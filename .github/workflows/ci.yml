@@ -32,10 +32,10 @@ jobs:
       # checkout leaves HEAD parentless, so that reports the whole tree as additions and never
       # mentions a deleted file at all. They need the history they read. The runner link check
       # below reads origin/main from it too.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
@@ -58,6 +58,10 @@ jobs:
         run: npm run test:docs
       - name: Validate public documentation
         run: npm run docs:check
+      - name: Test the release identity rules
+        run: npm run test:release-identity
+      - name: Test the release supply chain (checksums, SBOM, provenance)
+        run: npm run test:supply-chain
       - name: Generate Prisma Client
         run: npm run prisma:generate
       - name: Build workspaces
@@ -80,6 +84,9 @@ jobs:
         run: npm run test:upgrade-source-sha
       - name: Test what install and upgrade do for the runner link
         run: npm run test:upgrade-runner-link
+      # The two-stage release: built and pushed on one host, pulled and brought up on another, which builds nothing.
+      - name: Test the two-stage release's build and deploy stages
+        run: npm run test:upgrade-two-stage
       # The backup sidecar's rsync --delete is what can wipe the only off-host copy of the archive. Real rsync over local
       # paths, in seconds; it fails, rather than skips, where rsync is not installed.
       - name: Test what the backup sidecar does to its off-host target
@@ -99,8 +106,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
       - name: Audit dependencies
@@ -232,8 +239,8 @@ jobs:
       # No `fetch-depth: 0` here, unlike the JavaScript job: the two removal censuses that read this
       # repository's history are plain specs, and the only pg specs that run `git` at all build
       # their own throwaway repositories.
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
@@ -260,7 +267,7 @@ jobs:
         run: mkdir -p "$PCC_PG_LOG_DIR" && bash scripts/project-pg-matrix.sh
       - name: Keep the failing specs' output
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           # Per shard, because three jobs uploading one artifact name is a collision rather than a
           # report. A red names its shard in the check list, and that is the artifact to read.
@@ -297,8 +304,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.x'
           cache-dependency-path: src/runner-go/go.sum
@@ -313,8 +320,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.27.x'
           cache-dependency-path: src/link-gateway/go.sum
@@ -328,7 +335,7 @@ jobs:
     timeout-minutes: 20
     container: swift:6.1
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test OrbitKit
         working-directory: src/macos/OrbitKit
         run: swift test
@@ -437,7 +444,7 @@ jobs:
     env:
       DOCKER_BUILDKIT: '1'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Five base images come from Docker Hub over an IP this runner shares with everyone else's,
       # and its 502s are the one failure in this job that says nothing about this tree — run
       # 34333514813 died two seconds in on `unexpected status from HEAD request to

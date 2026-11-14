@@ -1,3 +1,5 @@
+import { ProjectCriterionConfirmationModule } from '../projects/project-criterion-confirmation.module';
+import { RunnerCriterionConfirmationController } from './runner-criterion-confirmation.controller';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProjectsModule } from '../projects/projects.module';
@@ -49,6 +51,7 @@ import { RunnersModule } from '../runners/runners.module';
 import { RunnerWriteProtocolInterceptor } from './runner-write-protocol';
 import { IntegrationJobRelay } from './integration-job-relay';
 import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
+import { MainCheckoutService } from '../workspaces/main-checkout.service';
 import { OutcomeReconcilerModule } from '../outcome-reconciler/outcome-reconciler.module';
 import { WatchesModule } from '../watches/watches.module';
 import { OwnerRequestsModule } from '../owner-requests/owner-requests.module';
@@ -75,6 +78,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     TaskListsModule,
     ProvidersModule,
     ProjectsModule,
+    ProjectCriterionConfirmationModule,
     OutcomeReconcilerModule,
     // RunnerWatchesController reads and writes through the one WatchesService the user door uses.
     WatchesModule,
@@ -91,6 +95,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
   controllers: [
     RunnerApiController,
+    RunnerCriterionConfirmationController,
     RunnerTasksController,
     RunnerTaskCompletionEvidenceController,
     RunnerTaskOwnerConfirmationController,
@@ -160,6 +165,7 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     WorkspacesService,
     IntegrationJobRelay,
     WikiRepoOps,
+    MainCheckoutService,
   ],
 })
 export class RunnerApiModule {}

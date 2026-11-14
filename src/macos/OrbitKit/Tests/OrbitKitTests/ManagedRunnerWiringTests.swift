@@ -158,9 +158,9 @@ final class ManagedRunnerWiringTests: XCTestCase {
         XCTAssertTrue(draft.contains("if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {"))
     }
 
-    // MARK: Infrastructure and the actions
+    // MARK: Machines & models and the actions
 
-    func testInfrastructureShowsItOnlyToAnAccountWithNoRunner() throws {
+    func testMachinesAndModelsShowsItOnlyToAnAccountWithNoRunner() throws {
         let list = code(try source("Views/SkillsRunnersView.swift"))
         let page = try slice(list, from: "struct RunnersListView: View {", to: ".modifier(RunnersLoadOverlay(")
         XCTAssertTrue(flat(page).contains("let managed = runners.loadState.hasLoaded ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count) : nil"))

@@ -7,10 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ShareLink } from '../api';
 
 /**
- * Settings → Shared links (docs/share-links-design.md §3, §8; mock 06-manage-and-entry), in a real
- * document over the links GET /share-links answers with: the three tabs and their counts, the
- * banner that names the links nobody is working behind any more and turns them off in one request,
- * and what each row says and offers in each state.
+ * Settings → Shared links (docs/share-links-design.md §3, §8; mocks 06-manage-and-entry, 13-row-buttons), in a real
+ * document over the links GET /share-links answers with: the three tabs and their counts, that no
+ * link is singled out for its session being finished long ago, and what each row says and offers in
+ * each state.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -149,6 +149,10 @@ const tabs = () =>
 const tab = (label: string) =>
   [...page().querySelectorAll<HTMLElement>('[role="tab"]')].find((t) => t.firstChild?.textContent === label);
 
+/** A row's own controls as they read: a button's words, else its name; the ⋯ reads as ⋯. */
+const controlName = (b: Element) =>
+  b.textContent?.trim() || (b.getAttribute('aria-label')?.startsWith('More for ') ? '⋯' : b.getAttribute('aria-label'));
+
 /** Each link row as it reads: title, the line under it, the chips, and the actions it offers. */
 const rows = () =>
   [...page().querySelectorAll<HTMLElement>('.shared-link-row:not(.is-head)')].map((row) => ({
@@ -156,10 +160,33 @@ const rows = () =>
     where: row.querySelector('.shared-link-where')?.textContent,
     chips: [...row.querySelectorAll('.shared-link-chip')].map((chip) => chip.textContent),
     updates: row.querySelector('.shared-link-updates')?.textContent,
-    actions: [...row.querySelectorAll('.shared-link-actions button')].map((b) => b.textContent?.trim()),
+    actions: [...row.querySelectorAll('.shared-link-actions button')].map(controlName),
+    opens: row.classList.contains('is-pressable'),
   }));
 
-const banner = () => page().querySelector<HTMLElement>('.shared-links-banner');
+const rowOf = (title: string) =>
+  [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
+    (r) => r.querySelector('.shared-link-title')?.textContent === title,
+  )!;
+const menuItems = () => [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+/** Opens a row's ⋯ (board 13) and reads what it holds. */
+async function openMenu(title: string): Promise<string[]> {
+  await click(rowOf(title).querySelector(`button[aria-label="More for ${title}"]`), `the ⋯ for ${title}`);
+  await act(async () => {
+    await vi.waitFor(() => expect(menuItems().length).toBeGreaterThan(0));
+  });
+  return menuItems().map((item) => item.textContent?.trim() ?? '');
+}
+async function pressMenu(title: string, label: string): Promise<void> {
+  await openMenu(title);
+  await click(
+    menuItems().find((item) => item.textContent?.trim() === label),
+    label,
+  );
+}
+/** A press on the row's words, as a person opens it (board 13). */
+const pressRow = (title: string) => click(rowOf(title).querySelector('.shared-link-title'), `the row ${title}`);
+
 
 /** The anchored question a Turn off asks, its words by what the dialog is named and described by. */
 const question = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
@@ -207,8 +234,8 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     serve(LINKS);
     await open();
 
-    expect(page().querySelector('.page-title')?.textContent).toBe('Shared links');
-    expect(page().querySelector('.following-sub')?.textContent).toBe(
+    expect(page().querySelector('.settings-header-title')?.textContent).toBe('Shared links');
+    expect(page().querySelector('.settings-header-description')?.textContent).toBe(
       'Everything you’ve made viewable by link. Anyone who has one of these links can open what it includes — no sign-in.',
     );
     expect(tabs()).toEqual([
@@ -219,47 +246,26 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     expect(rows().map((row) => row.title)).toEqual([STALE_A, STALE_B, STALE_C, RECENT, OPEN, TASK].map((l) => l.root.title));
   });
 
-  it('names the links for sessions completed more than 30 days ago, and turns exactly those off', async () => {
+  it('names no link for its session being finished long ago: a finished session stays shared as set', async () => {
     serve(LINKS);
     await open();
 
-    expect(banner()?.textContent).toContain('3 links are for sessions completed more than 30 days ago.');
-    expect(banner()?.textContent).toContain('They still open for anyone who has them.');
-    const button = banner()!.querySelector('button');
-    expect(button?.textContent?.trim()).toBe('Turn off these 3');
-
-    await click(button, 'Turn off these 3');
-    // One question for the batch, then one request naming exactly the three.
-    expect(turnOffShareLinks).not.toHaveBeenCalled();
-    const asked = question();
-    expect(nameOf(asked!)).toBe('Turn off these 3 links?');
-    const confirm = [...asked!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Turn off');
-    await click(confirm, 'Turn off');
-
-    expect(turnOffShareLinks).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(turnOffShareLinks).mock.calls[0][0]).toEqual([STALE_A.id, STALE_B.id, STALE_C.id]);
-    await vi.waitFor(() =>
-      expect(tabs()).toEqual([
-        { label: 'Active', count: '3', selected: true },
-        { label: 'Paused', count: '1', selected: false },
-        { label: 'Ended', count: '5', selected: false },
-      ]),
-    );
-    expect(banner()).toBeNull();
+    // Three of the six active links are for sessions completed 31 to 73 days ago.
+    expect(page().textContent).not.toContain('30 days');
+    expect(page().querySelector('[role="status"]')).toBeNull();
+    expect([...page().querySelectorAll('button')].map((b) => b.textContent?.trim())).not.toContain('Turn off these 3');
   });
 
-  it('says nothing about old links when no open link is for a session finished 30 days ago', async () => {
-    serve([RECENT, OPEN, TASK, PAUSED]);
-    await open();
-    expect(banner()).toBeNull();
-  });
-
-  it('gives every active link Copy, Settings and Turn off, and says what it includes and how long it lives', async () => {
+  it('gives every active link a copy icon and a ⋯, opens from its row, and says what it includes and how long it lives', async () => {
     serve(LINKS);
     await open();
 
     const [staleA, staleB, staleC, recent, open7, task] = rows();
-    for (const row of [staleA, staleB, staleC, recent, open7]) expect(row.actions).toEqual(['Copy', 'Settings', 'Turn off']);
+    for (const row of [staleA, staleB, staleC, recent, open7, task]) {
+      expect(row.actions).toEqual(['Copy link', '⋯']);
+      expect(row.opens).toBe(true);
+    }
+    expect(await openMenu(RECENT.root.title)).toEqual(['Copy link', 'Settings…', 'Turn off…']);
     expect(staleA).toMatchObject({
       where: `Session · Completed ${new Date(STALE_A.root.completedAt!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
       chips: ['Messages', 'Tool output'],
@@ -270,27 +276,23 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     expect(open7.updates).toBe(
       `Live · until ${new Date(OPEN.expiresAt!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
     );
-    // A task's link has the same three: tasks have the dialog too.
+    // A task's link reads the same: tasks have the dialog too.
     expect(task).toMatchObject({ where: 'Task · Done', chips: ['Overview', 'Comments', 'Conversations'] });
-    expect(task.actions).toEqual(['Copy', 'Settings', 'Turn off']);
   });
 
-  it('a task row’s Settings opens the Share dialog on that task', async () => {
+  it('a press on a task row opens the Share dialog on that task', async () => {
     serve(LINKS);
     vi.mocked(getShareLink).mockResolvedValue({ link: TASK, counts: { comments: 3, files: 0, transcripts: 1 } });
     await open();
 
-    const row = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
-      (r) => r.querySelector('.shared-link-title')?.textContent === TASK.root.title,
-    );
-    await click([...row!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+    await pressRow(TASK.root.title);
 
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('TASK', TASK.root.id);
     expect(shareDialogName()).toBe('Share task');
   });
 
-  it('a project row has Copy, Settings and Turn off, and its Settings opens the Share dialog on that project', async () => {
+  it('a project row has the copy icon and ⋯, and a press on it opens the Share dialog on that project', async () => {
     const PROJECT: ShareLink = {
       ...sessionLink('Claude 账号池：按订阅配额均衡派发'),
       kind: 'PROJECT',
@@ -305,18 +307,15 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     await open();
 
     const [row] = rows();
-    expect(row).toMatchObject({ chips: ['Overview', 'Task pages'], actions: ['Copy', 'Settings', 'Turn off'] });
-    const project = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
-      (r) => r.querySelector('.shared-link-title')?.textContent === PROJECT.root.title,
-    );
-    await click([...project!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+    expect(row).toMatchObject({ chips: ['Overview', 'Task pages'], actions: ['Copy link', '⋯'], opens: true });
+    await pressRow(PROJECT.root.title);
 
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('PROJECT', 'P1');
     expect(shareDialogName()).toBe('Share project');
   });
 
-  it('a wiki row is the space by name, says Wiki and what it includes, and its Settings opens the Share dialog on that space', async () => {
+  it('a wiki row is the space by name, says Wiki and what it includes, and its ⋯ Settings… opens the Share dialog on that space', async () => {
     const WIKI: ShareLink = {
       ...sessionLink('orbit'),
       kind: 'WIKI',
@@ -328,42 +327,40 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     await open();
 
     const [row] = rows();
-    expect(row).toMatchObject({ title: 'orbit', where: 'Wiki', chips: ['Documents', 'Footnotes'], actions: ['Copy', 'Settings', 'Turn off'] });
+    expect(row).toMatchObject({ title: 'orbit', where: 'Wiki', chips: ['Documents', 'Footnotes'], actions: ['Copy link', '⋯'] });
     const wiki = page().querySelector<HTMLElement>('.shared-link-row[data-kind="WIKI"]')!;
     expect(wiki.querySelector('.shared-link-kind')?.textContent).toBe('W');
     // Footnotes can carry command output and file contents: its chip is the one to notice.
     expect(wiki.querySelector('.shared-link-chip.is-warn')?.textContent).toBe('Footnotes');
-    await click([...wiki.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+    await pressMenu('orbit', 'Settings…');
 
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('WIKI', 'W1');
     expect(shareDialogName()).toBe('Share wiki');
   });
 
-  it('Settings opens the Share dialog on that link’s session', async () => {
+  it('a press on a session row opens the Share dialog on that link’s session; one on its copy icon only copies', async () => {
     serve(LINKS);
     vi.mocked(getShareLink).mockResolvedValue({ link: RECENT, counts: { messages: 12, toolCalls: 40 } });
     await open();
 
-    const recent = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
-      (row) => row.querySelector('.shared-link-title')?.textContent === RECENT.root.title,
-    );
-    const settings = [...recent!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Settings');
-    await click(settings, 'Settings');
+    await click(rowOf(RECENT.root.title).querySelector('button[aria-label="Copy link"]'), 'the copy icon');
+    expect(document.body.querySelector('[role="dialog"].share-dialog')).toBeNull();
+    await pressRow(RECENT.root.title);
 
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('SESSION', RECENT.root.id);
     expect(shareDialogName()).toBe('Share session');
   });
 
-  it('a row’s Turn off asks first, then turns off that one link', async () => {
+  it('a row’s ⋯ Turn off… asks first, then turns off that one link', async () => {
     serve(LINKS);
     await open();
 
-    const row = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
-      (r) => r.querySelector('.shared-link-title')?.textContent === OPEN.root.title,
-    );
-    await click([...row!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Turn off'), 'Turn off');
+    await pressMenu(OPEN.root.title, 'Turn off…');
+    await act(async () => {
+      await vi.waitFor(() => expect(nameOf(question()!)).toBe('Turn off this link?'));
+    });
     const asked = question();
     expect(nameOf(asked!)).toBe('Turn off this link?');
     expect(descriptionOf(asked!)).toBe('Anyone who has it loses access right away.');
@@ -372,7 +369,7 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     expect(vi.mocked(turnOffShareLinks).mock.calls).toEqual([[[OPEN.id]]]);
   });
 
-  it('Paused: a session in Trash says restoring it turns the link back on, and offers only Turn off', async () => {
+  it('Paused: a session in Trash says restoring it turns the link back on, does not open, and its ⋯ holds only Turn off…', async () => {
     serve(LINKS);
     await open();
     await click(tab('Paused'), 'the Paused tab');
@@ -383,11 +380,12 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
         where: 'Paused · in Trash — restoring the session turns this link back on',
         chips: ['Messages', 'Tool output'],
         updates: 'Live',
-        actions: ['Turn off'],
+        actions: ['⋯'],
+        opens: false,
       },
     ]);
     expect(page().querySelector('.shared-link-paused')?.textContent).toBe('Paused · in Trash');
-    expect(banner()).toBeNull();
+    expect(await openMenu(PAUSED.root.title)).toEqual(['Turn off…']);
   });
 
   it('Ended: says how and when each ended, and offers Share again only for an expired one', async () => {

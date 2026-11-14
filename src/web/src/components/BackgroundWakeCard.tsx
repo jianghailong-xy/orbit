@@ -82,7 +82,7 @@ function FailedOutput({ text }: { text: string }) {
  * on that side of this deployment's transcripts were wakes, and after nearly all of them the agent
  * simply carried on with the same work.
  *
- * It is no anchor for the sticky bar (no `data-sticky-label`): the bar keeps naming the question the
+ * It is no anchor for the sticky bar (no `data-orbit-round`): the bar keeps naming the question the
  * answer around it belongs to. The command, the ids, who queued it and what the agent read open
  * beneath it, behind a native disclosure so they still open in a static export. A failure stays
  * loud: the line takes the error tone and the output's tail stays out of the fold, since that is

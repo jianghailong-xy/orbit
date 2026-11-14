@@ -29,6 +29,51 @@ type heartbeatTelemetryTarget struct {
 type heartbeatTelemetrySample struct {
 	target heartbeatTelemetryTarget
 	state  SessionLiveState
+	// reportSeq is worktreeReports' sequence when the scan of this session began: a turn-complete,
+	// finalize or diff report sent after it carries newer state than this sample does.
+	reportSeq uint64
+}
+
+// worktreeReportClock orders the scan of a session's worktree against the reports that carry its
+// state on their own (turn-complete, finalize, diff). A scan's result is published on the NEXT
+// heartbeat, up to a heartbeat interval later, and while a session stays active from one turn to the
+// next (an agent turn followed by its task's acceptance shell turn) its permit generation does not
+// move, so the generation check in snapshotFor cannot tell a sample scanned before a report from
+// one scanned after it. The control plane writes a heartbeat's snapshot over the session's columns
+// with no ordering of its own, so a sample older than a turn-complete put that turn's state back to
+// before it: a branch tip from before the turn's commit, which a DONE task's delivered identity was
+// then frozen from.
+type worktreeReportClock struct {
+	mu  sync.Mutex
+	seq uint64
+	// One entry per session this process has reported on: a session id and a counter, kept for the
+	// process's life (a runner restarts at every upgrade).
+	last map[string]uint64
+}
+
+var worktreeReports = &worktreeReportClock{last: map[string]uint64{}}
+
+// now is the sequence a scan starting at this moment is ordered by.
+func (c *worktreeReportClock) now() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.seq
+}
+
+// reported records that the session's worktree state has just been sent by a report of its own.
+// Called once the report's git reads are done, so a scan begun before it is ordered before it.
+func (c *worktreeReportClock) reported(sessionID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.seq++
+	c.last[sessionID] = c.seq
+}
+
+// supersedes reports whether a report of the session was sent after a scan ordered at seq.
+func (c *worktreeReportClock) supersedes(sessionID string, seq uint64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.last[sessionID] > seq
 }
 
 type heartbeatTelemetryCollector func(context.Context, []heartbeatTelemetryTarget) []heartbeatTelemetrySample
@@ -107,7 +152,8 @@ func (p *heartbeatTelemetryProbe) wait() { <-p.done }
 
 // snapshotFor filters the cache against the current active set. A session that
 // parked after its last scan must not have stale mid-turn state replayed after its
-// turn-complete update.
+// turn-complete update, and neither must one still active whose turn-complete, finalize
+// or diff report was sent after its scan began (worktreeReportClock).
 func (p *heartbeatTelemetryProbe) snapshotFor(activeTargets []heartbeatTelemetryTarget) []SessionLiveState {
 	active := make(map[string]heartbeatTelemetryTarget, len(activeTargets))
 	for _, target := range activeTargets {
@@ -120,7 +166,8 @@ func (p *heartbeatTelemetryProbe) snapshotFor(activeTargets []heartbeatTelemetry
 	out := make([]SessionLiveState, 0, len(p.state))
 	for _, sample := range p.state {
 		current, ok := active[sample.state.SessionID]
-		if ok && current.supervisor == sample.target.supervisor && current.permitGeneration == sample.target.permitGeneration {
+		if ok && current.supervisor == sample.target.supervisor && current.permitGeneration == sample.target.permitGeneration &&
+			!worktreeReports.supersedes(sample.state.SessionID, sample.reportSeq) {
 			out = append(out, sample.state)
 		}
 	}
@@ -141,6 +188,8 @@ func collectHeartbeatSessionStates(ctx context.Context, targets []heartbeatTelem
 		if target.sessionID == "" || target.isolationStatus == "" {
 			continue
 		}
+		// Before the first git read: a report sent after this point may carry newer state.
+		reportSeq := worktreeReports.now()
 		// Base-SHA healing is intentionally local to the immutable worktree copy
 		// captured by heartbeatSnapshot. The collector never reads ClaimedSession.
 		changedFiles := ops.liveDiffStat(target.worktree)
@@ -168,7 +217,7 @@ func collectHeartbeatSessionStates(ctx context.Context, targets []heartbeatTelem
 		if ctx.Err() != nil {
 			break
 		}
-		state = append(state, heartbeatTelemetrySample{target: target, state: entry})
+		state = append(state, heartbeatTelemetrySample{target: target, state: entry, reportSeq: reportSeq})
 	}
 	return state
 }
@@ -183,7 +232,11 @@ func heartbeatSessionSnapshot(pool *sessionPool, telemetry *heartbeatTelemetryPr
 ) {
 	supervisors, activeTargets := pool.heartbeatSnapshot()
 	ids := make([]string, 0, len(supervisors))
-	for id := range supervisors {
+	for id, s := range supervisors {
+		// Supervised means a supervisor exists: a session still being reclaimed has none yet.
+		if s.supervisor == nil {
+			continue
+		}
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)

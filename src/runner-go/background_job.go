@@ -507,11 +507,13 @@ func (b *bgTailer) launchJob(p *bgPreparedJob) (bgJobStatus, error) {
 	// The launch pair the UI already understands: the "Background processes" tray
 	// keys off a Bash tool_use with run_in_background, and clears on the terminal
 	// background_task below. The runner emits it here because no engine tool call
-	// produced this process — that is precisely what makes it survivable.
-	b.emit(evToolUse, map[string]interface{}{
-		"id": jobID, "name": "Bash",
-		"input": map[string]interface{}{"command": spec.Command, "run_in_background": true},
-	})
+	// produced this process — that is precisely what makes it survivable. The description
+	// rides along because the tray titles a row with it, as it does an engine's own Bash.
+	input := map[string]interface{}{"command": spec.Command, "run_in_background": true}
+	if spec.Description != "" {
+		input["description"] = spec.Description
+	}
+	b.emit(evToolUse, map[string]interface{}{"id": jobID, "name": "Bash", "input": input})
 	b.emit(evToolResult, map[string]interface{}{
 		"toolUseId": jobID,
 		"content": fmt.Sprintf(

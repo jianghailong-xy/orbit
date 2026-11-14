@@ -7,11 +7,11 @@ import org.junit.Test
 
 /** When another session's message folds, and to what (web `SessionMessageCard`, docs/mocks/session-message-clamp/). */
 class SessionMessageClampTest {
-    @Test fun foldsOnlyPastTwelveLinesAndToEight() {
-        assertFalse(SessionMessageClamp.folds(contentPx = 240, linePx = 20f))
-        assertTrue(SessionMessageClamp.folds(contentPx = 241, linePx = 20f))
+    @Test fun foldsOnlyPastSixLinesAndToFour() {
+        assertFalse(SessionMessageClamp.folds(contentPx = 120, linePx = 20f))
+        assertTrue(SessionMessageClamp.folds(contentPx = 121, linePx = 20f))
         assertFalse("no line height to read, nothing folds", SessionMessageClamp.folds(contentPx = 5000, linePx = 0f))
-        assertEquals(160f, SessionMessageClamp.foldedPx(20f))
+        assertEquals(80f, SessionMessageClamp.foldedPx(20f))
     }
 
     @Test fun theToggleSaysWhatItWillDo() {

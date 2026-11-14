@@ -46,7 +46,7 @@ export const ENGINE_SESSION_USER_ROUTES = routesNamingSession(TENANT_ISOLATION_C
 export const ENGINE_SESSION_RUNNER_ROUTES = routesNamingSession(RUNNER_ISOLATION_CASES, '/runner/sessions');
 
 /**
- * The doors whose session id rides in the body or the query rather than the path (6). Each is held
+ * The doors whose session id rides in the body or the query rather than the path (7). Each is held
  * to the field case of the same name in the isolation registries, so the two lists cannot drift.
  */
 export const ENGINE_SESSION_FIELD_CASES: Readonly<Record<string, { guard: string; note: string }>> = {
@@ -73,6 +73,10 @@ export const ENGINE_SESSION_FIELD_CASES: Readonly<Record<string, { guard: string
   'POST /runner/heartbeat body expiredCommitErrors[].sessionId': {
     guard: 'RunnerApiController.assertNoLandingSessionNamed',
     note: 'an expired commit attempt belongs to a session this runner hosts',
+  },
+  'POST /runner/sessions/takeover-leases body sessions[].sessionId': {
+    guard: 'RunnerApiController.takeoverLeasesBatch',
+    note: 'each row of the batch takeover is the single takeover door, answered per row',
   },
 };
 
@@ -145,7 +149,7 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
   'SessionsService.mergeToMain': {
     file: 'sessions/sessions.service.ts',
     snippet:
-      'requestedBy?: MergeRequester;\n    } = {},\n  ) {\n    await this.assertEngineSession(ownerId, id);',
+      'selfRequest?: boolean;\n    } = {},\n  ) {\n    await this.assertEngineSession(ownerId, id);',
     note: 'POST /merge and the runner merge door',
   },
   'SessionsService.startMergeRepair': {
@@ -236,6 +240,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     snippet: '// A landing session is not a conversation anyone can share (§2.9 LS6).',
     note: 'POST and PUT /sessions/:id/share',
   },
+  'SessionGuestsService.ownedSession': {
+    file: 'session-guests/session-guests.service.ts',
+    snippet: '// Nobody is invited into the platform\'s landing record: it runs no engine turn (§2.9 LS6).\n    if (opts.write) assertEngineSession(session);',
+    note: 'POST /sessions/:id/guests and DELETE /sessions/:id/guests/:userId',
+  },
   'ShareLinksService.turnOff': {
     file: 'share-links/share-links.service.ts',
     snippet: 'if (kind === \'SESSION\') assertEngineSession(root);\n    await this.end({ ownerId, ...rootColumn(kind, rootId) }, new Date());',
@@ -270,6 +279,11 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
     file: 'runner-api/runner-api.controller.ts',
     snippet: 'return assertEngineSessionRowById(this.prisma, sessionId, ownerId);',
     note: 'the runner doors that name the session only by id: leases, pin, credential, reporting routes',
+  },
+  'RunnerApiController.takeoverLeasesBatch': {
+    file: 'runner-api/runner-api.controller.ts',
+    snippet: "// The single route's first refusal, on the caller's own account: a landing is the platform's (§2.9 LS6).",
+    note: 'every row of the batch takeover, refused per row as the single takeover refuses it',
   },
   'RunnerApiController.assertNoLandingSessionNamed': {
     file: 'runner-api/runner-api.controller.ts',
@@ -315,6 +329,8 @@ export const ENGINE_SESSION_DOORS: Readonly<Record<string, string>> = {
   'POST /sessions/:id/share': 'ShareLinksService.put',
   'PUT /sessions/:id/share': 'ShareLinksService.put',
   'DELETE /sessions/:id/share': 'ShareLinksService.turnOff',
+  'POST /sessions/:id/guests': 'SessionGuestsService.ownedSession',
+  'DELETE /sessions/:id/guests/:userId': 'SessionGuestsService.ownedSession',
 
   // ── the runner door (32) ──────────────────────────────────────────────────────────────────────
   'POST /runner/sessions/:id/source/pin': 'RunnerApiController.assertEngineSessionById',

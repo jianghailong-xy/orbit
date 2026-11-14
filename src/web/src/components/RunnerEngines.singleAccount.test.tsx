@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineHealth } from '@orbit/shared';
-import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
+import { EngineRows } from './RunnerEngines.test-rows';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -96,9 +96,6 @@ const ROW: {
   auth: Auth;
   over?: Partial<Runner>;
   codex: CodexRow;
-  count: string;
-  /** What the card's head says of Codex (MachineChips), folded or open: null for no chip at all. */
-  folded: string | null;
 }[] = [
   {
     state: 'signed in',
@@ -109,8 +106,6 @@ const ROW: {
       bar: '62%',
       buttons: ['More actions · text'],
     },
-    count: '1 runner · 3 signed in',
-    folded: 'Codex',
   },
   {
     state: 'signed out',
@@ -123,8 +118,6 @@ const ROW: {
       bar: null,
       buttons: ['Sign in · primary'],
     },
-    count: '1 runner · 2 signed in',
-    folded: 'Codex signed out',
   },
   {
     state: "the CLI wouldn't say",
@@ -138,8 +131,6 @@ const ROW: {
       bar: null,
       buttons: ['More actions · text'],
     },
-    count: '1 runner · 2 signed in',
-    folded: null,
   },
   {
     state: 'signed in, on a runner that is offline',
@@ -151,8 +142,6 @@ const ROW: {
       bar: '62%',
       buttons: ['More actions · text'],
     },
-    count: '1 runner · 3 signed in',
-    folded: 'Codex',
   },
 ];
 
@@ -175,9 +164,8 @@ afterEach(() => {
   localStorage.clear();
 });
 
-/** Mount the section over these runners, their cards open, the way a user who opened them sees it. */
+/** Mount these runners' engine rows. */
 function mount(runners: Runner[]) {
-  localStorage.setItem('orbit:providers-expanded-runners', JSON.stringify(runners.map((r) => r.id)));
   apiMock.mockImplementation(async (path: string) => (path === '/runners' ? runners : null));
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['runners'], runners);
@@ -188,7 +176,7 @@ function mount(runners: Runner[]) {
     root!.render(
       <MemoryRouter initialEntries={['/providers']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -252,16 +240,14 @@ function codexRow(page: HTMLElement): CodexRow {
 describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
   it.each(ROW)(
     '$state: the Codex row is the row every engine has, and nothing of a group',
-    ({ auth, over, codex, count, folded }) => {
+    ({ auth, over, codex }) => {
       const box = runner({ auth, ...accountsOf(auth) }, over);
       const page = mount([box]);
 
       // No account rows: none of the marks an account row or its group head carries...
       expect(page.querySelectorAll('.re-acct, .re-grp, .re-rail, .re-chip')).toHaveLength(0);
-      // ...and no row of any other kind either: the card is its head and one row per engine,
-      // DeepSeek Harness's last.
+      // ...and no row of any other kind either: one row per engine, DeepSeek Harness's last.
       expect([...page.querySelector('.re-card')!.children].map((el) => el.className)).toEqual([
-        're-head',
         're-row',
         're-row',
         're-row',
@@ -270,15 +256,6 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
       ]);
       // Pause is available inside More and adds no visible button or text to this row.
       expect(codexRow(page)).toEqual(codex);
-      // One account counts once, as the engine always did: on the section, and on the card's head —
-      // one chip, neither ×1 nor 1 of 1, and the line beside it says nothing more.
-      expect(page.querySelector('.re-sec-count')?.textContent).toBe(count);
-      expect(
-        machineChipsOf(box)
-          .filter((chip) => chip.engine === 'codex')
-          .map((chip) => (chip.signedOut ? 'Codex signed out' : chip.logins < chip.accounts || chip.logins > 1 ? `Codex ${chip.logins}/${chip.accounts}` : 'Codex')),
-      ).toEqual(folded ? [folded] : []);
-      expect(summaryOf(box)).toBeNull();
     },
   );
 

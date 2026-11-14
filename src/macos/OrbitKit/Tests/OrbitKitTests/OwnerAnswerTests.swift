@@ -116,7 +116,7 @@ final class OwnerAnswerTests: XCTestCase {
     }
 
     /// A line inside the coordinator's work, not the head of a round: the sticky bar keeps naming the
-    /// question above it, as the web's line carries no `data-sticky-label`.
+    /// question above it, as the web's line carries no `data-orbit-round`.
     func testTheStickyBarDoesNotPointAtTheLine() {
         XCTAssertFalse(StickySummary.isAnchor(text: Self.told, ownerAnswer: expected))
         XCTAssertTrue(StickySummary.isAnchor(text: Self.told), "with no card it is the reader's message, as before")

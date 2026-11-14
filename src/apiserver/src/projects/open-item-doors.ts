@@ -658,6 +658,10 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     if (assignee === 'COORDINATOR') doors.push(askOwner(assignee));
     if (assignee === 'OWNER') doors.push(askAgain(assignee));
     if (failureClass === 'CONFLICT') doors.push(createSyncTask(assignee));
+    // M-T13: a task branch's work already on the upstream as other commits is answered by the
+    // receipt naming the commit that carries it, which retires the candidate. Cell-wide, because the
+    // cell does not know its source kind; only a task branch's message names it.
+    doors.push(recordLanding(assignee));
     doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee), openLanding(assignee));
     return doors;
   }

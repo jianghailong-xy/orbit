@@ -260,6 +260,7 @@ struct TaskLabelsSheet: View {
                 }
             }
             .listStyle(.plain)
+            .softTopEdgeEffect()
             .navigationTitle(TaskListCopy.labelsTitle)
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),

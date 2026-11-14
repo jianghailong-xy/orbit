@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>从 GitHub 建 workspace · 02 Settings 与管理区</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/ChoiceControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Badge.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Card.css">
+<link rel="stylesheet" href="board.css">
+<style>
+  .app .orbit-card + .orbit-card { margin-top: 14px; }
+  .srow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 4px 0; }
+  .srow + .srow { border-top: 1px solid var(--border-subtle); padding-top: 14px; margin-top: 10px; }
+  .srow-label { font-weight: 500; }
+  .srow-hint { color: var(--text-3); font-size: 12px; margin-top: 2px; }
+  .srow-value { color: var(--text-2); font-size: 13px; margin-top: 4px; }
+  .acct { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: #d9e2f2; display: grid; place-items: center; color: #3a4a66; font-weight: 600; }
+  .inst { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 0; border-top: 1px solid var(--border-subtle); }
+  .inst:first-child { border-top: 0; padding-top: 0; }
+  .inst-name { font-weight: 500; }
+  .inst-sub { color: var(--text-3); font-size: 12px; }
+  .wsrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 9px 0; border-top: 1px solid var(--border-subtle); }
+  .wsrow:first-child { border-top: 0; padding-top: 0; }
+  .wsrow .ws-src { color: var(--text-3); font-size: 12px; }
+  .steps { margin: 0; padding-left: 18px; color: var(--text-2); font-size: 12.5px; line-height: 1.65; }
+  .steps b { color: var(--text-1); font-weight: 500; }
+  .perm { display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 11.5px; background: var(--fill-muted); border-radius: 4px; padding: 0 5px; color: var(--text-1); }
+  .saved { color: var(--text-3); font-size: 12px; }
+  .pagehead { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .crumb { color: var(--text-3); font-size: 12px; margin-bottom: 4px; }
+</style>
+<body>
+<div class="board">
+<h1>从 GitHub 建 workspace · 02 Web：Settings → Integrations，管理区 → Integrations</h1>
+<div class="lede">
+两处都放在已有的 Integrations 里，和飞书并排，不新开页面体系。<b>用户</b>在 Settings 连接或断开自己的 GitHub，并查看 Orbit 的 App 装在哪里。
+<b>管理员</b>为整个部署注册一次 GitHub App，配置方式和 Google 登录、飞书一样：存库、密钥只写不读、不改部署文件。
+</div>
+
+<div class="section"><span class="sec after">用户</span><span class="sec-sub">Settings 页的 Integrations 卡片加一行；Manage 打开 <code>/settings/integrations/github</code>。</span></div>
+<div class="grid2">
+<figure class="tile">
+  <div class="tile-title">Settings → Integrations 卡片</div>
+  <div class="app"><span class="fr-label">today</span>
+    <div class="orbit-card"><div class="orbit-card-head"><h2 class="orbit-card-title">Integrations</h2></div><div class="orbit-card-body">
+      <div class="srow"><div><div class="srow-label">Feishu</div><div class="srow-hint">A Feishu or Lark app of your own, connected to Orbit as its bot.</div><div class="srow-value">Not connected</div></div>
+        <button class="orbit-button orbit-button-default orbit-button-middle"><span>Manage</span></button></div>
+    </div></div>
+  </div>
+  <div class="app"><span class="fr-label">proposal · not connected</span>
+    <div class="orbit-card"><div class="orbit-card-head"><h2 class="orbit-card-title">Integrations</h2></div><div class="orbit-card-body">
+      <div class="srow"><div><div class="srow-label">Feishu</div><div class="srow-hint">A Feishu or Lark app of your own, connected to Orbit as its bot.</div><div class="srow-value">Not connected</div></div>
+        <button class="orbit-button orbit-button-default orbit-button-middle"><span>Manage</span></button></div>
+      <div class="srow" style="position:relative"><div><div class="srow-label"><i data-ic="github"></i> GitHub<span class="newtag">NEW</span></div><div class="srow-hint">Clone your repositories into workspaces, and land work back to them.</div><div class="srow-value">Not connected</div></div>
+        <button class="orbit-button orbit-button-primary orbit-button-middle"><span class="orbit-button-icon"><i data-ic="github"></i></span><span>Connect</span></button>
+        <span class="num m" style="right:-10px;top:-6px">1</span></div>
+    </div></div>
+  </div>
+  <div class="app"><span class="fr-label">proposal · connected</span>
+    <div class="orbit-card"><div class="orbit-card-head"><h2 class="orbit-card-title">Integrations</h2></div><div class="orbit-card-body">
+      <div class="srow"><div><div class="srow-label"><i data-ic="github"></i> GitHub</div><div class="srow-hint">Clone your repositories into workspaces, and land work back to them.</div><div class="srow-value">@octo-dev · 14 repositories in 2 accounts</div></div>
+        <button class="orbit-button orbit-button-default orbit-button-middle"><span>Manage</span></button></div>
+    </div></div>
+  </div>
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t">部署没配 App 时，这一行写 <i>Not set up on this Orbit — ask an administrator.</i>，没有按钮。连接过期时写 <i>@octo-dev needs to sign in again</i>（橙色），按钮是 <i>Reconnect</i>。</span></li>
+  </ul>
+</figure>
+
+<figure class="tile">
+  <div class="tile-title">Settings → Integrations → GitHub（Manage）</div>
+  <div class="app"><span class="fr-label">proposal · /settings/integrations/github</span>
+    <div class="crumb">Settings / Integrations</div>
+    <div class="pagehead"><h1 class="page-title">GitHub</h1></div>
+    <div class="orbit-card"><div class="orbit-card-head"><h2 class="orbit-card-title">Your GitHub account</h2><div class="orbit-card-extra"><span class="orbit-badge orbit-badge-success">Connected</span></div></div><div class="orbit-card-body">
+      <div class="srow" style="align-items:center"><div class="acct"><span class="avatar">O</span><div><div class="srow-label">@octo-dev</div><div class="srow-hint">Connected Nov 11 · Orbit sees only the repositories you install its app on.</div></div></div>
+        <button class="orbit-button orbit-button-default orbit-button-middle orbit-button-danger"><span>Disconnect</span></button></div>
+    </div></div>
+    <div class="orbit-card" style="position:relative"><div class="orbit-card-head"><h2 class="orbit-card-title">Where Orbit’s app is installed</h2></div><div class="orbit-card-body">
+      <div class="inst"><span class="inst-name">octo-dev</span><a>Configure on GitHub <i data-ic="export"></i></a><span class="inst-sub">Personal account · 3 selected repositories</span></div>
+      <div class="inst"><span class="inst-name">orbit-labs</span><a>Configure on GitHub <i data-ic="export"></i></a><span class="inst-sub">Organization · All repositories (11)</span></div>
+      <div class="inst"><span></span><a>Install on another account <i data-ic="export"></i></a></div>
+    </div><span class="num m" style="right:-10px;top:-6px">2</span></div>
+    <div class="orbit-card" style="position:relative"><div class="orbit-card-head"><h2 class="orbit-card-title">Workspaces from GitHub</h2></div><div class="orbit-card-body">
+      <div class="wsrow"><span><b>orbit-web</b> on orbit@austin</span><span class="ws-src">orbit-labs/orbit-web</span><span class="ws-src">Uses Orbit’s GitHub app</span></div>
+      <div class="wsrow"><span><b>orbit-runner</b> on HPC</span><span class="ws-src">orbit-labs/orbit-runner</span><span class="ws-src">Uses this machine’s Git credential</span></div>
+    </div><span class="num m" style="right:-10px;top:-6px">3</span></div>
+  </div>
+  <ul class="notes">
+    <li><span class="num">2</span><span class="t">授权哪些仓库在 GitHub 上管，Orbit 不重做这套界面，只列出安装、给出跳转。</span></li>
+    <li><span class="num">3</span><span class="t">每个 workspace 写明用的是哪种凭据（runner 每次 clone 或落地时上报）。Disconnect 之前会提示：
+      <i>2 workspaces keep their folders. Clones and landings that need GitHub will stop until you connect again.</i></span></li>
+  </ul>
+</figure>
+</div>
+
+<div class="section"><span class="sec after">管理员</span><span class="sec-sub">管理区 Integrations 页，在 Feishu bots 下面加一张卡片。</span></div>
+<div class="grid2">
+<figure class="tile">
+  <div class="tile-title">Admin → Integrations → GitHub App</div>
+  <div class="app"><span class="fr-label">proposal · /admin/integrations</span>
+    <div class="orbit-card admin-signin" style="max-width:none"><div class="orbit-card-head"><h2 class="orbit-card-title">GitHub App</h2><div class="orbit-card-extra"><span class="orbit-badge orbit-badge-success">On</span></div></div><div class="orbit-card-body">
+      <div class="admin-signin-fields">
+        <div class="admin-signin-row"><div><div class="admin-signin-label">Let people clone from GitHub</div><div class="admin-signin-hint">Settings offers Connect GitHub, and a machine’s setup card offers From GitHub.</div></div>
+          <button class="orbit-switch" data-checked><span class="orbit-switch-thumb"></span></button></div>
+        <div class="admin-signin-field"><label class="admin-signin-label">App ID</label><span class="orbit-text-control orbit-input orbit-input-affix"><input class="orbit-input-field" value="1043271"></span>
+          <div class="admin-signin-hint">Checked with GitHub when you save: <b>orbit-example</b> (github.com/apps/orbit-example)</div></div>
+        <div class="admin-signin-field"><label class="admin-signin-label">Client ID</label><span class="orbit-text-control orbit-input orbit-input-affix"><input class="orbit-input-field" value="Iv23liQ8xk2aPz7mHc1d"></span></div>
+        <div class="admin-signin-field" style="position:relative"><label class="admin-signin-label">Client secret</label><span class="orbit-text-control orbit-input orbit-input-affix"><input class="orbit-input-field" placeholder="A secret is saved. Enter a new one to replace it."></span>
+          <span class="num m" style="right:-10px;top:-4px">4</span></div>
+        <div class="admin-signin-field"><label class="admin-signin-label">Private key</label>
+          <div class="admin-signin-redirect"><span class="saved">A key is saved (.pem)</span><button class="orbit-button orbit-button-default orbit-button-small"><span>Replace…</span></button></div></div>
+        <div class="admin-signin-field" style="position:relative"><div class="admin-signin-label">Callback URL</div>
+          <div class="admin-signin-redirect"><code>https://orbit.example.com/api/integrations/github/callback</code><button class="orbit-button orbit-button-default orbit-button-small"><span class="orbit-button-icon"><i data-ic="copy"></i></span><span>Copy</span></button></div>
+          <div class="admin-signin-hint">Enter this exactly in the app’s settings on GitHub.</div><span class="num m" style="right:-10px;top:-4px">5</span></div>
+        <div class="admin-signin-field"><div class="admin-signin-label">Connected accounts</div><div style="color:var(--text-2)">7 people have connected GitHub · 12 workspaces were cloned</div></div>
+        <div class="admin-signin-actions"><button class="orbit-button orbit-button-primary orbit-button-middle" disabled><span>Save</span></button></div>
+      </div>
+    </div></div>
+  </div>
+  <ul class="notes">
+    <li><span class="num">4</span><span class="t">client secret 和私钥只写不读，和 Google 登录一样。轮换 <code>PROVIDER_SECRET_KEY</code> 后解不开时，提示 <i>The saved secret can’t be read. Enter it again.</i>，开关显示为 Off。</span></li>
+    <li><span class="num">5</span><span class="t">回调地址由 <code>PUBLIC_ORIGIN</code> 拼出来。保存时用 App 私钥调一次 <code>GET /app</code>，核对 ID 和私钥是一对，不对就不保存，并说明原因。</span></li>
+  </ul>
+</figure>
+
+<figure class="tile">
+  <div class="tile-title">同一张卡片的下半部分：在 GitHub 上注册 App 的步骤</div>
+  <div class="app"><span class="fr-label">proposal · setup steps</span>
+    <div class="orbit-card" style="position:relative"><div class="orbit-card-head"><h2 class="orbit-card-title">Register the app on GitHub</h2></div><div class="orbit-card-body">
+      <ol class="steps">
+        <li><b>Create a GitHub App</b> under your organization: Settings → Developer settings → GitHub Apps → New GitHub App. <a>Open GitHub <i data-ic="export"></i></a></li>
+        <li><b>Callback URL:</b> the one above. Turn on <b>Request user authorization (OAuth) during installation</b>. Leave <b>Expire user authorization tokens</b> on.</li>
+        <li><b>Webhook:</b> turn it off. Orbit doesn’t need one.</li>
+        <li><b>Repository permissions:</b> <span class="perm">Contents: Read and write</span> <span class="perm">Metadata: Read-only</span>. Nothing else — no account or organization permissions.</li>
+        <li><b>Where can this app be installed:</b> Any account, so people can install it on their own repositories.</li>
+        <li>Create it, then <b>generate a private key</b> and a <b>client secret</b>, and enter them with the App ID and Client ID above.</li>
+      </ol>
+    </div><span class="num m" style="right:-10px;top:-6px">6</span></div>
+  </div>
+  <ul class="notes">
+    <li><span class="num">6</span><span class="t">权限只要两项，和 §5.4 签 token 时声明的一致。签 token 时还会再把范围收窄到一个仓库，所以 App 本身的权限是上限，不是每个 token 实际拿到的权限。</span></li>
+    <li><span class="num">7</span><span class="t">orbitd.io 由我们注册一个公共 App；自建部署由各自的管理员注册自己的 App。两边用同一套代码，区别只在这几项配置。</span></li>
+  </ul>
+</figure>
+</div>
+</div>
+<script src="icons.js"></script>
+</body>
+</html>

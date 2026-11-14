@@ -45,6 +45,7 @@ import {
   wikiSpaceQuery,
 } from '../lib/queries';
 import { useWikiMaintenanceWhere } from '../lib/useWikiMaintenanceWhere';
+import { useMachinesHref } from '../lib/useMachinesHref';
 import { encodeId } from '../lib/idCodec';
 import { MOBILE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import { WIKI_HISTORY_MAINTENANCE, WIKI_TITLE, shortSha, wikiEntryPath, wikiShowMore, wikiSpacePath } from '../lib/wiki';
@@ -514,6 +515,7 @@ function PlanVersionMenu({ page, spaceSlug }: { page: PlanPage; spaceSlug: strin
 
 /** The job's card (mock 21 ⑨, 22 ⑩): grey queued, blue drafting and writing, amber held, red failed. */
 function PlanJobCard({ card, spaceSlug }: { card: WikiPlanJobCard; spaceSlug: string }) {
+  const machinesHref = useMachinesHref();
   const tone = card.look === 'queued' ? 'wait' : card.look === 'held' ? 'held' : card.look === 'failed' ? 'fail' : 'run';
   const icon =
     card.look === 'queued' ? (
@@ -526,7 +528,7 @@ function PlanJobCard({ card, spaceSlug }: { card: WikiPlanJobCard; spaceSlug: st
       <SyncOutlined spin className="ic" />
     );
   const link = card.link;
-  const to = link?.to === 'run' && link.sessionId ? `/sessions/${encodeId(link.sessionId)}` : link?.to === 'settings' ? wikiSettingsPath(spaceSlug) : link?.to === 'runners' ? '/infrastructure' : null;
+  const to = link?.to === 'run' && link.sessionId ? `/sessions/${encodeId(link.sessionId)}` : link?.to === 'settings' ? wikiSettingsPath(spaceSlug) : link?.to === 'runners' ? machinesHref : null;
   return (
     <section className={`wk-pl-check wk-pl-job solo ${tone}`} role="status">
       <div className="h">

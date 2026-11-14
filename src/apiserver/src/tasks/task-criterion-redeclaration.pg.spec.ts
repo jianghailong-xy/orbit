@@ -360,7 +360,8 @@ test('a task’s criterion declaration can be made, corrected and taken back aft
   // A server that can be told and a tool that cannot say it is not a field anybody has. The two
   // agent-facing doors are MCP and the CLI capability document, and both are hand-written.
   await t.test('the MCP and CLI edit doors can send it', () => {
-    const mcp = readFileSync(path.join(REPO_ROOT, 'src/runner-go/mcp.go'), 'utf8');
+    const mcp = readFileSync(path.join(REPO_ROOT, 'src/runner-go/mcp.go'), 'utf8')
+      + readFileSync(path.join(REPO_ROOT, 'src/runner-go/operation_catalog.go'), 'utf8');
     const schema = mcp.slice(mcp.indexOf('"name":        "task_update"'));
     const updateSchema = schema.slice(0, schema.indexOf('"name":        "task_delete"'));
     assert.ok(updateSchema.length > 0, 'the task_update descriptor has to be findable to be read');
@@ -375,7 +376,8 @@ test('a task’s criterion declaration can be made, corrected and taken back aft
     assert.match(handler, /copyIfPresent\(body, args,[^\n]*"criterionKey"/,
       'a schema the dispatcher does not forward is a field the tool still cannot send');
 
-    const cli = readFileSync(path.join(REPO_ROOT, 'src/runner-go/task_cli.go'), 'utf8');
+    const cli = readFileSync(path.join(REPO_ROOT, 'src/runner-go/task_cli.go'), 'utf8')
+      + readFileSync(path.join(REPO_ROOT, 'src/runner-go/operation_catalog.go'), 'utf8');
     assert.match(cli, /body\["criterionKey"\] = /);
     assert.match(cli, /--criterion-key <key> \| --clear-criterion-key/,
       '`orbit capabilities` is the only contract an agent reads the CLI through');

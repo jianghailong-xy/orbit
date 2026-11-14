@@ -29,6 +29,7 @@ import {
   OWNER_DECISIONS,
   type OwnerDecisionValue,
 } from './task-owner-confirmation';
+import { TASK_FORK_CHANGED_FILES_MAX } from './task-fork';
 import { TASK_TERMINAL_REASONS, type TaskTerminalReason } from './task-supersession';
 import {
   TASK_COMPLETION_POLICIES,
@@ -214,12 +215,12 @@ export class TaskCompletionEvidenceDto {
   decision!: TaskEvidenceRevisionDecisionDto | null;
   /**
    * What this submission's citations resolved to, one per `evidence.checks` entry and in that
-   * order. Present on a submit receipt — including a replayed one — and null on a list read,
-   * which re-derives nothing: the rows a stored envelope cited may have been deleted since, and
-   * a `resolved` that quietly means "as of now" would be a different fact under the same name.
-   *
-   * A revision that cites a file is the exception, resolved as of the read: an id says nothing of a
-   * file, so a reader is told what each one is (docs/orbit-files-design.md §2.4).
+   * order. On a submit receipt — including a replayed one — as of the submission. On a list read,
+   * for every revision with a checks envelope, as of the read: the judge has to see which handles
+   * still hold (a TOOL_CALL's `bgj_…` included, which it cannot read with bg_output), and a row
+   * deleted since submission reads as unresolved with its reason. A file's citation also says what
+   * the file is (docs/orbit-files-design.md §2.4). Null only for a stored evidence object that is
+   * not a checks envelope (a legacy import).
    */
   citations!: TaskEvidenceCitationDto[] | null;
   criterionMatch!: TaskEvidenceCriterionMatchDto | null;
@@ -388,12 +389,41 @@ export class TaskVerificationDto {
   @IsOptional() @IsPublicId() assigneeId?: string;
 }
 
+/**
+ * A task forked from the session making the call (SR55, docs/task-fork-from-session-design.md §2.2):
+ * the snapshot `orbit mcp` took of that session's checkout. The checks are `task-fork.ts`'s.
+ */
+export class TaskForkDto {
+  /** The session making this call — never another one (D6). */
+  @IsPublicId() sessionId!: string;
+  /** The snapshot commit S: the session's HEAD, or a commit over it carrying its uncommitted edits. */
+  @IsString() @Matches(/^[0-9a-fA-F]{40}$/) sha!: string;
+  /** The session's HEAD when the snapshot was taken. */
+  @IsString() @Matches(/^[0-9a-fA-F]{40}$/) baseHead!: string;
+  /** True exactly when `sha` is not `baseHead`. */
+  @IsBoolean() includesUncommitted!: boolean;
+  /**
+   * The paths `sha` changed relative to `baseHead` (`git diff --name-only`), which the task_await
+   * payload names (design §2.7 F4). Optional: a runner from before P3 sends none.
+   */
+  @IsOptional() @IsArray() @ArrayMaxSize(TASK_FORK_CHANGED_FILES_MAX) @IsString({ each: true })
+  @MaxLength(4096, { each: true })
+  changedFiles?: string[];
+}
+
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
   title!: string;
 
   @IsOptional() @IsString() description?: string;
+  // The caller's name for THIS create (docs/orbit-agent-contract.md §5.2, gap G5): sending the same
+  // key again — after a timeout, a dropped answer, or in a later turn — answers with the task the
+  // first send wrote instead of writing a second one, and the same key with a different title or
+  // description is refused 409. Scoped to the calling session (to the account for a person's own
+  // create), so two conversations never share a key. Without it a create is deduplicated only when
+  // the turn that made it is redelivered. On a batch it belongs to the batch, not to an item.
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) idempotencyKey?: string;
   // Existing owner-owned attachments to copy as task inputs, preserving their original scope.
   @IsOptional() @IsArray() @IsPublicId({ each: true }) attachmentIds?: string[];
   // The workspace assigned to execute the task. Must be owned by the caller.
@@ -447,6 +477,10 @@ export class CreateTaskDto {
   // Declaring it here is the first statement of what the task is and needs no reason; turning an
   // existing task codeless does (UpdateTaskDto.codelessReason, `task-codeless.ts`).
   @IsOptional() @IsBoolean() codeless?: boolean;
+  // SR55: start this task from a snapshot of the session making the call (the runner door posts it;
+  // the MCP tool calls it `forkFromSession`). Create-time only: the five columns it becomes are never
+  // written again (migration 0615).
+  @IsOptional() @ValidateNested() @Type(() => TaskForkDto) fork?: TaskForkDto;
   // EXECUTABLE is intentionally only this pair: one command, one expected exit code.
   @IsOptional() @IsString() acceptanceCommand?: string;
   @IsOptional() @IsInt() acceptanceExpectedExitCode?: number;
@@ -628,6 +662,14 @@ export class CreateTasksBatchDto {
    * they submit rather than after.
    */
   @IsOptional() @IsBoolean() dryRun?: boolean;
+
+  /**
+   * The caller's name for this batch, as `idempotencyKey` is for a single create: the same key sent
+   * again answers with the rows the first send wrote, item for item, instead of writing the plan a
+   * second time. Each item is keyed by the batch's key and its position, so the same key with a
+   * changed item is refused 409. An item may not carry a key of its own.
+   */
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(200) idempotencyKey?: string;
 }
 
 export class DagOpDto {
@@ -890,7 +932,7 @@ export class BatchExecuteDto {
   // When set, caps how many of THIS batch's tasks run at once. It applies only to this
   // batch (the claim queue gates the batch's live sessions on it) and never touches any
   // runner's persistent max_concurrent — independent of the per-runner cap. Rest queue.
-  @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
+  @IsOptional() @IsInt() @Min(1) maxConcurrent?: number;
 
   /** This press's identity, exactly as on `RunTaskDto` — one press, one run per task in it. */
   @IsOptional() @IsPublicId() triggerId?: string;

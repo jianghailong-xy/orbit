@@ -7,6 +7,7 @@ import {
   type WikiSearchHit,
   type WikiSearchMatch,
   type WikiSearchRow,
+  type WikiSearchUnavailable,
   type WikiTrust,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -100,6 +101,17 @@ export interface WikiSearchOutcome {
   q: string;
   semantic: false;
   hits: WikiSearchHit[];
+  /** Set only when there was no wiki to search (contract `searchUnavailable`): `hits` is then empty by construction. */
+  unavailable?: WikiSearchUnavailable;
+}
+
+/**
+ * The answer to a session whose workspace has no wiki, or whose repository's wiki is in Trash (design
+ * docs/wiki-explicit-creation-design.md §3.3): nothing found and why, never a refusal, because every session is asked to
+ * search before it edits a file and an error would stop it to explain one.
+ */
+export function unavailableSearch(q: string | undefined, unavailable: WikiSearchUnavailable): WikiSearchOutcome {
+  return { q: normalizeSearchQuery(stripEmphasis(q ?? ''))?.raw ?? '', semantic: false, hits: [], unavailable };
 }
 
 /** One entry, as the fusion ranked it. */

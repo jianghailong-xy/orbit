@@ -54,9 +54,51 @@ export const RUNNER_ENGINES = 'Engines';
 export const RUNNER_WORKSPACES = 'Workspaces';
 export const RUNNER_ABOUT = 'About This Runner';
 
+// MARK: Resources
+
+export const RUNNER_RESOURCES = 'Resources';
+export const RUNNER_RESOURCES_CPU = 'CPU';
+export const RUNNER_RESOURCES_MEMORY = 'Memory';
+export const RUNNER_RESOURCES_LIVE = 'Live · every 30 s · last hour';
+export const RUNNER_RESOURCES_OFFLINE = 'Offline';
+export const RUNNER_RESOURCES_DISK_ONLY = 'Disk is read from your workspaces';
+export const RUNNER_RESOURCES_UPDATE = 'Update runner';
+export const RUNNER_RESOURCES_NO_READING = 'No reading yet';
+export const RUNNER_RESOURCES_MEMORY_FULL = 'Nearly full — new sessions may be slow to start.';
+
+/** The header of an offline machine's Resources: when its last reading came, as `ago` says it (`14m ago`). */
+export function runnerResourcesLastReading(ago: string): string {
+  return `Offline · last reading ${ago}`;
+}
+
+/** A runner too old to report CPU or memory; `what` is the tile's own name. */
+export function runnerResourcesPredates(what: 'CPU' | 'memory'): string {
+  return `This runner predates ${what} readings.`;
+}
+
+export const RUNNER_CPU_ONE_CORE = '1 core';
+
+export function runnerCpuCores(count: string): string {
+  return `${count} cores`;
+}
+
+/** The one-minute load average, already formatted (`3.0`). */
+export function runnerCpuLoad(load: string): string {
+  return `load ${load}`;
+}
+
+export function runnerDiskFree(free: string): string {
+  return `${free} GB free`;
+}
+
 // MARK: Capacity
 
 export const RUNNER_MAX_CONCURRENT = 'Max Concurrent';
+/** Max Concurrent's dialog, opened from its `3/16`: what the number is, and when it takes effect. */
+export const RUNNER_MAX_CONCURRENT_HINT =
+  'How many sessions this machine runs at once. A change applies to the next session it picks up — no restart.';
+/** Beside Max Concurrent's reading: opens its dialog. */
+export const RUNNER_EDIT = 'Edit';
 export const RUNNER_DISK = 'Disk';
 export const RUNNER_KEEP_FREE = 'Keep Free';
 export const RUNNER_KEEP_FREE_OFF = 'Off';
@@ -174,8 +216,17 @@ export const RUNNER_ABOUT_LAST_UPDATE = 'Last Update';
 export const RUNNER_VERSION_LATEST = 'Latest';
 /** Behind the latest release on a runner that replaces itself: it waits for an idle moment. */
 export const RUNNER_VERSION_INSTALLS_WHEN_IDLE = 'installs when no turn is running';
+/** The same, from a runner that reports its quiet window (selfUpdate.quietWindowSeconds, in whole
+ *  minutes here): it waits until no turn has ended and nothing was claimed for that long. */
+export function runnerVersionInstallsWhenQuiet(minutes: number): string {
+  return `installs when the runner has been idle for ${minutes} min`;
+}
 /** Behind the latest release because its staged rollout hasn't reached this runner. */
 export const RUNNER_VERSION_NOT_ROLLED_OUT = 'not rolled out to it yet';
+/** About's Version note while the runner drains or restarts for a release: `updating to 0.1.254`. */
+export function runnerVersionUpdatingTo(version: string): string {
+  return `updating to ${version}`;
+}
 export const RUNNER_RUNS_AS_ROOT = 'root';
 export const RUNNER_RUNS_AS_REGULAR_USER = 'regular user';
 export const RUNNER_ROOT_NO_BYPASS = 'Runs as root, so sessions here can’t use Bypass permissions.';
@@ -468,4 +519,186 @@ export function attentionEngineUpdateFailed(engine: string): string {
 /** `note` is runnerEngines' updateNoteOf text, capitalized: `18d behind 2.1.270`. */
 export function attentionEngineUpdateDetail(note: string): string {
   return `${note}. Orbit retries every 30 min — Update Engines Now tries again right away.`;
+}
+
+/** Fix with an agent: one press starts a session on that machine (docs/mocks/install-failed-fix-with-agent). */
+export const AGENT_FIX_BUTTON = 'Fix with an agent';
+/** In place of the button while that session is open; the link opens it. */
+export function agentFixFixing(workspace: string): string {
+  return `An agent is fixing this in ${workspace} · `;
+}
+export const AGENT_FIX_OPEN_SESSION = 'Open session';
+/** Under the button on an Install failed panel: where the session would run. */
+export function agentFixStartsIn(workspace: string, engine: string): string {
+  return `Starts a session in ${workspace} on this machine, with ${engine}.`;
+}
+/** After a signed-out reason on an Install failed panel, whose engine rows (and their Sign in) are above it. */
+export function agentFixSignInAbove(engine: string): string {
+  return ` Sign in to ${engine} above to use this.`;
+}
+export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
+
+/** The card's second action, beside Update Engines Now; `engine` is the CLI's own name. */
+export function attentionDismissUntilNextRelease(engine: string): string {
+  return `Dismiss until next ${engine} release`;
+}
+
+/** The engine row's warning panel: the same dismissal, after its retry hint. */
+export const RUNNER_ENGINE_UPDATE_DISMISS = 'Dismiss';
+
+// MARK: the Update card (docs/runner-update-drain-design.md, board 4)
+
+export const RUNNER_UPDATE_TAG_AVAILABLE = 'Available';
+export const RUNNER_UPDATE_TAG_DRAINING = 'Not taking new work';
+export const RUNNER_UPDATE_TAG_RESTARTING = 'Restarting';
+export const RUNNER_UPDATE_TAG_POSTPONED = 'Postponed';
+
+export function runnerUpdateAvailableTitle(version: string): string {
+  return `${version} is available`;
+}
+export const RUNNER_UPDATE_AVAILABLE_BODY =
+  'It installs when no turn is running. If turns keep running for an hour, it stops taking new ' +
+  'work so they can finish.';
+/** The Available card's body for a runner that reports its quiet window; unit is RUNNER_UNIT_MINUTE(S). */
+export function runnerUpdateAvailableBodyQuiet(minutes: number, unit: string): string {
+  return `It installs once the runner has been idle for ${minutes} ${unit}. If it stays busy for an hour, it stops taking new work so its turns can finish.`;
+}
+
+export function runnerUpdateDrainingTitle(version: string): string {
+  return `Updating to ${version}`;
+}
+/** `since`: the clock time the release was first found waiting. */
+export function runnerUpdateDrainingBody(version: string, since: string): string {
+  return `${version} has been waiting since ${since}. After an hour it stopped taking new work so the turns in flight can finish; then it installs and restarts.`;
+}
+/** The same, from a runner that didn't say since when. */
+export const RUNNER_UPDATE_DRAINING_BODY_NO_SINCE =
+  'It stopped taking new work so the turns in flight can finish; then it installs and restarts.';
+export const RUNNER_UPDATE_TURN = 'turn';
+export const RUNNER_UPDATE_TURNS = 'turns';
+/** The progress line's count: `Waiting for 2 of 8 turns`. */
+export function runnerUpdateWaitingForOf(left: number, of: number, unit: string): string {
+  return `Waiting for ${left} of ${of} ${unit}`;
+}
+/** From a runner that didn't say how many there were at the start: `Waiting for 2 turns`. */
+export function runnerUpdateWaitingFor(left: number, unit: string): string {
+  return `Waiting for ${left} ${unit}`;
+}
+/** How long it has waited, after the count and RUNNER_LINE_SEPARATOR: `38 min`, `1 h 52 min`, `2 h`. */
+export function runnerUpdateWaitedMinutes(minutes: number): string {
+  return `${minutes} min`;
+}
+export function runnerUpdateWaitedHoursMinutes(hours: number, minutes: number): string {
+  return `${hours} h ${minutes} min`;
+}
+export function runnerUpdateWaitedHours(hours: number): string {
+  return `${hours} h`;
+}
+
+/** A turn the drain waits for, on its row: how long it has run. */
+export function runnerUpdateTurnRunning(duration: string): string {
+  return `running ${duration}`;
+}
+export const RUNNER_UPDATE_UNTITLED_TURN = 'Untitled session';
+
+export function runnerUpdateRestartingTitle(version: string): string {
+  return `Restarting into ${version}…`;
+}
+export const RUNNER_UPDATE_RESTARTING_BODY = 'Usually under a minute.';
+/** Restarting for the owner's Update Now, which interrupted one turn. */
+export const RUNNER_UPDATE_RESTARTING_BODY_ONE = '1 interrupted turn continues once it is back. Usually under a minute.';
+/** ...or several: `2 interrupted turns continue once it is back. Usually under a minute.` */
+export function runnerUpdateRestartingBodyMany(turns: number): string {
+  return `${turns} interrupted turns continue once it is back. Usually under a minute.`;
+}
+
+// The Updated card (board 4): shown for a day after the update (runnerUpdateCard), then About's Last Update says it.
+export function runnerUpdateUpdatedTitle(version: string): string {
+  return `Updated to ${version}`;
+}
+/** How long the restart took: `34 s`, `1 min 12 s`, `2 min`. */
+export function runnerUpdateTookSeconds(seconds: number): string {
+  return `${seconds} s`;
+}
+export function runnerUpdateTookMinutesSeconds(minutes: number, seconds: number): string {
+  return `${minutes} min ${seconds} s`;
+}
+export function runnerUpdateTookMinutes(minutes: number): string {
+  return `${minutes} min`;
+}
+/** The Updated card's body: `Took 34 s.`, then what became of the turns Update Now interrupted. */
+export function runnerUpdateUpdatedTook(took: string): string {
+  return `Took ${took}.`;
+}
+export const RUNNER_UPDATE_RESUMED_ONE = '1 interrupted turn resumed.';
+export function runnerUpdateResumedMany(turns: number): string {
+  return `${turns} interrupted turns resumed.`;
+}
+
+// Update Now… (board 3 ⑧ on the web; board 5's confirmation on iOS and Android): install the waiting
+// release now, interrupting the turns in flight, which continue once the runner is back.
+export function runnerUpdateNowTitle(runner: string): string {
+  return `Update ${runner} now?`;
+}
+/** The confirmation's first paragraph, by how many turns it interrupts: none, one, several. */
+export function runnerUpdateNowBodyNone(version: string): string {
+  return `No turn is running. It installs ${version} and restarts — usually under a minute.`;
+}
+export function runnerUpdateNowBodyOne(version: string): string {
+  return `It stops this turn, installs ${version} and restarts — usually under a minute. It then continues where it stopped, with a note that the update interrupted it.`;
+}
+export function runnerUpdateNowBodyMany(version: string): string {
+  return `It stops these turns, installs ${version} and restarts — usually under a minute. Each one then continues where it stopped, with a note that the update interrupted it.`;
+}
+/** Below the turns. A self-update re-execs the runner, which hands background jobs on; services stop. */
+export const RUNNER_UPDATE_NOW_JOBS_NOTE =
+  'Background jobs in those sessions keep running; services they started are stopped. Waiting work starts once it is back.';
+/** The red button: `Interrupt 1 Turn and Update`, `Interrupt 2 Turns and Update`; with nothing running, RUNNER_UPDATE_NOW_CONFIRM. */
+export const RUNNER_UPDATE_NOW_CONFIRM_ONE = 'Interrupt 1 Turn and Update';
+export function runnerUpdateNowConfirmMany(turns: number): string {
+  return `Interrupt ${turns} Turns and Update`;
+}
+export const RUNNER_UPDATE_NOW_FAILED = 'Couldn’t update the runner';
+/** The toast once the server took it. */
+export function runnerUpdateNowToast(version: string): string {
+  return `Restarting into ${version}…`;
+}
+
+// The transcript (D4): the interrupt the update made.
+export function runnerUpdateInterruptedTo(version: string): string {
+  return `⊘ interrupted — the runner updated to ${version}`;
+}
+/** From a runner that did not name the release. */
+export const RUNNER_UPDATE_INTERRUPTED = '⊘ interrupted — the runner updated';
+
+export function runnerUpdatePostponedTitle(version: string, until: string): string {
+  return `${version} postponed until ${until}`;
+}
+// Later ▾ (board 3 ⑦ on the web; board 5's action sheet on iOS and Android)
+export const RUNNER_UPDATE_LATER = 'Later';
+/** The postponed card's Later, which picks a new time. */
+export const RUNNER_UPDATE_CHANGE = 'Change';
+export const RUNNER_UPDATE_LATER_HOUR = 'Postpone 1 hour';
+export const RUNNER_UPDATE_LATER_TONIGHT = 'Postpone until tonight';
+export const RUNNER_UPDATE_LATER_TOMORROW = 'Postpone until tomorrow';
+/** Beside Postpone 1 hour: `until 12:57`. */
+export function runnerUpdateLaterUntil(clock: string): string {
+  return `until ${clock}`;
+}
+/** The toast once the server took it: `Update postponed until 02:00 — the runner takes work again.` */
+export function runnerUpdatePostponedToast(clock: string): string {
+  return `Update postponed until ${clock} — the runner takes work again.`;
+}
+export const RUNNER_UPDATE_POSTPONE_FAILED = 'Couldn’t postpone the update';
+/** The postponed card's Update Now…: ends the postponement through Update Runner Now. */
+export const RUNNER_UPDATE_NOW = 'Update Now…';
+export function runnerUpdateNowConfirmTitle(version: string): string {
+  return `Update to ${version} now?`;
+}
+export const RUNNER_UPDATE_NOW_CONFIRM_BODY =
+  'The postponement ends. It installs as soon as no turn is running; if turns keep running for an hour, it stops taking new work so they can finish.';
+export const RUNNER_UPDATE_NOW_CONFIRM = 'Update Now';
+
+export function runnerUpdatePostponedBody(until: string): string {
+  return `Taking work as usual. At ${until} it waits for the turns in flight again, for up to an hour.`;
 }

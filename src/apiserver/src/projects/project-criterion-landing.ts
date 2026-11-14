@@ -309,6 +309,9 @@ export interface LandingServingTask {
 export interface CriterionWithLandingFacts {
   id: string;
   servingTasks: ReadonlyArray<LandingServingTask>;
+  /** A CONFIRMATION criterion (migration 0545) takes no part in landing: it is met by somebody
+   *  saying it holds, not by work reaching a branch. Absent reads as TASKS. */
+  satisfiedBy?: 'TASKS' | 'CONFIRMATION';
 }
 
 /** One criterion's landing answer, addressed the same way the satisfaction answer is. */
@@ -796,6 +799,9 @@ export function criterionLanding(
   branches: LandingBranches,
 ): CriterionLandingAnswer[] {
   return definitions.map((definition) => {
+    if (definition.satisfiedBy === 'CONFIRMATION') {
+      return { definitionId: definition.id, landing: 'LANDED' as CriterionLanding };
+    }
     const delivery = definition.servingTasks.filter((task) => !taskHasNothingToLand(task));
     const tasks = delivery.map((task) => taskLanding(task.mergeReceipts, branches));
     let landing: CriterionLanding = 'UNKNOWN';
@@ -846,6 +852,7 @@ export async function readCriterionLandingFacts(
     where: { projectId, project: { ownerId } },
     select: {
       id: true,
+      satisfiedBy: true,
       servingTasks: {
         where: { ownerId },
         // `id` is not the fold's to read; it is how the jobs below are keyed to these rows.

@@ -312,7 +312,11 @@ test('evidence that cites a file', { skip: !URL, concurrency: 1, timeout: 600_00
     assert.deepEqual(plain.evidence.checks, [neighbour.tool]);
     assert.equal(plain.evidenceDigest, completionDigest(envelope(neighbour, [neighbour.tool])), 'the digest of what was sent');
     const ledger = await call(api, 'GET', `/api/runner/tasks/${b62(neighbour.taskId)}/evidence`, owner.token);
-    assert.equal(ledger.json[0].citations, null);
+    assert.deepEqual(
+      ledger.json[0].citations.map(({ kind, resolved }: { kind: string; resolved: boolean }) => [kind, resolved]),
+      [['TOOL_CALL', true]],
+      'its citations are told as of the read, a tool call\'s as much as a file\'s',
+    );
   });
 
   await t.test('(2) only reformatting keeps the digest, and other bytes do not', async () => {

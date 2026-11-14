@@ -1,4 +1,5 @@
 import type { SessionMessageCard } from '@orbit/shared';
+import { MODE_OPTIONS } from './workspaceDefaults';
 
 /**
  * Another Orbit session's message, as the control plane recorded who sent it beside the turn's echo
@@ -26,7 +27,7 @@ export function parseSessionMessage(payload: unknown): SessionMessageCard | null
   };
 }
 
-/** The word in front of the sending session's title, on the card's head and on the sticky bar. */
+/** The word in front of the sending session's title, on the card's head. */
 export const SESSION_MESSAGE_FROM = 'From';
 /** What a session with no title is called where its title would be. */
 export const SESSION_MESSAGE_UNTITLED = 'Untitled session';
@@ -40,10 +41,35 @@ export function sessionMessageTitle(card: SessionMessageCard): string {
   return card.fromTitle.trim() || SESSION_MESSAGE_UNTITLED;
 }
 
+/** The block delivery appends after another session's message (apiserver `sessionMessageBlock`). */
+const SESSION_MESSAGE_BLOCK = /<orbit-session-message\b[^>]*>[\s\S]*?<\/orbit-session-message>/g;
+/** The block's sentence for a sender that may do less than this session (apiserver `narrowerSenderNote`). */
+const NARROWER_SENDER = /The sender runs in (\S+), which is narrower than this session's (\S+)\./;
+
+/** A permission mode as the mode picker names it; a mode this client does not know, as sent. */
+function modeLabel(mode: string): string {
+  return MODE_OPTIONS.find((option) => option.value === mode)?.label ?? mode;
+}
+
+/** The card's line for a sender that runs narrower than this session (board session-message-attached-line ③). */
+export function sessionMessageNarrower(from: string, to: string): string {
+  return `Sender runs in ${modeLabel(from)}, narrower than this session's ${modeLabel(to)}: not taken as your approval`;
+}
+
 /**
- * What the sticky bar names this turn by: who sent it, and what it said. Not "Your question" — the
- * bar saying that above a card reading "not by you" would be the screen contradicting itself.
+ * A session message's recorded note without its own block, which only tells the agent what the card
+ * already shows the reader — who sent it, its task, the request (owner, 2026-11-12; board
+ * docs/mocks/session-message-attached-line). `rest` is whatever else delivery appended, still folded
+ * under the card; empty when there is nothing else. The one thing the block says that the card does
+ * not — that the sender runs in a narrower mode than this session — comes back as `narrower`, the
+ * card's own line.
  */
-export function sessionMessageSticky(card: SessionMessageCard, text: string): { label: string; text: string } {
-  return { label: `${SESSION_MESSAGE_FROM} ${sessionMessageTitle(card)}`, text };
+export function splitSessionMessageNote(note: string | null | undefined): { rest: string; narrower: string | null } {
+  if (!note) return { rest: '', narrower: null };
+  const blocks = note.match(SESSION_MESSAGE_BLOCK) ?? [];
+  const narrower = blocks.map((block) => NARROWER_SENDER.exec(block)).find((m) => m != null);
+  return {
+    rest: note.replace(SESSION_MESSAGE_BLOCK, '').trim(),
+    narrower: narrower ? sessionMessageNarrower(narrower[1], narrower[2]) : null,
+  };
 }

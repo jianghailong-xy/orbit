@@ -18,6 +18,8 @@ object ProjectCrossings {
     const val unreadable = "Crossings could not be loaded"
     /** A project end the server sent no title for. */
     const val unnamedProject = "unnamed project"
+    /** The "to" end of a move that takes the task out of its project, filed under none. */
+    const val noProject = "no project"
     const val arrow = " → "
     const val approveAsk = "Approve…"
     const val refuseAsk = "Refuse…"
@@ -39,18 +41,23 @@ object ProjectCrossings {
     const val moveCriterionGone = "The target project no longer states this criterion."
     const val moveApproveConsequence =
         "Confirming is the move: the task joins the target project as soon as you answer, and nobody has to send the request again."
+    /** The same, for a move that files the task under no project. */
+    const val moveOutApproveConsequence = "Confirming takes the task out of this project; no project's acceptance counts it any more."
     const val moveDenyConsequence =
         "Refusing is final for this request, and the task stays where it is. If you change your mind, move the task yourself."
     // A filing, and a dependency.
     const val fileApproveConsequence = "The writer may then file this work under the target project. It is not filed by this answer."
     const val fileDenyConsequence = "Refusing is final for this crossing. If you change your mind, file the work yourself."
 
-    /** What a row cannot be answered without: which row, its two ends, what it is, where it stands and the key an answer echoes. A
-     * list with a row short of one fails as a read — an older server's row with less on it is still a row. */
+    /** What a row cannot be answered without: which row, its source, what it is, where it stands and the key an answer echoes. A
+     * list with a row short of one fails as a read — an older server's row with less on it is still a row. The target may be none: a
+     * move that takes the task out of its project. */
     fun rows(read: JsonElement): List<JsonObject>? {
         val rows = (read as? JsonArray)?.map { it as? JsonObject ?: return null } ?: return null
-        return rows.takeIf { all -> all.all { row -> listOf("id", "fromProjectId", "toProjectId", "kind", "crossingKey", "state").all { row.text(it) != null } } }
+        return rows.takeIf { all -> all.all { row -> listOf("id", "fromProjectId", "kind", "crossingKey", "state").all { row.text(it) != null } } }
     }
+    /** A row with no target project: a move that files the task under none. */
+    fun hasNoTarget(row: JsonObject) = row.text("toProjectId") == null && row.text("toProjectPublicId") == null
     fun isMove(row: JsonObject) = row.text("kind") == moveKind
     /** What a state is called; a state nobody wrote a label for reads as its own code. */
     fun label(state: String) = TaskDetailCopy.crossingStateLabel[state] ?: state
@@ -67,6 +74,12 @@ object ProjectCrossings {
         return pending.sortedBy { it.text("requestedAt").orEmpty() } + answered.sortedByDescending { it.text("requestedAt").orEmpty() }
     }
     fun waitingCount(rows: List<JsonObject>) = rows.count { isAnswerable(it.text("state")) }
+    /** The rows the project page lists: those no coordinator conversation answers. A target with a live coordinator draws the
+     * row as a decision card there, so neither end's page lists it, answered or not. No target, a null `coordinatorSessionId`, or an
+     * older server that sends no such key: the row stays — better twice than nowhere to answer it. */
+    fun pageRows(rows: List<JsonObject>) = rows.filter { row ->
+        (row["toProject"] as? JsonObject)?.get("coordinatorSessionId").let { it == null || it is JsonNull }
+    }
 
     // Ids and names: the id a person can read and paste — Base62 when the server sent it.
     fun fromId(row: JsonObject) = row.text("fromProjectPublicId") ?: row.text("fromProjectId").orEmpty()
@@ -82,8 +95,9 @@ object ProjectCrossings {
     fun prompt(row: JsonObject, approve: Boolean): Prompt {
         val verb = if (approve) "Approve" else "Refuse"
         val from = row.obj("fromProject")?.text("title") ?: fromId(row)
-        val to = row.obj("toProject")?.text("title") ?: toId(row)
-        return if (isMove(row)) Prompt(verb, from, to, subjectTitle(row), if (approve) moveApproveConsequence else moveDenyConsequence)
+        val to = if (hasNoTarget(row)) noProject else row.obj("toProject")?.text("title") ?: toId(row)
+        val approved = if (hasNoTarget(row)) moveOutApproveConsequence else moveApproveConsequence
+        return if (isMove(row)) Prompt(verb, from, to, subjectTitle(row), if (approve) approved else moveDenyConsequence)
             else Prompt(verb, from, to, row.text("title").orEmpty(), if (approve) fileApproveConsequence else fileDenyConsequence)
     }
     /** The second press's question, naming the subject and both ends. */

@@ -166,11 +166,20 @@ export const providerIdentityResolved = (
 // `codex debug models`; Claude: `claude -p "/model <alias>"`). There are no static
 // fallback lists — when no runner catalog is available the picker is empty.
 // Mirrors Claude Code's `/model` picker (Opus 5 default / Fable 5 / Sonnet 5 / Haiku 4.5).
-// Previous models (Opus 4.8, …) stay reachable by pinning the id directly and render as
-// their raw id, same as any other non-current model.
+// Previous models (Opus 4.8, …) stay reachable by pinning the id directly; a Claude id the
+// catalogue has no row for reads as its name (claudeModelName), any other as its raw id.
 // Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
 // model's context window and thinking levels). Its managed default is the one static fallback,
 // for a runner whose CLI predates that probe.
+/** The name Claude Code gives a Claude api id: `claude-opus-5-5` -> "Opus 5.5", `claude-haiku-4-5` ->
+ *  "Haiku 4.5" — the reverse of the runner's claudeModelID. For a model the runner's catalogue has no
+ *  row for (a runner whose probe failed, a pin on a previous model); anything else stays as it is. */
+export const claudeModelName = (id: string): string => {
+  const m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?$/.exec(id);
+  if (!m) return id;
+  return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] ? `.${m[3]}` : ''}`;
+};
+
 export const KIMI_MODEL_OPTIONS = [
   { value: 'kimi-code/kimi-for-coding', label: 'Kimi for Coding' },
 ];

@@ -7,9 +7,9 @@ import OrbitKit
 /// selectable on a phone where a tooltip is not available.
 ///
 /// The line is in the voice of the time under a message and says what is attached, nothing more:
-/// "⊕ Orbit attached: background jobs", ⊖ once open. What the person typed is what the eye should
-/// land on (owner, 2026-10-27; docs/mocks/attached-context-note), so how the block stands — "2
-/// running, 1 failed" — is the line's accessibility label, and the opened rows say it job by job.
+/// "⊕ Orbit attached: list conditions", ⊖ once open. What the person typed is what the eye should
+/// land on (owner, 2026-10-27; docs/mocks/attached-context-note). A coordinator's role, the
+/// background-jobs inventory and a `#`-reference draw no line of their own (owner, 2026-11-14).
 ///
 /// Under a person's bubble the line ends the bubble's meta row and what it opens to goes under that
 /// row (`UserBubbleView`, which holds the open state for both). Inside a card that is Orbit's own — a
@@ -27,16 +27,13 @@ struct AttachedNoteEntry: View {
     }
 }
 
-/// The line that names the note: ⊕ while it is shut, ⊖ while it is open, the counts in its
-/// accessibility label (web: the line's accessible name and tooltip).
+/// The line that names the note: ⊕ while it is shut, ⊖ while it is open.
 struct AttachedNoteLine: View {
     let attached: (kind: String, text: String)
     @Binding var open: Bool
 
     var body: some View {
-        let jobs = BackgroundJobsText.parse(attached.text)
-        let tasks = ReferencedTaskText.parse(jobs?.rest ?? attached.text)
-        return Button {
+        Button {
             open.toggle()
         } label: {
             Text(open ? "⊖ Orbit attached: \(attached.kind)" : "⊕ Orbit attached: \(attached.kind)")
@@ -45,16 +42,8 @@ struct AttachedNoteLine: View {
                 .multilineTextAlignment(.leading)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(head(jobs, tasks)))
-        .help(head(jobs, tasks))
-    }
-
-    /// "⊕ Orbit attached: background jobs · 2 running, 1 failed".
-    private func head(_ jobs: BackgroundJobs?, _ tasks: ReferencedTasks?) -> String {
-        var line = "⊕ Orbit attached: \(attached.kind)"
-        if let tasks { line += " · " + ReferencedTaskNote.summary(tasks.tasks) }
-        if let jobs { line += " · " + BackgroundJobsNote.summary(jobs) }
-        return line
+        .accessibilityLabel(Text("⊕ Orbit attached: \(attached.kind)"))
+        .help("⊕ Orbit attached: \(attached.kind)")
     }
 }
 
@@ -203,6 +192,13 @@ struct BackgroundJobsNoteView: View {
 struct ReferencedTaskNoteView: View {
     let tasks: [ReferencedTask]
     @Environment(\.openURL) private var openURL
+    /// The app's own link door: over a phone's conversation the task is pushed over it (see
+    /// `opensPagesOverConsole`), so the back swipe returns to the conversation.
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.opensPagesOverConsole) private var overConsole
+    /// On a wide shell a task opens over the page instead of switching sections
+    /// (`opensTasksOverPage`, owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -226,7 +222,8 @@ struct ReferencedTaskNoteView: View {
                 }
                 // The title is the row, and tapping it opens the task the block could only name.
                 Button {
-                    if let url = ReferencedTaskNote.link(task) { openURL(url) }
+                    if let url = ReferencedTaskNote.link(task),
+                       app?.openOrbitLink(url, overConsole: overConsole, overPage: opensTasksOverPage) != true { openURL(url) }
                 } label: {
                     Text(task.title)
                         .font(.orbitLabel)

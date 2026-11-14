@@ -170,8 +170,8 @@ export function WikiTrashDialog({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * The line that leads to Trash where the sidebar's row is not to hand: under Wiki settings' last card, and on the
- * first-wiki card once no wiki is left. Nothing while Trash is empty.
+ * The way to Trash: under Wiki settings' last card, and on the first-wiki card once no wiki is left. The sidebar has
+ * no Trash row (docs/mocks/wiki-trash/02-trash-entry). Nothing while Trash is empty.
  */
 export function WikiTrashLink({ sentence, className }: { sentence: (wikis: number) => string; className?: string }) {
   const trash = useQuery(wikiTrashQuery());

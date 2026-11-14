@@ -448,6 +448,29 @@ class ComposerModelTest {
         assertEquals("claude", engine("""{"provider":"a-deleted-key"}"""))
     }
 
+    /** A Codex pool of one's own runs Claude Code only where GET /providers/pools lists `claude` among its `engines`
+     * (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY), and says what that risks under it; a shared pool never does, whatever it lists. */
+    @Test fun aCodexPoolOfOnesOwnRunsClaudeCodeOnlyWhereTheServerSaysSo() {
+        fun catalog(vararg pools: JsonObject) = ComposerCatalog(EngineFixture.obj(EngineFixture.RUNNER),
+            EngineFixture.providers() + pools)
+        val plain = ProviderEngines.poolRow(EngineFixture.obj("""{"slug":"my-chatgpt","label":"My ChatGPT","engine":"codex","members":[]}"""),
+            ProviderEngines.CLAUDE)
+        assertTrue(catalog(plain).credentials("claude").none { it.id == "my-chatgpt" })
+        assertTrue(catalog(plain).credentials("codex").any { it.id == "my-chatgpt" })
+
+        val listed = ProviderEngines.poolRow(EngineFixture.obj(
+            """{"slug":"my-chatgpt","label":"My ChatGPT","engine":"codex","engines":["codex","claude"],"members":[]}"""), ProviderEngines.CLAUDE)
+        val underClaude = catalog(listed).credentials("claude").first { it.id == "my-chatgpt" }
+        assertEquals(CredentialKind.POOL, underClaude.kind)
+        assertEquals(EngineCopy.CODEX_POOL_ON_CLAUDE_NOTICE, underClaude.notice)
+        assertNull(catalog(listed).credentials("codex").first { it.id == "my-chatgpt" }.notice)
+
+        val team = ProviderEngines.poolRow(EngineFixture.obj(
+            """{"slug":"team-codex","label":"Team Codex","engines":["codex","claude"],"members":[]}"""), ProviderEngines.CODEX, shared = true)
+        assertTrue(catalog(team).credentials("claude").none { it.id == "team-codex" })
+        assertTrue(catalog(team).credentials("codex").any { it.id == "team-codex" })
+    }
+
     /** The Provider menu lists only what the engine runs, grouped: its own sign-in (or OpenCode's own configuration), its pools,
      * its keys. Harness lists every DeepSeek key and no row of its own; no engine lists another engine's credential. */
     @Test fun theProviderMenuGroupsTheEnginesCredentialsAndHarnessTakesEveryDeepSeekKey() {

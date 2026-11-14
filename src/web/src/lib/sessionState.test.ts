@@ -14,6 +14,9 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
   sessionStateOf,
+  sessionActivityOf,
+  sessionStateWord,
+  isSessionWorking,
 } from './sessionState';
 
 describe('sessionRunStateOf', () => {
@@ -299,5 +302,31 @@ describe('sessionIsStarting', () => {
     expect(sessionIsStarting({ runState: 'QUEUED', engineStartedAt: null })).toBe(false);
     expect(sessionIsStarting({ runState: 'AWAITING_INPUT', engineStartedAt: null })).toBe(false);
     expect(sessionIsStarting({ runState: 'ENDED', engineStartedAt: null })).toBe(false);
+  });
+});
+
+describe('a parked session still working (activity)', () => {
+  const parked = { runState: 'AWAITING_INPUT', lifecycleState: 'OPEN' };
+
+  it('reads activity only off a parked session, and only a known value', () => {
+    expect(sessionActivityOf({ ...parked, activity: 'BACKGROUND_JOB' })).toBe('BACKGROUND_JOB');
+    expect(sessionActivityOf({ ...parked, activity: 'SOMETHING_NEW' })).toBeNull();
+    expect(sessionActivityOf({ ...parked })).toBeNull();
+    expect(sessionActivityOf({ runState: 'RUNNING', activity: 'TURN' })).toBeNull();
+  });
+
+  it('says what it is doing instead of asking for a reply', () => {
+    expect(sessionStateWord({ ...parked, activity: 'TURN' })).toBe('Running');
+    expect(sessionStateWord({ ...parked, activity: 'BACKGROUND_JOB' })).toBe('Running in background');
+    expect(sessionStateWord({ ...parked, activity: 'WAITING' })).toBe('Waiting to resume');
+    expect(sessionStateWord({ ...parked, activity: null })).toBe('Awaiting reply');
+    expect(sessionStateWord({ ...parked, activity: null }, { canReply: false })).toBe('Waiting for owner');
+    expect(sessionStateWord({ runState: 'AWAITING_INPUT', lifecycleState: 'COMPLETED', activity: 'TURN' })).toBe('Completed');
+  });
+
+  it('counts a self-driven turn as working, and nothing else it is parked on', () => {
+    expect(isSessionWorking({ ...parked, activity: 'TURN' })).toBe(true);
+    expect(isSessionWorking({ ...parked, activity: 'BACKGROUND_JOB' })).toBe(false);
+    expect(isSessionWorking({ runState: 'RUNNING' })).toBe(true);
   });
 });

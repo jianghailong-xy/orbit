@@ -312,25 +312,50 @@ object OwnerConfirmationCopy {
 }
 
 object TaskDetailCopy {
-    const val detailsHeading = "Details"
     const val dependenciesHeading = "Dependencies"
-    const val descriptionHeading = "Description"
     const val acceptanceHeading = "Acceptance"
     const val inputsHeading = "Inputs"
     const val attributionHeading = "Attribution"
     const val followedByHeading = "Followed by"
-    const val runsHeading = "Runs"
-    const val commentsHeading = "Comments"
     const val runNow = "Run now"
+    // The page led by the agent's work (TaskDetailAgentFirst.swift, boards 04–05).
+    const val nowHeading = "Now"
+    /** The evidence card's heading on a done task; `evidenceHeading` on any other. */
+    const val deliveredHeading = "Delivered"
+    const val evidenceHeading = "Evidence"
+    const val doneMeansHeading = "Done means"
+    const val briefHeading = "Brief for the agent"
+    const val planHeading = "In the plan"
+    const val runsWithHeading = "Runs with"
+    const val activityHeading = "Activity"
+    const val showGraph = "Show graph"
+    const val hideGraph = "Hide graph"
+    const val runAgain = "Run again"
+    const val changesApplyToNextRun = "Changes apply to the next run. The run going now keeps what it started with."
+    const val toTheRun = "To the run"
+    const val comment = "Comment"
+    const val sentToTheRun = "Sent to the run"
+    fun messageWhileItWorks(name: String) = "Message $name while it works…"
+    fun isWorking(name: String) = "$name is working"
+    const val theAgent = "The agent"
+    const val theAgentInASentence = "the agent"
+    const val evidenceAccepted = "Accepted"
+    const val evidenceSentBack = "Sent back"
+    const val evidenceAwaiting = "Awaiting a decision"
+    const val notCovered = "Not covered: "
+    const val filed = "Filed"
+    // TasksView.swift's own words for the menu, the Runs with line and its sheet.
+    const val markDone = "Mark done"
+    const val agentLabel = "Agent"
+    const val providerDefault = "Provider default"
+    const val noInputFiles = "No input files"
+    const val done = "Done"
     const val nothingStartsThisTask = "Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither."
     const val assigneeLabel = "Assignee"
     const val providerLabel = "Provider"
     const val modelLabel = "Model"
     const val listLabel = "List"
     const val startAtLabel = "Start at"
-    const val createdByLabel = "Created by"
-    const val createdFromLabel = "Created from"
-    const val createdLabel = "Created"
     const val projectCancelledNote = "The project was cancelled, so this task won’t start. Reopen the project to run it."
     const val scheduleNotSet = "Not set"
     const val saveSchedule = "Save schedule"
@@ -364,7 +389,6 @@ object TaskDetailCopy {
     const val automaticJudgementLabel = "Automatic judgement"
     const val edit = "Edit"
     const val acceptanceEmpty = "No acceptance criteria set."
-    const val acceptancePairEmpty = "Not set — a person decides when this task is done."
     const val acceptanceAutomaticHint = "Filled in as a pair, the task is judged by running this command and reading its exit code — nobody has to decide by hand."
     const val acceptancePairIncomplete = "The command and the exit code that counts as done go together — fill in both."
     const val acceptanceExitCodeNotAnInteger = "The exit code has to be a whole number."
@@ -423,8 +447,6 @@ object TaskDetailCopy {
     const val followDeadlineHint = "If the condition has not held by then, the watch expires. Pausing does not stop this clock."
     const val following = "Following"
     const val followMatchedAtOnce = "Already true, so the watch triggered at once"
-    const val noRuns = "No runs yet"
-    const val noComments = "No comments yet"
     const val suggestedLabel = "Suggested"
     const val noSuggestion = "No suggestion"
     const val noSuggestionDetail = "Keeps the agent's model, as today"
@@ -604,7 +626,6 @@ data class TaskActionRow(val leading: Leading?, val trailing: Trailing?) {
         data class Waiting(val sessionId: String) : Leading
         data class UnderReview(val sessionId: String) : Leading
         data object ConfirmDone : Leading
-        data object Reopen : Leading
     }
     sealed interface Trailing {
         data class OpenRun(val sessionId: String?) : Trailing
@@ -656,15 +677,16 @@ data class AcceptanceDraft(val criteria: String = "", val command: String = "", 
 }
 
 object TaskDetailLogic {
-    fun actionRow(owner: OwnerPanelAction?, reopenable: Boolean, status: String?, gate: Boolean, entry: TaskRunHandoff.Entry): TaskActionRow {
+    /** A stopped task — done or cancelled — draws no run here: Reopen task and Run again are in ⋯ (board 05), as on iOS. */
+    fun actionRow(owner: OwnerPanelAction?, status: String?, gate: Boolean, entry: TaskRunHandoff.Entry): TaskActionRow {
         val leading = when (owner) {
             is OwnerPanelAction.Pointer -> TaskActionRow.Leading.Waiting(owner.sessionId)
             is OwnerPanelAction.UnderReview -> TaskActionRow.Leading.UnderReview(owner.sessionId)
             OwnerPanelAction.Confirm -> TaskActionRow.Leading.ConfirmDone
-            null -> if (reopenable) TaskActionRow.Leading.Reopen else null
+            null -> null
         }
         val trailing = when {
-            status == "DONE" -> null
+            status == "DONE" || (status == "CANCELLED" && !gate && entry.kind != TaskRunHandoff.EntryKind.OPEN_RUN) -> null
             !gate && entry.kind == TaskRunHandoff.EntryKind.OPEN_RUN -> TaskActionRow.Trailing.OpenRun(entry.sessionId)
             gate -> TaskActionRow.Trailing.Gate
             entry.kind == TaskRunHandoff.EntryKind.RETRY -> TaskActionRow.Trailing.Retry
@@ -672,6 +694,10 @@ object TaskDetailLogic {
         }
         return TaskActionRow(leading, trailing)
     }
+
+    /** The server's finished SOURCE sentence of a task forked from a session (task-fork-from-session §2.3, SR18), shown verbatim;
+     * a session's detail carries the same field. Null when absent, null or empty: older servers do not send it. */
+    fun forkSource(row: JsonObject): String? = row.text("forkSource")?.takeUnless { it.isBlank() }
 
     /** Asked first like the browser's: a gate row is not waiting on a prerequisite or a workspace. */
     fun runDisabledHint(task: JsonObject, assigneeHasRunner: Boolean): String? = when {
@@ -692,16 +718,6 @@ object TaskDetailLogic {
             task.text("runAt").isNullOrEmpty()
     }
 
-    fun createdFootnote(creatorName: String?, createdAt: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {
-        val time = TaskTime.local(createdAt, zone, locale)
-        val who = creatorName?.takeUnless { it.isBlank() }
-        return when {
-            who != null && time != null -> "${TaskDetailCopy.createdByLabel} $who · $time"
-            who != null -> "${TaskDetailCopy.createdByLabel} $who"
-            time != null -> "${TaskDetailCopy.createdLabel} $time"
-            else -> null
-        }
-    }
     fun scheduleValue(runAt: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String {
         if (runAt.isNullOrEmpty()) return TaskDetailCopy.scheduleNotSet
         return TaskTime.local(runAt, zone, locale) ?: runAt

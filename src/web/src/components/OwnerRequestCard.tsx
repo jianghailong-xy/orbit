@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -35,6 +35,7 @@ import {
 import { accountSecretsQuery, ownerRequestsQuery, runnersQuery } from '../lib/queries';
 import { ago, linkId, sameResourceId } from '../lib/watches';
 import { CardActionButton, CardActions } from './CardAction';
+import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { NOTE_PROMPT, OWN_ANSWER_PROMPT, YOUR_ANSWER, QuestionOptions, optionIndex, type Choice } from './CoordinatorQuestionCard';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
 import Markdown from './Markdown';
@@ -121,11 +122,15 @@ function StepValue({ value, action, onAction, href }: {
 
 function CopyValue({ value }: { value: string }): JSX.Element {
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when the card goes, so it never updates a card that is gone.
+  const reset = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(reset.current), []);
   const copy = () => {
     void copyText(value).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      window.clearTimeout(reset.current);
+      reset.current = window.setTimeout(() => setCopied(false), 1500);
     });
   };
   return <StepValue value={value} action={copied ? 'Copied' : 'Copy'} onAction={copy} />;
@@ -320,8 +325,15 @@ function RemindLater({ request, now }: { request: OwnerRequest; now: number }): 
   );
 }
 
+/** Hands a talk about the request to the conversation's composer. Only a conversation has one, so the inbox passes none. */
+type ChatAbout = (request: OwnerRequest) => void;
+
 /** A pending request, whole. */
-export function OwnerRequestCard({ request: given, now = Date.now() }: { request: OwnerRequest; now?: number }): JSX.Element {
+export function OwnerRequestCard({ request: given, now = Date.now(), onChat }: {
+  request: OwnerRequest;
+  now?: number;
+  onChat?: ChatAbout;
+}): JSX.Element {
   const qc = useQueryClient();
   const door = useSecretDoor(given);
   const request = door.current;
@@ -494,6 +506,9 @@ export function OwnerRequestCard({ request: given, now = Date.now() }: { request
                 {PRIMARY[request.kind]}
               </CardActionButton>
             )}
+            {onChat && !closed ? (
+              <CardActionButton onClick={() => onChat(request)}>{OWNER_SEND_BACK_ACTION}</CardActionButton>
+            ) : null}
             <button type="button" className="owner-request-link" disabled={closed} onClick={() => setDeclining(true)}>
               {request.kind === 'MANUAL_STEP' ? 'Can’t do this…' : 'Decline…'}
             </button>
@@ -633,13 +648,13 @@ function SnoozedRequest({ request, until, now }: { request: OwnerRequest; until:
 }
 
 /** One request where a conversation draws it: whole, folded for later, or as its summary. */
-function ConversationRequest({ request }: { request: OwnerRequest }): JSX.Element {
+function ConversationRequest({ request, onChat }: { request: OwnerRequest; onChat?: ChatAbout }): JSX.Element {
   const snoozes = useSnoozes();
   const now = Date.now();
   if (request.state !== 'PENDING') return <OwnerRequestResolved request={request} now={now} />;
   const until = snoozes[request.id] ?? 0;
   if (until > now) return <SnoozedRequest request={request} until={until} now={now} />;
-  return <OwnerRequestCard request={request} now={now} />;
+  return <OwnerRequestCard request={request} now={now} onChat={onChat} />;
 }
 
 /**
@@ -649,6 +664,7 @@ function ConversationRequest({ request }: { request: OwnerRequest }): JSX.Elemen
 export function useSessionOwnerRequestInserts(
   sessionId: string | null | undefined,
   events: ReadonlyArray<{ seq: number; ts?: string }>,
+  onChat?: ChatAbout,
 ): TranscriptInsert[] {
   const open = useQuery({ ...ownerRequestsQuery('open'), enabled: Boolean(sessionId) });
   const all = useQuery({ ...ownerRequestsQuery('all'), enabled: Boolean(sessionId) });
@@ -668,10 +684,10 @@ export function useSessionOwnerRequestInserts(
             anchor,
             moment: request.createdAt,
             key: `owner-request:${request.id}`,
-            element: <ConversationRequest request={request} />,
+            element: <ConversationRequest request={request} onChat={onChat} />,
           }];
     });
-  }, [sessionId, events, open.data, all.data]);
+  }, [sessionId, events, open.data, all.data, onChat]);
 }
 
 /** On a task a pending request holds up, wherever a task is listed or opened. */

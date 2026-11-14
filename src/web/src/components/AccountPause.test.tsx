@@ -11,8 +11,8 @@ import { availableCount, type ProviderPool } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, type SharedPool } from '../lib/sharedPools';
 import { AccountPauseActions } from './AccountPause';
 import { PoolMembers } from './AccountPools';
-import { RunnerEngines } from './RunnerEngines';
-import { clickRunnerMenuItem, dialogName, openRunnerCards } from './RunnerEngines.test-helpers';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { clickRunnerMenuItem, dialogName, openAccountGroups } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -179,10 +179,10 @@ describe('account pause on real account rows', () => {
       ] }],
       planUsage: { provider: 'codex', primary: { utilization: 60, windowDurationMins: 10080 } },
     };
-    openRunnerCards([runner]);
+    openAccountGroups([runner]);
     qc.setQueryData(['runners'], [runner]);
     apiMock.mockImplementation(async (path) => path === '/runners' ? [runner] : {});
-    render(<RunnerEngines />);
+    render(<EngineRows />);
     expect(host.querySelector('.account-paused')?.textContent).toContain('60%');
     expect(host.querySelector('.account-paused')?.textContent).toContain('Signed in');
     expect(host.textContent).toContain('1 of 2 accounts available');

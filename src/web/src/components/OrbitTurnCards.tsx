@@ -211,8 +211,7 @@ export function EvidenceToReviewCard({ card, seq, ts, undelivered, told, attache
       <div
         className={`crc crc-evidence-review${open ? '' : ' is-neutral'}${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={EVIDENCE_TO_REVIEW}
-        data-sticky-text={card.title}
+        data-orbit-round
       >
         <Head icon={<AuditOutlined />} label={EVIDENCE_TO_REVIEW} ts={ts} />
         <TaskTitle taskId={card.taskId} title={card.title} />
@@ -235,8 +234,7 @@ export function EvidenceSentBackCard({ card, seq, ts, undelivered, told, attache
       <div
         className={`crc crc-evidence-send-back is-returned${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={EVIDENCE_SENT_BACK}
-        data-sticky-text={card.note}
+        data-orbit-round
       >
         <Head icon={<RollbackOutlined />} label={EVIDENCE_SENT_BACK} ts={ts} />
         <TaskTitle taskId={card.taskId} title={card.title} />
@@ -269,8 +267,7 @@ export function RunQuestionTurnCard({ card: stored, seq, ts, undelivered, told, 
       <div
         className={`crc crc-run-question${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={QUESTION_FROM_RUN}
-        data-sticky-text={card.questions[0]?.question ?? card.taskTitle}
+        data-orbit-round
       >
         <Head icon={<QuestionCircleOutlined />} label={QUESTION_FROM_RUN} ts={ts} />
         <TaskTitle taskId={card.taskId} title={card.taskTitle} />
@@ -307,8 +304,7 @@ export function RunNoticeTurnCard({ card, seq, ts, undelivered, told, attached, 
       <div
         className={`crc crc-run-notice is-neutral${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={NOTICE_FROM_RUN}
-        data-sticky-text={card.message}
+        data-orbit-round
       >
         <Head icon={<BellOutlined />} label={NOTICE_FROM_RUN} ts={ts} />
         <TaskTitle taskId={card.taskId} title={card.taskTitle} />

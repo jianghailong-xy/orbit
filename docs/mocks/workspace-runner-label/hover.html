@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Workspace rows · machine on hover</title>
+<style>
+:root {
+  --bg-raised: #ffffff; --bg-hover: #f5f6f7; --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e;
+  --text-4: #a8acb3; --brand: #3370ff; --brand-tint: #eaf1ff; --warning: #d97706; --warning-bg: #fff4e0;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #eef0f3; font-family: -apple-system, BlinkMacSystemFont, Inter, 'PingFang SC', 'Noto Sans SC', sans-serif; color: var(--text-1); }
+.board { width: 1460px; padding: 32px 36px 40px; }
+h1 { font-size: 24px; margin: 0 0 6px; }
+.sub { color: var(--text-2); font-size: 14px; margin-bottom: 24px; line-height: 1.6; }
+.cols { display: flex; gap: 22px; align-items: flex-start; }
+.col { width: 340px; }
+.col h2 { font-size: 16px; margin: 0 0 4px; }
+.col .cap { font-size: 12.5px; color: var(--text-2); line-height: 1.55; min-height: 58px; margin-bottom: 10px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 2px; }
+.tag.rec { background: #e6f6ec; color: #18794e; }
+.tag.alt { background: #f0eefc; color: #5b4bc4; }
+.tag.now { background: #eceef1; color: #646a73; }
+
+/* ---- the sidebar, copied from src/web/src/index.css ---- */
+.nav { width: 264px; background: var(--bg-raised); border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 8px 0 10px; }
+.tp-group-head { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 16px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.tp-group-head .n { font-weight: 400; color: var(--text-3); }
+.tp-section { padding: 0 8px; }
+.tp-item { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; border-radius: 6px; color: var(--text-1); font-size: 14px; }
+.tp-item.hover { background: var(--bg-hover); }
+.tp-item.active { background: var(--brand-tint); color: var(--brand); }
+.tp-ico { display: flex; font-size: 16px; color: var(--text-2); flex: none; position: relative; }
+.tp-item.active .tp-ico { color: var(--brand); }
+.tp-ico svg { width: 16px; height: 16px; fill: currentColor; }
+.tp-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tp-count { color: var(--text-3); font-size: 12px; flex: none; }
+.tp-item.active .tp-count { color: var(--brand); }
+.more { display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; color: var(--text-3); flex: none; border-radius: 4px; }
+.more svg { width: 14px; height: 14px; fill: currentColor; }
+.off { position: absolute; right: -6px; bottom: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg-raised); color: var(--text-3); display: flex; align-items: center; justify-content: center; }
+.off svg { width: 9px; height: 9px; }
+.tp-item.active .off { background: var(--brand-tint); }
+.dot { position: absolute; right: -3px; bottom: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 1.5px var(--bg-raised); }
+.needs { color: var(--warning); background: var(--warning-bg); border-radius: 999px; padding: 1px 7px; font-weight: 600; font-size: 12px; flex: none; }
+
+/* ① today: name and runner share one line, both shrink (runner 8x faster, weighted by width) */
+.today .tp-workspace-label { display: flex; align-items: center; gap: 6px; }
+.today .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.today .sep { flex: none; color: var(--text-3); }
+.today .runner { flex: 1 8 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-3); }
+
+/* ② D: the name keeps the line; "· machine" is whole or gone (it wraps to a clipped second line) */
+.d .tp-workspace-label { display: flex; flex-wrap: wrap; align-items: center; height: 20px; overflow: hidden; column-gap: 6px; }
+.d .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; line-height: 20px; }
+.d .meta { flex: none; color: var(--text-4); line-height: 20px; }
+.d .tp-item.active .meta { color: #7fa2f5; }
+
+/* ③ C: the folder becomes the machine's chip; the line is the name alone */
+.chip { width: 20px; height: 20px; border-radius: 5px; font-size: 9.5px; font-weight: 700; letter-spacing: .2px; display: flex; align-items: center; justify-content: center; position: relative; flex: none; margin: 0 -2px; }
+.chip.offline { filter: grayscale(1); opacity: .55; }
+.c .tp-item.active .chip { box-shadow: 0 0 0 1.5px var(--brand); }
+
+.tip { position: absolute; background: #1f2329; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 6px; white-space: nowrap; z-index: 5; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+.rowwrap { position: relative; }
+.kbdhint { position: absolute; left: 8px; right: 8px; bottom: -30px; font-size: 11.5px; color: var(--text-2); text-align: center; }
+
+.mark { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #e5484d; color: #fff; font-size: 11.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px #fff; z-index: 6; }
+
+/* notes */
+.notes { display: flex; gap: 22px; margin-top: 30px; }
+.panel { background: #fff; border-radius: 10px; padding: 18px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.06); font-size: 13.5px; line-height: 1.65; }
+.panel h3 { margin: 0 0 10px; font-size: 15px; }
+.panel table { border-collapse: collapse; width: 100%; }
+.panel td, .panel th { text-align: left; vertical-align: top; padding: 6px 10px 6px 0; border-top: 1px solid #eef0f3; }
+.panel th { color: var(--text-2); font-weight: 600; border-top: none; }
+.panel code { font-family: inherit; font-size: 12.5px; color: #3d4450; background: #f3f4f6; padding: 0 4px; border-radius: 3px; }
+.panel ol { margin: 0; padding-left: 20px; }
+.panel li { margin-bottom: 6px; }
+.en { font-family: Inter, sans-serif; }
+.e .tp-workspace-label { display: flex; align-items: center; gap: 6px; }
+.e .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.e .meta { flex: none; color: var(--text-3); }
+.e .tp-item.active .meta { color: #7fa2f5; }
+.stage { position: relative; }
+.card { position: absolute; left: 252px; background: #1f2329; color: #fff; font-size: 12.5px; padding: 6px 10px; border-radius: 6px; white-space: nowrap; z-index: 5; box-shadow: 0 4px 14px rgba(0,0,0,.2); display: flex; align-items: center; gap: 7px; }
+.card:before { content: ''; position: absolute; left: -4px; top: 50%; margin-top: -4px; width: 8px; height: 8px; background: #1f2329; transform: rotate(45deg); }
+.card .st { width: 7px; height: 7px; border-radius: 50%; background: #34c759; }
+.card .st.stoff { background: #8f959e; }
+.card .dim { color: #a8acb3; }
+.ptr { position: absolute; width: 14px; height: 20px; z-index: 6; }
+.blk { margin-bottom: 26px; }
+.blk .t { font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; line-height: 1.5; }
+.blk .nav { padding: 6px 0; }
+.content-ghost { position: absolute; left: 264px; top: 0; bottom: 0; width: 150px; background: repeating-linear-gradient(0deg, #f7f8fa 0 36px, #fff 36px 37px); border-radius: 0 10px 10px 0; }
+.bad { color: #b4234a; }
+</style>
+</head>
+<body>
+<div class="board" id="board">
+  <h1>补充：鼠标悬停时才显示机器名（方案 E）</h1>
+  <div class="sub">接着上一张稿：行里平时只写工作区名，鼠标移上去才看到机器名。机器名出现在哪里，有两种做法：<b>E1 在这一行里展开</b>，<b>E2 在行右侧弹一张小提示</b>。数据和样式跟上一张稿一样，侧栏宽 264 px。</div>
+  <div class="cols">
+    <div class="col" style="width:300px">
+      <h2>⑤ 方案 E：平时 <span class="tag now">不悬停</span></h2>
+      <div class="cap">只显示名字和 ⌘N，整列最干净，名字基本都能完整显示。代价是扫一眼看不出哪个工作区在哪台机器上；离线角标照旧在图标上，所以「机器挂了」还是一眼能看到。</div>
+      <div class="nav e" id="e"></div>
+    </div>
+    <div class="col" style="width:300px">
+      <h2>E1：在行内展开 <span class="tag alt">不推荐</span></h2>
+      <div class="cap">悬停时 ⌘N 换成 ⋯，名字后面接上「· 机器名」。问题是放不下时被挤掉的是名字，而名字正是你在看的东西。鼠标在列表里上下移动，每一行的文字都会跟着缩一下再恢复（❶）。</div>
+      <div id="e1"></div>
+    </div>
+    <div class="col" style="width:500px">
+      <h2>E2：右侧小提示 <span class="tag rec">推荐（如果选 E）</span></h2>
+      <div class="cap">行内文字不动，只有 ⋯ 出现（和今天一样）。停留约 300 ms 后，在侧栏右边、盖在正文上弹出「机器名 · 在线状态」。在列表里移动时提示跟着走，不用再等延迟（macOS 菜单的做法）。</div>
+      <div id="e2"></div>
+    </div>
+    <div class="col" style="width:290px">
+      <h2>E 的两个例外</h2>
+      <div class="cap">只靠悬停显示的话，下面两种情况会出问题，所以仍然直接显示机器名。</div>
+      <div id="ex"></div>
+    </div>
+  </div>
+  <div class="notes">
+    <div class="panel" style="flex:1.2">
+      <h3>D 和 E 对比</h3>
+      <table>
+        <tr><th style="width:120px"></th><th>D（上一张稿：放得下就显示）</th><th>E2（悬停才显示）</th></tr>
+        <tr><td>扫一眼看出机器</td><td>大部分行可以</td><td class="bad">不行，得一行行悬停</td></tr>
+        <tr><td>名字完整</td><td>是</td><td>是，更宽松</td></tr>
+        <tr><td>视觉噪音</td><td>机器名颜色变浅，噪音降低</td><td>最少</td></tr>
+        <tr><td>手机抽屉 / 触屏</td><td>规则一样</td><td>没有悬停，抽屉要回退到 D 的规则</td></tr>
+        <tr><td>改动量</td><td>小（CSS + 一个判断）</td><td>中（提示组件、延迟，加上两个例外）</td></tr>
+      </table>
+    </div>
+    <div class="panel" style="flex:1">
+      <h3>我的看法</h3>
+      <div>如果你基本靠<b>名字</b>认工作区（截图里大部分名字已经带了机器信息，比如 <span class="en">-workstation</span>、<span class="en">-macos</span>），<b>E2</b> 最干净，选它没问题。如果你常常要<b>按机器</b>找工作区（比如 HPC 挂了，想知道哪些工作区受影响），选 <b>D</b> 更顺手。E1 不推荐。</div>
+      <h3 style="margin-top:16px">待你定</h3>
+      <ol>
+        <li>选 D 还是 E2？</li>
+        <li>E2 的提示里要不要多一项「最近一次在线时间」（只在离线时显示）？</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+const S = {
+  folder: '<svg viewBox="64 64 896 896"><path d="M880 298.4H521L403.7 186.2a8.15 8.15 0 00-5.5-2.2H144c-17.7 0-32 14.3-32 32v592c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V330.4c0-17.7-14.3-32-32-32zM840 768H184V256h188.5l119.6 114.4H840V768z"/></svg>',
+  disc: '<svg viewBox="64 64 896 896" fill="currentColor"><path d="M832.6 191.4c-84.6-84.6-221.5-84.6-306 0l-96.9 96.9 51 51 96.9-96.9c53.8-53.8 144.6-59.5 204 0 59.5 59.5 53.8 150.2 0 204l-96.9 96.9 51.1 51.1 96.9-96.9c84.4-84.6 84.4-221.5-.1-306.1zM446.5 781.6c-53.8 53.8-144.6 59.5-204 0-59.5-59.5-53.8-150.2 0-204l96.9-96.9-51.1-51.1-96.9 96.9c-84.6 84.6-84.6 221.5 0 306s221.5 84.6 306 0l96.9-96.9-51-51-96.8 97zM260.3 209.4a8.03 8.03 0 00-11.3 0L209.4 249a8.03 8.03 0 000 11.3l554.4 554.4c3.1 3.1 8.2 3.1 11.3 0l39.6-39.6c3.1-3.1 3.1-8.2 0-11.3L260.3 209.4z"/></svg>',
+  more: '<svg viewBox="64 64 896 896"><path d="M456 231a56 56 0 10112 0 56 56 0 10-112 0zm0 280a56 56 0 10112 0 56 56 0 10-112 0zm0 280a56 56 0 10112 0 56 56 0 10-112 0z"/></svg>',
+};
+const W = [
+  ['orbit-develop', 'HPC'], ['orbit-develop-workstation', 'workstation'], ['orbit-op', 'wikova'],
+  ['orbit-prod', 'orbit'], ['orbit-macos', 'longdeMac-mini'], ['wikova-data', 'workstation'],
+  ['kiktok', 'HPC'], ['wikova-develop', 'wikova'], ['wikova-prod', 'wikova'], ['HPC', 'HPC'],
+  ['lfs', 'workstation'], ['wikids', 'workstation'], ['Penetration Testing', 'HPC'],
+  ['orbit-prod-fcm', 'wikova'], ['orbit', 'orbit@austin'], ['kiktok-macos', 'longdeMac-mini'],
+  ['orbit-clean-install-workstation', 'workstation'],
+];
+const CHIP = {
+  HPC: ['HP', '#dbe7ff', '#2a5bd7'], workstation: ['WO', '#d9f2ec', '#0f7a62'], wikova: ['WI', '#fde8cc', '#a35a00'],
+  orbit: ['OR', '#ece4fb', '#6a3fc1'], 'longdeMac-mini': ['LM', '#fbe1e6', '#b4234a'], 'orbit@austin': ['OA', '#e4ecef', '#3d5a66'],
+};
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const kbd = (i) => (i < 9 ? `<span class="tp-count">⌘${i + 1}</span>` : '');
+const ptr = '<svg class="ptr" viewBox="0 0 14 20"><path d="M1 1 L1 16 L5 12 L8 19 L10.5 18 L7.5 11 L13 11 Z" fill="#fff" stroke="#1f2329" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+function erow([name, runner], i, o = {}) {
+  const badge = (o.offline ? `<span class="off">${S.disc}</span>` : '') + (o.running ? '<span class="dot"></span>' : '');
+  const showRunner = o.inline || o.always;
+  const label = `<span class="tp-label tp-workspace-label"><span class="name">${esc(name)}</span>${showRunner ? `<span class="meta">· ${esc(runner)}</span>` : ''}</span>`;
+  const tail = o.hover ? `<span class="more">${S.more}</span>` : (o.nokbd ? '' : kbd(i));
+  return `<div class="tp-item${o.active ? ' active' : ''}${o.hover ? ' hover' : ''}">${S && `<span class="tp-ico">${S.folder}${badge}</span>`}${label}${tail}</div>`;
+}
+const head17 = `<div class="tp-group-head">Workspaces <span class="n">${W.length}</span></div>`;
+document.getElementById('e').innerHTML = head17 + '<div class="tp-section">' + W.map((w, i) => erow(w, i, { active: i === 0, running: i === 0 })).join('') + '</div>';
+
+const blk = (t, rows, extra = '') => `<div class="blk"><div class="t">${t}</div><div class="stage"><div class="nav e" style="position:relative"><div class="tp-section">${rows}</div></div>${extra}</div></div>`;
+const at = (n) => 6 + n * 36;  // top of row n inside a blk nav
+document.getElementById('e1').innerHTML =
+  blk('悬停在第 2 行：名字被挤成 <span class="en">orbit-dev…</span>',
+    W.slice(0, 4).map((w, i) => erow(w, i, { active: i === 0, hover: i === 1, inline: i === 1 })).join(''),
+    `<div style="position:absolute;left:150px;top:${at(1) + 18}px">${ptr}</div>`) +
+  blk('移到第 3 行：第 2 行恢复，第 3 行开始缩',
+    W.slice(0, 4).map((w, i) => erow(w, i, { active: i === 0, hover: i === 2, inline: i === 2 })).join(''),
+    `<div style="position:absolute;left:150px;top:${at(2) + 18}px">${ptr}</div>`) +
+  blk('名字放得下的行没问题，问题出在长名字',
+    erow(W[16], 16, { hover: true, inline: true }),
+    `<div style="position:absolute;left:150px;top:${at(0) + 18}px">${ptr}</div>`);
+
+const card = (top, html) => `<div class="card" style="top:${top + 4}px">${html}</div>`;
+document.getElementById('e2').innerHTML =
+  blk('悬停在第 2 行，停留后弹出：',
+    W.slice(0, 4).map((w, i) => erow(w, i, { active: i === 0, hover: i === 1 })).join(''),
+    `<div style="position:absolute;left:150px;top:${at(1) + 18}px">${ptr}</div>` + card(at(1), '<span class="st"></span>workstation <span class="dim">· Online</span>')) +
+  blk('机器离线时，提示里写 Offline，和图标上的角标一致',
+    erow(W[4], 4, { hover: true, offline: true }),
+    `<div style="position:absolute;left:150px;top:${at(0) + 18}px">${ptr}</div>` + card(at(0), '<span class="st stoff"></span>longdeMac-mini <span class="dim">· Offline</span>')) +
+  blk('名字很长时，提示里写完整名字和机器',
+    erow(W[16], 16, { hover: true }),
+    `<div style="position:absolute;left:150px;top:${at(0) + 18}px">${ptr}</div>` + card(at(0) - 9, '<div>orbit-clean-install-workstation<div style="display:flex;align-items:center;gap:7px;margin-top:2px"><span class="st"></span>workstation <span class="dim">· Online</span></div></div>'));
+
+document.getElementById('ex').innerHTML =
+  blk('<b>同名工作区</b>（假设的例子）：两个 <span class="en">orbit-develop</span> 在不同机器上，不显示机器名就分不清，所以这两行一直显示',
+    erow(['orbit-develop', 'HPC'], 0, { always: true, nokbd: true }) + erow(['orbit-develop', 'workstation'], 1, { always: true, nokbd: true }) + erow(W[2], 2, { nokbd: true })) +
+  blk('<b>手机抽屉（≤960 px）</b>：触屏没有悬停，回退到 D 的规则：放得下就显示，放不下就整段不显示；抽屉本来也不显示 ⌘N',
+    [W[1], W[2], W[4], W[9]].map((w, i) => erow(w, i, { always: w[0] !== w[1] && w[0].length < 12, nokbd: true })).join(''));
+
+function mark(n, el, dx, dy) {
+  const r = el.getBoundingClientRect(), b = document.getElementById('board').getBoundingClientRect();
+  const m = document.createElement('div');
+  m.className = 'mark'; m.textContent = n;
+  m.style.left = r.left - b.left + dx + 'px'; m.style.top = r.top - b.top + dy + 'px';
+  document.getElementById('board').appendChild(m);
+}
+document.getElementById('board').style.position = 'relative';
+window.drawMarks = () => { mark('1', document.querySelectorAll('#e1 .tp-item')[1], 258, 8); };
+</script>
+</body>
+</html>

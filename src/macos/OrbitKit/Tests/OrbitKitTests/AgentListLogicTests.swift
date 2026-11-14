@@ -119,22 +119,6 @@ final class AgentListLogicTests: XCTestCase {
             .map(\.name), ["HPC"])
     }
 
-    /// The Mac's sidebar: a group per machine, with the empty ones after every workspace, Shared included.
-    func testTheMacsGroupsPutEmptyMachinesAfterEveryWorkspace() {
-        let groups = AgentListLogic.sidebarGroups(
-            [agent(#"{"id":"1","name":"a","runnerId":"r1"}"#), agent(#"{"id":"2","name":"b"}"#)],
-            machines: [MachineToSetUp(id: "austin", name: "orbit@austin")])
-        XCTAssertEqual(groups.map(\.runnerId), ["r1", nil, "austin"])
-        XCTAssertEqual(groups.last?.setUp, MachineToSetUp(id: "austin", name: "orbit@austin"))
-        XCTAssertEqual(groups.last?.agents, [])
-        XCTAssertNil(groups.first?.setUp)
-    }
-
-    func testAnEmptyAccountsGroupsAreItsMachines() {
-        let groups = AgentListLogic.sidebarGroups([], machines: [MachineToSetUp(id: "austin", name: "orbit@austin")])
-        XCTAssertEqual(groups.map(\.id), ["austin"])
-    }
-
     func testNewSessionStaysInTheWorkspaceInView() {
         XCTAssertEqual(AgentListLogic.newSessionTarget(currentAgentID: "w", list: .content(showsError: false),
                                                        firstOnlineMachine: "austin"), .workspace("w"))
@@ -153,5 +137,50 @@ final class AgentListLogicTests: XCTestCase {
         for list: ListLoadPresentation? in [.loading, .failed, nil] {
             XCTAssertNil(AgentListLogic.newSessionTarget(currentAgentID: nil, list: list, firstOnlineMachine: "austin"))
         }
+    }
+
+    func testSidebarRowsAreTheWorkspacesThenTheMachines() {
+        let rows = AgentListLogic.sidebarRows(
+            [agent(#"{"id":"1","name":"a","runnerId":"r1"}"#), agent(#"{"id":"2","name":"b"}"#)],
+            machines: [MachineToSetUp(id: "austin", name: "orbit@austin")])
+        XCTAssertEqual(rows.map(\.id), ["agent:1", "agent:2", "setup:austin"])
+    }
+
+    func testSidebarRowsWithNothingAreThePlaceholderAlone() {
+        XCTAssertEqual(AgentListLogic.sidebarRows([], machines: []), [.placeholder])
+    }
+
+    /// The work rows the Mac rail opens with: the Wiki's visibility is the server's answer carried as
+    /// data, and each row carries the drawer's amber count (0 when nothing waits).
+    func testSidebarSectionsCarryTheWikisVisibilityAndWaitingCountsAsData() {
+        let shown = AgentListLogic.sidebarSections(AppSection.workSections, wiki: true,
+                                                   projectsWaiting: 3, wikiWaiting: 2)
+        XCTAssertEqual(shown.map(\.id), ["section:projects", "section:tasks", "section:wiki"])
+        XCTAssertEqual(shown.map(\.waiting), [3, 0, 2])
+        let hidden = AgentListLogic.sidebarSections(AppSection.workSections, wiki: false,
+                                                    projectsWaiting: 0, wikiWaiting: 0)
+        XCTAssertEqual(hidden.map(\.id), ["section:projects", "section:tasks"])
+    }
+
+    /// An open project row: its title and the drawer's one trailing mark, duplicate ids dropped.
+    func testSidebarProjectsCarryTheDrawersMarkPerRow() {
+        let idle = ProjectSummary(id: "p1", title: "Quiet")
+        let running = ProjectSummary(id: "p2", title: "Busy", buckets: ProjectBuckets(running: 2))
+        let rows = AgentListLogic.sidebarProjects([idle, running, idle], coordinators: [:])
+        XCTAssertEqual(rows.map(\.id), ["p1", "p2"])
+        XCTAssertEqual(rows.map(\.title), ["Quiet", "Busy"])
+        XCTAssertEqual(rows.map(\.mark), [.idle, .running])
+        // A coordinator working is the same running mark the drawer draws.
+        let coordinated = ProjectSummary(id: "p3", title: "Coord")
+        let pulse = [PublicID.storageKey("p3"): ProjectCoordinatorPulse(working: true, lastTurnAt: nil)]
+        XCTAssertEqual(AgentListLogic.sidebarProjects([coordinated], coordinators: pulse).map(\.mark),
+                       [.running])
+    }
+
+    func testSidebarRowIDsAreUniqueAndKeepTheFirstRow() {
+        let a = agent(#"{"id":"1","name":"a","runnerId":"r1"}"#)
+        let m = MachineToSetUp(id: "m", name: "m")
+        let ids = AgentListLogic.sidebarRows([a, a], machines: [m, m]).map(\.id)
+        XCTAssertEqual(ids, ["agent:1", "setup:m"])
     }
 }

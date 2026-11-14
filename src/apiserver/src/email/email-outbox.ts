@@ -2,9 +2,11 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } f
 import type { Prisma } from '@prisma/client';
 import { MANAGED_RUNNER_GATE, MANAGED_RUNNERS_OFF, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { PrismaService } from '../prisma/prisma.service';
-import { EmailSettingsService, publicOrigin, readEmailSettings, welcomeQueued, type EmailChannel } from './email-settings.service';
+import { uuidToBase62 } from '@orbit/shared';
+import { EmailSettingsService, inviteQueued, publicOrigin, readEmailSettings, welcomeQueued, type EmailChannel } from './email-settings.service';
 import { sendViaResend } from './resend.client';
-import { firstNameOf, renderWelcomeEmail, type WelcomeSignIn } from './welcome-email.template';
+import { ownerNameOf, renderSessionInviteEmail } from './session-invite-email.template';
+import { firstNameOf, renderWelcomeEmail, type RenderedEmail, type WelcomeSignIn } from './welcome-email.template';
 
 /**
  * The email outbox (docs/welcome-email-design.md §3.3, migration 0517).
@@ -15,9 +17,16 @@ import { firstNameOf, renderWelcomeEmail, type WelcomeSignIn } from './welcome-e
  * lock while it renders and sends: a second worker, on this replica or another, skips the row, so no
  * two send it. A worker that dies mid-send rolls its transaction back, the row stays PENDING with the
  * same Idempotency-Key, and Resend answers the next try with the first result instead of a second email.
+ *
+ * A SESSION_INVITE row (migration 0618, owner decision D7 = A) is written with a session guest's new invitation
+ * (`enqueueSessionInvite`); `UNIQUE NULLS NOT DISTINCT (kind, user_id, session_id)` keeps it to one per person and
+ * session, so inviting again, after a Remove too, sends nothing more.
  */
 
 export const WELCOME = 'WELCOME';
+export const SESSION_INVITE = 'SESSION_INVITE';
+/** What a SESSION_INVITE row SKIPPED at send time says: the invitation ended, or the session went to the Trash, first. */
+export const INVITE_NO_LONGER_LIVE = 'The invitation ended before the email was sent.';
 export const EMAIL_SENT_ACTIVITY = 'EMAIL_SENT';
 export const EMAIL_FAILED_ACTIVITY = 'EMAIL_FAILED';
 /** After the 1st, 2nd and 3rd failure; the 4th is FAILED (decision D4). */
@@ -28,7 +37,8 @@ export const EMAIL_OUTBOX_POLL_MS = 15_000;
 const CLAIM_TX_TIMEOUT_MS = 60_000;
 
 /** The Idempotency-Key of one attempt (resend.client.ts says why `keyAttempt` is in it). */
-export function idempotencyKey(row: { userId: string; generation: number; keyAttempt: number }): string {
+export function idempotencyKey(row: { id: string; kind: string; userId: string; generation: number; keyAttempt: number }): string {
+  if (row.kind === SESSION_INVITE) return `session-invite/${row.id}/${row.generation}/${row.keyAttempt}`;
   return `welcome/${row.userId}/${row.generation}/${row.keyAttempt}`;
 }
 
@@ -54,10 +64,29 @@ export async function enqueueWelcome(
   });
 }
 
+/**
+ * Writes a session invitation's row inside the transaction that writes the guest's new live invitation: PENDING
+ * when the channel is on (the welcome toggle aside), SKIPPED otherwise. ON CONFLICT DO NOTHING: a person already
+ * sent (or skipped) an invitation to this session gets no second row. `ownerId` is the owner who invited them.
+ */
+export async function enqueueSessionInvite(
+  tx: Prisma.TransactionClient,
+  invite: { guestId: string; toAddress: string; sessionId: string; ownerId: string },
+): Promise<void> {
+  const status = inviteQueued(await readEmailSettings(tx)) ? 'PENDING' : 'SKIPPED';
+  await tx.$executeRaw`
+    INSERT INTO "email_outbox" ("id", "kind", "user_id", "session_id", "to_address", "created_by_id", "status")
+    VALUES (gen_random_uuid(), ${SESSION_INVITE}, ${invite.guestId}::uuid, ${invite.sessionId}::uuid, ${invite.toAddress},
+            ${invite.ownerId}::uuid, ${status})
+    ON CONFLICT DO NOTHING`;
+}
+
 /** The row a claim locks. */
 interface ClaimedRow {
   id: string;
+  kind: string;
   userId: string;
+  sessionId: string | null;
   toAddress: string;
   createdById: string | null;
   attempts: number;
@@ -141,7 +170,7 @@ export class EmailOutboxWorker implements OnModuleInit, OnModuleDestroy {
     return this.prisma.$transaction(
       async (tx) => {
         const [row] = await tx.$queryRaw<ClaimedRow[]>`
-          SELECT "id", "user_id" AS "userId", "to_address" AS "toAddress", "created_by_id" AS "createdById",
+          SELECT "id", "kind", "user_id" AS "userId", "session_id" AS "sessionId", "to_address" AS "toAddress", "created_by_id" AS "createdById",
                  "attempts", "generation", "key_attempt" AS "keyAttempt"
           FROM "email_outbox"
           WHERE "status" = 'PENDING' AND "next_attempt_at" <= ${now}
@@ -150,23 +179,15 @@ export class EmailOutboxWorker implements OnModuleInit, OnModuleDestroy {
           FOR UPDATE SKIP LOCKED`;
         if (!row) return false;
 
-        const user = await tx.user.findUnique({ where: { id: row.userId }, select: { name: true, passwordHash: true } });
-        const admin = row.createdById
-          ? await tx.user.findUnique({ where: { id: row.createdById }, select: { name: true, email: true } })
-          : null;
-        const adminName = admin ? admin.name?.trim() || admin.email : 'An administrator';
-        const signIn: WelcomeSignIn = !row.createdById
-          ? { kind: 'GOOGLE_SIGNUP' }
-          : user?.passwordHash
-            ? { kind: 'ADMIN_PASSWORD', admin: adminName }
-            : { kind: 'ADMIN_PASSWORDLESS', admin: adminName };
-        const mail = renderWelcomeEmail({
-          firstName: firstNameOf(user?.name, row.toAddress),
-          email: row.toAddress,
-          origin: publicOrigin(),
-          signIn,
-          managedRunner: this.managedRunners.enabled,
-        });
+        const mail = row.kind === SESSION_INVITE ? await this.renderInvite(tx, row) : await this.renderWelcome(tx, row);
+        if (!mail) {
+          // The invitation ended (Remove, Leave) or the session went to the Trash before the email went out.
+          await tx.emailOutbox.update({
+            where: { id: row.id },
+            data: { status: 'SKIPPED', lastError: INVITE_NO_LONGER_LIVE, lastAttemptAt: now },
+          });
+          return true;
+        }
 
         const result = await sendViaResend(
           channel.apiKey,
@@ -180,7 +201,7 @@ export class EmailOutboxWorker implements OnModuleInit, OnModuleDestroy {
             data: { status: 'SENT', sentAt: now, lastAttemptAt: now, lastError: null, providerMessageId: result.id || null },
           });
           await tx.activity.create({
-            data: { actorId: null, type: EMAIL_SENT_ACTIVITY, payload: { kind: WELCOME, userId: row.userId, to: row.toAddress, providerMessageId: result.id } },
+            data: { actorId: null, type: EMAIL_SENT_ACTIVITY, payload: { kind: row.kind, userId: row.userId, ...sessionOf(row), to: row.toAddress, providerMessageId: result.id } },
           });
           return true;
         }
@@ -188,7 +209,8 @@ export class EmailOutboxWorker implements OnModuleInit, OnModuleDestroy {
         const attempts = row.attempts + 1;
         const final = result.outcome === 'FAILED' || attempts >= MAX_ATTEMPTS;
         if (result.outcome === 'RETRY' && (result.status === 401 || result.status === 403)) {
-          this.log.error(`Resend refused the welcome email to user ${row.userId}: ${result.error} — check the API key and the From domain on Admin → Email`);
+          const what = row.kind === SESSION_INVITE ? 'session invitation email' : 'welcome email';
+          this.log.error(`Resend refused the ${what} to user ${row.userId}: ${result.error} — check the API key and the From domain on Admin → Email`);
         }
         await tx.emailOutbox.update({
           where: { id: row.id },
@@ -204,7 +226,7 @@ export class EmailOutboxWorker implements OnModuleInit, OnModuleDestroy {
         });
         if (final) {
           await tx.activity.create({
-            data: { actorId: null, type: EMAIL_FAILED_ACTIVITY, payload: { kind: WELCOME, userId: row.userId, to: row.toAddress, attempts, error: result.error } },
+            data: { actorId: null, type: EMAIL_FAILED_ACTIVITY, payload: { kind: row.kind, userId: row.userId, ...sessionOf(row), to: row.toAddress, attempts, error: result.error } },
           });
         }
         return true;
@@ -212,6 +234,51 @@ export class EmailOutboxWorker implements OnModuleInit, OnModuleDestroy {
       { timeout: CLAIM_TX_TIMEOUT_MS, maxWait: 10_000 },
     );
   }
+
+  /** The welcome email of the row's account, as it reads now. */
+  private async renderWelcome(tx: Prisma.TransactionClient, row: ClaimedRow): Promise<RenderedEmail> {
+    const user = await tx.user.findUnique({ where: { id: row.userId }, select: { name: true, passwordHash: true } });
+    const admin = row.createdById
+      ? await tx.user.findUnique({ where: { id: row.createdById }, select: { name: true, email: true } })
+      : null;
+    const adminName = admin ? admin.name?.trim() || admin.email : 'An administrator';
+    const signIn: WelcomeSignIn = !row.createdById
+      ? { kind: 'GOOGLE_SIGNUP' }
+      : user?.passwordHash
+        ? { kind: 'ADMIN_PASSWORD', admin: adminName }
+        : { kind: 'ADMIN_PASSWORDLESS', admin: adminName };
+    return renderWelcomeEmail({
+      firstName: firstNameOf(user?.name, row.toAddress),
+      email: row.toAddress,
+      origin: publicOrigin(),
+      signIn,
+      managedRunner: this.managedRunners.enabled,
+    });
+  }
+
+  /**
+   * The invitation email, with the session's title and its owner's name as they read now; null when the person's
+   * invitation is no longer live or the session is in the Trash, so nothing is sent.
+   */
+  private async renderInvite(tx: Prisma.TransactionClient, row: ClaimedRow): Promise<RenderedEmail | null> {
+    const invitation = await tx.sessionGuest.findFirst({
+      where: { sessionId: row.sessionId!, userId: row.userId, removedAt: null, session: { deletedAt: null } },
+      select: { session: { select: { title: true, owner: { select: { name: true, email: true } } } } },
+    });
+    if (!invitation) return null;
+    return renderSessionInviteEmail({
+      ownerName: ownerNameOf(invitation.session.owner),
+      sessionTitle: invitation.session.title,
+      guestEmail: row.toAddress,
+      origin: publicOrigin(),
+      sessionPublicId: uuidToBase62(row.sessionId!),
+    });
+  }
+}
+
+/** The session an activity row names, for a SESSION_INVITE row. */
+function sessionOf(row: ClaimedRow): { sessionId?: string } {
+  return row.sessionId ? { sessionId: row.sessionId } : {};
 }
 
 /**
@@ -231,7 +298,7 @@ export async function resendWelcome(prisma: PrismaService, userId: string): Prom
       lastError: null,
     },
   });
-  const row = await prisma.emailOutbox.findUnique({ where: { kind_userId: { kind: WELCOME, userId } }, select: { status: true } });
+  const row = await prisma.emailOutbox.findFirst({ where: { kind: WELCOME, userId }, select: { status: true } });
   if (!row) return null;
   return { status: count === 1 ? 'PENDING' : row.status };
 }

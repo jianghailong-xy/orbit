@@ -374,6 +374,22 @@ describe('a queued message, sent into the running turn', { timeout: 60_000 }, ()
     });
   });
 
+  it('keeps a new message behind it: Enter queues for the next turn instead of steering', async () => {
+    events = RUNNING.slice(0, 2);
+    queue = queued();
+    await mountSession(() => {
+      expect(rowState(trayRow('then update the changelog'))).toBe('Queued for next turn');
+    });
+    expect(document.querySelector('[aria-label="Add to current work"]')).toBeNull();
+
+    const box = await type('and tag the release');
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => expect(sendMock).toHaveBeenCalledTimes(1));
+    expect(sendMock.mock.calls[0][4]).toBe('NEXT_TURN');
+  });
+
   it('is withdrawn with its words back under a draft', async () => {
     events = RUNNING.slice(0, 2);
     queue = queued();
@@ -402,19 +418,20 @@ describe('a message sent the other way while a turn runs', { timeout: 60_000 }, 
       expect(composer()).not.toBeNull();
     });
 
+    // Enter first: once a message waits for the next turn, Enter joins it there too.
     const box = await type('then push it to main');
-    await act(async () => {
-      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true, cancelable: true }));
-    });
-    await waitForUi(() => expect(sendMock).toHaveBeenCalledTimes(1));
-    expect(sendMock.mock.calls[0][4]).toBe('NEXT_TURN');
-
-    await type('and tag the release');
     await act(async () => {
       box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     });
+    await waitForUi(() => expect(sendMock).toHaveBeenCalledTimes(1));
+    expect(sendMock.mock.calls[0][4]).toBe('CURRENT_WORK');
+
+    await type('and tag the release');
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true, cancelable: true }));
+    });
     await waitForUi(() => expect(sendMock).toHaveBeenCalledTimes(2));
-    expect(sendMock.mock.calls[1][4]).toBe('CURRENT_WORK');
+    expect(sendMock.mock.calls[1][4]).toBe('NEXT_TURN');
   });
 
   it('is queued for the next turn from a held Send, and the hold sends nothing itself', async () => {

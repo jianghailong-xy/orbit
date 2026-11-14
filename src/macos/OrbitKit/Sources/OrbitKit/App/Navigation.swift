@@ -67,16 +67,16 @@ public enum NavNode: Hashable, Sendable {
     /// device's name is, instead of a text field and a Rename button on the record.
     case runnerName(runnerID: String)
     case watchDetail(watchID: String)
-    /// A page Settings' list opens — Infrastructure, Notifications, Shared links, Access tokens, Change
+    /// A page Settings' list opens — Machines & models, Notifications, Shared links, Access tokens, Change
     /// password, Admin — each a frame of Settings' own stack. A machine's record pushed from
-    /// Infrastructure is the *same* ``runnerDetail(runnerID:)`` frame the Infrastructure section pushes —
+    /// Machines & models is the *same* ``runnerDetail(runnerID:)`` frame the Machines & models section pushes —
     /// what tells the two apart is the stack a frame rides, not the frame.
     case settingsPage(SettingsPage)
-    /// A pool's page, pushed from Infrastructure's Account pools: an account pool of the user's own Claude
+    /// A pool's page, pushed from Machines & models' Account pools: an account pool of the user's own Claude
     /// subscriptions, read-only here, or a shared pool of OpenAI API keys, which is run from its page.
     case accountPool(poolID: String)
     case sharedPool(poolID: String)
-    /// One of the account's own API keys, read-only, pushed from Infrastructure's API keys: a DeepSeek
+    /// One of the account's own API keys, read-only, pushed from Machines & models' API keys: a DeepSeek
     /// key's page, its account balance first (`DeepSeekBalance`). Changing a key happens on the web.
     case providerDetail(providerID: String)
     case userDetail(userID: String)
@@ -129,6 +129,11 @@ public enum NavNode: Hashable, Sendable {
     case wikiPlanDoc(slug: String, version: Int?)
     /// One of its sections — what it covers and where its material comes from (mock 22 ④⑤): 0-based.
     case wikiPlanSection(slug: String, index: Int, version: Int?)
+    /// A session someone else owns and invited this account to reply in: the guest view
+    /// (docs/session-guests-design.md §4). Its Shared with me row is its destination, so it leads like
+    /// a list — the drawer's hamburger, not back — and a 404 from the owner's read of a session id
+    /// lands here when the guest door answers for it.
+    case guestSession(sessionID: String)
 }
 
 /// Which section is showing, and every section's stack.
@@ -201,13 +206,15 @@ public struct NavState: Equatable, Sendable {
     public var highlightedSessionID: String? { consoleOnTop }
 
     /// The drawer row the screen belongs to — the one drawn as selected, and the one whose tap only
-    /// closes the drawer. A project's sessions page anywhere on the Agents stack makes it that
-    /// project's, with what was pushed over it; otherwise the Agents stack is the workspace's
+    /// closes the drawer. A project's sessions page the drawer's project row opened, anywhere on the
+    /// Agents stack, makes it that project's, with what was pushed over it; one a session list's row
+    /// opened stays the workspace's (owner, 2026-11-14). Otherwise the Agents stack is the workspace's
     /// (`agentID`, the agent its pane shows), and every other section's stack is the section's own.
     public func drawerDestination(agentID: String?) -> DrawerDestination {
         guard section == .agents else { return .section(section) }
+        if let sessionID = guestSessionOnTop { return .guestSession(sessionID: sessionID) }
         if let runnerID = machineDraftOnTop { return .machine(runnerID: runnerID) }
-        if let project = projectSessionsColumn { return .project(projectID: project.projectID) }
+        if let project = projectSessionsColumnDestination { return .project(projectID: project.projectID) }
         return agentID.map { .workspace(agentID: $0) } ?? .section(.agents)
     }
 
@@ -219,7 +226,14 @@ public struct NavState: Equatable, Sendable {
         guard let top = path.last else { return true }
         if case .sessionProject(_, let asDestination) = top { return asDestination }
         if case .machineDraft = top { return true }
+        if case .guestSession = top { return true }
         return false
+    }
+
+    /// The session whose guest view is showing.
+    public var guestSessionOnTop: String? {
+        if case .guestSession(let sessionID) = path.last { return sessionID }
+        return nil
     }
 
     /// The machine whose new session page is showing.
@@ -261,7 +275,16 @@ public struct NavState: Equatable, Sendable {
         return nil
     }
 
-    // The three sections whose list opens one kind of record — Following, Infrastructure (a machine's),
+    /// The project whose sidebar row opened the session column's page (``enterProjectSessions(_:asDestination:)``).
+    /// Nil when a session list's row opened it: the Mac's sidebar keeps the workspace selected then.
+    public var projectSessionsColumnDestination: SessionProjectAddress? {
+        for frame in path.reversed() {
+            if case .sessionProject(let address, true) = frame { return address }
+        }
+        return nil
+    }
+
+    // The three sections whose list opens one kind of record — Following, Machines & models (a machine's),
     // Admin — say "which record is showing" with the id on top of their own stack. Each one is a total function
     // of that stack like every other fact here: the list's highlight and the detail pane are the
     // same read, which is what stops a row drawing as selected while the page under it says
@@ -275,7 +298,7 @@ public struct NavState: Equatable, Sendable {
         return id
     }
 
-    /// `AppModel.selectedRunnerID` — the machine's record the Infrastructure pane shows. A page the record
+    /// `AppModel.selectedRunnerID` — the machine's record the Machines & models pane shows. A page the record
     /// pushed over itself (an engine's, its name's) is still that runner's, so the list's highlight
     /// stays on it.
     public var selectedRunnerID: String? {
@@ -519,11 +542,13 @@ public struct NavState: Equatable, Sendable {
 
     /// Open a project's session list over the workspace's list or its folder. The detail console
     /// stays above it on an iPad; a phone's back button returns to the list it came from.
-    public mutating func enterProjectSessions(_ address: SessionProjectAddress) {
+    /// `asDestination`: a sidebar's project row opened it, so that row is the one drawn as selected;
+    /// a session list's row opens it over the workspace, which stays selected.
+    public mutating func enterProjectSessions(_ address: SessionProjectAddress, asDestination: Bool = false) {
         var frames = path
         frames.removeAll { if case .sessionProject = $0 { return true }; return false }
         let index = frames.first.map { if case .folder = $0 { return 1 }; return 0 } ?? 0
-        frames.insert(.sessionProject(address, asDestination: false), at: index)
+        frames.insert(.sessionProject(address, asDestination: asDestination), at: index)
         path = frames
     }
 
@@ -554,6 +579,25 @@ public struct NavState: Equatable, Sendable {
         path = [.machineDraft(runnerID: runnerID)]
     }
 
+    /// Put up a shared session's guest view as the Agents stack's whole content: it is the Shared with
+    /// me row's own page, not one pushed over a workspace's list.
+    public mutating func openGuestSession(_ sessionID: String) {
+        section = .agents
+        path = [.guestSession(sessionID: sessionID)]
+    }
+
+    /// The owner's read of `sessionID` found nothing of this account's, and the guest door answered
+    /// for it: the console frame that named it becomes its guest view, where it stood.
+    public mutating func replaceConsoleWithGuest(_ sessionID: String) {
+        let key = PublicID.storageKey(sessionID)
+        for (section, frames) in stacks {
+            stacks[section] = frames.map {
+                if case .console(let id, _) = $0, PublicID.storageKey(id) == key { return .guestSession(sessionID: sessionID) }
+                return $0
+            }
+        }
+    }
+
     /// Select a session's console in a three-column shell: it replaces the page the detail pane
     /// shows — or, with a folder's page showing, is pushed over it, so the folder stays the page
     /// the session list draws beside the console. Every other frame behaves exactly as
@@ -563,6 +607,15 @@ public struct NavState: Equatable, Sendable {
             withPath { $0.append(node) }
         } else {
             replaceTop(with: node)
+        }
+    }
+
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): it takes
+    /// the place of the conversation the sheet was opened over, so Back returns to the list (or the
+    /// folder page) that conversation was opened from, never to the conversation it replaced.
+    public mutating func switchConsole(to node: NavNode) {
+        withPath {
+            if case .console? = $0.last { $0[$0.count - 1] = node } else { $0.append(node) }
         }
     }
 
@@ -639,6 +692,8 @@ public enum DrawerDestination: Hashable, Sendable {
     case project(projectID: String)
     /// A machine's Set up row, and the new session page it opens.
     case machine(runnerID: String)
+    /// A Shared with me row, and the guest view it opens.
+    case guestSession(sessionID: String)
 
     public static func == (lhs: DrawerDestination, rhs: DrawerDestination) -> Bool {
         switch (lhs, rhs) {
@@ -646,6 +701,7 @@ public enum DrawerDestination: Hashable, Sendable {
         case (.workspace(let a), .workspace(let b)): return a == b
         case (.project(let a), .project(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
         case (.machine(let a), .machine(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
+        case (.guestSession(let a), .guestSession(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
         default: return false
         }
     }
@@ -656,6 +712,7 @@ public enum DrawerDestination: Hashable, Sendable {
         case .workspace(let agentID): hasher.combine(1); hasher.combine(agentID)
         case .project(let projectID): hasher.combine(2); hasher.combine(PublicID.storageKey(projectID))
         case .machine(let runnerID): hasher.combine(3); hasher.combine(PublicID.storageKey(runnerID))
+        case .guestSession(let sessionID): hasher.combine(4); hasher.combine(PublicID.storageKey(sessionID))
         }
     }
 }

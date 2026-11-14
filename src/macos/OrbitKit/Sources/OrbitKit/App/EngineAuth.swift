@@ -42,10 +42,12 @@ public enum EngineAuth {
     }
     /// Whether text carries a sign-in failure — this machine's stored credentials being gone,
     /// expired or rejected. Keys on the runtime's stable `Failed to authenticate` prefix;
-    /// heuristic and intentionally narrow. Keep in sync with `isAuthErrorText` in @orbit/shared
-    /// and `isAuthError` in the runner's claude.go.
+    /// heuristic and intentionally narrow. A failure of the connection — Cloudflare's block page, a
+    /// dropped socket — carries the same prefix but is not one (EngineErrors.isConnectionFailureText):
+    /// the credentials are fine there, so the transcript retries it instead of offering a sign-in.
+    /// Keep in sync with `isAuthErrorText` in @orbit/shared and `isAuthError` in the runner's claude.go.
     public static func isAuthErrorText(_ text: String?) -> Bool {
-        guard let text else { return false }
+        guard let text, !EngineErrors.isConnectionFailureText(text) else { return false }
         return text.drop(while: { $0.isWhitespace }).hasPrefix("Failed to authenticate")
     }
 
@@ -57,10 +59,10 @@ public enum EngineAuth {
         /// can't express (the runner refuses such a request outright — `loginFlowFor` in login.go),
         /// so the card names the command to run on that machine instead of a button that can't work.
         case runCommand(String)
-        /// A runner that cannot relay Google sign-in can use a Gemini API key in Infrastructure.
+        /// A runner that cannot relay Google sign-in can use a Gemini API key in Machines & models.
         case connectGemini
         /// Any other slug is a control-plane–configured provider, i.e. an API key to fix. These
-        /// clients have no key editor (their Infrastructure page only lists the keys), so the card
+        /// clients have no key editor (their Machines & models page only lists the keys), so the card
         /// says where the key lives rather than offering an action it can't perform.
         case apiKey(slug: String)
     }

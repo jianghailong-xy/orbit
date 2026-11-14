@@ -232,13 +232,55 @@ func isResumeCarrierResult(r ExecResult, streamedText string) bool {
 		r.NumTurns == 0 && r.Result == "" && streamedText == ""
 }
 
+// connectionFailureMarkers mirrors CONNECTION_FAILURE_MARKERS in @orbit/shared: every marker of a
+// group must appear for the text to be the connection's failure rather than the credential's.
+var connectionFailureMarkers = [][]string{
+	{"attention required", "cloudflare"}, // Cloudflare's block page in front of the API
+	{"econnreset"},                       // the socket dropped mid-request
+}
+
+// isConnectionFailure reports whether a runtime's text carries a failure of the connection to the
+// API — Cloudflare's block page at the edge, or a socket the request died on ("Failed to
+// authenticate. API Error: 403 Attention Required! | Cloudflare", "Failed to authenticate. API
+// Error: 403 ECONNRESET: The socket connection was closed unexpectedly. …"). Claude Code wraps both
+// in "Failed to authenticate", so without this the failure reads as a sign-in and the control plane
+// moves the session off an account whose credentials are intact (2026-11-13: two dozen sessions on
+// three machines inside one 4.5-minute window, all signed in). The connection clears on its own, so
+// the turn still fails here but is retried rather than handed to a human as a sign-in. Anchored at
+// the start of the text, like the other classifications: a reply that merely quotes one is an
+// ordinary reply. Heuristic; keep in sync with isConnectionFailureText in @orbit/shared.
+func isConnectionFailure(s string) bool {
+	low := strings.ToLower(strings.TrimSpace(s))
+	// The runtime's wrapper, or the raw line when nothing wrapped it.
+	if !strings.HasPrefix(low, "failed to authenticate") && !strings.HasPrefix(low, "api error") {
+		return false
+	}
+	for _, markers := range connectionFailureMarkers {
+		all := true
+		for _, marker := range markers {
+			if !strings.Contains(low, marker) {
+				all = false
+				break
+			}
+		}
+		if all {
+			return true
+		}
+	}
+	return false
+}
+
 // isAuthError reports whether a result/assistant text carries a sign-in failure — this
 // machine's stored credentials being gone, expired or rejected ("Failed to authenticate:
 // OAuth session expired and could not be refreshed"). It arrives the same way an API error
 // does (assistant text + a "success" result), so it needs the same rescue from resultFrom;
 // it's split out because the control plane renders it as sign-in guidance rather than a bare
-// error. Heuristic; keep in sync with isAuthErrorText in @orbit/shared.
+// error. A failure of the connection carries the same prefix and is not one: isConnectionFailure
+// excludes it. Heuristic; keep in sync with isAuthErrorText in @orbit/shared.
 func isAuthError(s string) bool {
+	if isConnectionFailure(s) {
+		return false
+	}
 	return strings.HasPrefix(strings.TrimSpace(s), "Failed to authenticate")
 }
 

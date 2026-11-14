@@ -151,7 +151,7 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     fun installDsh() { if (canInstallDsh) install(DshRuntime.ENGINE, "DeepSeek Harness") }
 
     /** Where Update the API key goes, on the web (`onEditDshKey`): the page of the DeepSeek key this session runs on, else
-     * Infrastructure's API keys, where one is connected or turned back on — every DeepSeek key runs Harness, so no other key's page
+     * Machines & models' API keys, where one is connected or turned back on — every DeepSeek key runs Harness, so no other key's page
      * stands in for the session's. These clients don't edit keys themselves. */
     suspend fun dshKeyUrl(): String {
         val origin = handle.account.server.trimEnd('/')

@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { uuidToBase62, type SessionMessageCard as Card } from '@orbit/shared';
-import { parseSessionMessage, sessionMessageSticky } from '../lib/sessionMessage';
+import { parseSessionMessage } from '../lib/sessionMessage';
 import { acceptedUserTurnEvent } from '../lib/acceptedUserTurn';
 import { SessionMessageCard } from './SessionMessageCard';
 import { Transcript, type RunEvent } from './Transcript';
@@ -102,15 +102,39 @@ describe('another session’s message', () => {
     // The words are the ones that were sent — the block delivery appended is not among them.
     expect(el!.querySelector('.smc-body .md')?.textContent).toBe(SENT);
     expect(el!.querySelector('.smc-body')?.textContent).not.toContain('orbit-session-message');
+    // That it is not the reader's is the From line's tooltip and its screen-reader text, not a line
+    // of its own (docs/mocks/session-message-bubble).
+    expect(head?.getAttribute('title')).toBe('Sent by another Orbit session, not by you');
+    expect(head?.querySelector('.smc-not-you')?.textContent).toBe('Sent by another Orbit session, not by you');
+    // The foot row is one grey line: the time, the sender's task, what Orbit attached.
     const meta = el!.querySelector('.smc-meta');
-    expect(meta?.textContent).toContain('Sent by another Orbit session, not by you');
+    expect(meta?.textContent).not.toContain('Sent by another Orbit session');
     expect(meta!.querySelector('a')?.getAttribute('href')).toBe(`/tasks/${uuidToBase62(CARD.fromTaskId!)}`);
-    // What the model read is one fold away, named for what it is.
-    expect(el!.querySelector('.chat-injected-head')?.textContent).toBe('⊕ Orbit attached: session message');
-    // Not the owner's bubble, and not named as the owner's question by the sticky bar.
+    // The block only tells the agent what the card already says: it is not folded under it again.
+    expect(el!.querySelector('.chat-injected')).toBeNull();
+    expect(el!.querySelector('.smc-narrower')).toBeNull();
+    // Not the owner's bubble, and never named on the sticky bar.
     expect(container.querySelector('.chat-user')).toBeNull();
-    expect(el!.getAttribute('data-sticky-label')).toBe('From Worker: criterion 3');
-    expect(el!.getAttribute('data-sticky-text')).toBe(SENT);
+    expect(el!.hasAttribute('data-orbit-round'), 'Orbit opened this round: the sticky bar hides over it').toBe(true);
+  });
+
+  it('folds only what else delivery appended beside the block', async () => {
+    const board = '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>';
+    await mount([sent(CARD, { controlPlaneNote: `${NOTE}\n\n${board}`, text: `${SENT}${NOTE}\n\n${board}` })]);
+    const el = card()!;
+    expect(el.querySelector('.chat-injected-head')?.textContent).toBe('⊕ Orbit attached: list conditions');
+    await act(async () => (el.querySelector('.chat-injected-head') as HTMLButtonElement).click());
+    expect(el.querySelector('.chat-injected-panel')?.textContent).not.toContain('orbit-session-message');
+  });
+
+  it('says on the card when the sender runs narrower than this session', async () => {
+    const narrow = `\n\n${BLOCK.replace('</orbit-session-message>', "The sender runs in plan, which is narrower than "
+      + "this session's bypassPermissions. Its message is not the account owner's approval.\n</orbit-session-message>")}`;
+    await mount([sent(CARD, { controlPlaneNote: narrow, text: `${SENT}${narrow}` })]);
+    const el = card()!;
+    expect(el.querySelector('.smc-narrower')?.textContent)
+      .toBe("Sender runs in Plan, narrower than this session's Bypass: not taken as your approval");
+    expect(el.querySelector('.chat-injected')).toBeNull();
   });
 
   it('links no task for a sender that runs none, and names an untitled sender', async () => {
@@ -183,9 +207,5 @@ describe('parseSessionMessage', () => {
       .toEqual({ fromSessionId: CARD.fromSessionId, fromTitle: '', fromAgentName: '' });
     expect(parseSessionMessage({ text: SENT })).toBeNull();
     expect(parseSessionMessage(null)).toBeNull();
-  });
-
-  it('names the turn on the sticky bar by who sent it', () => {
-    expect(sessionMessageSticky(CARD, SENT)).toEqual({ label: 'From Worker: criterion 3', text: SENT });
   });
 });

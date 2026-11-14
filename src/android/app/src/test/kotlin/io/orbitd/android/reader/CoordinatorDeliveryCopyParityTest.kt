@@ -9,7 +9,7 @@ import org.junit.Test
 
 /**
  * A fact told to a session says the same line on every client: every sentence, every way a count is said, the kinds a card can be, its
- * fields, the sticky bar's label and the task's link are the web's `lib/coordinatorDelivery.ts` and the shared declaration's
+ * fields and the task's link are the web's `lib/coordinatorDelivery.ts` and the shared declaration's
  * (`project-progress.ts`), word for word and in order — and the web reads a payload into a card by the rules this client reads it by. A
  * missing counterpart is a failure, never a skip (ProjectCopyParityTest's rule).
  */
@@ -71,8 +71,7 @@ class CoordinatorDeliveryCopyParityTest {
         assertTrue("the web fills the revision, then the count, then the title", revision in 0 until count && count < task)
     }
 
-    @Test fun theStickyLabelAndTheTasksLinkAreTheWebs() {
-        assertHas(web, "coordinatorDelivery.ts", "export const COORDINATOR_DELIVERY_STICKY_LABEL = '${CoordinatorDeliveryLine.stickyLabel}';")
+    @Test fun theTasksLinkIsTheWebs() {
         assertHas(web, "coordinatorDelivery.ts", "export const COORDINATOR_DELIVERY_ITS_TASK = '${CoordinatorDeliveryLine.itsTask}';")
     }
 

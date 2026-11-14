@@ -1,0 +1,121 @@
+==> Building the managed runners' firewall from deploy/managed-runner/firewall (orbit-managed-runner-firewall:local, local, never pushed)
+
+
+
+
+
+
+
+
+
+
+
+
+==> Checking that this host's firewall can carry the managed runners' rules
+    {"backend": "nft", "iptables": "iptables v1.8.13 (nf_tables)", "ipv4Hook": "DOCKER-USER", "ipv6": "present", "ipv6Hook": "DOCKER-USER"}
+==> Creating the managed runners' network orbit-managed-runners
+==> Building the managed runner image from deploy/managed-runner/image (local, never pushed)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+==> Writing data/channel-host (the Docker channel's token and channel.json)
+==> Building the Docker channel
+ Image orbit-docker-channel:local Building 
+
+
+
+
+
+
+
+
+
+ Image orbit-docker-channel:local Built 
+==> Checking channel.json
+{"ok": true, "instanceId": "orbit-lab-chan"}
+==> Writing data/channel-host/firewall (the managed runners' firewall: bridge br-2835712306da, gateway 172.18.0.1:2086)
+==> Applying the managed runners' firewall rules
+{"backend": "nft", "enforced": true, "problems": [], "written": ["IPv4", "IPv6"]}
+==> Checking from the managed runners' network that this host and private addresses are refused
+{"blocked": "172.18.0.1:1", "ok": true, "result": "EHOSTUNREACH", "seconds": 0.009}
+{"blocked": "169.254.169.254:80", "ok": true, "result": "EHOSTUNREACH", "seconds": 0.0}
+{"blocked": "10.255.255.1:9", "ok": true, "result": "EHOSTUNREACH", "seconds": 0.0}
+{"addresses": ["184.193.170.199", "3.228.133.3", "3.232.125.55", "3.82.118.205", "32.194.98.194", "52.20.47.70", "98.86.185.36", "98.94.168.235"], "ok": true, "resolve": "registry-1.docker.io"}
+==> Starting the managed runners' firewall and the Docker channel
+ Container orbit-managed-runner-firewall Creating 
+ Container orbit-docker-channel Creating 
+ Container orbit-managed-runner-firewall Created 
+ Container orbit-docker-channel Created 
+ Container orbit-managed-runner-firewall Starting 
+ Container orbit-docker-channel Starting 
+ Container orbit-managed-runner-firewall Started 
+ Container orbit-docker-channel Started 
+ Container orbit-managed-runner-firewall Waiting 
+ Container orbit-docker-channel Waiting 
+ Container orbit-managed-runner-firewall Healthy 
+ Container orbit-docker-channel Healthy 
+NAME                            IMAGE                                 COMMAND                  SERVICE                   CREATED         STATUS                   PORTS
+orbit-docker-channel            orbit-docker-channel:local            "python3 -I /opt/orb…"   docker-channel            7 seconds ago   Up 5 seconds (healthy)   
+orbit-managed-runner-firewall   orbit-managed-runner-firewall:local   "python3 -I /opt/orb…"   managed-runner-firewall   7 seconds ago   Up 6 seconds (healthy)   
+
+✓ This host serves managed runners as instance orbit-lab-chan, at http://172.31.91.20:7300 for 172.31.91.10.
+
+  On the server, add this host to docker.hosts in the managed runners' profile.json:
+
+    { "instanceId": "orbit-lab-chan", "channel": { "url": "http://172.31.91.20:7300" }, "tokenFile": "/var/lib/orbit-managed-runners/orbit-lab-chan.token" }
+
+  and copy the channel's token, /work/orbit/data/channel-host/token, into the server's managed runners directory as orbit-lab-chan.token,
+  mode 0600 like the files beside it. A profile whose hosts are all remote names "image": "channel" under runner
+  and an https runner.serverUrl. Then recreate the apiserver (docs/self-hosting.md, "Managed runners on another host").
+  After each deploy of the server: /work/orbit/deploy/managed-runner/remote-host/remote-host.sh upgrade <the commit it deployed>

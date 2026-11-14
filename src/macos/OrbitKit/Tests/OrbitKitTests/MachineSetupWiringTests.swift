@@ -61,24 +61,32 @@ final class MachineSetupWiringTests: XCTestCase {
                           "the row is board 03's")
     }
 
-    /// The Mac: a group per machine, an empty one with its header and this row, selected through the
-    /// source list's one selection.
-    func testTheMacsSidebarGroupsByMachine() throws {
+    /// The Mac: the drawer's flat order, the Set up rows after every workspace, selected through the
+    /// source list's one selection (docs/mocks/macos-sidebar, 01).
+    func testTheMacsSidebarListsTheSetUpRowsLast() throws {
         let main = try app("Views/MainView.swift")
-        let sidebar = try slice(main, from: "private func agentsDisclosure(", to: "struct AccountFooter")
-        try assertInOrder(sidebar, ["!agents.groups.isEmpty", "ForEach(agents.groups)", "agents.runnerLabel(group.runnerId)",
-                                    "ForEach(group.agents)", "if let machine = group.setUp", "setUpRow(machine)",
-                                    ".tag(SidebarSelection.machine(machine.id))"],
-                          "the group and its row")
+        let sidebar = try slice(main, from: "private func workspaceRows(", to: "struct AccountFooter")
+        // One flat ForEach over `AgentListLogic.sidebarRows` (whose order AgentListLogicTests pins): an
+        // if/else or a second ForEach under the section is the row shape the outline list's reload aborted on.
+        let rows = try slice(sidebar, from: "private func workspaceRows(", to: "private func setUpRow(")
+        try assertInOrder(rows, ["ForEach(AgentListLogic.sidebarRows(agents?.orderedItems ?? [], machines: agents?.machinesToSetUp ?? []))",
+                                 "case .agent(let agent):", "case .setUp(let machine):", "setUpRow(machine)",
+                                 ".tag(SidebarSelection.machine(machine.id))", "case .placeholder:"],
+                          "the workspaces, then the machines to set up")
+        XCTAssertEqual(rows.components(separatedBy: "ForEach(").count - 1, 1, "one ForEach under the section")
+        XCTAssertFalse(rows.contains("} else {"), "no if/else swapping the placeholder for the rows")
         let row = try slice(main, from: "private func setUpRow(_ machine: MachineToSetUp) -> some View {", to: "\n    }\n")
         try assertInOrder(row, ["model.machineDraftRunnerID == machine.id ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.accentColor)",
                                 "MachineSetupCopy.setupTitle(machine: machine.name)", "Image(systemName: \"folder.badge.plus\")"],
                           "tinted, until it is the row selected")
-        XCTAssertTrue(main.contains("if let runnerID = model.machineDraftRunnerID { return .machine(runnerID) }"),
-                      "the selection reads the page on screen")
-        XCTAssertTrue(main.contains("case .machine(let runnerID):\n                    model.openMachineDraft(runnerID)"))
-        let model = try app("AgentsModel.swift")
-        XCTAssertTrue(model.contains("AgentListLogic.sidebarGroups(items, runnerOrder: runnerOrder, machines: machinesToSetUp)"))
+        // The selection is ONE stored value; its actions run in `.onChange`, after the List's update.
+        XCTAssertTrue(main.contains("SidebarLogic.selection(section: model.selectedSection, agentID: model.selectedAgentID,"),
+                      "the stored value reads the page on screen")
+        let onChange = try slice(main, from: ".onChange(of: selection) { _, now in", to: ".onChange(of: modelSelection")
+        try assertInOrder(onChange, ["case .machine(let runnerID):", "model.openMachineDraft(runnerID)"],
+                          "the machine row's one action")
+        XCTAssertTrue(main.contains(".onChange(of: modelSelection, initial: true)"),
+                      "a deep link or shortcut brings the list's stored value along")
     }
 
     /// The page is the same one on every shell.

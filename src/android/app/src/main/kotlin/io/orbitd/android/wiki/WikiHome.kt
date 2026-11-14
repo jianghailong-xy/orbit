@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
@@ -118,7 +119,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
         seen = store.seen(space.slug); store.moveSeen(space.slug)
         wikiHomeLoad(store)
     }
-    // What Trash holds: the picker offers it, and so does the first-wiki card once no wiki is left.
+    // What Trash holds: the first-wiki card offers it once no wiki is left. The picker does not (docs/mocks/wiki-trash/02-trash-entry).
     LaunchedEffect(store) { store.loadTrash() }
     val openTrash = { nav.open(OrbitRoute(Destination.WIKI_TRASH)) }.takeIf { state.trash.isNotEmpty() }
     if (state.disabled) {
@@ -141,11 +142,11 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     // The space's public link: read as each space opens, so the globe says whether it has one. A read that failed leaves
     // the globe as it is when there is none.
     LaunchedEffect(store, space.id) { shareRead = optional { store.client.share(space.id) } }
-    // The page's own header carries the title; the bar takes it once the header scrolls away (iOS's large title). The
+    // The page's own header carries the title, the space's name; the bar takes it once the header scrolls away (iOS's large title). The
     // bar's actions are the web head's — Contents, Activity, Share, Settings — and Activity wears the drawer's number.
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val headerOnScreen by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
-    PageBar.Bind(route, title = if (headerOnScreen) "" else WikiCopy.title) {
+    PageBar.Bind(route, title = if (headerOnScreen) "" else WikiSpaceLogic.names(state.spaces)[space.id] ?: space.title ?: space.slug) {
         BarIcon(R.drawable.ic_contents, WikiArticleCopy.contents, "wiki-bar-contents") { contentsShown = true }
         WikiActivityButton(state.waiting) { nav.open(OrbitRoute(Destination.WIKI_ACTIVITY)) }
         WikiShareButton(live = SharePanel.open(shareRead) != null) { sharing = true }
@@ -156,7 +157,7 @@ internal fun WikiHomeScreen(store: WikiStore, route: OrbitRoute, data: Directory
     }, modifier = Modifier.fillMaxSize().testTag("wiki-home")) {
         WikiHomePage(space, state, seen, store, data, nav, listState, retry = { scope.launch { wikiHomeLoad(store) } },
             // The home reads the space picked as its effect's key changes.
-            pickSpace = store::select, manageSpaces = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) }, openTrash = openTrash,
+            pickSpace = store::select, manageSpaces = { nav.open(OrbitRoute(Destination.WIKI_SETTINGS)) },
             setUp = { settingUp = true })
     }
     if (settingUp) WikiSetUpSheet(store, space, data, close = { settingUp = false })
@@ -329,7 +330,7 @@ private fun WikiStartMark(number: Int, state: WikiStartLogic.StepState) {
 @Composable
 private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, store: WikiStore, data: DirectoryData, nav: WikiNav,
     listState: androidx.compose.foundation.lazy.LazyListState, retry: () -> Unit, pickSpace: (String) -> Unit, manageSpaces: () -> Unit,
-    openTrash: (() -> Unit)?, setUp: () -> Unit) {
+    setUp: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<List<WikiSearchHit>>(emptyList()) }
     var searched by rememberSaveable { mutableStateOf("") }
@@ -351,7 +352,7 @@ private fun WikiHomePage(space: WikiSpace, state: WikiState, seen: Double?, stor
     val line = WikiLogic.homeLine(state.docsDirectory, state.directory, loading)
     val documents = WikiLogic.homeDocuments(state.docsDirectory, state.directory, loading, seen)
     LazyColumn(Modifier.fillMaxSize().testTag("wiki-home-list"), state = listState) {
-        item(key = "header") { HomeHeader(space, state.spaces, pickSpace, manageSpaces, openTrash) }
+        item(key = "header") { HomeHeader(space, state.spaces, pickSpace, manageSpaces) }
         WikiLogic.HomeBand.entries.forEach { band ->
             when (band) {
                 WikiLogic.HomeBand.STATE -> item(key = "state") { HomeLine(line) }
@@ -530,23 +531,43 @@ private fun HomeMore(browse: () -> Unit, index: () -> Unit) {
     }
 }
 
-/** The title and the space on one row — the web's page head. */
+/** The space's name as the page's title, a picker among several — the web's page head (board docs/mocks/wiki-rail-name B). */
 @Composable
-private fun HomeHeader(space: WikiSpace, spaces: List<WikiSpace>, pickSpace: (String) -> Unit, manageSpaces: () -> Unit, openTrash: (() -> Unit)?) {
+private fun HomeHeader(space: WikiSpace, spaces: List<WikiSpace>, pickSpace: (String) -> Unit, manageSpaces: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(WikiCopy.title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
-        WikiSpacePicker(space, spaces, pickSpace, manageSpaces, openTrash)
+        WikiSpacePicker(space, spaces, pickSpace, manageSpaces, title = MaterialTheme.typography.headlineLarge)
     }
 }
 
 /** The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④; iOS `WikiSpacePicker`): with
  * one space a grey label and no control; with several a menu of every space, the current one ticked — its name, the
  * repository and its documents under it, what waits in it as the amber number — and Manage spaces at the foot, into Wiki
- * settings, with Trash under it while Trash holds a wiki ([trash], docs/mocks/wiki-trash). */
+ * settings. Trash is not in it: it opens from Wiki settings (docs/mocks/wiki-trash/02-trash-entry). */
 @Composable
-internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (String) -> Unit, manage: () -> Unit, trash: (() -> Unit)? = null) {
+internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (String) -> Unit, manage: () -> Unit,
+    title: androidx.compose.ui.text.TextStyle? = null) {
     val names = WikiSpaceLogic.names(spaces)
     val name = names[space.id] ?: space.title ?: space.slug
+    // Given a [title] style, the name is the head's title (board docs/mocks/wiki-rail-name B, iOS `WikiSpacePicker`'s
+    // `title`): no capsule, the name in that type, and with several spaces a small chevron after it.
+    if (title != null) {
+        var expanded by remember { mutableStateOf(false) }
+        if (spaces.size < 2) {
+            Text(name, Modifier.testTag("wiki-space-picker").semantics { heading(); contentDescription = WikiCopy.spacePickerHint },
+                style = title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            return
+        }
+        Box {
+            Row(Modifier.clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { expanded = true }.padding(horizontal = 4.dp, vertical = 2.dp)
+                .testTag("wiki-space-picker").semantics(mergeDescendants = true) { heading(); contentDescription = WikiCopy.spacePickerHint },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(name, Modifier.weight(1f, fill = false), style = title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(16.dp), tint = WikiPalette.secondary)
+            }
+            WikiSpaceMenu(expanded, { expanded = false }, space, spaces, names, pick, manage)
+        }
+        return
+    }
     val capsule = Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f), CircleShape)
     if (spaces.size < 2) {
         // The name is its own text: as a state as well, TalkBack read it twice.
@@ -564,26 +585,31 @@ internal fun WikiSpacePicker(space: WikiSpace, spaces: List<WikiSpace>, pick: (S
             Text(name, Modifier.weight(1f, fill = false), style = WikiType.label.copy(fontWeight = FontWeight.SemiBold), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Icon(painterResource(R.drawable.ic_chevron_updown), null, Modifier.size(14.dp))
         }
-        DropdownMenu(expanded, { expanded = false }) {
-            WikiSpaceLogic.menuRows(spaces, names).forEach { row ->
-                val current = row.id == space.id
-                DropdownMenuItem(modifier = Modifier.testTag("wiki-space:${row.slug}").semantics { selected = current },
-                    leadingIcon = { if (current) Icon(painterResource(R.drawable.ic_check), null) else Spacer(Modifier.size(24.dp)) },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(row.name)
-                            Text(row.subtitle(sayWaiting = false), style = WikiType.label, color = WikiPalette.secondary)
-                        }
-                    },
-                    trailingIcon = if (row.waiting > 0) ({ WikiWaitingBadge(row.waiting, WikiCopy.spaceWaiting(row.waiting).removePrefix("· ")) }) else null,
-                    onClick = { expanded = false; if (!current) pick(row.slug) })
-            }
-            HorizontalDivider()
-            DropdownMenuItem(modifier = Modifier.testTag("wiki-space-manage"), text = { Text(WikiCopy.manageSpaces) },
-                leadingIcon = { Icon(painterResource(R.drawable.ic_settings), null) }, onClick = { expanded = false; manage() })
-            if (trash != null) DropdownMenuItem(modifier = Modifier.testTag("wiki-space-trash"), text = { Text(WikiModeCopy.trash) },
-                leadingIcon = { Icon(painterResource(R.drawable.ic_trash), null) }, onClick = { expanded = false; trash() })
+        WikiSpaceMenu(expanded, { expanded = false }, space, spaces, names, pick, manage)
+    }
+}
+
+/** The space menu both looks of [WikiSpacePicker] open. */
+@Composable
+private fun WikiSpaceMenu(expanded: Boolean, close: () -> Unit, space: WikiSpace, spaces: List<WikiSpace>, names: Map<String, String>,
+    pick: (String) -> Unit, manage: () -> Unit) {
+    DropdownMenu(expanded, close) {
+        WikiSpaceLogic.menuRows(spaces, names).forEach { row ->
+            val current = row.id == space.id
+            DropdownMenuItem(modifier = Modifier.testTag("wiki-space:${row.slug}").semantics { selected = current },
+                leadingIcon = { if (current) Icon(painterResource(R.drawable.ic_check), null) else Spacer(Modifier.size(24.dp)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(row.name)
+                        Text(row.subtitle(sayWaiting = false), style = WikiType.label, color = WikiPalette.secondary)
+                    }
+                },
+                trailingIcon = if (row.waiting > 0) ({ WikiWaitingBadge(row.waiting, WikiCopy.spaceWaiting(row.waiting).removePrefix("· ")) }) else null,
+                onClick = { close(); if (!current) pick(row.slug) })
         }
+        HorizontalDivider()
+        DropdownMenuItem(modifier = Modifier.testTag("wiki-space-manage"), text = { Text(WikiCopy.manageSpaces) },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_settings), null) }, onClick = { close(); manage() })
     }
 }
 

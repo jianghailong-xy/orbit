@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>03 · Criteria met by confirmation</title>
+<link rel="stylesheet" href="board.css">
+</head>
+<body>
+<div class="board">
+  <h1>③ 靠“确认”满足的判据：怎么设、怎么确认、谁确认的、什么时候过期</h1>
+  <div class="sub">
+    已定（11-11，判据 4）：判据可以由任务满足（默认），也可以由确认满足。协调者或 owner 设这个模式；确认可以来自 owner、协调者，或一次 Agent 检查运行（按判据的验证方法给 PASS / FAIL）。“What did you check” 可选；所有项目都能用；卡片写出谁/哪次运行确认的；判据文字修订后确认过期。<br>
+    这块板画：<b>设模式</b>（协调者提、owner 随判据一起批；owner 也能直接设）、<b>Confirm 面板</b>、<b>每种确认人的行</b>（你 / 协调者（owner 可撤回）/ Agent 检查 PASS（带运行链接）/ FAIL / 进行中）、<b>文字修订后的过期</b>。Web 判据卡是真控制台截图（提议部分用控制台自己的 class 注入）。
+  </div>
+
+  <div class="cols">
+    <!-- ① today -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">① 现在：外部事实只能变成“替身任务”</div>
+      <div class="frame-sub">备案、审核、商户开通不是任务，但判据只能被任务满足，于是挂一个一直 OPEN、等你点确认的任务。</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹ Projects</span><span class="t">CBAI AI 视觉内容平台…<small>Open · 155 tasks</small></span><span></span></div>
+        <div class="scroll">
+          <div class="hdr"><span>Acceptance criteria</span><span></span></div>
+          <div class="grp">
+            <div class="cell meta">4 criteria stated. Whether one is met is read off the work filed under it.</div>
+            <div class="cell"><div class="crit"><span class="ord met">3</span><div><div class="txt">Operators can review and publish a generated asset.</div><div class="st green">Met by its work</div></div></div></div>
+            <div class="cell rel"><i class="mk l">!</i><div class="crit"><span class="ord unmet">4</span><div><div class="txt">External prerequisites settled: SMS provider, WeChat Open Platform app, payment merchant, ICP filing.</div><div class="st"><b>Not met by its work</b></div><div class="q">Work filed under it has not settled by the criterion that work declared.</div><div class="q"><span class="blue">Settle external prerequisites (SMS, WeChat, payment, ICP)</span> — have the account owner confirm it in the app</div><div class="q blue">› How it's checked</div></div></div></div>
+          </div>
+          <div class="foot">Task completion is a process measure, and nothing evaluates these criteria.</div>
+        </div>
+      </div>
+      <div style="height:16px"></div>
+      <div class="cap">Web 今天（真控制台）</div>
+      <img class="shot" src="shots/w-acc-today-crop.png" width="393">
+    </div>
+
+    <!-- ② setting the mode -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">② 设模式：协调者提，你随判据一起批</div>
+      <div class="frame-sub">开工前的 “When is this project done?” 卡里，每条判据写着由什么满足；你按 Confirm the criteria 就把模式一起批了。</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹</span><span class="t">Coordinator<small>CBAI AI 视觉内容平台…</small></span><span></span></div>
+        <div class="scroll">
+          <div class="c-card">
+            <div class="c-head"><span class="c-heading">When is this project done?</span><span class="c-prov">FROM ORBIT</span></div>
+            <div class="c-body">
+              <div class="c-sec">Done when · 5 criteria</div>
+              <ul class="c-rows">
+                <li><span class="c-no">1</span><span class="c-text">Phase 0 design documents are written and reviewed.</span><span class="c-state">by its tasks</span></li>
+                <li><span class="c-no">2</span><span class="c-text">The content pipeline runs end to end on staging.</span><span class="c-state">by its tasks</span></li>
+                <li class="rel"><span class="c-no">3</span><span class="c-text">SMS provider is live.</span><span class="c-state"><b style="color:var(--ink)">by confirmation</b></span><i class="mk r" style="right:-14px">A</i></li>
+                <li><span class="c-no">4</span><span class="c-text">WeChat Open Platform app is approved.</span><span class="c-state"><b style="color:var(--ink)">by confirmation</b></span></li>
+                <li><span class="c-no">5</span><span class="c-text">ICP filing is approved for cbai.example.cn.</span><span class="c-state"><b style="color:var(--ink)">by confirmation</b></span><span class="c-sub2">Checked by: the filing number shows on the MIIT site</span></li>
+              </ul>
+              <div class="c-meta">A criterion met by confirmation is met when you, the coordinator or an Agent check confirms it — not by tasks.</div>
+            </div>
+            <div class="c-actions"><span class="btn primary">Confirm the criteria</span><span class="btn">Not yet…</span></div>
+          </div>
+          <div class="cap" style="margin:16px 4px 8px">开工后改模式 → 现有的 “Weaken this ruler?” 卡</div>
+          <div class="c-card rel">
+            <i class="mk l">B</i>
+            <div class="c-head"><span class="c-heading">Weaken this ruler?</span><span class="c-prov">CRITERIA</span></div>
+            <div class="c-body">
+              <div class="c-meta">A weakening change to this project’s ruler needs your decision</div>
+              <div style="font-size:13px"><b>4</b> · WeChat Open Platform app is approved.</div>
+              <div class="c-meta" style="margin-top:4px">met by: <s>its tasks</s> <u>confirmation</u> · changed by this proposal</div>
+            </div>
+            <div class="c-actions"><span class="btn primary">Approve &amp; re-seal</span><span class="btn">Refuse</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ owner sets directly -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">③ 设模式：你直接设</div>
+      <div class="frame-sub">项目详情的判据行，长按（或行尾 ⋯）出菜单 “Met by”。你自己改不用再批。</div>
+      <div class="ph">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹ Projects</span><span class="t">CBAI AI 视觉内容平台…<small>Open · 155 tasks</small></span><span></span></div>
+        <div class="scroll">
+          <div class="hdr"><span>Acceptance criteria</span><span></span></div>
+          <div class="grp">
+            <div class="cell"><div class="crit"><span class="ord met">5</span><div><div class="txt">Payment merchant account is active.</div><div class="st green">Met · Agent check passed</div></div></div></div>
+            <div class="cell" style="background:#fff;box-shadow:0 0 0 2px var(--ios-blue);border-radius:10px;z-index:9;position:relative"><div class="crit"><span class="ord unmet">7</span><div><div class="txt">The production domain resolves to the ingress.</div><div class="st"><b>Not met by its work</b></div><div class="q">No task says it serves this criterion.</div></div></div></div>
+          </div>
+        </div>
+        <div class="dim" style="background:rgba(0,0,0,.18);backdrop-filter:blur(1px)"></div>
+        <div class="menu rel" style="left:70px;top:322px;width:290px">
+          <div style="color:var(--ink2);font-size:12.5px">Met by</div>
+          <div><span>Its tasks<small>Met when the work filed under it is done.</small></span><span>✓</span></div>
+          <div><span>Confirmation<small>Met when you, the coordinator or an Agent check confirms it. For filings, approvals, accounts.</small></span></div>
+          <div><span>Confirm…</span><span></span></div>
+          <div><span>Run an Agent check</span><span>▶︎</span></div>
+          <i class="mk r" style="top:-8px">C</i>
+        </div>
+      </div>
+      <div style="height:16px"></div>
+      <div class="cap">Web（真控制台 + 注入）：行尾 “Met by: … ▾”</div>
+      <img class="shot" src="shots/w-acc-mode-menu-crop.png" width="393">
+    </div>
+
+    <!-- ④ confirm sheet -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">④ Confirm 面板</div>
+      <div class="frame-sub">两项都可选：写了什么查过、附一张截图。验证方法放在最上面提醒该查什么。</div>
+      <div class="ph">
+        <div class="status" style="color:#fff"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="dim" style="background:rgba(0,0,0,.4)"></div>
+        <div class="sheet" style="top:56px">
+          <div class="nav"><span class="l">Cancel</span><span class="t">Confirm criterion 6</span><span class="r">Confirm</span></div>
+          <div class="scroll" style="padding-top:0">
+            <div class="grp" style="margin-top:8px"><div class="cell"><div class="txt" style="font-size:15px">ICP filing is approved for cbai.example.cn.</div><div class="q">How it's checked: the filing number shows on the MIIT site (beian.miit.gov.cn).</div></div></div>
+            <div class="hdr rel"><span>What did you check? · optional</span><span></span><i class="mk l" style="left:-30px">D</i></div>
+            <div class="field ph-empty" style="height:84px">e.g. filing no. 京ICP备…</div>
+            <div class="hdr"><span>Screenshot · optional</span><span></span></div>
+            <div class="grp"><div class="cell row"><span class="blue">＋ Attach a screenshot</span><span></span></div></div>
+            <div class="foot">Your name and the time are kept with it. If the wording of this criterion changes, it goes back to not met until someone confirms it again.</div>
+            <div style="height:70px"></div>
+            <span class="pill pri">Confirm</span>
+          </div>
+        </div>
+      </div>
+      <div style="height:16px"></div>
+      <div class="cap">Web 对话框</div>
+      <div class="w-modal" style="width:393px">
+        <div class="w-h">Confirm criterion 6</div>
+        <div class="w-b">
+          <div class="w-box">ICP filing is approved for cbai.example.cn.<div class="w-hint">How it's checked: the filing number shows on the MIIT site.</div></div>
+          <div class="w-lbl">What did you check? <span style="color:#8c8c8c;font-weight:400">optional</span></div>
+          <div class="w-in ph-empty" style="height:64px">e.g. filing no. 京ICP备…</div>
+          <div class="w-lbl">Screenshot <span style="color:#8c8c8c;font-weight:400">optional</span></div>
+          <div class="w-in ph-empty" style="text-align:center;border-style:dashed">Drop an image or paste it here</div>
+        </div>
+        <div class="w-f"><span class="w-btn">Cancel</span><span class="w-btn pri">Confirm</span></div>
+      </div>
+    </div>
+
+    <!-- ⑤ rows per confirmer iOS -->
+    <div class="col" style="width:393px">
+      <div class="frame-title">⑤ 每种确认人的行（iOS 项目详情）</div>
+      <div class="frame-sub">状态一句 + 谁 + 何时；下面一行引号里是“查了什么”。撤回、重跑等动作在行里。</div>
+      <div class="ph" style="height:1150px">
+        <div class="status"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="nav"><span class="l">‹ Projects</span><span class="t">CBAI AI 视觉内容平台…<small>Open · 155 tasks</small></span><span></span></div>
+        <div class="scroll">
+          <div class="hdr"><span>Acceptance criteria</span><span></span></div>
+          <div class="grp">
+            <div class="cell rel"><i class="mk l">E</i><div class="crit"><span class="ord met">3</span><div><div class="txt">SMS provider is live.</div><div class="st green">Met · confirmed by you · Nov 10</div><div style="display:flex;gap:8px;margin-top:4px"><span class="thumb"></span><span class="q" style="margin:0">“Aliyun SMS template SMS_4821 shows Approved.”</span></div><div class="acts"><span class="btn-s">Withdraw</span></div></div></div></div>
+            <div class="cell rel"><i class="mk l">F</i><div class="crit"><span class="ord met">4</span><div><div class="txt">WeChat Open Platform app is approved.</div><div class="st green">Met · confirmed by the coordinator · Nov 11, 10:42</div><div class="q">“AppID wx3f… shows Approved on open.weixin.qq.com.”</div><div class="acts"><span class="btn-s">Withdraw</span><span class="btn-s">Open conversation</span></div></div></div></div>
+            <div class="cell rel"><i class="mk l">G</i><div class="crit"><span class="ord met">5</span><div><div class="txt">Payment merchant account is active.</div><div class="st green">Met · Agent check passed · Nov 11, 14:05</div><div class="q">PASS — merchant 1650…22 is Active on the payment console.</div><div class="acts"><span class="btn-s">View run</span></div></div></div></div>
+            <div class="cell rel"><i class="mk l">H</i><div class="crit"><span class="ord unmet">6</span><div><div class="txt">ICP filing is approved for cbai.example.cn.</div><div class="st red"><b>Not met · Agent check failed · Nov 11, 15:30</b></div><div class="q">FAIL — no filing number for cbai.example.cn on beian.miit.gov.cn.</div><div class="acts"><span class="btn-s pri">Confirm…</span><span class="btn-s">Run again</span><span class="btn-s">View run</span></div></div></div></div>
+            <div class="cell rel"><i class="mk l">I</i><div class="crit"><span class="ord unmet">7</span><div><div class="txt">The production domain resolves to the ingress.</div><div class="st"><b>Checking…</b> <span class="val">Agent check started 2 min ago</span></div><div class="acts"><span class="btn-s">View run</span></div></div></div></div>
+            <div class="cell rel"><i class="mk l">J</i><div class="crit"><span class="ord unmet">8</span><div><div class="txt">The privacy policy is published at /privacy and names the SMS vendor.</div><div class="st amber"><b>Not met · confirmed for an earlier wording</b></div><div class="q">You confirmed it on Nov 9. The wording changed on Nov 11.</div><div class="acts"><span class="btn-s pri">Confirm again…</span><span class="btn-s">What changed</span></div></div></div></div>
+            <div class="cell"><div class="crit"><span class="ord unmet">9</span><div><div class="txt">Customer service hotline is staffed.</div><div class="st"><b>Waits for confirmation</b></div><div class="acts"><span class="btn-s pri">Confirm…</span><span class="btn-s">Run an Agent check</span></div></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑥ web rows + done card -->
+    <div class="col" style="width:720px">
+      <div class="frame-title">⑥ Web 判据卡（真控制台 + 注入）与 done 卡</div>
+      <div class="frame-sub">同一组状态；判据卡顶部和底部那两句“nothing judges these criteria”要改，不然和“由确认满足”自相矛盾（K）。</div>
+      <div class="rel"><i class="mk l" style="top:20px">K</i><img class="shot" src="shots/w-acc-confirmers.png" width="720"></div>
+      <div style="height:18px"></div>
+      <div class="cap">done 卡（延续已定板 ⑤ F）</div>
+      <div class="c-card" style="width:440px">
+        <div class="c-head"><span class="c-heading">Is this project done?</span><span class="c-prov">FROM ORBIT</span></div>
+        <div class="c-body">
+          <div class="c-sec">Done when · 6 criteria</div>
+          <div class="c-tally">4 of 6 met · 2 wait for confirmation</div>
+          <ul class="c-rows">
+            <li><span class="c-no">1</span><span class="c-text">Phase 0 design documents</span><span class="c-state"><span class="ok">met</span> · by 4 tasks</span></li>
+            <li><span class="c-no">3</span><span class="c-text">SMS provider is live</span><span class="c-state"><span class="ok">met</span> · by you</span><span class="c-sub2">Confirmed by you · Nov 10 · “Aliyun SMS template approved”</span></li>
+            <li><span class="c-no">4</span><span class="c-text">WeChat app is approved</span><span class="c-state"><span class="ok">met</span> · by the coordinator</span><span class="c-sub2">Nov 11, 10:42 · <span class="lnk">Withdraw</span></span></li>
+            <li><span class="c-no">5</span><span class="c-text">Payment merchant is active</span><span class="c-state"><span class="ok">met</span> · Agent check</span><span class="c-sub2">PASS · Nov 11, 14:05 · <span class="lnk">View run</span></span></li>
+            <li><span class="c-no">6</span><span class="c-text">ICP filing is approved</span><span class="c-state"><span class="btn small">Confirm…</span></span><span class="c-sub2" style="color:var(--red)">Agent check failed · <span class="lnk">View run</span></span></li>
+            <li><span class="c-no">8</span><span class="c-text">Privacy policy published</span><span class="c-state"><span class="btn small">Confirm again…</span></span><span class="c-sub2" style="color:var(--amber)">Confirmed for an earlier wording</span></li>
+          </ul>
+        </div>
+        <div class="c-actions"><span class="btn primary">Record as done anyway</span><span class="btn">Not yet…</span></div>
+      </div>
+    </div>
+
+    <!-- side -->
+    <div class="col" style="width:520px">
+      <div class="notes" style="margin-top:0">
+        <div class="n"><span class="k">A</span><div><b>协调者提模式</b>：随判据一起提；开工前的 “When is this project done?” 卡每行写 “by its tasks / by confirmation”，确认判据 = 连模式一起批。</div></div>
+        <div class="n"><span class="k">B</span><div><b>开工后协调者改模式</b>：任务 → 确认算放宽，走现有 “Weaken this ruler?” 卡，diff 里写 “met by: its tasks → confirmation”。确认 → 任务是收紧，直接生效。</div></div>
+        <div class="n"><span class="k">C</span><div><b>你直接设</b>：判据行菜单 “Met by”。你改的不用批。同一菜单里有 Confirm… 和 Run an Agent check。</div></div>
+        <div class="n"><span class="k">D</span><div><b>Confirm 面板</b>：判据原文 + 验证方法在上；“What did you check?” 和截图都可选。协调者用 MCP 确认时同样可带 note，截图用已上传文件的 id。</div></div>
+        <div class="n"><span class="k">E</span><div><b>你确认的</b>：“Met · confirmed by you · 日期”，下面引号是 note，缩略图点开看大图；Withdraw 撤回。</div></div>
+        <div class="n"><span class="k">F</span><div><b>协调者确认的</b>：写明 “by the coordinator” + 时间 + note；<b>你可以撤回</b>；“Open conversation” 跳到它确认时的那条消息。</div></div>
+        <div class="n"><span class="k">G</span><div><b>Agent 检查 PASS</b>：“Agent check passed”，一行结论，View run 打开那次运行的会话。PASS 就算满足，不再等你。</div></div>
+        <div class="n"><span class="k">H</span><div><b>FAIL</b>：仍是 Not met（红字写 FAIL 结论），给 Confirm…（你知道它其实好了）/ Run again / View run。</div></div>
+        <div class="n"><span class="k">I</span><div><b>进行中</b>：“Checking…”，不算满足也不算失败。</div></div>
+        <div class="n"><span class="k">J</span><div><b>过期</b>：判据文字修订后，之前的确认不再算数，琥珀色 “confirmed for an earlier wording”，What changed 展开新旧文字对比；Confirm again…</div></div>
+        <div class="n"><span class="k">K</span><div>Web 判据卡顶句改为 “8 criteria stated. 2 are met by their tasks; 6 by a confirmation — from you, the coordinator, or an Agent check.” 底句同步改。</div></div>
+      </div>
+
+      <div class="side" style="margin-top:16px">
+        <h3>规则</h3>
+        <table>
+          <tr><th>确认来源</th><th>算满足？</th><th>行上写</th><th>谁能撤</th></tr>
+          <tr><td>你</td><td>是</td><td>by you · 时间 · note · 截图</td><td>你</td></tr>
+          <tr><td>协调者（MCP）</td><td>是</td><td>by the coordinator · 时间 · note</td><td>你、协调者</td></tr>
+          <tr><td>Agent 检查 PASS</td><td>是</td><td>Agent check passed · View run</td><td>你（撤回 = 回到等确认）</td></tr>
+          <tr><td>Agent 检查 FAIL</td><td>否</td><td>Agent check failed · 结论 · View run</td><td>—</td></tr>
+          <tr><td>检查进行中</td><td>否</td><td>Checking… · View run</td><td>—</td></tr>
+          <tr><td>判据文字修订</td><td>否（过期）</td><td>confirmed for an earlier wording</td><td>—</td></tr>
+          <tr><td>由任务满足的判据</td><td colspan="3">不变：NO_WORK_SERVES_IT 等规则照旧；不显示 Confirm…</td></tr>
+        </table>
+      </div>
+
+      <div class="side" style="margin-top:16px">
+        <h3>会改到的文件</h3>
+        <div class="mono" style="line-height:1.7">
+          apiserver: project-criterion-satisfaction.ts（confirmation 模式），新 criterion confirmations（表 + 迁移 + POST/DELETE），criteria 提议 diff 加 metBy，MCP 工具 criterion_confirm / criterion_check_run，project-done-request.ts<br>
+          shared: project-done.ts / criteria 类型（metBy, confirmation{by, at, note, fileId, runId, verdict, revision}）<br>
+          web: components/ProjectAcceptanceCard.tsx（行 + 菜单 + 顶/底句），新 ConfirmCriterionDialog.tsx，CriteriaDecisionCard.tsx / AcceptanceConfirmationCard.tsx（metBy），ProjectSettlementCard.tsx，lib/projectDone.ts<br>
+          iOS/macOS: Views/ProjectsView.swift（criterionRow），新 ConfirmCriterionSheet.swift，OrbitKit/App/CriteriaDecision.swift，ProjectDone.swift，Views/ProjectDoneCards.swift<br>
+          Android: 同步 · + copy-parity 测试
+        </div>
+      </div>
+
+      <div class="side todo" style="margin-top:16px">
+        <h3>待你定</h3>
+        <ol>
+          <li><b>Agent 检查在哪跑、用谁的额度？</b><span class="rec">建议：</span>协调者所在 workspace，一次性只读会话，提示词 = 判据文字 + 验证方法；模型同协调者。</li>
+          <li><b>Agent PASS 要不要你再点一下？</b>已定是 PASS 即满足。<span class="rec">建议：</span>照已定，不再要你点；但你可撤回。</li>
+          <li><b>协调者能不能确认它自己提出、你还没批模式的判据？</b><span class="rec">建议：</span>不能：模式没批（还在 Weaken 卡里）时，Confirm 不可用。</li>
+          <li><b>撤回后要不要留痕？</b><span class="rec">建议：</span>行上不留；判据历史里记 “Withdrawn by you · 时间”。</li>
+          <li><b>过期条件</b>：只看文字修订（semanticRevision）还是验证方法改了也算？<span class="rec">建议：</span>两者任一变了都过期，和任务声明过期同一规则。</li>
+          <li><b>截图数量</b>：<span class="rec">建议：</span>最多一张（已定写的是“optional screenshot”）。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

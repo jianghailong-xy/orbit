@@ -9,6 +9,15 @@ x-logging: &logging
     max-file: "5"
     compress: "true"
 
+# Where each image comes from. With none of these variables set, every image is what a single host has always run:
+# the apiserver, web and link gateway images built here from this checkout, postgres, nginx and nats pulled from
+# Docker Hub by tag. /upgrade's two-stage release (.claude/skills/upgrade/SKILL.md, "Two-stage release") builds on
+# one host and sets them on the host it deploys to, which builds nothing: ORBIT_REGISTRY is the registry every image
+# is pulled from, ORBIT_IMAGE_TAG the commit the apiserver and web images were built from, ORBIT_LINK_GATEWAY_TAG the
+# last commit under src/link-gateway, and ORBIT_NGINX_IMAGE and ORBIT_NATS_IMAGE the base images by digest
+# (deploy/two-stage/base-images.env). postgres and pgbackup are pinned by deploy/postgres-pinned.yml instead, which
+# that host lists in COMPOSE_FILE.
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -162,13 +171,18 @@ services:
       - ./data/files:/var/lib/orbit/files:ro
 
   apiserver:
-    image: orbit-apiserver:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-apiserver:${ORBIT_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: src/apiserver/Dockerfile
     container_name: orbit-apiserver
     restart: unless-stopped
     logging: *logging
+    # How long `docker stop` waits before SIGKILL. The apiserver stops by itself well inside it
+    # (src/apiserver/src/common/graceful-stop.ts): the requests in flight are answered for up to 23 s, and it exits by 25 s
+    # after it gets the signal, which leaves 5 s for a signal that comes late. A second apiserver defined with `extends`
+    # takes this with the rest.
+    stop_grace_period: 30s
     environment:
       DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
       JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET (generate: openssl rand -base64 32)}"
@@ -209,6 +223,14 @@ services:
       # Where runners reach this deployment — the origin the web image bakes in below. A session on a
       # shared Codex pool is handed <origin>/api/gw/codex as its OpenAI endpoint (providers/shared-pool.ts).
       PUBLIC_ORIGIN: "${PUBLIC_ORIGIN:-http://localhost:2086}"
+      # Optional: Claude Code on an OpenAI API key through this server's /api/gw/anthropic gateway (docs/configuration.md).
+      # `true` turns it on; anything else leaves every key's engines and dispatch environment as they were.
+      ORBIT_CLAUDE_OPENAI_GATEWAY: "${ORBIT_CLAUDE_OPENAI_GATEWAY:-}"
+      # Optional: Claude Code on the account owner's own Codex login pool, through the same gateway (docs/configuration.md).
+      # `true` turns it on; anything else leaves every pool's engines and dispatch environment as they were.
+      ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"
+      # Optional: hosts besides api.openai.com that gateway may call (comma-separated; public https only, no redirects).
+      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"
       # Optional: the proxies in front of the gateway (a CDN such as Cloudflare, a load balancer, a TLS proxy on the host),
       # as addresses and CIDR ranges separated by commas or spaces (docs/configuration.md). The apiserver reads a
       # visitor's own address through them from X-Forwarded-For, as the register approval page shows it; unset, a visitor
@@ -315,7 +337,7 @@ services:
   # key are given to this service and no other: the apiserver reads the model's name and state from the row this one
   # writes (wiki_model_status). Until the wiki's executor is switched to the server, probing the model is all it does.
   wiki-worker:
-    image: orbit-apiserver:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-apiserver:${ORBIT_IMAGE_TAG:-local}
     container_name: orbit-wiki-worker
     restart: unless-stopped
     logging: *logging
@@ -341,6 +363,9 @@ services:
         condition: service_healthy
 
   web:
+    # Empty unless ORBIT_IMAGE_TAG is set, and an empty image is none: Compose names the image it builds after the
+    # project, as it always has.
+    image: ${ORBIT_IMAGE_TAG:+${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-web:${ORBIT_IMAGE_TAG}}
     build:
       context: .
       dockerfile: src/web/Dockerfile
@@ -367,7 +392,7 @@ services:
       start_period: 10s
 
   gateway:
-    image: nginx:alpine
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NGINX_IMAGE:-nginx:alpine}
     container_name: orbit-gateway
     restart: unless-stopped
     logging: *logging
@@ -477,7 +502,7 @@ services:
       context: src/link-gateway
       args:
         ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
-    image: orbit-link-gateway:local
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-link-gateway:${ORBIT_LINK_GATEWAY_TAG:-local}
     container_name: orbit-link-gateway
     restart: unless-stopped
     logging: *logging
@@ -538,7 +563,7 @@ services:
   # the host, monitoring included, and runs only under the runner-link profile, beside the gateway.
   nats:
     profiles: [runner-link]
-    image: nats:2.15-alpine
+    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NATS_IMAGE:-nats:2.15-alpine}
     container_name: orbit-nats
     restart: unless-stopped
     logging: *logging

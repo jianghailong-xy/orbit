@@ -73,7 +73,7 @@ final class DeepSeekBalanceCopyParityTests: XCTestCase {
     /// A key's line is every engine it runs on, as the server lists them (`engines`, default first): a
     /// key made from the retired DeepSeek Harness preset runs on Claude Code and OpenCode too.
     func testAHarnessKeysLineIsWhereItRunsAsTheWebSaysIt() throws {
-        // Infrastructure's API keys: each engine by its CLI's name, a dot between (web's `KeyEngines`).
+        // Machines & models' API keys: each engine by its CLI's name, a dot between (web's `KeyEngines`).
         let keys = try web(Self.keys)
         assertSays(keys, "{row.engines.map((engine, index) => (", in: Self.keys)
         assertSays(keys, "{index > 0 && <> <span className=\"prov-engine-sep\">·</span> </>}", in: Self.keys)

@@ -25,6 +25,16 @@ final class WorktreeBarLogicTests: XCTestCase {
         )
     }
 
+    func testModeShowsALandingTheWorkFedEvenWithoutChangedFiles() {
+        XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: "orbit/x-abcdef",
+                                             changedFileCount: 0, hasSourceLanding: true), .worktree)
+        XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: nil,
+                                             changedFileCount: 0, hasSourceLanding: true), .hidden)
+        XCTAssertTrue(WorktreeBarLogic.carriesSourceLanding(isolationStatus: "worktree", branch: "orbit/x-abcdef"))
+        XCTAssertFalse(WorktreeBarLogic.carriesSourceLanding(isolationStatus: "worktree", branch: nil))
+        XCTAssertFalse(WorktreeBarLogic.carriesSourceLanding(isolationStatus: "shared-nogit", branch: "orbit/x"))
+    }
+
     func testModeHiddenWhenWorktreeButNoBranch() {
         XCTAssertEqual(WorktreeBarLogic.mode(isolationStatus: "worktree", branch: nil, changedFileCount: 5), .hidden)
     }

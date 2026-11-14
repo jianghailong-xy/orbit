@@ -117,6 +117,10 @@ final class ConsoleRegistry {
     /// instantly once that console opens. Not added to `models` — there's no sessionID to key it by.
     /// `folderID` is the folder whose page opened this draft (a folder page's ✎): the session it
     /// creates is filed in that folder as it is created (design §3.3). Nil from a list.
+    /// Words the next draft opened for a workspace starts with, by workspace id (a main checkout line's
+    /// Open in a new session). Taken by that draft, once.
+    var pendingDraftText: [String: String] = [:]
+
     func draftModel(for agent: Agent, defaultModel: String,
                     configuredProviders: [ConfiguredProvider] = [],
                     configuredProvidersLoaded: Bool = false,
@@ -141,6 +145,7 @@ final class ConsoleRegistry {
                                  modelCatalog: modelCatalog, accountDefaultEffort: accountDefaultEffort,
                                  folderID: folderID,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
+        if let text = pendingDraftText.removeValue(forKey: agent.id) { model.composerText = text }
         model.onSessionCreated = { [weak self, weak model] session in
             if let self, let model {
                 // A machine's first draft names no workspace: its session says which one it made.

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WikiPlanSupportBuildResult, WikiSupportSpace, WikiSupportSpaces } from '@orbit/shared';
 import { api, fetchUserAvatarDataUrl, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
-import { AdminNav } from '../components/AdminNav';
+import { SettingsHeader } from '../components/settings';
 import { Avatar } from '../components/ui/Avatar';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -491,38 +491,34 @@ export function AdminUsersPage() {
     });
 
   return (
-    <div className="admin-page">
-      <AdminNav />
-      <div className="admin-users-head">
-        <div className="admin-users-heading">
-          <h1 className="page-title">Users</h1>
-          {users.data && (
-            <div className="admin-users-sub">
-              {[
+    <div className="settings-page settings-page--wide admin-users-page">
+      <SettingsHeader
+        title="Users"
+        description={
+          users.data
+            ? [
                 plural(all.length, 'account', 'accounts'),
                 plural(admins, 'administrator', 'administrators'),
                 ...(disabled ? [`${disabled} disabled`] : []),
-              ].join(' · ')}
-            </div>
-          )}
-        </div>
-        <div className="admin-users-tools">
-          <Input
-            className="admin-users-search"
-            prefix={<SearchOutlined />}
-            placeholder="Search name or email"
-            aria-label="Search users"
-            value={query}
-            allowClear
-            onClear={() => setQuery('')}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+              ].join(' · ')
+            : undefined
+        }
+        action={
           <Button variant="primary" onClick={() => setCreateOpen(true)}>
             Add user
           </Button>
-        </div>
-      </div>
-
+        }
+      />
+      <Input
+        className="admin-users-search"
+        prefix={<SearchOutlined />}
+        placeholder="Search name or email"
+        aria-label="Search users"
+        value={query}
+        allowClear
+        onClear={() => setQuery('')}
+        onChange={(e) => setQuery(e.target.value)}
+      />
       <TableFrame className="admin-users-frame" loading={users.isLoading}>
         <table className="orbit-table admin-users-table">
           <thead>

@@ -102,7 +102,7 @@ function ChangedRows({
  * the reader's own messages sit, in a tint, so the reply the agent carried on with read as two
  * answers with somebody cutting in between them.
  *
- * It is no anchor for the sticky bar (no `data-sticky-label`): the bar keeps naming the question
+ * It is no anchor for the sticky bar (no `data-orbit-round`): the bar keeps naming the question
  * the answer around it belongs to. Why it fired, each target that moved, who queued it, the way to
  * the watch and what the agent read open beneath it, behind a native disclosure so they still open
  * in a static export. A target that failed stays loud: the line takes the error tone, and where

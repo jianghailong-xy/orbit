@@ -47,7 +47,10 @@ fun BusinessCard(card: InteractionCard, fresh: Boolean, result: CardActionState 
     val batchPreview = card.source.obj("input")?.obj("preview")?.takeIf { card.family == CardFamily.BATCH }
     val skip = card.source.takeIf { it.text("toolName") == SkipMergeCheckCards.tool }?.let { SkipMergeCheckCards.read(it.obj("input") ?: JsonObject(emptyMap())) }
     val enabled = fresh && !result.busy && !result.uncertain && !result.settled
+    // Restart the task is a Run press: named once per drawn card, so a press sent again is the same press, not a second run.
+    val triggerId = rememberSaveable(card.key, card.binding) { java.util.UUID.randomUUID().toString() }
     val input = CardInput(note, selections, custom, ownerAnswers, option,
+        triggerId = triggerId.takeIf { CardVerb.RESTART_TASK in card.actions },
         edited = if (editTitle.isBlank()) null else buildJsonObject {
             // Amend replaces proposed changes, so preserve the fields this two-field form doesn't edit.
             if (card.source.text("op") == "amend") {

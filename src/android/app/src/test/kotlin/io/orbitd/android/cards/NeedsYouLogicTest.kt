@@ -235,6 +235,34 @@ class NeedsYouLogicTest {
         assertEquals("the one it names, and +1", 1, banner?.more)
     }
 
+    // the bar unfolded (owner 2026-11-13, 03-expand option B)
+
+    @Test fun entriesListEveryConversationInTheBarsOwnOrder() {
+        val blockedNew = session("s-new", 1, "dev", "orbit-prod", "Rebuild the report", "2026-09-13T11:00:00Z")
+        val blockedOld = session("s-old", 1, "dev", "orbit-prod", "Ship the release", "2026-09-13T07:00:00Z")
+        val newer = coordinator("c1", "Newer project", listOf(ownerItem("COORDINATOR_QUESTION", "2026-09-13T12:00:00Z", "new")))
+        val older = coordinator("c2", "Older project", listOf(ownerItem("PROMOTION_APPROVAL", "2026-09-13T08:00:00Z", "old")))
+        val waiting = listOf(blockedNew, newer, blockedOld, older)
+        val entries = NeedsYouLogic.entries(waiting)
+        assertEquals(listOf("c2", "c1", "s-old", "s-new"), entries.map { it.target.text("id") })
+        assertEquals(listOf("Approve merge to main", "Question from coordinator", "orbit-prod needs you", "orbit-prod needs you"),
+            entries.map { it.text })
+        assertEquals(listOf("Older project", "Newer project", "Ship the release", "Rebuild the report"), entries.map { it.detail })
+        assertEquals(listOf("old", "new", null, null), entries.map { it.ownerItem?.itemId })
+        assertEquals("each line is one conversation", listOf(0, 0, 0, 0), entries.map { it.more })
+        val banner = NeedsYouLogic.banner(waiting)
+        assertEquals("the folded bar names the first line", banner?.target?.text("id"), entries.first().target.text("id"))
+        assertEquals(banner?.ownerItem?.itemId, entries.first().ownerItem?.itemId)
+    }
+
+    @Test fun entriesNameEachBlockedSessionAndLeaveOutTheFocusedOne() {
+        val a = session("a", 1, "a", "A", "First", "2026-08-14T09:00:00.000Z")
+        val b = session("b", 1, "b", "B", "Second", "2026-08-14T08:00:00.000Z")
+        assertEquals(listOf("B needs you", "A needs you"), NeedsYouLogic.entries(listOf(a, b)).map { it.text })
+        assertEquals(listOf("b"), NeedsYouLogic.entries(listOf(a, b), "a").map { it.target.text("id") })
+        assertTrue(NeedsYouLogic.entries(emptyList()).isEmpty())
+    }
+
     @Test fun anOwnerItemOutranksABlockedToolCall() {
         val blocked = session("s1", 1, "dev", "wikova-develop")
         val waiting = coordinator("c1", "Integration line", listOf(ownerItem("FUSE_PAUSED", "2026-09-13T10:00:00Z")))

@@ -139,7 +139,7 @@ internal fun SessionLiveMark(session: DirectorySession, watching: WatchSessionSu
         session.pendingApprovals > 0 -> Box(Modifier.size(7.dp).background(LocalOrbitColors.current.needsYou, CircleShape).testTag("session-mark-needs-you"))
         session.confirmationUnderReview != null -> Icon(painterResource(R.drawable.ic_clock), null, Modifier.size(14.dp).testTag("session-mark-review"), tint = muted)
         session.isRunning() -> RowSpinner(Modifier.testTag("session-mark-running"))
-        parked && watching != null -> Icon(painterResource(R.drawable.ic_eye), null, Modifier.size(14.dp).testTag("session-mark-watching"), tint = muted)
+        parked && (watching != null || session.resumesOnItsOwn) -> Icon(painterResource(R.drawable.ic_eye), null, Modifier.size(14.dp).testTag("session-mark-watching"), tint = muted)
         session.isRunningJob(watching) -> BreathingTerminal(Modifier.testTag("session-mark-jobs"))
         session.effectiveRunState == RunState.FAILED && !session.retryPending(Instant.now()) && !session.error.orEmpty().lowercase().contains("offline") ->
             Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.error, CircleShape).testTag("session-mark-failed"))

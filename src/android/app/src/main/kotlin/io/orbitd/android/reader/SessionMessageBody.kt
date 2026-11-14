@@ -2,7 +2,6 @@ package io.orbitd.android.reader
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.LocalTextStyle
@@ -37,7 +36,7 @@ import io.orbitd.android.core.cards.SessionMessageClamp
 import io.orbitd.android.text.MarkdownText
 
 /**
- * Another session's words, under its card: whole when short, and past [SessionMessageClamp.FROM] lines their first
+ * Another session's words, in its bubble (hugging them, so nothing here fills the width): whole when short, and past [SessionMessageClamp.FROM] lines their first
  * [SessionMessageClamp.LINES], fading out, with "Show more" / "Show less" under them (web `SessionMessageCard`). The body is measured at its
  * full height inside the cut, so the toggle appears only where something is actually hidden. [revealed] — a record link landed in this
  * turn — opens it, as a find opens it on web.
@@ -51,14 +50,14 @@ internal fun SessionMessageBody(words: String, open: (String) -> Unit, revealed:
     val folds = SessionMessageClamp.folds(fullPx, linePx)
     val clamped = folds && !expanded
     val density = LocalDensity.current
-    Column(Modifier.fillMaxWidth()) {
+    Column {
         Box(
-            Modifier.fillMaxWidth().testTag(if (clamped) "session-message:clamped" else "session-message:whole")
+            Modifier.testTag(if (clamped) "session-message:clamped" else "session-message:whole")
                 .then(if (clamped) Modifier.heightIn(max = with(density) { SessionMessageClamp.foldedPx(linePx).toDp() }).clipToBounds().fadeOut() else Modifier),
         ) {
             MarkdownText(
                 words,
-                Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).onSizeChanged { fullPx = it.height },
+                Modifier.wrapContentHeight(Alignment.Top, unbounded = true).onSizeChanged { fullPx = it.height },
                 open = open,
             )
         }
@@ -82,5 +81,5 @@ private fun lineHeightPx(style: TextStyle): Float = with(LocalDensity.current) {
 private fun Modifier.fadeOut(): Modifier = graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithContent {
         drawContent()
-        drawRect(Brush.verticalGradient(0.7f to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+        drawRect(Brush.verticalGradient(0.55f to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
     }

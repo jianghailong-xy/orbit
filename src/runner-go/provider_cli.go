@@ -171,13 +171,6 @@ session this is put on a confirmation card first.
 `,
 }
 
-var providerCLICapabilities = []cliCapabilitySpec{
-	{Tool: "provider_list", Argv: []string{"orbit", "provider", "list"}, Usage: "orbit provider list [--json]", Arguments: []string{"--json"}},
-	{Tool: "provider_create", Argv: []string{"orbit", "provider", "create"}, Usage: "orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]", Arguments: []string{"--label <text> (required)", "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol the endpoint speaks: Anthropic Messages, OpenAI Responses, Moonshot, Gemini or a Cursor User API Key; it decides which engines can run the key)", "--base-url <url> (required but for --runtime cursor; resolved on the runner the session runs on)", "--api-key <key> | --api-key-file - (required)", "--models <json array> (required but for --runtime cursor; [{value,label,contextWindow?,reasoningLevels?}])", "--default-model <model id>", "--json"}, Mutates: true},
-	{Tool: "provider_update", Argv: []string{"orbit", "provider", "update"}, Usage: "orbit provider update SLUG [options]", Arguments: []string{"[slug] (required)", "--label <text>", "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol the endpoint speaks)", "--base-url <url>", "--api-key <key> | --api-key-file -", "--models <json array> (replaces the list)", "--default-model <model id>", "--json"}, Mutates: true},
-	{Tool: "provider_delete", Argv: []string{"orbit", "provider", "delete"}, Usage: "orbit provider delete SLUG [--json]", Arguments: []string{"[slug] (required)", "--json"}, Mutates: true},
-}
-
 func cmdProviderCLI(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		_, err := fmt.Fprint(out, providerHelp)
@@ -357,7 +350,7 @@ func cliProviderCreate(args []string, in io.Reader, out io.Writer) error {
 	if declined, err := askBeforeCreate(t, sessionID, providerCreateApprovalToolName, providerCard("", body)); err != nil {
 		return fmt.Errorf("create provider: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("create provider: the human rejected this provider: %s", declined)
+		return fmt.Errorf("create provider: %s", declinedText("the human rejected this provider", declined))
 	}
 	raw, err := t.createProvider(body)
 	if err != nil {
@@ -395,7 +388,7 @@ func cliProviderUpdate(args []string, in io.Reader, out io.Writer) error {
 	if declined, err := askBeforeCreate(t, sessionID, providerUpdateApprovalToolName, providerCard(slug, body)); err != nil {
 		return fmt.Errorf("update provider: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("update provider: the human rejected this change: %s", declined)
+		return fmt.Errorf("update provider: %s", declinedText("the human rejected this change", declined))
 	}
 	raw, err := t.updateProvider(slug, body)
 	if err != nil {
@@ -425,7 +418,7 @@ func cliProviderDelete(args []string, out io.Writer) error {
 	if declined, err := askBeforeCreate(t, sessionID, providerDeleteApprovalToolName, providerCard(slug, nil)); err != nil {
 		return fmt.Errorf("delete provider: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("delete provider: the human rejected this deletion: %s", declined)
+		return fmt.Errorf("delete provider: %s", declinedText("the human rejected this deletion", declined))
 	}
 	raw, err := t.deleteProvider(slug)
 	if err != nil {

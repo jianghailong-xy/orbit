@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS launch: updating indicator</title>
+<style>
+  :root { --bg:#000; --fg:#fff; --sec:#8e8e93; --ter:#48484a; --sep:#2c2c2e; --blue:#0a84ff; --green:#30d158; --orange:#ff9f0a; --chip:#1c1c1e; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #e9e9ee; font-family: "Liberation Sans", "Nimbus Sans", "Droid Sans Fallback", sans-serif; color: #1d1d1f; }
+  .board { background: #f5f5f7; padding: 36px 40px 40px; margin: 0 0 24px; width: max-content; }
+  .board h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+  .board .lede { font-size: 15px; color: #555; margin-bottom: 26px; max-width: 1500px; line-height: 1.5; }
+  .row-of-phones { display: flex; gap: 28px; align-items: flex-start; }
+  .col { width: 330px; }
+  .col .tag { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .col .tag .rec { color: #fff; background: #0a84ff; border-radius: 4px; padding: 1px 6px; font-size: 12px; margin-left: 6px; vertical-align: 2px; }
+  .col .note { font-size: 13px; color: #555; line-height: 1.5; margin-top: 12px; min-height: 60px; }
+  .col .note b { color: #1d1d1f; }
+  .col .note code { font-family: "Liberation Mono", monospace; font-size: 12px; background: #e5e5ea; padding: 0 3px; border-radius: 3px; }
+
+  /* phone */
+  .phone { width: 330px; height: 640px; background: var(--bg); border-radius: 44px; overflow: hidden; position: relative; color: var(--fg); border: 6px solid #1c1c1e; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+  .status { height: 44px; display: flex; justify-content: space-between; align-items: center; padding: 6px 30px 0 34px; font-size: 15px; font-weight: 700; }
+  .status .r { font-size: 12px; letter-spacing: 1px; }
+  .header { display: flex; align-items: center; padding: 6px 14px 8px; gap: 10px; height: 60px; }
+  .ham { width: 40px; height: 40px; border-radius: 20px; background: var(--chip); display: flex; align-items: center; justify-content: center; flex: none; }
+  .ham i { display: block; width: 16px; height: 2px; background: #fff; box-shadow: 0 -5px 0 #fff, 0 5px 0 #fff; border-radius: 1px; }
+  .titlebox { flex: 1; min-width: 0; }
+  .ws { font-size: 17px; font-weight: 500; white-space: nowrap; }
+  .sub { font-size: 12px; color: var(--sec); display: flex; align-items: center; gap: 5px; margin-top: 2px; white-space: nowrap; }
+  .sub.orange { color: var(--orange); }
+  .sub.orange .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--orange); }
+  .caps { width: 92px; height: 40px; border-radius: 20px; background: var(--chip); display: flex; align-items: center; justify-content: space-around; padding: 0 10px; flex: none; }
+  .caps .f { width: 16px; height: 12px; background: linear-gradient(#fff 0 2px, transparent 2px 5px, #fff 5px 7px, transparent 7px 10px, #fff 10px 12px); clip-path: polygon(0 0,100% 0,100% 17%,0 17%,0 42%,85% 42%,85% 58%,0 58%,0 83%,65% 83%,65% 100%,0 100%); }
+  .caps .c { width: 16px; height: 16px; border: 2px solid #fff; border-radius: 4px; }
+  .progress { height: 2px; margin: 0 14px; background: transparent; position: relative; overflow: hidden; border-radius: 1px; }
+  .progress i { position: absolute; left: 0; top: 0; height: 2px; width: 38%; background: var(--blue); border-radius: 1px; }
+  .list { padding: 0 14px; }
+  .r1 { padding: 11px 0 11px; border-bottom: 1px solid var(--sep); }
+  .r1 .t { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .r1 .t .n { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r1 .t .tm { font-size: 11px; color: var(--sec); white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+  .r1 .s { font-size: 13px; color: var(--sec); margin-top: 5px; display: flex; gap: 7px; align-items: center; white-space: nowrap; overflow: hidden; }
+  .r1 .s .blue { color: var(--blue); }
+  .pill { display: inline-flex; align-items: center; gap: 5px; background: var(--chip); border-radius: 6px; padding: 2px 6px; font-size: 11px; color: #d1d1d6; flex: none; }
+  .pill .bar { width: 26px; height: 3px; border-radius: 2px; background: linear-gradient(90deg, var(--green) 0 var(--p), var(--blue) var(--p) calc(var(--p) + 8%), #48484a 0); }
+  .ring { width: 12px; height: 12px; border-radius: 6px; border: 1.6px solid #d1d1d6; border-right-color: transparent; display: inline-block; }
+  .stale .n, .stale .s, .stale .tm { opacity: .5; }
+  .search { position: absolute; left: 22px; right: 22px; bottom: 22px; height: 44px; border-radius: 22px; background: rgba(44,44,46,.92); display: flex; align-items: center; gap: 10px; padding: 0 16px; font-size: 15px; color: var(--sec); }
+  .search .g { width: 13px; height: 13px; border: 2px solid #fff; border-radius: 7px; }
+  .toast { position: absolute; left: 50%; top: 116px; transform: translateX(-50%); background: rgba(44,44,46,.96); color: #fff; font-size: 12px; padding: 6px 12px; border-radius: 16px; display: flex; gap: 6px; align-items: center; white-space: nowrap; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+
+  /* skeleton */
+  .sk { padding: 13px 0; border-bottom: 1px solid var(--sep); }
+  .sk i { display: block; height: 12px; border-radius: 6px; background: #1c1c1e; }
+  .sk i + i { margin-top: 9px; height: 10px; }
+
+  /* spinner (iOS spokes) */
+  .spin { width: 12px; height: 12px; flex: none; }
+  .callout { position: absolute; border: 2px solid #ff375f; border-radius: 10px; pointer-events: none; }
+  .num { position: absolute; width: 20px; height: 20px; border-radius: 10px; background: #ff375f; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  /* timeline */
+  .timeline { margin-top: 30px; background: #fff; border-radius: 14px; padding: 20px 24px; width: 1762px; }
+  .timeline h2 { font-size: 17px; margin-bottom: 14px; }
+  .tl { position: relative; height: 92px; }
+  .tl .axis { position: absolute; left: 0; right: 0; top: 46px; height: 2px; background: #c7c7cc; }
+  .tl .seg { position: absolute; top: 34px; height: 26px; border-radius: 6px; font-size: 12px; display: flex; align-items: center; padding: 0 8px; white-space: nowrap; color: #1d1d1f; }
+  .tl .tick { position: absolute; top: 64px; font-size: 12px; color: #555; transform: translateX(-50%); white-space: nowrap; }
+  .tl .lab { position: absolute; top: 4px; font-size: 12px; color: #1d1d1f; transform: translateX(-50%); white-space: nowrap; }
+  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 40px; font-size: 13px; line-height: 1.55; color: #333; margin-top: 10px; }
+  .rules b { color: #000; }
+  .rules code { font-family: "Liberation Mono", monospace; font-size: 12px; background: #eee; padding: 0 3px; border-radius: 3px; }
+</style>
+
+<body>
+<template id="spokes">
+  <svg class="spin" viewBox="0 0 24 24"><g stroke="#8e8e93" stroke-width="2.6" stroke-linecap="round">
+    <line x1="12" y1="2.5" x2="12" y2="7" opacity="1"/><line x1="12" y1="2.5" x2="12" y2="7" transform="rotate(45 12 12)" opacity=".85"/>
+    <line x1="12" y1="2.5" x2="12" y2="7" transform="rotate(90 12 12)" opacity=".7"/><line x1="12" y1="2.5" x2="12" y2="7" transform="rotate(135 12 12)" opacity=".58"/>
+    <line x1="12" y1="2.5" x2="12" y2="7" transform="rotate(180 12 12)" opacity=".46"/><line x1="12" y1="2.5" x2="12" y2="7" transform="rotate(225 12 12)" opacity=".36"/>
+    <line x1="12" y1="2.5" x2="12" y2="7" transform="rotate(270 12 12)" opacity=".28"/><line x1="12" y1="2.5" x2="12" y2="7" transform="rotate(315 12 12)" opacity=".2"/></g></svg>
+</template>
+
+<!-- ====================== BOARD 1: where the indicator goes ====================== -->
+<section class="board" data-png="01-placement">
+  <h1>① 打开 iOS 时，「正在收取」放在哪</h1>
+  <p class="lede">今天：冷启动先画上次存下的列表（<code>restoreLaunchSnapshot</code>），服务器的新列表回来前没有任何提示，行上的「Resolving a merge conflict · 1d」、转圈可能都是旧的，看不出来。<br>
+  三种放法，内容相同：都在列表读回来之前出现，读回来就消失。英文是上线文案，中文是说明。</p>
+  <div class="row-of-phones" id="placement"></div>
+</section>
+
+<!-- ====================== BOARD 2: states of A ====================== -->
+<section class="board" data-png="02-states">
+  <h1>② 建议版（A：工作区名下面一行小字）的各个状态</h1>
+  <p class="lede">一行小字只说「列表现在是不是最新的」。只管打开、回到前台、下拉这几次整表读取；之后事件流断开重连不在这里显示（行会照常按轮询更新）。</p>
+  <div class="row-of-phones" id="states"></div>
+
+  <div class="timeline">
+    <h2>什么时候出现、什么时候消失</h2>
+    <div class="tl">
+      <div class="axis"></div>
+      <div class="seg" style="left:0;width:120px;background:#e5e5ea">不显示</div>
+      <div class="seg" style="left:122px;width:420px;background:#d6e8ff">Updating…</div>
+      <div class="seg" style="left:544px;width:520px;background:#ffe9c7">Connecting…</div>
+      <div class="seg" style="left:1066px;width:648px;background:#ffd8d2">Offline · Tap to retry</div>
+      <div class="lab" style="left:0;transform:none">打开 / 回前台</div>
+      <div class="tick" style="left:0">0</div>
+      <div class="tick" style="left:122px">0.4 s</div>
+      <div class="tick" style="left:544px">4 s</div>
+      <div class="tick" style="left:1066px">15 s 或请求失败</div>
+    </div>
+    <div class="rules">
+      <div><b>0.4 s 内读回来：</b>什么都不出现，避免每次打开闪一下。出现了就至少留 0.6 s 再淡出。</div>
+      <div><b>读回来：</b>小字淡出，标题回到一行，不留「Updated」之类的提示；行在原地更新，不整表闪。</div>
+      <div><b>旧行变淡（可选）：</b>Updating 期间行的状态行和右侧时间 50% 透明，读回来恢复。默认不做，见上面 1′ 屏。</div>
+      <div><b>Offline：</b>点小字立即重读；下拉同样重读；回到前台自动重读。行保持上次的样子，不清空。</div>
+      <div><b>没存过列表</b>（新装 / 换账号）：小字照样是 Loading sessions…，列表位置放 6 行灰色占位，不放大转圈。</div>
+      <div><b>只在 Open 列表：</b>Completed / Trash 有自己的读取，不共用这行。macOS 不做（窗口常开，冷启动少）。</div>
+    </div>
+  </div>
+</section>
+
+<script>
+const spin = document.getElementById('spokes').innerHTML;
+const rows = [
+  { n: 'Fix the release preview on main', p: 10, of: 25, s: 'Background process running…', tm: 'just now', icon: 'term' },
+  { n: 'Start an Orbit session from the CLI', p: 6, of: 10, s: '<span class="blue">Resolving a merge conflict · 2h</span>', tm: 'just now', icon: 'ring' },
+  { n: 'Agent contract and usage guide', p: 2, of: 9, s: '<span class="blue">Resolving a merge conflict · 54m</span>', tm: 'just now' },
+  { n: 'Button design review', s: 'The host is overloaded and the test work…', tm: '1h', icon: 'ring' },
+  { n: 'Runner hardening: offline alerts, auto…', p: 21, of: 23, s: 'The wiki job finished batch 4 cl…', tm: 'just now' },
+  { n: 'Task: Native guest view: Shared with me', s: '<span class="blue">Running Agent…</span>', tm: '', icon: 'ring' },
+  { n: 'Wiki sidebar redesign', s: 'Background process running…', tm: 'just now' },
+  { n: 'Android: new account welcome card', s: 'Background process running…', tm: 'just now' },
+];
+function row(r, stale) {
+  const pill = r.p ? `<span class="pill"><span class="bar" style="--p:${Math.round(r.p / r.of * 100)}%"></span>${r.p}/${r.of}</span>` : '';
+  const icon = r.icon === 'ring' ? '<span class="ring"></span>' : r.icon === 'term' ? '<span style="border:1.4px solid #8e8e93;border-radius:3px;width:16px;height:12px;display:inline-block"></span>' : '';
+  return `<div class="r1 ${stale ? 'stale' : ''}"><div class="t"><span class="n">${r.n}</span><span class="tm">${icon}${r.tm}</span></div><div class="s">${pill}<span>${r.s}</span></div></div>`;
+}
+function phone({ sub = '', title = 'orbit-develop', progress = false, toast = '', stale = false, skeleton = false, extra = '' }) {
+  const list = skeleton
+    ? Array.from({ length: 7 }, (_, i) => `<div class="sk"><i style="width:${[72, 60, 80, 55, 68, 76, 58][i]}%"></i><i style="width:${[46, 52, 38, 60, 42, 50, 36][i]}%"></i></div>`).join('')
+    : rows.map((r) => row(r, stale)).join('');
+  return `<div class="phone">
+    <div class="status"><span>1:43</span><span class="r">▮▮▮ 5G ▭</span></div>
+    <div class="header"><div class="ham"><i></i></div>
+      <div class="titlebox"><div class="ws">${title}</div>${sub}</div>
+      <div class="caps"><span class="f"></span><span class="c"></span></div></div>
+    <div class="progress">${progress ? '<i></i>' : ''}</div>
+    <div class="list">${list}</div>
+    ${toast}
+    <div class="search"><span class="g"></span>Search sessions</div>
+    ${extra}
+  </div>`;
+}
+const subUpdating = `<div class="sub">${spin}Updating…</div>`;
+function col(tag, ph, note, rec) {
+  return `<div class="col"><div class="tag">${tag}${rec ? '<span class="rec">建议</span>' : ''}</div>${ph}<div class="note">${note}</div></div>`;
+}
+
+document.getElementById('placement').innerHTML = [
+  col('今天', phone({}),
+    '打开就是上次的列表，和读回来之后长得一样。<b>问题：</b>看不出这是旧的，也看不出有没有在读、有没有读到。'),
+  col('A · 工作区名下面一行小字', phone({ sub: subUpdating, extra: '<div class="callout" style="left:62px;top:76px;width:96px;height:26px"></div>' }),
+    '<b>Updating…</b> 带系统转圈，写在工作区名下面。名字不动、不挡行，读回来小字淡出。读不到时同一位置换成橙色 Offline，可点。', true),
+  col('B · 标题换成「Updating…」', phone({ title: `<span style="display:flex;gap:7px;align-items:center">${spin.replace('class="spin"', 'class="spin" style="width:16px;height:16px"')}Updating…</span>` }),
+    '和微信「收取中…」一样，直接替换标题。最醒目，但工作区名在打开的头一两秒看不到；多工作区的人一打开就想确认在哪个。'),
+  col('C · 顶部细进度条 + 浮条', phone({ progress: true, toast: `<div class="toast">${spin}Updating sessions…</div>` }),
+    '标题下 2pt 蓝色进度条加一个浮条。最显眼，但浮条盖住第一行；整表读取没有真实进度，进度条只能假装在走。'),
+].join('');
+
+document.getElementById('states').innerHTML = [
+  col('1 · 读取中（有存过的列表）', phone({ sub: subUpdating }),
+    '<b>Updating…</b>　超过 0.4 s 还没读回来才出现。'),
+  col('1′ · 同上，旧行变淡（可选）', phone({ sub: subUpdating, stale: true }),
+    '把旧行的状态压淡，更明确「这些还没确认」。<b>代价：</b>每次打开整表先暗后亮。默认不做。'),
+  col('2 · 读得慢', phone({ sub: `<div class="sub">${spin}Connecting…</div>` }),
+    '<b>Connecting…</b>　4 s 还没回来，说明网不好或服务器慢；列表仍可点、可搜。'),
+  col('3 · 读不到', phone({ sub: '<div class="sub orange"><span class="dot"></span>Offline · Tap to retry</div>', extra: '<div class="callout" style="left:62px;top:76px;width:150px;height:26px"></div>' }),
+    '<b>Offline · Tap to retry</b>　请求失败或 15 s 超时。点这行、下拉、回到前台都会重读。'),
+  col('4 · 没存过列表', phone({ sub: `<div class="sub">${spin}Loading sessions…</div>`, skeleton: true }),
+    '<b>Loading sessions…</b>　新装或刚换账号。占位行代替今天的空白页。'),
+].join('');
+</script>
+</body>
+</html>

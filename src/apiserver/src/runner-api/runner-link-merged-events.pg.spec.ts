@@ -828,7 +828,11 @@ test('the link gateway\'s merged event call: many sessions in one transaction, e
       const shape = (sessionId: string) => notes.slice(notesBefore).filter((n) => n.r === sessionId)
         .map((n) => (Array.isArray(n.b) ? { b: (n.b as NormalizedRunEvent[]).map((e) => e.seq) } : { f: n.f, t: n.t }));
       assert.deepEqual(shape(pair.merged.sessionId), shape(pair.alone.sessionId), `pair ${i}: the same notifications`);
-      assert.equal(shape(pair.merged.sessionId).length, 4, 'one for each batch that stored something, none for the batch sent again');
+      assert.equal(shape(pair.merged.sessionId).length, 5, 'one for each batch that stored something, and one for the batch sent again');
+      // The batch sent again stores nothing, and announces again, as seqs to read back, what it found stored: its
+      // delivery may have died before telling anyone (RestatedSeqs). The seqs of a noise ping (12) and a live-only event
+      // (14) are left out of the range's ends.
+      assert.deepEqual(shape(pair.merged.sessionId)[3], { f: 10, t: 13 }, 'the batch sent again, restated');
     }
   });
 

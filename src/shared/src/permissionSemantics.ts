@@ -338,7 +338,8 @@ export function derivePermissionSemantics(
         honored: true,
         note:
           `${cursor} plans without writing files, and every command, edit, MCP tool and web fetch it asks ` +
-          'to run is refused without asking, except Orbit’s own tools. If it switches itself out of Plan, ' +
+          'to run is refused without asking. Orbit’s own tools run, except a write, which Plan refuses on ' +
+          'every engine. If it switches itself out of Plan, ' +
           'Orbit stops the turn.',
       };
     }

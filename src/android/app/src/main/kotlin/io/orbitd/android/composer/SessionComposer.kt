@@ -75,7 +75,9 @@ import kotlinx.serialization.json.*
 @Composable
 internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
     inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
-    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null) {
+    openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
+    /** The page's own placeholder, over the composer's: a new account's welcome card (WelcomeCopy.WELCOME_PLACEHOLDER). */
+    placeholder: String? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
     val state by model.state.collectAsState()
     val context = LocalContext.current
@@ -238,6 +240,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         if (suggestion != null) SuggestionPlaceholder(suggestion)
                         // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (iOS 5 ⑥).
                         else Text(when {
+                            placeholder != null -> placeholder
                             target?.isMachineDraft == true || (target != null && MachineSetup.standsInForMachine(detail)) ->
                                 detail.text("name")?.takeIf { it.isNotEmpty() }?.let(MachineSetupCopy::composerPlaceholderFor) ?: "Message…"
                             target == null && running && engine == CursorRuntime.ENGINE -> CursorRuntime.RUNNING_PLACEHOLDER
@@ -278,7 +281,14 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                 // Cursor CLI's model by its catalogue's name, its effort and what the session set (iOS 5 ①②).
                 val cursorModel = if (shownEngine == CursorRuntime.ENGINE) CursorRuntime.modelName(state.catalog,
                     effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort")) else null
-                ModelChip(cursorModel ?: if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else effective.text("model")?.ifBlank { "Runtime default" } ?: "Model",
+                // Any other model by its catalogue's name too (web and iOS do), and a Claude id the catalogue has no row for
+                // as Claude Code names it — a signed-out runner whose probe failed showed the bare `claude-opus-5-5`.
+                val modelName = effective.text("model")?.let { id ->
+                    if (id.isBlank()) "Runtime default"
+                    else state.catalog?.modelLabel(shownEngine, effective.text("provider") ?: shownEngine, id)
+                        ?: if (shownEngine == ProviderEngines.CLAUDE) ProviderEngines.claudeModelName(id) else id
+                }
+                ModelChip(cursorModel ?: if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else modelName ?: "Model",
                     effortLabel(effective.text("effort")), smart != null,
                     enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f),
                     // …and aloud with its effort said once (iOS `chipAccessibilityLabel`): the name above already holds it.
@@ -635,6 +645,7 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
                     ?.let { ProviderChoices.fixSuffix(it, option.unavailable) } ?: "")
                     else (if (here) "✓ " else "") + option.label)
                 option.detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                option.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
     }

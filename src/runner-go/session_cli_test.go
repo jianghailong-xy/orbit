@@ -71,7 +71,7 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		"session_delete":    true,
 	}
 	requiredArguments := map[string][]string{
-		"create":    {"--prompt", "--prompt-file -", "--agent-id", "--agent-name", "--title", "--model", "--provider", "--permission-mode", "--wait", "--json"},
+		"create":    {"--prompt", "--prompt-file -", "--agent-id", "--agent-name", "--title", "--model", "--provider", "--permission-mode", "--no-worktree", "--wait", "--json"},
 		"list":      {"--status", "--parent-session-id", "--json"},
 		"search":    {"--query", "--limit", "--json"},
 		"get":       {"[session-id]", "--json"},
@@ -173,6 +173,17 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 				"model":          "model-2",
 				"provider":       "codex",
 				"permissionMode": "plan",
+			},
+		},
+		{
+			name:       "create with no worktree",
+			args:       []string{"create", "--prompt", "read the logs", "--agent-id", "agent-2", "--no-worktree", "--json"},
+			method:     http.MethodPost,
+			requestURI: "/api/runner/sessions",
+			wantBody: map[string]interface{}{
+				"prompt":   "read the logs",
+				"agentId":  "agent-2",
+				"worktree": false,
 			},
 		},
 		{

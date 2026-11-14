@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
-import { RunnerEngines } from './RunnerEngines';
-import { openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { EngineRows } from './RunnerEngines.test-rows';
+import { openAccountGroups, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -108,9 +108,9 @@ afterEach(() => {
   localStorage.clear();
 });
 
-/** Mount the section over this runner, its card open, the way a user who opened it sees it. */
+/** Mount this runner's engine rows, its accounts open, the way a user who opened them sees them. */
 function mount(runners: Runner[]) {
-  openRunnerCards(runners);
+  openAccountGroups(runners);
   apiMock.mockImplementation(async (path: string, options?: { method?: string }) => {
     if (path === '/runners') return runners;
     if (path.endsWith('/login') && (options?.method ?? 'GET') === 'GET') {
@@ -127,7 +127,7 @@ function mount(runners: Runner[]) {
     root!.render(
       <MemoryRouter initialEntries={['/providers']}>
         <QueryClientProvider client={qc}>
-          <RunnerEngines />
+          <EngineRows />
         </QueryClientProvider>
       </MemoryRouter>,
     ),

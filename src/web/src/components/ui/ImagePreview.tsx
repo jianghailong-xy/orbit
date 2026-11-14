@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject, type TouchEvent as ReactTouchEvent } from 'react';
 import { Dialog as BaseDialog } from '@base-ui/react/dialog';
 import {
   CloseOutlined,
+  CompressOutlined,
   LeftOutlined,
+  OneToOneOutlined,
   RightOutlined,
   RotateLeftOutlined,
   RotateRightOutlined,
@@ -57,34 +59,29 @@ type Transform = { x: number; y: number; rotate: number; scale: number; flipX: b
 type Point = { x: number; y: number };
 const INITIAL: Transform = { x: 0, y: 0, rotate: 0, scale: 1, flipX: false, flipY: false };
 const SCALE_STEP = 0.5;
-const MIN_SCALE = 1;
 const MAX_SCALE = 50;
+/** A wheel or a trackpad that scrolls by lines moves the picture this many pixels a line. */
+const LINE_PX = 16;
 
-function clientSize() {
-  return { width: document.documentElement.clientWidth, height: window.innerHeight || document.documentElement.clientHeight };
-}
+/**
+ * Scale 1 is the picture's actual size: one of its pixels on one of the screen's, which is how a screenshot or a
+ * board rendered at 2x was taken, so its words read at the size they were written. A picture opens at its actual size
+ * or at the size the viewer always gave it (see fitScale), whichever is larger, so none opens smaller than it used to:
+ * one larger than the window opens from its top (and its left edge when it is wider) and scrolls, and a 1x picture
+ * still fills the room it filled. The fit button and a double click go between the two. A touch screen opens at the
+ * fit, as a phone holds a board too small to read at its actual size either way.
+ */
+const opensWhole = () => typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none) and (pointer: coarse)').matches;
 
-function fixPoint(start: number, size: number, client: number): number | undefined {
-  const offsetStart = (size - client) / 2;
-  if (size > client) {
-    if (start > 0) return offsetStart;
-    if (start < 0 && start + size < client) return -offsetStart;
-  } else if (start < 0 || start + size > client) {
-    return start < 0 ? offsetStart : -offsetStart;
-  }
-  return undefined;
-}
-
-/** Where a dragged or pinched picture settles: centred again when it fits, else with no gap at an edge. */
-function rebound(width: number, height: number, left: number, top: number): Partial<Transform> {
-  const client = clientSize();
-  if (width <= client.width && height <= client.height) return { x: 0, y: 0 };
-  const fix: Partial<Transform> = {};
-  const x = fixPoint(left, width, client.width);
-  const y = fixPoint(top, height, client.height);
-  if (x !== undefined) fix.x = x;
-  if (y !== undefined) fix.y = y;
-  return fix;
+/**
+ * Where a picture of `size` rests on one axis of the area from `start` to `end`, whose part above the footer ends at
+ * `visibleEnd`: centred when it fits (lifted clear of the footer if need be), else `offset` held so the picture covers
+ * the area with no gap at either edge. The offset is from the area's centre, where the picture's box is laid out.
+ */
+function rest(size: number, start: number, end: number, visibleEnd: number, offset: number): number {
+  const center = (start + end) / 2;
+  if (size <= visibleEnd - start) return Math.min(0, visibleEnd - center - size / 2);
+  return Math.min(start - center + size / 2, Math.max(visibleEnd - center - size / 2, offset));
 }
 
 const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -97,14 +94,20 @@ function pinchCenter(old1: Point, old2: Point, new1: Point, new2: Point): [numbe
   return [old1.x + ratio * (old2.x - old1.x), old1.y + ratio * (old2.y - old1.y)];
 }
 
-function useImageTransform(image: RefObject<HTMLImageElement | null>) {
+function useImageTransform(
+  image: RefObject<HTMLImageElement | null>,
+  minScale: () => number,
+  rested: (transform: Transform) => Transform,
+) {
   const frame = useRef<number | null>(null);
   const queue = useRef<Transform[]>([]);
   const [transform, setTransform] = useState<Transform>(INITIAL);
   useEffect(() => () => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
   }, []);
-  const reset = () => setTransform(INITIAL);
+  const reset = (to: Transform = INITIAL) => setTransform(to);
+  /** The transform as it will be next frame: the last change asked for in this one, else the one drawn. */
+  const latest = () => queue.current[queue.current.length - 1] ?? transform;
   // Changes made within one frame land together in the next. Each is the transform it was worked out from plus its
   // own change, so the last one made wins.
   const update = (next: Partial<Transform>) => {
@@ -115,45 +118,39 @@ function useImageTransform(image: RefObject<HTMLImageElement | null>) {
           let merged = state;
           for (const queued of queue.current) merged = { ...merged, ...queued };
           frame.current = null;
+          queue.current = [];
           return merged;
         });
       });
     }
-    queue.current.push({ ...transform, ...next });
+    queue.current.push({ ...latest(), ...next });
   };
   /** Scale by `ratio` around a point (the window's centre by default), keeping that point where it is. */
   const zoom = (ratio: number, centerX?: number, centerY?: number, isTouch = false) => {
     const img = image.current;
     if (!img) return;
-    const { width, height, offsetWidth, offsetHeight, offsetLeft, offsetTop } = img;
+    const current = latest();
+    const min = minScale();
+    const { width, height, offsetLeft, offsetTop } = img;
     let newRatio = ratio;
-    let newScale = transform.scale * ratio;
+    let newScale = current.scale * ratio;
     if (newScale > MAX_SCALE) {
       newScale = MAX_SCALE;
-      newRatio = MAX_SCALE / transform.scale;
-    } else if (newScale < MIN_SCALE) {
+      newRatio = MAX_SCALE / current.scale;
+    } else if (newScale < min) {
       // A pinch may go below the minimum while the fingers are down; it springs back when they lift.
-      newScale = isTouch ? newScale : MIN_SCALE;
-      newRatio = newScale / transform.scale;
+      newScale = isTouch ? newScale : min;
+      newRatio = newScale / current.scale;
     }
     const diffRatio = newRatio - 1;
     const diffImgX = diffRatio * width * 0.5;
     const diffImgY = diffRatio * height * 0.5;
-    const diffOffsetLeft = diffRatio * ((centerX ?? innerWidth / 2) - transform.x - offsetLeft);
-    const diffOffsetTop = diffRatio * ((centerY ?? innerHeight / 2) - transform.y - offsetTop);
-    let x = transform.x - (diffOffsetLeft - diffImgX);
-    let y = transform.y - (diffOffsetTop - diffImgY);
-    // Back at its own size and smaller than the window: centred again.
-    if (ratio < 1 && newScale === 1) {
-      const client = clientSize();
-      if (offsetWidth * newScale <= client.width && offsetHeight * newScale <= client.height) {
-        x = 0;
-        y = 0;
-      }
-    }
-    update({ x, y, scale: newScale });
+    const diffOffsetLeft = diffRatio * ((centerX ?? innerWidth / 2) - current.x - offsetLeft);
+    const diffOffsetTop = diffRatio * ((centerY ?? innerHeight / 2) - current.y - offsetTop);
+    const next = { ...current, x: current.x - (diffOffsetLeft - diffImgX), y: current.y - (diffOffsetTop - diffImgY), scale: newScale };
+    update(isTouch ? next : rested(next));
   };
-  return { transform, reset, update, zoom };
+  return { transform, reset, update, zoom, latest };
 }
 
 // ── the preview ───────────────────────────────────────────────────────────────────────────────────
@@ -161,15 +158,62 @@ function useImageTransform(image: RefObject<HTMLImageElement | null>) {
 /**
  * The full-screen picture viewer the replaced Image and Image.PreviewGroup opened: the picture on a dark mask, a
  * close button top right, previous/next arrows at the sides of a group, and under the picture the position in the
- * group and the flip, rotate and zoom buttons. A picture zooms with the buttons, the wheel and a double click, moves
- * when dragged, and pinches and moves by touch; ←/→ page a group. Esc, the close button or a press on the mask
+ * group, the flip, rotate and zoom buttons, the scale and the actual size / fit button. A picture opens at its actual
+ * size (see opensWhole); the wheel scrolls one larger than the window, ⌘ or Ctrl with the wheel (a trackpad's pinch)
+ * zooms, a double click goes between the actual size and the whole picture, a drag moves it, and a touch pinches and
+ * moves it; ←/→ page a group. Esc, the close button or a press on the mask
  * closes it, and focus goes back where it was.
  */
 export function ImagePreview({ open, onClose, items, current = 0, onCurrentChange, group = false, origin, position, caption, actions: moreActions = [] }: ImagePreviewProps) {
   const layer = useOverlayChild(open, onClose);
   const image = useRef<HTMLImageElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const footer = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
-  const { transform, reset, update, zoom } = useImageTransform(image);
+  const count = items.length;
+  const item = items[current];
+  const switches = group && count > 1;
+  /** The picture's actual size in CSS pixels, once it has loaded. */
+  const [natural, setNatural] = useState<{ src: string; width: number; height: number } | null>(null);
+  const size = natural && natural.src === item?.src ? natural : null;
+
+  /** Where the picture's area is in the window, from layout: its rect would be the opening zoom's, which starts at
+   *  scale 0, and a picture that loads from the cache lands during it. */
+  const areaRect = () => {
+    const el = body.current;
+    if (!el) return null;
+    const left = el.offsetLeft;
+    const top = el.offsetTop;
+    return { left, top, width: el.offsetWidth, height: el.offsetHeight, right: left + el.offsetWidth, bottom: top + el.offsetHeight };
+  };
+  /** The size the viewer gave a picture before it knew actual size, as a scale: the whole picture, as turned, in the
+   *  window's width and 70% of its height (the room above the footer when captioned), and never above one of its
+   *  pixels to a CSS pixel. Below 1 for a picture larger than the window, above 1 for a 1x picture on a 2x screen. */
+  const fitScale = (rotate: number) => {
+    const area = areaRect();
+    if (!size || !area || !area.width || !area.height) return 1;
+    const turned = rotate % 180 !== 0;
+    const width = turned ? size.height : size.width;
+    const height = turned ? size.width : size.height;
+    return Math.min(window.devicePixelRatio || 1, area.width / width, (area.height * (caption != null ? 1 : 0.7)) / height);
+  };
+  /** Where a picture comes to rest: see rest(), on each axis of the area it is laid out in. */
+  const rested = (next: Transform): Transform => {
+    const img = image.current;
+    const area = areaRect();
+    if (!img || !area) return next;
+    const turned = next.rotate % 180 !== 0;
+    const width = (turned ? img.offsetHeight : img.offsetWidth) * next.scale;
+    const height = (turned ? img.offsetWidth : img.offsetHeight) * next.scale;
+    const foot = footer.current;
+    const visibleBottom = foot && foot.offsetHeight ? Math.min(area.bottom, foot.getBoundingClientRect().top - 16) : area.bottom;
+    return {
+      ...next,
+      x: rest(width, area.left, area.right, area.right, next.x),
+      y: rest(height, area.top, area.bottom, visibleBottom, next.y),
+    };
+  };
+  const { transform, reset, update, zoom, latest } = useImageTransform(image, () => Math.min(1, fitScale(latest().rotate)), rested);
   const [transition, setTransition] = useState(true);
   const [moving, setMoving] = useState(false);
   const [touching, setTouching] = useState(false);
@@ -179,18 +223,33 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     point2: { x: 0, y: 0 },
     eventType: 'none',
   });
-  const count = items.length;
-  const item = items[current];
-  const switches = group && count > 1;
 
   // A switch shows the next picture at its own size at once; the frame after, zooming animates again.
   useEffect(() => {
     if (!transition) setTransition(true);
   }, [transition]);
   useEffect(() => {
-    if (!open) reset();
+    if (!open) {
+      reset();
+      setNatural(null);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // A picture that has loaded is laid out at its actual size, then put where it opens: at that size from its top-left
+  // corner, or whole on a touch screen (rested() centres whatever fits).
+  const onLoad = () => {
+    const img = image.current;
+    if (!img || !item?.src || !img.naturalWidth) return;
+    const ratio = window.devicePixelRatio || 1;
+    setNatural({ src: item.src, width: img.naturalWidth / ratio, height: img.naturalHeight / ratio });
+  };
+  useLayoutEffect(() => {
+    if (!size) return;
+    setTransition(false);
+    reset(rested({ ...INITIAL, scale: opensWhole() ? fitScale(0) : Math.max(1, fitScale(0)), x: Infinity, y: Infinity }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size]);
 
   const go = (offset: number) => {
     const next = current + offset;
@@ -200,16 +259,8 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     onCurrentChange?.(next);
   };
 
-  /** Settle a picture let go after a drag or a pinch (see rebound). */
-  const settle = () => {
-    const img = image.current;
-    if (!img) return;
-    const width = img.offsetWidth * transform.scale;
-    const height = img.offsetHeight * transform.scale;
-    const { left, top } = img.getBoundingClientRect();
-    const turned = transform.rotate % 180 !== 0;
-    update(rebound(turned ? height : width, turned ? width : height, left, top));
-  };
+  /** Settle a picture let go after a drag or a pinch (see rest). */
+  const settle = () => update(rested(latest()));
 
   useEffect(() => {
     const onMouseMove = (event: MouseEvent) => {
@@ -258,15 +309,40 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     drag.current = { diffX: event.pageX - transform.x, diffY: event.pageY - transform.y, transformX: transform.x, transformY: transform.y };
     setMoving(true);
   };
-  const onWheel = (event: ReactWheelEvent<HTMLImageElement>) => {
-    if (!open || event.deltaY === 0) return;
-    let ratio = 1 + Math.min(Math.abs(event.deltaY / 100), 1) * SCALE_STEP;
-    if (event.deltaY > 0) ratio = 1 / ratio;
-    zoom(ratio, event.clientX, event.clientY);
+  // The wheel anywhere in the viewer: with ⌘ or Ctrl (which a trackpad's pinch sends too) it zooms around the pointer,
+  // else it scrolls a picture larger than the window. Either way the page behind, and the browser's own zoom, stay put.
+  // It moves the picture at once, as a scroll does, rather than easing after it.
+  const [instant, setInstant] = useState(false);
+  const wheelEnd = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (wheelEnd.current) clearTimeout(wheelEnd.current);
+  }, []);
+  const onWheel = useRef<(event: WheelEvent) => void>(() => {});
+  onWheel.current = (event: WheelEvent) => {
+    event.preventDefault();
+    if (!open) return;
+    setInstant(true);
+    if (wheelEnd.current) clearTimeout(wheelEnd.current);
+    wheelEnd.current = setTimeout(() => setInstant(false), 150);
+    if (event.ctrlKey || event.metaKey) {
+      if (event.deltaY === 0) return;
+      let ratio = 1 + Math.min(Math.abs(event.deltaY / 100), 1) * SCALE_STEP;
+      if (event.deltaY > 0) ratio = 1 / ratio;
+      zoom(ratio, event.clientX, event.clientY);
+      return;
+    }
+    const unit = event.deltaMode === 1 ? LINE_PX : event.deltaMode === 2 ? window.innerHeight : 1;
+    // Shift turns a plain wheel sideways where the system does not.
+    const [dx, dy] = event.shiftKey && event.deltaX === 0 ? [event.deltaY, 0] : [event.deltaX, event.deltaY];
+    const now = latest();
+    update(rested({ ...now, x: now.x - dx * unit, y: now.y - dy * unit }));
   };
+  /** Between the actual size and the fit (see fitScale); a picture whose fit is its actual size zooms in and back instead. */
   const onDoubleClick = (event: ReactMouseEvent<HTMLImageElement>) => {
     if (!open) return;
-    if (transform.scale !== 1) update({ x: 0, y: 0, scale: 1 });
+    const fit = fitScale(transform.rotate);
+    if (transform.scale === 1 && fit !== 1) update(rested({ ...transform, x: 0, y: 0, scale: fit }));
+    else if (transform.scale !== 1) zoom(1 / transform.scale, event.clientX, event.clientY);
     else zoom(1 + SCALE_STEP, event.clientX, event.clientY);
   };
   const onTouchStart = (event: ReactTouchEvent<HTMLImageElement>) => {
@@ -300,8 +376,9 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     if (!open) return;
     if (touching) setTouching(false);
     touch.current = { ...touch.current, eventType: 'none' };
-    if (MIN_SCALE > transform.scale) {
-      update({ x: 0, y: 0, scale: MIN_SCALE });
+    const min = Math.min(1, fitScale(transform.rotate));
+    if (min > transform.scale) {
+      update(rested({ ...transform, x: 0, y: 0, scale: min }));
       return;
     }
     settle();
@@ -310,19 +387,31 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
   const setPopup = useCallback(
     (node: HTMLDivElement | null) => {
       if (!node || !open) return;
+      const wheel = (event: WheelEvent) => onWheel.current(event);
+      // Not passive, so a wheel can be kept from the page behind and ⌘/Ctrl with it from the browser's zoom.
+      node.addEventListener('wheel', wheel, { passive: false });
       // Notifications belong to the top open layer, as they do for Orbit dialogs.
-      return registerFeedbackLayer(node, (layer.zIndex - 1000) / 100);
+      const unregister = registerFeedbackLayer(node, (layer.zIndex - 1000) / 100);
+      return () => {
+        node.removeEventListener('wheel', wheel);
+        unregister();
+      };
     },
     [open, layer.zIndex],
   );
 
+  const fit = fitScale(transform.rotate);
+  const actual = transform.scale === 1;
   const actions: ImagePreviewAction[] = [
     { key: 'flipY', label: 'Flip vertically', icon: <SwapOutlined rotate={90} aria-hidden />, onClick: () => update({ flipY: !transform.flipY }) },
     { key: 'flipX', label: 'Flip horizontally', icon: <SwapOutlined aria-hidden />, onClick: () => update({ flipX: !transform.flipX }) },
-    { key: 'rotateLeft', label: 'Rotate left', icon: <RotateLeftOutlined aria-hidden />, onClick: () => update({ rotate: transform.rotate - 90 }) },
-    { key: 'rotateRight', label: 'Rotate right', icon: <RotateRightOutlined aria-hidden />, onClick: () => update({ rotate: transform.rotate + 90 }) },
-    { key: 'zoomOut', label: 'Zoom out', icon: <ZoomOutOutlined aria-hidden />, onClick: () => zoom(1 / (1 + SCALE_STEP)), disabled: transform.scale <= MIN_SCALE },
+    { key: 'rotateLeft', label: 'Rotate left', icon: <RotateLeftOutlined aria-hidden />, onClick: () => update(rested({ ...transform, rotate: transform.rotate - 90 })) },
+    { key: 'rotateRight', label: 'Rotate right', icon: <RotateRightOutlined aria-hidden />, onClick: () => update(rested({ ...transform, rotate: transform.rotate + 90 })) },
+    { key: 'zoomOut', label: 'Zoom out', icon: <ZoomOutOutlined aria-hidden />, onClick: () => zoom(1 / (1 + SCALE_STEP)), disabled: transform.scale <= Math.min(1, fit) },
     { key: 'zoomIn', label: 'Zoom in', icon: <ZoomInOutlined aria-hidden />, onClick: () => zoom(1 + SCALE_STEP), disabled: transform.scale === MAX_SCALE },
+    actual
+      ? { key: 'fit', label: 'Fit to window', icon: <CompressOutlined aria-hidden />, onClick: () => update(rested({ ...transform, x: 0, y: 0, scale: fit })), disabled: fit === 1 }
+      : { key: 'actual', label: 'Actual size', icon: <OneToOneOutlined aria-hidden />, onClick: () => update(rested({ ...transform, x: Infinity, y: Infinity, scale: 1 })) },
     ...moreActions,
   ];
   const { x, y, scale, rotate, flipX, flipY } = transform;
@@ -348,6 +437,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
         >
           <div className="orbit-image-preview-mask" onClick={onClose} />
           <div
+            ref={body}
             className="orbit-image-preview-body"
             style={origin ? { transformOrigin: `${origin.x}px ${origin.y}px` } : undefined}
           >
@@ -357,10 +447,11 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
               src={item?.src}
               alt={item?.alt}
               style={{
+                ...(size ? { width: size.width, height: size.height, maxWidth: 'none', maxHeight: 'none' } : null),
                 transform: `translate3d(${x}px, ${y}px, 0) scale3d(${flipX ? '-' : ''}${scale}, ${flipY ? '-' : ''}${scale}, 1) rotate(${rotate}deg)`,
-                transitionDuration: !transition || touching ? '0s' : undefined,
+                transitionDuration: !transition || touching || instant ? '0s' : undefined,
               }}
-              onWheel={onWheel}
+              onLoad={onLoad}
               onMouseDown={onMouseDown}
               onDoubleClick={onDoubleClick}
               onTouchStart={onTouchStart}
@@ -397,7 +488,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
               </button>
             </>
           )}
-          <div className="orbit-image-preview-footer">
+          <div ref={footer} className="orbit-image-preview-footer">
             {group && (
               <div className="orbit-image-preview-progress">
                 <bdi>{position ? position(current + 1, count) : `${current + 1} / ${count}`}</bdi>
@@ -405,6 +496,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
             )}
             {caption != null && <div className="orbit-image-preview-caption">{caption}</div>}
             <div className="orbit-image-preview-actions">
+              <span className="orbit-image-preview-scale">{Math.round(scale * 100)}%</span>
               {actions.map((action) => (
                 <button
                   key={action.key}

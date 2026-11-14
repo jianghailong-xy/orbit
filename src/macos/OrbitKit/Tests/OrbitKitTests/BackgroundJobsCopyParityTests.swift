@@ -204,48 +204,13 @@ final class BackgroundJobsCopyParityTests: XCTestCase {
         }
     }
 
-    // MARK: the line that names the block folded
-
-    /// The count, word for word: the line's accessible name and tooltip on web, its accessibility
-    /// label here. The two clients disagreeing about it is the drift a reader can hear across them.
-    func testTheSummaryIsCountedInTheSameWords() throws {
-        let web = try flat(Self.webJobs)
-        let summarize = try section(web, from: "export function summarizeBackgroundJobs(", to: "\n}",
-                                    Self.webJobs)
-
-        XCTAssertEqual(BackgroundJobsNote.summary(jobs(ended: [row(exitCode: 0)])), "1 ended, exit 0")
-        assertBuilt(summarize, "`1 ended, exit ${job.exitCode}`", "how a lone job's exit code is said",
-                    Self.webJobs)
-        XCTAssertEqual(BackgroundJobsNote.summary(jobs(ended: [row(status: "killed", exitCode: nil)])),
-                       "1 killed")
-        assertBuilt(summarize, "`1 ${job.status || 'ended'}`",
-                    "how a lone job that named no exit code is said", Self.webJobs)
-        XCTAssertEqual(BackgroundJobsNote.summary(jobs(running: [row(status: "")],
-                                                       ended: [row(exitCode: 0)])),
-                       "1 running, 1 ended")
-        assertBuilt(summarize, "`${running.length} running`", "how many are still running",
-                    Self.webJobs)
-        assertBuilt(summarize, "`${ended.length - failed.length} ended`", "how many ended cleanly",
-                    Self.webJobs)
-        XCTAssertEqual(BackgroundJobsNote.summary(jobs(running: [row(status: ""), row(status: "")],
-                                                       ended: [row(status: "failed", exitCode: 1)])),
-                       "2 running, 1 failed")
-        assertBuilt(summarize, "`${failed.length} failed`", "how many failed", Self.webJobs)
-        assertBuilt(summarize, ".join(', ')", "what parts the count", Self.webJobs)
-        // A killed job is counted with the failed ones, not with the clean ends.
-        assertBuilt(summarize, "job.status === 'failed' || job.status === 'killed'",
-                    "which outcomes count as failed", Self.webJobs)
-    }
-
-    /// The line the summary hangs off, which is the browser's `useControlPlaneNote`.
+    /// The fold head, which is the browser's `useControlPlaneNote`.
     func testTheFoldHeadIsBuiltTheSameWay() throws {
         let web = try flat(Self.webTranscript)
         let note = try section(web, from: "function useControlPlaneNote(", to: "\n}", Self.webTranscript)
 
         assertBuilt(note, "`⊕ Orbit attached: ${kind}`", "the line naming what was attached",
                     Self.webTranscript)
-        assertBuilt(note, "` · ${summarizeBackgroundJobs(jobs)}`",
-                    "the count in that line's accessible name", Self.webTranscript)
         // What the fold opens to: rows for the inventory, and whatever else the note held under them.
         assertBuilt(note, "<BackgroundJobsNote jobs={jobs} />", "the rows the fold opens to",
                     Self.webTranscript)
@@ -362,11 +327,6 @@ final class BackgroundJobsCopyParityTests: XCTestCase {
     }
 
     // MARK: fixtures
-
-    private func jobs(running: [BackgroundJobRow] = [],
-                      ended: [BackgroundJobRow] = []) -> BackgroundJobs {
-        BackgroundJobs(running: running, ended: ended, text: "", rest: "")
-    }
 
     private func row(status: String = "completed", exitCode: Int? = 0,
                      reason: String? = nil) -> BackgroundJobRow {

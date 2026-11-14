@@ -154,6 +154,8 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       ['reconciled_at', 'timestamp without time zone', 'YES'],
       // 0450: the last beat before the runner last lost contact, which the reaper reads a mass disconnection off.
       ['lost_at', 'timestamp without time zone', 'YES'],
+      // 0720: the machine's CPU, memory and disk and its last hour of them (runners/runner-resources.ts).
+      ['resources', 'jsonb', 'YES'],
     ]);
     const { rows: [pk] } = await sql.query(
       `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'runner_presence_pkey'`,

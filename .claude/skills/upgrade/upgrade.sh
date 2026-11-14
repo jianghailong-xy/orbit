@@ -13,10 +13,14 @@ NO_CACHE=0
 PRUNE=0
 PULL_BASE=0
 ALLOW_DIRTY=0
+TWO_STAGE_MODE=""
+TWO_STAGE_COMMIT=""
+STOP_THEN_START=0
 
 usage() {
   cat <<'EOF'
 Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
+       ORBIT_REGISTRY=<host:port> ORBIT_DEPLOY_HOST=<ssh destination> upgrade.sh [--build-only | --deploy <commit> | --plan <commit>] [--stop-then-start] [...]
 
   --no-pull    deploy the checkout as it is. By default a checkout on main is
                fast-forwarded first (git pull --ff-only), so origin's main ships
@@ -30,6 +34,23 @@ Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--a
                build anyway when the checkout has uncommitted changes (they are
                baked into the image and exist in no commit)
   -h, --help   show this help
+
+With ORBIT_REGISTRY set, the upgrade is a two-stage release (SKILL.md, "Two-stage
+release"): this host builds, boot-checks and pushes the images, tagged by commit,
+and ORBIT_DEPLOY_HOST (in ORBIT_DEPLOY_DIR, default /root/orbit) pulls them over
+ssh and recreates what changed, building nothing.
+  --build-only build, check and push the release of this checkout; deploy nothing
+  --deploy <commit>
+               deploy a release already in the registry, building nothing: a
+               rollback is the deploy of an earlier release
+  --plan <commit>
+               print what --deploy <commit> would change on the target, and
+               change nothing there
+  --stop-then-start
+               stop the running apiserver and web before their replacements
+               start, as releases did before they were handed over without a
+               gap: for a release whose migration the running release's code
+               cannot run against (502 until each new one is healthy)
 EOF
 }
 
@@ -42,11 +63,23 @@ while [ $# -gt 0 ]; do
     --no-cache)  NO_CACHE=1 ;;
     --prune)     PRUNE=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
+    --build-only) TWO_STAGE_MODE=build ;;
+    --stop-then-start) STOP_THEN_START=1 ;;
+    --deploy|--plan)
+      if [ $# -lt 2 ]; then echo "$1 needs the commit of the release to deploy" >&2; usage >&2; exit 2; fi
+      TWO_STAGE_MODE="${1#--}"; TWO_STAGE_COMMIT="$2"; shift ;;
     -h|--help)   usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
+if { [ -n "$TWO_STAGE_MODE" ] || [ "$STOP_THEN_START" -eq 1 ]; } && [ -z "${ORBIT_REGISTRY:-}" ]; then
+  echo "error: --build-only, --deploy, --plan and --stop-then-start belong to the two-stage release, which ORBIT_REGISTRY turns on" >&2
+  echo "       (SKILL.md, \"Two-stage release\")" >&2
+  exit 2
+fi
+# A deploy or its plan builds nothing, so there is nothing to pull for it unless asked.
+if { [ "$TWO_STAGE_MODE" = deploy ] || [ "$TWO_STAGE_MODE" = plan ]; } && [ "$GIT_PULL" = auto ]; then GIT_PULL=0; fi
 
 # Run from the repo root, where docker-compose.yml lives.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -78,10 +111,11 @@ MR_TAG=orbit-managed-runner:local
 MR_MOUNT=/var/lib/orbit-managed-runners
 MR_SWITCH=0
 
-# The managed runners' directory on this host: the source Compose binds at $MR_MOUNT. awk reads to the end
-# rather than exiting at the match, which could stop Compose with SIGPIPE and fail the pipeline.
+# The managed runners' directory on this host: the source Compose binds at $MR_MOUNT in service $1 (the channel by
+# default). awk reads to the end rather than exiting at the match, which could stop Compose with SIGPIPE and fail the
+# pipeline.
 managed_runners_dir() {
-  $DC config docker-channel 2>/dev/null | awk -v mount="$MR_MOUNT" '
+  $DC config "${1:-docker-channel}" 2>/dev/null | awk -v mount="$MR_MOUNT" '
     { sub(/^[[:space:]]*-?[[:space:]]*/, "") }
     /^source:/ { source = $0; sub(/^source:[[:space:]]*/, "", source); gsub(/^"|"$/, "", source) }
     /^target:/ { target = $0; sub(/^target:[[:space:]]*/, "", target); gsub(/^"|"$/, "", target)
@@ -99,6 +133,43 @@ managed_runner_image_in() {
     return 1
   fi
   printf '%s\n' "$ids"
+}
+
+# Managed runners on other hosts (docs/self-hosting.md, "Managed runners on another host"): a profile whose every channel
+# is a URL on another machine. Each such host builds its own image with the channel-host kit
+# (deploy/managed-runner/remote-host), so this host builds none and writes neither file. A socket path or a loopback
+# URL anywhere in it is a channel on this host, which keeps the section above.
+managed_runners_remote_only() {
+  local urls
+  [ -f "$1" ] || return 1
+  if grep -q '"socketPath"' "$1"; then return 1; fi
+  urls="$(grep -oE '"url"[[:space:]]*:[[:space:]]*"[^"]*"' "$1" | sed -E 's/.*"([^"]*)"$/\1/' || true)"
+  [ -n "$urls" ] || return 1
+  if printf '%s\n' "$urls" | grep -E '^http://(127\.0\.0\.1|\[::1\])(:|/|$)' >/dev/null; then return 1; fi
+}
+
+# Where the profile is, read from service $1's mount, and whether it names remote hosts only (MR_REMOTE).
+MR_REMOTE=0
+managed_runners_locate() {
+  local dir
+  dir="$(managed_runners_dir "$1")"
+  if [ -n "$dir" ] && managed_runners_remote_only "$dir/profile.json"; then
+    MR_REMOTE=1
+    echo "==> The managed runner profile ($dir/profile.json) names channel hosts on other machines only:"
+    echo "    no managed runner image is built here, and channel.json and profile.json are left as they are"
+    if [ "$1" = docker-channel ]; then
+      echo "    (this host's docker-channel serves none of the profile's hosts: it is neither built nor recreated)"
+    fi
+  fi
+}
+
+# After the upgrade: the image each of those hosts serves, as the apiserver reaches them. Read only, and never a reason
+# to fail: a host that does not answer is said, and its runners wait for it as they would anyway.
+managed_runners_remote_report() {
+  echo "==> Each channel host of the managed runner profile, as the apiserver reaches it"
+  $DC exec -T apiserver node - <deploy/managed-runner/docker-channel/info.js \
+    || echo "warning: the apiserver could not ask the channel hosts for their images (above)" >&2
+  echo "    A channel host moves to a new image with its own kit: deploy/managed-runner/remote-host/remote-host.sh upgrade <sha>"
 }
 
 # Before anything is built: the directory, its two files and the image each names now.
@@ -480,7 +551,8 @@ deployment_preflight() {
     exit 1
   fi
 }
-deployment_preflight
+# A two-stage release recreates nothing on this host: its deploy stage makes the same check where the deployment runs.
+[ -n "${ORBIT_REGISTRY:-}" ] || deployment_preflight
 
 # pgbackup is in neither list of services below, and `up` alone would not do for it: Compose bind-mounts its script as a
 # single file, so a new checkout replaces the file under a running container, which keeps the one it started on, and
@@ -603,6 +675,26 @@ fi
 DEPLOY_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
 
+# ── Two-stage release: this section is the same in both copies of /upgrade's script ─────────────────────────────────
+# With ORBIT_REGISTRY set, this host builds and the deployment runs on ORBIT_DEPLOY_HOST (SKILL.md, "Two-stage
+# release"): deploy/two-stage/release.sh builds, boots and pushes the images here, tagged by commit, and drives the
+# deploy stage there over ssh, which pulls them and recreates what changed. Nothing after this section runs: this
+# host's own containers, its .env and its runner link are left as they are. Without ORBIT_REGISTRY, nothing here runs.
+if [ -n "${ORBIT_REGISTRY:-}" ]; then
+  TWO_STAGE_ARGS=()
+  case "$TWO_STAGE_MODE" in
+    build) TWO_STAGE_ARGS+=(--build-only) ;;
+    deploy|plan) TWO_STAGE_ARGS+=("--$TWO_STAGE_MODE" "$TWO_STAGE_COMMIT") ;;
+  esac
+  if [ "$NO_CACHE" -eq 1 ]; then TWO_STAGE_ARGS+=(--no-cache); fi
+  if [ "$PULL_BASE" -eq 1 ]; then TWO_STAGE_ARGS+=(--pull-base); fi
+  if [ "$PRUNE" -eq 1 ]; then TWO_STAGE_ARGS+=(--prune); fi
+  if [ "$STOP_THEN_START" -eq 1 ]; then TWO_STAGE_ARGS+=(--stop-then-start); fi
+  bash "$REPO_ROOT/deploy/two-stage/release.sh" ${TWO_STAGE_ARGS[@]+"${TWO_STAGE_ARGS[@]}"}
+  exit 0
+fi
+# ── end of the two-stage release's section ─────────────────────────────────────────────────────────────────────────
+
 # The runner link (the section above). A build that needs it demands its lines before Compose can render anything, so a
 # deployment with none gets them first; any other waits until what can stop this run before anything is built has had its say.
 link_preflight
@@ -634,10 +726,17 @@ COMPOSE_SERVICES="$($DC config --services 2>/dev/null || true)"
 # mid-list with SIGPIPE, which pipefail would read as no channel.) The managed runners' firewall
 # (managed-runner-firewall) is never built, started or recreated here: its rules stay as the install or
 # --enable-managed-runner-firewall left them, and a deployment without it gains none.
+# A profile whose channel hosts are all on other machines leaves the image to them, whether or not this host lists the
+# channel; one without the channel is looked for in the apiserver's mount.
 CHANNEL=""
 if printf '%s\n' "$COMPOSE_SERVICES" | grep -x docker-channel >/dev/null; then
-  CHANNEL=docker-channel
-  managed_runners_preflight
+  managed_runners_locate docker-channel
+  if [ "$MR_REMOTE" -eq 0 ]; then
+    CHANNEL=docker-channel
+    managed_runners_preflight
+  fi
+else
+  managed_runners_locate apiserver
 fi
 # Once what can stop this run before anything is built has had its say.
 if [ "$LINK_EARLY" -eq 0 ]; then link_prepare; fi
@@ -685,6 +784,9 @@ else
 fi
 if [ -n "$CHANNEL" ]; then
   managed_runner_services_up
+fi
+if [ "$MR_REMOTE" -eq 1 ]; then
+  managed_runners_remote_report
 fi
 if printf '%s\n' "$COMPOSE_SERVICES" | grep -x pgbackup >/dev/null; then
   pgbackup_up

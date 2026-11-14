@@ -67,6 +67,35 @@ export function isApiErrorText(text: string | null | undefined): boolean {
 }
 
 /**
+ * Wording of a failure in the *connection* to the API rather than a credential it rejected:
+ * Cloudflare's block page at the edge, and a socket the request died on. Claude Code wraps both in
+ * "Failed to authenticate" — the page and the dropped socket arrive as
+ * "Failed to authenticate. API Error: 403 …" — so without this the failure reads as a sign-in: the
+ * session is moved off its account and told that account was signed out while every credential on
+ * the runner is intact. Seen on 2026-11-13: two dozen sessions on three machines inside one
+ * 4.5-minute window, every account signed in, all recovered when it lifted.
+ *
+ * The connection's answer, not the request's: the same request succeeds once it clears, so a text
+ * carrying one of these is retried rather than handed to a human as a sign-in failure. Every
+ * marker of a group must appear, and the text must *open* as the runtime's own failure (the
+ * wrapper or an `API Error` line), so a reply that merely quotes one is an ordinary reply.
+ * Kept in sync with the clients and the runner by EngineErrorsParityTests (macOS and Android)
+ * and `isConnectionFailure` in the runner.
+ */
+export const EDGE_BLOCK_MARKERS = ['attention required', 'cloudflare'];
+export const CONNECTION_DROPPED_MARKERS = ['econnreset'];
+
+const CONNECTION_FAILURE_MARKERS = [EDGE_BLOCK_MARKERS, CONNECTION_DROPPED_MARKERS];
+
+export function isConnectionFailureText(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const opening = text.trimStart().toLowerCase();
+  // The runtime's wrapper, or the raw line when nothing wrapped it.
+  if (!opening.startsWith('failed to authenticate') && !opening.startsWith('api error')) return false;
+  return CONNECTION_FAILURE_MARKERS.some((markers) => markers.every((marker) => opening.includes(marker)));
+}
+
+/**
  * HTTP statuses an `API Error:` line may carry that describe the *provider*, not this request:
  * 529 is Anthropic's "overloaded", 500/502/503/504 are the generic upstream failures, and
  * 408/429 mean the call was early, not wrong. Every one of them succeeds on a plain re-send
@@ -177,6 +206,9 @@ export function isRetryableApiErrorText(text: string | null | undefined): boolea
   if (!text) return false;
   const opening = text.trimStart().toLowerCase();
   if (RETRYABLE_ENGINE_ERROR_PREFIXES.some((prefix) => opening.startsWith(prefix))) return true;
+  // An edge block or a dropped socket is the one 403 a re-send does fix: the connection clears on
+  // its own, as it did within minutes on 2026-11-13. A credential 403 below stays non-retryable.
+  if (isConnectionFailureText(text)) return true;
   if (!isApiErrorText(text)) return false;
   const lower = text!.toLowerCase();
   // The status, when there is one, is authoritative: a 400 whose message happens to contain
@@ -201,10 +233,14 @@ export function isRetryableApiErrorText(text: string | null | undefined): boolea
  * sign-in guidance rather than a bare error line.
  *
  * Keys on the runtime's stable `Failed to authenticate` prefix. Heuristic, intentionally
- * narrow; keep in sync with the runner's Go check (isAuthError in claude.go).
+ * narrow; keep in sync with the runner's Go check (isAuthError in claude.go). A failure of the
+ * connection — Cloudflare's block page, a dropped socket — is excluded (isConnectionFailureText):
+ * the credentials are fine there, and treating it as a sign-in failure moves the session off an
+ * account that never left.
  */
 export function isAuthErrorText(text: string | null | undefined): boolean {
-  return !!text && text.trimStart().startsWith('Failed to authenticate');
+  if (!text || isConnectionFailureText(text)) return false;
+  return text.trimStart().startsWith('Failed to authenticate');
 }
 
 /**

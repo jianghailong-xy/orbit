@@ -29,6 +29,7 @@ be taken for a deployment's.
 | `cell-spec.mjs` | A cell's size projected from what each operation costs: apiserver processes, database cores, gateway nodes, and what a gateway node's loss adds. Task C2b's inputs are `cell-inputs.json`, task O3's that file at bf061ef45. See [The cell's size](#the-cells-size) and [Re-testing at cell scale](#re-testing-at-cell-scale-task-c2b). |
 | `loadgen-watch.mjs` | The load test's watchers: a session stream (SSE) on each of a run's first running sessions, as their owners, counting the live deltas that reach them and how late. A stream that ends opens again from the last stored event it received (`sinceSeq`), as the apps' do, and each session's stored events it missed are counted. `loadgen-run.sh --watch` starts it. See [The live stream](#the-live-stream). |
 | `loadgen-streams.mjs` | Which apiserver held each session's streams over a run, from NATS's clients (`nats.jsonl`): the sessions each apiserver holds streams of, what NATS delivered to it and its main thread; sessions held by two at once; sessions that moved; and the watchers' gaps and resumes. `loadgen-run.sh` writes it as `streams.md` and `streams.json`. See [Several apiservers](#several-apiservers). |
+| `restart-drill.sh` | A gateway restart under load on the [gateway-alone](#the-gateway-alone) rig: it reuses a finished `gateway-limit.sh` run's binaries, keys and fleet, brings `--level` runners up at cell traffic, then sends the gateway SIGTERM and starts a new one in its place once per `--rates` value (`LINK_HANDSHAKE_RATE`; `default` sets none), timing the drain and the return to 50, 90, 99 and 100% of the level. `restart-drill-report.py` reads its run: the drain, the return against the reaper's 10 min 45 s hold, handshakes accepted and refused, CPU, and the runners' errors. From task 34paLvEDFObkoBxYLAJSN's series E. |
 | `reconnect-drill.sh` | Task C2b's two gateway restarts, beside a load test that is running: it waits for the whole fleet and the loadgen's settle, then measures a release (SIGTERM, the gateway drains) at `--first` (10 minutes) into the steady window and a crash (SIGKILL) at `--second` (20 minutes) with `reconnect-probe.sh`, and reduces both with `reconnect-report.mjs`. See [Re-testing at cell scale](#re-testing-at-cell-scale-task-c2b). |
 | `reconnect-probe.sh` | One gateway restart, measured: the welcome walk's depth before it, `pg_stat_statements` around it, the gateway's `/metrics` and each container's CPU and memory every second, the old process's exit and who started the new one (Docker 29.9.2 does not apply the restart policy to `docker kill`, so after 5 s it runs `docker start` itself), the reconnect's milestones, the reaper's lines and the web gateway's link tokens. It reads four apiservers, `apiserver` to `apiserver-d`, as C2b's reconnect run had. |
 | `reconnect-report.mjs` | A `reconnect-probe.sh` directory reduced to the figures C2b reported: the handshake's quantiles, the welcome route's calls and their database time, what the reconnect added to each container's CPU, each process's counters, the reaper. |
@@ -889,7 +890,9 @@ first level.
 - The stubs keep up while they answer within their delay (p99 within 10% and 1 ms of it) and their own work, from a
   call's arrival to its answer being ready, stays below it. The gateway's own backend call latency shows the same thing
   from its side.
-- The shards keep up while they wait for a CPU less than 10% of the time (their cgroup's CPU pressure).
+- The shards keep up while each waits for a CPU less than 10% of the time (its cgroup's CPU pressure, judged shard by
+  shard: the worst one counts, not their sum).
+- No source address held more connections than there are odd ephemeral ports (see the kernel's needs below).
 - The EventAck the runners wait for is compared with the one the gateway measured, from a batch's arrival to its
   EventAck. The difference is the network and the shards' own loop.
 - The host's figures say what else ran. Before calling a limit the gateway's, `--rig-cpuset` gives the rig cores of
@@ -914,9 +917,15 @@ Everything runs on one host, over the loopback interface: every connection takes
 `127.0.0.0/8` gives as many source addresses as are needed without configuring any.
 
 - **Source addresses.** All connections go to the gateway's one address, so each source address has at most one
-  connection per ephemeral port (`net.ipv4.ip_local_port_range`, 32768–60999 by default: 28,232 ports). The harness
-  refuses a level that would take a source address past 90% of them. Renewals and TIME_WAIT need the rest. Widen the
-  range, or add addresses.
+  connection per ephemeral port (`net.ipv4.ip_local_port_range`, 32768–60999 by default: 28,232 ports). And the
+  shards share the host with the gateway: they bind each connection to its source address with port 0, which Linux
+  serves from the odd ports first, and a port bound on any address is passed over by every `connect()` that picks its
+  own port, the gateway's calls to the stubs among them. Past the odd ports (14,116 by default) a shard's sockets take
+  the even ones the gateway's calls need, and those fail "cannot assign requested address" (task
+  34paLvEDFObkoBxYLAJSN: 24 addresses collapsed at about 340,000 connections). So the harness refuses a level that
+  would take a source address past 90% of the odd ports: at the default range, a level needs one address for every
+  12,700 connections (24 for 300,000, 63 for 800,000); at 1024–65535, one for every 29,000. The report checks the same
+  against the connections each address actually held. Widen the range, or add addresses.
 - **File descriptors.** One per connection in the gateway and in its shard, and a few hundred more. The harness raises
   each process's limit to `min(fs.nr_open, 1048576)`.
 - **conntrack.** With `nf_conntrack` loaded (Docker loads it), each connection is one entry, and each closed one stays
@@ -937,11 +946,11 @@ Everything runs on one host, over the loopback interface: every connection takes
 | Level | Source addresses (default ports / 1024–65535) | `nf_conntrack_max` at least | Shards (about 20,000 runners each) | Gateway memory | Loadgen memory |
 | --- | --- | --- | --- | --- | --- |
 | 3,000 | 1 / 1 (2 for the check: each is exercised) | the default 262,144 | 2 | 0.5 GB | 0.3 GB |
-| 15,000 | 1 / 1 | 262,144 | 2 | 2.4 GB | 1.4 GB |
-| 30,000 | 2 / 1 | 262,144 | 2 | 4.7 GB | 2.8 GB |
-| 65,000 | 3 / 2 | 262,144 | 4 | 10 GB | 6 GB |
-| 100,000 | 4 / 2 | 262,144 | 5 | 16 GB | 9.4 GB |
-| 150,000 | 6 / 3 | 262,144 | 8 | 24 GB | 14 GB |
+| 15,000 | 2 / 1 | 262,144 | 2 | 2.4 GB | 1.4 GB |
+| 30,000 | 3 / 2 | 262,144 | 2 | 4.7 GB | 2.8 GB |
+| 65,000 | 6 / 3 | 262,144 | 4 | 10 GB | 6 GB |
+| 100,000 | 8 / 4 | 262,144 | 5 | 16 GB | 9.4 GB |
+| 150,000 | 12 / 6 | 262,144 | 8 | 24 GB | 14 GB |
 
 ```bash
 # For 65,000 connections and more, on a machine of its own, with room to spare beyond the table's:

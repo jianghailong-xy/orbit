@@ -382,6 +382,8 @@ beforeEach(() => {
     }
     // The open items the coordinator question card reads (§5.2): no question is open in any of these
     // cases, and the start request the start card is drawn from is served beside them.
+    // No cross-project request is waiting on this project: the crossing card reads this door.
+    if (path === `/projects/${PROJECT_PUBLIC}/handoffs`) return reply([]);
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
       return reply({ needsYou: [], withCoordinator: [], startRequest: startRow });
     }

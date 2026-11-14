@@ -16,15 +16,23 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Tag launch links per channel and write the 30-day review | [First-launch tracking and 30-day review](launch-tracking.md) |
 | Collect a design-partner story | [Design partner case-study template](design-partner-case-study-template.md) |
 | Follow project direction | [Public roadmap](../ROADMAP.md) |
+| Read what changed recently | [Public changelog](../CHANGELOG.md) |
+| Give feedback on a release | [Release feedback discussion](https://github.com/jianghailong-xy/orbit/discussions/159) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
 | Complete the first task on a fresh host | [Clean-machine first-run checklist](first-run.md) |
+| See the first seven screens, step by step | [Onboarding, step by step](onboarding.md) |
 | Find deployment settings and defaults | [Configuration reference](configuration.md) |
+| Call the HTTP API from a script or integration | [External HTTP API reference](api-reference.md) |
 | Diagnose runner enrollment, heartbeat, or runtime failures | [Runner troubleshooting](runner-troubleshooting.md) |
 | Publish or upgrade a release | [Release process](release-process.md) |
+| Verify a release's checksums, SBOM, provenance and signing identity | [Verifiable release supply chain](supply-chain.md) |
+| Write the notes a release publishes | [Release notes template](release-notes-template.md) |
 | Verify a fresh install and runner heartbeat | [Clean-host smoke record](evidence/clean-install-2026-09-29.md) |
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
+| Look up every operation an agent can call, with its risk, approval and receipt | [Operation catalogue](operation-catalog.md) |
+| See what each permission mode does with Orbit's own calls on Claude Code and Codex | [Permission matrix](permission-matrix.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
 | Back up, restore or recover managed runners on Docker | [Managed runners on Docker: operations](managed-runner-docker-operations.md) |
 | Deploy, back up, restore, roll back or fail over managed runners on Kubernetes (test environments) | [Managed runners on Kubernetes: operations](managed-runner-kubernetes-operations.md) |
@@ -48,7 +56,12 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Self-hosting](self-hosting.md) — Docker Compose, secrets, runners, TLS, upgrades, and production checks.
 - [Clean-machine first-run checklist](first-run.md) — prerequisites, bootstrap, enrollment, one completed task,
   and a reusable evidence table.
-- [Configuration reference](configuration.md) — server, backup, and runner settings with defaults and change procedures.
+- [Onboarding, step by step](onboarding.md) — the first administrator, runner, workspace, session, task graph,
+  approval, and recovery, with a screenshot of the current UI for each.
+- [Configuration reference](configuration.md) — every Compose and runner setting with its type, requirement,
+  default, secret status, and change procedure; ports, storage paths, and retention.
+- [External HTTP API reference](api-reference.md) — every route the control plane mounts, generated from the
+  controllers, with who may call it and the request DTO it validates.
 - [Runner troubleshooting](runner-troubleshooting.md) — enrollment, heartbeat/connectivity, runtime authentication,
   and safe support evidence.
 - [Runner CLI and automation](runner-cli.md) — task/session commands, service tokens, and authorization
@@ -62,6 +75,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   — an authorized test environment's deployment order, finding an account's runner, when the stop-report finalizer may
   and may not be removed, an independent RBD backup checked off the cluster and restored to a new PVC, switching off and
   rolling back, and fencing a node that stops reporting.
+- [Verifiable release supply chain](supply-chain.md) — the checksums, CycloneDX SBOM, SLSA provenance and
+  signing identities every release publishes, the commands that verify them, and the rollback path when a
+  check fails.
 - [PostgreSQL conflict runbook](postgres-conflict-runbook.md) — the transaction-conflict counters and where to
   read them, how to tell an injected fault from absorbed contention, a lock-order defect, a database resource
   fault and an unretried path, alert thresholds, PostgreSQL log correlation, and the deploy, mixed-schema,
@@ -84,6 +100,10 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Watch contract](watch-contract.md) — the frozen domain and product semantics for persistent cross-Session
   and cross-Task watching: the versioned typed predicate, the Watch/Match/Delivery state machines, why
   `AWAITING_INPUT` is not task completion, and why realtime events are not the fact source.
+- [Orbit Agent Contract v1](orbit-agent-contract.md) — the frozen contract for how an in-session Claude or
+  Codex agent uses Orbit: the five objects and their routing, MCP-first and the CLI boundary,
+  create-vs-start, permissions and approvals, errors and retries, success receipts, the eight black-box
+  scenarios, and the measured baseline with its confirmed gaps.
 - [Session search](session-search-design.md) — server-side multilingual search.
 - [Rate-limit retry](quota-limit-retry-design.md) — usage-limit detection and automatic retry.
 - [Cross-platform badge sync](cross-platform-badge-sync.md) — attention state across clients.
@@ -121,8 +141,10 @@ than silently rewriting the historical decision.
 ## Project and community
 
 - [Community guide](../COMMUNITY.md) — channel choice, labels, good first issues, maintainer response targets,
-  and the boundary between current guides and design history.
+  community update cadence, and the boundary between current guides and design history.
 - [Public roadmap](../ROADMAP.md) — now / next / later direction without date promises.
+- [Public changelog](../CHANGELOG.md) — maintainer-curated notable changes across releases, with links to each
+  tag's operator notes.
 - [Contributing](../CONTRIBUTING.md) — workflow, tests, and pull-request expectations.
 - [Governance](../GOVERNANCE.md) — decision making and the path to maintainership.
 - [Security](../SECURITY.md) — supported versions and vulnerability reporting.
@@ -131,6 +153,8 @@ than silently rewriting the historical decision.
 - [Code of Conduct](../CODE_OF_CONDUCT.md) — expected community behavior.
 - [Project maturity and brand roadmap](project-maturity.md) — current gaps and a phased path to independent
   open-source operation.
+- [Plan review, 2026-11-13](project-plan-review-2026-11-13.md) — the brand plan reviewed against the
+  2026-11-13 `main`, with task-by-task verdicts, dependency and integration findings, and owner decisions.
 
 ## Documentation conventions
 

@@ -233,8 +233,17 @@ data class WikiSearchHit(val id: String, val kind: String? = null, val title: St
     val recordedAt: String? = null, val changedAt: String? = null, val anchorCheckedRef: String? = null,
     val anchorCheckedAt: String? = null)
 
+/** `unavailable` says why nothing could be looked up (contract `searchUnavailable`, [WikiSearchUnavailable]); null on an
+ * answer that searched a wiki. Kept as the server spelled it, so a value newer than this build still decodes. */
 @Serializable
-data class WikiSearchResponse(val q: String? = null, val hits: List<WikiSearchHit>? = null)
+data class WikiSearchResponse(val q: String? = null, val hits: List<WikiSearchHit>? = null, val unavailable: String? = null)
+
+/** The closed set behind [WikiSearchResponse.unavailable] (src/shared `WIKI_SEARCH_UNAVAILABLE`). */
+object WikiSearchUnavailable {
+    const val NO_WIKI = "no_wiki"
+    const val WIKI_IN_TRASH = "wiki_in_trash"
+    val all = listOf(NO_WIKI, WIKI_IN_TRASH)
+}
 
 @Serializable
 data class WikiChangeResult(val changesetId: String? = null, val replayed: Boolean? = null, val ops: List<Outcome>? = null) {

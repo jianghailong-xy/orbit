@@ -130,6 +130,7 @@ export async function readDoneState(
       completionCriterionOverrideReason: true,
       revision: true,
       contentHash: true,
+      satisfiedBy: true,
       servingTasks: {
         where: { ownerId },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -154,6 +155,12 @@ export async function readDoneState(
     (await readCriterionSatisfaction(tx, ownerId, projectId)).map((row) => [row.definitionId, row]),
   );
   const branches = await readLandingBranches(tx, projectId);
+  // The explicit non-code mark (0535): a marked project reads no landing — no reason, no work held
+  // off LANDED — while `landing` itself stays the fold's own answer.
+  const nonCode = (await tx.project.findFirst({
+    where: { id: projectId, ownerId },
+    select: { nonCode: true },
+  }))?.nonCode ?? false;
   const landing = new Map(
     criterionLanding(served, branches).map((row) => [row.definitionId, row.landing]),
   );
@@ -186,14 +193,14 @@ export async function readDoneState(
       satisfied: met?.satisfied ?? false,
       heldUpBy: [...heldUpBy].map(([taskId, title]) => ({ taskId, title })),
       landing: landed,
-      reason: landed === 'LANDED'
+      reason: landed === 'LANDED' || nonCode
         ? null
         : criterionLandingReason(
           { landing: landed, servingTasks: definition.servingTasks },
           branches,
           jobs.map((job) => ({ kind: job.kind, taskId: job.taskId })),
         ) ?? 'NO_RECEIPT',
-      heldOffLanded: landed === 'LANDED'
+      heldOffLanded: landed === 'LANDED' || nonCode
         ? []
         : definition.servingTasks
           .filter((task) => !taskHasNothingToLand(task)
@@ -252,7 +259,8 @@ export async function readDoneState(
     ownerItems,
     jobs,
     criteriaDigest: standardSetVersion(stated).digest,
-    stateDigest: doneStateDigest(criteria, tasks, jobs),
+    stateDigest: doneStateDigest(criteria, tasks, jobs, nonCode),
+    nonCode,
   };
 }
 
@@ -267,9 +275,13 @@ export function doneStateDigest(
   criteria: readonly DoneStateCriterion[],
   tasks: readonly DoneStateTask[],
   jobs: DoneState['jobs'],
+  /** Marking or unmarking the project changes what the check finds, so it is a different state.
+   *  Absent from an unmarked project's digest, which therefore reads as it always has. */
+  nonCode = false,
 ): string {
   const state = {
     version: 2,
+    ...(nonCode ? { nonCode: true } : {}),
     tasks: tasks
       .filter((task) => task.criterionDefinitionId !== null)
       .map((task) => `${task.id}:${task.status}:${task.criterionDefinitionId ?? ''}:${task.run ?? ''}`)
@@ -313,8 +325,14 @@ const UNLANDED: Record<CriterionLandingReason, (ordinal: number) => [string, str
     'If it is on main by a path Orbit did not see, name it as a gap with what you checked; if it is '
       + 'not, land it first.',
   ],
+  NO_BRANCH: (n) => [
+    `criterion ${n}'s work ran without a branch, so Orbit can't see whether its changes reached main`,
+    'Check main for its changes and name it as a gap with what you found; if they are not there, '
+      + 'land them first.',
+  ],
   CODELESS: (n) => [
-    `criterion ${n}'s work ran no branch, so nothing of it can land`,
+    `criterion ${n}'s work was declared codeless or done in another repository, so nothing of it `
+      + 'lands here',
     'Name it as a gap: why Orbit cannot prove it, and what you checked instead.',
   ],
 };
@@ -398,8 +416,11 @@ export function doneReadiness(
   }
 
   const named = new Set(gaps.map((gap) => gap.criterionKey));
-  for (const criterion of state.criteria) {
-    if (criterion.landing === 'LANDED') continue;
+  // A project marked non-code reads no landing: nothing of it is reported unlanded.
+  for (const criterion of state.nonCode ? [] : state.criteria) {
+    // An unmet criterion is already a refusal of its own (DONE_CRITERION_UNSATISFIED): reporting it
+    // unlanded too would count one thing twice.
+    if (criterion.landing === 'LANDED' || !criterion.satisfied) continue;
     const reason = criterion.reason ?? 'NO_RECEIPT';
     const [message, requiredAction] = UNLANDED[reason](criterion.stated.ordinal);
     finding('WARN', 'DONE_CRITERION_UNLANDED',

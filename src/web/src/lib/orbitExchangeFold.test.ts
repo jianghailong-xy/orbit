@@ -6,6 +6,7 @@ import {
   buildExchangeTree,
   downstreamCount,
   exchangeKinds,
+  foldsAtLength,
   parseRunNotice,
   replyGist,
   upstreamFromGraph,
@@ -145,5 +146,15 @@ describe('upstreamFromGraph', () => {
     expect(read.upstreamOf(B1)).toEqual([]);
     expect(read.taskTitle(B4b)).toBe('B4b');
     expect(upstreamFromGraph(undefined).upstreamOf(B4)).toEqual([]);
+  });
+});
+
+describe('foldsAtLength', () => {
+  it('folds a watch under 220 characters, any other kind under 80, and never a reply', () => {
+    expect([foldsAtLength('watch', 219), foldsAtLength('watch', 220)]).toEqual([true, false]);
+    for (const kind of ['evidence', 'ready', 'project', 'job', 'notice', 'message'] as const) {
+      expect([foldsAtLength(kind, 79), foldsAtLength(kind, 80)]).toEqual([true, false]);
+    }
+    expect(foldsAtLength('reply', 0)).toBe(false);
   });
 });

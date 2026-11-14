@@ -132,18 +132,18 @@ export interface DockerRunnerProfile {
   /** Recorded on every mapping as its cluster; with the instance (the mapping's namespace), the pool's key. */
   clusterKey: string;
   resourceProfileId: string;
-  docker: {
-    /** The label value every managed resource carries (`orbit.managed-runner.instance`); the channel's own. */
-    instanceId: string;
-    /** Where the channel listens: a unix socket, or a loopback HTTP address. */
-    channel: { socketPath: string } | { url: string };
-    /** Absolute path of the file holding the channel's bearer token. */
-    tokenFile: string;
-  };
+  /**
+   * The channel host. A profile that names several (`docker.hosts`) has the first one's fields here and
+   * every host, the first included, in `hosts`; one that names a single channel has no `hosts`.
+   */
+  docker: DockerChannelHost & { hosts?: DockerRunnerHost[] };
   /** One data volume's disk limit, and its storage share of the pool. */
   storage: { capacity: string };
   runner: {
-    /** The locally built managed runner image, by its image ID: `sha256:<64 hex>`. */
+    /**
+     * The managed runner image, by its image ID: `sha256:<64 hex>`. On a profile with a remote host it
+     * may be `"channel"` (DOCKER_IMAGE_FROM_CHANNEL): each host's channel says which image it runs.
+     */
     image: string;
     /** The Orbit server the runner reports to: HTTPS, or HTTP to a loopback or private address of the host's container network. */
     serverUrl: string;
@@ -162,6 +162,68 @@ export interface DockerRunnerProfile {
     reserve?: { cpu?: number; memory?: number; disk?: number };
   };
   lifecycle: ManagedRunnerProfile['lifecycle'];
+}
+
+/** One channel host: what its manager and backend are built on. */
+export interface DockerChannelHost {
+  /** The label value every managed resource carries (`orbit.managed-runner.instance`); the channel's own, and the location's namespace. */
+  instanceId: string;
+  /** Where the channel listens: a unix socket, a loopback HTTP address, or (remote) HTTP on a private IPv4 address of another host. */
+  channel: { socketPath: string } | { url: string };
+  /** Absolute path of the file holding the channel's bearer token. */
+  tokenFile: string;
+}
+
+/** An entry of `docker.hosts`. */
+export interface DockerRunnerHost extends DockerChannelHost {
+  /** The channel is on another machine: its URL is a private, non-loopback address. */
+  remote: boolean;
+  /** No new runner is placed here; the ones already here keep running. */
+  draining: boolean;
+  /** This host's pool budget; absent, the profile's `capacity` (if any), the rest derived from the host. */
+  capacity?: DockerRunnerProfile['capacity'];
+}
+
+/** `runner.image` on a remote profile: adopt the image each channel reports in /v1/info. */
+export const DOCKER_IMAGE_FROM_CHANNEL = 'channel';
+
+/**
+ * The profile's hosts, in its order: the `docker.hosts` list, or the single channel as a one-host list
+ * (never draining, remote when its URL is).
+ */
+export function dockerRunnerHosts(profile: DockerRunnerProfile): DockerRunnerHost[] {
+  if (profile.docker.hosts?.length) return profile.docker.hosts;
+  const { instanceId, channel, tokenFile } = profile.docker;
+  return [{ instanceId, channel, tokenFile, remote: remoteChannel(channel), draining: false }];
+}
+
+/** The profile one host's backend acts on: that host's channel and capacity, everything else shared. */
+export function dockerHostProfile(profile: DockerRunnerProfile, host: DockerRunnerHost): DockerRunnerProfile {
+  if (!profile.docker.hosts) return profile;
+  const { capacity, ...rest } = profile;
+  const hostCapacity = host.capacity ?? capacity;
+  return {
+    ...rest,
+    docker: { instanceId: host.instanceId, channel: host.channel, tokenFile: host.tokenFile },
+    ...(hostCapacity ? { capacity: hostCapacity } : {}),
+  };
+}
+
+/** A channel URL on another machine: anything but a socket or loopback. */
+function remoteChannel(channel: DockerChannelHost['channel']): boolean {
+  if (!('url' in channel)) return false;
+  try {
+    return !['127.0.0.1', '[::1]'].includes(new URL(channel.url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** A private IPv4 address of another machine: 10/8, 172.16/12, 192.168/16, or the shared 100.64/10 (WireGuard, CGNAT). */
+function privateIpv4(hostname: string): boolean {
+  if (isIP(hostname) !== 4) return false;
+  const [a, b] = hostname.split('.').map(Number);
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
 }
 
 /** Either backend's profile: the runtime holds whichever its file names. */
@@ -195,10 +257,10 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
     else if (shape && !shape.test(v)) problems.push(`${path} ${why ?? 'is malformed'}`);
     return v;
   };
-  const count = (path: string, min: number, max: number): number => {
+  const count = (path: string, min: number, max = Infinity): number => {
     const v = at(path);
     if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
-      problems.push(`${path} must be an integer from ${min} to ${max}`);
+      problems.push(max === Infinity ? `${path} must be an integer of at least ${min}` : `${path} must be an integer from ${min} to ${max}`);
       return min;
     }
     return v;
@@ -259,7 +321,7 @@ export function parseManagedRunnerProfile(value: unknown): ManagedRunnerProfileR
     runner: {
       image: text('runner.image', PINNED_IMAGE, 'must be pinned by digest (<repository>@sha256:<64 hex>)'),
       serverUrl: https('runner.serverUrl', true),
-      maxConcurrent: count('runner.maxConcurrent', 1, 64),
+      maxConcurrent: count('runner.maxConcurrent', 1),
       tmpSizeLimit: text('runner.tmpSizeLimit', QUANTITY, 'is not a quantity'),
       resources: { runner: amounts('runner.resources.runner'), init: amounts('runner.resources.init') },
     },
@@ -347,10 +409,10 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
     else if (shape && !shape.test(v)) problems.push(`${path} ${why ?? 'is malformed'}`);
     return v;
   };
-  const count = (path: string, min: number, max: number): number => {
+  const count = (path: string, min: number, max = Infinity): number => {
     const v = at(path);
     if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
-      problems.push(`${path} must be an integer from ${min} to ${max}`);
+      problems.push(max === Infinity ? `${path} must be an integer of at least ${min}` : `${path} must be an integer from ${min} to ${max}`);
       return min;
     }
     return v;
@@ -376,36 +438,104 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
     if (has(section)) problems.push(`${section} belongs to the kubernetes backend; a docker profile does not name it`);
   }
 
-  // The channel: a unix socket, or HTTP on a loopback address. Never Docker's own socket.
-  let channel: DockerRunnerProfile['docker']['channel'] = { socketPath: '' };
-  const socketPath = at('docker.channel.socketPath');
-  const channelUrl = at('docker.channel.url');
-  if ((socketPath === undefined) === (channelUrl === undefined)) {
-    problems.push('docker.channel must name exactly one of socketPath or url');
-  } else if (socketPath !== undefined) {
-    const path = absolute('docker.channel.socketPath');
-    if (/docker\.sock$/.test(path)) problems.push("docker.channel.socketPath must be the channel's socket, never Docker's own");
-    channel = { socketPath: path };
-  } else {
-    const url = text('docker.channel.url');
+  // The channel: a unix socket, HTTP on a loopback address, or HTTP on a private IPv4 address of
+  // another machine (remote). Never Docker's own socket.
+  const channelAt = (prefix: string): DockerChannelHost['channel'] => {
+    const socketPath = at(`${prefix}.socketPath`);
+    const channelUrl = at(`${prefix}.url`);
+    if ((socketPath === undefined) === (channelUrl === undefined)) {
+      problems.push(`${prefix} must name exactly one of socketPath or url`);
+      return { socketPath: '' };
+    }
+    if (socketPath !== undefined) {
+      const path = absolute(`${prefix}.socketPath`);
+      if (/docker\.sock$/.test(path)) problems.push(`${prefix}.socketPath must be the channel's socket, never Docker's own`);
+      return { socketPath: path };
+    }
+    const url = text(`${prefix}.url`);
     try {
       const parsed = new URL(url);
-      if (parsed.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(parsed.hostname) || !parsed.port
+      if (parsed.protocol !== 'http:' || !(['127.0.0.1', '[::1]'].includes(parsed.hostname) || privateIpv4(parsed.hostname)) || !parsed.port
         || parsed.username || parsed.password || parsed.search || parsed.hash || (parsed.pathname !== '/' && parsed.pathname !== '')) {
-        problems.push('docker.channel.url must be http://127.0.0.1:<port> or http://[::1]:<port>: the channel listens on loopback only');
+        problems.push(`${prefix}.url must be http://127.0.0.1:<port>, http://[::1]:<port>, or http://<private IPv4 of the channel host>:<port>`);
       }
     } catch {
-      if (url) problems.push('docker.channel.url is not a URL');
+      if (url) problems.push(`${prefix}.url is not a URL`);
     }
-    channel = { url: url.replace(/\/+$/, '') };
+    return { url: url.replace(/\/+$/, '') };
+  };
+
+  const optionalText = (path: string): string | undefined => (has(path) ? text(path, QUANTITY, 'is not a quantity') : undefined);
+  const optionalCount = (path: string, max: number): number | undefined => (has(path) ? count(path, 1, max) : undefined);
+  const stated = <T extends object>(object: T): T | undefined => {
+    const kept = Object.fromEntries(Object.entries(object).filter(([, v]) => v !== undefined)) as T;
+    return Object.keys(kept).length ? kept : undefined;
+  };
+  const capacityAt = (prefix: string): DockerRunnerProfile['capacity'] => {
+    const compute = stated({
+      cpu: optionalText(`${prefix}.compute.cpu`),
+      memory: optionalText(`${prefix}.compute.memory`),
+      ephemeralStorage: optionalText(`${prefix}.compute.ephemeralStorage`),
+      pods: optionalCount(`${prefix}.compute.pods`, 100_000),
+      attachments: optionalCount(`${prefix}.compute.attachments`, 100_000),
+    });
+    const storage = stated({ usable: optionalText(`${prefix}.storage.usable`), headroom: optionalText(`${prefix}.storage.headroom`) });
+    const reserve = stated({ cpu: fraction(`${prefix}.reserve.cpu`), memory: fraction(`${prefix}.reserve.memory`), disk: fraction(`${prefix}.reserve.disk`) });
+    return stated({ compute, storage, maxActiveUsers: optionalCount(`${prefix}.maxActiveUsers`, 100_000), reserve });
+  };
+
+  // The hosts: the `docker.hosts` list, or the single channel of `docker.instanceId` / `channel` / `tokenFile`.
+  let hosts: DockerRunnerHost[] | undefined;
+  let first: DockerChannelHost;
+  const instanceShape = [DNS_LABEL, 'must be a DNS label (the label value every managed resource carries)'] as const;
+  if (has('docker.hosts')) {
+    for (const key of ['instanceId', 'channel', 'tokenFile']) {
+      if (has(`docker.${key}`)) problems.push(`docker.${key} belongs in each entry of docker.hosts; a profile names either docker.hosts or one channel`);
+    }
+    const list = at('docker.hosts');
+    if (!Array.isArray(list) || list.length === 0) {
+      problems.push('docker.hosts must be a non-empty list');
+      hosts = [];
+    } else {
+      hosts = list.map((_, i) => {
+        const prefix = `docker.hosts.${i}`;
+        const channel = channelAt(`${prefix}.channel`);
+        const draining = at(`${prefix}.draining`);
+        if (draining !== undefined && typeof draining !== 'boolean') problems.push(`${prefix}.draining must be true or false`);
+        const capacity = has(`${prefix}.capacity`) ? capacityAt(`${prefix}.capacity`) : undefined;
+        return {
+          instanceId: text(`${prefix}.instanceId`, ...instanceShape),
+          channel,
+          tokenFile: absolute(`${prefix}.tokenFile`),
+          remote: remoteChannel(channel),
+          draining: draining === true,
+          ...(capacity ? { capacity } : {}),
+        };
+      });
+      const seen = new Set<string>();
+      for (const host of hosts) {
+        if (host.instanceId && seen.has(host.instanceId)) problems.push(`docker.hosts names instance ${host.instanceId} twice: each host is its own instance`);
+        seen.add(host.instanceId);
+      }
+    }
+    first = hosts[0] ? { instanceId: hosts[0].instanceId, channel: hosts[0].channel, tokenFile: hosts[0].tokenFile } : { instanceId: '', channel: { socketPath: '' }, tokenFile: '' };
+  } else {
+    first = {
+      instanceId: text('docker.instanceId', ...instanceShape),
+      channel: channelAt('docker.channel'),
+      tokenFile: absolute('docker.tokenFile'),
+    };
   }
+  const remote = hosts ? hosts.some((host) => host.remote) : remoteChannel(first.channel);
 
   const serverUrl = text('runner.serverUrl');
   if (serverUrl && !PLACEHOLDER.test(serverUrl)) {
     try {
       const url = new URL(serverUrl);
       const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
-      if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (loopback || privateHost(url.hostname)))) {
+      if (remote && url.protocol !== 'https:') {
+        problems.push('runner.serverUrl must be an https URL when a channel host is remote: its runners reach the server over the internet');
+      } else if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (loopback || privateHost(url.hostname)))) {
         problems.push('runner.serverUrl must be an https URL, or http to a loopback or private address of the host\'s container network');
       }
       if (url.username || url.password || url.search || url.hash) problems.push('runner.serverUrl must not carry credentials, a query or a fragment');
@@ -414,23 +544,12 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
     }
   }
 
-  const optionalText = (path: string): string | undefined => (has(path) ? text(path, QUANTITY, 'is not a quantity') : undefined);
-  const optionalCount = (path: string, max: number): number | undefined => (has(path) ? count(path, 1, max) : undefined);
-  const stated = <T extends object>(object: T): T | undefined => {
-    const kept = Object.fromEntries(Object.entries(object).filter(([, v]) => v !== undefined)) as T;
-    return Object.keys(kept).length ? kept : undefined;
-  };
-  const compute = stated({
-    cpu: optionalText('capacity.compute.cpu'),
-    memory: optionalText('capacity.compute.memory'),
-    ephemeralStorage: optionalText('capacity.compute.ephemeralStorage'),
-    pods: optionalCount('capacity.compute.pods', 100_000),
-    attachments: optionalCount('capacity.compute.attachments', 100_000),
-  });
-  const storage = stated({ usable: optionalText('capacity.storage.usable'), headroom: optionalText('capacity.storage.headroom') });
-  const reserve = stated({ cpu: fraction('capacity.reserve.cpu'), memory: fraction('capacity.reserve.memory'), disk: fraction('capacity.reserve.disk') });
   const backoff = backoffOf(count, problems);
-  const capacity = stated({ compute, storage, maxActiveUsers: optionalCount('capacity.maxActiveUsers', 100_000), reserve });
+  const capacity = capacityAt('capacity');
+  const image = at('runner.image') === DOCKER_IMAGE_FROM_CHANNEL && remote
+    ? DOCKER_IMAGE_FROM_CHANNEL
+    : text('runner.image', LOCAL_IMAGE_ID, `must be the local image ID of the managed runner image (sha256:<64 hex>)${remote ? ', or "channel"' : ''}`);
+  if (at('runner.image') === DOCKER_IMAGE_FROM_CHANNEL && !remote) problems.push('runner.image may be "channel" only on a profile with a remote channel host');
 
   const profile: DockerRunnerProfile = {
     schemaVersion: 1,
@@ -439,16 +558,12 @@ function parseDockerRunnerProfile(value: Record<string, unknown>): ManagedRunner
     environmentId: text('environmentId', DNS_LABEL, 'must be a DNS label'),
     clusterKey: text('clusterKey'),
     resourceProfileId: text('resourceProfileId'),
-    docker: {
-      instanceId: text('docker.instanceId', DNS_LABEL, 'must be a DNS label (the label value every managed resource carries)'),
-      channel,
-      tokenFile: absolute('docker.tokenFile'),
-    },
+    docker: { ...first, ...(hosts ? { hosts } : {}) },
     storage: { capacity: text('storage.capacity', QUANTITY, 'is not a quantity') },
     runner: {
-      image: text('runner.image', LOCAL_IMAGE_ID, 'must be the local image ID of the managed runner image (sha256:<64 hex>)'),
+      image,
       serverUrl: serverUrl.replace(/\/+$/, ''),
-      maxConcurrent: count('runner.maxConcurrent', 1, 64),
+      maxConcurrent: count('runner.maxConcurrent', 1),
       tmpSizeLimit: text('runner.tmpSizeLimit', QUANTITY, 'is not a quantity'),
       resources: {
         cpu: text('runner.resources.cpu', QUANTITY, 'is not a quantity'),
@@ -477,6 +592,16 @@ function dockerAmountProblems(profile: DockerRunnerProfile): string[] {
     ['capacity.storage.usable', profile.capacity?.storage?.usable, 'unit'],
     ['capacity.storage.headroom', profile.capacity?.storage?.headroom, 'unit'],
   ];
+  profile.docker.hosts?.forEach((host, i) => {
+    const prefix = `docker.hosts.${i}.capacity`;
+    quantities.push(
+      [`${prefix}.compute.cpu`, host.capacity?.compute?.cpu, 'milli'],
+      [`${prefix}.compute.memory`, host.capacity?.compute?.memory, 'unit'],
+      [`${prefix}.compute.ephemeralStorage`, host.capacity?.compute?.ephemeralStorage, 'unit'],
+      [`${prefix}.storage.usable`, host.capacity?.storage?.usable, 'unit'],
+      [`${prefix}.storage.headroom`, host.capacity?.storage?.headroom, 'unit'],
+    );
+  });
   for (const [path, quantity, scale] of quantities) {
     if (quantity !== undefined && !quantityUnits(quantity, scale)) problems.push(`${path} must be a positive quantity small enough to count exactly`);
   }

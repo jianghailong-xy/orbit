@@ -63,6 +63,8 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
     session: {
       groupBy: async () => [],
     },
+    // Fix with an agent's workspace lookup (attention-fix.ts), which finds none here.
+    $queryRaw: async () => [],
     // Callback form: the reorder issues its updates one at a time, in id order, inside one
     // transaction — which is the property that keeps two opposite drags from deadlocking.
     $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(db),
@@ -142,6 +144,8 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       accountPauses: true,
       // The Defaults removed from Orbit, left out of the report (usedRunnerEngines).
       defaultRemoved: true,
+      engineUpdateDismissals: true,
+      attentionFixes: true,
       installStatus: true,
       installEngine: true,
       installCommand: true,

@@ -389,7 +389,7 @@ describe('a managed workspace in the console', () => {
     expect(posted[0].body.model).toBe('deepseek-v4-flash');
   });
 
-  it('started without a signed-in runtime: says so, points at Infrastructure, and still offers no engine', async () => {
+  it('started without a signed-in runtime: says so, points at its machine’s page, and still offers no engine', async () => {
     server = {
       capabilities: capability('switched on'),
       statuses: [state('model unavailable: started without a signed-in runtime')],
@@ -398,7 +398,7 @@ describe('a managed workspace in the console', () => {
     await open(MANAGED_WORKSPACE);
     await waitForUi(() => expect(noticeTitle()).toBe('Your managed runner needs a model'));
     const link = [...notice()!.querySelectorAll('a')].find((a) => a.textContent === 'Open Machines & models');
-    expect(link?.getAttribute('href')).toBe(`/infrastructure?runner=${encodeId(MANAGED_RUNNER)}`);
+    expect(link?.getAttribute('href')).toBe(`/settings/machines/${encodeId(MANAGED_RUNNER)}`);
     expect(mounted().querySelector('.np-hero')).toBeNull();
     expect(mounted().querySelector('.composer-model-chip')).toBeNull();
     await type('Hello');

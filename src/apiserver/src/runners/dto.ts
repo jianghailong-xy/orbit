@@ -6,7 +6,6 @@ import {
   IsOptional,
   IsString,
   Matches,
-  Max,
   MaxLength,
   Min,
   MinLength,
@@ -23,8 +22,8 @@ export class UpdateRunnerDto {
   // Empty string clears the alias and falls back to the machine name.
   @IsOptional() @IsString() @MaxLength(60) displayName?: string;
   // Max sessions the runner runs at once; the claim queue gates on this. Floor of
-  // 1 (0 would stall the runner); 64 is a sanity ceiling against a fat-fingered value.
-  @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
+  // 1 (0 would stall the runner); no ceiling — a runner defaults to its CPU core count.
+  @IsOptional() @IsInt() @Min(1) maxConcurrent?: number;
   // Free-space floor in MB: below it, the auto-run sweep dispatches nothing onto this machine.
   // null clears the floor (no gate), and 0 is spelled that way rather than accepted as a
   // disabling value, so "gate at zero bytes" can never be typed by accident. No ceiling — the

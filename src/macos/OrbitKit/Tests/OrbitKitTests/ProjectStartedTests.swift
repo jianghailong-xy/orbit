@@ -110,13 +110,10 @@ final class ProjectStartedTests: XCTestCase {
 
     // MARK: - what the card and the bar say
 
-    func testTheBarNamesTheTurnTheWayTheCardDoes() throws {
+    func testTheBarHidesOverTheTurn() throws {
         let b = try bubble(after: try echo(
             "{\"text\": \(Self.jsonString(Self.told)), \"projectStarted\": \(Self.card)}"))
-        let summary = StickySummary.of(text: b.text, note: b.note, itemCard: b.itemCard,
-                                       startedCard: b.startedCard)
-        XCTAssertEqual(summary.label, "↑ Project started")
-        XCTAssertEqual(summary.text, "Codex 多账户：一台机器上登录多个 Codex")
+        XCTAssertTrue(StickySummary.isOrbits(b), "Orbit opened this round: the sticky bar hides over it")
     }
 
     func testSaysHowItWasStartedAndWhatWaits() throws {

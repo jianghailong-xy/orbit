@@ -395,3 +395,42 @@ esac`)
 		t.Fatalf("the refusal asked for %d engine re-probes, want 1", n)
 	}
 }
+
+// A failed Codex install has to suggest something that can work on this platform: brew exists
+// only on macOS, and npm is usually the very thing that failed.
+func TestCodexFailedInstallSuggestsAPlatformAlternative(t *testing.T) {
+	var codex engineSpec
+	for _, s := range engineSpecs {
+		if s.bin == providerCodex {
+			codex = s
+		}
+	}
+	t.Setenv("PATH", t.TempDir()+":"+os.Getenv("PATH"))
+	for _, goos := range []string{"linux", "darwin"} {
+		spec := codex
+		spec.bin = "orbit-fake-codex" // the real codex may be installed on a dev box
+		spec.installCmd = "echo 'sh: 1: npm: not found' >&2; exit 127"
+		spec.installAlt = codexInstallAlt(goos)
+		res := installEngineNow(spec)
+		if res.Status != installFailed {
+			t.Fatalf("%s: want a failed install, got %+v", goos, res)
+		}
+		_, alt, ok := strings.Cut(res.Message, "\nTry instead: ")
+		if !ok {
+			t.Fatalf("%s: the message must keep its Try instead line, got %q", goos, res.Message)
+		}
+		switch goos {
+		case "linux":
+			if strings.Contains(alt, "brew") || strings.Contains(alt, "npm") {
+				t.Fatalf("linux: the alternative must need neither brew nor npm, got %q", alt)
+			}
+			if !strings.Contains(alt, "https://chatgpt.com/codex/install.sh") {
+				t.Fatalf("linux: want OpenAI's standalone installer, got %q", alt)
+			}
+		case "darwin":
+			if !strings.Contains(alt, "brew install codex") {
+				t.Fatalf("darwin: want brew, got %q", alt)
+			}
+		}
+	}
+}

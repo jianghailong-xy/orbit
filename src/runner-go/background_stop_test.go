@@ -184,6 +184,9 @@ func TestAPlainInterruptLeavesBackgroundWorkRunning(t *testing.T) {
 	)
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	job := runnerStopJob(t, "sess-stop-negative")
+	// The second turn's claim: a fresh struct, as a claim payload is, copied before the supervisor
+	// starts writing the job it runs.
+	claim := *job
 	api := newRunnerStopControlPlane()
 	sup := superviseUntilRunnerStop(t, job, true, api)
 
@@ -229,7 +232,7 @@ func TestAPlainInterruptLeavesBackgroundWorkRunning(t *testing.T) {
 	if sup.returned() {
 		t.Fatalf("the session ended when its background work was stopped")
 	}
-	if _, ok := sup.pool.activate(sup.job); !ok {
+	if _, ok := sup.pool.activate(&claim); !ok {
 		t.Fatalf("the session could not be claimed again for a second turn")
 	}
 	api.queue(RunInboxResponse{TurnID: "turn-2", Kind: "message", Content: "are you still there?"})

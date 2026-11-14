@@ -3938,5 +3938,207 @@
       "subtitle": "Offline · last seen 5h ago · v0.1.235",
       "disk": null
     }
+  },
+  {
+    "name": "Codex update warning dismissed against the release that is still the latest: no card, and the machine leaves Needs Attention",
+    "input": {
+      "runner": {
+        "name": "orbit@austin",
+        "hostname": "aivps-sg",
+        "version": "0.1.256",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.290 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.159.2",
+            "auth": "yes",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-15T00:00:00Z",
+              "latest": "0.169.0",
+              "behindSince": "2026-09-16T00:00:00Z",
+              "message": "0.159.2 → 0.169.0: Codex updates itself with npm, and npm isn't on this runner's PATH."
+            }
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ],
+        "engineUpdateDismissals": {
+          "codex": "0.169.0"
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "codex",
+          "workDir": "~/app"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.256"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "aivps-sg · v0.1.256",
+      "disk": null
+    }
+  },
+  {
+    "name": "a Codex release newer than the one its warning was dismissed against: the card is back",
+    "input": {
+      "runner": {
+        "name": "orbit@austin",
+        "hostname": "aivps-sg",
+        "version": "0.1.256",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.290 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.159.2",
+            "auth": "yes",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-15T00:00:00Z",
+              "latest": "0.170.0",
+              "behindSince": "2026-09-16T00:00:00Z",
+              "message": "0.159.2 → 0.170.0: Codex updates itself with npm, and npm isn't on this runner's PATH."
+            }
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ],
+        "engineUpdateDismissals": {
+          "codex": "0.169.0"
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "codex",
+          "workDir": "~/app"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.256"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineNotUpdating",
+          "tone": "warn",
+          "short": "Codex update failed",
+          "title": "Codex update failed",
+          "actionKind": "updateEngines"
+        }
+      ],
+      "listLine": "Codex update failed",
+      "subtitle": "aivps-sg · v0.1.256",
+      "disk": null
+    }
+  },
+  {
+    "name": "a dismissal of another engine's warning leaves Codex's card where it is",
+    "input": {
+      "runner": {
+        "name": "orbit@austin",
+        "hostname": "aivps-sg",
+        "version": "0.1.256",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.290 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.159.2",
+            "auth": "yes",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-15T00:00:00Z",
+              "latest": "0.169.0",
+              "behindSince": "2026-09-16T00:00:00Z",
+              "message": "0.159.2 → 0.169.0: Codex updates itself with npm, and npm isn't on this runner's PATH."
+            }
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ],
+        "engineUpdateDismissals": {
+          "claude": "0.169.0"
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "codex",
+          "workDir": "~/app"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.256"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineNotUpdating",
+          "tone": "warn",
+          "short": "Codex update failed",
+          "title": "Codex update failed",
+          "actionKind": "updateEngines"
+        }
+      ],
+      "listLine": "Codex update failed",
+      "subtitle": "aivps-sg · v0.1.256",
+      "disk": null
+    }
   }
 ]

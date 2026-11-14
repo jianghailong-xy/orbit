@@ -582,6 +582,14 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
 
     /** A pick made for this draft from elsewhere — a Cursor CLI quota card's "start a new session on Team" (the board's iOS 5 ⑧) — held as
      * if picked here, once the draft's saved copy is read: its engine, provider and account, the model left to the draft's own seed. */
+    /** Words put in this draft from elsewhere — Save & clean's "Open in a new session" — as [putBack] does, once the saved copy is read. */
+    fun putBackWhenLoaded(words: String) {
+        launch {
+            withTimeoutOrNull(10_000) { state.first { it.loaded } } ?: return@launch
+            putBack(words)
+        }
+    }
+
     fun hold(values: JsonObject) {
         launch {
             withTimeoutOrNull(10_000) { state.first { it.loaded } } ?: return@launch

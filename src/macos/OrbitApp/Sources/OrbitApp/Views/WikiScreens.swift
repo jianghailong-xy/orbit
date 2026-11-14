@@ -40,7 +40,6 @@ struct WikiHomeView: View {
                                      start: startCard(wiki, space: space, now: context.date), busy: wiki.busy,
                                      seen: seen, failed: loading && wiki.homeState.lastLoadFailed, waiting: wiki.waiting,
                                      shareLive: shareRead?.link.map { $0.state != .ended } ?? false,
-                                     trashed: wiki.trash.count,
                                      besideContents: rowNavigation == .selection, actions: actions(wiki))
                     }
                 } else {
@@ -159,7 +158,6 @@ struct WikiHomeView: View {
             pickSpace: { slug in wiki.selectedSlug = slug },
             search: { query in await wiki.search(query) },
             openSettings: { open(.wikiSettings) },
-            openTrash: { open(.wikiTrash) },
             openContents: { contentsShown = true },
             openActivity: { open(.wikiActivity) },
             openShare: { sharing = true },
@@ -414,6 +412,7 @@ struct WikiTopicEntriesPage: View {
             }
         }
         .listStyle(.plain)
+        .softTopEdgeEffect()
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: actions.openContents) { Image(systemName: "list.bullet") }
@@ -503,7 +502,13 @@ struct WikiIndexScreen: View {
 /// One entry's page, and the three forms its actions open.
 struct WikiEntryView: View {
     @Environment(AppModel.self) private var model
+    /// A wide shell: a source's task opens over the entry (owner decision 2026-11-12).
+    @Environment(\.opensTasksOverPage) private var opensTasksOverPage
     let entryID: String
+    /// How a source row navigates. The phone's stacks push the task over the entry page, so the back
+    /// swipe returns to it; the wide shells open it over the page instead (owner decision
+    /// 2026-11-12).
+    var rowNavigation: SessionRowNavigation = .selection
 
     private enum Form: Identifiable {
         case edit, supersede
@@ -594,7 +599,13 @@ struct WikiEntryView: View {
             retire: { retiring = true },
             copyLink: { copyLink(wiki, detail.entry) },
             openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
-            openTask: { id in model.route(to: .task(PublicID.toPublic(id))) },
+            // A source's task opens over the entry page it was read on: pushed on the phone's stack,
+            // so back returns here; over the entry as the wide shells' panel elsewhere (owner
+            // decision 2026-11-12).
+            openTask: { id in
+                if rowNavigation == .push { model.push(.taskDetail(taskID: PublicID.toPublic(id))) }
+                else { model.open(.task(id: PublicID.toPublic(id)), overPage: opensTasksOverPage) }
+            },
             confirm: {
                 Task { finish(await wiki.confirm(detail.entry), done: WikiModeCopy.confirmed, failure: WikiCopy.entryConfirmFailed) }
             },

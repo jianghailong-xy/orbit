@@ -4,6 +4,7 @@ import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { untilStopping } from '../common/graceful-stop';
 import { declaresListChanged } from '../realtime/open-list-hints';
 import { RealtimeService } from '../realtime/realtime.service';
 
@@ -37,9 +38,10 @@ export class EventsController {
     // not know.
     @Query('hints') hints?: string | string[],
   ): Observable<MessageEvent> {
+    // Ends as this apiserver stops, so the client opens it again on another (common/graceful-stop.ts).
     return merge(
       this.realtime.streamForUser(user.userId, { listChanged: declaresListChanged(hints) }).pipe(map((e) => ({ data: e }) as MessageEvent)),
       interval(KEEPALIVE_MS).pipe(map(() => ({ data: { type: 'ping' } }) as MessageEvent)),
-    );
+    ).pipe(untilStopping());
   }
 }

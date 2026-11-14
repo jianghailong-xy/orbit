@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Infrastructure page's Account pools and API keys (`Infrastructure` has the rest of it), in the
+/// The Machines & models page's Account pools and API keys (`MachinesAndModels` has the rest of it), in the
 /// web page's words (`SettingsCopyParityTests` reads them back out of the web source). Adding or
 /// editing a key stays on the web; a pool's row opens the pool's page, where a shared pool is run from.
 public enum ProvidersOverview {
