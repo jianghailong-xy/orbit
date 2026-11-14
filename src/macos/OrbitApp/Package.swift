@@ -24,5 +24,8 @@ let package = Package(
             // and its license. build-dmg.sh copies both into the app; the iOS project takes them in with the shared sources.
             resources: [.copy("Resources/mermaid.min.js"), .copy("Resources/mermaid-LICENSE.txt")]
         ),
+        // The stores live here (they are the app shell's), so the tests that drive a reload with an
+        // unchanged answer have to live beside them. macOS-only, like the app target.
+        .testTarget(name: "OrbitAppTests", dependencies: ["OrbitApp"]),
     ]
 )
