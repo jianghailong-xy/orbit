@@ -167,34 +167,13 @@ final class ReferencedTaskCopyParityTests: XCTestCase {
         }
     }
 
-    // MARK: the line that names the note folded
-
-    /// The count, word for word: the line's accessible name and tooltip on web, its accessibility
-    /// label here. The two clients disagreeing about it is the drift a reader can hear across them.
-    func testTheSummaryIsCountedInTheSameWords() throws {
-        let web = try flat(Self.webTasks)
-        let summarize = try section(web, from: "export function summarizeReferencedTasks(", to: "\n}",
-                                    Self.webTasks)
-
-        XCTAssertEqual(ReferencedTaskNote.summary([task(status: "DONE")]), "DONE")
-        assertBuilt(summarize, "if (tasks.length === 1) return tasks[0].status;",
-                    "a lone task saying its state outright", Self.webTasks)
-        XCTAssertEqual(ReferencedTaskNote.summary([task(status: "DONE"), task(status: "OPEN"),
-                                                   task(status: "DONE")]),
-                       "2 DONE, 1 OPEN")
-        assertBuilt(summarize, "`${n} ${status}`", "how several are counted", Self.webTasks)
-        assertBuilt(summarize, ".join(', ')", "what parts the count", Self.webTasks)
-    }
-
-    /// The line the summary hangs off, which is the browser's `useControlPlaneNote`.
+    /// The fold head, which is the browser's `useControlPlaneNote`.
     func testTheFoldHeadIsBuiltTheSameWay() throws {
         let web = try flat(Self.webTranscript)
         let note = try section(web, from: "function useControlPlaneNote(", to: "\n}", Self.webTranscript)
 
         assertBuilt(note, "`⊕ Orbit attached: ${kind}`", "the line naming what was attached",
                     Self.webTranscript)
-        assertBuilt(note, "` · ${summarizeReferencedTasks(tasks.tasks)}`",
-                    "the count in that line's accessible name", Self.webTranscript)
         // Read from what the inventory did not take, so a note carrying both draws each block once.
         assertBuilt(note, "parseReferencedTasks(jobs ? jobs.rest : text)",
                     "the references read out of what the inventory left", Self.webTranscript)

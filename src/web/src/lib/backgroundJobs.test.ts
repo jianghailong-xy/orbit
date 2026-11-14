@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseBackgroundJobs, summarizeBackgroundJobs } from './backgroundJobs';
+import { parseBackgroundJobs } from './backgroundJobs';
 import {
   EN_ENDED,
   EN_RUNNING_AND_ENDED,
@@ -133,20 +133,5 @@ describe('parseBackgroundJobs', () => {
         '<background-jobs>\n  这是控制面替你记下的，不是用户说的。\n</background-jobs>',
       ),
     ).toBeNull();
-  });
-});
-
-describe('summarizeBackgroundJobs', () => {
-  const summarize = (note: string) =>
-    summarizeBackgroundJobs(parseBackgroundJobs(note) as NonNullable<ReturnType<typeof parseBackgroundJobs>>);
-
-  it('says how the one job came out', () => {
-    expect(summarize(EN_ENDED)).toBe('1 ended, exit 0');
-    expect(summarize(ZH_KILLED)).toBe('1 killed');
-  });
-
-  it('counts the sections when there is more than one job', () => {
-    expect(summarize(EN_RUNNING_AND_ENDED)).toBe('1 running, 1 ended');
-    expect(summarize(ZH_MULTILINE_COMMAND)).toBe('3 running');
   });
 });
