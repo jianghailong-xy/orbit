@@ -26,6 +26,7 @@ import { StorageFilesPage } from './pages/settings/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
+import { AdminGithubPage } from './pages/AdminGithubPage';
 import { AdminIntegrationsPage } from './pages/AdminIntegrationsPage';
 import { ProviderConnectPage, ProviderPickPage } from './pages/ProviderConnectPage';
 import { ProviderPoolPage } from './pages/ProviderPoolPage';
@@ -264,6 +265,7 @@ export function App() {
             <Route path="sign-in" element={<AdminSignInPage />} />
             <Route path="email" element={<AdminEmailPage />} />
             <Route path="integrations" element={<AdminIntegrationsPage />} />
+            <Route path="integrations/github" element={<AdminGithubPage />} />
           </Route>
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />

@@ -22110,10 +22110,7 @@ div.landing-jobs-open {
 }
 /* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
    console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
-/* Admin → Integrations → GitHub App, and its steps (docs/github-workspace-design.md §8, board 02). */
-.admin-signin + .admin-signin {
-  margin-top: 16px;
-}
+/* Admin → Integrations → GitHub App: the steps on GitHub, and the private key file picker (board 02). */
 .github-app-file {
   color: var(--brand);
   cursor: pointer;

@@ -18,7 +18,7 @@ vi.mock('../api', async (importOriginal) => ({
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api } = await import('../api');
-const { GithubAppCard, githubConnectedText } = await import('./GithubAppCard');
+const { AdminGithubPage, githubConnectedText } = await import('./AdminGithubPage');
 const { GithubIntegrationPage, disconnectWarning } = await import('./GithubIntegrationPage');
 const { installationText, installationSettingsUrl } = await import('../lib/githubIntegration');
 
@@ -97,9 +97,9 @@ afterEach(async () => {
 const button = (scope: ParentNode, text: string) =>
   [...scope.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) as HTMLButtonElement | undefined;
 
-describe('Admin → Integrations → GitHub App', () => {
+describe('Admin → Integrations → GitHub App (its own page)', () => {
   it('draws the saved App as board 02 does, with secrets write-only', async () => {
-    const page = await mount(<GithubAppCard />);
+    const page = await mount(<AdminGithubPage />);
     const text = page.textContent ?? '';
     expect(text).toContain('Let people clone from GitHub');
     expect(text).toContain('Checked with GitHub when you save: orbit-example (github.com/apps/orbit-example)');
@@ -113,7 +113,7 @@ describe('Admin → Integrations → GitHub App', () => {
   });
 
   it('saves a change without the secrets it was not given', async () => {
-    const page = await mount(<GithubAppCard />);
+    const page = await mount(<AdminGithubPage />);
     await act(async () => (page.querySelector('[role="switch"]') as HTMLButtonElement).click());
     await act(async () => button(page, 'Save')!.click());
     await settle();
@@ -124,7 +124,7 @@ describe('Admin → Integrations → GitHub App', () => {
 
   it('after a key rotation, says so and reads Off', async () => {
     admin.secretUnreadable = true;
-    const page = await mount(<GithubAppCard />);
+    const page = await mount(<AdminGithubPage />);
     expect(page.textContent).toContain("The saved secret can't be read. Enter it again.");
     expect(page.querySelector('.orbit-badge')!.textContent).toBe('Off');
   });
