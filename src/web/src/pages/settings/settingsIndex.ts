@@ -62,7 +62,7 @@ export const PERSONAL_SETTINGS = {
     'enableOrchestration',
     '/settings/general',
     'Let sessions orchestrate',
-    'Sessions in every workspace can spawn and manage other sessions via the orbit MCP tools.',
+    'Sessions can start and manage other sessions, and manage agents and runners, via the orbit MCP tools.',
   ),
   notifySessionFinished: setting(
     'notifySessionFinished',

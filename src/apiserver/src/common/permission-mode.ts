@@ -22,6 +22,12 @@ export const DEFAULT_PERMISSION_MODE = PermissionMode.AUTO;
  *
  * Only Orbit's own MCP server is on it: it is injected into every session, and under an
  * ask-me mode its tools would otherwise prompt the user to approve Orbit talking to Orbit.
+ * Every runtime keeps it, each its own way (docs/permission-matrix.md): Claude Code and Kimi are
+ * handed it as an allow rule, Cursor CLI and Antigravity answer their own permission requests from
+ * it, and Codex, which takes no allowlist, has the runner consent to each Orbit tool by its name.
+ * The rule takes the engine's own prompt away and nothing else: what a call may then do is still
+ * Orbit's to say — a write that needs the owner files its own card in every mode, and in Plan every
+ * write is refused by the runner's Plan gate (runner-go plan_gate.go).
  *
  * This used to be `Workspace.allowedTools`, a per-directory column — but in production not one
  * row ever held anything else: every single one was exactly this list, written by the server on

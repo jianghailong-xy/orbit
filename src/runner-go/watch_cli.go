@@ -121,17 +121,6 @@ Options:
 `, command, when, idFlag, noun, presets[0].until, until.String())
 }
 
-// watchCLICapabilities are listed inside a session only (SessionOnly). session_await is not here: it sits
-// with the session commands, behind the orchestration gate session_get is behind.
-var watchCLICapabilities = []cliCapabilitySpec{
-	{Tool: "watch_create", Argv: []string{"orbit", "watch", "create"}, Usage: "orbit watch create --target KIND:ID [--target KIND:ID ...] (--predicate JSON | --predicate-file -) [options]", Arguments: []string{"--target <TASK|SESSION>:<id> (targets; repeatable, at least one)", "--predicate <json> | --predicate-file - (required; grammar versions 1 to 3)", "--predicate-version <n> (predicateVersion 1, 2 or 3; default: the lowest the predicate needs)", "--action <RESUME_SESSION|NOTIFY_USER> (default RESUME_SESSION)", "--ttl-seconds <n> (60-2592000; default 86400)", "--idempotency-key <key>", "--json"}, Mutates: true, SessionOnly: true},
-	{Tool: "watch_get", Argv: []string{"orbit", "watch", "get"}, Usage: "orbit watch get WATCH_ID [--json]", Arguments: []string{"[watch-id] (required)", "--json"}, SessionOnly: true},
-	{Tool: "watch_list", Argv: []string{"orbit", "watch", "list"}, Usage: "orbit watch list [--state STATE] [--json]", Arguments: []string{"--state <" + strings.Join(watchStates, "|") + ">", "--json"}, SessionOnly: true},
-	{Tool: "watch_update", Argv: []string{"orbit", "watch", "update"}, Usage: "orbit watch update WATCH_ID [--predicate JSON | --predicate-file -] [--ttl-seconds N] [--json]", Arguments: []string{"[watch-id] (required)", "--predicate <json> | --predicate-file -", "--predicate-version <n> (predicateVersion 1, 2 or 3; default: the lowest the predicate needs)", "--ttl-seconds <n> (60-2592000, counted from now)", "--json"}, Mutates: true, SessionOnly: true},
-	{Tool: "watch_cancel", Argv: []string{"orbit", "watch", "cancel"}, Usage: "orbit watch cancel WATCH_ID [--json]", Arguments: []string{"[watch-id] (required)", "--json"}, Mutates: true, SessionOnly: true},
-	{Tool: "task_await", Argv: []string{"orbit", "task", "await"}, Usage: "orbit task await --task-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]", Arguments: awaitCLIArguments("task-id", "taskIds", taskAwaitPresets), Mutates: true, SessionOnly: true},
-}
-
 func awaitCLIArguments(idFlag, param string, presets []watchAwaitPreset) []string {
 	return []string{
 		"--" + idFlag + " <id[,id...]> (" + param + "; repeatable, required)",

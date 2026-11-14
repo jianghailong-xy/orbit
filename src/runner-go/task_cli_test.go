@@ -118,11 +118,17 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 		if capability.Description == "" || capability.MCPInputSchema == nil {
 			t.Fatalf("capability did not reuse MCP description/schema: %#v", capability)
 		}
-		// In-session these writes are attributed to the agent (matching the MCP path); headless they
-		// fall back to the runner owner. The description must state BOTH so neither is misleading.
-		writesAttributed := capability.ID == "task_create" || capability.ID == "task_create_batch" ||
-			capability.ID == "task_comment"
-		if writesAttributed &&
+		// In-session these writes are attributed to the agent (matching the MCP path). The carded
+		// creates have no headless form on the machine credential: a headless process acts as the
+		// account owner with a personal access token, and the description must say so. A comment
+		// takes no card, so headless it still falls back to the runner owner.
+		if capability.ID == "task_create" || capability.ID == "task_create_batch" {
+			if !strings.Contains(capability.Description, "agent") ||
+				!strings.Contains(capability.Description, "personal access token") {
+				t.Fatalf("CLI attribution is misleading: %#v", capability)
+			}
+		}
+		if capability.ID == "task_comment" &&
 			(!strings.Contains(capability.Description, "agent") || !strings.Contains(capability.Description, "runner owner")) {
 			t.Fatalf("CLI attribution is misleading: %#v", capability)
 		}
@@ -518,6 +524,8 @@ func TestTaskCLIDeleteCapabilityIsExactAndMutating(t *testing.T) {
 				"description": "Task id; defaults to the current task (ORBIT_TASK_ID) if omitted",
 			},
 		},
+		// Closed: an argument the schema does not name is refused before the call (tool_schema.go).
+		"additionalProperties": false,
 	}
 	if !reflect.DeepEqual(got.MCPInputSchema, wantSchema) {
 		t.Errorf("task_delete schema = %#v, want %#v", got.MCPInputSchema, wantSchema)
