@@ -2926,9 +2926,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0528_approval_subagent_run',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
       '0530_wiki_repo_probe',
-      // 0531 adds two nullable owner_request columns (repo_url_norm, workspace_id), swaps owner_request's kind CHECK
-      // for one that admits WIKI_CREATE, adds one CHECK and one partial unique index; `owner_request` is none of the
-      // preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      // 0531 adds WIKI_CREATE owner requests, two nullable columns, two CHECKs and a partial unique index;
+      // no preserved rows, triggers or DONE fence change, and no row is written.
       '0531_owner_request_wiki_create',
       // 0534 creates main_checkout_request only; no preserved rows, triggers or DONE fence change.
       '0534_main_checkout_request',
