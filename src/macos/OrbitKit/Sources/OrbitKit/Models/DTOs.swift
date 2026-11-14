@@ -1316,8 +1316,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// predates the field.
     public let coordinatorDelivery: JSONValue?
     public var coordinatorDeliveryCard: CoordinatorDelivery? { CoordinatorDelivery.parseCard(coordinatorDelivery) }
-    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
-    /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
+    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's, or a
+    /// run's opening turn while no runner has taken it — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
     public let taskStart: JSONValue?
     public var taskStartCard: TaskStart? { TaskStart.parseCard(taskStart) }
@@ -1383,6 +1383,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
     public let authoredByOrbit: Bool?
+    /// The session's opening prompt, listed as the accepted head until the runner echoes it — so a
+    /// session no runner has claimed yet still shows its first message. Nil on every other turn, and
+    /// from a server that predates the field.
+    public let opening: Bool?
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
@@ -1395,7 +1399,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 runQuestion: JSONValue? = nil, runNotice: JSONValue? = nil, sessionOpening: JSONValue? = nil,
                 placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
-                deliveryReason: String? = nil) {
+                deliveryReason: String? = nil, opening: Bool? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.placement = placement
@@ -1423,6 +1427,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.runQuestion = runQuestion
         self.runNotice = runNotice
         self.sessionOpening = sessionOpening
+        self.opening = opening
     }
 }
 

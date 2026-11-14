@@ -48,6 +48,7 @@ final class QueuedOpeningTurnTests: XCTestCase {
 
         reducer.reconcileQueuedTurns(try listedOpening(), knownBefore: reducer.state.listedTurnIDs)
 
+        XCTAssertEqual(try listedOpening().first?.opening, true, "the opening mark is not decoded")
         let drawn = openingRows(reducer)
         XCTAssertEqual(drawn.count, 1, "the first message is not on screen while the session is queued")
         XCTAssertFalse(drawn[0].queued, "drawn as a queued follow-up, with a Cancel the opening does not have")
