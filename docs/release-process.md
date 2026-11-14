@@ -16,7 +16,7 @@ the tag and every artifact derive from it:
 | macOS DMG and Sparkle payload | the tag, verbatim | `Orbit-v0.1.257-beta.1-arm64.dmg`, `Orbit-v0.1.257-beta.1-arm64.zip`, `CFBundleShortVersionString` `0.1.257-beta.1` |
 | iOS TestFlight | the tag, with the prerelease suffix stripped | marketing `0.1.257`, build number = commit count |
 | Android APK and `android-update.json` | the tag without `v` | `orbit-android-0.1.257-beta.1.apk`, `versionName` `0.1.257-beta.1`, `versionCode` = commit count |
-| Runner binaries and `/dl/version.json` | `package.json` | `0.1.257-beta.1` |
+| Runner binaries and `/dl/version.json` | the newest release tag behind the deployed commit | `0.1.257-beta.1`, built from `v0.1.257-beta.1`'s tree |
 | Sparkle appcast | the macOS build | `sparkle:shortVersionString` `0.1.257-beta.1`, `sparkle:version` = build number, `beta` channel |
 | Release notes | `release-notes/<version>.md` in the release commit | `release-notes/0.1.257-beta.1.md` |
 
@@ -38,6 +38,20 @@ build settings from the tag.
 Tags before this rule are historical exceptions, not a pattern: `v0.1.2-beta.245` carried `package.json`
 `0.1.254`, and `/dl` published `0.1.256` from untagged commits. Do not repeat or "fix" them by retagging;
 releases after this rule follow it.
+
+### Runner binaries come from the release tag
+
+The web image serves the downloadable runner at `/dl`, and every deploy builds that image. The upgrade skill
+builds the runner from the newest `v*` tag behind the deployed commit, not from the deployed tree: it unpacks
+that tag's `src/runner-go`, `package.json`, `scripts` and `contracts/runner-write-protocol.json` into
+`.runner-release/` and passes `ORBIT_RUNNER_SOURCE` and `ORBIT_RUNNER_SOURCE_SHA` to `src/web/Dockerfile`.
+So a runner's version always names the tag its code was cut from, and the server, web and apps can deploy
+from `main` between releases without publishing new runner code under the last release's number.
+
+- Runner changes reach runners when a release is tagged and deployed, never before. Deploy after pushing the
+  tag; until then `/dl` keeps serving the release before it.
+- A checkout with no `v*` tag behind HEAD (a fork, a shallow clone) builds the runner from itself and warns.
+  So does a plain `docker compose build` or `docker build`, which pass no runner source.
 
 ## Version and channels
 

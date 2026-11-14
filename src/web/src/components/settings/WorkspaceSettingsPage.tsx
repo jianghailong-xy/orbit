@@ -60,6 +60,7 @@ import { Select } from '../ui/Select';
 import { Spinner } from '../ui/Spinner';
 import { Switch } from '../ui/Switch';
 import { Textarea } from '../ui/Textarea';
+import { SubagentSettings } from '../SubagentSettings';
 import {
   WorktreeIsolationDialog,
   worktreeIsolationDialogFor,
@@ -97,6 +98,9 @@ export interface SettingsWorkspace {
   modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** The other engines smart selection may move this Agent's task runs to (§6). */
   modelRoutingProviders?: string[];
+  /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
+  subagentsEnabled?: boolean;
+  subagentsMaxRunning?: number;
   effort?: string | null;
   /** What the runner last saw at `workDir` on its own disk (refreshed each heartbeat). */
   workDirExists?: boolean | null;
@@ -124,6 +128,8 @@ type WorkspacePatch = Partial<
     | 'modelRouting'
     | 'modelRoutingOptimizeFor'
     | 'modelRoutingProviders'
+    | 'subagentsEnabled'
+    | 'subagentsMaxRunning'
     | 'env'
     | 'appendSystemPrompt'
     | 'enabled'
@@ -711,6 +717,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
           )}
         </SettingsCard>
       </SettingsSection>
+
+      <SubagentSettings
+        enabled={workspace.subagentsEnabled ?? true}
+        onEnabledChange={(subagentsEnabled) => save({ subagentsEnabled })}
+        optimizeFor={workspace.modelRoutingOptimizeFor ?? 'cost'}
+        onOptimizeForChange={(modelRoutingOptimizeFor) => save({ modelRoutingOptimizeFor })}
+        maxRunning={workspace.subagentsMaxRunning ?? 4}
+        onMaxRunningChange={(subagentsMaxRunning) => save({ subagentsMaxRunning })}
+      />
 
       <SettingsSection title="Agent environment" className="workspace-section-environment">
         <SettingsCard>
