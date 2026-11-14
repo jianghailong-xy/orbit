@@ -20,6 +20,8 @@ import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
 import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
 import { settleAlert } from './settle-alert';
+import { crossingRequestAlert } from './crossing-request-alert';
+import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
 import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
@@ -94,6 +96,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
+  'crossing-request': 'Cross-project request',
   'watch-matched': 'Watch matched',
   'loop-missed': 'Wakeup loop missed',
   'wakeup-dropped': 'Scheduled wakeup dropped',
@@ -907,6 +910,51 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', `owner-request-${requestId}`);
     } catch (err) {
       this.log.warn(`owner request notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * A cross-project request an agent just filed, waiting on the account owner (`ProjectHandoffService
+   * .declare`, once, after the commit). The tap opens the conversation that draws its decision card
+   * (`crossingCardSessionId`) — the target's coordinator, or the source's for a task asked to be
+   * taken out of every project — else the project page that lists it. Every word is Orbit's: the
+   * projects' titles and the request's own title, never the agent's reason.
+   */
+  async notifyCrossingRequest(handoffId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const row = await this.prisma.projectHandoffApproval.findUnique({
+        where: { id: handoffId },
+        select: {
+          ...CARD_SESSION_SELECT,
+          ownerId: true,
+          state: true,
+          kind: true,
+          title: true,
+          fromProjectId: true,
+          fromProject: { select: { title: true, coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+          toProject: { select: { title: true, coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+        },
+      });
+      if (!row || row.state !== 'PENDING') return;
+      const { tokens, feishu } = await this.channels(row.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = crossingRequestAlert(row);
+      const sessionId = crossingCardSessionId(row);
+      const projectId = row.toProjectId ?? row.fromProjectId;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `crossing-request-${sessionId ?? projectId}` },
+        kind: 'crossing-request',
+        ...(sessionId ? { sessionID: sessionId } : {}),
+        projectID: projectId,
+        handoffID: handoffId,
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: 'crossing-request', ...alert, collapseId: `crossing-request-${handoffId}`, sessionId, projectId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', `crossing-request-${handoffId}`);
+    } catch (err) {
+      this.log.warn(`crossing request notify failed: ${(err as Error).message}`);
     }
   }
 
