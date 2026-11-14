@@ -376,6 +376,10 @@ services:
         # Full commit embedded in every advertised runner capability revision. Empty is fine
         # from a Git checkout: the build reads the commit from the checkout's own .git/HEAD.
         ORBIT_SOURCE_SHA: "${ORBIT_SOURCE_SHA:-}"
+        # The release tag's tree the runner binaries are built from, and its commit; empty builds them from the
+        # context. The upgrade skill sets both (docs/release-process.md, "Runner binaries come from the release tag").
+        ORBIT_RUNNER_SOURCE: "${ORBIT_RUNNER_SOURCE:-.}"
+        ORBIT_RUNNER_SOURCE_SHA: "${ORBIT_RUNNER_SOURCE_SHA:-}"
     container_name: orbit-web
     restart: unless-stopped
     logging: *logging

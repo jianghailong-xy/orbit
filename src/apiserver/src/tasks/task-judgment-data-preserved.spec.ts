@@ -2916,6 +2916,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0519_wiki_repo_attention',
       // 0521 adds a defaulted wiki_repo_snapshot column and its CHECK only; no preserved rows, triggers or DONE fence change.
       '0521_wiki_repo_snapshot_source',
+      // 0524 adds two workspace columns and the subagent_run table only; no preserved row, trigger or DONE fence change.
+      '0524_subagent_run',
+      // 0526 adds model_provider.model_tiers only; no preserved row, trigger or DONE fence change.
+      '0526_model_provider_model_tiers',
+      // 0527 adds three subagent_run columns and a partial index only; no preserved row, trigger or DONE fence change.
+      '0527_subagent_run_wake',
+      // 0528 adds the nullable approval.subagent_run_id only; no preserved row, trigger or DONE fence change.
+      '0528_approval_subagent_run',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
       '0530_wiki_repo_probe',
       // 0534 creates main_checkout_request only; no preserved rows, triggers or DONE fence change.
@@ -2977,6 +2985,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or dropped, nothing sits on `task` or `project`, there is no INSERT, UPDATE or DELETE, and none of the six
       // preserved triggers/functions is named or replaced, so it is not another writer of the DONE fence.
       '0641_open_list_epoch_session_waits',
+      // 0642 adds five nullable subagent_run columns, an index and the subagent_relay_event table; no preserved row, trigger or DONE fence change.
+      '0642_subagent_run_remote',
       // 0660 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.

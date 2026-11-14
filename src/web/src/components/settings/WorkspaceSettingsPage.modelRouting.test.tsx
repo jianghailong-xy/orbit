@@ -234,6 +234,10 @@ describe('smart model selection on the Agent', () => {
     const { writes } = mount(workspace({ modelRoutingOptimizeFor: 'intelligence' }), { modelRouting: false });
     await openEditor();
     expect(optimize()).toBeNull();
+    // Only the SubAgents group's control, which writes the same field (docs/subagent-design.md §7).
+    const controls = page().querySelectorAll('[aria-label="Optimize For"]');
+    expect(controls).toHaveLength(1);
+    expect(controls[0].closest('.subagents-group')).not.toBeNull();
     await click(worktreeSwitch());
     expect(writes.map((w) => w.body)).toEqual([{ enableWorktree: false }]);
   });

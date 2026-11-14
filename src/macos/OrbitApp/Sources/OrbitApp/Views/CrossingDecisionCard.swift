@@ -33,12 +33,12 @@ struct CrossingDecisionCard: View {
                 if live {
                     ApprovalActions {
                         Button { decide(.approve) } label: {
-                            Text(CrossingBatches.approveLabel).approvalActionLabel()
+                            Text(CrossingBatches.approveLabel(for: batch)).approvalActionLabel()
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(deciding)
                         Button { decide(.deny) } label: {
-                            Text(CrossingBatches.refuseLabel).approvalActionLabel()
+                            Text(CrossingBatches.refuseLabel(for: batch)).approvalActionLabel()
                         }
                         .buttonStyle(.bordered)
                         .disabled(deciding)
@@ -84,12 +84,13 @@ struct CrossingDecisionCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         VStack(alignment: .leading, spacing: 2) {
             (Text("\(CrossingBatches.fromLabel) ").foregroundStyle(.secondary) + Text(batch.sourceTitle))
-            (Text("\(CrossingBatches.toLabel) ").foregroundStyle(.secondary) + Text(CrossingBatches.toThisProject))
+            (Text("\(CrossingBatches.toLabel) ").foregroundStyle(.secondary)
+                + Text(batch.out ? CrossingBatches.toNoProject : CrossingBatches.toThisProject))
         }
         .font(.orbitProse)
         .frame(maxWidth: .infinity, alignment: .leading)
 
-        Text(CrossingBatches.listHead(batch.kind))
+        Text(CrossingBatches.listHead(for: batch))
             .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
         let shown = showAll ? batch.rows : Array(batch.rows.prefix(CrossingBatches.shownRows))

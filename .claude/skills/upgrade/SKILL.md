@@ -55,6 +55,10 @@ It will, in order:
    release it replaces at `/dl/previous/` — what a staged rollout holds runners at
    and a rollback returns them to (docs/release-process.md, "Runner rollout and
    rollback"). With no `orbit-web` container running, nothing is kept.
+   The runner binaries in the web image are built from the newest `v*` tag behind
+   HEAD, unpacked at `.runner-release/`, not from the checkout: runner code ships
+   only with a release tag (docs/release-process.md, "Runner binaries come from the
+   release tag"). With no such tag, the checkout's own runner is built, with a warning.
 3. `docker compose up -d --wait apiserver wiki-worker web gateway` — recreate only the
    services whose image or config changed (the freshly built `apiserver`/`web`,
    `wiki-worker` with the `apiserver` image it runs), and block

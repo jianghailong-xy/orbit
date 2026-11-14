@@ -263,32 +263,7 @@ struct SessionFolderPage: View {
                 searchResults
             } else {
                 ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-                    if index == 0, section.title == "Today" {
-                        // The leading "Today" keeps no title, exactly as the workspace list draws it
-                        // (the first row drops its top separator with the title).
-                        ForEach(section.sessions) { session in
-                            if session.id == section.sessions.first?.id {
-                                listRow(session, projects: projectRows, marks: projectMarks)
-                                    .listRowSeparator(.hidden, edges: .top)
-                            } else {
-                                listRow(session, projects: projectRows, marks: projectMarks)
-                            }
-                        }
-                    } else if section.title == "Pinned" {
-                        Section {
-                            if !pinnedCollapsed {
-                                ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                            }
-                        } header: {
-                            pinnedSectionHeader(section.title)
-                        }
-                    } else {
-                        Section {
-                            ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                        } header: {
-                            Text(section.title).textCase(nil)
-                        }
-                    }
+                    folderSection(index: index, section: section, projects: projectRows, marks: projectMarks)
                 }
             }
         }
@@ -369,6 +344,40 @@ struct SessionFolderPage: View {
             Image(systemName: "ellipsis.circle")
         }
         .accessibilityLabel("Folder actions")
+    }
+
+    /// One recency section of the page's list. The section is the row the List's ForEach draws;
+    /// which header it takes and whether its rows show is decided here, off the one grouping.
+    @ViewBuilder
+    private func folderSection(index: Int, section: SessionTimeSection,
+                               projects: [String: SessionProjectRow],
+                               marks: [String: SessionProjectMark]) -> some View {
+        if index == 0, section.title == "Today" {
+            // The leading "Today" keeps no title, exactly as the workspace list draws it
+            // (the first row drops its top separator with the title).
+            ForEach(section.sessions) { session in
+                if session.id == section.sessions.first?.id {
+                    listRow(session, projects: projects, marks: marks)
+                        .listRowSeparator(.hidden, edges: .top)
+                } else {
+                    listRow(session, projects: projects, marks: marks)
+                }
+            }
+        } else if section.title == "Pinned" {
+            Section {
+                if !pinnedCollapsed {
+                    ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
+                }
+            } header: {
+                pinnedSectionHeader(section.title)
+            }
+        } else {
+            Section {
+                ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
+            } header: {
+                Text(section.title).textCase(nil)
+            }
+        }
     }
 
     /// One row, wrapped for the container it is in — the workspace list's own arrangement, repeated

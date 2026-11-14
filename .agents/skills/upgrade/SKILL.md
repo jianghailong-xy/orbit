@@ -39,7 +39,7 @@ On `main` the helper first fast-forwards to origin (`git pull --ff-only`) unless
 
 Without `--pull-base`, the helper:
 
-1. Builds `apiserver` (whose image `wiki-worker` runs) and `web`.
+1. Builds `apiserver` (whose image `wiki-worker` runs) and `web`. The web image's downloadable runner is built from the newest `v*` tag behind HEAD (unpacked at `.runner-release/`), not from the checkout, so runner code ships only with a release tag (docs/release-process.md, "Runner binaries come from the release tag"); with no such tag, the checkout's own runner is built, with a warning.
 2. Runs `docker compose up -d --wait apiserver wiki-worker web gateway`.
 3. Where `docker-compose.override.yml` adds other apiservers (`apiserver-2` and on; docs/self-hosting.md, "Several apiservers"), recreates them once `apiserver` is healthy and the migrations are applied, so they find none to apply.
 4. Brings `pgbackup` up to date, last (see "pgbackup" below).

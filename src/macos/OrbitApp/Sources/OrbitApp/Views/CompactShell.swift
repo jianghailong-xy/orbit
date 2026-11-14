@@ -755,24 +755,23 @@ struct NavigationDrawer: View {
                 // from them by a rule; the open projects themselves close it, where the task lists
                 // and Recents used to be. Machines & models lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
-                ForEach(AppSection.workSections) { section in
-                    if section == .projects {
-                        projectsRow
-                    } else if section == .wiki {
-                        // No row at all for an account the server has not switched the wiki on for
-                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
-                        // would be worse than none.
-                        if model.wiki?.shown == true { wikiRow }
-                    } else {
-                        sectionRow(section)
+                // The rows are one array (`DrawerWorkLogic`), drawn by one ForEach: an `if` or a
+                // second ForEach under it is the shape the source list's reload aborted on.
+                ForEach(DrawerWorkLogic.rows(
+                    AppSection.workSections,
+                    wiki: model.wiki?.shown == true,
+                    waitingOnYou: model.ownerRequests.map { !$0.unsupported } ?? false)) { row in
+                    switch row {
+                    case .projects:       projectsRow
+                    case .wiki:           wikiRow
+                    case .section(let section): sectionRow(section)
+                    case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
+                    case .workspacesHeader: workspacesHeader
+                    case .agents:         agentsRows
+                    case .openProjects:   projectRows
+                    case .sharedWithMe:   sharedWithMeRows
                     }
                 }
-                // What agents have asked the owner to do: the inbox, with how many are waiting.
-                if let requests = model.ownerRequests, !requests.unsupported { waitingOnYouRow(requests) }
-                workspacesHeader
-                agentsRows
-                projectRows
-                sharedWithMeRows
             }
             .listStyle(.plain)
             // Let each row's own padding set its height and let the drawer background show through, so
@@ -1044,7 +1043,14 @@ struct NavigationDrawer: View {
     /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
     /// drawer has no rows below it for the Wiki's pages.
     /// "Waiting on you": a sheet rather than a page, so a push's action can raise it over anything.
-    private func waitingOnYouRow(_ requests: OwnerRequestsModel) -> some View {
+    @ViewBuilder
+    private func waitingOnYouRow(_ requests: OwnerRequestsModel?) -> some View {
+        if let requests {
+            waitingOnYouButton(requests)
+        }
+    }
+
+    private func waitingOnYouButton(_ requests: OwnerRequestsModel) -> some View {
         let waiting = requests.waitingCount
         return Button {
             requests.tab = .open
