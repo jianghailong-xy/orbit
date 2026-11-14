@@ -38,6 +38,7 @@ import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
+import { reloadCarriesEnv } from '../sessions/session-settings';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -4098,6 +4099,7 @@ export class RunnerApiController {
           workspaceModel: workspace?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
+          sessionEnv: s.env,
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
@@ -5921,8 +5923,9 @@ export class RunnerApiController {
   }
 
   /**
-   * The environment a `reload` re-spawns with, for the one reload that needs it: a provider switch
-   * (see SessionsService.updateConfig). Every other reload — model, permission mode, effort — runs
+   * The environment a `reload` re-spawns with, for the reloads that need it (reloadCarriesEnv): a
+   * provider switch (see SessionsService.updateConfig), and a Settings restart, which re-spawns on the
+   * same provider with the session's env as it stands (SessionsService.restart). Every other reload — model, permission mode, effort — runs
    * on the environment the engine already has, and returns undefined so the runner leaves its
    * process alone beyond the flags.
    *
@@ -5947,17 +5950,12 @@ export class RunnerApiController {
     sessionId: string,
     content: string | null,
   ): Promise<{ env?: Record<string, string>; refusal?: string }> {
-    let declared: unknown;
-    try {
-      declared = (JSON.parse(content ?? '{}') as { provider?: unknown }).provider;
-    } catch {
-      return {};
-    }
-    if (typeof declared !== 'string' || !declared) return {};
+    if (!reloadCarriesEnv(content)) return {};
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
         id: true,
+        envChangedAt: true,
         ownerId: true,
         model: true,
         provider: true,
@@ -5967,6 +5965,7 @@ export class RunnerApiController {
         poolKeyId: true,
         poolCodexAccountId: true,
         usesRuntimeDefaultModel: true,
+        env: true,
         codexAccount: true,
         claudeAccount: true,
         antigravityAccount: true,
@@ -6034,6 +6033,7 @@ export class RunnerApiController {
         workspaceModel: session.workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
+        sessionEnv: session.env,
         codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
         claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
         antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
@@ -6052,6 +6052,14 @@ export class RunnerApiController {
           : await unavailable(customRow),
       };
     }
+    // The engine this reload re-spawns runs on the session's env as read here, so the Settings panel
+    // owes no restart for it (sessionSettingsOf) — only while the env is still the one read, as on the
+    // claim (QueueService): a PATCH since then is not in this engine, and stays owed. Stamped as the
+    // reload is handed out, which is the runner's acknowledgement of a control turn (dequeueTurn).
+    await tx.session.updateMany({
+      where: { id: sessionId, envChangedAt: session.envChangedAt },
+      data: { envAppliedAt: new Date() },
+    });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
     // previous provider's variables must still go, which an empty map is how the runner is told.
     return { env: exec.env ?? {} };
