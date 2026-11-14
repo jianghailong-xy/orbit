@@ -17994,7 +17994,7 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 /* A status as a dot before plain words (AccountPauseStatus dot): on rows whose buttons sit beside it. */
-.status-dot {
+.account-status-dot {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -18004,7 +18004,7 @@ button.chat-jump-start:hover {
   color: var(--text-1);
   white-space: nowrap;
 }
-.status-dot::before {
+.account-status-dot::before {
   content: '';
   flex: none;
   width: 7px;
@@ -18012,25 +18012,25 @@ button.chat-jump-start:hover {
   border-radius: 50%;
   background: var(--dot-idle);
 }
-.status-dot-success::before,
-.status-dot-green::before {
+.account-status-dot-success::before,
+.account-status-dot-green::before {
   background: var(--success-solid);
 }
-.status-dot-warning::before,
-.status-dot-orange::before,
-.status-dot-gold::before {
+.account-status-dot-warning::before,
+.account-status-dot-orange::before,
+.account-status-dot-gold::before {
   background: var(--warning-solid);
 }
-.status-dot-error::before,
-.status-dot-red::before {
+.account-status-dot-error::before,
+.account-status-dot-red::before {
   background: var(--error-solid);
 }
-.status-dot-info::before,
-.status-dot-blue::before {
+.account-status-dot-info::before,
+.account-status-dot-blue::before {
   background: var(--brand);
 }
-.status-dot-error,
-.status-dot-red {
+.account-status-dot-error,
+.account-status-dot-red {
   color: var(--error);
 }
 .pool-people {
