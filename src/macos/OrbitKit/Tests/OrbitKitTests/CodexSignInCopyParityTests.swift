@@ -12,7 +12,9 @@ import XCTest
 ///
 /// Deliberately not compared: "New pool" — a pool is made on the web (it opens straight to signing in),
 /// as a shared pool's is; the words only a phone has to say (the swipe's own label is `Sign out`, the
-/// web mark's name); and the page the accounts are drawn on, whose words — its head, its way out, who can
+/// web menu item's word); the apps' standalone sign-out mark's name (`signOutLabel`, "Sign out <name>"),
+/// since the web's row (settings-buttons board 02, e86033585) has no such mark any more: its Sign out
+/// is an item under the row's ⋯, named `More for <name>`, which the check below pins; and the page the accounts are drawn on, whose words — its head, its way out, who can
 /// use it — are `PoolAccessCopyParityTests`'.
 final class CodexSignInCopyParityTests: XCTestCase {
 
@@ -231,10 +233,12 @@ final class CodexSignInCopyParityTests: XCTestCase {
         assertSays(row, "<div className=\"pool-why\"> {signInAgain ? '\(CodexLoginPool.signedOutReason)' : `\(CodexLoginPool.signedOutReasonNotYours("${contributor ? contributor.name : 'the person who signed it in'}"))`} </div>",
                    in: Self.accountPools)
         assertSays(row, "> \(CodexLoginPool.signInAgain) </Button>", in: Self.accountPools)
+        // Signing out is the last item under the row's ⋯ (e86033585), in red, and asks first.
         let signingOut = account(email: "${member.label}")
-        assertSays(row, "title={`\(CodexLoginPool.signOutTitle(signingOut))`}", in: Self.accountPools)
-        assertSays(row, "aria-label={`\(CodexLoginPool.signOutLabel(signingOut))`}", in: Self.accountPools)
-        assertSays(row, "confirmText=\"\(CodexLoginPool.signOut)\"", in: Self.accountPools)
+        assertSays(row, "key: 'signout', label: '\(CodexLoginPool.signOut)', danger: true,", in: Self.accountPools)
+        assertSays(row, "aria-label={`More for ${name}`}", in: Self.accountPools)
+        assertSays(row, "title: `\(CodexLoginPool.signOutTitle(signingOut))`,", in: Self.accountPools)
+        assertSays(row, "confirmText: '\(CodexLoginPool.signOut)',", in: Self.accountPools)
         // Signing one out: the only account, and nothing runs on the pool; one of several, and it keeps
         // running on the others — "account" for one left, "accounts" for more.
         let one = CodexLoginPool.signOutNote(pool("${pool.label}", accounts: 1))

@@ -445,7 +445,10 @@ final class PoolAccessCopyParityTests: XCTestCase {
                    in: Self.accountPools)
         assertSays(card, "{people && <span className=\"re-chip pool-shared-chip\">\(CodexPoolPage.sharedChip)</span>}",
                    in: Self.accountPools)
-        assertSays(card, "{!member && <PoolGauge pool={pool} />}", in: Self.accountPools)
+        // Its owner reads the gauge on the head; open with one account that can run, that account's own
+        // row says the same right under it, so the head leaves it out (e86033585).
+        assertSays(card, "{!member && (collapsed || pool.members.length !== 1 || poolHeadline(pool).kind !== 'next') && <PoolGauge pool={pool} />}",
+                   in: Self.accountPools)
 
         let spec = try web(Self.whoSpec)
         let alone = PoolAccessBoards.ownersPage(people: [], keys: []).pool

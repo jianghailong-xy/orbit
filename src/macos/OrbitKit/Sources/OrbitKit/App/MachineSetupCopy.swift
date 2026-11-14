@@ -92,6 +92,9 @@ public enum MachineSetupCopy {
     public static let START_A_SESSION = "Start a session"
     public static let REGISTER_NEXT =
         "It's now on the Machines & models page, under Machines. Next, start a session on it — you pick the folder it works in and sign in a coding CLI there."
+    /// The same, said where the machine was registered from inside Settings' Machines.
+    public static let REGISTER_NEXT_IN_SETTINGS =
+        "It's now under Machines on the left. Next, start a session on it — you pick the folder it works in and sign in a coding CLI there."
 
     // MARK: this client's own
 

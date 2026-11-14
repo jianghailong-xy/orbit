@@ -100,6 +100,7 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("CREATED_RENAME_FAILED", MachineSetupCopy.CREATED_RENAME_FAILED),
         ("START_A_SESSION", MachineSetupCopy.START_A_SESSION),
         ("REGISTER_NEXT", MachineSetupCopy.REGISTER_NEXT),
+        ("REGISTER_NEXT_IN_SETTINGS", MachineSetupCopy.REGISTER_NEXT_IN_SETTINGS),
     ]
 
     /// Each template rendered with the web's own interpolations for its values.

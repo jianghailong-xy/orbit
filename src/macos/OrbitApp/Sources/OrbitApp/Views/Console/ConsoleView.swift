@@ -2146,11 +2146,12 @@ struct TranscriptItemView: View {
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
-            // theirs under the call rather than left inside its result (`OwnerChatReply`).
+            // theirs under the call rather than left inside its result (`OwnerChatReply`) — through the
+            // one row every user turn is drawn with. It is no steer and was delivered, so it has no controls.
             if let words = OwnerChatReply.words(of: c) {
                 VStack(alignment: .leading, spacing: 12) {
                     ToolCardView(card: c, fullPayload: fullPayload)
-                    UserBubbleView(bubble: UserBubble(id: "owner-chat-\(c.id)", text: words, pending: false))
+                    UserTurnRow(bubble: UserBubble(id: "owner-chat-\(c.id)", text: words, pending: false))
                 }
             } else {
                 ToolCardView(card: c, fullPayload: fullPayload)

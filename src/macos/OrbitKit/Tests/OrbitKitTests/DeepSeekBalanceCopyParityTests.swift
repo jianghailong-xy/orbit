@@ -76,7 +76,9 @@ final class DeepSeekBalanceCopyParityTests: XCTestCase {
         // Machines & models' API keys: each engine by its CLI's name, a dot between (web's `KeyEngines`).
         let keys = try web(Self.keys)
         assertSays(keys, "{row.engines.map((engine, index) => (", in: Self.keys)
-        assertSays(keys, "{index > 0 && <> <span className=\"prov-engine-sep\">·</span> </>}", in: Self.keys)
+        // The separator rides inside the engine after it (e86033585), so a wrapped line never ends on one.
+        assertSays(keys, "<span className=\"prov-engine\" key={engine}> {index > 0 && <>{' '}<span className=\"prov-engine-sep\">·</span>{' '}</>}",
+                   in: Self.keys)
         assertSays(keys, "<EngineTile engine={engine} size={12} /> {ENGINE_CLI_NAMES[engine]}", in: Self.keys)
         XCTAssertEqual(ProvidersOverview.keyLine(ConfiguredProvider(slug: "h", label: "H", runtime: "dsh",
                                                                     engines: ["dsh", "claude", "opencode"])),
@@ -84,7 +86,8 @@ final class DeepSeekBalanceCopyParityTests: XCTestCase {
         // A Claude subscription token: Anthropic's protocol on Claude Code alone, and said to be one.
         assertSays(keys, "keyDialect(row.runtime) === 'anthropic' && row.engines.length === 1 && row.engines[0] === AgentProvider.CLAUDE",
                    in: Self.keys)
-        assertSays(keys, "<span>\(ProvidersOverview.subscriptionToken), Claude Code only</span>", in: Self.keys)
+        assertSays(keys, "<span> {' '}<span className=\"prov-engine-sep\">·</span> \(ProvidersOverview.subscriptionToken), Claude Code only </span>",
+                   in: Self.keys)
         XCTAssertEqual(ProvidersOverview.keyLine(ConfiguredProvider(slug: "max", label: "Claude Max", runtime: "claude",
                                                                     engines: ["claude"])),
                        "Claude Code · subscription token")

@@ -89,7 +89,11 @@ final class UserTurnRowWiringTests: XCTestCase {
                       "the transcript no longer draws a user turn with the row")
         XCTAssertTrue(console.contains("UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {"),
                       "the queued tail no longer draws its turn with the row the transcript draws it with")
-        XCTAssertEqual(console.filter { $0.contains("UserTurnRow(") }.count, 2)
+        // The owner's "Chat about this" words under one of Orbit's own cards (`OwnerChatReply`) are a
+        // user turn too, drawn with the same row: delivered and no steer, so handed no controls.
+        XCTAssertTrue(console.contains("UserTurnRow(bubble: UserBubble(id: \"owner-chat-\\(c.id)\", text: words, pending: false))"),
+                      "the console no longer draws the owner's Chat about this reply with the row")
+        XCTAssertEqual(console.filter { $0.contains("UserTurnRow(") }.count, 3)
         XCTAssertFalse(console.contains { $0.contains("UserBubbleView(") },
                        "the console draws a user turn's bubble outside the row")
 
