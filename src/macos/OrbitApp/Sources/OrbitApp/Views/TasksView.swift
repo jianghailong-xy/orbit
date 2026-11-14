@@ -1992,13 +1992,14 @@ private struct TaskDetailContent: View {
         }
     }
 
-    /// What the Provider field reads at rest: the pinned credential, or what Engine default runs on.
+    /// What the Provider field reads at rest: the pinned credential, the key the server's `runsWith`
+    /// names for an unpinned task, or what Engine default runs on.
     private func providerSummary(_ task: TaskItem) -> String {
         let pin = runPin(task)
         let sources = pinSources(task)
         let firstDeepSeekKey = SessionProviderChoices.providers(for: "dsh", sources: sources).first { $0.kind == .key }
         let runnerName = assigneeRunner(task).map { RunnerPageFormat.displayName($0) }
-        guard let pinned = task.provider else {
+        guard let pinned = task.provider ?? pin.runsWithKey else {
             return TaskRunPin.engineDefaultLabel(engine: pin.runEngine, firstDeepSeekKey: firstDeepSeekKey?.label,
                                                  runnerName: runnerName)
         }

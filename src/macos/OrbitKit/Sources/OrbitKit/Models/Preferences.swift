@@ -2,15 +2,14 @@ import Foundation
 
 // User preferences, mirroring users.controller `me` / `me/preferences` (UpdatePreferencesDto).
 // The PATCH body is a partial set shallow-merged server-side: an omitted key keeps its value.
-// `defaultModels` also merges its provider entries, preserving the other providers' choices.
+// Compatibility: the server still accepts `defaultModels` from older clients, but nothing reads it; this
+// client neither decodes nor writes it (a draft's model is the workspace's `lastModel`).
 // `theme` / `defaultPermissionMode` are kept as `String` (not enums) so an unknown future value
 // decodes rather than throwing — the app maps known values and ignores the rest.
 
 public struct UserPreferences: Codable, Equatable, Sendable {
     public let theme: String?                  // "system" | "light" | "dark"
     public let defaultModel: String?
-    /// Last-picked model per provider, synced across clients.
-    public let defaultModels: [String: String]?
     public let defaultPermissionMode: String?
     /// Account-wide default reasoning effort for a new session (last-picked-wins). "" = model
     /// default; otherwise an `Effort` raw value. Synced so a value chosen on web seeds new
@@ -47,7 +46,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public var showRecaps: Bool { recaps != false }
 
     private enum CodingKeys: String, CodingKey {
-        case theme, defaultModel, defaultModels, defaultPermissionMode, defaultEffort
+        case theme, defaultModel, defaultPermissionMode, defaultEffort
         case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting, promptSuggestions
         case recaps
     }
@@ -56,7 +55,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         theme = try c.decodeIfPresent(String.self, forKey: .theme)
         defaultModel = try c.decodeIfPresent(String.self, forKey: .defaultModel)
-        defaultModels = try c.decodeIfPresent([String: String].self, forKey: .defaultModels)
         defaultPermissionMode = try c.decodeIfPresent(String.self, forKey: .defaultPermissionMode)
         defaultEffort = try c.decodeIfPresent(String.self, forKey: .defaultEffort)
         enableOrchestration = try c.decodeIfPresent(Bool.self, forKey: .enableOrchestration)
@@ -73,7 +71,6 @@ public struct UserPreferences: Codable, Equatable, Sendable {
 public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var theme: String?
     public var defaultModel: String?
-    public var defaultModels: [String: String]?
     public var defaultPermissionMode: String?
     public var defaultEffort: String?
     public var enableOrchestration: Bool?
@@ -82,14 +79,13 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var modelRouting: Bool?
     public var promptSuggestions: Bool?
     public var recaps: Bool?
-    public init(theme: String? = nil, defaultModel: String? = nil, defaultModels: [String: String]? = nil,
+    public init(theme: String? = nil, defaultModel: String? = nil,
                 defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
                 notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil,
                 modelRouting: Bool? = nil, promptSuggestions: Bool? = nil, recaps: Bool? = nil) {
         self.theme = theme
         self.defaultModel = defaultModel
-        self.defaultModels = defaultModels
         self.defaultPermissionMode = defaultPermissionMode
         self.defaultEffort = defaultEffort
         self.enableOrchestration = enableOrchestration

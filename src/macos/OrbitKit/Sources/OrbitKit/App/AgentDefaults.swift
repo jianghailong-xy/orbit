@@ -302,42 +302,22 @@ public enum AgentDefaults {
         return offered.contains { $0.id == model || $0.id == named } ? model : nil
     }
 
-    /// The key a model picked for `engine` on `provider` is remembered under in
-    /// `User.preferences.defaultModels` (docs/provider-engine-contract.md §6.5): one key's model on
-    /// Claude Code is not its model on DeepSeek Harness.
-    public static func defaultModelKey(engine: String, provider: String) -> String { "\(engine):\(provider)" }
-
-    /// The model last picked for `engine` on `provider`, read in §6.5's order: the pair's own key, then
-    /// what an older client remembered under the old keys — `opencode/<slug>` (whose value names the
-    /// key, `orbit-<slug>/<model>`) and `opencode` for OpenCode, the bare slug for the engine a provider
-    /// runs on by default. Nil when nothing was picked for it. Mirrors web's `rememberedModel`.
-    public static func rememberedModel(engine: String, provider: String, accountModels: [String: String]?,
-                                       configured: [ConfiguredProvider]?) -> String? {
-        guard let accountModels else { return nil }
-        if let own = accountModels[defaultModelKey(engine: engine, provider: provider)] { return own }
-        if engine == "opencode" {
-            if provider == "opencode" {
-                guard let old = accountModels["opencode"], OpenCodeKeys.key(of: old) == nil else { return nil }
-                return old
-            }
-            guard let named = OpenCodeKeys.key(of: accountModels["opencode/\(provider)"]), named.slug == provider
-            else { return nil }
-            return named.model
-        }
-        return ProviderEngines.defaultEngine(ofProvider: provider, configured: configured) == engine
-            ? accountModels[provider] : nil
-    }
-
-    /// An interactive draft remembers the last explicit model pick for its engine and provider. A retired
-    /// model falls back to the caller's current default for the pair; an empty OpenCode pick is kept.
-    public static func newSessionModel(engine: String, provider: String, accountModels: [String: String]?,
+    /// The model a new session drafted on `engine` and `provider` starts with: the workspace's `lastModel`
+    /// — the model of the session a person last opened there (apiserver workspaces/workspace-provider.ts)
+    /// — when the draft runs on that same engine and provider, else `fallback`, the runner's or the key's
+    /// default. A retired `lastModel` drops out to the default, as a retired pin does at dispatch; an
+    /// empty OpenCode model is kept. The account-wide model memory is retired:
+    /// nothing reads or writes it (docs/workspace-default-model-design.md). Mirrors web's
+    /// `newSessionModelFor`.
+    public static func newSessionModel(engine: String, provider: String, workspace: Agent?,
                                        fallback: String, catalog: RunnerModelCatalog?,
                                        configured: [ConfiguredProvider]?,
                                        runtimeDefaults: [String: String]? = nil) -> String {
-        livePin(rememberedModel(engine: engine, provider: provider, accountModels: accountModels,
-                                configured: configured),
-                engine: engine, provider: provider, catalog: catalog,
-                configured: configured, runtimeDefaults: runtimeDefaults) ?? fallback
+        let last = workspace.flatMap { ws -> String? in
+            ws.defaultEngine(configured: configured) == engine && ws.defaultProvider == provider ? ws.lastModel : nil
+        }
+        return livePin(last, engine: engine, provider: provider, catalog: catalog,
+                       configured: configured, runtimeDefaults: runtimeDefaults) ?? fallback
     }
 
     /// The engine a persisted provider identity runs on when nothing else says — what a session that

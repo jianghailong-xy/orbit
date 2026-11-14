@@ -6,27 +6,48 @@ import XCTest
 /// own model and effort choices.
 final class AgentDefaultsTests: XCTestCase {
 
-    func testNewSessionRemembersTheModelForItsProvider() {
+    private func workspace(engine: String?, provider: String?, model: String?) throws -> Agent {
+        var row: [String: Any] = ["id": "w1", "name": "orbit"]
+        if let engine { row["lastEngine"] = engine }
+        if let provider { row["lastProvider"] = provider }
+        if let model { row["lastModel"] = model }
+        return try JSONDecoder().decode(Agent.self, from: JSONSerialization.data(withJSONObject: row))
+    }
+
+    /// docs/workspace-default-model-design.md: a draft on the workspace's lastEngine/lastProvider starts
+    /// on its lastModel; on any other pair, or with no lastModel, on the runner's or the key's default.
+    func testNewSessionModelComesFromTheWorkspacesLastModel() throws {
         let catalog = RunnerModelCatalog(claude: nil, codex: [
             RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6-Sol"),
             RunnerModelInfo(value: "gpt-6.1-sol", label: "GPT-6.1-Sol"),
         ])
-        let remembered = ["codex": "gpt-6.1-sol", "claude": "claude-sonnet-5"]
+        let onCodex = try workspace(engine: "codex", provider: "codex", model: "gpt-6.1-sol")
+        XCTAssertEqual(onCodex.lastModel, "gpt-6.1-sol")
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            engine: "codex", provider: "codex", accountModels: remembered, fallback: "gpt-5.6-sol",
+            engine: "codex", provider: "codex", workspace: onCodex, fallback: "gpt-5.6-sol",
             catalog: catalog, configured: nil), "gpt-6.1-sol")
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            engine: "codex", provider: "codex", accountModels: ["claude": "claude-sonnet-5"], fallback: "gpt-5.6-sol",
-            catalog: catalog, configured: nil), "gpt-5.6-sol")
-        XCTAssertEqual(AgentDefaults.newSessionModel(
-            engine: "codex", provider: "codex", accountModels: ["codex": "gpt-retired"], fallback: "gpt-5.6-sol",
-            catalog: catalog, configured: nil), "gpt-5.6-sol")
-        XCTAssertEqual(AgentDefaults.newSessionModel(
-            engine: "codex", provider: "codex", accountModels: remembered, fallback: "gpt-5.6-sol",
+            engine: "codex", provider: "codex", workspace: onCodex, fallback: "gpt-5.6-sol",
             catalog: nil, configured: nil), "gpt-6.1-sol")
+        // Another engine or provider than the one it last ran on: that pair's default.
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            engine: "opencode", provider: "opencode", accountModels: ["opencode": ""], fallback: "some/model",
-            catalog: nil, configured: nil), "")
+            engine: "claude", provider: "claude", workspace: onCodex, fallback: "claude-opus-5",
+            catalog: catalog, configured: nil), "claude-opus-5")
+        // No lastModel (an older server, or a session on its default), and no workspace: the default.
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            engine: "codex", provider: "codex", workspace: try workspace(engine: "codex", provider: "codex", model: nil),
+            fallback: "gpt-5.6-sol", catalog: catalog, configured: nil), "gpt-5.6-sol")
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            engine: "codex", provider: "codex", workspace: nil, fallback: "gpt-5.6-sol",
+            catalog: catalog, configured: nil), "gpt-5.6-sol")
+        // A lastModel the runner has retired drops out to the default, as a retired pin does at dispatch.
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            engine: "codex", provider: "codex", workspace: try workspace(engine: "codex", provider: "codex", model: "gpt-retired"),
+            fallback: "gpt-5.6-sol", catalog: catalog, configured: nil), "gpt-5.6-sol")
+        // OpenCode's empty model is a choice, kept.
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            engine: "opencode", provider: "opencode", workspace: try workspace(engine: "opencode", provider: "opencode", model: ""),
+            fallback: "some/model", catalog: nil, configured: nil), "")
     }
 
     func testModelsForProvider() {
@@ -968,7 +989,7 @@ final class AgentDefaultsTests: XCTestCase {
             runtimeDefaults: nil, runnerSnapshotLoaded: true, configuredProvidersLoaded: false), "")
     }
 
-    func testAntigravityShowsTheModelAModelLessSessionActuallyRunsOn() {
+    func testAntigravityShowsTheModelAModelLessSessionActuallyRunsOn() throws {
         // "" stood in for a catalog not reported yet, not a pick that outlives one: a model-less
         // session runs on the reported default, so the pin drops out and the caller re-resolves.
         // (OpenCode's "", a choice, is kept — see testLivePinKeepsEveryPinTheCatalogCannotSpeakFor.)
@@ -977,8 +998,9 @@ final class AgentDefaultsTests: XCTestCase {
                                                configured: nil, runtimeDefaults: nil))
         }
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            engine: "antigravity", provider: "antigravity", accountModels: ["antigravity": ""], fallback: "gemini-3.8-flash",
-            catalog: agyCatalog, configured: nil), "gemini-3.8-flash")
+            engine: "antigravity", provider: "antigravity",
+            workspace: try workspace(engine: "antigravity", provider: "antigravity", model: ""),
+            fallback: "gemini-3.8-flash", catalog: agyCatalog, configured: nil), "gemini-3.8-flash")
         // A pin the runner still lists stays; one it no longer lists falls to the current default.
         XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", engine: "antigravity", provider: "antigravity",
                                              catalog: agyCatalog, configured: nil,
@@ -986,7 +1008,8 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertNil(AgentDefaults.livePin("gemini-2.9-pro", engine: "antigravity", provider: "antigravity",
                                            catalog: agyCatalog, configured: nil, runtimeDefaults: nil))
         XCTAssertEqual(AgentDefaults.newSessionModel(
-            engine: "antigravity", provider: "antigravity", accountModels: ["antigravity": "gemini-2.9-pro"],
+            engine: "antigravity", provider: "antigravity",
+            workspace: try workspace(engine: "antigravity", provider: "antigravity", model: "gemini-2.9-pro"),
             fallback: "gemini-3.8-flash", catalog: agyCatalog, configured: nil), "gemini-3.8-flash")
         // Judged against agy's own rows: Claude's catalog says nothing about a Gemini pin, and the
         // id agy itself reports as its default is current by definition.

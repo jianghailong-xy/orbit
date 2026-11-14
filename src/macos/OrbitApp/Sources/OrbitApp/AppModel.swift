@@ -49,11 +49,6 @@ final class AppModel {
     var user: User? {
         didSet { refreshAvatar() }
     }
-    private var pendingDefaultModels: [String: String] = [:]
-    @ObservationIgnored private var defaultModelWrite: Task<Void, Never>?
-    var defaultModels: [String: String] {
-        (user?.preferences?.defaultModels ?? [:]).merging(pendingDefaultModels) { _, picked in picked }
-    }
     /// The account's profile photo, once fetched — drawn wherever the account's avatar is
     /// (`AccountAvatar`). Nil while the account has none, or before it has arrived; the name's first
     /// letter stands in.
@@ -649,7 +644,6 @@ final class AppModel {
         consoleRegistry?.rememberDefaultPermissionMode = { [weak self] raw in
             self?.rememberDefaultPermissionMode(raw)
         }
-        consoleRegistry?.accountDefaultModels = { [weak self] in self?.defaultModels ?? [:] }
         consoleRegistry?.managedRunner = managedRunnerModel
         consoleRegistry?.seedSessionContext = { [weak self] console in
             guard let self, let session = self.session(id: console.sessionID) else { return }
@@ -688,34 +682,6 @@ final class AppModel {
         guard let api else { return }
         do { user = try await api.updatePreferences(req) }
         catch { errorText = "Couldn't save preferences." }
-    }
-
-    /// Keep a model pick available to the next draft immediately, then sync it. Remembered per engine
-    /// and provider — `<engine>:<provider>` (docs/provider-engine-contract.md §6.5): one key's model on
-    /// Claude Code is not its model on DeepSeek Harness. Serialize writes so quickly choosing two models
-    /// cannot leave the account remembering the older choice.
-    func rememberDefaultModel(_ model: String, engine: String, provider: String) {
-        let key = AgentDefaults.defaultModelKey(engine: engine, provider: provider)
-        rememberDefaultModel(model, key: key)
-    }
-
-    private func rememberDefaultModel(_ model: String, key provider: String) {
-        guard let api, defaultModels[provider] != model else { return }
-        pendingDefaultModels[provider] = model
-        let previous = defaultModelWrite
-        let generation = apiGeneration
-        defaultModelWrite = Task {
-            await previous?.value
-            guard generation == apiGeneration else { return }
-            if let updated = try? await api.updatePreferences(
-                UpdatePreferencesRequest(defaultModels: [provider: model])),
-               generation == apiGeneration {
-                user = updated
-                if pendingDefaultModels[provider] == model {
-                    pendingDefaultModels.removeValue(forKey: provider)
-                }
-            }
-        }
     }
 
     /// Persist the composer's last-picked reasoning effort as the account default (synced across
@@ -913,9 +879,6 @@ final class AppModel {
 
     func logout() {
         apiGeneration &+= 1
-        pendingDefaultModels = [:]
-        defaultModelWrite?.cancel()
-        defaultModelWrite = nil
         pollTask?.cancel()
         pollTask = nil
         appPoll = nil

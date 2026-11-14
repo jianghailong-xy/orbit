@@ -3,15 +3,22 @@ import Foundation
 /// A task's engine and provider pins (docs/provider-engine-contract.md §1.2, board 6): what its runs use
 /// instead of its assignee workspace's, read and written the web's way (TaskDetailPanel's Engine and
 /// Provider fields). The engine is the CLI that runs it; the provider where its credential comes from —
-/// one that engine runs. Unpinned, a task runs on what its assignee's project last ran.
+/// one that engine runs. Unpinned, a task runs on what the server's `runsWith` says dispatch would use
+/// (its project's coordinator session, else the workspace's newest person-opened session); an older
+/// server sends none, and the assignee workspace's lastEngine/lastProvider stand in.
 public struct TaskRunPin: Equatable, Sendable {
     /// The engine pinned on the task, nil when it inherits one.
     public let pinnedEngine: String?
     /// The credential pinned on the task, nil when it inherits one.
     public let pinnedProvider: String?
-    /// What the assignee's project last ran on, engine and provider both — what an unpinned task runs.
+    /// What an unpinned task runs on, engine and provider both: the server's `runsWith`, else what the
+    /// assignee's project last ran on.
     public let assigneeEngine: String
     public let assigneeProvider: String
+    /// The key or pool an unpinned task runs on by the server's `runsWith` — what the Provider field says
+    /// in place of "Engine default" while no engine is pinned. Nil on an engine's own sign-in, under a
+    /// pin, and from an older server.
+    public let runsWithKey: String?
     /// The engine its runs use: its own pin, else — under a provider an older client pinned alone — that
     /// provider's default engine, else the assignee's.
     public let runEngine: String
@@ -24,8 +31,17 @@ public struct TaskRunPin: Equatable, Sendable {
     public init(task: TaskItem, assignee: Agent?, configured: [ConfiguredProvider], runners: [Runner]? = nil) {
         pinnedProvider = task.provider
         pinnedEngine = ProviderEngines.isEngine(task.engine) ? task.engine : nil
-        assigneeProvider = assignee?.defaultProvider ?? "claude"
-        assigneeEngine = assignee?.defaultEngine(configured: configured) ?? "claude"
+        // Under a pin it is the pin, which the fields already say.
+        let unpinned = task.runsWith.flatMap { $0.source != nil && $0.source != "TASK_PIN" ? $0 : nil }
+        if let unpinned {
+            assigneeProvider = unpinned.provider ?? assignee?.defaultProvider ?? "claude"
+            assigneeEngine = ProviderEngines.sessionEngine(unpinned.engine, provider: assigneeProvider,
+                                                           configured: configured)
+        } else {
+            assigneeProvider = assignee?.defaultProvider ?? "claude"
+            assigneeEngine = assignee?.defaultEngine(configured: configured) ?? "claude"
+        }
+        runsWithKey = pinnedEngine == nil && unpinned?.providerBuiltin == false ? unpinned?.provider : nil
         runEngine = pinnedEngine
             ?? pinnedProvider.flatMap { ProviderEngines.defaultEngine(ofProvider: $0, configured: configured) }
             ?? assigneeEngine

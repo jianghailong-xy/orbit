@@ -96,6 +96,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// runs on Claude Code, OpenCode and DeepSeek Harness alike). Nil from an older server, and where
     /// nobody can tell; `defaultEngine(configured:)` reads it.
     public let lastEngine: String?
+    /// The model that session ran on — what a new-session draft on `lastEngine`/`lastProvider` starts
+    /// with (`AgentDefaults.newSessionModel`). Nil from an older server, and where it ran on its default.
+    public var lastModel: String? = nil
     /// @deprecated The same derived value under its old name, served for builds that predate
     /// `lastProvider`. Read `defaultProvider` instead of either.
     public let provider: String?
@@ -156,7 +159,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let repoUrl: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, lastProvider, lastEngine, provider, model, permissionMode, effort, workDir, repoUrl
+        case id, name, lastProvider, lastEngine, lastModel, provider, model, permissionMode, effort, workDir, repoUrl
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
@@ -172,6 +175,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         name = try c.decode(String.self, forKey: .name)
         lastProvider = try c.decodeIfPresent(String.self, forKey: .lastProvider)
         lastEngine = try c.decodeIfPresent(String.self, forKey: .lastEngine)
+        lastModel = try c.decodeIfPresent(String.self, forKey: .lastModel)
         provider = try c.decodeIfPresent(String.self, forKey: .provider)
         model = try c.decodeIfPresent(String.self, forKey: .model)
         permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
