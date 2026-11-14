@@ -16,6 +16,8 @@ sed -i '' \
   -e 's/^private struct CoordinatorHandoffConfirmPresentation/struct CoordinatorHandoffConfirmPresentation/' \
   -e 's/@Environment(\\.horizontalSizeClass) private var horizontalSizeClass/@Environment(\\.horizontalSizeClass) var horizontalSizeClass/' \
   Shared/Views/ComposerView.swift
+# The Mac probe keeps the app's own types but not its entry point: Probe.swift is the @main.
+sed -i '' -e 's/^@main$//' Shared/OrbitApp.swift
 grep -n "^struct ContextWindowDetailPresentation\|^struct CoordinatorHandoffConfirmPresentation" Shared/Views/ComposerView.swift
 xcodegen generate >/dev/null || exit 1
 STATUS=0

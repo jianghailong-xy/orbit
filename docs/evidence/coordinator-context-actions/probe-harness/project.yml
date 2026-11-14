@@ -33,6 +33,7 @@ targets:
       - path: Shared
         excludes:
           - "OrbitApp.swift"
+          - "MenuBarIcon.swift"
           - "HotKeyManager.swift"
           - "UpdaterModel.swift"
           - "RunnerControl.swift"
@@ -57,9 +58,8 @@ targets:
     sources:
       - path: Probe.swift
       - path: ../src/macos/Assets.xcassets
+      # OrbitApp.swift stays (other shared files name its types); run.sh strips its @main.
       - path: Shared
-        excludes:
-          - "OrbitApp.swift"
     dependencies:
       - package: OrbitKit
         product: OrbitKit
