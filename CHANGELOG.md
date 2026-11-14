@@ -29,6 +29,12 @@ Its notes also correct the 0.1.260 notes' lists of migrations and security fixes
 
 ### Added
 
+- SubAgents. A session's `delegate` tool runs a child engine in the session's working directory or in another
+  workspace, on a provider and model routed by tier across the enabled providers. Its steps are nested in the
+  parent's transcript on every client. An agent's settings have a SubAgents group, the Providers page a Tier
+  column, and the API is `GET /sessions/:id/subagents`.
+- A request to take a task out of its project reaches the owner and is answered in the source project's
+  conversation (web, macOS/iOS).
 - Session Settings on every client (a web drawer, an iOS/macOS sheet, an Android page). A session's own
   environment variables sit over the workspace's, with Restart to reload a live engine. It also holds
   notification overrides and a mute, the session's labels and public link, and its usage and engine version.
@@ -48,6 +54,8 @@ Its notes also correct the 0.1.260 notes' lists of migrations and security fixes
   updated runner. A release postponed with Later keeps its plain deferral.
 - Project pages (web, macOS/iOS, Android) leave off the crossings their target's coordinator conversation
   already answers, and trashing an open project's coordinator opens the next one at once.
+- The upgrade skill builds the `/dl` runner from the newest release tag behind the deployed commit, so a deploy
+  between releases no longer publishes new runner code under the last release's number.
 - The main checkout's Commit sends a default message naming the chosen files instead of asking for one.
 - The "Queued · runner updating" note sits on the queued turn the update holds, not under the last delivered
   message (web, macOS/iOS, Android).
@@ -87,8 +95,9 @@ These were merged before `v0.1.260` was tagged, but that release did not move th
 
 ### Upgrade notes
 
-- Two additive migrations since `v0.1.260`: `0700_session_settings` and `0770_main_checkout_discard`. Runners
-  self-update; the update to 0.1.261 is taken under the rules of the runner it replaces. See the [release notes](release-notes/0.1.261.md).
+- Seven additive migrations since `v0.1.260`: `0524`, `0526`, `0527`, `0528` and `0642` for SubAgents,
+  `0700_session_settings` and `0770_main_checkout_discard`. Runners self-update; the update to 0.1.261 is taken
+  under the rules of the runner it replaces. See the [release notes](release-notes/0.1.261.md).
 
 ## 0.1.257 to 0.1.260
 
