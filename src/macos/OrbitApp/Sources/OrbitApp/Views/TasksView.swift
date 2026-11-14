@@ -2583,6 +2583,12 @@ private struct TaskDetailContent: View {
 
     /// The task's input files. On the page when there are some, and in the Runs with sheet, each
     /// with its own file picker (`addFile`): a sheet cannot raise the page's.
+    /// Whether the "Remove input?" confirmation is up, written back to nil when it closes.
+    private var inputToRemovePresented: Binding<Bool> {
+        Binding(get: { inputToRemove != nil },
+                set: { if !$0 { inputToRemove = nil } })
+    }
+
     private func inputsSection(_ task: TaskItem, addFile: @escaping () -> Void) -> some View {
         let inputs = task.attachments ?? []
         return Section {
@@ -2607,8 +2613,7 @@ private struct TaskDetailContent: View {
                     // On the row's own button, so the panel opens against it rather than at the top
                     // of the page.
                     .orbitConfirmation({ _ in TaskDetailCopy.removeInputTitle },
-                                        isPresented: Binding(get: { inputToRemove != nil },
-                                                             set: { if !$0 { inputToRemove = nil } }),
+                                        isPresented: inputToRemovePresented,
                                         presenting: inputToRemove) { input in
                         Button(TaskDetailCopy.remove, role: .destructive) {
                             Task { await tasks.removeInput(taskID, inputID: input.id) }

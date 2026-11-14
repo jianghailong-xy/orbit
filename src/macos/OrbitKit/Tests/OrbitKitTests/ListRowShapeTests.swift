@@ -6,8 +6,10 @@ import XCTest
 /// under a `List` holds an `if` or a second `ForEach`. That conditional row shape is what aborted the
 /// outline list's row reload (beta.242, `-NSLayoutConstraint setActive:` under
 /// `OutlineListCoordinator`); the sidebar fix established the flat row array, and this holds every
-/// other list to it. Comments and string literals are blanked before the scan, so prose about the
-/// unsafe shape can't fail it.
+/// other list to it. A List's rows are often built by a `@ViewBuilder` the List calls (the
+/// sidebar's `workspaceRows` is one), so the scan follows those builders too — otherwise putting the
+/// branch back into the helper would pass unseen. Comments and string literals are blanked before
+/// the scan, so prose about the unsafe shape can't fail it.
 final class ListRowShapeTests: XCTestCase {
     // MARK: the real sources
 
@@ -88,31 +90,137 @@ final class ListRowShapeTests: XCTestCase {
         XCTAssertEqual(scan(path: "Static.swift", source: source).count, 1)
     }
 
+    /// A List's rows often come from a builder it calls. Putting the branch back into that builder is
+    /// the same defect (the sidebar's `workspaceRows` is one of them), so the scan follows it.
+    func testTheScanFollowsTheBuildersAListCalls() {
+        let source = """
+        struct D: View {
+            var body: some View {
+                List(selection: $selected) {
+                    Section {
+                        rows
+                    }
+                }
+            }
+
+            @ViewBuilder private var rows: some View {
+                ForEach(itemList) { item in
+                    if item.id != firstID {
+                        Row(item: item)
+                    } else {
+                        Row(item: item).bold()
+                    }
+                }
+            }
+        }
+        """
+        XCTAssertEqual(scan(path: "Builder.swift", source: source).count, 1)
+    }
+
     // MARK: - the scan
 
     /// One line per violation, naming the file, the line and what is wrong.
     private func scan(path: String, source: String) -> [String] {
         let text = Array(stripped(source))
+        let builders = viewBuilders(text)
         var violations: [String] = []
         for start in listStarts(text) {
             let line = lineNumber(of: start, in: text)
             guard let body = listBody(text, nameAt: start) else { continue }
-            let forEaches = forEachStarts(body)
-            if forEaches.isEmpty {
-                violations.append("\(path):\(line) List draws no rows through a ForEach")
-                continue
+            // The List's row areas: its own content, and the builders it calls directly (outside a
+            // ForEach closure), recursively.
+            let areas = [("List", body)] + reachableBuilders(body, in: builders, seen: [], depth: 0)
+            var forEachCount = 0
+            for (area, areaBody) in areas {
+                let forEaches = forEachStarts(areaBody)
+                forEachCount += forEaches.count
+                for forEach in forEaches {
+                    guard let closure = forEachClosure(areaBody, nameAt: forEach) else { continue }
+                    if containsIf(closure) {
+                        violations.append("\(path):\(line) an `if` sits inside a ForEach closure in \(area)")
+                    }
+                    if hasForEach(closure) {
+                        violations.append("\(path):\(line) a second ForEach sits inside a ForEach closure in \(area)")
+                    }
+                }
             }
-            for forEach in forEaches {
-                guard let closure = forEachClosure(body, nameAt: forEach) else { continue }
-                if containsIf(closure) {
-                    violations.append("\(path):\(line) an `if` sits inside a ForEach closure under a List")
-                }
-                if hasForEach(closure) {
-                    violations.append("\(path):\(line) a second ForEach sits inside a ForEach closure under a List")
-                }
+            if forEachCount == 0 {
+                violations.append("\(path):\(line) List draws no rows through a ForEach")
             }
         }
         return violations
+    }
+
+    /// The `@ViewBuilder` funcs and `some View` properties in the file, by name: the helpers a List
+    /// can hand its rows to.
+    private func viewBuilders(_ text: [Character]) -> [String: [Character]] {
+        var builders: [String: [Character]] = [:]
+        for start in identifierStarts("func", in: text) {
+            var i = skipSpace(text, start + 4)
+            let nameStart = i
+            while i < text.count, isIdent(text[i]) { i += 1 }
+            guard i > nameStart else { continue }
+            let name = String(text[nameStart..<i])
+            i = skipSpace(text, i)
+            guard i < text.count, text[i] == "(", let afterParams = matching(text, i, open: "(", close: ")")
+            else { continue }
+            guard let open = nextIndex(of: "{", in: text, from: afterParams),
+                  let end = matching(text, open, open: "{", close: "}") else { continue }
+            builders[name] = Array(text[(open + 1)..<(end - 1)])
+        }
+        for start in identifierStarts("var", in: text) {
+            var i = skipSpace(text, start + 3)
+            let nameStart = i
+            while i < text.count, isIdent(text[i]) { i += 1 }
+            guard i > nameStart else { continue }
+            let name = String(text[nameStart..<i])
+            i = skipSpace(text, i)
+            guard i < text.count, text[i] == ":" else { continue }
+            guard let open = nextIndex(of: "{", in: text, from: i) else { continue }
+            // A `some View` property: the type between the colon and the brace says View.
+            let type = String(text[i..<open])
+            guard type.contains("View") else { continue }
+            guard let end = matching(text, open, open: "{", close: "}") else { continue }
+            builders[name] = Array(text[(open + 1)..<(end - 1)])
+        }
+        return builders
+    }
+
+    /// The builders `body` calls outside any ForEach closure, and what those call in turn. A builder
+    /// called *inside* a ForEach closure is a row's own view, not a row area, so it is not followed.
+    private func reachableBuilders(_ body: [Character], in builders: [String: [Character]],
+                                   seen: Set<String>, depth: Int) -> [(String, [Character])] {
+        guard depth < 5 else { return [] }
+        let direct = directText(body)
+        var found: [(String, [Character])] = []
+        var visited = seen
+        for (name, builderBody) in builders.sorted(by: { $0.key < $1.key }) {
+            guard !visited.contains(name), !identifierStarts(name, in: direct).isEmpty else { continue }
+            visited.insert(name)
+            found.append((name, builderBody))
+            found += reachableBuilders(builderBody, in: builders, seen: visited, depth: depth + 1)
+        }
+        return found
+    }
+
+    /// The body with every ForEach closure blanked: what the List draws directly, rather than hands
+    /// to a row.
+    private func directText(_ body: [Character]) -> [Character] {
+        var out = body
+        for start in forEachStarts(body) {
+            guard let range = forEachClosureRange(body, nameAt: start) else { continue }
+            for i in range where out[i] != "\n" { out[i] = " " }
+        }
+        return out
+    }
+
+    private func nextIndex(of c: Character, in text: [Character], from: Int) -> Int? {
+        var i = from
+        while i < text.count {
+            if text[i] == c { return i }
+            i += 1
+        }
+        return nil
     }
 
     /// `List`, `List(...)`, `List<...>(...)` — never `Foo.List` and never a name that merely starts
@@ -173,13 +281,19 @@ final class ListRowShapeTests: XCTestCase {
 
     /// The closure of a `ForEach(...)` call, or nil when the name isn't one.
     private func forEachClosure(_ text: [Character], nameAt start: Int) -> [Character]? {
+        guard let range = forEachClosureRange(text, nameAt: start) else { return nil }
+        return Array(text[(range.lowerBound + 1)..<(range.upperBound - 1)])
+    }
+
+    /// The braces of a `ForEach(...)` call's closure, `{` through `}`.
+    private func forEachClosureRange(_ text: [Character], nameAt start: Int) -> Range<Int>? {
         var i = skipSpace(text, start + 7)
         guard i < text.count, text[i] == "(" else { return nil }
         guard let after = matching(text, i, open: "(", close: ")") else { return nil }
         i = skipSpace(text, after)
         guard i < text.count, text[i] == "{" else { return nil }
         guard let end = matching(text, i, open: "{", close: "}") else { return nil }
-        return Array(text[(i + 1)..<(end - 1)])
+        return i..<end
     }
 
     private func skipSpace(_ text: [Character], _ from: Int) -> Int {

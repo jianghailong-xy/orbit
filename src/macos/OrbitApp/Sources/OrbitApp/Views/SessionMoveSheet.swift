@@ -161,11 +161,7 @@ struct SessionMoveSheet: View {
             if !targets.targets.isEmpty {
                 Section {
                     ForEach(SessionWorkspaceMoveLogic.rows(targets, providerName: providerName)) { row in
-                        if row.isEnabled {
-                            NavigationLink(value: row.target) { targetRow(row) }
-                        } else {
-                            targetRow(row)
-                        }
+                        workspaceTargetRow(row)
                     }
                 } header: {
                     Text(SessionMoveCopy.anotherWorkspaceGroup)
@@ -189,6 +185,16 @@ struct SessionMoveSheet: View {
             } header: {
                 Text(SessionMoveCopy.anotherWorkspaceGroup)
             }
+        }
+    }
+
+    /// One workspace row: a link when the session may go there, the greyed row itself when not.
+    /// The workspace is the row the list's ForEach draws, so that closure holds no branch.
+    @ViewBuilder private func workspaceTargetRow(_ row: SessionMoveTargetRow) -> some View {
+        if row.isEnabled {
+            NavigationLink(value: row.target) { targetRow(row) }
+        } else {
+            targetRow(row)
         }
     }
 

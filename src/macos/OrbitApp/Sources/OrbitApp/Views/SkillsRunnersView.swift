@@ -611,6 +611,29 @@ struct RunnerDetailContent: View {
     /// Change ▾ once postponed. Update Now… (`RunnerUpdateNowControl`) while available, draining or
     /// postponed for a runner that declares `self-update-now/v1`; one without it keeps the postponed
     /// card's Update Now…, which asks for Update Runner Now.
+    /// One turn the update waits for: its session's title, and how long it has run when it says.
+    /// The turn is the row the section's ForEach draws, so that closure holds no branch.
+    private func updateTurnRow(_ turn: RunnerPageFormat.UpdateCard.Turn) -> some View {
+        Button { openSession(turn.id) } label: {
+            HStack(alignment: .firstTextBaseline) {
+                Text(turn.title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 8)
+                if let running = turn.running {
+                    Text(running)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
+                RunnerChevron()
+            }
+            .foregroundStyle(Color.primary)
+            .contentShape(Rectangle())
+        }
+        .runnerRowButtonStyle()
+    }
+
     @ViewBuilder private func updateSection(_ card: RunnerPageFormat.UpdateCard) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
@@ -640,24 +663,7 @@ struct RunnerDetailContent: View {
             .listRowBackground(card.warn ? Color.orange.opacity(0.08) : nil)
             // The turns it waits for (board 4): each opens its session.
             ForEach(card.turns, id: \.id) { turn in
-                Button { openSession(turn.id) } label: {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(turn.title)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer(minLength: 8)
-                        if let running = turn.running {
-                            Text(running)
-                                .font(.orbitLabel)
-                                .foregroundStyle(Color.secondary)
-                                .lineLimit(1)
-                        }
-                        RunnerChevron()
-                    }
-                    .foregroundStyle(Color.primary)
-                    .contentShape(Rectangle())
-                }
-                .runnerRowButtonStyle()
+                updateTurnRow(turn)
             }
             if card.phase == "available", RunnerUpdateNow.offered(runner) {
                 RunnerUpdateNowControl(runnerID: runner.id, machine: RunnerPageFormat.displayName(runner),

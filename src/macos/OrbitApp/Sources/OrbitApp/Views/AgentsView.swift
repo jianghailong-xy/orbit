@@ -684,14 +684,7 @@ struct AgentPanes: View {
         // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
         // `folderListing` — so the list goes on flat there.
         ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
-            // The list draws a hairline at the top of its first row; with folder rows at the
-            // very top, that row is one of theirs (see the note on the first "Today" row
-            // below, whose trick this repeats).
-            if index == 0 {
-                folderRow(row).listRowSeparator(.hidden, edges: .top)
-            } else {
-                folderRow(row)
-            }
+            folderListRow(row, first: index == 0)
         }
         // The leading "Today" keeps no title. A list that opens on today — which is nearly
         // always — would be saying something its rows already say (each carries its own time
@@ -702,40 +695,59 @@ struct AgentPanes: View {
         // decision is the one the mock put second, `docs/mocks/ios-session-list-first-header.html`
         // — the reporter picked the first: never draw it, rather than only once it pins.)
         ForEach(Array(timeSections.enumerated()), id: \.element.id) { index, section in
-            if index == 0, section.title == "Today" {
-                // The list draws a hairline at the top of its first row — the title used to
-                // sit over it. With the title gone it reads as a stray rule above the first
-                // session, so that one row drops its top separator (measured on an iOS 26.2
-                // simulator: hiding the *section* separator, or giving the Section an empty
-                // header, both leave the line; only this removes it).
-                ForEach(section.sessions) { session in
-                    // Only the list's own first row drops the hairline above it: with
-                    // folder rows on top, the first "Today" row is not that row.
-                    if session.id == section.sessions.first?.id, folderListing.folders.isEmpty {
-                        listRow(session, projects: projectRows, marks: projectMarks)
-                            .listRowSeparator(.hidden, edges: .top)
-                    } else {
-                        listRow(session, projects: projectRows, marks: projectMarks)
-                    }
+            timeSection(index: index, section: section, foldersEmpty: folderListing.folders.isEmpty,
+                        projectRows: projectRows, projectMarks: projectMarks)
+        }
+    }
+
+    /// One folder row at the top of the list; the first drops the hairline the list draws there.
+    @ViewBuilder
+    private func folderListRow(_ row: SessionFolderRow, first: Bool) -> some View {
+        if first {
+            folderRow(row).listRowSeparator(.hidden, edges: .top)
+        } else {
+            folderRow(row)
+        }
+    }
+
+    /// One recency section: the leading "Today" without its title, the Pinned fold, or an
+    /// ordinary titled section. The section is the row this list's ForEach draws, so that closure
+    /// holds no branch or second ForEach of its own.
+    @ViewBuilder
+    private func timeSection(index: Int, section: SessionTimeSection, foldersEmpty: Bool,
+                             projectRows: [String: SessionProjectRow],
+                             projectMarks: [String: SessionProjectMark]) -> some View {
+        if index == 0, section.title == "Today" {
+            // The list draws a hairline at the top of its first row — the title used to
+            // sit over it. With the title gone it reads as a stray rule above the first
+            // session, so that one row drops its top separator (measured on an iOS 26.2
+            // simulator: hiding the *section* separator, or giving the Section an empty
+            // header, both leave the line; only this removes it).
+            ForEach(section.sessions) { session in
+                if session.id == section.sessions.first?.id, foldersEmpty {
+                    listRow(session, projects: projectRows, marks: projectMarks)
+                        .listRowSeparator(.hidden, edges: .top)
+                } else {
+                    listRow(session, projects: projectRows, marks: projectMarks)
                 }
-            } else if section.title == "Pinned" {
-                // Pinned folds to its header, as Notes' Pinned does: the rows leave the
-                // list, the header stays to bring them back. The rows are dropped here
-                // rather than through `Section(isExpanded:)`, whose disclosure only draws in
-                // the sidebar list style.
-                Section {
-                    if !pinnedCollapsed {
-                        ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                    }
-                } header: {
-                    sectionHeaderBand { pinnedSectionHeader(section.title) }
-                }
-            } else {
-                Section {
+            }
+        } else if section.title == "Pinned" {
+            // Pinned folds to its header, as Notes' Pinned does: the rows leave the
+            // list, the header stays to bring them back. The rows are dropped here
+            // rather than through `Section(isExpanded:)`, whose disclosure only draws in
+            // the sidebar list style.
+            Section {
+                if !pinnedCollapsed {
                     ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-                } header: {
-                    sectionHeaderBand { Text(section.title).textCase(nil) }
                 }
+            } header: {
+                sectionHeaderBand { pinnedSectionHeader(section.title) }
+            }
+        } else {
+            Section {
+                ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
+            } header: {
+                sectionHeaderBand { Text(section.title).textCase(nil) }
             }
         }
     }
