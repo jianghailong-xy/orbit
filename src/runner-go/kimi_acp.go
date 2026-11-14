@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -598,6 +599,7 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
 		envMCPPermissionPrompt+"=0",
+		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),
 	)
 	// Runner-hosted background jobs (mcp__orbit__bg_run). Kimi's `orbit` MCP server
 	// is configured with an empty env block on purpose and inherits this process's

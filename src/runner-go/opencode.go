@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -489,6 +490,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		envWiki:                           wikiEnv(job.WikiDisabled),
 		envOrchestrationToken:             job.OrchestrationToken,
 		envMCPPermissionPrompt:            "0",
+		envSpawnDepth:                     strconv.Itoa(job.SpawnDepth),
 	})
 	// Runner-hosted background jobs (mcp__orbit__bg_run), for `orbit mcp` to
 	// inherit; also written into the MCP server's own environment block by
@@ -917,6 +919,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			envWiki:                     wikiEnv(job.WikiDisabled),
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
+			envSpawnDepth:               strconv.Itoa(job.SpawnDepth),
 			envRunnerChild:              "1",
 		}
 		// Where `orbit mcp` reaches the runner to start a background job the runner
