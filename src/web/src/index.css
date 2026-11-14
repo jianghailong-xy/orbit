@@ -4859,6 +4859,12 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
+/* A project entry is the one focusable session row; draw its ring inside, as folder rows do, so the
+   list's edge doesn't clip the browser's outer default ring. */
+.session-project-row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
 /* Trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
   cursor: default;
@@ -13264,7 +13270,7 @@ button.chat-jump-start:hover {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--bg-base);
   font-size: 13.5px;
   cursor: pointer;
 }
@@ -16393,6 +16399,16 @@ button.chat-jump-start:hover {
 .share-page.guest-view {
   height: 100%;
   min-height: 0;
+  /* Nothing in it may reach past the pane, as nothing in the owner's console does (.workspace-view,
+     .workspace-scroll-wrap): a box the transcript positions against otherwise sits outside the
+     conversation's scroller, and the page grew taller than the window with it. */
+  position: relative;
+  overflow: hidden;
+}
+.share-page.guest-view > .share-scroll {
+  position: relative;
+  /* Reaching the end of the conversation ends the scroll there: it is not handed on to the page. */
+  overscroll-behavior: contain;
 }
 .share-subtitle {
   overflow: hidden;
@@ -16958,7 +16974,8 @@ button.chat-jump-start:hover {
 
 /* One vendor's keys on its Settings page (ProviderKeyRows, docs/mocks/settings-redesign board-4): a
    SettingsRow per key, its name over one line of what it runs on, the model it starts on, the pools it
-   is in and when it was last used; Edit and ⋯ on its right. */
+   is in and when it was last used; a borderless ⋯ and the › that says the row opens (settings-buttons
+   board 01) on its right. */
 .vk-line {
   display: flex;
   flex-wrap: wrap;
@@ -16968,13 +16985,21 @@ button.chat-jump-start:hover {
 .vk-line .infra-model {
   color: var(--text-1);
 }
-.vk-used {
+.vk-used,
+.vk-used-item {
   white-space: nowrap;
 }
 .vk-act {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
+}
+.vk-act .orbit-button-text {
+  color: var(--text-3);
+}
+.vk-chev {
+  color: var(--text-3);
+  font-size: 11px;
 }
 
 /* ============================================================================
@@ -17693,7 +17718,11 @@ button.chat-jump-start:hover {
   margin-top: 10px;
 }
 .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 140px 110px;
+  /* Top-aligned (settings-buttons board 02): the status, the quota's head and the actions sit level with
+     the name's line, however many lines the quota column takes. The last column holds a way back
+     (Resume Now, Sign in again) beside the ⋯. */
+  grid-template-columns: minmax(0, 1fr) 160px 140px 146px;
+  align-items: start;
 }
 .pool-status {
   min-width: 0;
@@ -17728,7 +17757,7 @@ button.chat-jump-start:hover {
 /* The pool's page takes accounts out, so its rows carry up to two actions: Re-add key and the
    remove mark (88 + 8 + 24px measured). */
 .pool-detail .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 130px 124px;
+  grid-template-columns: minmax(0, 1fr) 160px 130px 146px;
 }
 /* The head's gauge: the account the next session runs on, never an average of them. */
 .pool-gauge {
@@ -17942,8 +17971,70 @@ button.chat-jump-start:hover {
 .re-chip.pool-shared-chip {
   flex: none;
   margin-left: 0;
-  background: var(--brand-tint);
-  color: var(--brand);
+  font-weight: 500;
+}
+/* The pool card's head (settings-buttons board 02): a chevron that can be seen, the name on one line,
+   the whole head lit under the pointer since a press anywhere on it folds (foldFromAnywhere). */
+.pool-card .re-head:hover {
+  background: var(--bg-hover);
+}
+.re-chev.pool-chev {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.pool-card .re-runner {
+  white-space: nowrap;
+}
+.pool-card .re-summary {
+  border-left: 0;
+  padding-left: 0;
+}
+/* A row's ⋯, quiet beside the buttons that are a way back. */
+.pool-row .pool-more.orbit-button:not(:hover):not(:active) {
+  color: var(--text-3);
+}
+/* A status as a dot before plain words (AccountPauseStatus dot): on rows whose buttons sit beside it. */
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 24px;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.status-dot::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+.status-dot-success::before,
+.status-dot-green::before {
+  background: var(--success-solid);
+}
+.status-dot-warning::before,
+.status-dot-orange::before,
+.status-dot-gold::before {
+  background: var(--warning-solid);
+}
+.status-dot-error::before,
+.status-dot-red::before {
+  background: var(--error-solid);
+}
+.status-dot-info::before,
+.status-dot-blue::before {
+  background: var(--brand);
+}
+.status-dot-error,
+.status-dot-red {
+  color: var(--error);
 }
 .pool-people {
   display: inline-flex;
@@ -17975,9 +18066,8 @@ button.chat-jump-start:hover {
   margin-top: 1px;
   font-size: 12px;
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps rather than cut: an ellipsis left "· …" where the last part was (settings-buttons board 02). */
+  overflow-wrap: anywhere;
 }
 
 /* ── the pool's page: its title, its people and its rules ─────────────────────── */
@@ -18368,12 +18458,6 @@ button.chat-jump-start:hover {
 }
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
-}
-/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
-   as something wrong with it. At rest only: under the pointer and pressed it keeps the danger
-   button's own red. */
-.pool-row .pool-signout.orbit-button:not(:hover):not(:active) {
-  color: var(--text-3);
 }
 .pool-login-reset {
   margin-top: 3px;
@@ -25310,6 +25394,7 @@ button.project-open-item-action:disabled {
 .wk-page .wk-contents-btn { display: none; }
 
 .wk-toc { display: block; min-width: 0; margin-left: -8px; padding-top: 2px; }
+.wk-dir-resizer { display: none; }
 .wk-toc-item { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border-radius: 6px;
                font-size: 13.5px; color: var(--text-1); white-space: nowrap; min-width: 0; text-decoration: none; }
 .wk-toc-item:hover { background: var(--bg-hover); color: var(--text-1); }
@@ -25487,7 +25572,7 @@ button.project-open-item-action:disabled {
      docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
      Settings and Share at the foot. The head row and the search line above it give way to it; the main column
      starts at the top, the home's line first. */
-  .wk-page--railed { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+  .wk-page--railed { display: grid; grid-template-columns: var(--wk-dir-w, 248px) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
                      column-gap: 32px; align-items: start; }
   .wk-page--railed > .wk-title-row, .wk-page--railed > .wk-search { display: none; }
   /* The home's line was the head's; Activity has its own head and status row (as on a phone). */
@@ -25498,6 +25583,11 @@ button.project-open-item-action:disabled {
                                                 top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
                                                 margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
                                                 border-right: 1px solid var(--border-subtle); background: var(--bg-raised); }
+  /* The column's border drags its width, as the app sidebar's does (.tp-resizer). Inside the column's edge: the column
+     clips what lies past it. */
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer { display: block; position: absolute; top: 0; right: 0; width: 6px;
+                                                                  height: 100%; z-index: 5; cursor: col-resize; }
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer:hover { background: rgba(51, 112, 255, 0.12); }
   .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
   .wk-rail-head { display: flex; align-items: center; gap: 12px; height: 32px; }
   .wk-rail-head .wk-select .v, .wk-rail-head .wk-space-tag { max-width: 150px; }
@@ -26292,7 +26382,7 @@ button.agent-progress-agent:hover {
 .wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
 .wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
+.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); font: inherit; }
 .wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
 .wt-recovery-repair-status { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); color: var(--text-1); text-align: left; cursor: pointer; font: inherit; }
 .wt-recovery-repair-status.is-running { border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
