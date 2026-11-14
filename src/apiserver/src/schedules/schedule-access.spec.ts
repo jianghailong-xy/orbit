@@ -18,6 +18,7 @@ import {
   scheduleRunDisallowedTools,
   scheduleRunMode,
 } from './schedule-access';
+import { heldReasonSentence } from './schedule-start-check';
 
 const WORKSPACE_ALLOWED = ['mcp__orbit__*', 'Bash(npm install:*)', 'Edit'];
 
@@ -30,10 +31,41 @@ test('CHECK_ONLY on Claude Code runs in Don\'t Ask; every other engine and level
   assert.equal(scheduleRunMode('CHECK_ONLY', 'opencode'), PermissionMode.PLAN);
 });
 
-test('a CHECK_ONLY run on Claude Code may fetch a URL and use Orbit, and keeps none of the workspace\'s allow rules', () => {
+test('a CHECK_ONLY run on Claude Code is allowed exactly what a check needs: no wildcard, no workspace rule', () => {
   const allowed = scheduleRunAllowedTools(WORKSPACE_ALLOWED, 'CHECK_ONLY', 'claude');
-  assert.deepEqual(allowed, ['mcp__orbit__*', 'WebFetch', 'WebSearch']);
-  assert.deepEqual([...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS], ['WebFetch', 'WebSearch']);
+  assert.deepEqual(allowed, [
+    'mcp__orbit__schedule_run_report',
+    'mcp__orbit__schedule_get',
+    'mcp__orbit__schedule_list',
+    'mcp__orbit__schedule_update',
+    'mcp__orbit__schedule_end',
+    'mcp__orbit__notify',
+    'mcp__orbit__task_get',
+    'mcp__orbit__task_list',
+    'mcp__orbit__session_get',
+    'mcp__orbit__session_search',
+    'mcp__orbit__project_get',
+    'mcp__orbit__wiki_search',
+    'mcp__orbit__wiki_get',
+    'mcp__orbit__file_fetch',
+    'mcp__orbit__file_list',
+    'WebFetch',
+    'WebSearch',
+  ]);
+  assert.deepEqual(allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
+  // Don't Ask runs only what an allow rule names, so whatever is absent here is refused before it is called.
+  assert.ok(!allowed.includes('mcp__orbit__*'), 'no wildcard over Orbit\'s tools');
+  for (const tool of [
+    'bg_run', 'session_merge', 'task_start', 'task_update', 'task_reopen', 'session_send', 'project_send',
+    'task_create', 'task_create_batch', 'project_create', 'session_create', 'task_comment', 'file_upload',
+    'integration_request_promotion', 'provider_update', 'agent_update', 'runner_delete',
+  ]) {
+    assert.ok(!allowed.includes(`mcp__orbit__${tool}`), tool);
+  }
+  // Only Orbit tools that read, report the run, or touch the run's own schedule.
+  for (const tool of allowed.filter((t) => t.startsWith('mcp__orbit__'))) {
+    assert.match(tool, /^mcp__orbit__(schedule_(run_report|get|list|update|end)|notify|[a-z]+_(get|list|search|fetch))$/, tool);
+  }
   // A workspace rule could cover a writing command or a file edit, which Don't Ask would then run.
   assert.ok(!allowed.includes('Bash(npm install:*)'));
   assert.ok(!allowed.includes('Edit'));
@@ -41,18 +73,21 @@ test('a CHECK_ONLY run on Claude Code may fetch a URL and use Orbit, and keeps n
   assert.ok(!allowed.some((rule) => rule.startsWith('Bash')));
 });
 
-test('a CHECK_ONLY run on Claude Code may not use the file tools or Orbit\'s create doors, on either surface', () => {
+test('a CHECK_ONLY run on Claude Code may not use the file tools or the Orbit CLI, whatever allows them', () => {
   const denied = scheduleRunDisallowedTools(['X'], 'CHECK_ONLY', 'claude');
   assert.deepEqual(denied, ['X', ...CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS]);
   for (const tool of ['Edit', 'Write', 'NotebookEdit']) assert.ok(denied.includes(tool), tool);
-  for (const door of ['task_create', 'task_create_batch', 'project_create', 'session_create']) {
-    assert.ok(denied.includes(`mcp__orbit__${door}`), door);
-  }
-  // The runner allows `Bash(<orbit> task create *)`; these deny rules win over it (measured, §7 of the record).
-  for (const words of ['task create', 'task create-batch', 'project create', 'session create']) {
-    assert.ok(denied.includes(`Bash(* ${words} *)`), words);
-  }
+  // The runner allows `Bash(<orbit> <command> *)` for every CLI command, quoted and unquoted; these win over it.
+  assert.ok(denied.includes('Bash(*/orbit *)'));
+  assert.ok(denied.includes("Bash('*/orbit' *)"));
   assert.deepEqual(scheduleRunDisallowedTools(['X', 'Edit'], 'CHECK_ONLY', 'claude').filter((t) => t === 'Edit'), ['Edit']);
+});
+
+test('a run held because the account default is narrower says what to change', () => {
+  const sentence = heldReasonSentence('MODE_WIDER_THAN_ACCOUNT_DEFAULT');
+  assert.ok(sentence);
+  assert.match(sentence, /Set Default permission mode in Settings > General to Default, then resume the schedule\.$/);
+  assert.equal(heldReasonSentence('WORKSPACE_DELETED'), null);
 });
 
 test('every other run keeps the claim\'s tools: CHECK_ONLY elsewhere, OPEN_PR, and a session that is no run', () => {

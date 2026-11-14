@@ -61,7 +61,7 @@ import {
 } from './schedule-envelope';
 import { ScheduleRuleError, assertTimezone, nextDueAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
 import { SCHEDULE_ACCESS_NOT_ENFORCEABLE, scheduleRunMode } from './schedule-access';
-import { scheduleStartCheck } from './schedule-start-check';
+import { heldReasonSentence, scheduleStartCheck } from './schedule-start-check';
 
 /** At most this many schedules that are not ENDED per account (§3). */
 export const SCHEDULE_LIMIT = 50;
@@ -432,7 +432,12 @@ export class SchedulesService {
           if (s.state !== 'HELD') return;
           const check = await scheduleStartCheck(tx, s);
           if (!check.ok) {
-            throw refusal('CONFLICT', 'SCHEDULE_START_CHECK_FAILED', `The schedule is still held: ${check.reason}.`);
+            const why = heldReasonSentence(check.reason);
+            throw refusal(
+              'CONFLICT',
+              'SCHEDULE_START_CHECK_FAILED',
+              `The schedule is still held: ${check.reason}.${why ? ` ${why}` : ''}`,
+            );
           }
         });
         if (resumed.heldReason === null) return resumed;

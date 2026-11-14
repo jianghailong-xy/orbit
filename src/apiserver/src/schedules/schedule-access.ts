@@ -17,10 +17,12 @@
  *
  * Claude Code is the exception for CHECK_ONLY: it runs in Don't Ask, not Plan. Its headless Plan never
  * permission-checks Bash, so `touch` and `date > file` ran there (measured on 2.1.325); in Don't Ask its own
- * read-only check still runs `git log`, `ls`, `cat` and `grep`, and refuses every shell command that writes. The run
- * keeps no workspace "Always allow" rule (one could cover a writing command or Edit), may fetch with WebFetch and
- * WebSearch, and may not use the file tools or Orbit's create doors, which Plan's own gate refused before
- * (docs/scheduled-tasks-engine-modes.md §7).
+ * read-only check still runs `git log`, `ls`, `cat` and `grep`, and refuses every shell command that writes. Don't
+ * Ask runs only what an allow rule names, so the run's allow list is short and explicit: no workspace "Always
+ * allow" rule (one could cover a writing command or Edit), no `mcp__orbit__*` wildcard (`bg_run` would start a shell
+ * outside Claude's check, and Plan's runner gate refused Orbit's writes before), only the Orbit tools a check needs,
+ * and WebFetch/WebSearch. The Orbit CLI, which the runner allows by its absolute path for every command it offers,
+ * is denied outright (docs/scheduled-tasks-engine-modes.md §7).
  */
 import {
   AgentProvider,
@@ -29,8 +31,6 @@ import {
   PermissionMode,
   derivePermissionSemantics,
 } from '@orbit/shared';
-
-import { ALWAYS_ALLOWED_TOOLS } from '../common/permission-mode';
 
 import type { AccessLevel } from './schedule-envelope';
 
@@ -70,31 +70,57 @@ function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string
   return level === 'CHECK_ONLY' && (provider ?? AgentProvider.CLAUDE) === AgentProvider.CLAUDE;
 }
 
-/** What a CHECK_ONLY run on Claude Code may use without asking, beyond Orbit's own tools: fetching a URL. */
-export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = ['WebFetch', 'WebSearch'];
+/**
+ * Everything a CHECK_ONLY run on Claude Code may call beyond what Claude Code judges read-only by itself (Read,
+ * Grep, Glob, `git log`, `ls`, …). In Don't Ask nothing else runs, so each Orbit tool here is one a check needs:
+ *
+ *   * the run's own schedule: report the run, read it, and change or end it, which the server already holds to the
+ *     schedule the run serves and to its envelope (§8.3);
+ *   * `notify`, a line in front of the owner;
+ *   * reads: tasks, sessions, projects, the wiki and Orbit Files.
+ *
+ * Absent on purpose: `bg_run` (a shell outside Claude's check), `session_merge`, `task_start`, `task_update`,
+ * `session_send`, the create doors and every other Orbit write; `file_upload`, since a report carries links, not files.
+ */
+export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
+  'mcp__orbit__schedule_run_report',
+  'mcp__orbit__schedule_get',
+  'mcp__orbit__schedule_list',
+  'mcp__orbit__schedule_update',
+  'mcp__orbit__schedule_end',
+  'mcp__orbit__notify',
+  'mcp__orbit__task_get',
+  'mcp__orbit__task_list',
+  'mcp__orbit__session_get',
+  'mcp__orbit__session_search',
+  'mcp__orbit__project_get',
+  'mcp__orbit__wiki_search',
+  'mcp__orbit__wiki_get',
+  'mcp__orbit__file_fetch',
+  'mcp__orbit__file_list',
+  'WebFetch',
+  'WebSearch',
+];
 
 /**
- * What a CHECK_ONLY run on Claude Code may not call: the file tools, and Orbit's create doors as MCP tools and as
- * the Orbit CLI, which the runner otherwise allows (`Bash(<orbit> task create *)`; a deny rule wins over it).
+ * What a CHECK_ONLY run on Claude Code may not call, even where an allow rule names it: the file tools, and the
+ * Orbit CLI. The runner allows the CLI by its absolute path for every command it offers, writes included
+ * (`Bash(/usr/local/bin/orbit task update *)`, quoted and unquoted); a deny rule wins over those. The run reads
+ * Orbit through the tools above instead.
  */
 export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
   'Edit',
   'Write',
   'NotebookEdit',
-  'mcp__orbit__task_create',
-  'mcp__orbit__task_create_batch',
-  'mcp__orbit__project_create',
-  'mcp__orbit__session_create',
-  'Bash(* task create *)',
-  'Bash(* task create-batch *)',
-  'Bash(* project create *)',
-  'Bash(* session create *)',
+  'Bash(*/orbit *)',
+  "Bash('*/orbit' *)",
 ];
 
 /**
- * The tools the run's session may use without asking. A CHECK_ONLY run on Claude Code gets Orbit's own tools and
- * WebFetch/WebSearch only: in Don't Ask an allow rule is all that runs a call the engine does not judge read-only,
- * so the workspace's rules are left out. Every other run keeps what the claim computed.
+ * The tools the run's session may use without asking. A CHECK_ONLY run on Claude Code gets exactly
+ * CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: in Don't Ask an allow rule is all that runs a call the engine does not judge
+ * read-only, so neither the workspace's rules nor the `mcp__orbit__*` wildcard is kept. Every other run keeps what
+ * the claim computed.
  */
 export function scheduleRunAllowedTools(
   base: string[],
@@ -102,7 +128,7 @@ export function scheduleRunAllowedTools(
   provider: string | null | undefined,
 ): string[] {
   if (!claudeCheckOnly(accessLevel, provider)) return base;
-  return [...ALWAYS_ALLOWED_TOOLS, ...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS];
+  return [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS];
 }
 
 /**

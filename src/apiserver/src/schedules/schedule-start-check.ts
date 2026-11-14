@@ -32,6 +32,20 @@ export type ScheduleHeldReason =
   | 'MODE_WIDER_THAN_ACCOUNT_DEFAULT'
   | 'NO_REPOSITORY';
 
+/**
+ * What the person changes to clear a held reason, where the code alone does not say it (§6.1). A run's mode is
+ * compared with the account's default permission mode: Plan there holds a CHECK_ONLY run on Claude Code, which runs
+ * in Don't Ask (§6.2), and every OPEN_PR run.
+ */
+export function heldReasonSentence(reason: ScheduleHeldReason): string | null {
+  if (reason === 'MODE_WIDER_THAN_ACCOUNT_DEFAULT') {
+    return "The account's default permission mode is narrower than the mode this schedule's runs use (Don't Ask "
+      + 'for a check-only run on Claude Code, Accept Edits for a run that opens a PR). Set Default permission mode '
+      + 'in Settings > General to Default, then resume the schedule.';
+  }
+  return null;
+}
+
 /** What a run that passed starts with: its mode, and the engine and credential it runs on (null: the workspace's). */
 export interface StartPlan {
   mode: PermissionMode;

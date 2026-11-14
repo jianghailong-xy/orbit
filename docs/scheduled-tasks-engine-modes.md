@@ -395,6 +395,63 @@ FILES: README.md victim.txt     victim.txt: old     git log: one commit     READ
 (end: 0 calls)
 ```
 
+### Orbit's own tools (revision 2 of the lists)
+
+The lists above still allowed `mcp__orbit__*`, so Orbit's own tools were a way round the shell rule: `bg_run` starts a
+shell command on the runner outside Claude Code's check, and the other Orbit writes Plan's runner gate refused
+(`session_merge`, `task_start`, `task_update`, `session_send`, …) would run. So the run's allow list is now explicit
+(design §6.2) and the Orbit CLI is denied outright. Probe script `measure2.sh`; `stub_mcp.py` now offers Orbit's tool
+names (`bg_run`, `session_merge`, `task_start`, `task_update`, `session_send`, `schedule_run_report`, `task_get`, and
+`permission_prompt`) and logs every call that reaches it, so a call missing from its log was refused by Claude Code
+before the tool ran. The runner's own allow rules for the CLI are added as `agent_instructions.go` writes them, both
+forms (`Bash('<orbit>' task update *)`, `Bash(<orbit> task update *)`, the same for `session merge`, `task create`,
+`capabilities --json`).
+
+```
+--allowedTools mcp__orbit__schedule_run_report,mcp__orbit__schedule_get,mcp__orbit__schedule_list,mcp__orbit__schedule_update,
+  mcp__orbit__schedule_end,mcp__orbit__notify,mcp__orbit__task_get,mcp__orbit__task_list,mcp__orbit__session_get,
+  mcp__orbit__session_search,mcp__orbit__project_get,mcp__orbit__wiki_search,mcp__orbit__wiki_get,mcp__orbit__file_fetch,
+  mcp__orbit__file_list,WebFetch,WebSearch,<the runner's CLI rules>
+--disallowedTools Edit,Write,NotebookEdit,Bash(*/orbit *),Bash('*/orbit' *),TaskCreate,…,TodoRead
+--mcp-config <stub> --permission-prompt-tool mcp__orbit__permission_prompt      (+ the stream-json flags of run.sh)
+```
+
+Prompt 3: (a) `mcp__orbit__bg_run {"command": "touch probe-bg.txt && date > probe-bg2.txt", "kind": "job"}`,
+(b) `session_merge`, (c) `task_start`, (d) `task_update`, (e) `session_send`,
+(f) `/mnt/data/checkonly-probe/bin/orbit task update probe --title x`,
+(g) `'/mnt/data/checkonly-probe/bin/orbit' session merge probe`, (h) `task_get`, (i) `schedule_run_report
+{"outcome": "NO_CHANGE", "summary": "probe"}`, (j) `git log --oneline -1`.
+
+```
+TOOL_USE mcp__orbit__bg_run {"command": "touch probe-bg.txt && date > probe-bg2.txt", "kind": "job"}
+RESULT err= True Permission to use mcp__orbit__bg_run has been denied because Claude Code is running in don't ask mode. ...
+TOOL_USE mcp__orbit__session_merge {"sessionId": "probe"}   RESULT err= True Permission to use mcp__orbit__session_merge has been denied because Claude Code is running in don't ask mode. ...
+TOOL_USE mcp__orbit__task_start {"taskId": "probe"}         RESULT err= True Permission to use mcp__orbit__task_start has been denied ...
+TOOL_USE mcp__orbit__task_update {"taskId": "probe", ...}   RESULT err= True Permission to use mcp__orbit__task_update has been denied ...
+TOOL_USE mcp__orbit__session_send {"sessionId": "probe", ...} RESULT err= True Permission to use mcp__orbit__session_send has been denied ...
+TOOL_USE Bash {"command": "/mnt/data/checkonly-probe/bin/orbit task update probe --title x"}
+RESULT err= True Permission to use Bash with command /mnt/data/checkonly-probe/bin/orbit task update probe --title x has been denied.
+TOOL_USE Bash {"command": "'/mnt/data/checkonly-probe/bin/orbit' session merge probe"}
+RESULT err= True Permission to use Bash with command '/mnt/data/checkonly-probe/bin/orbit' session merge probe has been denied.
+TOOL_USE mcp__orbit__task_get {"taskId": "probe"}           RESULT err= None {"ok": true, "tool": "task_get"}
+TOOL_USE mcp__orbit__schedule_run_report {...}              RESULT err= None {"ok": true, "tool": "schedule_run_report"}
+TOOL_USE Bash {"command": "git log --oneline -1"}           RESULT err= False 1c957d9 probe initial commit
+FILES: README.md victim.txt     victim.txt: old
+===== calls that reached the orbit stub =====
+TOOL_REACHED task_get {"taskId": "probe"}
+TOOL_REACHED schedule_run_report {"outcome": "NO_CHANGE", "summary": "probe"}
+(end: 2 lines)
+```
+
+`bg_run`, `session_merge`, `task_start`, `task_update` and `session_send` are refused by Claude Code's permission
+layer before the tool is called (none reached the stub, so the stub cannot have stood in for `bg_run`'s effect: no
+job was started and no file written), and so are both CLI forms, though the runner's rules allow them: the deny rules
+win. `task_get` and `schedule_run_report` run; the permission prompt tool is never called. Prompts 1 and 2 were run
+again under these lists in the same job, step for step with the outcome shown above for them: WebFetch, `git log`,
+`ls`, `cat`, `grep`, `git status`, `git diff` ran; every writing command, the Write tool and `orbit task create` were
+refused; no file changed; 0 calls reached the stub. On the runner `bg_run` is refused a second time
+by its own gate in `dontAsk` (`background_gate.go`), which this probe does not exercise.
+
 So in `dontAsk`, with these lists:
 
 - the fetch (`WebFetch`) and the read-only commands (`git log`, `ls`, `cat`, `grep`, `git status`, `git diff`) run with
@@ -403,6 +460,8 @@ So in `dontAsk`, with these lists:
   offered, and the deny rule `Bash(* task create *)` wins over the runner's allow rule for the Orbit CLI;
 - the permission prompt tool is never called (0 calls on a stub that would have allowed), so nothing waits on a
   card and an Orbit-side answer cannot let a write through;
+- of Orbit's tools only the listed ones run (`task_get`, `schedule_run_report`); `bg_run` with a writing command,
+  `session_merge`, `task_start`, `task_update`, `session_send` and the Orbit CLI are refused before they are called;
 - `curl` is refused even as a GET: in `CHECK_ONLY` on Claude a URL is fetched with `WebFetch`.
 
 Both prompts were run twice with the same outcome: first by hand without `--mcp-config`/`--permission-prompt-tool`,
