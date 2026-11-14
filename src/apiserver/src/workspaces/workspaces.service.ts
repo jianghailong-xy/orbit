@@ -124,6 +124,8 @@ export class WorkspacesService {
         modelRouting: dto.modelRouting ?? false,
         modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor ?? 'cost',
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
+        subagentsEnabled: dto.subagentsEnabled ?? true,
+        subagentsMaxRunning: dto.subagentsMaxRunning ?? 4,
       },
     });
     if (workspace.workDir && workspace.runnerId) this.realtime?.markRunnerChanged(workspace.runnerId);
@@ -358,6 +360,8 @@ export class WorkspacesService {
       modelRouting: dto.modelRouting,
       modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor,
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
+      subagentsEnabled: dto.subagentsEnabled,
+      subagentsMaxRunning: dto.subagentsMaxRunning,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {
