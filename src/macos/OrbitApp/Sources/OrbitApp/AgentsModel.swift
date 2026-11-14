@@ -101,6 +101,11 @@ final class AgentsModel {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
+    /// The store over a transport handed in (the observation tests): the app builds `api` above.
+    init(api: APIClient) {
+        self.api = api
+    }
+
     var orderedItems: [Agent] { AgentListLogic.ordered(items, runnerOrder: runnerOrder) }
     /// What the workspace list shows where its rows would be: a failed fetch is never "no workspaces".
     var listPresentation: ListLoadPresentation {
@@ -170,7 +175,7 @@ final class AgentsModel {
     /// read is slow holds up no other key's.
     func loadDeepSeekBalances() async {
         guard let mine = try? await api.personalProviders() else { return }
-        personalProviders = mine
+        assignIfChanged(\.personalProviders, mine)
         let ids = mine.filter(DeepSeekBalance.applies(to:)).compactMap(\.providerID)
         await withTaskGroup(of: Void.self) { group in
             for id in ids { group.addTask { await self.readBalance(id, refresh: false) } }
@@ -186,11 +191,13 @@ final class AgentsModel {
     }
 
     private func readBalance(_ id: String, refresh: Bool) async {
+        let reading: ProviderBalanceReading
         do {
-            deepSeekBalances[id] = .answered(try await api.providerBalance(id, refresh: refresh))
+            reading = .answered(try await api.providerBalance(id, refresh: refresh))
         } catch {
-            deepSeekBalances[id] = .unreachable(APIClient.failureReason(error))
+            reading = .unreachable(APIClient.failureReason(error))
         }
+        if deepSeekBalances[id] != reading { deepSeekBalances[id] = reading }
     }
 
     // MARK: a Cursor key's last check (P2 follow-up)
@@ -203,8 +210,8 @@ final class AgentsModel {
         do {
             let answer = try await api.recheckCursorKey(id)
             if let mine = try? await api.personalProviders() {
-                personalProviders = mine
-                ownKeys = mine
+                assignIfChanged(\.personalProviders, mine)
+                assignIfChanged(\.ownKeys, mine)
             }
             return answer.recorded ? nil : answer.message
         } catch {
@@ -216,23 +223,23 @@ final class AgentsModel {
 
     /// The pools read again: an account went in or out, or a pool went.
     func reloadPools() async {
-        poolsState.begin()
+        assignIfChanged(\.poolsState, poolsState.startingRead())
         do {
-            providerPools = try await api.providerPools()
-            poolsState.succeed()
+            assignIfChanged(\.providerPools, try await api.providerPools())
+            assignIfChanged(\.poolsState, poolsState.afterSuccess())
         } catch {
-            poolsState.fail()
+            assignIfChanged(\.poolsState, poolsState.afterFailure())
         }
     }
 
     /// Best-effort like the pools: a failed read keeps the last good list.
     func loadOwnKeys() async {
-        ownKeysState.begin()
+        assignIfChanged(\.ownKeysState, ownKeysState.startingRead())
         do {
-            ownKeys = try await api.personalProviders()
-            ownKeysState.succeed()
+            assignIfChanged(\.ownKeys, try await api.personalProviders())
+            assignIfChanged(\.ownKeysState, ownKeysState.afterSuccess())
         } catch {
-            ownKeysState.fail()
+            assignIfChanged(\.ownKeysState, ownKeysState.afterFailure())
         }
     }
 
@@ -285,9 +292,9 @@ final class AgentsModel {
     }
 
     func load() async {
-        loadState.begin()
+        assignIfChanged(\.loadState, loadState.startingRead())
         do {
-            items = try await api.agents()
+            assignIfChanged(\.items, try await api.agents())
             workspacesAnswered = true
             await refreshRunnerSnapshot()
             // Also when a refresh already on the wire took that call: the workspaces just changed.
@@ -295,15 +302,15 @@ final class AgentsModel {
             // Best-effort too: a transient failure keeps the last good list rather than blanking
             // the pickers (mirrors the runners fetch above).
             if let providers = try? await api.providers() {
-                configuredProviders = providers
-                configuredProvidersLoaded = true
+                assignIfChanged(\.configuredProviders, providers)
+                assignIfChanged(\.configuredProvidersLoaded, true)
             }
             await reloadPools()
-            if let shared = try? await api.sharedPools() { sharedPools = shared }
-            loadState.succeed()
+            if let shared = try? await api.sharedPools() { assignIfChanged(\.sharedPools, shared) }
+            assignIfChanged(\.loadState, loadState.afterSuccess())
         } catch {
-            errorText = friendly(error)
-            loadState.fail()
+            assignIfChanged(\.errorText, friendly(error))
+            assignIfChanged(\.loadState, loadState.afterFailure())
         }
     }
 
@@ -481,13 +488,14 @@ final class AgentsModel {
             // With the app's Open snapshot in hand an Open list has its rows already: show them and
             // let the fetch below refresh them in place.
             if view == .open, let openSnapshot {
-                agentSessions = SessionFilter.forAgent(openSnapshot, agentID: agentID, view: view)
+                assignIfChanged(\.agentSessions,
+                                SessionFilter.forAgent(openSnapshot, agentID: agentID, view: view))
             } else {
-                agentSessions = []
-                sessionsLoading = true
+                assignIfChanged(\.agentSessions, [])
+                assignIfChanged(\.sessionsLoading, true)
             }
         }
-        defer { if isCurrent() { sessionsLoading = false } }
+        defer { if isCurrent() { assignIfChanged(\.sessionsLoading, false) } }
         // The app already keeps the Open list: refresh it through the app's one fetch rather than
         // a second of the same list beside it. A failed one falls through to this list's own, which
         // says what went wrong.
@@ -499,9 +507,10 @@ final class AgentsModel {
             let read = try await api.listSessions(view: view)
             guard isCurrent() else { return }
             let all = SessionFilter.removing(trashing, from: read)
-            allSessions = all
-            agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)
-        } catch { if isCurrent() { errorText = friendly(error) } }
+            assignIfChanged(\.allSessions, all)
+            assignIfChanged(\.agentSessions,
+                            SessionFilter.forAgent(all, agentID: agentID, view: view))
+        } catch { if isCurrent() { assignIfChanged(\.errorText, friendly(error)) } }
     }
 
     /// Silently refresh the currently-shown session list (after a pin/complete/delete row action).
@@ -535,7 +544,7 @@ final class AgentsModel {
     func applyOpenRow(_ all: [Session], workspaceIDs: Set<String?>) {
         openSnapshot = all
         guard let q = lastSessionQuery, q.view == .open else { return }
-        allSessions = all
+        assignIfChanged(\.allSessions, all)
         guard workspaceIDs.contains(q.agentID) else { return }
         let mine = SessionFilter.forAgent(all, agentID: q.agentID, view: .open)
         if agentSessions != mine { agentSessions = mine }

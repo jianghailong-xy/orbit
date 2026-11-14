@@ -1725,6 +1725,17 @@ private extension View {
 }
 #endif
 
+/// The session page's transcript in a wiki chat's panel (design §9): the same rows, cards and approvals,
+/// with the sticky question kept out of a navigation bar the panel does not have. It sits here, beside
+/// the view it initializes: an initializer for this struct declared in another file crashes Xcode 27's
+/// IRGen on the private `HeldScroll` (`Global is external, but doesn't have external or weak linkage`).
+extension TranscriptView {
+    init(wikiChat console: ConsoleModel) {
+        self.console = console
+        self.hidesStickyQuestion = true
+    }
+}
+
 /// A tap target that still fires while the enclosing `List` is coasting (momentum scroll) — the whole
 /// reason these controls aren't plain `Button`s. On iOS the scroll view's stop-on-tap arbitration eats
 /// that first touch, so a SwiftUI `Button`/`onTapGesture`/`DragGesture` does nothing until the list
