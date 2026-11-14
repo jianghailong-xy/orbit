@@ -3,6 +3,8 @@
  * reply in it, and each guest's messages are turns of the owner's own session, sent as external sender ORBIT_GUEST.
  */
 
+import type { SessionActivity } from './task-run-reason';
+
 /** One person who can reply, as the owner's `GET /sessions/:id/guests` lists them. */
 export interface SessionGuestPerson {
   userId: string;
@@ -25,6 +27,8 @@ export interface GuestSessionSummary {
   status: string;
   sessionState: string;
   lifecycleState: string;
+  /** What the session is doing beyond its status (SessionActivity); absent from an older server. */
+  activity?: SessionActivity | null;
   addedAt: string;
   lastTurnAt: string | null;
 }

@@ -301,7 +301,7 @@ describe('Activity', () => {
     expect(html).toContain('href="/wiki/orbit"');
     expect(html).toContain('class="wk-page wk-page--activity wk-page--railed"');
     // The directory stands beside it with its own Activity row lit, and no other (board docs/mocks/wiki-rail ③).
-    expect(html).toContain('class="wk-dir-col"');
+    expect(html).toContain('class="wk-dir-col autohide-scrollbar"');
     expect(html.match(/class="wk-toc-item[^"]* active"[^>]*>(?:(?!<\/a>).)*/g)?.map((row) => row.includes('>Activity<'))).toEqual([true]);
     // Principles are content: they stay on the home.
     expect(html).not.toContain('>Principles<');

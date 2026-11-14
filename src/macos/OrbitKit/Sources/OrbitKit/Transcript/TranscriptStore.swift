@@ -17,7 +17,7 @@ public protocol TranscriptPersisting: Sendable {
 public struct FileTranscriptStore: TranscriptPersisting {
     public let directory: URL
     private let maxFiles: Int
-    private static let schemaVersion = 10
+    private static let schemaVersion = 11
 
     public init(directory: URL, maxFiles: Int = 200) {
         self.directory = directory
@@ -51,6 +51,8 @@ public struct FileTranscriptStore: TranscriptPersisting {
     /// snapshots drew those as a Stop, so re-fetch them.
     /// v10: a main checkout notice (`noticeKind` main-checkout-*) is a `.mainCheckout` card or result line.
     /// Old snapshots keep it as a plain notice with no buttons, so re-fetch.
+    /// v11: a notice says whether it is an account switch (`accountSwitch`), which mutes once the
+    /// conversation moves past it. Old snapshots hold switches as plain notices, so re-fetch them.
     private struct Envelope: Codable { var version: Int; var reducer: TranscriptReducer }
 
     public func load(sessionID: String) -> TranscriptReducer? {
