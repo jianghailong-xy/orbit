@@ -284,14 +284,14 @@ describe('ImagePreview', () => {
   describe('a picture larger than the window', () => {
     // A 3200×4000 board rendered at 2x, on a 2x screen, in a 1000×800 window: 1600×2000 at its actual size, whole at
     // 0.28 (70% of the window's height).
-    async function board() {
+    async function board(naturalWidth = 3200, naturalHeight = 4000) {
       vi.stubGlobal('devicePixelRatio', 2);
       await render(<Group />);
       const body = dialog()!.querySelector<HTMLElement>('.orbit-image-preview-body')!;
       body.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1000, height: 800, top: 0, left: 0, right: 1000, bottom: 800, toJSON: () => ({}) });
       const img = picture();
-      Object.defineProperty(img, 'naturalWidth', { configurable: true, value: 3200 });
-      Object.defineProperty(img, 'naturalHeight', { configurable: true, value: 4000 });
+      Object.defineProperty(img, 'naturalWidth', { configurable: true, value: naturalWidth });
+      Object.defineProperty(img, 'naturalHeight', { configurable: true, value: naturalHeight });
       Object.defineProperty(img, 'offsetWidth', { configurable: true, get: () => parseFloat(img.style.width) || 0 });
       Object.defineProperty(img, 'offsetHeight', { configurable: true, get: () => parseFloat(img.style.height) || 0 });
       await act(async () => {
@@ -344,6 +344,20 @@ describe('ImagePreview', () => {
       // ⌘ and the wheel zoom it, never below the whole picture.
       for (let turn = 0; turn < 5; turn += 1) await wheel({ deltaY: 10_000, metaKey: true });
       expect(picture().style.transform).toContain('scale3d(0.28, 0.28, 1)');
+    });
+
+    it('opens a 1x picture no smaller than it used to: at its fit, with Actual size to go down to its pixels', async () => {
+      // 1440×900 on a 2x screen: 720×450 at its actual size; it used to fill the window's width or 70% of its height
+      // (560 / 450 = 1.244…), as it still does.
+      await board(1440, 900);
+      expect(picture().style.width).toBe('720px');
+      expect(picture().style.transform).toMatch(/^translate3d\(0px, 0px, 0\) scale3d\(1\.244/);
+      expect(dialog()!.querySelector('.orbit-image-preview-scale')?.textContent).toBe('124%');
+      await click(button('Actual size')!);
+      expect(picture().style.transform).toBe('translate3d(0px, 0px, 0) scale3d(1, 1, 1) rotate(0deg)');
+      expect(button('Zoom out')!.getAttribute('aria-disabled')).toBe('true');
+      await click(button('Fit to window')!);
+      expect(picture().style.transform).toContain('scale3d(1.244');
     });
 
     it('opens whole on a touch screen', async () => {
