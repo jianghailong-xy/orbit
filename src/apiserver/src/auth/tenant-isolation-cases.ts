@@ -526,6 +526,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /runners/:id/accounts/:engine/default/restore': {
     request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
   },
+  'POST /runners/:id/attention/:kind/fix': {
+    request: (of) => ({ params: { id: of.runnerId, kind: 'installFailed' }, body: { engine: 'codex' } }),
+  },
   'POST /runners/:id/engines/:engine/update-warning/dismiss': {
     request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
   },

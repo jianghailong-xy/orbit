@@ -962,6 +962,10 @@ model Runner {
   /// Clients hide that engine's update warning while it equals the engine's current `update.latest`.
   /// Written by RunnersService.dismissEngineUpdateWarning, never by the runner. NULL is nothing dismissed.
   engineUpdateDismissals Json? @map("engine_update_dismissals")
+  /// The sessions Fix with an agent started here, one per warning (migration 0760):
+  /// { "<kind>[:<engine>]": { "sessionId": "<uuid>", "at": "<iso>" } }. A second start for a warning is
+  /// refused while its session is open. Written by RunnerAttentionFixService.fix, never by the runner.
+  attentionFixes Json? @map("attention_fixes")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).

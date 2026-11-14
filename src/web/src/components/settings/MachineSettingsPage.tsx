@@ -1,3 +1,5 @@
+import { AgentFixButton, AgentFixLine } from '../AgentFix';
+import { agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
   CloudDownloadOutlined,
@@ -497,8 +499,16 @@ export function MachineSettingsPage() {
       onConfirm: () => deleteMut.mutateAsync(),
     });
 
+  /** What a card offers, with Fix with an agent where its fix is work on this machine — after the card's own
+   *  button, and before Update Engines Now's Dismiss link. */
+  const attentionAction = (item: AttentionItem, fixButton: ReactNode): ReactNode => {
+    if (item.action?.kind === 'updateEngines') return cardAction(item, fixButton);
+    const own = cardAction(item, null);
+    return own || fixButton ? <>{own}{fixButton}</> : null;
+  };
+
   /** The one thing a card offers, where it has one. */
-  const attentionAction = (item: AttentionItem): ReactNode => {
+  const cardAction = (item: AttentionItem, fixButton: ReactNode): ReactNode => {
     const action = item.action;
     switch (action?.kind) {
       case 'signIn': {
@@ -560,6 +570,7 @@ export function MachineSettingsPage() {
             <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
               {RUNNER_UPDATE_ENGINES_NOW}
             </Button>
+            {fixButton}
             {/* Until the next release: only a warning against a known latest has one to wait for. */}
             {engine && item.params.latest && (
               <button
@@ -764,16 +775,26 @@ export function MachineSettingsPage() {
           the one thing that fixes it. */}
       {attention.length > 0 && (
         <section className="rd-attention machine-attention" aria-label={RUNNER_NEEDS_ATTENTION}>
-          {attention.map((item, index) => (
-            <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
-              <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
-              <div className="rd-attention-main">
-                <div className="rd-attention-title">{item.title}</div>
-                <div className="rd-attention-detail">{attentionDetail(item)}</div>
-                {item.action && <div className="rd-attention-action">{attentionAction(item)}</div>}
+          {attention.map((item, index) => {
+            // Fix with an agent, on the cards whose fix is work on this machine (lib/agentFix.ts).
+            const fixTarget = attentionFixTarget(item);
+            const fixView = fixTarget ? agentFixView(runner.agentFix, fixTarget, 'card') : null;
+            const fixButton = fixTarget && fixView
+              ? <AgentFixButton view={fixView} target={fixTarget} runnerId={runner.id} />
+              : null;
+            const action = attentionAction(item, fixButton);
+            return (
+              <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
+                <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
+                <div className="rd-attention-main">
+                  <div className="rd-attention-title">{item.title}</div>
+                  <div className="rd-attention-detail">{attentionDetail(item)}</div>
+                  {action && <div className="rd-attention-action">{action}</div>}
+                  <AgentFixLine view={fixView} />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       )}
 

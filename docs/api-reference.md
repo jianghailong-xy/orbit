@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 421 |
+| `user` | 423 |
 | `admin` | 28 |
 | `runner` | 176 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **660** |
+| **Total** | **662** |
 
 ## Public routes
 
@@ -272,6 +272,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `PATCH` | `/api/runners/:id/accounts/:engine/:account` | body `RenameAccountDto`; path `account`, `engine`, `id` | `RunnersController.renameAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/pause` | body `PauseAccountDto`; path `account`, `engine`, `id` | `RunnersController.pauseAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
+| `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/claude-history` | path `id`; query `workDir` | `RunnersController.claudeHistory` |
 | `POST` | `/api/runners/:id/claude-history` | body `Object`; path `id` | `RunnersController.askClaudeHistory` |
 | `DELETE` | `/api/runners/:id/codex-accounts/:account` | path `account`, `id` | `RunnersController.removeCodexAccount` |

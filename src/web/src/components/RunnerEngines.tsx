@@ -20,6 +20,8 @@ import {
   type RunnerRemovedDefault,
 } from '@orbit/shared';
 import { api } from '../api';
+import { agentFixView, installFixTarget } from '../lib/agentFix';
+import { AgentFixButton, AgentFixLine } from './AgentFix';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { Badge } from './ui/Badge';
@@ -669,6 +671,8 @@ function EngineRow({
     mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
   });
+  // Fix with an agent on this row's Install failed panel: where it would run, or why it can't.
+  const installFixView = kind === 'install-failed' ? agentFixView(runner.agentFix, installFixTarget(engine), 'panel') : null;
 
   // Only one runtime's quota is this engine's; the others belong to the other rows. Antigravity's
   // comes with its engine's health, folded in beside the rest.
@@ -1037,11 +1041,17 @@ function EngineRow({
               Orbit ran <code className="re-cmd">{runner.install.command}</code>
             </div>
           )}
-          <div className="re-panel-hint">
+          {/* Fix with an agent, before Dismiss; the row's Retry stays where it is (lib/agentFix.ts). */}
+          <div className="re-panel-hint agent-fix-row">
+            {installFixView?.state !== 'fixing' && (
+              <AgentFixButton view={installFixView} target={installFixTarget(engine)} runnerId={runner.id} />
+            )}
+            {installFixView?.state === 'fixing' && <AgentFixLine view={installFixView} />}
             <button className="re-link" type="button" onClick={() => dismissInstall.mutate()}>
               Dismiss
             </button>
           </div>
+          {installFixView?.state !== 'fixing' && <AgentFixLine view={installFixView} />}
         </div>
       )}
       {/* Drifted, and not for a reason this page can name. The machine's own words are the only
