@@ -28120,6 +28120,35 @@ button.agent-progress-agent:hover {
 .confirm-criterion-shot img { max-width: 220px; max-height: 140px; border: 1px solid var(--border-subtle); border-radius: 6px; }
 .acceptance-mode-row { margin-top: 4px; }
 
+/* Settings → Terminals (TerminalsPage) */
+.terminals-empty {
+  margin: 0;
+  color: var(--text-3);
+}
+.terminals-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.terminals-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.terminals-row:first-child {
+  border-top: 0;
+}
+.terminals-machine {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.terminals-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
 /* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
    `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
 .approval-card.coordinator-question {

@@ -41,6 +41,26 @@ public final class APIClient: @unchecked Sendable {
         return "\(kind)/\(version ?? "unknown")"
     }()
 
+    /// `X-Orbit-Device: iphone` or `ipad` from the iOS app, nil from the Mac. The server records it
+    /// with the turns this device sends (apiserver sessions/turn-sender-client.ts), so `orbit` in a
+    /// terminal can say "· from iPad" rather than "· from iPhone". Read from the hardware model
+    /// (`hw.machine`, or the simulated one), which needs no main actor as `UIDevice` does.
+    static let deviceHeader: String? = {
+        #if os(iOS)
+        var model = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? ""
+        if model.isEmpty {
+            var size = 0
+            sysctlbyname("hw.machine", nil, &size, nil, 0)
+            var bytes = [UInt8](repeating: 0, count: size)
+            sysctlbyname("hw.machine", &bytes, &size, nil, 0)
+            model = String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
+        }
+        return model.hasPrefix("iPad") ? "ipad" : "iphone"
+        #else
+        return nil
+        #endif
+    }()
+
     public let baseURL: URL
     private let tokenStore: TokenStore
     private let session: URLSession
@@ -665,6 +685,35 @@ public final class APIClient: @unchecked Sendable {
     @discardableResult
     public func revokeAccessToken(_ id: String) async throws -> RevokedAccessToken {
         try await delete("access-tokens/\(id)")
+    }
+
+    // MARK: terminals — the approve card and Settings → Terminals (docs/terminal-session-design.md)
+
+    /// The terminal sign-ins waiting for this owner. Web parity: `terminalRequestsQuery`.
+    public func terminalRequests() async throws -> [TerminalRequest] {
+        let list: TerminalRequestList = try await get("terminals/requests")
+        return list.requests
+    }
+
+    /// Approve: the terminal's next poll collects a credential bound to this account and that machine, for 30 days.
+    public func approveTerminalRequest(_ id: String) async throws {
+        _ = try await postRaw("terminals/requests/\(id)/approve", body: Optional<Empty>.none)
+    }
+
+    /// Deny: the terminal is told so, and nothing is minted.
+    public func denyTerminalRequest(_ id: String) async throws {
+        _ = try await postRaw("terminals/requests/\(id)/deny", body: Optional<Empty>.none)
+    }
+
+    /// The live terminals, newest first. Web parity: `terminalsQuery`.
+    public func terminals() async throws -> [Terminal] {
+        let list: TerminalList = try await get("terminals")
+        return list.terminals
+    }
+
+    /// Revoke one terminal at once: its next request is 401.
+    public func revokeTerminal(_ id: String) async throws {
+        try await deleteRaw("terminals/\(id)")
     }
 
     // MARK: approvals
@@ -2306,6 +2355,7 @@ public final class APIClient: @unchecked Sendable {
         req.httpMethod = method
         if let timeout { req.timeoutInterval = timeout }
         req.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
+        if let device = Self.deviceHeader { req.setValue(device, forHTTPHeaderField: "X-Orbit-Device") }
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

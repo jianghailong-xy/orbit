@@ -60,13 +60,16 @@ var defaultServer = "https://orbitd.io"
 var usage = `orbit — register a machine and run coding-agent tasks for an Orbit control plane
 
 Usage:
+  orbit                             In a terminal: talk to a new session in this folder (Orbit terminal client)
+  orbit --engine E [--model M]      The same, on that engine and model
+  orbit --pick                      The same, choosing the engine and model from a list first
   orbit register [options]          Register this machine + install the service (approve in the browser)
   orbit run                         Start the runner loop in the foreground
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
   orbit doctor                      Check the coding-engine CLIs, sign-in, and service PATH
   orbit engine-update               Update the coding-engine CLIs now (the periodic check, on demand)
-  orbit resume [session-id]         Resume a session in its engine's CLI
+  orbit resume [session-id]         Reopen a session in the Orbit terminal client (--engine-cli: its engine's CLI)
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
   orbit project <command>           Manage an Orbit project's durable context
@@ -83,6 +86,7 @@ Usage:
   orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
   orbit logout [--keep-token]       Revoke that token and forget it
   orbit whoami [--json]             Show who the CLI acts as, and why
+  orbit terminal login|logout       Approve this terminal in the Orbit app (remembered 30 days), or sign it out
   orbit api [-X METHOD] PATH        Call the Orbit REST API as yourself
   orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit host setup --server URL     Set this machine up for runners (root, once per host)
@@ -111,7 +115,8 @@ Env:
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
 var cmdHelp = map[string]string{
-	"secret": secretHelp,
+	"secret":   secretHelp,
+	"terminal": terminalHelp,
 	"register": `orbit register — register this machine and install the background service
 
 Usage:
@@ -179,21 +184,26 @@ best-effort sign-in check, and whether the background service's PATH can see it 
 with the exact install/sign-in command for anything that's missing. Exits non-zero
 when no engine is installed.
 `,
-	"resume": `orbit resume — resume a session in this terminal
+	"resume": `orbit resume — reopen a session in this terminal
 
 Usage:
   orbit resume [session-id]
+  orbit resume --engine-cli <session-id>
 
-Resumes the given session in its original engine's CLI and original work directory.
-The session ID is the one shown in the web UI URL (e.g. /sessions/<id>). If omitted,
-lists sessions available on this machine.
+Opens the Orbit terminal client on the given session, whatever engine it runs on: its
+transcript, a composer, approval cards answered with a key, and slash commands. The
+session keeps running on its machine when you leave (Ctrl-D or /exit). The session ID
+is the one shown in the web UI URL (e.g. /sessions/<id>). If omitted, lists sessions
+available on this machine.
 
-The engine is the one the session runs on, which never changes: this machine's own
+--engine-cli resumes the session in its original engine's CLI and original work
+directory instead. The engine is the one the session runs on, which never changes: this machine's own
 record of the run, or for a session that never ran here the engine the control plane
-reports for it. A DeepSeek Harness session is not opened here — Orbit drives Harness
-over ACP, the Harness it installs has no terminal interface, and the session's
-DeepSeek key reaches it only with each run Orbit dispatches — so it is refused,
-saying how to continue it instead.
+reports for it. DeepSeek Harness and Cursor sessions have no engine CLI to open here —
+Orbit drives Harness over ACP, the Harness it installs has no terminal interface, and
+the session's DeepSeek key reaches it only with each run Orbit dispatches — so
+--engine-cli refuses them, saying how to continue instead. Without the flag they open
+in the Orbit terminal client like every other session.
 `,
 	"upgrade": `orbit upgrade — force-reinstall the latest orbit binary
 
@@ -345,8 +355,13 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 	}
 	_, bools := parseFlags(args)
 
-	// Top-level help: `orbit`, `orbit help [cmd]`, `orbit --help`, `orbit -h`.
-	if cmd == "" || cmd == "help" || cmd == "--help" || cmd == "-h" {
+	// Bare `orbit` (and `orbit --engine E --model M`, `orbit --pick`): on a terminal, the Orbit TUI on a new
+	// session in the cwd's workspace; anywhere else, the help text, exit 0 (terminal_bare.go).
+	if isBareOrbit(args) {
+		os.Exit(cmdBareOrbit(args, stdioIsTerminal(), os.Stdout, os.Stderr))
+	}
+	// Top-level help: `orbit help [cmd]`, `orbit --help`, `orbit -h`.
+	if cmd == "help" || cmd == "--help" || cmd == "-h" {
 		if len(args) > 1 {
 			_, err := fmt.Fprint(out, helpFor(args[1]))
 			return err
@@ -432,6 +447,11 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 	case "login":
 		if err := cmdLoginCLI(args[1:], in, out, errW); err != nil {
 			return fmt.Errorf("orbit login: %w", err)
+		}
+	case "terminal":
+		if err := cmdTerminalCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit terminal:", err)
+			os.Exit(1)
 		}
 	case "logout":
 		if err := cmdLogoutCLI(args[1:], out, errW); err != nil {
@@ -993,7 +1013,39 @@ func cmdStatus() {
 	}
 }
 
+// cmdResume is `orbit resume`. With a session id it opens the Orbit TUI on that session, whatever
+// engine it runs on (docs/terminal-session-design.md D8); `--engine-cli` keeps the engine's own CLI
+// (cmdResumeEngineCLI). With no id it lists this machine's sessions, as it always has.
 func cmdResume(args []string) {
+	engineCLI, rest := resumeArgs(args)
+	if engineCLI || len(rest) == 0 || rest[0] == "" {
+		cmdResumeEngineCLI(rest)
+		return
+	}
+	if err := resumeOpenTUI(publicID(decodeSessionID(rest[0])), os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "orbit resume:", err)
+		os.Exit(1)
+	}
+}
+
+// resumeOpenTUI is what `orbit resume <id>` opens: a variable so the dispatch tests can see it chosen.
+var resumeOpenTUI = openSessionTUI
+
+// resumeArgs takes `--engine-cli` out of the arguments, wherever it stands.
+func resumeArgs(args []string) (engineCLI bool, rest []string) {
+	for _, a := range args {
+		if a == "--engine-cli" {
+			engineCLI = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	return engineCLI, rest
+}
+
+// cmdResumeEngineCLI is `orbit resume --engine-cli`: the session's own engine CLI in its recorded work
+// directory, the behaviour `orbit resume` had before the TUI.
+func cmdResumeEngineCLI(args []string) {
 	runs := runsDir()
 
 	// No session ID: list sessions available on this machine.
@@ -1016,7 +1068,7 @@ func cmdResume(args []string) {
 				fmt.Printf("  %s\n", id)
 			}
 		}
-		fmt.Println("\nRun:  orbit resume <session-id>")
+		fmt.Println("\nRun:  orbit resume <session-id>  (or orbit resume --engine-cli <session-id> for the engine's own CLI)")
 		return
 	}
 

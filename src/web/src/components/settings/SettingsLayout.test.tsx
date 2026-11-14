@@ -61,6 +61,7 @@ vi.mock('../../pages/settings/StoragePage', async () => ({ StorageSettingsPage: 
 vi.mock('../../pages/ProfilePage', () => ({ ProfilePage: () => <p data-page="profile">profile</p> }));
 vi.mock('../../pages/SharedLinksPage', () => ({ SharedLinksPage: () => <p data-page="shared-links">links</p> }));
 vi.mock('../../pages/AccessTokensPage', () => ({ AccessTokensPage: () => <p data-page="access-tokens">tokens</p> }));
+vi.mock('../../pages/TerminalsPage', () => ({ TerminalsPage: () => <p data-page="terminals">terminals</p> }));
 vi.mock('../../pages/FeishuIntegrationPage', () => ({ FeishuIntegrationPage: () => <p data-page="feishu">feishu</p> }));
 vi.mock('./SettingsProviderPages', async (original) => {
   const { useParams } = await import('react-router-dom');
@@ -292,6 +293,7 @@ describe('the Settings window', () => {
       ['Storage', '/settings/storage'],
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
+      ['Terminals', '/settings/terminals'],
     ]);
     expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([['Feishu', '/settings/integrations/feishu']]);
     expect(rows('Machines').map((r) => [r.label, r.href, r.dot])).toEqual([
@@ -320,6 +322,7 @@ describe('the Settings window', () => {
       '/settings/storage': '/settings/storage',
       '/settings/shared-links': 'shared-links',
       '/settings/access-tokens': 'access-tokens',
+      '/settings/terminals': 'terminals',
       '/settings/integrations/feishu': 'feishu',
       '/settings/machines/gpuBox': 'machine:gpuBox:',
       '/settings/machines/studioMac': 'machine:studioMac:',

@@ -1,3 +1,4 @@
+import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
@@ -56,6 +57,7 @@ import {
   readSessionMessageFrom,
   type ExternalTurnSender,
 } from './session-message';
+import { senderClientColumns, type TurnSenderClient } from './turn-sender-client';
 import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -1084,10 +1086,19 @@ export class SessionsService {
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
+    // CreateSessionDto is an interface, so nothing upstream checked the type: a string "false" must not
+    // quietly keep a worktree the caller asked to leave out.
+    if (dto.worktree != null && typeof dto.worktree !== 'boolean') {
+      throw new BadRequestException('worktree must be a boolean');
+    }
+    // `worktree: false` from any caller is the same deliberate override the internal doors pass as noWorktree.
+    const noWorktree = opts?.noWorktree === true || dto.worktree === false;
+    // The folder below workDir the session runs in: checked here, before anything is read or written.
+    const workSubdir = checkedWorkSubdir(dto.workSubdir, noWorktree);
     const wikiChat = opts?.wikiChat;
     // A chat is a conversation of its workspace and nothing else: it executes no task, makes no
     // workspace and opens with words (wiki contract `chat.create`). The door never asks for more.
-    if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || opts?.noWorktree)) {
+    if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || noWorktree)) {
       throw new Error('a wiki chat is a session of its workspace that executes no task and opens with words');
     }
     // Attachments with no words are a whole opening message, as they are on any later turn: the
@@ -1525,9 +1536,10 @@ export class SessionsService {
         runner: targetRunner,
       });
     }
-    // §13.8: a conversation gets no worktree. Applied after the workspace's default is read, so it
-    // is a deliberate override rather than a second source of the default.
-    if (opts?.noWorktree) {
+    // §13.8: a conversation gets no worktree, nor does a session that asked for none (`worktree: false`, a
+    // terminal's). Applied after the workspace's default is read, so it is a deliberate override rather than a
+    // second source of the default.
+    if (noWorktree) {
       enableWorktree = false;
       branch = null;
     }
@@ -1542,6 +1554,7 @@ export class SessionsService {
         titleBeforeProjectManagement: null,
         promptByOrbit: opts?.promptByOrbit ?? false,
         branch,
+        workSubdir,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
         provider,
@@ -6142,6 +6155,9 @@ export class SessionsService {
       externalSenderSource?: string;
       externalSenderId?: string;
       externalSenderName?: string | null;
+      /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
+      senderClient?: string;
+      senderClientDetail?: string | null;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
     },
@@ -6370,6 +6386,12 @@ export class SessionsService {
        * §8.2). Like `senderSessionId`, an option of this call and never a field of `dto`. Written on a NEW turn only.
        */
       externalSender?: ExternalTurnSender;
+      /**
+       * Which client sent this turn (`conversation_turn.sender_client*`, migration 0595, turn-sender-client.ts),
+       * as the door derived it from its credential and the app's headers. Like `senderSessionId`, an option of
+       * this call and never a field of `dto`. Written on a NEW turn only.
+       */
+      senderClient?: TurnSenderClient;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
@@ -6693,6 +6715,7 @@ export class SessionsService {
         ...(targetTurnId ? { targetTurnId } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...externalSenderColumns(opts?.externalSender),
+        ...senderClientColumns(opts?.senderClient),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -8891,7 +8914,9 @@ export class SessionsService {
    *  (docs/feishu-bot-design.md §7.2): its clicker's open_id and the card's message_id are recorded
    *  beside it, and it carries only a plain allow or deny — "always allow" widens a standing grant and
    *  "Create and start" starts work, both of which stay in the app — so either is refused before anything
-   *  is written. */
+   *  is written. A TERMINAL one is `orbit` in a terminal (docs/terminal-session-design.md, "The terminal
+   *  credential"): its machine name is recorded beside it (0663), and it answers as the app does, "always
+   *  allow" included. Either one's decision that lands also writes an Activity row. */
   async decideApproval(
     ownerId: string,
     id: string,
@@ -8900,6 +8925,7 @@ export class SessionsService {
     credential?: AuthCredential,
   ): Promise<ApprovalInfo> {
     const feishu = credential?.kind === 'FEISHU' ? credential : null;
+    const terminal = credential?.kind === 'TERMINAL' ? credential : null;
     if (feishu && (dto.rememberRules !== undefined || dto.startAfterCreate !== undefined)) {
       throw new BadRequestException('a decision from a Feishu card is a plain allow or deny: "always allow" and "Create and start" stay in Orbit');
     }
@@ -8953,7 +8979,8 @@ export class SessionsService {
       select: { toolName: true, input: true },
     });
     // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
-    // decision is also an Activity row (docs/feishu-bot-design.md §7.2): written in the same
+    // decision is also an Activity row (docs/feishu-bot-design.md §7.2), and so is a terminal's
+    // (docs/human-only-authority.md, the TERMINAL row): written in the same
     // transaction, and only by the decision that lands, so a replayed event or a stale card's
     // click records nothing more.
     const decide = async (db: Prisma.TransactionClient) => {
@@ -8978,6 +9005,7 @@ export class SessionsService {
         decidedCredentialKind: credential?.kind ?? null,
         decidedFeishuOpenId: feishu?.openId ?? null,
         decidedFeishuMessageId: feishu?.messageId ?? null,
+        decidedTerminalMachineName: terminal?.machineName ?? null,
         decidedAt: new Date(),
       },
     });
@@ -8990,6 +9018,19 @@ export class SessionsService {
             payload: {
               sessionId: id, approvalId, behavior: dto.behavior,
               appId: feishu.appId, openId: feishu.openId, messageId: feishu.messageId ?? null,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+      if (terminal && landed.count > 0) {
+        await db.activity.create({
+          data: {
+            actorId: ownerId,
+            type: 'terminal.approval.decided',
+            credentialKind: 'TERMINAL',
+            payload: {
+              sessionId: id, approvalId, behavior: dto.behavior,
+              terminalId: terminal.terminalId, runnerId: terminal.runnerId, machineName: terminal.machineName,
             } as Prisma.InputJsonValue,
           },
         });
@@ -9353,6 +9394,8 @@ export class SessionsService {
        * `senderSessionId` is: a request is no less a request for having woken its recipient up.
        */
       onTurnWritten?: (tx: Prisma.TransactionClient, turn: ConversationTurn) => Promise<void>;
+      /** Which client sent the turn — see `createTurn`'s own. Carried onto both branches. */
+      senderClient?: TurnSenderClient;
       /**
        * This request is a PERSON saying something now — the HTTP resume door, and only that one.
        *
@@ -9482,6 +9525,7 @@ export class SessionsService {
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
         senderSessionId: opts?.senderSessionId,
+        senderClient: opts?.senderClient,
         externalSender: opts?.externalSender,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
@@ -9775,6 +9819,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...senderClientColumns(opts?.senderClient),
         ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
@@ -11104,6 +11149,8 @@ export class SessionsService {
         folderId,
         assignedRunnerId: target.runnerId,
         branch: branchAfterMove(session, fromWorktree, target.enableWorktree),
+        // A folder below the old workspace's directory names nothing in the new one.
+        workSubdir: null,
         baseSha: null,
         changedFiles: Prisma.DbNull,
         isolationStatus: null,

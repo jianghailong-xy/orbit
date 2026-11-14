@@ -86,6 +86,11 @@ export enum ControlEventType {
    *  the Review queue — and only that; a client may not conclude from its arrival what changed, and
    *  nothing depends on it arriving at all (contract `realtime.correctness`). */
   WIKI_CHANGED = 'wiki.changed',
+  /** The owner's terminals changed — a terminal asked to be approved, a request was approved, denied or
+   *  collected, or a terminal credential was revoked. USER-SCOPED (see above). `data` is a
+   *  `ControlResourceChanged` naming the request or credential and NOTHING else: a nudge to re-read
+   *  `GET /terminals/requests` (the approve card) and `GET /terminals` (Settings → Terminals). */
+  TERMINALS_CHANGED = 'terminals.changed',
   /** The owner's Open list may read differently than it did. USER-SCOPED (see above). `data` is a
    *  `ControlListChanged`. Sent ONLY to a stream that declared it with
    *  `GET /api/events?hints=list_changed` (`CONTROL_HINT_LIST_CHANGED`): shipped clients treat a type
@@ -108,7 +113,7 @@ export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
    *  `tag.changed` / `folder.changed` / `provider.changed` / `project.criteria_decisions.changed` /
-   *  `project.changed` / `watch.changed` / `wiki.changed` / `sessions.list_changed`), which belong to the owner, not to any
+   *  `project.changed` / `watch.changed` / `wiki.changed` / `terminals.changed` / `sessions.list_changed`), which belong to the owner, not to any
    *  one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
   sessionId: string;
