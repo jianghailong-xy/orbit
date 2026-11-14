@@ -350,4 +350,52 @@ class RunnerPageTest {
         assertEquals("Not installed", status("""{"engine":"dsh","installed":false}"""))
         assertEquals("Unsupported version", status("""{"engine":"dsh","installed":true,"dsh":{"versionCompatible":false}}"""))
     }
+
+    // Dismiss until the next release (web runnerEngines.test.ts / runnerAttention.cases.json's dismissal cases)
+
+    private val dismissedCase = "Codex update warning dismissed against the release that is still the latest"
+    /** The dismissal case's runner, with Codex's latest and the dismissal set as given. */
+    private fun dismissal(latest: String, dismissed: String?): JsonObject {
+        val input = case(dismissedCase)
+        val runner = runnerOf(input)
+        val engines = runner.list("engines").map { e ->
+            if (e.str("engine") != "codex") e else JsonObject(e + ("update" to JsonObject(e.obj("update")!! + ("latest" to JsonPrimitive(latest)))))
+        }
+        val dismissals = dismissed?.let { buildJsonObject { put("codex", it) } } ?: JsonNull
+        return JsonObject(input + ("runner" to JsonObject(runner + mapOf("engines" to JsonArray(engines), "engineUpdateDismissals" to dismissals))))
+    }
+    private fun codexUpdate(input: JsonObject) = runnerOf(input).list("engines").first { it.str("engine") == "codex" }.obj("update")
+
+    @Test fun aWarningDismissedAgainstTheLatestGoesQuietAndANewerLatestWarnsAgain() {
+        val now = case(dismissedCase)["nowMs"]!!.jsonPrimitive.long
+        val still = dismissal("0.169.0", "0.169.0")
+        assertEquals("quiet" to "13d behind 0.169.0 · warning dismissed", RunnerPage.updateNoteOf(codexUpdate(still), now, dismissed = "0.169.0"))
+        assertEquals("0.169.0", RunnerPage.engineUpdateDismissedFor(runnerOf(still), "codex"))
+        val newer = dismissal("0.170.0", "0.169.0")
+        assertEquals("warn" to "13d behind 0.170.0", RunnerPage.updateNoteOf(codexUpdate(newer), now, dismissed = "0.169.0"))
+        assertEquals("not dismissed", "warn" to "13d behind 0.169.0", RunnerPage.updateNoteOf(codexUpdate(still), now))
+        assertEquals("an empty dismissal is none", "warn" to "13d behind 0.169.0", RunnerPage.updateNoteOf(codexUpdate(still), now, dismissed = ""))
+        // A note that was not a warning is left as it is.
+        val quiet = buildJsonObject { put("status", "skipped"); put("latest", "0.169.0") }
+        assertEquals("quiet" to "not auto-updated", RunnerPage.updateNoteOf(quiet, now, dismissed = "0.169.0"))
+        assertNull("an older server sends no dismissals", RunnerPage.engineUpdateDismissedFor(runnerOf(dismissal("0.169.0", null)), "codex"))
+    }
+
+    @Test fun aDismissedEngineRaisesNoItemNorCountsUntilTheLatestMoves() {
+        val now = case(dismissedCase)["nowMs"]!!.jsonPrimitive.long
+        val still = dismissal("0.169.0", "0.169.0")
+        assertEquals(emptyList<AttentionItem>(), items(still))
+        assertNull("the machine is not in Needs Attention", RunnerPage.listAttentionLine(items(still)))
+        assertFalse(RunnerPage.offersUpdateDismiss(runnerOf(still), "codex", now))
+        assertNull(RunnerPage.updateFailedLine(runnerOf(still).list("engines")[1], now, ZoneId.of("UTC"), dismissed = "0.169.0"))
+        assertFalse(MachinesAndModels.summary(runnerOf(still), now).contains("not updating"))
+
+        val newer = dismissal("0.170.0", "0.169.0")
+        assertEquals(listOf("engineNotUpdating"), items(newer).map { it.kind })
+        assertEquals("Codex update failed", RunnerPage.listAttentionLine(items(newer)))
+        assertTrue(RunnerPage.offersUpdateDismiss(runnerOf(newer), "codex", now))
+        assertEquals("1 engine not updating", MachinesAndModels.summary(runnerOf(newer), now))
+        assertEquals("Dismiss until next Codex release", RunnerCopy.dismissUntilNextRelease(RunnerPage.engineName("codex")))
+        assertEquals("runners/r1/engines/codex/update-warning/dismiss", RunnerPage.updateDismissPath("r1", "codex"))
+    }
 }

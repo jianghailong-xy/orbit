@@ -386,6 +386,14 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
         scope.launch { show(model.press { api.patch("runners/$id", buildJsonObject { put("minFreeDiskMb", mb?.let(::JsonPrimitive) ?: JsonNull) }) }) }
     }
     fun updateEngines() = scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
+    // Dismiss until the engine's next release: the server records its current update.latest (runner.engineUpdateDismissals), which hides
+    // both the Needs Attention card and the row's warning until a newer release.
+    var dismissing by remember(id) { mutableStateOf(false) }
+    fun dismissUpdateWarning(engine: String) = scope.launch {
+        dismissing = true
+        model.press { api.post(RunnerPage.updateDismissPath(id, engine)) }?.let { notice.show("${RunnerCopy.UPDATE_DISMISS_FAILED} — $it") }
+        dismissing = false
+    }
     // Checks for its own release now rather than at its next 10-minute check, by the same rules: a turn in flight still holds it.
     fun updateRunner() = scope.launch { notice.show(model.press { api.post("runners/$id/self-update") } ?: RunnerCopy.UPDATE_RUNNER_REQUESTED) }
     fun copy(text: String) { copyText(context, "Orbit", text); notice.show("Copied") }
@@ -427,7 +435,15 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                             "repair" -> AttentionButton(RunnerCopy.REPAIR) { scope.launch { show(model.press { api.post("workspaces/${action.workspaceId}/repo-cleanup") }) } }
                             "setReserve" -> AttentionButton(RunnerCopy.SET_A_RESERVE) { choosingReserve = true }
                             "copyCommand" -> AttentionButton(RunnerCopy.COPY_COMMAND) { copy(action.command.orEmpty()) }
-                            "updateEngines" -> AttentionButton(RunnerCopy.UPDATE_ENGINES_NOW, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { updateEngines() }
+                            "updateEngines" -> {
+                                AttentionButton(RunnerCopy.UPDATE_ENGINES_NOW, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { updateEngines() }
+                                // Until the next release: only a warning against a known latest has one to wait for.
+                                val engine = action.engine
+                                if (engine != null && RunnerPage.offersUpdateDismiss(runner, engine, now)) {
+                                    DismissWarningLink(RunnerCopy.dismissUntilNextRelease(RunnerPage.engineName(engine)), "attention-dismiss:$engine",
+                                        enabled = !dismissing) { dismissUpdateWarning(engine) }
+                                }
+                            }
                             "updateRunner" -> AttentionButton(RunnerCopy.UPDATE_RUNNER_NOW) { updateRunner() }
                             "checkRegion" -> AttentionButton(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE, enabled = id !in model.regionChecking) { checkRegion() }
                         }
@@ -450,7 +466,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                 if (runner["engines"] == null || runner["engines"] is JsonNull) Text("This runner hasn’t reported its engines yet.", Modifier.padding(vertical = 8.dp), color = Ink.muted)
                 engineRows.forEachIndexed { index, health ->
                     if (index > 0) HorizontalDivider()
-                    EngineRow(runner, health, offline, now, checking = id in model.regionChecking, checkAgain = ::checkRegion) {
+                    EngineRow(runner, health, offline, now, checking = id in model.regionChecking, checkAgain = ::checkRegion,
+                        dismissing = dismissing, dismiss = { dismissUpdateWarning(health.text("engine")) }) {
                         open(OrbitRoute(Destination.RUNNER, id, recordId = "engine:${health.text("engine")}"))
                     }
                 }
@@ -569,6 +586,14 @@ private fun AboutRows(vararg rows: Pair<String, String?>) = rows.filter { !it.se
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(label, Modifier.weight(1f)); SelectionContainer { Text(value!!, color = Ink.muted) } }
 }
 
+/** Dismiss an engine's update warning until its next release: a text link, beside the warning it hides (web's `re-link`). */
+@Composable
+private fun DismissWarningLink(label: String, tag: String, enabled: Boolean, onClick: () -> Unit) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.testTag(tag), contentPadding = PaddingValues(horizontal = 0.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
 @Composable
 private fun AttentionButton(label: String, enabled: Boolean = true, onClick: () -> Unit) {
     FilledTonalButton(onClick = onClick, enabled = enabled, modifier = Modifier.padding(top = 4.dp), shape = RoundedCornerShape(50)) { Text(label) }
@@ -650,7 +675,7 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, mod
  * Region not supported, reads no usage and names no next account, and offers Check Again in Sign In's place: a press of its own. */
 @Composable
 private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, now: Long, checking: Boolean, checkAgain: () -> Unit,
-                      open: () -> Unit) {
+                      dismissing: Boolean, dismiss: () -> Unit, open: () -> Unit) {
     val engine = health.text("engine")
     val installed = health.bool("installed") == true
     val status = RunnerPage.engineStatus(health, runner)
@@ -676,7 +701,12 @@ private fun EngineRow(runner: JsonObject, health: JsonObject, offline: Boolean, 
                     if (tone == "muted") append(text) else withStyle(SpanStyle(color = Ink.tone(tone))) { append(text) }
                 }
             }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-            RunnerPage.updateFailedLine(health, now)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+            RunnerPage.updateFailedLine(health, now, dismissed = RunnerPage.engineUpdateDismissedFor(runner, engine))?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber)
+                // Until the next release: only a warning against a known latest has one to wait for.
+                if (RunnerPage.offersUpdateDismiss(runner, engine, now)) DismissWarningLink(RunnerCopy.UPDATE_DISMISS, "engine-row:$engine:dismiss",
+                    enabled = !dismissing, onClick = dismiss)
+            }
             cursorHint?.let { Text(it, Modifier.testTag("cursor-state-hint"), style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
             if (RunnerPage.claudeRegionBlocked(runner, engine)) Box(Modifier.testTag("engine-row:$engine:check-again")) {
                 AttentionButton(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE, enabled = !offline && !checking, onClick = checkAgain)
@@ -785,6 +815,14 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
         restoring = false
     }
     fun install() = scope.launch { show(model.press { api.post("runners/$id/install", buildJsonObject { put("engine", engine) }) }) }
+    // Dismiss until the next release, as the machine page's card and row do.
+    val dismissed = RunnerPage.engineUpdateDismissedFor(runner, engine)
+    var dismissing by remember(id, engine) { mutableStateOf(false) }
+    fun dismissUpdateWarning() = scope.launch {
+        dismissing = true
+        model.press { api.post(RunnerPage.updateDismissPath(id, engine)) }?.let { notice.show("${RunnerCopy.UPDATE_DISMISS_FAILED} — $it") }
+        dismissing = false
+    }
     // A machine blocked for the Claude region keeps Claude Code's accounts as they are, each saying its sign-in alone, and offers Check
     // Again in Add Account's place (board 03): no Claude sign-in starts there.
     val regionBlocked = RunnerPage.claudeRegionBlocked(runner, engine)
@@ -799,7 +837,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         val version = RunnerPage.engineVersion(health.str("version"))
                         append(version.orEmpty())
                         // Cursor CLI's build is the one Orbit pins, which its note says (`pinned · checked 6m ago`).
-                        RunnerPage.updateNoteOf(health.obj("update"), now, pinned = engine == ProviderEngines.CURSOR)?.let { (tone, text) ->
+                        RunnerPage.updateNoteOf(health.obj("update"), now, pinned = engine == ProviderEngines.CURSOR, dismissed = dismissed)?.let { (tone, text) ->
                             if (version != null) append(RunnerCopy.SEP)
                             if (tone == "warn") withStyle(SpanStyle(color = Ink.amber)) { append(text) } else append(text)
                         }
@@ -810,7 +848,10 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         withStyle(SpanStyle(color = Ink.amber)) { append(ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED) }
                     }
                 }, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                health?.let { RunnerPage.updateFailedLine(it, now) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+                health?.let { RunnerPage.updateFailedLine(it, now, dismissed = dismissed) }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.amber) }
+                // Until the next release: only a warning against a known latest has one to wait for.
+                if (RunnerPage.offersUpdateDismiss(runner, engine, now)) DismissWarningLink(RunnerCopy.UPDATE_DISMISS, "engine-page:dismiss",
+                    enabled = !dismissing) { dismissUpdateWarning() }
                 // DeepSeek Harness signs nothing in here: each session runs on the DeepSeek key it was started with (board 1 ⑥).
                 if (engine == ProviderEngines.DSH && health != null) RunnerPage.dshStatus(health, runner).let { (text, _) ->
                     Text(if (text == RunnerCopy.USES_API_KEYS) RunnerCopy.DSH_READY else text, Modifier.testTag("dsh-engine-status"),
