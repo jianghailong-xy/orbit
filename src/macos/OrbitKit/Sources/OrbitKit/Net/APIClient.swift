@@ -1217,6 +1217,20 @@ public final class APIClient: @unchecked Sendable {
                               body: ReplaceProjectCoordinatorRequest(workspaceId: workspaceID))
     }
 
+    /// The waits the project's coordinator would hand over — the confirm's "N pending waits move
+    /// over" row (docs/coordinator-handoff.md). Empty hides the row.
+    public func coordinatorPendingWaits(_ projectID: String) async throws -> [CoordinatorPendingWait] {
+        try await get("projects/\(projectID)/coordinator/pending-waits")
+    }
+
+    /// One of the handoff's presses: `nil` is Hand over, then `skip` (Skip the note / Hand over without
+    /// a note), `cancel` (Cancel handover / Keep this coordinator) and `retry` (Try again). Each
+    /// answers the handoff as it now stands; a 409 is a press that does not fit its state.
+    public func coordinatorHandoff(_ projectID: String,
+                                   _ action: CoordinatorHandoffAction = .start) async throws -> CoordinatorHandoffView {
+        try await postEmpty("projects/\(projectID)/coordinator/handoff\(action.pathSuffix)")
+    }
+
     /// Lift a task list's pause, so its otherwise-ready tasks can run.
     public func resumeTaskList(_ listID: String, note: String) async throws {
         let _: Empty = try await patch("task-lists/\(listID)", body: ResumeTaskListRequest(note: note))

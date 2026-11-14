@@ -1475,6 +1475,13 @@ public struct TranscriptReducer: Sendable, Codable {
         // for the same block — arriving with the whole text and no open bubble to fill — would
         // then append the reply a SECOND time, in full, under the partial copy.
         if !steer { flushStreaming() }
+        // A coordinator's handoff-note turn is the platform's prompt, not the owner's words: the
+        // conversation shows the handoff's own row instead (docs/coordinator-handoff.md), and the
+        // reply that follows is drawn as usual.
+        if CoordinatorContextActions.isHandoffTurn(clientTurnId: cid) {
+            if let tid = ev.turnId { state.queued.removeAll { $0.turnId == tid } }
+            return
+        }
         // An exception item's delivery, when the control plane recorded the item's own fields beside
         // this echo (`openItemDelivery`, `OpenItemDelivery.parse`). Read off the payload rather than
         // out of the text, so a delivery that carries no card — every one stored before the payload
