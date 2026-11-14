@@ -61,8 +61,10 @@ func assertCodexOrbitMCPContextForwarded(t *testing.T, args []string) {
 	// a deliberate edit, because Codex hands its MCP servers this ALLOWLIST instead
 	// of its own environment — a variable the spawn sets but this list omits simply
 	// never arrives (ORBIT_BG_SOCKET/ORBIT_BG_TOKEN are on it for that reason, and a managed runner's
-	// instance identity, without which its control plane refuses the credential `orbit mcp` uses).
-	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
+	// instance identity, without which its control plane refuses the credential `orbit mcp` uses, and
+	// ORBIT_SPAWN_DEPTH, without which a nested session's wait is as long as a root's, and the runner's mark, without
+	// which the Plan gate cannot tell a session process that lost its socket from a terminal).
+	want := `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_WATCHES","ORBIT_WIKI","ORBIT_MCP_PERMISSION_PROMPT","ORBIT_SPAWN_DEPTH","ORBIT_RUNNER_CHILD","ORBIT_BG_SOCKET","ORBIT_BG_TOKEN","ORBIT_MANAGED_RUNNER_GENERATION","ORBIT_MANAGED_RUNNER_POD_UID"]`
 	for i, arg := range args {
 		if arg == want {
 			if i == 0 || args[i-1] != "-c" {
@@ -282,12 +284,32 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	if !ok {
 		t.Fatalf("additionalContext = %#v", got["additionalContext"])
 	}
-	orbit, ok := additional["orbit_00000000_cli"].(map[string]interface{})
-	if !ok || orbit["kind"] != "application" {
-		t.Fatalf("orbit CLI context = %#v", additional["orbit_00000000_cli"])
+	// Orbit's instructions arrive as whole paragraphs in values Codex never cuts, and read back in key
+	// order they are the instructions themselves.
+	var cliKeys []string
+	for key := range additional {
+		if strings.HasPrefix(key, "orbit_00000000_cli_") {
+			cliKeys = append(cliKeys, key)
+		}
 	}
-	if orbit["value"] != orbitCLIInstructions(exe, false, true) {
-		t.Fatalf("orbit_cli value = %q, want %q", orbit["value"], orbitCLIInstructions(exe, false, true))
+	sort.Strings(cliKeys)
+	var cliParts []string
+	for _, key := range cliKeys {
+		orbit, ok := additional[key].(map[string]interface{})
+		if !ok || orbit["kind"] != "application" {
+			t.Fatalf("orbit CLI context %s = %#v", key, additional[key])
+		}
+		value := orbit["value"].(string)
+		if len(value) > codexContextValueMaxBytes {
+			t.Fatalf("orbit CLI context %s is %d bytes, over Codex's per-value budget %d", key, len(value), codexContextValueMaxBytes)
+		}
+		cliParts = append(cliParts, value)
+	}
+	if len(cliParts) < 2 || strings.Join(cliParts, "\n\n") != orbitCLIInstructions(exe, false, true) {
+		t.Fatalf("orbit CLI context in %d values = %q, want %q", len(cliParts), strings.Join(cliParts, "\n\n"), orbitCLIInstructions(exe, false, true))
+	}
+	if !strings.HasPrefix(cliParts[0], agentPrimerLead) {
+		t.Fatalf("the first orbit CLI value does not open with the agent primer: %q", cliParts[0])
 	}
 	owner, ok := additional["orbit_00000000_agent_append_00000000"].(map[string]interface{})
 	if !ok || owner["kind"] != "application" || owner["value"] != "Owner instructions." {
