@@ -21831,7 +21831,7 @@ div.landing-jobs-open {
 }
 .shared-link-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px 236px;
+  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px auto;
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
@@ -21913,10 +21913,29 @@ div.landing-jobs-open {
 .shared-link-since {
   color: var(--text-3);
 }
+.shared-link-row.is-pressable {
+  cursor: pointer;
+}
+.shared-link-row.is-pressable:hover {
+  background: var(--bg-hover);
+}
 .shared-link-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 2px;
+  min-width: 92px;
+}
+.shared-link-actions .orbit-button-text {
+  color: var(--text-3);
+}
+.shared-link-chev {
+  width: 16px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.shared-link-chev.is-ghost {
+  visibility: hidden;
 }
 @media (max-width: 900px) {
   .shared-link-row {

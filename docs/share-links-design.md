@@ -103,7 +103,7 @@
 - 管理页：Settings → `Shared links`（`/settings/shared-links`）。
   - 结构照 Following 页：tab 为 Active / Paused / Ended。
   - 不按「会话完成多久」点名链接（2026-11-14，效果图 12）：完成不等于不想分享了，要限时在分享时选 Expires。
-  - 每行三个动作：Copy / Settings / Turn off。
+  - 每行（2026-11-14，效果图 13）：点整行打开 Share 对话框，行尾 ›；露出一个无框复制图标（Copy link）；无框 ⋯ 里是 Copy link / Settings… / 分隔线 / 红字 Turn off…（照旧先问）。暂停的行点不开，⋯ 里只有 Turn off…；过期的行保留 Share again 按钮。
 - iOS/macOS：
   - 项目菜单里现在的「Share link」（分享登录地址）改名为 `Copy Link`，新增 `Share…`。
   - 分享面板是对话框的 Form 版：Access Picker → 链接、Copy Link、Share Link… → Includes 开关 → Expires → 访问次数。
