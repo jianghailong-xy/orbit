@@ -47,6 +47,40 @@ export function mergeRecoveryTargetMovedAfterRepair(r: MergeRecovery): boolean {
     r.repairBranch !== `orbit/recovery/${r.previewId}`;
 }
 
+/** A ready check whose push only adds this session's own commits on top of an origin the local target matches: nothing
+ *  for the owner to decide, so the merge slot offers a plain Merge on its preview instead of this panel. Older runners
+ *  leave pushCommits out, and then the panel still lists what the push adds. */
+export function mergeRecoveryFastForward(r: MergeRecovery): boolean {
+  const rel = mergeRecoveryTargetRelation(r);
+  return mergeRecoveryReady(r) && !r.addsMergeCommit && !!rel && !rel.ahead && !rel.behind &&
+    !!r.pushCommits?.length && r.pushCommits.every((c) => mergeRecoveryCommitOrigin(r, c) === 'session');
+}
+
+/** Past this a pending merge operation is overdue: the server's own WORKTREE_OPERATION_STALE_MS. */
+const MERGE_OPERATION_OVERDUE_MS = 5 * 60_000;
+
+/** The one line the merge slot shows while a merge operation is pending: what Orbit is doing, since when, and on which
+ *  runner. It takes the place of the panel and every button, so nothing reads as a check that isn't running. */
+export function MergeOperationLine({ action, target, requestedAt, runner, now = Date.now() }: {
+  action?: MergeRecoveryAction | null;
+  target: string;
+  requestedAt?: string | null;
+  runner?: { name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
+  now?: number;
+}) {
+  const what = action === 'preview' ? `Checking ${target} against origin/${target}`
+    : action === 'sync-local' ? `Syncing local ${target}` : `Merging into ${target}`;
+  const runnerName = runner?.displayName || runner?.name;
+  const overdue = !!requestedAt && now - Date.parse(requestedAt) > MERGE_OPERATION_OVERDUE_MS;
+  const since = [requestedAt && `started ${relTime(requestedAt)}`, runnerName && `on ${runnerName}`].filter(Boolean).join(' ');
+  return <div className={`wt-merge-op${overdue ? ' is-overdue' : ''}`} role="status">
+    {!overdue && <LoadingOutlined spin aria-hidden="true" />}
+    <strong>{overdue ? `Still ${what[0].toLowerCase()}${what.slice(1)}` : what}</strong>
+    {since && <span>· {since}</span>}
+    {overdue && runnerName && runner?.lastHeartbeatAt && <span>· {runnerName} last reported {relTime(runner.lastHeartbeatAt)}</span>}
+  </div>;
+}
+
 /** "Oct 11": the day a commit reached origin, with the year when it is not this one. */
 function landedDay(iso: string): string {
   const d = new Date(iso);
@@ -56,7 +90,7 @@ function landedDay(iso: string): string {
 }
 
 export function MergeRecoveryPanel({ recovery: r, branch, message, busy, supported, checking = false, onAction, onRepair,
-  repairSession, repairStarting, onOpenRepair }: {
+  repairSession, repairStarting, onOpenRepair, waitingForTurn = false }: {
   recovery: MergeRecovery;
   /** The session's branch — where the pushed work comes from. */
   branch?: string | null;
@@ -70,6 +104,8 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
   repairSession?: MergeRepairSession | null;
   repairStarting?: boolean;
   onOpenRepair?: () => void;
+  /** The session is running a turn: every write waits for it to end, and the panel says so. */
+  waitingForTurn?: boolean;
 }) {
   const ready = mergeRecoveryReady(r);
   const pendingLocal = r.code === 'LOCAL_SYNC_PENDING';
@@ -106,9 +142,11 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
     : { kind: 'finished', head: 'Repair session finished', note: checkedAgo && `Checked ${checkedAgo}` };
   // Beside the time once the loop has settled. While the repair runs, a check could only say it isn't done yet.
   const checkLink = loop === 'settled' && canAct && !pendingLocal;
+  const more = (!!message && !ready && !landed) || (r.patch !== undefined && !!r.candidateSha) || !!r.check || ready || !!r.repairBranch;
   const title = pendingLocal ? `Merged into origin/${r.targetBranch}; local sync pending`
     : landed ? `Already on origin/${t}`
-    : ready ? `Review synchronization into ${r.targetBranch}`
+    : ready ? (localOnly ? `Local ${t} has ${localOnly} ${localOnly === 1 ? 'commit' : 'commits'} that ${localOnly === 1 ? 'isn’t' : 'aren’t'} on origin`
+      : r.addsMergeCommit ? `origin/${t} moved — merging joins both histories` : `Ready to merge into ${t}`)
     : r.code === 'CONFLICT' ? (r.phase === 'TARGET_SYNC' ? `${r.targetBranch} synchronization has conflicts` : 'Your changes conflict with the synchronized target')
     : unfinished ? 'The repair isn’t finished'
     : r.code === 'PREVIEW_CHANGED' ? 'Branches changed — check again'
@@ -146,7 +184,6 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
       {landed && localOnly > 0 && <p>Local {t}’s own {localOnly} {localOnly === 1 ? 'commit isn’t' : 'commits aren’t'} part of this session.</p>}
       {r.code === 'TARGET_DIVERGED' && <p>Local {r.targetBranch} and origin/{r.targetBranch} each have unique commits.</p>}
       {r.code === 'TARGET_AHEAD' && <p>Local {r.targetBranch} has extra commits that are not on origin/{r.targetBranch}. Review them before continuing this merge.</p>}
-      {message && !ready && !landed && <details><summary>Details</summary><pre>{message}</pre></details>}
       {!r.previewId && !landed && <p>Check the local and remote commits before continuing the merge.</p>}
       {landedCommits.length > 0 && <div className="wt-recovery-histories">
         <details open className="wt-recovery-landed"><summary>On origin/{t} ({landedCommits.length} {landedCommits.length === 1 ? 'commit' : 'commits'})</summary>
@@ -174,12 +211,16 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
         <ul>{r.conflicts.map((path) => <li key={path}><code>{path}</code></li>)}</ul>
         {mergeRecoveryTargetMovedAfterRepair(r) && <p>origin/{t} moved after the repair. The repair was kept; only {conflicts === 1 ? 'this file conflicts' : 'these files conflict'} with the new commits.</p>}
       </div> : null}
-      {r.patch !== undefined && r.candidateSha && <details className="wt-recovery-diff"><summary>Complete candidate diff against origin/{r.targetBranch}</summary><pre>{r.patch || 'No content changes.'}</pre></details>}
-      {r.check && <p>{r.check.status === 'unconfigured' ? 'Git preview only; no merge check is configured.' : r.check.status === 'passed' ? 'Configured merge check passed.' : 'Configured merge check failed.'}</p>}
-      {r.check?.output && <details><summary>Check output</summary><pre>{r.check.output}</pre></details>}
-      {ready && <p>{!push && <>Preserves both target histories.{r.addsMergeCommit ? ' Adds one merge commit.' : ''}{localOnly ? ' The local-only commits above will be pushed with this session’s changes.' : ''} </>}If the repository requires linear history or a PR, prepare a PR candidate instead.</p>}
       {pendingLocal && <p>The remote contains the reviewed candidate. Save the blocking local edits before syncing; this action only updates this machine.</p>}
-      {r.repairBranch && <details><summary>Saved repair branch and location</summary><code>{r.repairBranch}</code><br /><code>{r.repairWorktree}</code></details>}
+      {/* Everything below the decision: the full diff, the configured check, the policy note and where the repair lives. */}
+      {more && <details className="wt-recovery-more"><summary>Details</summary>
+        {message && !ready && !landed && <pre>{message}</pre>}
+        {r.patch !== undefined && r.candidateSha && <details className="wt-recovery-diff"><summary>Complete candidate diff against origin/{r.targetBranch}</summary><pre>{r.patch || 'No content changes.'}</pre></details>}
+        {r.check && <p>{r.check.status === 'unconfigured' ? 'Git preview only; no merge check is configured.' : r.check.status === 'passed' ? 'Configured merge check passed.' : 'Configured merge check failed.'}</p>}
+        {r.check?.output && <details><summary>Check output</summary><pre>{r.check.output}</pre></details>}
+        {ready && <p>{!push && <>Preserves both target histories.{r.addsMergeCommit ? ' Adds one merge commit.' : ''}{localOnly ? ' The local-only commits above will be pushed with this session’s changes.' : ''} </>}If the repository requires linear history or a PR, prepare a PR candidate instead.</p>}
+        {r.repairBranch && <details><summary>Saved repair branch and location</summary><code>{r.repairBranch}</code><br /><code>{r.repairWorktree}</code></details>}
+      </details>}
     </div>
     <div className="wt-recovery-actions">
       {loop === 'running'
@@ -192,8 +233,8 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
             : pendingLocal
             ? <button type="button" disabled={busy} onClick={() => onAction!('sync-local', r.previewId)}>Sync local checkout</button>
             : <>
-              {!loop && <button type="button" disabled={busy} onClick={() => onAction!('preview')}>{busy ? 'Checking…' : checkLabel}</button>}
-              {ready && <button type="button" className="wt-merge-btn" disabled={busy} onClick={() => onAction!('apply', r.previewId)}>Sync {r.targetBranch} and merge</button>}
+              {!loop && <button type="button" disabled={busy} onClick={() => onAction!('preview')}>{checkLabel}</button>}
+              {ready && <button type="button" className="wt-merge-btn" disabled={busy} onClick={() => onAction!('apply', r.previewId)}>{localOnly && push ? `Push ${push.length} ${push.length === 1 ? 'commit' : 'commits'} and merge` : `Merge into ${t}`}</button>}
               {retry && <button type="button" disabled={busy} onClick={() => onAction!('apply', r.previewId)}>Check result / retry reviewed candidate</button>}
             </>)}
           {r.repairWorktree && onRepair && !pendingLocal && (loop
@@ -211,6 +252,7 @@ export function MergeRecoveryPanel({ recovery: r, branch, message, busy, support
         </>}
     </div>
     {loop === 'running' && <p className="wt-recovery-actions-note">Orbit checks again when the repair stops.</p>}
+    {waitingForTurn && loop !== 'running' && <p className="wt-recovery-actions-note">Available when this session’s turn ends.</p>}
     {!supported && <p>Update the runner to use target synchronization recovery.</p>}
   </section>;
 }
