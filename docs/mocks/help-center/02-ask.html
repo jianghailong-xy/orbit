@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Help center · 02 · Ask</title>
+<link rel="stylesheet" href="kit.css"></head>
+<body><div class="board">
+<h1>帮助中心 · 02 · Ask：问一个读过文档的 agent</h1>
+<p class="lede">搜不到、或者不知道该搜什么时，用 Ask。它是一个<b>普通的 session</b>，跑在你自己的一台机器、一个 engine 上（和 Wiki 聊天一样：工具、费用、手机上能看，全都照旧），只是有三条限制：<br>
+① 只能<b>读</b>：帮助文章 + 你账户的只读状态（机器在不在线、任务卡在哪），不能改任何东西；② 每个结论<b>引用文章</b>；③ 要改设置时给一个<b>按钮</b>，由你点。</p>
+<div class="legend"><span><i style="background:var(--new)"></i>新增</span><span><i style="background:var(--mark)"></i>说明</span><span><span class="tag dec">已定</span>owner 11-14 定了</span></div>
+
+<!-- ============ 1 empty ============ -->
+<div class="part"><div class="part-h"><span class="no">1</span><h2>打开 Ask：带着这一页，给三个建议问题</h2><small>还在 Settings → Machines，build-box 离线</small></div>
+<div class="split"><div class="frames">
+<div class="win" style="width:400px;height:640px">
+  <div class="drawer" style="width:100%;border-left:0">
+    <div class="dh"><span class="ttl">Help</span><span class="seg"><span>Articles</span><span class="on">Ask</span></span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="runs m">Runs on <span class="pick">mia-macbook ▾</span><span class="pick">Claude Code · Sonnet 5.5 ▾</span><span class="mk g" style="right:6px;top:7px">1</span></div>
+    <div class="db">
+      <div class="empty"><span class="logo" style="display:inline-block;width:30px;height:30px;border-radius:9px"></span>
+        <div class="big">Ask about Orbit</div>Answers come from the help articles and what Orbit can see on your account. Nothing is changed unless you press a button.</div>
+      <div class="m" style="margin-top:14px"><span class="mk g" style="left:-12px;top:-10px">2</span>
+        <div class="sugg">Why is build-box offline?</div>
+        <div class="sugg">How do I add a second machine?</div>
+        <div class="sugg">Which engines can run on a Linux server?</div></div>
+    </div>
+    <div class="composer m"><span class="mk g" style="left:-12px;top:-10px">3</span>
+      <div style="margin-bottom:6px"><span class="ctx">▣ Settings → Machines ✕</span></div>
+      <div class="ph2">Ask a question</div>
+      <div class="bar"><span style="color:var(--text-3);font-size:12px">Read-only</span><span class="send off">↑</span></div></div>
+  </div>
+</div>
+<div class="win" style="width:400px;height:640px">
+  <div class="drawer" style="width:100%;border-left:0">
+    <div class="dh"><span class="ttl">Help</span><span class="seg"><span>Articles</span><span class="on">Ask</span></span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="runs">Runs on <span class="pick">mia-macbook ▾</span><span class="pick">Claude Code · Sonnet 5.5 ▾</span></div>
+    <div class="db" style="position:relative">
+      <div class="menu" style="left:16px;top:-6px;width:300px">
+        <div style="color:var(--text-3);font-size:11.5px">MACHINE</div>
+        <div class="hl">✓ mia-macbook<span class="k">Online</span></div>
+        <div style="color:var(--text-3)">build-box<span class="k">Offline</span></div>
+        <div>gpu-01<span class="k">Online</span></div>
+        <hr><div style="color:var(--text-3);font-size:11.5px">ENGINE ON MIA-MACBOOK</div>
+        <div class="hl">✓ Claude Code · Sonnet 5.5</div><div>Codex · GPT-5.5 mini</div><div>Cursor</div>
+        <hr><div style="color:var(--text-2);white-space:normal;line-height:1.45">Orbit remembers this choice for every Ask.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n g">1</span><div><b>Runs on</b>：机器 + engine。默认挑一台在线的机器、一个便宜够快的模型（Sonnet / mini 级），选过一次就记住。离线机器灰掉不能选。<b>不需要 workspace</b>：Ask 在机器上一个临时目录里跑，目录里只有这台服务器版本的文章库。</div></div>
+<div class="it"><span class="n g">2</span><div><b>建议问题</b>：按当前页 + 页上的错误生成（例：页上有离线机器 → “Why is build-box offline?”）。点一下直接发送。</div></div>
+<div class="it"><span class="n g">3</span><div><b>这一页作为附件</b>：自动带上当前页面（路由 + 页上可见的错误），可以点 ✕ 去掉。composer 左下角写明 <b>Read-only</b>。</div></div>
+<div class="it"><span class="n">!</span><div>Ask 是普通 session，所以 <b>费用、额度、手机上看</b>都和别的 session 一样；它<b>不出现</b>在任何 workspace 的 session 列表里，只在 <code>/help → Your questions</code> 里（④）。</div></div>
+</div></div></div>
+
+<!-- ============ 2 answer ============ -->
+<div class="part"><div class="part-h"><span class="no">2</span><h2>回答：先查，再说，每句有出处，要改的地方给按钮</h2><small>agent 看到 build-box 最后一次心跳，判断是睡眠</small></div>
+<div class="split"><div class="frames">
+<div class="win" style="width:400px;height:700px">
+  <div class="drawer" style="width:100%;border-left:0">
+    <div class="dh"><span class="ib">‹</span><span class="ttl">Why is build-box offline?</span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="runs">mia-macbook · Claude Code · Sonnet 5.5 · $0.01</div>
+    <div class="db">
+      <div class="msg-u">Why is build-box offline?</div>
+      <div class="tool m">✓ Read 2 articles · ✓ Checked build-box<span class="mk g" style="left:250px;top:-2px">1</span></div>
+      <div class="msg-a">build-box last checked in <b>2 h 4 min ago</b>, right after its last session finished, and Orbit has heard nothing since. That pattern usually means the computer went to <b>sleep</b>, not that the runner crashed <span class="ref">1</span>.
+        <ol><li>Wake build-box, or check it is powered on.</li>
+          <li>If it doesn't come back in a minute, run <code style="font-size:11px">orbit doctor</code> on it <span class="ref">1</span>.</li>
+          <li>To stop this happening, turn off sleep while plugged in <span class="ref">2</span>.</li></ol>
+        Its two paused sessions resume on their own once it is back.</div>
+      <div class="m"><span class="mk g" style="left:-12px;top:-10px">2</span><div class="srcs">
+        <div><span class="ref">1</span>A machine shows Offline</div>
+        <div><span class="ref">2</span>Keep a machine awake for long tasks</div></div></div>
+      <div class="m" style="display:flex;gap:6px"><span class="go">Open build-box ›</span><span class="go">Paused sessions (2) ›</span><span class="mk g" style="left:290px;top:0">3</span></div>
+      <div class="helpful m" style="margin-top:12px;border:0">Did this answer it? <span class="btn sm">Yes</span><span class="btn sm" style="border-color:var(--brand);color:var(--brand)">No</span><span class="mk g" style="left:206px;top:6px">4</span></div>
+    </div>
+    <div class="composer"><div class="ph2" style="min-height:22px">Ask a follow-up</div><div class="bar"><span style="color:var(--text-3);font-size:12px">Read-only</span><span class="send off">↑</span></div></div>
+  </div>
+</div>
+<div class="win" style="width:400px;height:700px">
+  <div class="drawer" style="width:100%;border-left:0">
+    <div class="dh"><span class="ib">‹</span><span class="ttl">Why is build-box offline?</span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="runs">mia-macbook · Claude Code · Sonnet 5.5 · $0.01</div>
+    <div class="db">
+      <div class="msg-a" style="color:var(--text-3)">…Its two paused sessions resume on their own once it is back.</div>
+      <div class="helpful" style="border:0">Did this answer it? <span class="btn sm">Yes</span><span class="btn sm" style="background:var(--brand-tint);border-color:var(--brand);color:var(--brand)">No ✓</span></div>
+      <div class="stuck m"><span class="mk g" style="left:-12px;top:-10px">5</span>
+        <div style="font-weight:600;margin-bottom:2px">Still stuck?</div>
+        <div style="color:var(--text-2);font-size:12px;margin-bottom:4px">Say what's still wrong and the agent tries again, or hand it to a person.</div>
+        <div class="r"><span class="ai" style="width:24px;height:24px;border-radius:6px;background:var(--fill-muted);display:grid;place-items:center">✎</span><div class="b" style="flex:1"><div>Tell it what's still wrong</div></div><span style="color:var(--text-3)">›</span></div>
+        <div class="r"><span class="av" style="background:#d97757">AL</span><div style="flex:1"><div>Ask your admin</div><div style="color:var(--text-2);font-size:12px">Alex Li · sends this chat as a task</div></div><span style="color:var(--text-3)">›</span></div>
+        <div class="r"><span class="ai" style="width:24px;height:24px;border-radius:6px;background:#24292f;color:#fff;display:grid;place-items:center;font-size:11px">gh</span><div style="flex:1"><div>Report on GitHub</div><div style="color:var(--text-2);font-size:12px">Opens a prefilled issue. You review it first.</div></div><span style="color:var(--text-3)">↗</span></div>
+      </div>
+      <div class="lh">WHAT A REPORT INCLUDES</div>
+      <div class="code" style="font-size:11px;white-space:pre-line">Orbit 0.1.257 · web
+Machine: build-box · runner 0.1.255 · Linux
+Last heartbeat: 2h 4m ago
+Question and answer: this chat
+Not included: repository names, file contents, keys</div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n g">1</span><div><b>它先查再说</b>：读了哪几篇文章、看了你账户的什么，折叠成一行，点开能看。能看的只有只读接口：机器状态和心跳、session 状态、任务状态、账号额度。看不到仓库内容、key。</div></div>
+<div class="it"><span class="n g">2</span><div><b>出处</b>：回答里的 <span class="ref">1</span> 对应下面的文章，点开在 Articles 里打开那篇。<b>文章里没有的说法不说</b>：系统提示要求它只用文章和查到的状态作答；查不到就说不知道，并给出 ⑤。</div></div>
+<div class="it"><span class="n g">3</span><div><b>行动按钮</b>：要去哪里改，给一个应用内链接按钮（和文章里的 <code>orbit:/…</code> 一样）。agent 自己不改任何设置。</div></div>
+<div class="it"><span class="n g">4</span><div><b>Did this answer it?</b> Yes 结束；No 展开 ⑤。计数和文章的 Yes / No 一起给管理员看。</div></div>
+<div class="it"><span class="n g">5</span><div><b>Still stuck</b> 三条路：<br>· 继续说哪里不对，再试一次；<br>· <b>Ask your admin</b>（只对非管理员显示）：把这次对话作为一个任务发给管理员，管理员在 Waiting on you 里看到；<br>· <b>Report on GitHub</b>（自托管的管理员最需要）：预填 issue，带版本和诊断摘要，用户先看再发，默认不带仓库名、文件内容、key。<span class="tag dec">已定 2</span></div></div>
+</div></div></div>
+
+<!-- ============ 3 no machine ============ -->
+<div class="part"><div class="part-h"><span class="no">3</span><h2>还没有机器的新账户：文章照常可用，Ask 说清楚差什么</h2><small>这正是最需要帮助的时刻，所以必须有个说法</small></div>
+<div class="split"><div class="frames">
+<div class="win" style="width:400px;height:560px">
+  <div class="drawer" style="width:100%;border-left:0">
+    <div class="dh"><span class="ttl">Help</span><span class="seg"><span>Articles</span><span class="on">Ask</span></span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="db">
+      <div class="empty m"><span class="mk g" style="left:0;top:14px">A</span><span class="logo" style="display:inline-block;width:30px;height:30px;border-radius:9px;opacity:.4"></span>
+        <div class="big">Ask needs a machine</div>An agent answers your questions, and agents run on your machines. Add one and Ask works here. It takes about five minutes.</div>
+      <div style="text-align:center;margin:8px 0 18px"><span class="btn primary">+ Add a machine</span></div>
+      <div class="lh">UNTIL THEN, START HERE</div>
+      <div class="art"><span class="ai">1</span><div><div class="t">Orbit in five minutes</div></div></div>
+      <div class="art"><span class="ai">＋</span><div><div class="t">Add a machine</div></div></div>
+      <div class="art"><span class="ai">⚿</span><div><div class="t">Connect a model: subscription or API key</div></div></div>
+    </div>
+  </div>
+</div>
+<div class="win" style="width:400px;height:560px">
+  <div class="drawer" style="width:100%;border-left:0">
+    <div class="dh"><span class="ttl">Help</span><span class="seg"><span>Articles</span><span class="on">Ask</span></span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="runs m">Runs on <span class="pick">Orbit server ▾</span><span class="pick">DeepSeek key · V4.1 Flash ▾</span><span class="mk g" style="right:6px;top:7px">B</span></div>
+    <div class="db">
+      <div class="empty"><span class="logo" style="display:inline-block;width:30px;height:30px;border-radius:9px"></span>
+        <div class="big">Ask about Orbit</div>No machine yet, so the Orbit server answers with one of your API keys. It can read the help articles only.</div>
+      <div class="sugg">How do I add my first machine?</div>
+      <div class="sugg">Do I need an API key, or can I use my Claude subscription?</div>
+    </div>
+    <div class="composer"><div class="ph2" style="min-height:22px">Ask a question</div><div class="bar"><span style="color:var(--text-3);font-size:12px">Read-only</span><span class="send off">↑</span></div></div>
+  </div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n g">A</span><div><b>已定：没机器时 Ask 不可用</b>，说清楚差的是什么，给 “Add a machine” 和 3 篇上手文章。好处：Ask 只有一种运行方式，就是普通 session，不新增服务端调模型的路径；新账户最常问的问题，上手文章已经回答了。</div></div>
+<div class="it"><span class="n g">B</span><div><b>不做：没机器时由服务端用账户的 API key 回答</b>，只能读文章。好处：第一分钟就能问。代价：服务端要新增一条直接调模型的路径（今天模型调用都在 runner 上）；只有订阅、没有 API key 的账户仍然用不了。<span class="tag dec">已定 1</span></div></div>
+</div></div></div>
+
+<!-- ============ 4 your questions ============ -->
+<div class="part"><div class="part-h"><span class="no">4</span><h2>/help → Your questions：问过的都在这里</h2><small>不混进 workspace 的 session 列表</small></div>
+<div class="split"><div class="frames">
+<div class="win" style="height:420px">
+  <div class="hnav">
+    <div class="back">‹ Back to Orbit</div><div class="ni">Home</div>
+    <div class="grp">Categories</div><div class="ni">Get started</div><div class="ni">Workspaces &amp; sessions</div><div class="ni">…</div>
+    <div class="grp">More</div><div class="ni">What's new</div><div class="ni on">Your questions</div>
+  </div>
+  <div class="articlepage">
+    <div class="ph"><h3>Your questions</h3><span class="btn">✦ Ask</span></div>
+    <p class="sub">Every Ask chat you started. They are sessions like any other.</p>
+    <div class="card">
+      <div class="row"><div class="b"><div class="t">Why is build-box offline?</div><div class="s">Today 13:02 · from Settings → Machines · answered · $0.01</div></div><span class="dot">Answered</span></div>
+      <div class="row"><div class="b"><div class="t">Can two people confirm the same task?</div><div class="s">Nov 12 · from a task · sent to Alex Li</div></div><span class="dot warn">With your admin</span></div>
+      <div class="row"><div class="b"><div class="t">How do account pools pick an account?</div><div class="s">Nov 9 · from Settings → Account pools · answered · $0.02</div></div><span class="dot">Answered</span></div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n">!</span><div>每一行是一个 Ask session：标题是第一个问题，下面是从哪一页问的、结果、花费。点开在 <code>/help</code> 里接着问。</div></div>
+<div class="it"><span class="n">!</span><div>和其他 session 一样保留、一样删除。管理员<b>看不到</b>别人问了什么，只看到文章 / 回答的 Yes / No 计数。</div></div>
+</div></div></div>
+
+</div></body></html>

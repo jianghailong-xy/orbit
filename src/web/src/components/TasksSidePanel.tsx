@@ -424,11 +424,13 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       ? `project:${openProjectId}`
       : null;
   // A project's sessions page — the console with `?project=` — is that project's row's, over
-  // whichever workspace or member session it shows, and the workspace's row is not lit there.
+  // whichever workspace or member session it shows, and the workspace's row is not lit there. That is
+  // a phone's: wider, `?project=` is a column beside the conversation and the list stays the
+  // workspace's, so the workspace's row stays lit (owner 2026-11-14).
   const onConsole = !!(workspacesMatch ?? agentsMatch) || !!sessionId;
   const projectPageId = onConsole ? routeId(searchParams.get('project')) : null;
   const projectPageKey =
-    projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
+    narrow && projectPageId && openProjects.some((p) => encodeId(p.id) === projectPageId)
       ? `project:${projectPageId}`
       : null;
   const litWorkspaceId = projectPageKey ? null : activeWorkspaceId;
@@ -838,8 +840,9 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const openProject = (project: SidebarProject) => {
     onNavigate?.();
     const key = encodeId(project.id);
-    if (sel === `project:${key}`) return;
-    setSel(`project:${key}`);
+    // Wider than a phone the workspace's row stays lit (above), so the project's is not lit ahead.
+    if (sel === `project:${key}` || (!narrow && projectPageId === key)) return;
+    if (narrow) setSel(`project:${key}`);
     if (sessionId && !narrow) {
       navigate(`/sessions/${encodeId(sessionId)}?project=${key}`);
       return;

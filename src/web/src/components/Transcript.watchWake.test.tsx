@@ -151,8 +151,7 @@ describe('a turn a watch queued', () => {
 
   it('is no turn the sticky bar points at', async () => {
     await mount([userEvent(WAKE)]);
-    expect(container.querySelector('[data-sticky-label]')).toBeNull();
-    expect(container.querySelector('[data-sticky-text]')).toBeNull();
+    expect(container.querySelector('[data-orbit-round]')).toBeNull();
   });
 
   it('names a target by the title the console holds for it, on the line and in its row', async () => {
