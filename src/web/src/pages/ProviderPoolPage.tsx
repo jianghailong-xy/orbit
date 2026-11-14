@@ -293,7 +293,7 @@ function CodexPoolPage({
           <div className="pool-page-title">
             <PoolEngineMark pool={pool} size={26} />
             <h1 className="page-title">{pool.label}</h1>
-            {people && <span className="re-chip pool-shared-chip">SHARED</span>}
+            {people && <span className="re-chip pool-shared-chip">Shared</span>}
           </div>
           <div className="pool-sub">
             Codex pool · <b>{who}</b> · {!mine && `${plural(access!.people.length, 'person', 'people')} · `}

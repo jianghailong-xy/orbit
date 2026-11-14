@@ -2427,10 +2427,11 @@ struct ProjectDetailView: View {
 
     /// Work asked across this project's line, in either direction — the account owner's to answer,
     /// and nobody else's (web's `ProjectCrossingsCard.tsx`). Last, where the web draws it; drawn once
-    /// the project is an end of a crossing, or when the read failed with nothing to show.
+    /// the project is an end of a crossing no coordinator conversation answers, or when the read
+    /// failed with nothing to show.
     @ViewBuilder
     private func crossingsSection(_ store: ProjectDetailModel) -> some View {
-        if let rows = store.crossings, !rows.isEmpty {
+        if let rows = store.crossings.map(ProjectCrossings.shownOnProjectPage), !rows.isEmpty {
             Section {
                 ForEach(ProjectCrossings.ordered(rows)) { row in
                     let asking = crossingAsk?.id == row.id

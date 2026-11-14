@@ -335,6 +335,18 @@
 .settings-row-control {
   flex-shrink: 0;
 }
+/* A row that opens something from a press anywhere on it: lit across the card's width on hover, its
+   control level with the title's line however many lines the description takes. */
+.settings-row--link {
+  align-items: flex-start;
+  cursor: pointer;
+}
+.settings-row--link:hover {
+  background: var(--bg-hover);
+  box-shadow:
+    -16px 0 0 var(--bg-hover),
+    16px 0 0 var(--bg-hover);
+}
 /* The row a search result opened, lit for a moment across the card's width (useFoundRowFlash). */
 .settings-row--found {
   animation: settings-row-found 2s ease-out;
@@ -427,7 +439,7 @@
 .sp-chip.on {
   background: var(--text-1);
   border-color: var(--text-1);
-  color: var(--bg);
+  color: var(--bg-base);
 }
 .sp-chip-count {
   opacity: 0.6;
@@ -598,9 +610,141 @@
 .machine-engines {
   border-radius: 12px;
 }
-.machine-disk-bar.rd-disk-bar {
-  width: 180px;
-  margin-top: 0;
+.machine-res-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .machine-res-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.machine-res-tile {
+  display: flex;
+  flex-direction: column;
+  min-height: 150px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--brand);
+}
+.machine-res-tile.warn {
+  color: var(--warning-solid);
+}
+.machine-res-tile.off {
+  color: var(--text-3);
+}
+.machine-res-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.machine-res-value {
+  margin-top: 4px;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.machine-res-value span {
+  margin-left: 1px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.machine-res-tile.warn .machine-res-value {
+  color: var(--warning);
+}
+.machine-res-tile.off .machine-res-value {
+  color: var(--text-3);
+}
+.machine-res-detail {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.machine-res-update {
+  margin-top: 10px;
+}
+.machine-res-update + .machine-res-detail {
+  margin-top: 10px;
+}
+.machine-res-spark {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin-top: auto;
+  padding-top: 10px;
+  overflow: visible;
+}
+.machine-res-spark-top {
+  stroke: var(--border);
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.machine-res-spark-area {
+  fill: currentColor;
+  fill-opacity: 0.12;
+}
+.machine-res-spark-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.machine-res-spark-dot {
+  fill: currentColor;
+}
+.machine-res-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--warning);
+}
+.machine-res-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--success-solid);
+  vertical-align: 1px;
+}
+.machine-res-dot.off {
+  background: var(--text-3);
+}
+/* Capacity's meters: the name, the reading and an action on one line, the bar across the row under
+   them at the row's full width. */
+.settings-row.machine-meter {
+  display: block;
+}
+.machine-meter-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 24px;
+}
+.machine-meter-line .settings-row-title {
+  flex: 1;
+  min-width: 0;
+}
+.machine-meter-value {
+  font-size: 13px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.machine-meter-bar.rd-disk-bar {
+  margin-top: 10px;
+}
+/* Edit ends where the bar under it does. */
+.orbit-button.machine-max-edit {
+  padding-inline: 0;
+}
+.machine-max-concurrent-hint {
+  margin: 0 0 12px;
 }
 .machine-workspace-row {
   display: block;
@@ -752,4 +896,78 @@
 }
 .admin-users-page .admin-users-frame tbody tr:last-child td {
   border-bottom: 0;
+}
+
+/* Settings → Storage: each ranking row opens the files it counts. */
+.storage-usage-chevron {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.storage-files-back {
+  margin: 0 0 8px -8px;
+}
+.storage-file-row {
+  align-items: flex-start;
+}
+.storage-file-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 15px;
+}
+.storage-file-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.storage-file-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-file-pin {
+  font-size: 12px;
+  color: var(--brand);
+}
+.storage-file-facts {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.storage-file-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.storage-files-more {
+  margin-top: 12px;
+  text-align: center;
+}
+.storage-menu-blocked {
+  display: flex;
+  flex-direction: column;
+  max-width: 240px;
+  white-space: normal;
+}
+.storage-menu-why {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* A file list goes back to Storage, not to the Settings list. */
+.settings-column:has(.storage-files-page) > .settings-back--list {
+  display: none;
+}
+.storage-files-empty {
+  margin: 24px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
 }

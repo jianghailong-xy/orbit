@@ -395,11 +395,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         return rows.firstOrNull { it.text("value") == name }
     }
 
-    /** A model as its row names it, or the id itself; an empty one is the runtime's own pick. */
+    /** A model as its row names it, else a Claude id as Claude Code names it, else the id itself; an empty one is the runtime's
+     *  own pick. */
     fun modelLabel(engine: String, provider: String, model: String): String =
         modelRow(engine, provider, model)?.let { it.text("label") ?: model }
             // Cursor CLI's Auto, which its catalogue names `default` and no model named runs too.
             ?: if (CursorRuntime.onAuto(engine, model)) CursorRuntime.AUTO
+            else if (engine == ProviderEngines.CLAUDE && model.isNotEmpty()) ProviderEngines.claudeModelName(model)
             else model.ifEmpty { if (engine == ProviderEngines.OPENCODE) "Managed by OpenCode" else "Runtime default" }
 
     /** Whether this runner can start a Cursor CLI session, as the server admits one (web `cursorRunnerState`): null when it can, else why
@@ -568,12 +570,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         runner.objects("engines").firstOrNull { it.text("engine") == provider }?.objects("accounts").orEmpty() else emptyList()
     /** Whether a session here moves to another of the runner's [provider] accounts (EngineAccounts.moveCapability). */
     fun movesAccounts(provider: String) = EngineAccounts.moveCapability(provider) in runner.strings("capabilities")
-    /** SessionProviderChoices.accountChoices: the runner's accounts of [provider] as rows, each with its own quota. */
+    /** SessionProviderChoices.accountChoices: the runner's accounts of [provider] as rows, each with its own quota;
+     *  one signed out on this runner is not one it can run, so it gets no row. */
     fun accountChoices(provider: String): List<AccountChoice> {
         val health = runner.objects("engines").firstOrNull { it.text("engine") == provider } ?: return emptyList()
         val accounts = accounts(provider)
         val usage = EngineAccounts.usage(provider, runner)
-        return accounts.map { account ->
+        return accounts.filter { it.text("auth") != "no" || RunnerPage.runsOnEnvKey(health, it.text("id").orEmpty(), it.text("auth")) }.map { account ->
             val id = account.text("id").orEmpty()
             val label = RunnerPage.accountLabel(id, accounts)
             // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its own: not signed out.
@@ -587,8 +590,7 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             val rows = own?.let(::usageRows).orEmpty()
             // The window closest to its limit; a bucket's row counts what is left, so its tightest is the binding one.
             val row = if (rows.any { it.remaining }) own?.let { bindingRow(it, System.currentTimeMillis()) } else rows.maxByOrNull { it.percent }
-            AccountChoice(id, label, row?.let(::quotaText), (row?.utilization ?: 0.0) >= 90,
-                if (account.text("auth") == "no") "Not signed in" else null)
+            AccountChoice(id, label, row?.let(::quotaText), (row?.utilization ?: 0.0) >= 90)
         }
     }
 

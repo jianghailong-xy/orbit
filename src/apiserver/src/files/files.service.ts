@@ -13,7 +13,7 @@ import {
   type OnApplicationBootstrap,
 } from '@nestjs/common';
 import { uuidToBase62 } from '@orbit/shared';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, statfs } from 'node:fs/promises';
@@ -100,6 +100,58 @@ export interface StorageUsage {
   tasks: { taskId: string; title: string; bytes: number; fileCount: number }[];
   /** What arrived each week, oldest first, ending with this week, which starts on a Monday, UTC. */
   weeks: { weekStart: string; bytes: number }[];
+}
+
+/** How many files one page of a Storage file list holds. */
+export const STORED_FILES_PAGE = 50;
+
+/** What a Storage file list is of: a row of `usage`'s rankings or weeks. */
+export type StoredFilesScope = { kind: 'project' | 'task'; id: string } | { kind: 'week'; weekStart: string };
+
+/**
+ * What keeps a content from being deleted from Settings. `EVIDENCE`: a task's evidence holds a row of it, so it does not
+ * expire (file-retention.ts). `CONVERSATION`: a row of it is part of a session, an image or file sent in it or a task's
+ * input handed to a run, which goes with that session.
+ */
+export type StoredFileHold = 'EVIDENCE' | 'CONVERSATION';
+
+/** The code of a delete refused because something still holds the file. */
+export const FILE_HELD = 'FILE_HELD';
+
+/** One content in a Storage file list, counted once however many rows name it, as `usage` counts it. */
+export interface StoredFileView {
+  /** The row this content is shown by: in the scope, an upload's row first, the earliest of them. */
+  id: string;
+  fileName: string | null;
+  label: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  /** When the scope first kept it. */
+  createdAt: Date;
+  taskId: string | null;
+  taskTitle: string | null;
+  sessionId: string | null;
+  sessionTitle: string | null;
+  /** `upload`: an agent's `file_upload`; `task-input`: attached to a task; `conversation`: sent in a session. */
+  source: 'upload' | 'task-input' | 'conversation';
+  /** Of every row of this content the account keeps: */
+  pinnedAt: Date | null;
+  expiresAt: Date | null;
+  /** Set when no row of it is kept any more: a week's list counts what arrived, expired or not. */
+  expiredAt: Date | null;
+  heldBy: StoredFileHold | null;
+  /** How many other rows keep the same bytes. */
+  alsoIn: number;
+}
+
+export interface StoredFilesPage {
+  /** The project's or task's title; for a week, its Monday. */
+  title: string;
+  totalBytes: number;
+  fileCount: number;
+  files: StoredFileView[];
+  /** What asks for the next page, or null on the last. */
+  nextCursor: string | null;
 }
 
 /** The Monday `weeksAgo` weeks before the week of `now`, as YYYY-MM-DD, in UTC. */
@@ -886,6 +938,183 @@ export class FilesService implements OnApplicationBootstrap {
         return { weekStart: start, bytes: added.get(start) ?? 0 };
       }),
     };
+  }
+
+  /**
+   * The contents one of `usage`'s rows counts (§2.10), each once, largest or newest first: a project's or a task's as
+   * `usage` ranks them, kept now, and a week's as it counts them, everything that arrived then, expired or not. What a
+   * content's pin, date and holds say is read over every row of it the account keeps, because a delete acts on all of them.
+   * Null when the project or task is not this account's.
+   */
+  async storedFiles(
+    ownerId: string,
+    scope: StoredFilesScope,
+    order: 'size' | 'newest',
+    cursor: string | null,
+  ): Promise<StoredFilesPage | null> {
+    let title: string;
+    let rows: Prisma.Sql;
+    if (scope.kind === 'week') {
+      title = scope.weekStart;
+      const from = new Date(`${scope.weekStart}T00:00:00Z`);
+      const to = new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
+      rows = Prisma.sql`
+        SELECT a.* FROM attachment a
+         WHERE a.owner_id = ${ownerId}::uuid
+           AND COALESCE(a.sha256, a.id::text) IN (
+             SELECT COALESCE(sha256, id::text) FROM attachment WHERE owner_id = ${ownerId}::uuid
+              GROUP BY 1 HAVING MIN(created_at) >= ${from} AND MIN(created_at) < ${to})`;
+    } else {
+      const named = scope.kind === 'task'
+        ? await this.prisma.task.findFirst({ where: { id: scope.id, ownerId }, select: { title: true } })
+        : await this.prisma.project.findFirst({ where: { id: scope.id, ownerId }, select: { title: true } });
+      if (!named) return null;
+      title = named.title;
+      const within = scope.kind === 'task'
+        ? Prisma.sql`COALESCE(a.task_id, s.task_id) = ${scope.id}::uuid`
+        : Prisma.sql`COALESCE(a.task_id, s.task_id) IN (SELECT id FROM task WHERE project_id = ${scope.id}::uuid)`;
+      rows = Prisma.sql`
+        SELECT a.* FROM attachment a
+          LEFT JOIN session s ON s.id = a.session_id
+         WHERE a.owner_id = ${ownerId}::uuid AND a.expired_at IS NULL AND ${within}`;
+    }
+    const offset = cursor === null ? 0 : Number.parseInt(cursor, 10);
+    if (!Number.isSafeInteger(offset) || offset < 0) throw new BadRequestException('cursor is not one this list gave');
+    const ordering = order === 'size'
+      ? Prisma.sql`c.size DESC, c.first_kept DESC, c.content`
+      : Prisma.sql`c.first_kept DESC, c.size DESC, c.content`;
+    const found = await this.prisma.$queryRaw<Array<{
+      id: string; file_name: string | null; label: string | null; mime_type: string; size: number; first_kept: Date;
+      task_id: string | null; task_title: string | null; session_id: string | null; session_title: string | null;
+      retention: string | null; own_task_id: string | null; live: number; pinned_at: Date | null; expires_at: Date | null;
+      expired_at: Date | null; evidence: boolean; conversation: boolean; total_bytes: bigint; total_files: bigint;
+    }>>`
+      WITH scoped AS (${rows}),
+      contents AS (
+        SELECT COALESCE(sha256, id::text) AS content, MAX(size_bytes) AS size, MIN(created_at) AS first_kept
+          FROM scoped GROUP BY 1
+      ),
+      shown AS (
+        SELECT DISTINCT ON (COALESCE(sha256, id::text)) COALESCE(sha256, id::text) AS content, *
+          FROM scoped
+         ORDER BY COALESCE(sha256, id::text), (expired_at IS NULL) DESC, (retention = ${FILE_UPLOAD_RETENTION}) DESC NULLS LAST,
+                  created_at, id
+      ),
+      everywhere AS (
+        SELECT COALESCE(sha256, id::text) AS content,
+               COUNT(*)::int AS live,
+               MAX(pinned_at) AS pinned_at,
+               MAX(expires_at) AS expires_at,
+               bool_or(retention = ${FILE_UPLOAD_RETENTION} AND expires_at IS NULL) AS evidence,
+               bool_or(retention IS DISTINCT FROM ${FILE_UPLOAD_RETENTION} AND task_id IS NULL) AS conversation
+          FROM attachment
+         WHERE owner_id = ${ownerId}::uuid AND expired_at IS NULL
+           AND COALESCE(sha256, id::text) IN (SELECT content FROM contents)
+         GROUP BY 1
+      ),
+      totals AS (SELECT COALESCE(SUM(size), 0)::bigint AS total_bytes, COUNT(*)::bigint AS total_files FROM contents)
+      SELECT sh.id, sh.file_name, sh.label, sh.mime_type, c.size, c.first_kept,
+             t.id AS task_id, t.title AS task_title, se.id AS session_id, se.title AS session_title,
+             sh.retention, sh.task_id AS own_task_id,
+             COALESCE(e.live, 0) AS live, e.pinned_at, e.expires_at, sh.expired_at,
+             COALESCE(e.evidence, false) AS evidence, COALESCE(e.conversation, false) AS conversation,
+             totals.total_bytes, totals.total_files
+        FROM contents c
+        JOIN shown sh ON sh.content = c.content
+        LEFT JOIN everywhere e ON e.content = c.content
+        LEFT JOIN session se ON se.id = sh.session_id
+        LEFT JOIN task t ON t.id = COALESCE(sh.task_id, se.task_id)
+        CROSS JOIN totals
+       ORDER BY ${ordering}
+       LIMIT ${STORED_FILES_PAGE + 1} OFFSET ${offset}`;
+    const totals = found[0]
+      ? { totalBytes: Number(found[0].total_bytes), fileCount: Number(found[0].total_files) }
+      : await this.storedFilesTotals(ownerId, rows);
+    return {
+      title,
+      ...totals,
+      files: found.slice(0, STORED_FILES_PAGE).map((row) => ({
+        id: row.id,
+        fileName: row.file_name,
+        label: row.label,
+        mimeType: row.mime_type,
+        sizeBytes: Number(row.size),
+        createdAt: row.first_kept,
+        taskId: row.task_id,
+        taskTitle: row.task_title,
+        sessionId: row.session_id,
+        sessionTitle: row.session_title,
+        source: row.retention === FILE_UPLOAD_RETENTION ? 'upload' : row.own_task_id ? 'task-input' : 'conversation',
+        pinnedAt: row.live > 0 ? row.pinned_at : null,
+        expiresAt: row.live > 0 && !row.evidence ? row.expires_at : null,
+        expiredAt: row.live > 0 ? null : row.expired_at,
+        heldBy: row.evidence ? 'EVIDENCE' : row.conversation ? 'CONVERSATION' : null,
+        alsoIn: Math.max(0, row.live - (row.expired_at === null ? 1 : 0)),
+      })),
+      nextCursor: found.length > STORED_FILES_PAGE ? String(offset + STORED_FILES_PAGE) : null,
+    };
+  }
+
+  /** The totals of a list whose page came back empty: past its end, or of nothing. */
+  private async storedFilesTotals(ownerId: string, rows: Prisma.Sql): Promise<{ totalBytes: number; fileCount: number }> {
+    const [totals] = await this.prisma.$queryRaw<Array<{ bytes: bigint; files: bigint }>>`
+      WITH scoped AS (${rows})
+      SELECT COALESCE(SUM(size), 0)::bigint AS bytes, COUNT(*)::bigint AS files
+        FROM (SELECT MAX(size_bytes) AS size FROM scoped GROUP BY COALESCE(sha256, id::text)) AS c`;
+    return { totalBytes: Number(totals.bytes), fileCount: Number(totals.files) };
+  }
+
+  /**
+   * Delete a content from Settings (§2.10): every row of it the account keeps goes as it would when it expires. An agent's
+   * upload gets its tombstone, and loses a pin; a task's input that no run was handed is deleted, as the task's own door
+   * deletes it. The bytes go a grace period after the last row lets them go (file-retention-sweep.ts), and every row keeps
+   * its name and size. Refused whole when evidence holds any row of it, or a session does. False when the account has no
+   * such file. A content already gone answers true.
+   */
+  async deleteEverywhere(ownerId: string, id: string): Promise<boolean> {
+    const named = await this.prisma.attachment.findFirst({ where: { id, ownerId }, select: { sha256: true } });
+    if (!named) return false;
+    const content: Prisma.AttachmentWhereInput = named.sha256 ? { ownerId, sha256: named.sha256 } : { id, ownerId };
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        // The rows as they are now, locked in id order: evidence that cites one writes it, so it has committed first or
+        // will find the tombstone and refuse (task-completion-evidence.service.ts).
+        const ids = (await tx.attachment.findMany({ where: { ...content, expiredAt: null }, select: { id: true }, orderBy: { id: 'asc' } }))
+          .map((row) => row.id);
+        if (ids.length === 0) return;
+        await tx.$queryRaw`SELECT id FROM attachment WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR UPDATE`;
+        const live = await tx.attachment.findMany({
+          where: { id: { in: ids }, expiredAt: null },
+          select: { id: true, retention: true, expiresAt: true, taskId: true },
+        });
+        const uploads = live.filter((row) => row.retention === FILE_UPLOAD_RETENTION);
+        const held: StoredFileHold | null = uploads.some((row) => row.expiresAt === null)
+          ? 'EVIDENCE'
+          : live.some((row) => row.retention !== FILE_UPLOAD_RETENTION && row.taskId === null)
+            ? 'CONVERSATION'
+            : null;
+        if (held) {
+          throw new ConflictException({
+            code: FILE_HELD,
+            heldBy: held,
+            message: held === 'EVIDENCE'
+              ? 'Evidence cites this file, so it is kept. It can go 30 days after that evidence is sent back or replaced.'
+              : 'This file is part of a conversation, and goes when the session is deleted.',
+          });
+        }
+        if (uploads.length > 0) {
+          await tx.attachment.updateMany({
+            where: { id: { in: uploads.map((row) => row.id) }, expiredAt: null },
+            data: { expiredAt: new Date(), pinnedAt: null },
+          });
+        }
+        const inputs = live.filter((row) => row.retention !== FILE_UPLOAD_RETENTION).map((row) => row.id);
+        if (inputs.length > 0) await tx.attachment.deleteMany({ where: { id: { in: inputs }, taskId: { not: null } } });
+      },
+      loggedRetry(this.logger, 'files.deleteEverywhere'),
+    );
+    return true;
   }
 
   /**

@@ -767,6 +767,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         agentId: await workspace(ownerId, runnerId, `${name}-spare-agent`),
         workspaceId: await workspace(ownerId, runnerId, `${name}-spare-workspace`),
         attachmentId: await attachment(),
+        // Its own, because the owner's delete from Settings → Storage really removes it.
+        storedFileId: await attachment(),
         projectId: await project(`${name} spare project`),
         providerId: await provider(`${name}-spare-provider`),
         poolId: idOf(await as('POST', '/providers/pools', { label: `${name} spare pool` }), 'a spare pool'),

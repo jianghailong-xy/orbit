@@ -1,17 +1,17 @@
-import { Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { EllipsisOutlined } from '@ant-design/icons';
+import { EllipsisOutlined, RightOutlined } from '@ant-design/icons';
 import { AgentProvider, ENGINE_CLI_NAMES, keyDialect } from '@orbit/shared';
 import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import type { ProviderRow } from '../lib/providerAdmin';
+import { foldFromAnywhere } from '../lib/foldHead';
 import { ago } from '../lib/watches';
 import { CursorKeyCheckLine } from './CursorKeyCheck';
-import { DeepSeekBalanceLine } from './DeepSeekBalance';
+import { DeepSeekBalanceLine, useBalance } from './DeepSeekBalance';
 import { EngineTile } from './ProviderGallery';
 import { SettingsCard, SettingsRow } from './settings/SettingsBlocks';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
-import { Menu } from './ui/Menu';
+import { Menu, type MenuItem } from './ui/Menu';
 
 /** The exact time behind a key's relative Used, for its tooltip. */
 const stampOf = (iso: string): string =>
@@ -29,19 +29,17 @@ function KeyEngines({ row }: { row: ProviderRow }) {
     <span className="prov-engines">
       Runs on{' '}
       {row.engines.map((engine, index) => (
-        <Fragment key={engine}>
-          {index > 0 && <> <span className="prov-engine-sep">·</span> </>}
-          <span className="prov-engine">
-            <EngineTile engine={engine} size={12} />
-            {ENGINE_CLI_NAMES[engine]}
-          </span>
-        </Fragment>
+        // The separator rides with the engine after it, so a wrapped line never ends on one.
+        <span className="prov-engine" key={engine}>
+          {index > 0 && <>{' '}<span className="prov-engine-sep">·</span>{' '}</>}
+          <EngineTile engine={engine} size={12} />
+          {ENGINE_CLI_NAMES[engine]}
+        </span>
       ))}
       {subscription && (
-        <>
-          {' '}
-          <span className="prov-engine-sep">·</span> <span>subscription token, Claude Code only</span>
-        </>
+        <span>
+          {' '}<span className="prov-engine-sep">·</span> subscription token, Claude Code only
+        </span>
       )}
     </span>
   );
@@ -63,8 +61,8 @@ function startsOn(row: ProviderRow): string | null {
  * One vendor's API keys on its Settings page (docs/mocks/settings-redesign, board-4): a row per key, its
  * name and on the line under it the engines it runs on, the model a session on it starts on, the account
  * pools it is in and when a session last ran on it (with a DeepSeek key's balance, a Cursor key's last
- * check). Edit opens the key's own page in Settings' right-hand column; its ⋯ holds Delete, which asks
- * first (KeyImpact). The dispatch slug is the server's to generate and nobody's to read, so a key goes by
+ * check). A press on the row opens the key's own page in Settings' right-hand column (docs/mocks/settings-buttons,
+ * board 01); its borderless ⋯ holds Edit, the same page for the keyboard, and Delete, which asks first (KeyImpact). The dispatch slug is the server's to generate and nobody's to read, so a key goes by
  * the name it was given; its endpoint and how many models it lists are on its own page.
  */
 export function ProviderKeyRows({
@@ -85,6 +83,7 @@ export function ProviderKeyRows({
     <SettingsCard>
       {rows.map((row) => {
         const model = startsOn(row);
+        const edit = () => navigate(`/settings/providers/keys/${row.id}`);
         return (
           <SettingsRow
             key={row.id}
@@ -116,14 +115,17 @@ export function ProviderKeyRows({
                   ))}
                   {/* When a session last ran on it: the relative answer the row is read for, with the exact
                       time on hover — and for a key nothing has spent, a state, not a date. */}
-                  <span className="prov-engine-sep">·</span>{' '}
-                  {row.lastUsedAt ? (
-                    <span className="vk-used" title={stampOf(row.lastUsedAt)}>
-                      last used {ago(row.lastUsedAt, nowMs)}
-                    </span>
-                  ) : (
-                    <span className="vk-used never">never used</span>
-                  )}
+                  {/* Its separator rides with it, so a wrapped line never ends on one. */}
+                  <span className="vk-used-item">
+                    {' '}<span className="prov-engine-sep">·</span>{' '}
+                    {row.lastUsedAt ? (
+                      <span className="vk-used" title={stampOf(row.lastUsedAt)}>
+                        last used {ago(row.lastUsedAt, nowMs)}
+                      </span>
+                    ) : (
+                      <span className="vk-used never">never used</span>
+                    )}
+                  </span>
                 </span>
                 {/* A DeepSeek key also carries its whole account's balance (DeepSeekBalance.tsx). */}
                 {hasDeepSeekBalance(row) && <DeepSeekBalanceLine row={row} />}
@@ -131,22 +133,52 @@ export function ProviderKeyRows({
                 {row.runtime === 'cursor' && <CursorKeyCheckLine row={row} />}
               </>
             }
+            // A press anywhere on the row opens the key's page, but not one on a control of its own (the
+            // balance's refresh, a top-up link, the ⋯) nor one that ended a drag across the words.
+            onClick={foldFromAnywhere(edit, 'button, a, input, [role="menu"]')}
             control={
-              // Named after the key as well, where a screen reader lists every Edit and ⋯ on the page.
               <span className="vk-act">
-                <Button size="small" aria-label={`Edit ${row.label}`} onClick={() => navigate(`/settings/providers/keys/${row.id}`)}>
-                  Edit
-                </Button>
-                <Menu
-                  align="end"
-                  items={[{ key: 'delete', label: 'Delete', danger: true, onSelect: () => onDelete(row) }]}
-                  trigger={<Button size="small" icon={<EllipsisOutlined />} aria-label={`More for ${row.label}`} />}
-                />
+                {hasDeepSeekBalance(row) ? (
+                  <DeepSeekKeyMenu row={row} edit={edit} onDelete={() => onDelete(row)} />
+                ) : (
+                  <KeyMenu row={row} items={keyMenuItems(edit, () => onDelete(row))} />
+                )}
+                <RightOutlined className="vk-chev" aria-hidden />
               </span>
             }
           />
         );
       })}
     </SettingsCard>
+  );
+}
+
+/** Edit first, Delete last behind a line: what every key's ⋯ holds. */
+const keyMenuItems = (edit: () => void, remove: () => void, extra: MenuItem[] = []): MenuItem[] => [
+  { key: 'edit', label: 'Edit', onSelect: edit },
+  ...extra,
+  { type: 'separator', key: 'sep' },
+  { key: 'delete', label: 'Delete', danger: true, onSelect: remove },
+];
+
+/** A key's ⋯, borderless; named after the key, where a screen reader lists every ⋯ on the page. */
+function KeyMenu({ row, items }: { row: ProviderRow; items: MenuItem[] }) {
+  return (
+    <Menu
+      align="end"
+      items={items}
+      trigger={<Button size="small" variant="text" icon={<EllipsisOutlined />} aria-label={`More for ${row.label}`} />}
+    />
+  );
+}
+
+/** A DeepSeek key's ⋯ also refreshes its account balance, the same ask as the ↻ on its balance line. */
+function DeepSeekKeyMenu({ row, edit, onDelete }: { row: ProviderRow; edit: () => void; onDelete: () => void }) {
+  const { ask, asking } = useBalance(row);
+  return (
+    <KeyMenu
+      row={row}
+      items={keyMenuItems(edit, onDelete, [{ key: 'refresh', label: 'Refresh balance', disabled: asking, onSelect: ask }])}
+    />
   );
 }

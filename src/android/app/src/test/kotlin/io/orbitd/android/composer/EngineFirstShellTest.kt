@@ -55,7 +55,7 @@ class EngineFirstShellTest : ComposerShellTest() {
         ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
             "preferences":{"defaultModels":{"claude:claude":"claude-sonnet-5-5","codex:codex":"gpt-4-retired"}}}""".encodeToByteArray()) }
         signIn(); openDraft()
-        await { has(hasContentDescription("Model claude-sonnet-5-5, effort Default")) }
+        await { has(hasContentDescription("Model Sonnet 5.5, effort Default")) }
         compose.onNodeWithTag("composer-input").performTextInput("Start on Sonnet")
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body("POST sessions") != null }
@@ -109,6 +109,6 @@ class EngineFirstShellTest : ComposerShellTest() {
         await { has(hasTestTag("engine:codex") and hasClickAction()) }
         compose.onNodeWithTag("engine:codex").performClick()
         await { has(hasText("Codex ⌄")) }
-        await { has(hasContentDescription("Model gpt-6, effort Default")) }
+        await { has(hasContentDescription("Model GPT-6, effort Default")) }
     }
 }

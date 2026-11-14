@@ -22,7 +22,13 @@ import {
  * Chinese the block was written in until 2026-10 — but `IN_ENGLISH`, which is what it writes now.
  *
  * The reading itself is proved in lib/referencedTask.test.ts; this is about what reaches the page.
+ *
+ * A note of references alone draws no line (owner, 2026-11-14): the bubble's own words already link
+ * each task. The cards are still what the fold opens to when a named block rides along, so each
+ * note here is mounted beside a list's condition board.
  */
+
+const CONDITIONS = '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>';
 
 const LABEL = '⊕ Orbit attached:';
 
@@ -58,7 +64,7 @@ async function open(note: string, typed = '这几个任务现在什么状态？'
   await act(async () => {
     root.render(
       <MemoryRouter>
-        <Transcript events={[userEvent(typed, note)]} />
+        <Transcript events={[userEvent(typed, `${note}\n\n${CONDITIONS}`)]} />
       </MemoryRouter>,
     );
   });
@@ -91,7 +97,7 @@ describe('a `#`-referenced task in a bubble', () => {
     );
     // The table it replaced is gone, the sentence addressed to the agent with it.
     expect(container.textContent).not.toContain('详情请用 task_get 自取');
-    expect(container.querySelector('.chat-injected-body')).toBeNull();
+    expect(text(container.querySelector('.chat-injected-body'))).toBe(CONDITIONS);
   });
 
   it('links the title to the task, which is the id the block could only show', async () => {
@@ -111,12 +117,23 @@ describe('a `#`-referenced task in a bubble', () => {
     expect(text(queued.querySelector('.reftask-meta'))).toContain('1 run, 0 with turns');
   });
 
-  it('says so in the line’s name, its words naming the block alone: the state of a lone task, the count of several', async () => {
-    const one = await open(ONE_TASK);
-    expect(one.getAttribute('aria-label')).toBe(`${LABEL} referenced task · FAILED`);
+  it('draws no line for a note of references alone: the bubble’s own words link the tasks', async () => {
+    const typed = '[runner 从项目集成线的 tip 创建 worktree](orbit-task:34OEE9MQXMEm0h0Ptm1GG) 现在什么状态？';
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <Transcript events={[userEvent(typed, ONE_TASK)]} />
+        </MemoryRouter>,
+      );
+    });
 
-    const eight = await open(EIGHT_TASKS);
-    expect(eight.getAttribute('aria-label')).toBe(`${LABEL} referenced task ×8 · 7 DONE, 1 OPEN`);
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(container.querySelector('.chat-user a')?.getAttribute('href')).toBe('/tasks/34OEE9MQXMEm0h0Ptm1GG');
+  });
+
+  it('leaves the references out of the line’s name when another block rides along', async () => {
+    const toggle = await open(EIGHT_TASKS);
+    expect(toggle.getAttribute('aria-label')).toBe(`${LABEL} list conditions`);
   });
 
   it('draws all eight of the most anyone has referenced at once, in the order named', async () => {
@@ -133,8 +150,8 @@ describe('a `#`-referenced task in a bubble', () => {
       '/tasks/34NJZsv3am8LrTpZ4jc09',
       '/tasks/34DH29mTc7OQ6AwxAFIJu',
     ]);
-    // Nothing of the note is left over to draw as text under them.
-    expect(container.querySelector('.chat-injected-body')).toBeNull();
+    // Nothing of the note but the board riding along is left over to draw as text under them.
+    expect(text(container.querySelector('.chat-injected-body'))).toBe(CONDITIONS);
   });
 
   it('says a task nothing has run in this end’s own words, and shows no outcome it does not have', async () => {
@@ -151,20 +168,17 @@ describe('a `#`-referenced task in a bubble', () => {
 
     expect(cards()).toHaveLength(1);
     expect(container.querySelectorAll('.bgjobs-job')).toHaveLength(1);
-    expect(toggle.getAttribute('aria-label')).toBe(
-      `${LABEL} referenced task, background jobs · DONE · 1 ended, exit 1`,
-    );
+    expect(toggle.getAttribute('aria-label')).toBe(`${LABEL} list conditions`);
     // The job's own row is the block's, not a line of the card's.
     expect(text(container.querySelector('.bgjobs-name'))).toContain('run-pg-spec.sh');
     expect(text(cards()[0])).not.toContain('bgj_0c8d57e95552');
-    // Both blocks were taken, so there is nothing left to draw as text.
-    expect(container.querySelector('.chat-injected-body')).toBeNull();
+    // Both blocks were taken, so only the board riding along is left to draw as text.
+    expect(text(container.querySelector('.chat-injected-body'))).toBe(CONDITIONS);
   });
 
   it('draws the English block as the same cards, the suffix and the task nothing has run included', async () => {
-    const toggle = await open(IN_ENGLISH, 'What state are these two in?');
+    await open(IN_ENGLISH, 'What state are these two in?');
 
-    expect(toggle.getAttribute('aria-label')).toBe(`${LABEL} referenced task ×2 · 1 DONE, 1 OPEN`);
     expect(cards()).toHaveLength(2);
     const [verification, never] = cards();
     expect(text(verification.querySelector('.status-pill'))).toBe('Done');
@@ -180,7 +194,7 @@ describe('a `#`-referenced task in a bubble', () => {
     expect(never.querySelector('.reftask-outcome')).toBeNull();
     // The table it replaced is gone, the sentence addressed to the agent with it.
     expect(container.textContent).not.toContain('fetch them yourself with task_get');
-    expect(container.querySelector('.chat-injected-body')).toBeNull();
+    expect(text(container.querySelector('.chat-injected-body'))).toBe(CONDITIONS);
   });
 
   it('leaves a block it cannot read as the text it always was, rather than half a card', async () => {
@@ -189,7 +203,7 @@ describe('a `#`-referenced task in a bubble', () => {
     await open(reworded);
 
     expect(cards()).toHaveLength(0);
-    expect(text(container.querySelector('.chat-injected-body'))).toBe(reworded);
+    expect(text(container.querySelector('.chat-injected-body'))).toBe(`${reworded}\n\n${CONDITIONS}`);
   });
 
   it('reads an English block reworded beyond its labels as no block either', async () => {
@@ -198,6 +212,6 @@ describe('a `#`-referenced task in a bubble', () => {
     await open(reworded);
 
     expect(cards()).toHaveLength(0);
-    expect(text(container.querySelector('.chat-injected-body'))).toBe(reworded);
+    expect(text(container.querySelector('.chat-injected-body'))).toBe(`${reworded}\n\n${CONDITIONS}`);
   });
 });

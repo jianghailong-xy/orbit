@@ -86,8 +86,7 @@ export function ReviewRequestedCard({
       <div
         className={`crc${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={REVIEW_REQUESTED}
-        data-sticky-text={card.title}
+        data-orbit-round
       >
         <div className="crc-head">
           <span className="crc-mark"><AuditOutlined /></span>
@@ -137,8 +136,7 @@ export function SentBackByReviewerCard({
       <div
         className={`crc is-returned${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={SENT_BACK_BY_REVIEWER}
-        data-sticky-text={card.reason}
+        data-orbit-round
       >
         <div className="crc-head">
           <span className="crc-mark"><RollbackOutlined /></span>
@@ -197,8 +195,7 @@ export function YouConfirmedCard({
       <div
         className={`crc is-confirmed${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={YOU_CONFIRMED}
-        data-sticky-text={card.title}
+        data-orbit-round
       >
         <div className="crc-head">
           <span className="crc-mark"><CheckCircleFilled /></span>

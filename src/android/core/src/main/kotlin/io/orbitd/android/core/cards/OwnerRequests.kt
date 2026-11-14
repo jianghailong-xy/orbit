@@ -123,6 +123,15 @@ object OwnerRequests {
     }
     fun declineLabel(kind: String) = if (kind == MANUAL_STEP) "Can’t do this…" else "Decline…"
 
+    /** Talking about a request rather than answering it, as every card that hands a reply to the composer says it. */
+    const val chatAction = "Chat about this"
+    /**
+     * What a press of [chatAction] puts in front of the owner's words, in the composer of the session that asked: which request, and
+     * that it is still open. Nothing is resolved. The web's `ownerRequestChatContext` and OrbitKit's `OwnerRequests.chatContext`.
+     */
+    fun chatContext(request: OwnerRequest) = "The owner pressed Chat about this on your request “${request.title}” " +
+        "(owner request ${request.id}). It is still open: not marked done and not declined. Their message:"
+
     /** A pending request whose deadline has passed. The door refuses it; the sweep writes EXPIRED within a minute. */
     fun pastDeadline(request: OwnerRequest, now: Instant): Boolean = parse(request.expiresAt)?.let { !it.isAfter(now) } == true
 

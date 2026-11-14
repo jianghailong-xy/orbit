@@ -16,9 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.orbitd.android.core.cards.CoordinatorDeliveryLine
 import io.orbitd.android.core.cards.InteractionCard
-import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -46,17 +44,10 @@ internal object StickyQuestionHold {
         if (found == null && showing != null && anchor == showing) showing else found
 }
 
-/** The two words the sticky bar draws for one turn: what kind of turn it was, and what it said (OrbitKit `StickySummary`). */
+/** Which turns the sticky bar points at (OrbitKit `StickySummary`). It only ever names the reader's own words. */
 internal object StickySummary {
-    const val ARROW = "↑ "
-    const val YOUR_QUESTION = "${ARROW}Your question"
-
-    /**
-     * The label as the bar's capsule draws it (OrbitKit `StickySummary.compactLabel`, iOS d87e5fa67): the arrow alone over the
-     * reader's own words — the capsule has no room to say whose they are, and needs none — and a card's label as it stands over
-     * anything else, so the capsule can't pass a card off as something the reader typed.
-     */
-    fun compactLabel(label: String): String = if (label == YOUR_QUESTION) ARROW.trim() else label
+    /** What the capsule labels the reader's words by: the arrow alone — it has no room to say whose they are, and needs none. */
+    const val ARROW = "↑"
 
     private fun RunEvent.card(cards: List<InteractionCard>, field: String) = cards.firstOrNull { it.key == "record:$seq:$field" }?.source
 
@@ -66,7 +57,7 @@ internal object StickySummary {
      * background wake. A watch's wake is the whole of its turn's words, so nobody's are there. Never the owner's answer handed
      * to the coordinator, which is such a line too (OrbitKit `StickySummary.isAnchor`). Always a fact told to this session
      * (`coordinatorDelivery`): its line is one too, but the reply under it answers it, so it heads what follows (web
-     * `CoordinatorDeliveryLine`'s `data-sticky-label`).
+     * `CoordinatorDeliveryLine`'s `data-orbit-round`) — and the bar hides over it ([isOrbits]).
      */
     fun isAnchor(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Boolean {
         if (listOf("sessionMessage", "openItemDelivery", "coordinatorDelivery", "taskStart", "projectStarted")
@@ -77,32 +68,16 @@ internal object StickySummary {
         return event.personWords().isNotBlank()
     }
 
-    /** The label and line for one turn, in the transcript's order: another session, an item, a fact told to this session, a task's run, a
-     * project's start, the person. */
-    fun of(event: RunEvent, cards: List<InteractionCard> = transcriptCards(event)): Pair<String, String> {
-        event.card(cards, "sessionMessage")?.let { from ->
-            return "${ARROW}From ${from.text("fromTitle")?.trim()?.ifEmpty { null } ?: "Untitled session"}" to event.personWords()
-        }
-        event.card(cards, "openItemDelivery")?.let { item ->
-            val label = itemKindLabel(item.text("kind"))
-            val title = item.text("title").orEmpty()
-            return "${ARROW}Exception item" to if (title.lowercase().startsWith(label.lowercase())) title else "$label: $title"
-        }
-        // "↑ From Orbit" and the line's own sentence — never "Your question" over words the reader did not write.
-        event.card(cards, "coordinatorDelivery")?.let { return "$ARROW${CoordinatorDeliveryLine.stickyLabel}" to CoordinatorDeliveryLine.sentence(it) }
-        event.card(cards, "taskStart")?.let { return "${ARROW}Task started" to it.text("title").orEmpty() }
-        event.card(cards, "projectStarted")?.let { started ->
-            return ARROW + (if (started.text("by") == "CONFIRMATION") "Project started" else "Project switched on") to started.text("projectTitle").orEmpty()
-        }
-        return YOUR_QUESTION to event.personWords()
-    }
+    /** The turns that are lines inside an answer rather than Orbit opening a round of its own (`isAnchor`). */
+    private val linesInAnAnswer = setOf("watch", "wake", "ownerAnswer")
 
-    private fun itemKindLabel(kind: String?) = when (kind) {
-        "INTEGRATION_CONFLICT" -> "Merge conflict"; "INTEGRATION_CHECK_FAILED" -> "Checks failed"
-        "INTEGRATION_ERROR" -> "Integration error"; "TASK_FAILED" -> "Task failed"
-        "PROMOTION_APPROVAL" -> "Merge approval"; "COORDINATOR_QUESTION" -> "Question"
-        "FUSE_PAUSED" -> "Project paused"; else -> "Exception item"
-    }
+    /**
+     * Whether Orbit, not a person, opened this turn: one of the control plane's cards stands in for the bubble (OrbitKit
+     * `StickySummary.isOrbits`). It still heads the round under it, so the question above no longer names what is on screen — but
+     * the bar never names a machine's message either (the owner, 2026-11-14), so over it the bar is hidden ([StickyQuestions]).
+     */
+    fun isOrbits(cards: List<InteractionCard>): Boolean =
+        cards.any { it.key.split(":").getOrNull(2) !in linesInAnAnswer }
 }
 
 /**
@@ -123,7 +98,11 @@ internal class StickyQuestions(rows: List<TranscriptRow>) {
         rows.forEachIndexed { index, row ->
             position.putIfAbsent(row.key, index)
             list += last
-            if (row.event.type == "user" && StickySummary.isAnchor(row.event)) last = row
+            if (row.event.type == "user") {
+                // A round Orbit opened ends the question's reach without taking the bar (`isOrbits`).
+                val cards = transcriptCards(row.event)
+                if (StickySummary.isAnchor(row.event, cards)) last = row.takeUnless { StickySummary.isOrbits(cards) }
+            }
         }
         list += last
         above = list
@@ -186,19 +165,19 @@ internal fun rememberStuckQuestion(rows: List<TranscriptRow>, list: LazyListStat
 
 /**
  * The sticky question in the bar's middle (iOS `TranscriptView.questionCapsule`, d87e5fa67): the turn's words in a capsule
- * between back and the page's buttons, one line — its label, served first (the arrow alone over the reader's own words,
- * [StickySummary.compactLabel]), and its first line, which gives way. At most 260 dp wide, as on iOS, so a wide bar keeps a
+ * between back and the page's buttons, one line — the arrow ([StickySummary.ARROW]), served first, and the question's first
+ * line, which gives way. At most 260 dp wide, as on iOS, so a wide bar keeps a
  * capsule rather than a second content row. Up there it moves nothing in the transcript, so the band's in-flow shift is gone
  * with it. A tap goes back to the turn.
  */
 @Composable
 internal fun QuestionCapsule(row: TranscriptRow, jump: (TranscriptRow) -> Unit) {
-    val (label, text) = remember(row) { StickySummary.of(row.event) }
+    val text = remember(row) { row.event.personWords() }
     Row(Modifier.widthIn(max = 260.dp).heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
         .clickable(role = Role.Button) { jump(row) }.semantics { contentDescription = "Jump to your last question" }
         .padding(horizontal = 12.dp, vertical = 4.dp).testTag("question-capsule"),
         horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(StickySummary.compactLabel(label), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium,
+        Text(StickySummary.ARROW, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium,
             maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(text.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(), Modifier.weight(1f, fill = false),
             style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

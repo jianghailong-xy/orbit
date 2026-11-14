@@ -93,5 +93,7 @@ export const ENROLL_NEXT_BODY =
 export const ENROLL_OPEN_MACHINE = 'Open machine instead';
 export const REGISTER_NEXT =
   "It's now on the Machines & models page, under Machines. Next, start a session on it — you pick the folder it works in and sign in a coding CLI there.";
+export const REGISTER_NEXT_IN_SETTINGS =
+  "It's now under Machines on the left. Next, start a session on it — you pick the folder it works in and sign in a coding CLI there.";
 export const machineEmpty = (machine: string) =>
   `No workspaces on ${machine} yet. Start a session and pick the folder it works in as you go — or add one here.`;

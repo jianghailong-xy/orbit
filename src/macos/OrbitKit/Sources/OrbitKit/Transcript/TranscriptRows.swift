@@ -716,6 +716,9 @@ public enum TranscriptRows {
 
     private static func isGroupable(_ card: ToolCard) -> Bool {
         if card.id.hasPrefix("shell-") { return false }
+        // The owner's "Chat about this" reply to a card is their message, drawn under the call; folded
+        // into a steps line it would vanish behind "Used tool".
+        if OwnerChatReply.words(of: card) != nil { return false }
         switch card.name {
         // Task/Agent/Workflow: Claude Code's names for a sub-agent and a team of them (the 08-14
         // Agent→Workspace rename had rewritten "Agent" here). Their cards carry work of their own —

@@ -1740,6 +1740,8 @@ func resultText(res map[string]interface{}) string {
 // Under an engine that ends tool calls on its own deadline, a create that waits for the owner returns
 // at once and hands the wait to a runner-hosted job: the job files the card (naming itself, so the card
 // outlives the turn), writes only on a confirmation, and wakes the session with the call's own result.
+// The session is in Don't Ask, which refuses every background job, because the hand-off is not one. (Plan
+// refuses the create itself before anything is handed off: TestPlanGateRefusesAnOwnerWaitBeforeTheHandOff.)
 func TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline(t *testing.T) {
 	d := newOwnerWaitDouble(t)
 	// The job runs this test binary as `orbit mcp`, which reaches the double through ORBIT_HOME.
@@ -1761,7 +1763,7 @@ func TestMCPOwnerWaitIsHandedOffUnderAnEngineDeadline(t *testing.T) {
 	bg.wakeSessionVia(func(w bgWake) error { wakesMu.Lock(); wakes[w.JobID] = w; wakesMu.Unlock(); return nil })
 	defer bg.stopAll()
 	svc := &bgJobService{bg: bg, token: "ho-token", execDir: home, scratchDir: home, sessionID: "sess-ho",
-		agentID: "agent-ho", taskID: "task-ho", mode: func() string { return "plan" }}
+		agentID: "agent-ho", taskID: "task-ho", mode: func() string { return "dontAsk" }}
 	socket := filepath.Join(home, "bg.sock")
 	stop, err := startBgJobService(ctx, svc, socket, filepath.Join(home, "bg.token"))
 	if err != nil {

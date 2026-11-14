@@ -1,6 +1,7 @@
 package io.orbitd.android.management
 
 import android.content.Intent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -13,11 +14,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthState
+import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.navigation.OrbitRoute
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -180,9 +187,10 @@ internal object ShareCopy {
     }
 }
 
-/** SharedLinksSettingsPage: every public link this account has made, by where it stands. */
+/** SharedLinksSettingsPage: every public link this account has made, by where it stands. An active link's row opens its Share page
+ * ([open]); a copy icon stays out, and the rest is in its ⋯, Turn off… last and in red (web board docs/mocks/share-links/13-row-buttons). */
 @Composable
-fun SharingSettings(api: ManagementApi, revision: Long) {
+fun SharingSettings(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val notice = remember { Notice() }
@@ -221,24 +229,42 @@ fun SharingSettings(api: ManagementApi, revision: Long) {
                         "PAUSED" -> "No link is paused. A session’s link pauses while the session is in Trash."
                         else -> "No link has ended yet."
                     }, color = Ink.muted)
-                    shown.forEach { link ->
+                    shown.forEach { link -> key(link.text("id")) {
                         HorizontalDivider()
-                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(link.obj("root")?.str("title") ?: ShareCopy.kindWord(link.text("kind")), maxLines = 2)
-                            Text(ShareCopy.whereLine(link), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                            Text(ShareCopy.viewsLine(link.int("viewCount") ?: 0, link.str("lastViewedAt"), now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                            // At large text sizes a button that no longer fits goes to the next line whole.
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                if (link.text("state") == "ACTIVE") {
-                                    val url = sharingPublicUrl(api.handle.account.server, link.text("token"))
-                                    TextButton(onClick = { copyText(context, "Public link", url); notice.show("Link copied") }) { Text("Copy Link") }
-                                    TextButton(onClick = { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
-                                        .putExtra(Intent.EXTRA_TEXT, url), null)) }) { Text("Share Link…") }
-                                }
-                                if (sharingCanTurnOff(link)) TextButton(onClick = { turnOff = link }) { Text("Turn off", color = Ink.red) }
+                        val title = link.obj("root")?.str("title") ?: ShareCopy.kindWord(link.text("kind"))
+                        val active = link.text("state") == "ACTIVE"
+                        val url = if (active) sharingPublicUrl(api.handle.account.server, link.text("token")) else null
+                        fun copy() { url?.let { copyText(context, "Public link", it); notice.show("Link copied") } }
+                        fun settings() { open(OrbitRoute(Destination.SETTINGS, "share", recordId = "${link.text("kind")}:${link.obj("root")?.str("id")}")) }
+                        var menu by remember { mutableStateOf(false) }
+                        Row(Modifier.fillMaxWidth().then(if (active) Modifier.clickable { settings() } else Modifier).padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(title, maxLines = 2)
+                                Text(ShareCopy.whereLine(link), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                                Text(ShareCopy.viewsLine(link.int("viewCount") ?: 0, link.str("lastViewedAt"), now), style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                             }
+                            if (url != null) IconButton(onClick = { copy() }) {
+                                Icon(painterResource(R.drawable.ic_copy), "Copy Link", Modifier.size(18.dp), tint = Ink.muted)
+                            }
+                            if (sharingCanTurnOff(link)) Box {
+                                TextButton(onClick = { menu = true }) { Text("⋯", Modifier.clearAndSetSemantics { contentDescription = "More for $title" }) }
+                                DropdownMenu(menu, { menu = false }) {
+                                    if (url != null) {
+                                        DropdownMenuItem(text = { Text("Copy Link") }, onClick = { menu = false; copy() })
+                                        DropdownMenuItem(text = { Text("Share Link…") }, onClick = {
+                                            menu = false
+                                            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url), null))
+                                        })
+                                        DropdownMenuItem(text = { Text("Settings…") }, onClick = { menu = false; settings() })
+                                        HorizontalDivider()
+                                    }
+                                    DropdownMenuItem(text = { Text("Turn off…", color = Ink.red) }, onClick = { menu = false; turnOff = link })
+                                }
+                            }
+                            if (active) Icon(painterResource(R.drawable.ic_chevron_forward), null, Modifier.size(14.dp), tint = Ink.muted)
                         }
-                    }
+                    } }
                 }
             }
         }

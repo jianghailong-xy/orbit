@@ -18,6 +18,7 @@ import { PatDeviceLoginService } from './pat-device-login.service';
 import { PatRefusalInterceptor, PatRequestAudit } from './pat-request-audit';
 import { PatService } from './pat.service';
 import { SignInProvidersService } from './sign-in-providers.service';
+import { TerminalCredentials } from './terminal-credentials';
 
 @Global()
 @Module({
@@ -57,6 +58,8 @@ import { SignInProvidersService } from './sign-in-providers.service';
     PatService,
     PatDeviceLoginService,
     PatRequestAudit,
+    // The TERMINAL credentials JwtAuthGuard verifies (docs/terminal-session-design.md).
+    TerminalCredentials,
     // An administrator viewing Orbit as another account, read-only, on a key derived for it alone.
     { provide: IMPERSONATION_JWT, inject: [ConfigService], useFactory: createImpersonationJwt },
     Impersonation,
@@ -75,7 +78,7 @@ import { SignInProvidersService } from './sign-in-providers.service';
   // instantiated in every module that uses it, PatService also because admin/* lists and revokes a user's tokens,
   // GoogleLoginService because admin/* unlinks a user's Google account, DisabledAccounts also because admin/*
   // disables one and the pool gateways read it, and Impersonation also because admin/* issues the token for
-  // viewing one.
-  exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit, GoogleLoginService, DisabledAccounts, Impersonation],
+  // viewing one. TerminalCredentials because JwtAuthGuard verifies a terminal's credential with it.
+  exports: [JwtAuthGuard, JwtModule, PatService, PatRequestAudit, GoogleLoginService, DisabledAccounts, Impersonation, TerminalCredentials],
 })
 export class AuthModule {}

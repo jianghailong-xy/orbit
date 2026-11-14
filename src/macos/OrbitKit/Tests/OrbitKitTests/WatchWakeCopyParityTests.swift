@@ -256,32 +256,32 @@ final class WatchWakeCopyParityTests: XCTestCase {
 
     /// The bar pinned to the top of the transcript does not point at this turn: it is a line inside
     /// the answer, so the bar keeps naming the question (`StickySummary.isAnchor`, which
-    /// `StickySummaryTests` holds). The browser's half of that rule is the attribute pair its scanner
-    /// reads, which the line must never stamp. Named in the card's own words it took the bar over the
+    /// `StickySummaryTests` holds). The browser's half of that rule is the round mark its scanner
+    /// reads, which the line must never carry. Named in the card's own words it took the bar over the
     /// reply the agent simply carried on with, and the question left the screen.
     func testTheLineIsNoTurnTheStickyBarPointsAt() throws {
         let card = try flat(Self.webWakeCard)
-        XCTAssertFalse(card.contains("data-sticky-label=") || card.contains("data-sticky-text="),
-                       "\(Self.webWakeCard) stamps an attribute the bar's scanner reads, so the bar points "
-                           + "at the line and the question leaves it")
+        // The attribute, not a comment naming it in backticks.
+        XCTAssertNil(card.range(of: "data-orbit-round(?!`)", options: .regularExpression),
+                       "\(Self.webWakeCard) carries the round mark the bar's scanner reads, so the bar hides "
+                           + "over the line and the question leaves it")
 
-        // The scanner itself still reaches the cards that do name themselves (an exception item's, a
-        // task run's opening), and reads their line off the card rather than scraping markdown.
+        // The scanner itself still reaches the rounds Orbit opened (an exception item's, a task run's
+        // opening), and hides the bar over them, as `StickySummary.isOrbits` does here.
         let web = try flat(Self.webWorkspace)
-        XCTAssertTrue(web.contains("[data-sticky-label]:not(.is-queued)"),
-                      "the browser's scanner no longer reaches a card that names itself — it is back "
+        XCTAssertTrue(web.contains("[data-orbit-round]:not(.is-queued)"),
+                      "the browser's scanner no longer reaches a round Orbit opened — it is back "
                           + "to `.chat-user` bubbles alone.")
-        XCTAssertTrue(web.contains("cur.getAttribute('data-sticky-text')"),
-                      "the browser's bar stopped reading a card's line off the card and is back to "
-                          + "scraping rendered markdown a card does not have.")
-        // The one label that is not a card's title, and the arrow every label opens with.
+        XCTAssertTrue(web.contains("cur?.hasAttribute('data-orbit-round')"),
+                      "the browser's bar no longer hides over a round Orbit opened.")
+        // The bar's one label, and the arrow it opens with.
         assertWritten(web, prefix: "const STICKY_LABEL = ",
                       String(StickySummary.yourQuestion.dropFirst(StickySummary.arrow.count)),
                       "what the bar calls a turn the person typed", Self.webWorkspace)
-        XCTAssertTrue(web.contains("className=\"chat-sticky-label\">\(StickySummary.arrow){stuck.label}"),
+        XCTAssertTrue(web.contains("className=\"chat-sticky-label\">\(StickySummary.arrow){STICKY_LABEL}"),
                       "the bar's label drifted: \(Self.webWorkspace) no longer opens it with "
                           + "\(StickySummary.arrow.debugDescription) — first is StickySummary.arrow, "
-                          + "which this client puts in front of every one of these labels.")
+                          + "which this client puts in front of the label too.")
     }
 
     // MARK: the span both the card's EXPIRES row and the strip count off

@@ -32,6 +32,7 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { isStopping, pauseUnlessStopping } from '../common/graceful-stop';
 import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
@@ -213,7 +214,7 @@ import {
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { QueueService } from '../queue/queue.service';
-import { approvalRequestEvent, RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
+import { approvalRequestEvent, RealtimeService, type RestatedSeqs } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
@@ -336,6 +337,7 @@ import {
   settleUnrunSessionRequests,
 } from '../sessions/session-request';
 import { readTurnCards } from '../sessions/turn-cards';
+import { sentFromOf } from '../sessions/turn-sender-client';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -371,6 +373,7 @@ import {
   withProjectStarted,
   withSessionMessage,
   withExternalSender,
+  withSentFrom,
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
@@ -539,6 +542,7 @@ import {
   recordRunnerBeat,
   runnerLastBeatAt,
 } from '../runners/runner-presence';
+import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -640,6 +644,8 @@ interface IngestOutcome {
   events: NormalizedRunEvent[];
   durable: NormalizedRunEvent[];
   alreadyStored: number;
+  /** The range of the batch's replayable seqs an earlier delivery stored, announced again (RestatedSeqs); null when none. */
+  restated: RestatedSeqs | null;
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
@@ -979,17 +985,24 @@ interface RepairCheckAfter {
   parentSessionId: string | null;
   /** This session's own recovery: a repair turn's check has been waiting for this session's turn to end. */
   owesCheck: boolean;
+  /** A merge this session asked for of itself during its turn (SessionsService.mergeAfterOwnTurn): queued
+   *  when the turn that ended succeeded, dropped when it did not; null when none was asked for. */
+  merge: 'QUEUE' | 'DROP' | null;
 }
 // Read off the session row the settle locked. Only a repair session (startMergeRepair's server-owned
 // source) triggers one — an ordinary child of the same parent, a task's run or anything else does not —
 // and only for a turn that ended, which a finalize says only of a session it found running one.
 function repairCheckAfter(
-  session: { source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null },
+  session: {
+    source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null; mergeAfterTurnAt: Date | null;
+  },
   turnEnded = true,
+  turnSucceeded = true,
 ): RepairCheckAfter {
   return {
     parentSessionId: turnEnded && session.source === 'merge-repair' ? session.parentSessionId : null,
     owesCheck: session.mergeRepairTurnEndedAt != null,
+    merge: session.mergeAfterTurnAt == null ? null : turnSucceeded ? 'QUEUE' : 'DROP',
   };
 }
 // Tool-permission approvals: `orbit mcp`'s permission tool, which holds no link, blocks on this
@@ -1948,6 +1961,7 @@ export class RunnerApiController {
         namedSessionIds: named,
         supervisedSessionIds: supervised,
         planUsageDigest: digests.facts.planUsage ?? null,
+        resources: sanitizeRunnerResources(dto?.resources),
       });
     } catch (error) {
       // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
@@ -2202,6 +2216,13 @@ export class RunnerApiController {
         linkState: link ? 'LINK' : 'HTTP',
         at: beatAt,
       }).catch(beatLost);
+      // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
+      const resources = sanitizeRunnerResources(dto?.resources);
+      if (resources) {
+        await recordRunnerResources(this.prisma, runner.id, resources).catch((error) =>
+          this.logger.warn(`runner ${runner.id}: resources not recorded this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`),
+        );
+      }
     }
     // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
     // like the relays below: a read that fails hands out this beat's work as usual, and the instance,
@@ -4209,6 +4230,8 @@ export class RunnerApiController {
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
+        // cf. the claim path: the folder below workDir a no-worktree session runs in.
+        ...(s.workSubdir ? { workSubdir: s.workSubdir } : {}),
         // cf. the claim path: a codeless run with no branch yet goes back to its detached checkout.
         ...codelessClaimFields(s, workspace, runner.capabilities),
         autoInitGit: workspace?.autoInitGit ?? undefined,
@@ -6313,8 +6336,9 @@ export class RunnerApiController {
           ...(a.startAfterCreate ? { startAfterCreate: true } : {}),
         };
       }
-      if (Date.now() >= deadline) return { id: a.id, status: 'PENDING' };
-      await new Promise((r) => setTimeout(r, APPROVAL_POLL_INTERVAL_MS));
+      // A stopping apiserver answers at once, as when the window elapses: the reader asks again, of another apiserver.
+      if (Date.now() >= deadline || isStopping()) return { id: a.id, status: 'PENDING' };
+      await pauseUnlessStopping(APPROVAL_POLL_INTERVAL_MS);
     }
   }
 
@@ -6619,6 +6643,8 @@ export class RunnerApiController {
           source: true,
           parentSessionId: true,
           mergeRepairTurnEndedAt: true,
+          // And whether this session asked to merge itself during the turn that just ended.
+          mergeAfterTurnAt: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -7795,7 +7821,7 @@ export class RunnerApiController {
         requestsClosed: [...stoppedRequestsClosed, ...requestsClosed],
         reviewToDeliver,
         reviewsAbandoned,
-        repairCheck: repairCheckAfter(current),
+        repairCheck: repairCheckAfter(current, true, dto.status === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
       };
@@ -8068,6 +8094,16 @@ export class RunnerApiController {
    * queued is logged — the owner's Check again is still there.
    */
   private async checkRecoveryAfterTurn(sessionId: string, check: RepairCheckAfter, endedAt: Date): Promise<void> {
+    // First the merge this session asked for of itself during the turn: it is what the session wanted
+    // done, and a recovery check queued ahead of it would leave it nothing to queue.
+    if (check.merge) {
+      try {
+        await this.sessions?.mergeAfterOwnTurn(sessionId, check.merge === 'QUEUE');
+      } catch (error) {
+        this.logger.warn(`the merge ${sessionId} asked for during its turn was not queued: `
+          + `${error instanceof Error ? error.message : error}`);
+      }
+    }
     const checks: Array<[string, Date | null]> = [];
     if (check.parentSessionId) checks.push([check.parentSessionId, endedAt]);
     if (check.owesCheck) checks.push([sessionId, null]);
@@ -8194,8 +8230,13 @@ export class RunnerApiController {
    *     (writeCallSessions), and their run_event rows in one statement once every batch is derived. Alone a batch
    *     issues one or more of each, and in a merged call each one was a round trip the transaction waited on the
    *     apiserver's event loop for: task C2b measured 72% of a merged transaction's time spent so;
-   *   - the other replicas' notice of each batch, sent by the transaction itself, so they hear of each batch once, at
-   *     its commit (§6.7).
+   *   - the other replicas' notice of each batch, every one of them in one statement of its own once the transaction
+   *     has committed, and before the call is answered (§6.7). Sent by the transaction, a NOTIFY made its COMMIT take
+   *     PostgreSQL's one notification-queue lock and hold it through its WAL flush, so every merged call committed one
+   *     at a time, and one that queued past LINK_CALL_LOCK_TIMEOUT_MS rolled back at its COMMIT and sent every batch
+   *     alone (task C2b). A process that dies between the commit and the notice never answers the call; the gateway
+   *     then sends the call again, to another apiserver (it is idempotent), or fails each batch to its runner, which
+   *     sends it again: either way an ingest finds the batch's seqs stored and announces them again (restated).
    *
    * A batch the call cannot take as the events route would is answered `sendAlone`, and so is one whose ingest fails:
    * the transaction is run again without it, at most LINK_CALL_RERUNS times, and past that every batch left is sent
@@ -8352,21 +8393,6 @@ export class RunnerApiController {
       if (runEvents) {
         await callWrite(() => chunkedCreateMany((data) => tx.runEvent.createMany({ data, skipDuplicates: true }), runEvents as never[]));
       }
-      // The other replicas hear of each batch once, at this commit, of what was stored while the session is open: what
-      // publishBatch tells them after an ingest of its own.
-      const notices = ingested.flatMap(({ batch, outcome }) => {
-        if (!OPEN.includes(outcome.session.status)) return [];
-        const notice = runEventBatchNotice(
-          instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted,
-        );
-        return notice ? [notice] : [];
-      });
-      if (notices.length > 0) {
-        await tx.$executeRaw`
-          SELECT pg_notify(n.channel, n.payload)
-            FROM unnest(${notices.map((n) => n.channel)}::text[], ${notices.map((n) => n.payload)}::text[]) AS n(channel, payload)
-        `;
-      }
       return { ingested, lockedAt };
     };
     let heldMs = 0;
@@ -8376,9 +8402,24 @@ export class RunnerApiController {
           transaction: { timeout: LINK_CALL_TRANSACTION_TIMEOUT_MS, maxWait: LINK_CALL_TRANSACTION_TIMEOUT_MS },
         }));
         heldMs = committed.lockedAt === null ? 0 : Math.round(performance.now() - committed.lockedAt);
+        // The other replicas hear of each batch once it has committed, of what was stored while the session is open:
+        // what publishBatch tells them after an ingest of its own, every batch's in one statement, before the call is
+        // answered. One that fails fails the call, once the rest is announced: every batch is then forwarded alone,
+        // finds its seqs stored, and is announced again (restated).
+        const told = this.realtime.sendNotices(committed.ingested.flatMap(({ batch, outcome }) => (
+          OPEN.includes(outcome.session.status)
+            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted, outcome.restated)
+            : []
+        ))).then(() => null, (error: unknown) => error);
         for (const { batch, outcome, coordinator } of committed.ingested) {
           await this.announceIngest(batch.sessionId, outcome, { coordinator });
           results[batch.index] = await this.linkCallAnswer(batch, outcome);
+        }
+        const untold = await told;
+        if (untold !== null) {
+          this.logger.error(`a merged runner link call of ${committed.ingested.length} batches committed, and the other apiservers could not be `
+            + `told of it (${(untold as Error)?.message ?? String(untold)}); failing the call, so that every batch is sent alone and announced again`);
+          throw untold;
         }
         break;
       } catch (error) {
@@ -8480,6 +8521,14 @@ export class RunnerApiController {
       // taken whole, as it always was.
       const stored = merged ? merged.stored : link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
       const events = stored.size > 0 ? batch.filter((e) => !stored.has(e.seq)) : batch;
+      // What of the batch an earlier delivery stored and the replicas read back: announced again, as its delivery may
+      // not have lived to announce it (RestatedSeqs).
+      const restatedSeqs = stored.size > 0
+        ? batch.filter((e) => stored.has(e.seq) && !NON_REPLAYABLE_EVENT_TYPES.includes(e.type) && !isNoiseSystemEvent(e)).map((e) => e.seq)
+        : [];
+      const restated = restatedSeqs.length > 0
+        ? { from: Math.min(...restatedSeqs), to: Math.max(...restatedSeqs) }
+        : null;
       const tombstones = link ? link.tombstones.filter((t) => !stored.has(t.seq)) : [];
       // What was left out is the same event sent again, or another at its seq, which nothing will store: that one is
       // logged and counted once the batch commits (run-event-seq-conflicts.ts). Over HTTPS it is found by the insert.
@@ -8551,6 +8600,7 @@ export class RunnerApiController {
             select: {
               id: true, content: true, clientTurnId: true, senderSessionId: true,
               externalSenderSource: true, externalSenderName: true,
+              senderClient: true, senderClientDetail: true,
             },
           })
         : [];
@@ -8597,6 +8647,11 @@ export class RunnerApiController {
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);
+        const sentTurn = e.turnId ? userTurnById.get(e.turnId) : undefined;
+        e.payload = withSentFrom(
+          e.payload,
+          sentTurn ? sentFromOf(sentTurn, cards?.sessionMessage, cards?.externalSender) : null,
+        );
       }
       // A move between account-pool members is said on the first engine start after it — the first
       // event from a process holding the new member's key. It rides on the runner's own event
@@ -9173,7 +9228,7 @@ export class RunnerApiController {
       }
       return {
         session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
-        seqConflicts, door: link ? 'link' : 'https', engineStarted,
+        restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };
     return ingest.call(this);
@@ -9181,7 +9236,7 @@ export class RunnerApiController {
 
   /**
    * What is announced of a batch once its ingest has committed (ingestEvents). For a batch of a merged link call
-   * (`merged`, ingestLinkEventCall) the other replicas have already heard of it, in the call's transaction, so its
+   * (`merged`, ingestLinkEventCall) the call tells the other replicas of every batch in one statement, so its
    * events go to this replica's streams alone; and the spend fuse is asked only for a session the call found
    * coordinating a project.
    */
@@ -9192,6 +9247,8 @@ export class RunnerApiController {
   ): Promise<void> {
     // What the attempt that committed stored: the whole batch, or for a link batch what was not already stored.
     const { events, durable } = eventOutcome;
+    /** Alone: the other replicas' notice of the batch, null once sent, or why it could not be (publishBatch). */
+    let told: Promise<unknown> | undefined;
     if (eventOutcome.seqConflicts.length > 0) {
       // Each of them is an event nothing will store, acknowledged with the batch (run-event-seq-conflicts.ts).
       const { seqConflicts, door } = eventOutcome;
@@ -9230,14 +9287,25 @@ export class RunnerApiController {
       // client, so spending a frame on it only costs the reader bandwidth. The replay paths
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
       // as one batch: the other replicas hear of it once, not once per event (publishBatch). A merged
-      // call's notice went with its transaction (ingestLinkEventCall), so only this replica is left.
+      // call tells them itself (ingestLinkEventCall), so only this replica is left. Alone, the batch is
+      // answered once they have heard: a notice that could not be sent fails the answer once the rest is
+      // announced, and the batch sent again finds its seqs stored and announces them again (restated).
       // A batch that ended the starting state is followed by a session_updated: the clients read that
       // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
       // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
       // one-minute safety read.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted);
-      else this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+      else {
+        told = (async () => {
+          try {
+            await this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+            return null;
+          } catch (error) {
+            return error;
+          }
+        })();
+      }
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
@@ -9257,6 +9325,12 @@ export class RunnerApiController {
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
+    }
+    const untold = await told;
+    if (untold) {
+      this.logger.error(`session ${sessionId}: a batch committed, and the other apiservers could not be told of it `
+        + `(${(untold as Error)?.message ?? String(untold)}); failing its answer, so that it is sent again and announced again`);
+      throw untold;
     }
   }
 
@@ -9612,7 +9686,8 @@ export class RunnerApiController {
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
-        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
+        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING,
+          effectiveStatus === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
       };

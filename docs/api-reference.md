@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 418 |
+| `user` | 432 |
 | `admin` | 28 |
-| `runner` | 176 |
+| `runner` | 178 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **657** |
+| **Total** | **673** |
 
 ## Public routes
 
@@ -114,9 +114,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/attachments` | query `sessionId`, `taskId` | `AttachmentsController.upload` |
 | `DELETE` | `/api/attachments/:id` | path `id` | `AttachmentsController.removeTaskInput` |
 | `GET` | `/api/attachments/:id` | path `id` | `AttachmentsController.download` |
+| `DELETE` | `/api/attachments/:id/everywhere` | path `id` | `AttachmentsController.deleteEverywhere` |
 | `DELETE` | `/api/attachments/:id/pin` | path `id` | `AttachmentsController.unpin` |
 | `PUT` | `/api/attachments/:id/pin` | path `id` | `AttachmentsController.pin` |
 | `GET` | `/api/attachments/usage` | — | `AttachmentsController.usage` |
+| `GET` | `/api/attachments/usage/projects/:id/files` | path `id`; query `cursor`, `order` | `AttachmentsController.projectFiles` |
+| `GET` | `/api/attachments/usage/tasks/:id/files` | path `id`; query `cursor`, `order` | `AttachmentsController.taskFiles` |
+| `GET` | `/api/attachments/usage/weeks/:week/files` | path `week`; query `cursor`, `order` | `AttachmentsController.weekFiles` |
 | `GET` | `/api/auth/capabilities` | — | `AuthController.capabilities` |
 | `POST` | `/api/auth/change-password` | body `ChangePasswordDto` | `AuthController.changePassword` |
 | `DELETE` | `/api/auth/google/link` | — | `GoogleAuthController.unlink` |
@@ -268,6 +272,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `PATCH` | `/api/runners/:id/accounts/:engine/:account` | body `RenameAccountDto`; path `account`, `engine`, `id` | `RunnersController.renameAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/:account/pause` | body `PauseAccountDto`; path `account`, `engine`, `id` | `RunnersController.pauseAccount` |
 | `POST` | `/api/runners/:id/accounts/:engine/default/restore` | path `engine`, `id` | `RunnersController.restoreDefault` |
+| `POST` | `/api/runners/:id/attention/:kind/fix` | body `Object`; path `id`, `kind` | `RunnerAttentionFixController.fix` |
 | `GET` | `/api/runners/:id/claude-history` | path `id`; query `workDir` | `RunnersController.claudeHistory` |
 | `POST` | `/api/runners/:id/claude-history` | body `Object`; path `id` | `RunnersController.askClaudeHistory` |
 | `DELETE` | `/api/runners/:id/codex-accounts/:account` | path `account`, `id` | `RunnersController.removeCodexAccount` |
@@ -277,6 +282,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runners/:id/dir-probe` | path `id`; query `path` | `RunnersController.dirProbe` |
 | `POST` | `/api/runners/:id/dir-probe` | body `Object`; path `id` | `RunnersController.askDirProbe` |
 | `POST` | `/api/runners/:id/engine-update` | path `id` | `RunnersController.startEngineUpdate` |
+| `POST` | `/api/runners/:id/engines/:engine/update-warning/dismiss` | path `engine`, `id` | `RunnersController.dismissEngineUpdateWarning` |
 | `DELETE` | `/api/runners/:id/install` | path `id` | `RunnersController.cancelInstall` |
 | `GET` | `/api/runners/:id/install` | path `id` | `RunnersController.installState` |
 | `POST` | `/api/runners/:id/install` | body `StartInstallDto`; path `id` | `RunnersController.startInstall` |
@@ -286,6 +292,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runners/:id/login/code` | body `SubmitLoginCodeDto`; path `id` | `RunnersController.submitLoginCode` |
 | `POST` | `/api/runners/:id/refresh-models` | path `id` | `RunnersController.refreshModels` |
 | `POST` | `/api/runners/:id/region-check` | path `id` | `RunnersController.requestRegionCheck` |
+| `GET` | `/api/runners/:id/resources` | path `id` | `RunnersController.resources` |
 | `POST` | `/api/runners/:id/rotate-token` | path `id` | `RunnersController.rotateToken` |
 | `POST` | `/api/runners/:id/self-update` | path `id` | `RunnersController.requestSelfUpdate` |
 | `POST` | `/api/runners/:id/self-update/now` | body `Object`; path `id` | `RunnersController.updateSelfNow` |
@@ -421,6 +428,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/tasks/labels` | query `assigneeId`, `listId`, `projectId` | `TasksController.labelSummary` |
 | `GET` | `/api/tasks/model-routing/report` | query `agentId`, `since` | `TaskModelRoutingReportController.read` |
 | `GET` | `/api/tasks/page` | query `assigneeId`, `counts`, `creatorSessionId`, `cursor`, `labels`, `limit`, `listId`, `minPriority`, `projectId`, `q`, `status` | `TasksController.listPage` |
+| `GET` | `/api/terminals` | — | `TerminalsController.list` |
+| `DELETE` | `/api/terminals/:id` | path `id` | `TerminalsController.revoke` |
+| `GET` | `/api/terminals/requests` | — | `TerminalsController.pending` |
+| `POST` | `/api/terminals/requests/:id/approve` | path `id` | `TerminalsController.approve` |
+| `POST` | `/api/terminals/requests/:id/deny` | path `id` | `TerminalsController.deny` |
+| `DELETE` | `/api/terminals/self` | — | `TerminalsController.revokeSelf` |
+| `GET` | `/api/terminals/self` | — | `TerminalsController.self` |
 | `GET` | `/api/users/me` | — | `UsersController.me` |
 | `PATCH` | `/api/users/me` | body `UpdateProfileDto` | `UsersController.updateProfile` |
 | `DELETE` | `/api/users/me/avatar` | — | `UsersController.removeAvatar` |
@@ -698,6 +712,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/tasks/batch-preview` | body `CreateTasksBatchDto` | `RunnerTasksController.previewBatch` |
 | `GET` | `/api/runner/tasks/labels` | query `listId` | `RunnerTasksController.labelSummary` |
 | `GET` | `/api/runner/tasks/page` | query `cursor`, `labels`, `limit`, `listId`, `minPriority`, `projectId`, `status` | `RunnerTasksController.listTaskPage` |
+| `POST` | `/api/runner/terminal-login/poll` | body `PollTerminalLoginDto` | `RunnerTerminalLoginController.poll` |
+| `POST` | `/api/runner/terminal-login/start` | — | `RunnerTerminalLoginController.start` |
 | `GET` | `/api/runner/watches` | query `state` | `RunnerWatchesController.list` |
 | `POST` | `/api/runner/watches` | body `RunnerCreateWatchDto` | `RunnerWatchesController.create` |
 | `GET` | `/api/runner/watches/:id` | path `id` | `RunnerWatchesController.get` |

@@ -13,10 +13,12 @@ private extension Color {
 struct OwnerRequestView: View {
     @Environment(AppModel.self) private var appModel
     let requestID: String
+    /// Hands a talk about the request to the conversation's composer.
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
         if let model = appModel.ownerRequests, let request = model.request(requestID) {
-            OwnerRequestContent(model: model, request: request)
+            OwnerRequestContent(model: model, request: request, onChat: onChat)
         }
     }
 }
@@ -25,6 +27,7 @@ struct OwnerRequestView: View {
 struct OwnerRequestContent: View {
     let model: OwnerRequestsModel
     let request: OwnerRequest
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
         if request.state != .pending {
@@ -32,7 +35,7 @@ struct OwnerRequestContent: View {
         } else if let until = model.snoozedUntil(request.id) {
             OwnerRequestSnoozedLine(model: model, request: request, until: until)
         } else {
-            OwnerRequestCard(model: model, request: request)
+            OwnerRequestCard(model: model, request: request, onChat: onChat)
         }
     }
 }
@@ -41,6 +44,7 @@ struct OwnerRequestContent: View {
 struct OwnerRequestCard: View {
     let model: OwnerRequestsModel
     let request: OwnerRequest
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     private enum Field: Hashable { case secret, answer, reason }
 
@@ -54,10 +58,13 @@ struct OwnerRequestCard: View {
     @State private var busy = false
     @State private var failure: String?
     @FocusState private var field: Field?
+    /// Closes the review sheet this card may be drawn in, so the composer it arms is in view.
+    @Environment(\.dismissApprovalReview) private var dismissReview
 
-    init(model: OwnerRequestsModel, request: OwnerRequest) {
+    init(model: OwnerRequestsModel, request: OwnerRequest, onChat: ((OwnerRequest) -> Void)? = nil) {
         self.model = model
         self.request = request
+        self.onChat = onChat
         _draft = State(initialValue: OwnerRequests.SecretDraft(spec: request.secretSpec))
         _chosen = State(initialValue: request.recommendedOption)
     }
@@ -270,10 +277,24 @@ struct OwnerRequestCard: View {
         }
     }
 
-    /// Two rows, so a phone's width never breaks a button's words: what to do, then the ways out.
+    /// The buttons as every other card draws them (`ApprovalActions`: stacked full width on a phone,
+    /// one row on a Mac), Chat about this after the press; then the ways out, as links.
     private var actions: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) { doors }
+            ApprovalActions {
+                doors
+                if let onChat, !closed {
+                    Button {
+                        PlatformHaptics.tap()
+                        dismissReview()
+                        onChat(request)
+                    } label: {
+                        Text(Approvals.chatAction).approvalActionLabel()
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("owner-request-chat")
+                }
+            }
             HStack(spacing: 12) { exits }
         }
         .lineLimit(1)
@@ -281,11 +302,13 @@ struct OwnerRequestCard: View {
 
     @ViewBuilder private var doors: some View {
             if grant?.state == .pendingDelivery {
-                Button(OwnerRequests.cancel) { run { try await model.cancelSecret(request) } }
-                    .buttonStyle(.bordered).disabled(busy)
+                Button { run { try await model.cancelSecret(request) } } label: {
+                    Text(OwnerRequests.cancel).approvalActionLabel()
+                }
+                .buttonStyle(.bordered).disabled(busy)
             } else {
                 Button { pressPrimary() } label: {
-                    Text(OwnerRequests.primaryLabel(request.kind)).bold()
+                    Text(OwnerRequests.primaryLabel(request.kind)).bold().approvalActionLabel()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -293,10 +316,12 @@ struct OwnerRequestCard: View {
                           || !OwnerRequests.canSubmit(request, draft: draft, option: chosen, text: text))
                 .accessibilityIdentifier("owner-request-primary")
                 if request.kind == .secret, draft.savedID == nil, let saved = model.savedSecrets.first {
-                    Button(OwnerRequests.useSaved(saved.label)) {
+                    Button {
                         draft.value = ""
                         draft.save = false
                         draft.savedID = saved.id
+                    } label: {
+                        Text(OwnerRequests.useSaved(saved.label)).approvalActionLabel()
                     }
                     .buttonStyle(.bordered)
                 }
@@ -421,6 +446,75 @@ struct OwnerRequestSteps: View {
         }
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+/// A terminal asking to be approved (docs/terminal-session-design.md, board 2 marker 7): the owner request card's
+/// frame, header and action row — no look of its own. Approve mints the terminal's credential for 30 days; Deny tells
+/// the terminal so. Web parity: `TerminalApproveCard.tsx`; the words are OrbitKit's `Terminals`.
+struct TerminalApproveCard: View {
+    let model: OwnerRequestsModel
+    let request: TerminalRequest
+    @State private var busy = false
+    @State private var failure: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Circle().fill(Color.ownerRequestAccent).frame(width: 8, height: 8)
+                Text(OwnerRequests.waitingOnYou).font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(Color.ownerRequestAccent)
+                Spacer(minLength: 8)
+                Text("Asked \(RelativeTime.ago(request.createdAt) ?? "")").font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(Color.ownerRequestAccent.opacity(0.10))
+            Divider().overlay(Color.ownerRequestAccent.opacity(0.35))
+            VStack(alignment: .leading, spacing: 12) {
+                Text(Terminals.approveTitle).font(.headline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Terminals.requestLine(request))
+                    Text(Terminals.approveDetail)
+                }
+                .font(.orbitProse)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                if let failure {
+                    Label { Text("\(OwnerRequests.notRecorded): \(failure)") } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .font(.orbitLabel).foregroundStyle(.red)
+                }
+                HStack(spacing: 10) {
+                    Button { decide(approve: false) } label: {
+                        Text(Terminals.deny).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("terminal-deny-\(request.id)")
+                    Button { decide(approve: true) } label: {
+                        Text(Terminals.approve).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("terminal-approve-\(request.id)")
+                }
+                .disabled(busy)
+            }
+            .padding(16)
+        }
+        .background(Color.ownerRequestAccent.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.ownerRequestAccent.opacity(0.45)))
+        // A container, so its own identifier does not overwrite its buttons'.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("terminal-request-\(request.id)")
+    }
+
+    private func decide(approve: Bool) {
+        busy = true
+        Task { @MainActor in
+            do { try await model.decideTerminal(request, approve: approve) } catch { failure = error.localizedDescription }
+            busy = false
+        }
     }
 }
 

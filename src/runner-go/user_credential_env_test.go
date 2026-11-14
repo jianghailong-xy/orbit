@@ -71,7 +71,9 @@ func userTokenEnvCases() []userTokenEnvCase {
 			},
 		},
 		{
-			name: "codex exec", sites: []string{"codex.go runCodexTurn"}, holds: inherited,
+			// Both Codex spawns write their session context through codexOrbitSessionEnv, so the census finds it
+			// there; each case still builds its own process.
+			name: "codex exec", sites: []string{"codex.go codexOrbitSessionEnv"}, holds: inherited,
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				capture := fakeEngineCapturingEnv(t, providerCodex)
 				runCodexTurn(context.Background(), job, dir, "work", nil, ignore)
@@ -81,7 +83,7 @@ func userTokenEnvCases() []userTokenEnvCase {
 		{
 			// Handed the runner's environment with the agent's token on top, as a caller that dropped
 			// nothing would hand it: the spawn drops them itself.
-			name: "codex app-server", sites: []string{"codex_appserver.go startCodexAppServer"}, holds: []string{session, runner},
+			name: "codex app-server", sites: []string{"codex.go codexOrbitSessionEnv"}, holds: []string{session, runner},
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				capture := fakeEngineCapturingEnv(t, providerCodex)
 				app, err := startCodexAppServer(context.Background(), job, dir, dir,

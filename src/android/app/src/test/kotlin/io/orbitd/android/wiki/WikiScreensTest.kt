@@ -112,6 +112,9 @@ class WikiScreensTest {
         show(route) { WikiHomeScreen(it, route, DirectoryData(), nav) }
         compose.waitUntil(60_000) { compose.onAllNodesWithTag("wiki-home-list").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("wiki-space-picker").assertTextContains("orbit")
+        // The space's name is the page's title, and Wiki is not (board docs/mocks/wiki-rail-name B).
+        compose.onNode(isHeading() and hasTestTag("wiki-space-picker")).assertExists()
+        compose.onAllNodes(isHeading() and hasText(WikiCopy.title)).assertCountEquals(0)
         // The first three principles, then All 4 (A12-3).
         listOf("Agent-writable data never becomes a system instruction", "Completion is adjudicated, not claimed",
             "A clock never starts agent work").forEach {

@@ -61,6 +61,7 @@ vi.mock('../../pages/settings/StoragePage', async () => ({ StorageSettingsPage: 
 vi.mock('../../pages/ProfilePage', () => ({ ProfilePage: () => <p data-page="profile">profile</p> }));
 vi.mock('../../pages/SharedLinksPage', () => ({ SharedLinksPage: () => <p data-page="shared-links">links</p> }));
 vi.mock('../../pages/AccessTokensPage', () => ({ AccessTokensPage: () => <p data-page="access-tokens">tokens</p> }));
+vi.mock('../../pages/TerminalsPage', () => ({ TerminalsPage: () => <p data-page="terminals">terminals</p> }));
 vi.mock('../../pages/FeishuIntegrationPage', () => ({ FeishuIntegrationPage: () => <p data-page="feishu">feishu</p> }));
 vi.mock('./SettingsProviderPages', async (original) => {
   const { useParams } = await import('react-router-dom');
@@ -87,7 +88,11 @@ vi.mock('./WorkspaceSettingsPage', async () => {
 });
 // Home lands in a workspace's console.
 vi.mock('../WorkspaceConsole', () => ({ WorkspaceConsole: () => <p data-page="console">console</p> }));
-vi.mock('../RunnerRegisterGuide', () => ({ RunnerRegisterGuide: () => <p data-page="register">register</p> }));
+vi.mock('../RunnerRegisterGuide', () => ({
+  RunnerRegisterGuide: ({ inSettings }: { inSettings?: boolean }) => (
+    <p data-page={inSettings ? 'register:settings' : 'register'}>register</p>
+  ),
+}));
 vi.mock('../../pages/ProviderConnectPage', () => ({
   ProviderPickPage: () => <p data-page="pick-vendor">pick</p>,
   ProviderConnectPage: () => <p data-page="key">key</p>,
@@ -288,6 +293,7 @@ describe('the Settings window', () => {
       ['Storage', '/settings/storage'],
       ['Shared links', '/settings/shared-links'],
       ['Access tokens', '/settings/access-tokens'],
+      ['Terminals', '/settings/terminals'],
     ]);
     expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([['Feishu', '/settings/integrations/feishu']]);
     expect(rows('Machines').map((r) => [r.label, r.href, r.dot])).toEqual([
@@ -316,6 +322,7 @@ describe('the Settings window', () => {
       '/settings/storage': '/settings/storage',
       '/settings/shared-links': 'shared-links',
       '/settings/access-tokens': 'access-tokens',
+      '/settings/terminals': 'terminals',
       '/settings/integrations/feishu': 'feishu',
       '/settings/machines/gpuBox': 'machine:gpuBox:',
       '/settings/machines/studioMac': 'machine:studioMac:',
@@ -379,9 +386,12 @@ describe('the Settings window', () => {
 
   it('sends each + where it adds one', async () => {
     await visit('/settings/general');
+    // Registering a machine stays in Settings (docs/mocks/settings-add-machine, A): the nav is still there.
     await click(group('Machines').querySelector('.settings-nav-add'));
-    expect(addressBar()).toBe('/runners/register');
-    expect(page()).toBe('register');
+    expect(addressBar()).toBe('/settings/machines/new');
+    expect(container.querySelector('.settings-column [data-page]')?.getAttribute('data-page')).toBe('register:settings');
+    expect(nav()).toBeTruthy();
+    expect(container.querySelector('[data-testid="app-shell"]')).toBeNull();
 
     await go('/settings/general');
     await click(group('Providers').querySelector('.settings-nav-add'));
@@ -393,6 +403,17 @@ describe('the Settings window', () => {
     await click(group('Workspaces').querySelector('.settings-nav-add'));
     expect(addressBar()).toBe('/settings/workspaces/new');
     expect(page()).toBe('workspace:new');
+  });
+
+  it('with no machine at all, Machines has a Register a machine row, and Workspaces’ + registers one first, in Settings', async () => {
+    runners = [];
+    workspaces = [];
+    await visit('/settings/general');
+    expect(rows('Machines').map((r) => [r.label, r.href])).toEqual([['Register a machine', '/settings/machines/new']]);
+    await click(group('Workspaces').querySelector('.settings-nav-add'));
+    expect(addressBar()).toBe('/settings/machines/new');
+    expect(page()).toBe('register:settings');
+    expect(nav()).toBeTruthy();
   });
 
   it('Back to Orbit returns to the page Settings was opened from, across pages inside it', async () => {

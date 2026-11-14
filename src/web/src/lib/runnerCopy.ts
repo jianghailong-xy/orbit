@@ -54,9 +54,51 @@ export const RUNNER_ENGINES = 'Engines';
 export const RUNNER_WORKSPACES = 'Workspaces';
 export const RUNNER_ABOUT = 'About This Runner';
 
+// MARK: Resources
+
+export const RUNNER_RESOURCES = 'Resources';
+export const RUNNER_RESOURCES_CPU = 'CPU';
+export const RUNNER_RESOURCES_MEMORY = 'Memory';
+export const RUNNER_RESOURCES_LIVE = 'Live · every 30 s · last hour';
+export const RUNNER_RESOURCES_OFFLINE = 'Offline';
+export const RUNNER_RESOURCES_DISK_ONLY = 'Disk is read from your workspaces';
+export const RUNNER_RESOURCES_UPDATE = 'Update runner';
+export const RUNNER_RESOURCES_NO_READING = 'No reading yet';
+export const RUNNER_RESOURCES_MEMORY_FULL = 'Nearly full — new sessions may be slow to start.';
+
+/** The header of an offline machine's Resources: when its last reading came, as `ago` says it (`14m ago`). */
+export function runnerResourcesLastReading(ago: string): string {
+  return `Offline · last reading ${ago}`;
+}
+
+/** A runner too old to report CPU or memory; `what` is the tile's own name. */
+export function runnerResourcesPredates(what: 'CPU' | 'memory'): string {
+  return `This runner predates ${what} readings.`;
+}
+
+export const RUNNER_CPU_ONE_CORE = '1 core';
+
+export function runnerCpuCores(count: string): string {
+  return `${count} cores`;
+}
+
+/** The one-minute load average, already formatted (`3.0`). */
+export function runnerCpuLoad(load: string): string {
+  return `load ${load}`;
+}
+
+export function runnerDiskFree(free: string): string {
+  return `${free} GB free`;
+}
+
 // MARK: Capacity
 
 export const RUNNER_MAX_CONCURRENT = 'Max Concurrent';
+/** Max Concurrent's dialog, opened from its `3/16`: what the number is, and when it takes effect. */
+export const RUNNER_MAX_CONCURRENT_HINT =
+  'How many sessions this machine runs at once. A change applies to the next session it picks up — no restart.';
+/** Beside Max Concurrent's reading: opens its dialog. */
+export const RUNNER_EDIT = 'Edit';
 export const RUNNER_DISK = 'Disk';
 export const RUNNER_KEEP_FREE = 'Keep Free';
 export const RUNNER_KEEP_FREE_OFF = 'Off';
@@ -478,6 +520,31 @@ export function attentionEngineUpdateFailed(engine: string): string {
 export function attentionEngineUpdateDetail(note: string): string {
   return `${note}. Orbit retries every 30 min — Update Engines Now tries again right away.`;
 }
+
+/** Fix with an agent: one press starts a session on that machine (docs/mocks/install-failed-fix-with-agent). */
+export const AGENT_FIX_BUTTON = 'Fix with an agent';
+/** In place of the button while that session is open; the link opens it. */
+export function agentFixFixing(workspace: string): string {
+  return `An agent is fixing this in ${workspace} · `;
+}
+export const AGENT_FIX_OPEN_SESSION = 'Open session';
+/** Under the button on an Install failed panel: where the session would run. */
+export function agentFixStartsIn(workspace: string, engine: string): string {
+  return `Starts a session in ${workspace} on this machine, with ${engine}.`;
+}
+/** After a signed-out reason on an Install failed panel, whose engine rows (and their Sign in) are above it. */
+export function agentFixSignInAbove(engine: string): string {
+  return ` Sign in to ${engine} above to use this.`;
+}
+export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
+
+/** The card's second action, beside Update Engines Now; `engine` is the CLI's own name. */
+export function attentionDismissUntilNextRelease(engine: string): string {
+  return `Dismiss until next ${engine} release`;
+}
+
+/** The engine row's warning panel: the same dismissal, after its retry hint. */
+export const RUNNER_ENGINE_UPDATE_DISMISS = 'Dismiss';
 
 // MARK: the Update card (docs/runner-update-drain-design.md, board 4)
 

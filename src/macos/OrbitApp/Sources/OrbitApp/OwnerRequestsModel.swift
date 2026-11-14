@@ -16,6 +16,9 @@ final class OwnerRequestsModel {
     /// Every state, newest first: what a conversation draws its ended requests from.
     private(set) var all: [OwnerRequest] = []
     private(set) var savedSecrets: [AccountSecret] = []
+    /// Terminals asking to be approved (docs/terminal-session-design.md). Each waits ten minutes at most.
+    /// Read here for the machine page's Needs you section (docs/mocks/waiting-on-you-removal/02).
+    private(set) var terminalRequests: [TerminalRequest] = []
     /// The titles of the tasks requests hold up, by id, read once each.
     private(set) var taskTitles: [String: String] = [:]
     private(set) var snoozes: [String: Date]
@@ -43,6 +46,7 @@ final class OwnerRequestsModel {
         do {
             open = try await api.ownerRequests(state: "open").requests
             all = try await api.ownerRequests(state: "all").requests
+            await loadTerminalRequests()
         } catch {
             // The next tick reads again; what was drawn stays.
         }
@@ -57,6 +61,28 @@ final class OwnerRequestsModel {
         guard let read = try? await api.ownerRequest(id) else { return nil }
         adopt(read)
         return read
+    }
+
+    /// The terminals waiting for a decision. A server that predates terminals answers 404: no cards.
+    func loadTerminalRequests() async {
+        do {
+            terminalRequests = try await api.terminalRequests()
+        } catch APIError.http(let status, _) where status == 404 {
+            terminalRequests = []
+        } catch {
+            // The next tick reads again; what was drawn stays.
+        }
+    }
+
+    /// Approve or Deny a terminal: the card leaves at once, and the list is read again either way.
+    func decideTerminal(_ request: TerminalRequest, approve: Bool) async throws {
+        defer { Task { await loadTerminalRequests() } }
+        if approve {
+            try await api.approveTerminalRequest(request.id)
+        } else {
+            try await api.denyTerminalRequest(request.id)
+        }
+        terminalRequests.removeAll { $0.id == request.id }
     }
 
     func taskTitle(_ id: String) -> String { taskTitles[PublicID.storageKey(id)] ?? "Task" }
@@ -133,7 +159,8 @@ final class OwnerRequestsModel {
     #if DEBUG
     /// Probe and preview fixtures: the lists as a read would have answered them.
     func seed(open: [OwnerRequest], all: [OwnerRequest], saved: [AccountSecret] = [],
-              taskTitles: [String: String] = [:]) {
+              taskTitles: [String: String] = [:], terminalRequests: [TerminalRequest] = []) {
+        self.terminalRequests = terminalRequests
         self.taskTitles = Dictionary(uniqueKeysWithValues: taskTitles.map { (PublicID.storageKey($0.key), $0.value) })
         self.open = open
         self.all = all

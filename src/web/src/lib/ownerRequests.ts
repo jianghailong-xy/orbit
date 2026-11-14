@@ -129,6 +129,22 @@ export function isTaskHeld(requests: readonly Pick<OwnerRequest, 'blocksTaskIds'
   return requests.some((request) => request.blocksTaskIds.some((id) => sameResourceId(id, taskId)));
 }
 
+/* ── Chat about this ───────────────────────────────────────────────────────────────────────────────
+   A request talked about rather than answered: the next send is an ordinary turn to the session that
+   asked, with the request named in front of the typed words. Nothing is resolved — the card stays, and
+   its own buttons stay the ways out. OrbitKit's `OwnerRequests` and Android's say the same words. */
+
+/** What the armed composer's bar says, ahead of the request's title. */
+export const OWNER_REQUEST_CHAT_PREFIX = 'About your request: ';
+/** What the empty composer asks for while armed. */
+export const OWNER_REQUEST_CHAT_PLACEHOLDER = 'Ask about this request…';
+
+/** What rides in front of the owner's words: which request, and that it is still open. */
+export function ownerRequestChatContext(request: Pick<OwnerRequest, 'id' | 'title'>): string {
+  return `The owner pressed Chat about this on your request “${request.title}” (owner request ${request.id}). `
+    + 'It is still open: not marked done and not declined. Their message:';
+}
+
 /* ── How a resolution turn reads ──────────────────────────────────────────────────────────────── */
 
 const RESOLUTION_HEAD = /^Orbit owner request \S+ \([A-Z_]+\) ended (DONE|DECLINED|EXPIRED|WITHDRAWN): /;

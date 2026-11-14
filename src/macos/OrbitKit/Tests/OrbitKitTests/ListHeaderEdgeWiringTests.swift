@@ -63,6 +63,7 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
     func testEveryPlainListAsksForTheSoftEdge() throws {
         let exempt: Set<String> = [
             "Console/ConsoleView.swift",   // the transcript: no edge effect at all (11-11)
+            "GuestSessionView.swift",      // the guest's transcript: the same rule as the console's
             "CompactShell.swift",          // the phone drawer: its own SoftEdgeLayer
         ]
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

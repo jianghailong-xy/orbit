@@ -418,13 +418,7 @@ final class OpenItemDeliveryTests: XCTestCase {
         XCTAssertEqual(bubble.itemCard?.itemId, "0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a6d")
         XCTAssertEqual(bubble.text, Self.told, "the paragraph the agent read is folded, not dropped")
 
-        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard)
-        XCTAssertEqual(summary.label, "↑ Exception item")
-        // The kind, then the item's own title — which in this product already opens with the kind
-        // ("Merge conflict: <task>", §4.2), so the label is not added a second time. The pair is
-        // still the browser's own: `OpenItemDeliveryCopyParityTests` holds the two ends to the same
-        // words, and both ends carry the same guard.
-        XCTAssertEqual(summary.text, "Merge conflict: 回填历史 user 事件的 controlPlaneNote")
+        XCTAssertTrue(StickySummary.isOrbits(bubble), "Orbit opened this round: the sticky bar hides over it")
     }
 
     // MARK: - (d) the card while the delivery is still QUEUED

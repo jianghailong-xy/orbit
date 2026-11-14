@@ -125,11 +125,10 @@ final class TaskStartTests: XCTestCase {
         let b = try bubble(reducer)
         XCTAssertNil(b.taskStart)
         XCTAssertEqual(b.text, Self.brief, "the echo is left exactly as it was")
-        XCTAssertEqual(StickySummary.of(text: b.text, note: b.note, itemCard: b.itemCard,
-                                        taskStart: b.taskStart).label, StickySummary.yourQuestion)
+        XCTAssertFalse(StickySummary.isOrbits(b), "the bar still names it as the reader's question")
     }
 
-    func testABriefWithACardCarriesItKeepsTheBriefAndNamesTheBar() throws {
+    func testABriefWithACardCarriesItKeepsTheBriefAndHidesTheBar() throws {
         var reducer = TranscriptReducer()
         reducer.apply(try started(card))
 
@@ -137,10 +136,7 @@ final class TaskStartTests: XCTestCase {
         XCTAssertEqual(b.taskStart?.taskId, "01a0cca7-8609-70ed-a0e2-d4b55b832b60")
         XCTAssertEqual(b.text, Self.brief, "the brief the agent read is folded, not dropped")
 
-        let summary = StickySummary.of(text: b.text, note: b.note, itemCard: b.itemCard,
-                                       taskStart: b.taskStart)
-        XCTAssertEqual(summary.label, "↑ Task started")
-        XCTAssertEqual(summary.text, "runner + web：配额按账户归属")
+        XCTAssertTrue(StickySummary.isOrbits(b), "Orbit opened this round: the sticky bar hides over it")
     }
 
     /// The card is the payload's, never read out of the brief, so the brief's language changes nothing:
@@ -151,16 +147,14 @@ final class TaskStartTests: XCTestCase {
         let withCard = try bubble(carded)
         XCTAssertEqual(withCard.taskStart, try XCTUnwrap(TaskStart.parse(try started(card).payload)))
         XCTAssertEqual(withCard.text, Self.englishBrief, "the brief the agent read is folded, not dropped")
-        XCTAssertEqual(StickySummary.of(text: withCard.text, note: withCard.note, itemCard: withCard.itemCard,
-                                        taskStart: withCard.taskStart).label, "↑ Task started")
+        XCTAssertTrue(StickySummary.isOrbits(withCard))
 
         var bare = TranscriptReducer()
         bare.apply(try started(nil, text: Self.englishBrief))
         let without = try bubble(bare)
         XCTAssertNil(without.taskStart)
         XCTAssertEqual(without.text, Self.englishBrief)
-        XCTAssertEqual(StickySummary.of(text: without.text, note: without.note, itemCard: without.itemCard,
-                                        taskStart: without.taskStart).label, StickySummary.yourQuestion)
+        XCTAssertFalse(StickySummary.isOrbits(without))
     }
 
     /// A cached transcript written before the card existed rehydrates with the bubble it had, and one

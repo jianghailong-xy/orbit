@@ -23,6 +23,7 @@ import {
   BellOutlined,
   BlockOutlined,
   CloudOutlined,
+  CodeOutlined,
   DatabaseOutlined,
   FolderOutlined,
   HddOutlined,
@@ -65,6 +66,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
+  '/settings/terminals': <CodeOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */
@@ -234,7 +236,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   };
 
   // New workspace starts by picking its machine; with no machine at all, registering one comes first.
-  const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/runners/register');
+  const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/settings/machines/new');
 
   return (
     <nav className="settings-nav autohide-scrollbar" aria-label="Settings">
@@ -268,10 +270,15 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
 
         <NavGroup
           title="Machines"
-          add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}
+          add={{ label: 'Register a machine', onClick: () => navigate('/settings/machines/new') }}
           empty={runners.length === 0}
         >
-          <MachineRows runners={runners} stateOf={stateOf} />
+          {runners.length === 0 ? (
+            // With no machine at all, the group is the one way to register one, as Providers does.
+            <NavRow to="/settings/machines/new" icon={<PlusOutlined />} label="Register a machine" />
+          ) : (
+            <MachineRows runners={runners} stateOf={stateOf} />
+          )}
         </NavGroup>
 
         <NavGroup

@@ -390,7 +390,8 @@ test('a task can be re-filed and taken out of a project, and a move cannot stran
   // suite next to them proves what they SEND; this proves the two files were touched at all, from
   // the side that knows the server accepts it.
   await t.test('the MCP and CLI edit doors can send it', () => {
-    const mcp = readFileSync(path.join(REPO_ROOT, 'src/runner-go/mcp.go'), 'utf8');
+    const mcp = readFileSync(path.join(REPO_ROOT, 'src/runner-go/mcp.go'), 'utf8')
+      + readFileSync(path.join(REPO_ROOT, 'src/runner-go/operation_catalog.go'), 'utf8');
     const schema = mcp.slice(mcp.indexOf('"name":        "task_update"'));
     const updateSchema = schema.slice(0, schema.indexOf('"name":        "task_delete"'));
     assert.ok(updateSchema.length > 0, 'the task_update descriptor has to be findable to be read');
@@ -405,7 +406,8 @@ test('a task can be re-filed and taken out of a project, and a move cannot stran
     assert.match(handler, /copyIfPresent\(body, args,[^\n]*"projectId"/,
       'a schema the dispatcher does not forward is a field the tool still cannot send');
 
-    const cli = readFileSync(path.join(REPO_ROOT, 'src/runner-go/task_cli.go'), 'utf8');
+    const cli = readFileSync(path.join(REPO_ROOT, 'src/runner-go/task_cli.go'), 'utf8')
+      + readFileSync(path.join(REPO_ROOT, 'src/runner-go/operation_catalog.go'), 'utf8');
     assert.match(cli, /body\["projectId"\] = nil/, '--no-project has to send an explicit null');
     assert.match(cli, /--project <id> \| --no-project/,
       '`orbit capabilities` is the only contract an agent reads the CLI through');

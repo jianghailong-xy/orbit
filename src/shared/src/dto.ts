@@ -803,6 +803,9 @@ export interface RunnerHeartbeatRequest {
    *  field; absent from an older one — or one rolled back to an older release — which the control
    *  plane stores as NULL, "not reported", rather than keeping what a newer binary last said. */
   selfUpdate?: RunnerSelfUpdate;
+  /** The machine's CPU, memory and disk now (RunnerResources). Sent on every beat by a runner that declares
+   *  MACHINE_RESOURCES_CAPABILITY; absent from an older one. */
+  resources?: RunnerResources;
   /** What a managed runner's instance is doing (managedRunner.ts, MANAGED_RUNNER_SLEEP_CAPABILITY).
    *  Sent only by a managed instance that declares that capability; the control plane stores it only
    *  from the instance the manager authorized. Absent: nothing about this runner may be put to sleep. */
@@ -1060,6 +1063,44 @@ export const DIR_PROBE_CAPABILITY = 'dir-probe/v1';
  *  (ClaimedSession.createWorkDir, docs/first-workspace-contract.md §4). POST /sessions makes a
  *  workspace in a new folder only on a runner that declares it. */
 export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
+
+/** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
+ *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
+export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
+
+/** One reading of a machine (RunnerHeartbeatRequest.resources; the runner's MachineResources). A figure the
+ *  platform has no answer for is absent — the page shows a dash, never a zero. Bytes are whole numbers. */
+export interface RunnerResources {
+  /** The whole machine's CPU in use since the runner's previous reading, 0–100. */
+  cpuPercent?: number;
+  cpuCores?: number;
+  /** The one-minute load average. */
+  load1?: number;
+  memTotalBytes?: number;
+  /** What the system can hand out without swapping; dropped page cache counts as available. */
+  memAvailableBytes?: number;
+  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. */
+  diskTotalBytes?: number;
+  diskFreeBytes?: number;
+}
+
+/** One point of a machine's last hour: percentages in use, null where that reading had no figure. */
+export interface RunnerResourceSample {
+  at: string;
+  cpu: number | null;
+  mem: number | null;
+  disk: number | null;
+}
+
+/** GET /api/runners/:id/resources: the machine's latest reading and its last hour, kept beside its presence
+ *  (runner_presence.resources, migration 0720). `at` and `latest` are null when nothing is kept — a runner that
+ *  has not beaten since the control plane's database last started, or one that does not report. */
+export interface RunnerResourcesAnswer {
+  at: string | null;
+  latest: RunnerResources | null;
+  /** Oldest first, one per heartbeat, none older than an hour before `at`. */
+  samples: RunnerResourceSample[];
+}
 
 /** Control plane → runner: what is at one path on this machine (docs/first-workspace-contract.md §2).
  *
@@ -2038,6 +2079,68 @@ export interface RunnerEngineAccount {
  * but "is this machine still being kept current" — which the runner answers by asking each
  * engine's release feed what is published and comparing it against the binary on disk.
  */
+/** The engine update warnings dismissed on a runner, by engine: the `update.latest` each was
+ *  dismissed against (POST /runners/:id/engines/:engine/update-warning/dismiss). Every client hides
+ *  that engine's update warning while this equals the engine's current `update.latest`; a newer
+ *  release brings it back. Stored on the runner, so it holds for everyone on the account. */
+export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string>>;
+
+/**
+ * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
+ * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
+ * (the runner can't update itself, or its updates are turned off) is the runner's own.
+ */
+export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed';
+
+/** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
+ *  most recently used workspace runs on is signed out there. */
+export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSignedOut';
+
+/** An agent already at work on one warning: the session a press started, while it is open. */
+export interface RunnerAgentFixing {
+  kind: RunnerAttentionFixKind;
+  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate`. */
+  engine: ReportedEngine | null;
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+}
+
+/**
+ * Where a press of Fix with an agent on this runner starts its session, or why it can't, as GET /runners
+ * reports it on each runner (`agentFix`). The same answer the fix endpoint acts on, so every client
+ * disables the button with the line the endpoint would refuse with.
+ */
+export interface RunnerAgentFix {
+  /** The workspace on this machine used most recently; null when none runs here. */
+  workspaceId: string | null;
+  workspaceName: string | null;
+  /** The engine that workspace's next session starts on, and its name ("Claude Code"). */
+  engine: string | null;
+  engineName: string | null;
+  /** Null when a press can start a session. `message` is the line a client shows in place of it. */
+  blocked: { code: RunnerAgentFixBlockedCode; message: string } | null;
+  /** The warnings an agent is fixing now, each with its open session. */
+  fixing: RunnerAgentFixing[];
+}
+
+/** POST /runners/:id/attention/:kind/fix body. */
+export interface RunnerAttentionFixRequest {
+  /** Required for `engineNotUpdating` and `installFailed`. */
+  engine?: ReportedEngine;
+  /** `cannotSelfUpdate` only: the newest runner release the client knows of (it reads dl/version.json),
+   *  quoted in the agent's first message. */
+  latest?: string;
+}
+
+/** What the fix endpoint answers with: the session it started. */
+export interface RunnerAttentionFixResult {
+  sessionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  title: string;
+}
+
 export interface RunnerEngineUpdate {
   /** `updated` — a newer version actually landed on this machine.
    *  `checked` — Orbit asked and there was nothing to fetch.
@@ -2274,6 +2377,10 @@ export interface ClaimedSession {
    *  (`mkdir -p`, 0755) before the engine starts when it is missing — only when the resolved path lies
    *  inside its own resolved reposRoot. Absent otherwise, never false. */
   createWorkDir?: boolean;
+  /** The folder below workDir a session with no worktree runs in (POST /sessions `workSubdir`): relative,
+   *  `/`-separated, normalized, no `..`. The runner starts the engine in workDir/workSubdir and refuses to
+   *  start when that folder, symlinks followed, is missing or lies outside workDir. Absent: workDir itself. */
+  workSubdir?: string;
   /** The branch this session's work merges INTO (its recorded mergeTarget, else its agent's
    *  defaultMergeTarget) — the same branch the status bar's Merge button names. The runner
    *  judges "already merged" against it, so work landed in e.g. `develop` isn't reported
@@ -2761,6 +2868,8 @@ export interface ReclaimSession {
   autoInitGit?: boolean;
   /** Make a missing workDir inside reposRoot first, cf. ClaimedSession.createWorkDir. */
   createWorkDir?: boolean;
+  /** The folder below workDir it runs in, cf. ClaimedSession.workSubdir. */
+  workSubdir?: string;
   /** Branch this session merges into, cf. ClaimedSession.mergeTarget. */
   mergeTarget?: string;
   /** DB id of the session's agent (ORBIT_AGENT_ID), cf. ClaimedSession.agentId. */

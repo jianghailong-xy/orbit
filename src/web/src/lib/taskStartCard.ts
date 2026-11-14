@@ -50,7 +50,7 @@ function criterionOf(value: unknown): TaskStartCriterion | null {
   return CRITERIA.includes(value as TaskStartCriterion) ? (value as TaskStartCriterion) : null;
 }
 
-/** The card's name, on its head and on the sticky bar that points back at it. */
+/** The card's name, on its head. */
 export const TASK_START_LABEL = 'Task started';
 /** The chip a run started by a schedule, a prerequisite finishing or a first run carries. */
 export const TASK_START_AUTO_LABEL = 'Auto-started';

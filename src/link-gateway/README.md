@@ -53,6 +53,7 @@ It is one static binary with these subcommands:
 | `LINK_NATS_SEED` | — | The gateway's NATS nkey seed (`SU…`), its credential on the [NATS](#nats) server. Never logged. Unset, it connects without credentials, which the deployment's NATS refuses. |
 | `LINK_INTERNAL_API_URLS` | required | The apiserver's internal listener for runner link calls (`RUNNER_LINK_INTERNAL_PORT`), one `http://` address per apiserver instance, comma-separated, for example `http://apiserver:3001`: where every call is forwarded. |
 | `LINK_RPC_TIMEOUT` | `60s` | How long one forwarded call may take, retries on other backends included. |
+| `LINK_BACKEND_MAX_CONNS` | `256` | The most connections open to each apiserver `LINK_INTERNAL_API_URLS` names. A call that finds them all busy waits for one to come free, in the order the calls came, instead of dialing another, so a stalled apiserver, or a gateway stalled by its own garbage collection, does not open a connection for every call in flight. A waiting call is bound by `LINK_RPC_TIMEOUT`: it ends `BACKEND_TIMEOUT` when no connection comes free in time, or is dropped when its runner's connection closes. Nothing of it reached the apiserver, and the runner sends it again. |
 | `LINK_EVENT_MERGE_WINDOW` | `100ms` | How long an event batch waits for others, from any connection, to go with it in one [merged call](#merged-calls), up to `500ms`. `0` forwards every batch alone. |
 | `LINK_EVENT_MERGE_MAX_BATCHES`, `LINK_EVENT_MERGE_MAX_BYTES` | `64`, `2097152` | What one merged call may carry: the sessions its transaction holds at once (at most the apiserver's 256), and the bytes of its events. A full call goes at once. |
 | `LINK_EVENT_MERGE_CALLS_PER_BACKEND` | `4` | How many merged calls may be out at once to each apiserver `LINK_INTERNAL_API_URLS` names, from 1 to 8. The gateway's calls out at once are this many times the apiservers: 4 with one, 16 with four (see [Merged calls](#merged-calls)). At most 8, because a call holds one of its apiserver's 10 database connections for its whole transaction, and its heartbeats and other calls need the rest. |
@@ -60,12 +61,14 @@ It is one static binary with these subcommands:
 | `LINK_HELLO_TIMEOUT` | `10s` | How long after the upgrade a Hello may take. |
 | `LINK_HANDSHAKE_TIMEOUT` | `5s` | How long the TLS handshake and the upgrade request may take, together. |
 | `LINK_IP_RATE`, `LINK_IP_BURST` | `1`, `20` | New connections per second per client address, and the burst allowed. Behind a web gateway every runner is one address: `deploy/runner-link/behind-web-gateway.env` raises these to the limit across all clients. |
-| `LINK_HANDSHAKE_RATE`, `LINK_HANDSHAKE_BURST` | `200`, `400` | New connections per second across all clients, and the burst allowed. |
+| `LINK_HANDSHAKE_RATE`, `LINK_HANDSHAKE_BURST` | 100 per CPU, at least `200`; the burst a second of it | New connections per second across all clients, and the burst allowed. Checked as a connection is accepted, before TLS: one past it is reset at once, which costs the gateway next to nothing, and the runner backs off as from any connection that fails. The default counts the CPUs the gateway may use (`GOMAXPROCS`, which follows the container's CPU limit): 2,800 a second at 28. A vCPU completes about 500 handshakes a second, and past about twice that a core they time out rather than level off, so the default leaves most of the CPU to the connections already open while bringing 800,000 runners back in under 5 minutes after a restart. |
 | `LINK_DRAIN_BATCH`, `LINK_DRAIN_BATCH_INTERVAL` | `250`, `1s` | How many connections are sent Drain at a time, and how far apart. |
 | `LINK_DRAIN_RECONNECT_MIN`, `LINK_DRAIN_RECONNECT_MAX` | `1s`, `30s` | The range the per-connection reconnect delay is drawn from, uniformly. |
 | `LINK_DRAIN_GRACE` | `15s` | How long past its delay a drained connection may stay open before the gateway closes it. |
 | `LINK_DRAIN_TIMEOUT` | `80s` | When the drain gives up and closes what is left. Keep Compose's `stop_grace_period` (90s) above it. |
 | `LINK_FRAME_LOG` | `lifecycle` | `lifecycle` logs Hello, Welcome, Drain and Close. `all` logs a summary of every frame, in and out. `off` logs no frames. |
+| `GOMEMLIMIT` | the container's memory allowance less a tenth | The Go runtime's memory limit. Unset, the gateway reads the allowance of the cgroup it runs in (the least `memory.max` of it and those above it, or cgroup v1's `memory.limit_in_bytes`) and keeps a tenth of it for what the runtime does not count, such as the kernel's socket buffers. The GC then collects as often as it must to stay inside the allowance, instead of the kernel killing the gateway at it. With no allowance and no `GOMEMLIMIT`, no limit is set and the gateway says so when it starts. |
+| `GOGC` | `400` with a memory limit, else Go's `100` | How far the heap may grow past what is live before the GC collects again. With a memory limit (above) and no `GOGC`, the gateway uses 400: at hundreds of thousands of connections each collection marks gigabytes, and every request that meets a mark waits on it. On 28 vCPUs and 110 GiB at 300,000 connections at cell traffic, HeartbeatAck and EventAck p99 were 703 and 1,016 ms at 100, 411 and 731 ms at 200, and 323 and 624 ms at 400, which also took the least CPU; the limit, not GOGC, bounds the heap. Without a limit Go's 100 stays. |
 | `LINK_DRILL_LOSE_ANSWERS` | — | For staging drills only: answers the gateway loses on purpose, such as `claim:3,inbox:3` ([Lost answers](#lost-answers-a-drills-fault)). Unset, it loses none. |
 | `LINK_DRILL_INGEST_RATE` | — | For load tests only: the durable events a second the gateway forwards at most, each batch in its turn, so that runners can send faster than the events are stored and the ingest queue fills to its bound. A batch waiting its turn counts in the queue. Unset, batches are forwarded as they come. |
 
@@ -73,13 +76,17 @@ These values are fixed by the design: ping every 20s, disconnect after 60s witho
 two connections per runner, frames of at most 256 KiB. Forwarding's bounds are fixed too: 64 calls in flight and 8
 sessions' events being stored at once per connection; a credit of 10,000 events or 64 MiB per connection, a tenth of
 it, or the connection's share of the high-water mark when that is less, while the ingest queue holds more than half its
-bound (100,000 events or 64 MiB at the defaults), back once it holds less than a quarter; room the queue frees held
+bound (100,000 events or 64 MiB at the defaults), back once it holds less than a quarter and 30s after it last held
+more than half, told 1,000 connections every 10ms; room the queue frees held
 15s for a session in line; retries on other backends for up to 5s; a watcher count lapses after 60s; a turn prefix
 request waits 10s for the runner.
 
 ## Handshake
 
-The gateway checks each upgrade request in this order. Nothing is upgraded until every check has passed. A refusal is
+Before any TLS, a new connection past the handshake rate across all clients (`LINK_HANDSHAKE_RATE`) is closed with a
+TCP reset as it is accepted: no handshake is spent on it, and it is counted `rate_limited`.
+
+Then the gateway checks each upgrade request in this order. Nothing is upgraded until every check has passed. A refusal is
 an HTTP response with `Connection: close`. Its JSON body has a `code`, named after the CloseCode the same refusal would
 carry after the upgrade, a `message` and, where it applies, `reason` and `retryAfterMs`. A `Retry-After` header carries
 the same delay.
@@ -88,7 +95,6 @@ the same delay.
 | --- | --- |
 | The gateway is draining. | `503 DRAINING`, `Retry-After: 5`. |
 | The request is a WebSocket upgrade. | `426 WEBSOCKET_REQUIRED`. |
-| The handshake rate across all clients. | `429 RATE_LIMITED`, with a Retry-After. |
 | The new-connection rate of the client address. | `429 RATE_LIMITED`, with a Retry-After. |
 | The connection token in `Authorization: Bearer`. | `401 UNAUTHENTICATED`, with a `reason`. |
 | The runner's connection slots. | `429 TOO_MANY_CONNECTIONS`, `Retry-After: 30`. |
@@ -413,7 +419,12 @@ and holds its events in its own buffer, in memory and then on disk (design §5.8
   not send again within 15s loses its turn, and one whose connection closes leaves the line.
 - **Credit.** Credit is granted by the depth of the queue (§5.8). While it holds more than half its bound (100,000
   events or 64 MiB), every connection's credit drops from 10,000 events or 64 MiB to a tenth of that, in a `Credit`
-  frame, and it comes back once the queue holds less than a quarter of its bound. The reduced credit is also at most
+  frame, and it comes back once the queue holds less than a quarter of its bound and has not held more than half for
+  30s. That hold keeps a queue that crosses the mark again and again, as it did at each GC mark of a gateway with
+  400,000 connections every 11-13s, from changing every connection's credit twice each time. A change is not written
+  to every connection at once: a walk tells 1,000 connections every 10ms (400,000 in 4s), and a connection that sends
+  a batch before the walk reaches it is told with that batch, ahead of its `EventAck`. That batch is held to the
+  credit the runner had been told when it sent it. The reduced credit is also at most
   the connection's share of the high-water mark in events, among the connections with events in the queue: 20 events
   each when 5,000 connections send. So what they may have in flight together stays about the high-water mark, however
   many connections there are and however many of them are idle, and runners slow down rather than send what the queue

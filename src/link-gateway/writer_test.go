@@ -66,7 +66,7 @@ func writerConn(t *testing.T) (*conn, *steppedWriter) {
 	c := newConn(h.g, nil, &linkClaims{RunnerID: runnerA, LeaseOwner: processA}, "127.0.0.1")
 	c.welcomed = true
 	w := stepWriter(c)
-	go c.writeLoop()
+	// The writer starts with the first frame queued.
 	t.Cleanup(c.cancel)
 	return c, w
 }
@@ -146,6 +146,8 @@ func TestAFullLiveQueueDropsWithoutClosingTheConnection(t *testing.T) {
 	h := newHarness(t, nil)
 	c := newConn(h.g, nil, &linkClaims{RunnerID: runnerA, LeaseOwner: processA}, "127.0.0.1")
 	c.welcomed = true
+	// A writer that never writes: one is taken to be running, so none starts and the queue only fills.
+	c.queues.writing = true
 	request := func() *linkpb.Frame {
 		return &linkpb.Frame{Body: &linkpb.Frame_TurnPrefixRequest{TurnPrefixRequest: &linkpb.TurnPrefixRequest{RequestId: "p"}}}
 	}
