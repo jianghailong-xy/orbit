@@ -776,7 +776,7 @@ clause is contradicted today), **NOT MEASURED** (no black-box run; the verdict i
 | --- | --- | --- |
 | MCP tools, orchestration on | **98** | **97** |
 | MCP tools, orchestration off | **76** | **75** |
-| `initialize` + `tools/list` stdout, on / off (the initialize response is 144 B; since v1.5.0 it carries the primer and is 3,203 B, measured 2026-11-14) | 254,114 / 222,152 B | 253,859 / 221,897 B |
+| `initialize` + `tools/list` stdout, on / off (the initialize response is 144 B; since v1.5.0 it carries the primer and is 3,407 B, measured 2026-11-14) | 254,114 / 222,152 B | 253,859 / 221,897 B |
 | Tool-description text, on / off | 91,054 / 76,203 chars (max 5,197; median 753) | 90,980 / 76,129 chars |
 | Input-schema text, on / off | 153,956 / 137,704 chars (max 22,255) | 153,825 / 137,573 chars |
 | `initialize` result keys | `capabilities`, `protocolVersion`, `serverInfo` — **no `instructions`** (since v1.5.0 also `instructions`, the agent primer, §2.6) | same |
