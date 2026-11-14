@@ -34,7 +34,9 @@ import { WorkspacesService } from './workspaces.service';
  * Every start goes through its real door (TasksService.execute, ProjectsService.coordinator,
  * CoordinatorJudgmentService.wake, SessionsService.spawnFromSession) and the assertion reads the new
  * session row's engine and provider. The quota gate's plan (dispatchEngines) and the routing baseline
- * (planTaskRunRoute) are read for the same task. Then: a project with no coordinator falls back to the
+ * (planTaskRunRoute) are read for the same task — also for a project whose Automatic switch
+ * (coordinator_enabled) is off, which still has a coordinator. Then: a project with no coordinator
+ * session (never opened, or trashed) falls back to the
  * person's conversation, and an anchor on a disabled key is refused in words naming that session.
  *
  * Destructive: COORDINATOR_PG_URL must pass coordinator-pg-test-safety and point at a disposable
@@ -128,13 +130,28 @@ test('project work follows its coordinator, not a person’s one-off Codex conve
   const projectId = randomUUID();
   await prisma.project.create({ data: { id: projectId, ownerId, title: 'Unattended work', coordinatorEnabled: true } });
   let coordinatorId = '';
+  // The incident's own shape: a coordinator on record with the Automatic switch off
+  // (coordinator_enabled = false), as this project and 10 of 34 open projects had on 2026-11-14.
+  const manualId = randomUUID();
+  await prisma.project.create({ data: { id: manualId, ownerId, title: 'Automatic off', coordinatorEnabled: false } });
+  // A project whose coordinator was on Claude Code and then trashed: it has no coordinator now.
+  const trashedId = randomUUID();
+  await prisma.project.create({ data: { id: trashedId, ownerId, title: 'Coordinator trashed', coordinatorEnabled: true } });
 
-  await t.test('the coordinator opens on claude/claude', async () => {
+  await t.test('the coordinators open on claude/claude', async () => {
     const opened = await projects.coordinator(ownerId, projectId, workspaceId);
     assert.equal(opened.created, true);
     coordinatorId = opened.sessionId;
     await newest(coordinatorId);
     assert.deepEqual(await pairOf(coordinatorId), CLAUDE);
+    for (const id of [manualId, trashedId]) {
+      const other = await projects.coordinator(ownerId, id, workspaceId);
+      assert.equal(other.created, true);
+      assert.deepEqual(await pairOf(other.sessionId), CLAUDE);
+    }
+    const manual = await prisma.project.findUniqueOrThrow({ where: { id: manualId } });
+    assert.equal(manual.coordinatorEnabled, false);
+    assert.ok(manual.coordinatorSessionId, 'the Automatic-off project has a coordinator session on record');
   });
 
   await t.test('a person opens a Codex conversation in the same workspace: the workspace default is Codex', async () => {
@@ -153,18 +170,29 @@ test('project work follows its coordinator, not a person’s one-off Codex conve
     assert.deepEqual(await pairOf(sessionId), CLAUDE);
   });
 
-  await t.test('with smart model selection on, routing starts from the coordinator’s pair', async () => {
+  /** The routing baseline of a fresh task of this project, with smart model selection on. */
+  async function routingBaseline(project: string): Promise<{ engine: unknown; provider: unknown }> {
     await prisma.user.update({ where: { id: ownerId }, data: { preferences: { modelRouting: true } } });
     try {
-      const routed = await task('a routed task', projectId);
+      const routed = await task('a routed task', project);
       const subject = await prisma.task.findUniqueOrThrow({ where: { id: routed } });
       const route = await planTaskRunRoute(taskRouteReads(db, ownerId), subject, { id: workspaceId, runnerId }, 'go');
       assert.ok(route, 'routing is on, so a route is planned');
-      assert.equal(route.baseline.engine, 'claude', JSON.stringify(route.baseline));
-      assert.equal(route.baseline.provider, 'claude', JSON.stringify(route.baseline));
+      return { engine: route.baseline.engine, provider: route.baseline.provider };
     } finally {
       await prisma.user.update({ where: { id: ownerId }, data: { preferences: {} } });
     }
+  }
+
+  await t.test('with smart model selection on, routing starts from the coordinator’s pair', async () => {
+    assert.deepEqual(await routingBaseline(projectId), CLAUDE);
+  });
+
+  await t.test('with the Automatic switch off (coordinator_enabled = false), the task run, quota plan and routing still follow the coordinator', async () => {
+    const unpinned = await task('a task of the Automatic-off project', manualId);
+    assert.deepEqual(await quotaGatePlan(unpinned), { provider: 'claude', login: true });
+    assert.deepEqual(await pairOf(await run(unpinned)), CLAUDE);
+    assert.deepEqual(await routingBaseline(manualId), CLAUDE);
   });
 
   await t.test('an MCP child of the coordinator, naming no engine, starts on claude/claude', async () => {
@@ -201,20 +229,20 @@ test('project work follows its coordinator, not a person’s one-off Codex conve
   });
 
   // ── no anchor ────────────────────────────────────────────────────────────────────────────────────
-  await t.test('a project with no coordinator falls back to the person’s conversation', async () => {
+  await t.test('a project with no coordinator session falls back to the person’s conversation', async () => {
+    // Never opened one.
     const plain = randomUUID();
     await prisma.project.create({ data: { id: plain, ownerId, title: 'No coordinator', coordinatorEnabled: true } });
     const unpinned = await task('a task of a project with no coordinator', plain);
     assert.deepEqual(await quotaGatePlan(unpinned), { provider: 'codex', login: true });
     assert.deepEqual(await pairOf(await run(unpinned)), CODEX);
 
-    // Coordination switched off counts as none, even with a coordinator session on record.
-    const off = randomUUID();
-    await prisma.project.create({ data: { id: off, ownerId, title: 'Coordination off', coordinatorEnabled: false } });
-    const offCoordinator = await projects.coordinator(ownerId, off, workspaceId);
-    const offTask = await task('a task of a project with coordination off', off);
-    assert.ok((await prisma.project.findUniqueOrThrow({ where: { id: off } })).coordinatorSessionId === offCoordinator.sessionId);
-    assert.deepEqual(await pairOf(await run(offTask)), CODEX);
+    // Its coordinator (on Claude Code) is in the trash: none now.
+    const trashed = await prisma.project.findUniqueOrThrow({ where: { id: trashedId } });
+    await prisma.session.update({ where: { id: trashed.coordinatorSessionId! }, data: { deletedAt: new Date() } });
+    const orphan = await task('a task of a project whose coordinator was trashed', trashedId);
+    assert.deepEqual(await quotaGatePlan(orphan), { provider: 'codex', login: true });
+    assert.deepEqual(await pairOf(await run(orphan)), CODEX);
 
     // And a task outside any project.
     assert.deepEqual(await pairOf(await run(await task('a task outside any project', null))), CODEX);

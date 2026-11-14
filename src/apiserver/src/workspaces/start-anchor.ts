@@ -12,8 +12,8 @@ import { agentProviderSeed, type AgentProviderSeed } from './workspace-provider'
  *  • a coordinator re-created, replaced or judging: the project's previous coordinator session;
  *  • an MCP child naming no engine: its parent session.
  *
- * Null when there is no anchor — a task outside a project, a project with no coordinator
- * (`coordinator_enabled` off, or never opened one) — and the caller falls back to the workspace seed
+ * Null when there is no anchor — a task outside a project, a project with no coordinator session
+ * (none ever opened, or the one it names is gone or trashed) — and the caller falls back to the workspace seed
  * (workspace-provider.ts). An anchor carries the session it came from, so a refusal names it (§2.3,
  * engine-provider.ts `fromAnchor`).
  */
@@ -61,8 +61,10 @@ export async function sessionAnchor(
 }
 
 /**
- * The anchor of each task's unpinned run: its project's current coordinator session, when the project
- * coordinates (`coordinator_enabled`) and has one. Tasks with none are absent from the map.
+ * The anchor of each task's unpinned run: its project's current coordinator session, whenever the project
+ * has one that is not trashed. `coordinator_enabled` is not read: it is the project's Automatic switch
+ * (may the platform hand exceptions to the coordinator, land on main by itself), not whether a
+ * coordinator exists. Tasks with none are absent from the map.
  */
 export async function taskRunAnchors(
   db: Prisma.TransactionClient,
@@ -74,7 +76,7 @@ export async function taskRunAnchors(
     const rows = await db.task.findMany({
       where: {
         id: { in: ids.slice(offset, offset + 500) },
-        project: { coordinatorEnabled: true, coordinatorSessionId: { not: null } },
+        project: { coordinatorSession: { deletedAt: null } },
       },
       select: { id: true, project: { select: { coordinatorSession: { select: ANCHOR_SESSION_SELECT } } } },
     });

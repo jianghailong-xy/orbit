@@ -69,7 +69,7 @@
 ### 2.3 锚点失效
 
 - 协调者 / 父会话的凭据已删除或停用：与今天对种子的处理一致，拒绝并说明是哪个会话的凭据失效；不静默换引擎（`project-agent-contract.md` §7.4）。
-- 项目没有协调者（`coordinator_enabled = false` 或从未建过）：项目任务退回 workspace 最新一条人开会话。
+- 项目没有协调者会话（`coordinator_session_id` 为空——从未建过或已被删除——或指向的会话已进回收站）：项目任务退回 workspace 最新一条人开会话。`coordinator_enabled` 是项目的「自动」开关，不表示有没有协调者，不参与判断。
 - 子会话跨 workspace 派生，父会话的凭据在目标机器上不可用：拒绝，与今天跨 workspace 的引擎检查一致。
 
 ### 2.4 草稿的模型
