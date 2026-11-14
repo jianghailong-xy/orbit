@@ -16227,6 +16227,16 @@ button.chat-jump-start:hover {
 .share-page.guest-view {
   height: 100%;
   min-height: 0;
+  /* Nothing in it may reach past the pane, as nothing in the owner's console does (.workspace-view,
+     .workspace-scroll-wrap): a box the transcript positions against otherwise sits outside the
+     conversation's scroller, and the page grew taller than the window with it. */
+  position: relative;
+  overflow: hidden;
+}
+.share-page.guest-view > .share-scroll {
+  position: relative;
+  /* Reaching the end of the conversation ends the scroll there: it is not handed on to the page. */
+  overscroll-behavior: contain;
 }
 .share-subtitle {
   overflow: hidden;
