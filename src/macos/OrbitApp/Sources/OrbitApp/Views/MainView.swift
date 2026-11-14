@@ -151,6 +151,7 @@ struct SectionSidebar: View {
     let isAdmin: Bool
     @AppStorage("sidebar.workspacesExpanded") private var workspacesExpanded = true
     @AppStorage("sidebar.projectsExpanded") private var projectsExpanded = true
+    @AppStorage("sidebar.sharedWithMeExpanded") private var sharedWithMeExpanded = true
     /// The workspace whose settings its row's menu opened.
     @State private var editingWorkspace: Agent?
     /// ⌘ is down: the workspace rows show their ⌘1…⌘9 shortcuts only then, as Safari shows its tab
@@ -176,7 +177,8 @@ struct SectionSidebar: View {
     private var modelSelection: SidebarSelection {
         SidebarLogic.selection(section: model.selectedSection, agentID: model.selectedAgentID,
                                machineDraftRunnerID: model.machineDraftRunnerID,
-                               projectID: selectedProjectID)
+                               projectID: selectedProjectID,
+                               guestSessionID: model.guestSessionID)
     }
 
     var body: some View {
@@ -215,6 +217,21 @@ struct SectionSidebar: View {
                     }
                 }
             }
+
+            // Shared with me, the rail's last group (docs/session-guests-design.md §4): the sessions
+            // other people invited this account to reply in. No group while there is none.
+            if SharedWithMe.showsGroup(model.sharedWithMe) {
+                Section(isExpanded: $sharedWithMeExpanded) {
+                    ForEach(model.sharedWithMe) { session in
+                        sharedWithMeRow(session)
+                    }
+                } header: {
+                    HStack(spacing: 6) {
+                        Text(GuestCopy.sharedWithMe)
+                        Text("\(model.sharedWithMe.count)").fontWeight(.regular)
+                    }
+                }
+            }
         }
         .listStyle(.sidebar)
         .navigationTitle("Orbit")
@@ -246,6 +263,7 @@ struct SectionSidebar: View {
         .task { await model.wiki?.loadSpaces() }
         // The Projects row counts the projects waiting on you, and the last group lists the open ones.
         .task { await model.projects?.load() }
+        .task { await model.followSharedWithMe() }
         .onChange(of: selection) { _, now in
             guard now != applied else { return }
             applied = now
@@ -258,6 +276,8 @@ struct SectionSidebar: View {
                 model.openMachineDraft(runnerID)
             case .project(let id):
                 model.openProjectSessions(id, inColumn: true)
+            case .guestSession(let id):
+                model.openGuestSession(id)
             case .none:
                 break
             }
@@ -412,6 +432,31 @@ struct SectionSidebar: View {
         .tag(SidebarSelection.project(row.id))
     }
 }
+
+#if os(macOS)
+extension SectionSidebar {
+    /// A Shared with me row: the session's title, who shared it and how it stands, and when it last
+    /// moved — the web's row (`GuestSessionRow`).
+    func sharedWithMeRow(_ session: GuestSessionSummary) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "person.2").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(SharedWithMe.title(session)).lineLimit(1)
+                Text(SharedWithMe.subtitle(session))
+                    .font(.orbitMeta)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            Text(SharedWithMe.ago(session))
+                .font(.orbitMeta)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .tag(SidebarSelection.guestSession(session.id))
+    }
+}
+#endif
 
 /// Pinned to the bottom of the sidebar, mirroring the web's `tp-user` footer: a monogram avatar
 /// plus the signed-in user's name, and the drawer's Settings gear beside it. Clicking the name opens

@@ -56,14 +56,16 @@ func orbitCLIInstructionExecutable(exe string) string {
 // orbitCLIInstructions is generated with the resolved binary path so an agent
 // cannot accidentally execute a project-local/PATH-shadowed `orbit` program.
 //
-// It leads with what separates an Orbit task from an engine's built-in todo/plan
-// entry — audience, not tool preference. An agent that never learns the distinction
-// records the user's work in session-local scratch that never reaches Orbit, so the
-// task silently never appears in the UI. The "returned its id" rule gives the agent
-// something it can check itself, which also catches the case where it wrote no task
-// at all and merely listed one in its reply.
+// It leads with the agent primer (agent_primer.go), the same words `orbit mcp` sends as its
+// instructions: what separates an Orbit task from an engine's built-in todo/plan entry — audience,
+// not tool preference — which object an intent belongs to, the CLI's place, create versus start,
+// the cards, and what counts as a receipt. An agent that never learns the first distinction
+// records the user's work in session-local scratch that never reaches Orbit, so the task silently
+// never appears in the UI. Everything after it is what only the runner knows: how this engine
+// spells Orbit's tools, the CLI's absolute path, which files a reply can hand over, and the
+// paragraphs that depend on the session's shape.
 //
-// The reference paragraph exists because the tools answer with base62 ids, and an agent reporting
+// The primer's link sentence exists because the tools answer with base62 ids, and an agent reporting
 // what it did pastes them into prose, where they are the one spelling the user cannot read. The
 // `orbit-<kind>:<id>` link is the shape the composer's #-references already use: clients draw its
 // text and route the click (web referenceRoute, OrbitKit ReferenceLink), so the id stays checkable.
@@ -77,25 +79,16 @@ func orbitCLIInstructionExecutable(exe string) string {
 // conversation, while proposing one every time costs the user's attention on every
 // turn, and only the second is paid whether or not the judgement was right.
 //
-// Kept ASCII and roughly a paragraph long: codex carries this as a single
-// application-context value capped at 1,000 tokens (see codexAgentAdditionalContext).
+// Kept ASCII and in paragraphs no longer than one Codex application-context value: codex carries
+// each value capped at 1,000 tokens, and codexAgentAdditionalContext sends these paragraphs packed
+// into values of at most codexContextValueMaxBytes.
 func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) string {
 	executable = orbitCLIInstructionExecutable(executable)
 	if executable == "" {
 		return ""
 	}
 	command := shellQuote(executable)
-	return "Orbit tasks are the user's durable record: visible in Orbit's UI, outliving this session. " +
-		"Any built-in todo or plan tool you have is private scratch the user never sees: fine for tracking your own steps, " +
-		"but anything the user asked you to record, or follow-up work they should see, MUST go through an Orbit tool. " +
-		"Never claim a task was created or updated unless an Orbit tool returned its id.\n\n" +
-		"Creating a task, a batch of tasks or a project puts a confirmation card in front of the user and writes nothing " +
-		"until they confirm it, so first say in a sentence or two what you are about to create and why. If they decline, " +
-		"do not create it another way.\n\n" +
-		"When you mention a task, session, project or task list to the user, link it by name instead of pasting its bare id: " +
-		"`[Fix login redirect](orbit-task:<id>)`, and likewise `orbit-session:<id>`, `orbit-project:<id>` and `orbit-list:<id>`. " +
-		"Cite a wiki entry the same way, as `[title](orbit-wiki:<id>)`. " +
-		"Orbit shows the user that name, one click from the thing itself; the id alone means nothing to them.\n\n" +
+	return agentPrimer + "\n\n" +
 		orbitReplyFileInstructions +
 		orbitEvidenceFileInstructions +
 		orbitProjectInstructions(insideRecordedWork) +
@@ -103,12 +96,10 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		orbitWaitInstructionsFor(watches) +
 		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
-		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
-		"work that outlives this turn. Inside a session both take the same approval and attribute the work to you: a " +
-		"create, a batch or a DAG change asks on the owner's card whichever door you use, so choose by what the work " +
-		"needs, never to get around a card. The CLI needs `" + command + " capabilities --json` first to discover its " +
-		"commands, then run the returned argv with that exact absolute path. Use `--json` output. Do not run `" +
-		command + " mcp` directly."
+		"they need no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes " +
+		"the work to you; it needs `" + command + " capabilities --json` first to discover its commands, then run the " +
+		"returned argv with that exact absolute path. Pass `--receipt` to read the receipt its MCP tool answers with; " +
+		"`--json` prints the entity alone. Do not run `" + command + " mcp` directly."
 }
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked

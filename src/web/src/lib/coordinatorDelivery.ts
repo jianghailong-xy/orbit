@@ -54,9 +54,6 @@ export const COORDINATOR_DELIVERY_COUNTS: Readonly<Partial<Record<CoordinatorDel
   SETTLED_UNMERGED: COMMITS,
 };
 
-/** What the sticky bar calls the turn once it has been scrolled past: the reply under it answers it. */
-export const COORDINATOR_DELIVERY_STICKY_LABEL = 'From Orbit';
-
 /** The link at the foot of the opened line, to the task the fact names. */
 export const COORDINATOR_DELIVERY_ITS_TASK = 'Its task ↗';
 

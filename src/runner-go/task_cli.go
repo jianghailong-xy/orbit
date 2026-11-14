@@ -912,8 +912,11 @@ var taskListActionHelp = map[string]string{
 Usage:
   orbit task-list propose-dag LIST_ID (--add TASK_ID:DEPENDS_ON_ID | --remove TASK_ID:DEPENDS_ON_ID)... [--note TEXT] [--apply] [--json]
 
-Judges a batch of dependency edits as one change and, with --apply, writes it. Unlike the
-MCP tool this raises no approval — at a terminal the person is already the one deciding.
+Judges a batch of dependency edits as one change and, with --apply, writes it. Inside a
+session --apply asks on the same approval card as the MCP tool and writes nothing before
+the answer. The runner's machine credential has no card-free form of this write, so --apply
+from a process in no session is refused (TASK_WRITE_NEEDS_OWNER_CARD); at a person's own
+terminal, change edges one at a time with orbit task dependency-add / dependency-remove.
 Without --apply it answers with what would be written and, more usefully, which tasks
 change dependency state as a result.
 
@@ -3288,8 +3291,8 @@ func (l *cliStringList) Set(v string) error {
 // from a session it takes the same path: preview, the owner's card, apply on their yes
 // (dag_approval.go). It used to apply with no approval at all, on the theory that at a terminal the
 // human is already the one deciding — true of a person typing, false of the agent that reaches this
-// same binary through its shell. A process in no session is the owner at their own terminal: nobody
-// to ask and no conversation to ask in, so it still applies directly.
+// same binary through its shell. A process in no session has nobody to ask and no conversation to
+// ask in, so it sends the apply as it is, and the server refuses it (TASK_WRITE_NEEDS_OWNER_CARD).
 func cliTaskListProposeDag(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task-list propose-dag")
