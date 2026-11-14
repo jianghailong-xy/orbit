@@ -255,7 +255,7 @@ export class ScheduleRunsService {
         });
         return outcome;
       },
-      loggedRetry(this.logger, 'schedule-runs.fire'),
+      loggedRetry(this.logger, 'scheduleRuns.fire'),
     );
   }
 
@@ -336,7 +336,7 @@ export class ScheduleRunsService {
         });
         return { outcome: 'STARTED', open: this.openInput(schedule, run, sessionId, prompt, check.plan) };
       },
-      loggedRetry(this.logger, 'schedule-runs.start'),
+      loggedRetry(this.logger, 'scheduleRuns.start'),
     );
     if (!step.open) return step.outcome;
     try {
@@ -553,7 +553,7 @@ export class ScheduleRunsService {
         }
         return { run: ended, newFinding, scheduleId: schedule.id };
       },
-      loggedRetry(this.logger, 'schedule-runs.report'),
+      loggedRetry(this.logger, 'scheduleRuns.report'),
     );
     if (result.run.state === 'NO_CHANGE') await this.completeIfSettled(ownerId, sessionId);
     await this.startNext(result.scheduleId);
@@ -581,7 +581,7 @@ export class ScheduleRunsService {
           data: { scheduleId, scheduleRevision: schedule.revision, plannedAt: now, trigger: 'MANUAL', state: 'QUEUED' },
         });
       },
-      loggedRetry(this.logger, 'schedule-runs.run-now'),
+      loggedRetry(this.logger, 'scheduleRuns.runNow'),
     );
     await this.startNext(scheduleId);
     return run;
@@ -605,7 +605,7 @@ export class ScheduleRunsService {
         });
         return { stopped, interrupt: run.state !== 'QUEUED' ? run.sessionId : null, ownerId: schedule.ownerId };
       },
-      loggedRetry(this.logger, 'schedule-runs.stop'),
+      loggedRetry(this.logger, 'scheduleRuns.stop'),
     );
     if (result.interrupt) await this.quietly(() => this.sessions.interrupt(result.ownerId, result.interrupt!), 'interrupt');
     await this.startNext(result.stopped.scheduleId);
@@ -637,7 +637,7 @@ export class ScheduleRunsService {
         const outcome = await this.failLocked(tx, schedule, run, reason, this.clock());
         return { outcome, ownerId: schedule.ownerId, scheduleId: schedule.id };
       },
-      loggedRetry(this.logger, 'schedule-runs.fail'),
+      loggedRetry(this.logger, 'scheduleRuns.fail'),
     );
     if (result.outcome !== 'SETTLED_ELSEWHERE' && result.ownerId && opts.sessionId) {
       const ownerId = result.ownerId;
