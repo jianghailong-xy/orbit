@@ -79,13 +79,20 @@ final class SessionListHeaderBandWiringTests: XCTestCase {
                       "the surface is a background, which lays out nothing, not padding on the header")
     }
 
-    /// The fill is what the list itself draws in each appearance: a hard-coded white (or a material)
-    /// would be the wrong colour in one of them, and a see-through one is no fix at all.
+    /// The fill is what the list itself draws in each appearance: a hard-coded white would be the
+    /// wrong colour in one of them, and a see-through one is no fix at all. On iOS 26 it is glass of
+    /// that colour — a material under a wash of `systemBackground` — so the pinned header joins the
+    /// soft edge above it instead of cutting it off with a solid strip (the owner, 2026-11-14).
     func testTheBandIsFilledWithTheListsOwnSurface() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
         let band = try XCTUnwrap(body(of: "sectionHeaderBand", in: agents),
                                  "the band helper is gone; these checks follow it")
         XCTAssertTrue(band.contains("Color(uiColor: .systemBackground)"),
                       "the band is filled with systemBackground, which is what the list draws")
+        XCTAssertTrue(band.contains("if #available(iOS 26.0, *) {"), "iOS 26 draws it as glass")
+        XCTAssertTrue(band.contains(".fill(.ultraThinMaterial)"), "a material blur under the wash")
+        XCTAssertTrue(band.contains("Color(uiColor: .systemBackground).opacity(0.85)"),
+                      "a wash dense enough that a row passing under the title can't be read")
+        XCTAssertTrue(band.contains(".frame(height: 9)"), "fading out over the strip below the title")
     }
 }

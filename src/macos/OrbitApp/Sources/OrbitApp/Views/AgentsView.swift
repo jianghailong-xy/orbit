@@ -1165,15 +1165,37 @@ struct AgentPanes: View {
     /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
     /// disappears behind it instead of reading through it.
     ///
+    /// On iOS 26 the list meets its top on the soft edge (the needs-you bar's `SoftEdgeLayer`), and
+    /// an opaque band pinned under it read as a solid strip cutting that edge off (the owner,
+    /// 2026-11-14: "Pinned has no glass"). There the band is glass of the same make — a material blur
+    /// under a wash of the page's colour — solid under the title, so a row still can't read through
+    /// it, and fading out over the 9pt below it, so rows blur into the header rather than end at a line.
+    ///
     /// The Mac's list draws its own section headers' backing, so there the band is the title alone.
     @ViewBuilder private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         #if os(iOS)
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                Color(uiColor: .systemBackground)
+                if #available(iOS 26.0, *) {
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial)
+                        Color(uiColor: .systemBackground).opacity(0.85)
+                    }
+                    .mask {
+                        VStack(spacing: 0) {
+                            Color.black
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 9)
+                        }
+                    }
                     .padding(.top, -33)
                     .padding(.bottom, -9)
+                } else {
+                    Color(uiColor: .systemBackground)
+                        .padding(.top, -33)
+                        .padding(.bottom, -9)
+                }
             }
         #else
         content()
