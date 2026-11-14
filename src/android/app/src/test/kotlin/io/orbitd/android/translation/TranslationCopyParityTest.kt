@@ -3,7 +3,6 @@ package io.orbitd.android.translation
 import io.orbitd.android.core.translation.Translation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 
@@ -11,8 +10,8 @@ import java.io.File
  * Settings › Translation says the same words on Android as on Web and on iOS/macOS (project instructions: "Keep the copy strings
  * identical across clients"): every [TranslationCopy] string, and every language's name, appears in each client's own source.
  *
- * The three clients land as separate tasks. A client whose source does not yet hold the feature at all (no "Translate conversations")
- * is skipped, and named as skipped, rather than failed; once it holds it, every word has to match.
+ * A client whose source no longer holds the feature at all (no "Translate conversations") FAILS, naming it: a cross-client check never
+ * skips (CrossClientChecksNeverSkipTest).
  */
 class TranslationCopyParityTest {
     private val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
@@ -46,13 +45,13 @@ class TranslationCopyParityTest {
     @Test fun webSaysTheSameWords() {
         // The web draws the language names from @orbit/shared (TRANSLATION_LANGUAGE_NAMES), so its words are its own and shared's.
         val web = source("src/web/src", setOf("ts", "tsx")) + " " + source("src/shared/src", setOf("ts"))
-        assumeTrue("Web has no Settings › Translation yet", web.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
+        assertTrue("Web has no Settings › Translation", web.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
         assertEquals("Android words the web does not say", emptyMap<String, String>(), missing(web))
     }
 
     @Test fun iosAndMacosSayTheSameWords() {
         val swift = source("src/macos", setOf("swift"))
-        assumeTrue("iOS/macOS has no Settings › Translation yet", swift.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
+        assertTrue("iOS/macOS has no Settings › Translation", swift.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
         assertEquals("Android words iOS/macOS does not say", emptyMap<String, String>(), missing(swift))
     }
 

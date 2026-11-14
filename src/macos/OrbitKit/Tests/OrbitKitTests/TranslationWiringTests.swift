@@ -46,7 +46,8 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(console.contains(".environment(\\.translationActions, TranslationActions("))
         XCTAssertTrue(console.contains("on: SessionTranslation.isOn(appModel.user),"))
         // The sticky question quotes what the owner wrote, as the bubble under it does.
-        XCTAssertTrue(console.contains("StickySummary.of(text: SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: false),"))
+        XCTAssertTrue(console.contains("let shown = SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: false)"))
+        XCTAssertTrue(console.contains("questionCapsule(shown)") && console.contains("Text(shown)"))
         let model = try source(app + "ConsoleModel.swift")
         XCTAssertTrue(model.contains("api.retryTurnTranslation(sessionID: sessionID, turnId: turnId)"))
         XCTAssertTrue(model.contains("api.sendTurnAsWritten(sessionID: sessionID, turnId: turnId)"))
