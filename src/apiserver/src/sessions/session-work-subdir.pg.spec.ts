@@ -71,7 +71,7 @@ test('POST /sessions workSubdir: stored when valid, refused 400 with no row othe
   const login = await new JwtService({ secret: jwtSecret }).signAsync({ sub: ownerId, email });
   const runnerToken = `runner-${randomUUID()}`;
   const runnerId = randomUUID();
-  await db.runner.create({ data: { id: runnerId, ownerId, name: `work-subdir-${RUN}`, tokenHash: sha256(runnerToken) } });
+  await db.runner.create({ data: { id: runnerId, ownerId, name: `work-subdir-${RUN}`, tokenHash: sha256(runnerToken), maxConcurrent: 4 } });
   // The workspace's own setting is worktrees: the terminal's `worktree: false` overrides it.
   const workspaceId = randomUUID();
   await db.workspace.create({
@@ -164,7 +164,7 @@ test('POST /sessions workSubdir: stored when valid, refused 400 with no row othe
         'x-orbit-runner-link-token': minted.json.token, 'x-orbit-link-request-id': `r:${leaseOwner}:${n++}`,
       });
     const beat = await viaLink('POST', '/runner/heartbeat', {
-      leaseOwner, status: 'ONLINE', engines: [{ engine: 'claude', installed: true, auth: 'yes', version: '2.3.0' }],
+      leaseOwner, status: 'ONLINE', idleCapacity: 4, engines: [{ engine: 'claude', installed: true, auth: 'yes', version: '2.3.0' }],
     });
     assert.ok(beat.status === 200 || beat.status === 201, `heartbeat ${beat.status}: ${beat.text}`);
     const claimed = new Map<string, Record<string, unknown>>();
