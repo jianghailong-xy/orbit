@@ -124,7 +124,7 @@ public struct OrbitMessageFrom: Sendable, Equatable, Codable {
 /// What the card says, in the web's own words: `lib/sessionMessage.ts`, which
 /// `SessionMessageCopyParityTests` holds this end to.
 public enum SessionMessageCard {
-    /// The word in front of the sending session's title, on the card's head and on the sticky bar.
+    /// The word in front of the sending session's title, on the card's head.
     public static let from = "From"
     /// What a session with no title is called where its title would be.
     public static let untitled = "Untitled session"
@@ -161,13 +161,6 @@ public enum SessionMessageCard {
     public static func meta(ts: String? = nil, now: Date = Date()) -> String? {
         guard let ts else { return nil }
         return RelativeTime.format(ts, now: now)
-    }
-
-    /// What the bar pinned to the top of a console says about this turn: who sent it, and what it
-    /// said (web parity: the `data-sticky-label` / `data-sticky-text` the card's root carries). Not
-    /// "Your question" — that above a card reading "not by you" is the screen contradicting itself.
-    public static func sticky(_ card: SessionMessage, text: String) -> (label: String, text: String) {
-        ("\(from) \(title(card))", text)
     }
 
     /// The card's line for a sender that runs narrower than this session, each mode as the mode

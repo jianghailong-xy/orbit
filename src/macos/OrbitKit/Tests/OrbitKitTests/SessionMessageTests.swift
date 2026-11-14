@@ -100,11 +100,10 @@ final class SessionMessageTests: XCTestCase {
         let b = try bubble(reducer)
         XCTAssertNil(b.sessionMessage)
         XCTAssertEqual(b.text, Self.words, "the recorded note is still taken out of the words")
-        XCTAssertEqual(StickySummary.of(text: b.text, note: b.note, sessionMessage: b.sessionMessage).label,
-                       StickySummary.yourQuestion)
+        XCTAssertFalse(StickySummary.isOrbits(b), "the bar still names it as the reader's question")
     }
 
-    func testAMessageWithACardCarriesItKeepsTheWordsAndNamesTheBar() throws {
+    func testAMessageWithACardCarriesItKeepsTheWordsAndHidesTheBar() throws {
         var reducer = TranscriptReducer()
         reducer.apply(try sent(card))
         let b = try bubble(reducer)
@@ -115,12 +114,8 @@ final class SessionMessageTests: XCTestCase {
         // …which the card does not fold under itself: it only says what the card shows.
         XCTAssertNil(SessionMessageCard.splitNote(b.note).attached)
         XCTAssertNil(SessionMessageCard.splitNote(b.note).narrower)
-        // Not "Your question": who asked it.
-        let sticky = StickySummary.of(text: b.text, note: b.note, itemCard: b.itemCard,
-                                      taskStart: b.taskStart, startedCard: b.startedCard,
-                                      sessionMessage: b.sessionMessage)
-        XCTAssertEqual(sticky.label, "↑ From Worker: criterion 3")
-        XCTAssertEqual(sticky.text, Self.words)
+        // Not the reader's question: the bar hides over it.
+        XCTAssertTrue(StickySummary.isOrbits(b))
         XCTAssertTrue(StickySummary.isAnchor(text: b.text, note: b.note, sessionMessage: b.sessionMessage))
     }
 
