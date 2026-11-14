@@ -150,6 +150,10 @@ func evalOwnerApproveAll(card *evalCard, _ int) (evalCardAnswer, string) {
 	return evalOwnerDefault(card)
 }
 
+// evalOwnerPolicyVersion names evalOwnerDefault's answers in the suite hash: a change to how the owner answers is a
+// change to the suite.
+const evalOwnerPolicyVersion = 2
+
 // evalOwnerDefault is how the eval's owner answers a card no scenario rule covers: every Orbit write card yes, a
 // command that runs Orbit's CLI or only reads yes, and everything else — a file edit, a command that would change
 // something, a request to leave Plan — no, with a reason.
@@ -159,6 +163,9 @@ func evalOwnerDefault(card *evalCard) (evalCardAnswer, string) {
 		return evalCardApprove, ""
 	case "ExitPlanMode":
 		return evalCardDecline, "Stay in Plan mode for now: I only want the plan."
+	case "AskUserQuestion":
+		// A person with no preference, rather than one who refuses the question.
+		return evalCardDecline, "No preference: choose what you think is best, and say what you chose."
 	case "Bash", "shell", "exec_command", "commandExecution":
 		command := asString(card.Input["command"])
 		if evalReadOnlyCommand(command) || strings.Contains(command, "orbit") {
@@ -579,7 +586,7 @@ func evalSuiteHash() string {
 		files = append(files, path+"="+sha256Hex([]byte(content)))
 	}
 	sort.Strings(files)
-	fmt.Fprintf(&b, "repo %s\n", strings.Join(files, ","))
+	fmt.Fprintf(&b, "repo %s\nowner %d\n", strings.Join(files, ","), evalOwnerPolicyVersion)
 	for _, s := range evalScenarios() {
 		fmt.Fprintf(&b, "%s|%s|%s\n", s.ID, s.Case, strings.Join(s.Covers, ","))
 		st := s.Setup
