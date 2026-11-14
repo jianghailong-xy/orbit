@@ -82,6 +82,8 @@ internal object RunnerCopy {
     const val WORKSPACES = "Workspaces"
     const val ABOUT = "About This Runner"
     const val MAX_CONCURRENT = "Max Concurrent"
+    const val MAX_CONCURRENT_HINT = "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    const val EDIT = "Edit"
     const val DISK = "Disk"
     const val KEEP_FREE = "Keep Free"
     const val CAPACITY_FOOTER = "Max Concurrent applies to the next session it picks up — no restart. Below Keep Free, task " +

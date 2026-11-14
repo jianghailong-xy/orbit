@@ -94,6 +94,11 @@ export function runnerDiskFree(free: string): string {
 // MARK: Capacity
 
 export const RUNNER_MAX_CONCURRENT = 'Max Concurrent';
+/** Max Concurrent's dialog, opened from its `3/16`: what the number is, and when it takes effect. */
+export const RUNNER_MAX_CONCURRENT_HINT =
+  'How many sessions this machine runs at once. A change applies to the next session it picks up — no restart.';
+/** Beside Max Concurrent's reading: opens its dialog. */
+export const RUNNER_EDIT = 'Edit';
 export const RUNNER_DISK = 'Disk';
 export const RUNNER_KEEP_FREE = 'Keep Free';
 export const RUNNER_KEEP_FREE_OFF = 'Off';
