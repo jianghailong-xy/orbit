@@ -245,7 +245,9 @@ export class GithubConnectionService {
     if (!repo) throw new NotFoundException({ code: 'GITHUB_REPO_NOT_FOUND', message: 'That repository is not one Orbit can reach for you.' });
     const names = await this.call(ownerId, app, (accessToken) => this.github.branches(accessToken, repo.fullName));
     const needle = typeof q === 'string' ? q.trim().toLowerCase() : '';
-    const matched = names.filter((name) => needle === '' || name.toLowerCase().includes(needle));
+    // The default branch exists whether or not the pages read reached it, and it is the one most people pick.
+    const all = names.includes(repo.defaultBranch) || repo.defaultBranch === '' ? names : [repo.defaultBranch, ...names];
+    const matched = all.filter((name) => needle === '' || name.toLowerCase().includes(needle));
     matched.sort((a, b) => (a === repo.defaultBranch ? -1 : b === repo.defaultBranch ? 1 : a.localeCompare(b)));
     return { defaultBranch: repo.defaultBranch, branches: matched };
   }

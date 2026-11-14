@@ -146,7 +146,10 @@ export class FakeGithub {
     if (method === 'GET' && branches) {
       const repo = user.installations.flatMap((i) => i.repos).find((r) => r.fullName === branches[1]);
       if (!repo) return json(404, { message: 'Not Found' });
-      return json(200, repo.branches.map((name) => ({ name })));
+      // GitHub answers branches by name, a page at a time.
+      const perPage = Number(url.searchParams.get('per_page') ?? 30);
+      const page = Number(url.searchParams.get('page') ?? 1);
+      return json(200, [...repo.branches].sort().slice((page - 1) * perPage, page * perPage).map((name) => ({ name })));
     }
     throw new Error(`the fake GitHub does not serve ${method} ${url.pathname}`);
   };

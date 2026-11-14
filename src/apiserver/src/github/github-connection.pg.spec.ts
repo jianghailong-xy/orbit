@@ -390,6 +390,13 @@ test('GitHub P0 on PostgreSQL: the App setting, connecting through the code flow
     const branches = await call('GET', '/api/integrations/github/repos/1000/branches', { bearer: ada.bearer });
     assert.deepEqual(branches.json, { defaultBranch: 'main', branches: ['main', 'feature/x', 'release'] });
     assert.deepEqual((await call('GET', '/api/integrations/github/repos/1000/branches?q=rel', { bearer: ada.bearer })).json.branches, ['release']);
+    // A repository with more branches than GitHub answers on one page, its default sorting after the first page
+    // (seen on a real repository on QA): every page is read, and the default still comes first.
+    octo.installations[0].repos[1].branches = ['main', ...Array.from({ length: 150 }, (_, i) => `claude/topic-${String(i).padStart(3, '0')}`)];
+    const many = await call('GET', '/api/integrations/github/repos/1001/branches', { bearer: ada.bearer });
+    assert.equal(many.json.branches.length, 151);
+    assert.equal(many.json.branches[0], 'main');
+    assert.deepEqual((await call('GET', '/api/integrations/github/repos/1001/branches?q=mai', { bearer: ada.bearer })).json.branches, ['main']);
 
     // Bob's own GitHub cannot see Ada's repository.
     assert.equal((await connect(bob, bobsGithub)).location, '/settings/integrations/github?github=connected');

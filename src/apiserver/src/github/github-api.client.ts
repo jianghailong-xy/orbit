@@ -15,6 +15,9 @@ const REQUEST_TIMEOUT_MS = 15_000;
 /** The repositories one listing reads at most, across every installation: 10 pages of 100 each. */
 export const MAX_LISTED_REPOSITORIES = 1_000;
 
+/** The branches one listing reads at most: 10 pages of 100. */
+export const MAX_LISTED_BRANCHES = 1_000;
+
 /** GitHub answered, but not with what was asked: a refusal (`status` 4xx) or a failure. */
 export class GithubCallError extends Error {
   constructor(
@@ -171,10 +174,19 @@ export class GithubClient {
     return { total, repositories: repositories.slice(0, limit) };
   }
 
-  /** A repository's branch names, the first 100. */
+  /**
+   * A repository's branch names, up to MAX_LISTED_BRANCHES. GitHub answers them by name, 100 a page, so a
+   * repository with many branches has its default one on a later page: every page is read until one is short.
+   */
   async branches(accessToken: string, fullName: string): Promise<string[]> {
-    const answer = await this.api<Array<{ name?: unknown }>>('GET', `/repos/${fullName}/branches?per_page=100`, `Bearer ${accessToken}`);
-    return (Array.isArray(answer) ? answer : []).map((row) => String(row.name ?? '')).filter((name) => name !== '');
+    const names: string[] = [];
+    for (let page = 1; names.length < MAX_LISTED_BRANCHES; page += 1) {
+      const answer = await this.api<Array<{ name?: unknown }>>('GET', `/repos/${fullName}/branches?per_page=100&page=${page}`, `Bearer ${accessToken}`);
+      const rows = Array.isArray(answer) ? answer : [];
+      names.push(...rows.map((row) => String(row.name ?? '')).filter((name) => name !== ''));
+      if (rows.length < 100) break;
+    }
+    return names.slice(0, MAX_LISTED_BRANCHES);
   }
 
   /** Revoke a user token (§5.2 DELETE). Already revoked or expired (404) is done too. */
