@@ -1241,7 +1241,7 @@ struct TranscriptView: View {
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
     // so is a watch's wake, a background job's news, a wakeup coming due or the owner's answer handed to
     // the coordinator, a line inside an answer rather than the head of one (`StickySummary.isAnchor`;
-    // web's line carries no `data-sticky-label`).
+    // web's line carries no `data-orbit-round`).
     //
     // Which turns are questions is read once per published state (`StickyQuestions`, kept on the
     // ruler), so a scroll is a lookup rather than a walk re-reading every turn's text.
@@ -1473,18 +1473,13 @@ struct TranscriptView: View {
     }
 
     // Sticky header that names the turn above the fold and scrolls back to it — web's
-    // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`):
+    // `.chat-sticky-question` (muted `StickySummary.yourQuestion` + the question on one ellipsized line):
     // a band under the toolbar on macOS, a capsule in the nav bar on iOS (see `chrome`).
     // `anchor: .top` lands the bubble just under either (the band is a safe-area inset, so the
     // scroll region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. Only the person's question reaches here: over a round
-        // Orbit opened the bar is hidden (`StickySummary.isOrbits`), and a wake is no turn (`isAnchor`).
-        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
-                                       taskStart: bubble.taskStart,
-                                       startedCard: bubble.startedCard,
-                                       sessionMessage: bubble.sessionMessage,
-                                       coordinatorDelivery: bubble.coordinatorDelivery)
+        // Only the person's question reaches here: over a round Orbit opened the bar is hidden
+        // (`StickySummary.isOrbits`), and a wake is no turn (`isAnchor`).
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1502,16 +1497,15 @@ struct TranscriptView: View {
             #endif
         } label: { _ in
             #if os(iOS)
-            questionCapsule(summary)
+            questionCapsule(bubble.text)
             #else
             HStack(spacing: 8) {
                 // Priority, not `fixedSize()`: the label is served first, so the line beside it is
-                // what gives way — but a card's label too long for the row truncates itself rather
-                // than pushing the line off the row entirely.
-                Text(summary.label)
+                // what gives way.
+                Text(StickySummary.yourQuestion)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-                Text(summary.text)
+                Text(bubble.text)
                     .font(.orbitSubtext).foregroundStyle(.primary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 0)
@@ -1531,15 +1525,14 @@ struct TranscriptView: View {
 
     #if os(iOS)
     /// The sticky question in the nav bar: the turn's words in a capsule between back and the ⋯ menu,
-    /// their height and their glass. The label and line are the band's, and give way the same way,
-    /// except that the person's own question is labelled by the arrow alone
-    /// (`StickySummary.compactLabel`).
-    private func questionCapsule(_ summary: (label: String, text: String)) -> some View {
+    /// their height and their glass. The line is the band's and gives way the same way, labelled by
+    /// the arrow alone: the capsule has no room to say whose words they are, and needs none.
+    private func questionCapsule(_ text: String) -> some View {
         HStack(spacing: 6) {
-            Text(StickySummary.compactLabel(summary.label))
+            Text(StickySummary.arrow.trimmingCharacters(in: .whitespaces))
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-            Text(summary.text)
+            Text(text)
                 .font(.orbitSubtext).foregroundStyle(.primary)
                 .lineLimit(1).truncationMode(.tail)
         }

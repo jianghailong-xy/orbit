@@ -77,6 +77,10 @@ const cases = [
     replace(`  ${name}:\n`, `  ${name}:\n    command: [sh, -c, "sleep infinity"]\n`)]),
   ['an unreviewed apiserver env', 'nothing beyond the approved configuration was added',
     replace('      PORT: "3000"', '      OBSERVER_ENABLED: "1"\n      PORT: "3000"')],
+  // The Claude-on-OpenAI gateway's three switches of 2026-11-11 are approved; a fourth beside them is not.
+  ['a fourth gateway env on the apiserver', 'nothing beyond the approved configuration was added',
+    replace('      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"\n',
+      '      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"\n      ORBIT_GATEWAY_UNAPPROVED: "${ORBIT_GATEWAY_UNAPPROVED:-}"\n')],
   ...[
     ['${ORBIT_WATCHES_MODE:-on}', '${ORBIT_WATCHES:-on}'],
     ['${ORBIT_WIKI_MODE:-on}', '${ORBIT_WIKI:-on}'],

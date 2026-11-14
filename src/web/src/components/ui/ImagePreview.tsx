@@ -177,11 +177,20 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
   const [natural, setNatural] = useState<{ src: string; width: number; height: number } | null>(null);
   const size = natural && natural.src === item?.src ? natural : null;
 
+  /** Where the picture's area is in the window, from layout: its rect would be the opening zoom's, which starts at
+   *  scale 0, and a picture that loads from the cache lands during it. */
+  const areaRect = () => {
+    const el = body.current;
+    if (!el) return null;
+    const left = el.offsetLeft;
+    const top = el.offsetTop;
+    return { left, top, width: el.offsetWidth, height: el.offsetHeight, right: left + el.offsetWidth, bottom: top + el.offsetHeight };
+  };
   /** The size the viewer gave a picture before it knew actual size, as a scale: the whole picture, as turned, in the
    *  window's width and 70% of its height (the room above the footer when captioned), and never above one of its
    *  pixels to a CSS pixel. Below 1 for a picture larger than the window, above 1 for a 1x picture on a 2x screen. */
   const fitScale = (rotate: number) => {
-    const area = body.current?.getBoundingClientRect();
+    const area = areaRect();
     if (!size || !area || !area.width || !area.height) return 1;
     const turned = rotate % 180 !== 0;
     const width = turned ? size.height : size.width;
@@ -191,7 +200,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
   /** Where a picture comes to rest: see rest(), on each axis of the area it is laid out in. */
   const rested = (next: Transform): Transform => {
     const img = image.current;
-    const area = body.current?.getBoundingClientRect();
+    const area = areaRect();
     if (!img || !area) return next;
     const turned = next.rotate % 180 !== 0;
     const width = (turned ? img.offsetHeight : img.offsetWidth) * next.scale;

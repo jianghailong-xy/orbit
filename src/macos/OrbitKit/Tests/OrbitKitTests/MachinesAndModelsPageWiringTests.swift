@@ -327,7 +327,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
         let page = try detail()
         let body = try slice(page, from: "Form {", to: ".formStyle(.grouped)")
         try assertInOrder(body, ["head(now: now)", "if !items.isEmpty {", "attentionSection(items, now: now)",
-                                 "capacitySection(workspaces)", "enginesSection(offline: offline, now: now)",
+                                 "capacitySection(workspaces, now: now)", "enginesSection(offline: offline, now: now)",
                                  "workspacesSection(workspaces)", "aboutSection(now: now)", "rotateSection",
                                  "removeSection"], "the page's sections")
         let sections = try slice(page, from: "private func head(now: Date) -> some View {", to: "private func statusLine(")
@@ -368,21 +368,24 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
                       "a quota's reset is said in the reader's time zone")
     }
 
-    /// ③ Capacity saves as it changes: the stepper when the press lets go, Keep Free as it is picked —
-    /// no Save button left.
+    /// ③ Capacity: Max Concurrent is a meter as Disk is — `3 of 16 running` over a bar — changed from
+    /// Edit in a sheet saved on Save; Keep Free saves as it is picked.
     func testCapacitySavesAsItChanges() throws {
         let page = try detail()
         let capacity = try slice(page, from: "private func capacitySection(", to: "private func enginesSection(")
-        for piece in ["Stepper(value: $maxConc, in: 1...64, onEditingChanged: steppingChanged)",
+        for piece in ["Stepper(value: $maxDraft, in: 1...64)", ".sheet(isPresented: $editingMax) { maxConcurrentSheet }",
+                      "RunnerPageCopy.runnerRunningOf(active: $0.active, max: $0.max)",
+                      "Button(RunnerPageCopy.RUNNER_EDIT) {",
                       "if let disk = RunnerAttention.runnerDisk(workspaces) {",
                       "Picker(RunnerPageCopy.RUNNER_KEEP_FREE, selection: $keepFree)",
                       "RunnerPageFormat.keepFreeChoices(runner.minFreeDiskMb)", ".pickerStyle(.menu)",
-                      "Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)"] {
+                      "Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)",
+                      "let slots = RunnerPageFormat.slots(runner, now: now)",
+                      "RunnerGauge(fraction: slots.fraction, tint: slots.full ? RunnerInk.full : Color.accentColor, height: 7)"] {
             XCTAssertTrue(capacity.contains(piece), "Capacity lost \(piece)")
         }
         let text = code(try runners())
-        XCTAssertFalse(text.contains("Button(\"Save\")"), "the stepper saves on release, not on a button")
-        XCTAssertTrue(text.contains("if !editing { saveMaxConcurrent(maxConc) }"))
+        XCTAssertTrue(text.contains("saveMaxConcurrent(maxDraft)"), "the sheet's Save sends the limit")
         XCTAssertTrue(text.contains("await runners.setMaxConcurrent(id, value)"))
         XCTAssertTrue(text.contains("await runners.setKeepFree(id, value)"))
         XCTAssertTrue(code(try appSource("RunnersModel.swift")).contains("UpdateRunnerRequest(minFreeDiskMb: floor)"))

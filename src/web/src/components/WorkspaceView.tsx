@@ -49,6 +49,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { WAITING_ON_YOU } from '../lib/ownerRequests';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -190,6 +191,7 @@ import {
   sessionEngineOf,
   sessionPick,
   supportsAuto,
+  claudeModelName,
 } from '../lib/workspaceDefaults';
 import {
   LOCAL_SLASH_ITEMS,
@@ -975,7 +977,7 @@ const JUMP_TO_START_PAGES = 30;
 // between — the normal state while a reply streams — must not flash the button.
 const STRANDED_AFTER_MS = 400;
 // What the sticky bar calls a turn the person typed — the only turn it ever names. A turn the control
-// plane opened (a card carrying `data-sticky-label`) is nobody's question: the owner ruled on
+// plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
 // 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
 const STICKY_LABEL = 'Your question';
 
@@ -1212,6 +1214,8 @@ const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
   if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
+  // An owner request this session filed (a step, a decision, a key, a confirmation): its card's words.
+  if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;
   return 'Waiting for approval';
 };
 
@@ -4448,19 +4452,19 @@ export function WorkspaceView({
     );
     // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
     // question above it no longer heads what is on screen — but nobody typed it, so the bar is hidden
-    // over it rather than naming a machine's message (`data-sticky-label` marks its card). Its queued
+    // over it rather than naming a machine's message (`data-orbit-round` marks its card). Its queued
     // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a
     // background job's news or a wakeup coming due is not one: it is a line inside the answer the
     // agent is still giving (WatchWakeCard, BackgroundWakeCard), so the bar keeps the question.
     const bubbles = Array.from(
-      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
+      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
     let cur: HTMLElement | null = null;
     for (const b of bubbles) {
       if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
       else break;
     }
-    if (cur?.hasAttribute('data-sticky-label')) {
+    if (cur?.hasAttribute('data-orbit-round')) {
       setStuck(null);
     } else if (cur) {
       // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
@@ -7301,7 +7305,11 @@ export function WorkspaceView({
         {
           value: shownModelName,
           label:
-            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModelName,
+            !shownProviderCapabilitiesResolved && !selected
+              ? 'Runtime default'
+              : shownEngine === AgentProvider.CLAUDE
+                ? claudeModelName(shownModelName)
+                : shownModelName,
         },
         ...catalogModelOptions,
       ];

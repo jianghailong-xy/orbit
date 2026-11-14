@@ -288,7 +288,10 @@ describe('ImagePreview', () => {
       vi.stubGlobal('devicePixelRatio', 2);
       await render(<Group />);
       const body = dialog()!.querySelector<HTMLElement>('.orbit-image-preview-body')!;
-      body.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1000, height: 800, top: 0, left: 0, right: 1000, bottom: 800, toJSON: () => ({}) });
+      // Laid out at 1000×800 while its rect is still the opening zoom's, which the viewer must not read.
+      Object.defineProperty(body, 'offsetWidth', { configurable: true, value: 1000 });
+      Object.defineProperty(body, 'offsetHeight', { configurable: true, value: 800 });
+      body.getBoundingClientRect = () => ({ x: 500, y: 400, width: 0, height: 0, top: 400, left: 500, right: 500, bottom: 400, toJSON: () => ({}) });
       const img = picture();
       Object.defineProperty(img, 'naturalWidth', { configurable: true, value: naturalWidth });
       Object.defineProperty(img, 'naturalHeight', { configurable: true, value: naturalHeight });

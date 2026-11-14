@@ -434,7 +434,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     }
                 }
             }
-            RunnerCapacity(runner, workspaces, model, notice, api)
+            RunnerResourcesSection(api, runner, workspaces, now, online = !offline, resumed = resumed)
+            RunnerCapacity(runner, now, model, notice, api)
             // Cursor CLI's row on every machine once one of the account's knows it (RunnerPage.engines), and the footer says it is the one
             // CLI kept on a pinned build (iOS 2 ②).
             val engineRows = RunnerPage.engines(runner, model.runners)
@@ -574,53 +575,58 @@ private fun AttentionButton(label: String, enabled: Boolean = true, onClick: () 
     FilledTonalButton(onClick = onClick, enabled = enabled, modifier = Modifier.padding(top = 4.dp), shape = RoundedCornerShape(50)) { Text(label) }
 }
 
-/** Max Concurrent (saved once the presses settle), Disk, and Keep Free. */
+/** Max Concurrent as a meter (`3 of 16 running` over a bar; the limit changed from Edit, in a dialog), and Keep Free. The disk is a
+ * reading, shown under Resources (RunnerResourcesSection). */
 @Composable
-private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, model: RunnersModel, notice: Notice, api: ManagementApi) {
+private fun RunnerCapacity(runner: JsonObject, now: Long, model: RunnersModel, notice: Notice, api: ManagementApi) {
     val id = runner.text("id")
     val serverMax = runner.int("maxConcurrent") ?: 1
-    var maxConc by remember(id) { mutableIntStateOf(serverMax) }
-    var pending by remember(id) { mutableStateOf(false) }
-    var edits by remember(id) { mutableIntStateOf(0) }
+    // Max Concurrent's dialog, and the number it holds while open.
+    var editing by remember(id) { mutableStateOf(false) }
+    var draft by remember(id) { mutableIntStateOf(serverMax) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(serverMax) { if (!pending) maxConc = serverMax }
-    // Saved once the presses settle, as the stepper's release and settle save it on iOS.
-    LaunchedEffect(edits) {
-        if (edits == 0) return@LaunchedEffect
-        delay(900)
-        val value = maxConc
-        if (value != (model.runner(id)?.int("maxConcurrent") ?: 1)) {
-            model.press { api.patch("runners/$id", buildJsonObject { put("maxConcurrent", value) }) }?.let { failure ->
-                maxConc = model.runner(id)?.int("maxConcurrent") ?: value; notice.show(failure)
+    if (editing) AlertDialog(onDismissRequest = { editing = false }, title = { Text(RunnerCopy.MAX_CONCURRENT) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(RunnerCopy.MAX_CONCURRENT_HINT, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The glyph carries the words, so TalkBack says them alone, not "…, minus".
+                    TextButton(onClick = { draft -= 1 }, enabled = draft > 1) {
+                        Text("−", Modifier.clearAndSetSemantics { contentDescription = "Decrease ${RunnerCopy.MAX_CONCURRENT}" })
+                    }
+                    Text("$draft", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 12.dp))
+                    TextButton(onClick = { draft += 1 }, enabled = draft < 64) {
+                        Text("+", Modifier.clearAndSetSemantics { contentDescription = "Increase ${RunnerCopy.MAX_CONCURRENT}" })
+                    }
+                }
             }
-        }
-        pending = false
-    }
-    // A press still settling is sent when the page goes (iOS saves on the stepper's release), so leaving at once loses nothing.
-    DisposableEffect(id) {
-        onDispose {
-            val value = maxConc
-            if (pending && value != (model.runner(id)?.int("maxConcurrent") ?: 1))
-                api.background.launch { try { api.patch("runners/$id", buildJsonObject { put("maxConcurrent", value) }) } catch (_: Exception) { } }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton({
+                editing = false
+                val value = draft
+                if (value != serverMax) scope.launch {
+                    model.press { api.patch("runners/$id", buildJsonObject { put("maxConcurrent", value) }) }?.let(notice::show)
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton({ editing = false }) { Text("Cancel") } })
     FormSection(RunnerCopy.CAPACITY, footer = RunnerCopy.CAPACITY_FOOTER) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(RunnerCopy.MAX_CONCURRENT, Modifier.weight(1f))
-            Text("$maxConc", color = Ink.muted)
-            // The glyph carries the words, so TalkBack says them alone, not "…, minus".
-            TextButton(onClick = { maxConc -= 1; pending = true; edits++ }, enabled = maxConc > 1) {
-                Text("−", Modifier.clearAndSetSemantics { contentDescription = "Decrease ${RunnerCopy.MAX_CONCURRENT}" })
+        // A meter, as Disk is: the name, `3 of 16 running` and Edit on a line, a bar of the slots taken across the row under them
+        // (online only), amber once all are. Edit opens the dialog that changes the limit.
+        val slots = RunnerPage.slots(runner, now)
+        Column(Modifier.padding(bottom = if (slots != null) 8.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(RunnerCopy.MAX_CONCURRENT, Modifier.weight(1f))
+                Text(slots?.let { (active, max) -> RunnerCopy.runningOf(active, max) } ?: "$serverMax",
+                    style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                // No padding after Edit, so it ends where the bar under it does.
+                TextButton({ draft = serverMax; editing = true },
+                    Modifier.semantics { contentDescription = "${RunnerCopy.EDIT} ${RunnerCopy.MAX_CONCURRENT}" },
+                    contentPadding = PaddingValues(start = 12.dp)) { Text(RunnerCopy.EDIT) }
             }
-            TextButton(onClick = { maxConc += 1; pending = true; edits++ }, enabled = maxConc < 64) {
-                Text("+", Modifier.clearAndSetSemantics { contentDescription = "Increase ${RunnerCopy.MAX_CONCURRENT}" })
-            }
-        }
-        RunnerPage.runnerDisk(workspaces)?.let { disk ->
-            HorizontalDivider()
-            Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row { Text(RunnerCopy.DISK, Modifier.weight(1f)); Text(RunnerPage.diskUsedLine(disk), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
-                Gauge(disk.usedPercent / 100f, if (RunnerPage.diskIsTight(disk, runner.int("minFreeDiskMb"))) Ink.amber else MaterialTheme.colorScheme.primary, height = 7.dp)
+            slots?.let { (active, max) ->
+                Gauge((active.toFloat() / max).coerceAtMost(1f), if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, height = 7.dp)
             }
         }
         HorizontalDivider()

@@ -17,8 +17,15 @@ struct SourceLandingChip: View {
         console.worktree.detail?.sourceLanding?.landingSessionId
     }
 
+    /// The worktree card says the landing itself where there is one (board
+    /// docs/mocks/session-landing-slot-ios); this chip stands only for a session without it.
+    private var carriedByWorktreeBar: Bool {
+        let d = console.worktree.detail
+        return WorktreeBarLogic.carriesSourceLanding(isolationStatus: d?.isolationStatus, branch: d?.branch)
+    }
+
     var body: some View {
-        if let label, let sessionID, !sessionID.isEmpty {
+        if !carriedByWorktreeBar, let label, let sessionID, !sessionID.isEmpty {
             Button {
                 PlatformHaptics.tap()
                 if let url = URL(string: "orbit-session:\(PublicID.toPublic(sessionID))") {
@@ -50,6 +57,69 @@ struct SourceLandingChip: View {
         case "landed": return .green
         case "failed": return .orange
         default: return .secondary
+        }
+    }
+}
+
+/// An open landing as the worktree card's second row (board docs/mocks/session-landing-slot-ios):
+/// queued is a still clock on grey, an attempt at work a spinner on blue, a stopped one amber. The
+/// whole row opens the landing session, where every attempt is read and a stopped one is dealt with.
+struct SourceLandingRow: View {
+    let slot: SourceLandingSlot
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 6) {
+                Group {
+                    switch slot.kind {
+                    case .running: ProgressView().controlSize(.small)
+                    case .stopped: Image(systemName: "exclamationmark.triangle")
+                    default: Image(systemName: "clock")
+                    }
+                }
+                .font(.orbitMeta.weight(.semibold))
+                .frame(width: 16)
+                Text(slot.text)
+                    .font(.orbitLabel.weight(.semibold))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                if let into = slot.into {
+                    Text("· \(into)")
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 4)
+                Text("Open ›")
+                    .font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(slot.kind == .queued ? Color.accentColor : ink)
+                    .fixedSize()
+            }
+            .foregroundStyle(ink)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 30)
+            .background(fill, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the landing")
+    }
+
+    private var ink: Color {
+        switch slot.kind {
+        case .running: return .accentColor
+        case .stopped: return .orange
+        default: return .primary
+        }
+    }
+
+    private var fill: Color {
+        switch slot.kind {
+        case .running: return Color.accentColor.opacity(0.1)
+        case .stopped: return Color.orange.opacity(0.12)
+        default: return Color.primary.opacity(0.05)
         }
     }
 }

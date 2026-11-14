@@ -320,6 +320,16 @@ final class SettingsHomeTests: XCTestCase {
                        "Project · Expired Sep 20")
     }
 
+    /// Board 13: only an active link's row opens its Share panel, and its ⋯ is named after it.
+    func testOnlyAnActiveLinksRowOpensAndItsMoreNamesIt() {
+        XCTAssertTrue(SharedLinksList.opens(link(.active)))
+        XCTAssertFalse(SharedLinksList.opens(link(.paused)), "a session in the Trash has no panel to change")
+        XCTAssertFalse(SharedLinksList.opens(link(.ended)))
+        XCTAssertEqual(SharedLinksList.moreLabel(link(.active)), "More for Root")
+        XCTAssertEqual(SharedLinksList.moreLabel(link(.active, kind: .wiki, root: ShareRootSummary(id: "w"))), "More for Wiki")
+        XCTAssertEqual([SharedLinksList.settings, SharedLinksList.turnOffMenu], ["Settings…", "Turn off…"])
+    }
+
     func testTurningOffSaysHowManyWent() {
         XCTAssertEqual(SharedLinksList.turnedOff(1), "Link turned off")
         XCTAssertEqual(SharedLinksList.turnedOff(3), "3 links turned off")

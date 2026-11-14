@@ -838,6 +838,19 @@ button.toast--pill:focus-visible {
   white-space: nowrap;
   color: var(--text-3);
 }
+/* With a pointer, the machine shows only on the row pointed at (board docs/mocks/workspace-runner-label,
+   E1): the list reads as names, the hovered row says where it runs, and there the machine stays whole
+   while the name gives way. A touch screen has no hover, so it keeps the machine on every row. */
+@media (hover: hover) and (min-width: 961px) {
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-separator,
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {
+    display: none;
+  }
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-runner {
+    flex: none;
+    max-width: 60%;
+  }
+}
 .tp-workspace-icon {
   position: relative;
 }
@@ -4856,11 +4869,17 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
-/* A project entry is the one focusable session row; draw its ring inside, as folder rows do, so the
-   list's edge doesn't clip the browser's outer default ring. */
+/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+   ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
+   right by the kebab's fade. */
 .session-project-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
+}
+.session-project-row.active:focus-visible {
+  background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
 }
 /* Trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
@@ -5863,9 +5882,11 @@ button.toast--pill:focus-visible {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
 }
+/* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --row-bg: var(--bg-hover);
 }
 .session-folder-row.editing {
   height: auto;
@@ -17994,7 +18015,7 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 /* A status as a dot before plain words (AccountPauseStatus dot): on rows whose buttons sit beside it. */
-.status-dot {
+.account-status-dot {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -18004,7 +18025,7 @@ button.chat-jump-start:hover {
   color: var(--text-1);
   white-space: nowrap;
 }
-.status-dot::before {
+.account-status-dot::before {
   content: '';
   flex: none;
   width: 7px;
@@ -18012,25 +18033,25 @@ button.chat-jump-start:hover {
   border-radius: 50%;
   background: var(--dot-idle);
 }
-.status-dot-success::before,
-.status-dot-green::before {
+.account-status-dot-success::before,
+.account-status-dot-green::before {
   background: var(--success-solid);
 }
-.status-dot-warning::before,
-.status-dot-orange::before,
-.status-dot-gold::before {
+.account-status-dot-warning::before,
+.account-status-dot-orange::before,
+.account-status-dot-gold::before {
   background: var(--warning-solid);
 }
-.status-dot-error::before,
-.status-dot-red::before {
+.account-status-dot-error::before,
+.account-status-dot-red::before {
   background: var(--error-solid);
 }
-.status-dot-info::before,
-.status-dot-blue::before {
+.account-status-dot-info::before,
+.account-status-dot-blue::before {
   background: var(--brand);
 }
-.status-dot-error,
-.status-dot-red {
+.account-status-dot-error,
+.account-status-dot-red {
   color: var(--error);
 }
 .pool-people {
@@ -24860,6 +24881,17 @@ button.project-open-item-action:disabled {
 .wk-name-title .wk-select:hover { background: var(--bg-hover); }
 .wk-name-title .wk-select:focus-within { box-shadow: 0 0 0 2px var(--brand-tint); }
 .wk-name-title .wk-select .ic.caret { position: static; font-size: 12px; color: var(--text-3); }
+/* The space menu the name opens (board docs/mocks/wiki-space-menu): a row a space, its name over its repository and
+   documents, the sidebar's amber count at its end; the current one lit and ticked, Manage spaces at the foot. */
+.orbit-menu.wk-space-menu { min-width: 260px; max-width: min(420px, calc(100vw - 24px)); max-height: 70vh; overflow-y: auto; }
+.wk-space-menu .orbit-menu-item { align-items: flex-start; padding-top: 7px; padding-bottom: 7px; }
+.wk-space-menu .orbit-menu-icon { padding-top: 3px; }
+.wk-space-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.wk-space-row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.wk-space-row-text .n { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row-text .s { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row .tp-count.needs-you { flex: none; }
+.wk-name-title .wk-select { cursor: pointer; }
 .wk-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 /* The space's public link, as the head's buttons are sized (mock share-links 08 ②). */
 .wk-actions > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
@@ -26379,6 +26411,23 @@ button.agent-progress-agent:hover {
 .wt-recovery { margin: 0 12px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); font-size: 12px; overflow-wrap: anywhere; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
+/* What the last check found scrolls inside the panel: the panel stands in the band above the composer, and a long
+   push list must not push the composer off screen. The title, the repair row and the actions stay in view. */
+/* A recovery with a repair session folds into one row of the branch bar, in the strip's row language (.bg-tray-row):
+   where the repair stands, its next step, and the arrow that opens the panel under it (docs/mocks/merge-repair-strip-row). */
+.wt-repair-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 6px 3px 10px; font-size: 12px; border-top: 1px solid var(--border-subtle); cursor: pointer; }
+.wt-repair-row:hover { background: var(--bg-hover); }
+.wt-repair-row-icon { flex: none; display: inline-flex; font-size: 14px; color: var(--text-3); }
+.wt-repair-row.is-running .wt-repair-row-icon, .wt-repair-row.is-checking .wt-repair-row-icon { color: var(--brand); }
+.wt-repair-row-head { flex: none; color: var(--text-1); font-weight: 500; white-space: nowrap; }
+.wt-repair-row-note { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.wt-repair-row.is-ready :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--success); }
+.wt-repair-row:is(.is-conflict, .is-reply) :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--warning); }
+.wt-repair-row.is-failed .wt-repair-row-icon { color: var(--error); }
+.wt-repair-row-step { flex: none; padding: 3px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.wt-repair-row-step:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); }
+.wt-repair-row-step:disabled { opacity: .55; cursor: default; }
+.wt-recovery-snapshot { max-height: 28vh; overflow-y: auto; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .wt-recovery-histories > :only-child { grid-column: 1 / -1; }
 .wt-recovery-route code { font-size: 11px; }
@@ -26406,6 +26455,7 @@ button.agent-progress-agent:hover {
 .wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
 .wt-recovery-link:disabled { opacity: .55; cursor: default; }
 .wt-recovery-snapshot.is-stale { opacity: .45; }
+.wt-recovery .wt-recovery-failure { color: var(--error); }
 /* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue. */
 .wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
 .wt-merge-op span { color: var(--text-2); }
