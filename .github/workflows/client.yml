@@ -114,6 +114,8 @@ jobs:
       # First real compile of the SwiftUI layer (views, @Observable models, MenuBarExtra,
       # UNUserNotificationCenter, launchctl glue). If this surfaces SDK nits, that's its job.
       - name: Build OrbitApp
+        # Probe only: build the app even though OrbitKit's tests carry reds that main has too.
+        if: always()
         working-directory: src/macos/OrbitApp
         run: swift build
 
