@@ -27,17 +27,23 @@ import (
 const planGateModeOp = "mode"
 
 // planGateRefusalFormat is what a call Plan refuses returns, on both surfaces, naming the call as its surface
-// spells it.
-const planGateRefusalFormat = "Not run: this session is in Plan mode, which reads, waits and asks but changes " +
+// spells it. Its receipt says SESSION_IN_PLAN_MODE (tool_receipt.go), recognized by planGateRefusalLead.
+const planGateRefusalFormat = planGateRefusalLead + ", which reads, waits and asks but changes " +
 	"nothing until the plan is approved, and %s writes to Orbit. Nothing was written. Do not retry it, and do not " +
 	"make the same write another way: the MCP tool and the orbit CLI refuse it alike. Put it in your plan, and " +
 	"make it once the owner has approved the plan or switched this session out of Plan mode."
 
 // planGateUnreadableFormat is what a write returns when the session's mode could not be read: a write is never made
-// on a mode nobody could read, since that mode may be Plan.
-const planGateUnreadableFormat = "Not run: Orbit could not read this session's permission mode (%v), and it makes " +
+// on a mode nobody could read, since that mode may be Plan. Its receipt says PERMISSION_MODE_UNREADABLE.
+const planGateUnreadableFormat = planGateUnreadableLead + " (%v), and it makes " +
 	"no write on a mode nobody could read. Nothing was written. Try it again; if it keeps failing, tell the owner: " +
 	"restarting this session, or its runner, gives the session its mode back."
+
+// The opening words of the two refusals, by which a receipt names them (callRecord.failure) on both surfaces.
+const (
+	planGateRefusalLead    = "Not run: this session is in Plan mode"
+	planGateUnreadableLead = "Not run: Orbit could not read this session's permission mode"
+)
 
 // errNoSessionSocket is what a session process the runner started reads when the socket the runner hands every one
 // of them (bgJobEnvPairs) is not in its environment: the runner's job service for the session did not start.

@@ -94,6 +94,11 @@ const (
 	// The server answered the write 2xx with ok:false — a start it skipped (superseded, a cancelled
 	// project, …): nothing was started, and the answer says why.
 	errorCodeNotDone = "NOT_DONE"
+	// Orbit's Plan gate (plan_gate.go) refused a write before anything was sent: the session is in Plan mode,
+	// so the write can be made once the plan is approved or the session leaves Plan, and not before (wait);
+	// or the session's mode could not be read, and the same call may be sent again (resend).
+	errorCodeSessionInPlanMode        = "SESSION_IN_PLAN_MODE"
+	errorCodePermissionModeUnreadable = "PERMISSION_MODE_UNREADABLE"
 )
 
 // receiptEntityTypes are the operations whose answer is an entity of another object than the one
@@ -637,6 +642,10 @@ func (rec *callRecord) failure(text string) (*receiptError, string) {
 		e.Code, e.Retry = errorCodeOrchestrationOff, retryDoNot
 	case text == noTaskMsg:
 		e.Code = errorCodeTaskIDRequired
+	case strings.HasPrefix(text, planGateRefusalLead):
+		e.Code, e.Retry = errorCodeSessionInPlanMode, retryWait
+	case strings.HasPrefix(text, planGateUnreadableLead):
+		e.Code, e.Retry, e.Retryable = errorCodePermissionModeUnreadable, retryResend, true
 	}
 	return e, outcomeRefused
 }

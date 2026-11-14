@@ -68,11 +68,11 @@ var (
 	matrixRead       = matrixCall{Class: "read", Tool: "task_get", Args: map[string]interface{}{"taskId": "T1"}, Argv: []string{"task", "get", "T1"}}
 	matrixWait       = matrixCall{Class: "wait on Orbit's own work", Tool: "task_await", Args: map[string]interface{}{"taskIds": []interface{}{"T1"}}, Argv: []string{"task", "await", "--task-id", "T1"}}
 	matrixQuestion   = matrixCall{Class: "a line or a question for the owner", Tool: "notify", Args: map[string]interface{}{"message": "plan ready"}, Argv: []string{"notify", "--message", "plan ready"}}
-	matrixPreview    = matrixCall{Class: "preview (writes nothing)", Tool: "task_create_batch", Args: map[string]interface{}{"dryRun": true, "tasks": []interface{}{}}, Argv: []string{"task", "create-batch", "--tasks-file", "-", "--dry-run"}}
+	matrixPreview    = matrixCall{Class: "preview (writes nothing)", Tool: "task_create_batch", Args: map[string]interface{}{"dryRun": true, "tasks": []interface{}{map[string]interface{}{"title": "a", "description": "d", "completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "x"}}}, Argv: []string{"task", "create-batch", "--tasks-file", "-", "--dry-run"}}
 	matrixWrite      = matrixCall{Class: "write: a schedule (`runAt`)", Tool: "task_update", Args: map[string]interface{}{"taskId": "T1", "runAt": "2026-11-15T09:00:00Z"}, Argv: []string{"task", "update", "T1", "--run-at", "2026-11-15T09:00:00Z"}}
 	matrixDependency = matrixCall{Class: "write: a dependency edge", Tool: "task_dependency_remove", Args: map[string]interface{}{"taskId": "T1", "dependsOnTaskId": "T0"}, Argv: []string{"task", "dependency-remove", "T1", "T0"}}
 	matrixDestroy    = matrixCall{Class: "destructive write", Tool: "task_delete", Args: map[string]interface{}{"taskId": "T1"}, Argv: []string{"task", "delete", "T1"}}
-	matrixCarded     = matrixCall{Class: "write that files its own card", Tool: "task_create", Args: map[string]interface{}{"title": "x"}, Argv: []string{"task", "create", "--title", "x"}}
+	matrixCarded     = matrixCall{Class: "write that files its own card", Tool: "task_create", Args: map[string]interface{}{"title": "x", "completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "x"}, Argv: []string{"task", "create", "--title", "x"}}
 	matrixJob        = matrixCall{Class: "background job", Tool: "bg_run", Args: map[string]interface{}{"command": "true", "kind": "job"}}
 	matrixThirdParty = matrixCall{Class: "a third-party server's tool", Tool: "deploy", Server: "acme"}
 )
@@ -262,15 +262,15 @@ func orbitCallCell(t *testing.T, mode string, call matrixCall, cli bool, engine 
 		}
 		preview = cliPlanPreview(call.Tool, call.Argv)
 	} else {
-		// Through `orbit mcp` itself, so the cell is what the server answers and not what the gate function says
-		// in isolation. Its transport reaches nothing: a call the gate lets through fails on the network, fast, and
-		// only a refusal reads as one.
+		// Through `orbit mcp` itself — tools/call's own path, strict input and receipt included — so the cell is what
+		// the server answers and not what the gate function says in isolation. Its transport reaches nothing: a call
+		// the gate lets through fails on the network, fast, and only Plan's refusal reads as one.
 		s := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok"), sessionID: "matrix", taskID: "T1", permissionMode: planModeIs(mode)}
 		args := map[string]interface{}{}
 		for key, value := range call.Args {
 			args[key] = value
 		}
-		if strings.Contains(resultText(s.callTool(call.Tool, args)), "this session is in Plan mode") {
+		if matrixRefusedInPlan(s.invokeTool(call.Tool, args)) {
 			return cellRefused
 		}
 		preview = !waitsForTheOwner(call.Tool, call.Args) && catalogPlanPreviewArgs[call.Tool] != ""
@@ -292,6 +292,25 @@ func orbitCallCell(t *testing.T, mode string, call matrixCall, cli bool, engine 
 		return cellOrbitCard
 	}
 	return cellRuns
+}
+
+// matrixRefusedInPlan reads an MCP answer as Plan's refusal: the receipt's SESSION_IN_PLAN_MODE for a tool that
+// answers with one, and the refusal's words for one that keeps an answer of its own (the wiki tools').
+func matrixRefusedInPlan(res map[string]interface{}) bool {
+	if receipt, ok := res["structuredContent"].(toolReceipt); ok {
+		return !receipt.OK && receipt.Error != nil && receipt.Error.Code == errorCodeSessionInPlanMode
+	}
+	return res["isError"] == true && strings.HasPrefix(resultText(res), planGateRefusalLead)
+}
+
+// The examples are real calls: each one's arguments pass the strict input its tool is judged by (tool_schema.go), so
+// a cell is never a refusal of the arguments read as one of the mode.
+func TestPermissionMatrixExamplesAreValidCalls(t *testing.T) {
+	for _, call := range []matrixCall{matrixRead, matrixWait, matrixQuestion, matrixPreview, matrixWrite, matrixDependency, matrixDestroy, matrixCarded, matrixJob} {
+		if violations := validateToolArguments(catalogOperation(call.Tool), call.Args); len(violations) > 0 {
+			t.Errorf("%s's example arguments are not a valid call: %v", call.Tool, violations)
+		}
+	}
 }
 
 // claudePromptAnswer is what Orbit's permission prompt answers Claude Code about one of Orbit's tools. Its transport
@@ -362,7 +381,7 @@ func renderPermissionMatrixMarkdown() string {
 	for _, cell := range [][2]string{
 		{cellRuns, "runs, and nobody is asked"},
 		{cellOrbitCard, "Orbit's own card for the write (or, for a background job, the background-job gate's); it runs once the owner says yes"},
-		{cellRefused, "refused by Orbit with what to do instead: Plan's write refusal, or the background-job gate's refusal"},
+		{cellRefused, "refused by Orbit with what to do instead: Plan's write refusal — a receipt with `ok: false`, `outcome: refused` and `SESSION_IN_PLAN_MODE` (`retry: wait`) — or the background-job gate's refusal"},
 		{cellDeclined, "the engine's own prompt is answered no without asking anybody: Plan cannot run what it asks about"},
 		{cellEngineCard, "the engine's own prompt goes to the owner on a card"},
 		{cellAutoReview, "the engine's own Auto review judges it first (Codex's reviewer)"},
@@ -414,9 +433,10 @@ func renderPermissionMatrixMarkdown() string {
 		"**Don't Ask asks nobody but Orbit's own cards.** A write that files its card still asks (a question is not a " +
 			"job), and a background job is refused. On Codex, Don't Ask runs every command unasked: Codex takes no allowlist.",
 		"**Where the gate reads the mode, and when it cannot.** The runner hosting the session answers it over the " +
-			"session's socket (`bgJobService`, op `mode`). The gate fails closed: a write is refused, with the reason, when " +
-			"the socket does not answer and when a session process the runner started (`ORBIT_RUNNER_CHILD`) has no socket " +
-			"at all, because that mode may be Plan. There is no gate where there is no session process: a person's own " +
+			"session's socket (`bgJobService`, op `mode`). The gate fails closed: a write is refused, with the reason and " +
+			"the receipt code `PERMISSION_MODE_UNREADABLE` (`retry: resend`), when the socket does not answer and when a " +
+			"session process the runner started (`ORBIT_RUNNER_CHILD`) has no socket at all, because that mode may be " +
+			"Plan. There is no gate where there is no session process: a person's own " +
 			"terminal, and a runner-hosted background job, whose environment carries the session but never the socket, so a " +
 			"job started before Plan can still write (the hosted wait for the owner is gated at its own door). Like the " +
 			"background-job gate, this protects against an agent acting ahead of the owner, not against a hostile process on " +

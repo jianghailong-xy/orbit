@@ -474,3 +474,67 @@ func TestTheInSessionCLIRefusesAWriteInPlan(t *testing.T) {
 		t.Fatal("the write never reached the control plane after leaving Plan")
 	}
 }
+
+// The refusal is a receipt like every other answer of a write (tool_receipt.go): ok false, outcome refused, Plan's
+// own code with the wait rule — the write can be made once the plan is approved, and not before — and, for a write
+// that files a card, the card not asked; a mode that could not be read is a code of its own, safe to resend since
+// nothing was sent. The MCP tool and the CLI's --receipt answer with the same receipt.
+func TestPlanGateRefusalIsAReceiptOnBothSurfaces(t *testing.T) {
+	plane := newPlanGateControlPlane(t)
+	s := &mcpServer{t: NewTransport(plane.srv.URL, "tok"), sessionID: "sess-gate", taskID: "task-1", permissionMode: planModeIs("plan")}
+	receiptOf := func(res map[string]interface{}) toolReceipt {
+		t.Helper()
+		r, ok := res["structuredContent"].(toolReceipt)
+		if !ok || res["isError"] != true {
+			t.Fatalf("answer = %#v, want an error with its receipt", res)
+		}
+		return r
+	}
+	r := receiptOf(s.invokeTool("task_update", map[string]interface{}{"taskId": "task-1", "title": "renamed"}))
+	if r.OK || r.Outcome != outcomeRefused || r.Error == nil || r.Error.Code != errorCodeSessionInPlanMode ||
+		r.Error.Retry != retryWait || r.Error.Retryable || !strings.HasPrefix(r.Error.Message, planGateRefusalLead) {
+		t.Errorf("task_update's receipt in Plan = %+v (error %+v)", r, r.Error)
+	}
+	r = receiptOf(s.invokeTool("task_create", map[string]interface{}{"title": "x", "completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "x"}))
+	if r.Error == nil || r.Error.Code != errorCodeSessionInPlanMode || r.Approval.Outcome != approvalOutcomeNotAsked {
+		t.Errorf("task_create's receipt in Plan = %+v (error %+v)", r, r.Error)
+	}
+	s.permissionMode = func() (string, bool, error) { return "", true, errNoSessionSocket }
+	r = receiptOf(s.invokeTool("task_update", map[string]interface{}{"taskId": "task-1", "title": "renamed"}))
+	if r.OK || r.Outcome != outcomeRefused || r.Error == nil || r.Error.Code != errorCodePermissionModeUnreadable ||
+		r.Error.Retry != retryResend || !r.Error.Retryable {
+		t.Errorf("task_update's receipt on an unreadable mode = %+v (error %+v)", r, r.Error)
+	}
+	if seen := plane.seen(); len(seen) != 0 {
+		t.Fatalf("a refused write reached the control plane: %v", seen)
+	}
+
+	// The CLI, in a session whose socket says Plan.
+	f := newGateFixture(t, "plan")
+	home := t.TempDir()
+	if err := os.Chmod(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config, _ := json.Marshal(RunnerConfig{ServerURL: plane.srv.URL, RunnerID: "r", RunnerToken: "tok"})
+	if err := os.WriteFile(filepath.Join(home, "config.json"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", home)
+	t.Setenv("ORBIT_SESSION_ID", "sess-gate")
+	t.Setenv(envBgSocket, f.socket)
+	t.Setenv(envBgToken, "tok")
+	var out bytes.Buffer
+	if err := runOrbitCLI([]string{"task", "update", "task-1", "--title", "renamed", "--receipt"}, strings.NewReader(""), &out, &out); err == nil {
+		t.Fatal("orbit task update --receipt in Plan exited zero")
+	}
+	var cli toolReceipt
+	if err := json.Unmarshal(bytes.TrimSpace(bytes.SplitN(out.Bytes(), []byte("\n"), 2)[0]), &cli); err != nil {
+		t.Fatalf("orbit task update --receipt printed %q: %v", out.String(), err)
+	}
+	if cli.OK || cli.Outcome != outcomeRefused || cli.Error == nil || cli.Error.Code != errorCodeSessionInPlanMode || cli.Error.Retry != retryWait {
+		t.Errorf("the CLI's receipt in Plan = %+v (error %+v)", cli, cli.Error)
+	}
+	if seen := plane.seen(); len(seen) != 0 {
+		t.Fatalf("a refused CLI write reached the control plane: %v", seen)
+	}
+}
