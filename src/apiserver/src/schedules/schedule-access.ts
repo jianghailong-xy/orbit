@@ -35,16 +35,21 @@ export function scheduleRunMode(level: AccessLevel, engine: string | null | unde
   const provider = engine ?? AgentProvider.CLAUDE;
   for (const mode of ACCESS_LEVEL_MODES[level]) {
     const semantics = derivePermissionSemantics(provider, mode);
-    // Honoured, and never "allow" for an action nobody pre-approved: an allow-everything mode is wider than both
-    // levels, whatever its name.
-    if (semantics.honored && semantics.unapproved !== 'allow') return mode;
+    // Never "allow" for an action nobody pre-approved: an allow-everything mode is wider than both levels, whatever
+    // its name.
+    if (semantics.unapproved === 'allow') continue;
+    if (semantics.honored) return mode;
+    // CHECK_ONLY only: a mode that refuses every unapproved action is not wider, even where the engine cannot ask
+    // as the mode would (OpenCode's Plan: reads run, fetches and commands are refused; measured, design §12).
+    if (level === 'CHECK_ONLY' && semantics.unapproved === 'deny') return mode;
   }
   return null;
 }
 
 /**
  * What an OPEN_PR run may not call (§6.2's *May not* column): merging, which is the person's, and the release and
- * deploy doors. A CHECK_ONLY run needs none: Plan refuses every write already.
+ * deploy doors. A CHECK_ONLY run gets none: its mode refuses file edits (a writing shell command under Claude Code's
+ * Plan is the open follow-up recorded in design §12).
  */
 export const OPEN_PR_DISALLOWED_TOOLS: readonly string[] = [
   'mcp__orbit__session_merge',

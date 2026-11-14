@@ -494,6 +494,10 @@ test('§6.2 a level each engine can enforce gets the nearest mode that is not wi
   assert.equal(scheduleRunMode('CHECK_ONLY', 'dsh'), PermissionMode.DONT_ASK, 'DeepSeek Harness has no Plan: its read-only sandbox');
   assert.equal(scheduleRunMode('OPEN_PR', 'dsh'), PermissionMode.DEFAULT, 'and no Accept Edits: Default asks before each write');
   assert.equal(scheduleRunMode('OPEN_PR', 'opencode'), null, 'OpenCode cannot ask, so it cannot edit under a level');
+  assert.equal(scheduleRunMode('CHECK_ONLY', 'opencode'), PermissionMode.PLAN, 'its Plan refuses everything but reads');
+  assert.equal(scheduleRunMode('CHECK_ONLY', 'codex'), PermissionMode.PLAN);
+  assert.equal(scheduleRunMode('CHECK_ONLY', 'kimi'), PermissionMode.PLAN);
+  assert.equal(scheduleRunMode('OPEN_PR', 'cursor'), PermissionMode.ACCEPT_EDITS);
   assert.deepEqual(scheduleRunDisallowedTools(['X'], 'CHECK_ONLY'), ['X']);
   assert.deepEqual(scheduleRunDisallowedTools(['X'], 'OPEN_PR'), ['X', ...OPEN_PR_DISALLOWED_TOOLS]);
   assert.ok(OPEN_PR_DISALLOWED_TOOLS.includes('mcp__orbit__session_merge'));
@@ -770,6 +774,10 @@ test('§7.2 a run whose first turn was delivered is never retried: ENGINE_CRASHE
   assert.equal(failed.failureReason, 'ENGINE_CRASHED');
   assert.equal(failed.attempt, 1);
   assert.equal(failed.notBeforeAt, null);
+  const after = await scheduleOf(run.scheduleId);
+  assert.equal(after.consecutiveFailures, 1, 'counted');
+  assert.equal(after.state, 'ACTIVE', 'and the schedule goes on');
+  assert.notEqual(after.nextDueAt, null);
 });
 
 test('§7.2 a runner offline at the start is RUNNER_UNAVAILABLE and retried without a session; a session that could not open is too', { skip }, async () => {
