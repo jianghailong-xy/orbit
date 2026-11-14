@@ -8,6 +8,9 @@
 | [`02-web-session-connected.png`](02-web-session-connected.png) | 实现：真组件 `AgentToolsDrawer`，会话模式，Claude Code 已连接、编排开、Default 模式 |
 | [`03-web-session-not-connected.png`](03-web-session-not-connected.png) | 实现：会话模式，Codex 未连接（引擎原话）、Wiki 与编排关、Plan 模式 |
 | [`04-web-workspace.png`](04-web-workspace.png) | 实现：工作区模式，Claude Code 一栏，四个示例展开 |
+| [`05-macos-session-connected.png`](05-macos-session-connected.png) | 实现：macOS，真文件 `AgentToolsSheet.swift`，会话模式，Claude Code 已连接 |
+| [`06-macos-session-not-connected.png`](06-macos-session-not-connected.png) | 实现：macOS，会话模式，Codex 未连接、Plan、编排与 Wiki 关 |
+| [`07-macos-workspace.png`](07-macos-workspace.png) | 实现：macOS，工作区模式（Claude Code / Codex 分段） |
 
 ## 和设计稿不一样的地方（实测后改的）
 
@@ -20,4 +23,5 @@
 
 - 设计稿：手绘 HTML（[`01-board.html`](01-board.html)），颜色和尺寸取自 `src/web/src/index.css` 的 `:root` 与 `src/web/src/components/settings/Settings.css`；`chromium --headless=new --dump-dom` 读 `SIZE WxH`，再 `--force-device-scale-factor=2 --screenshot` 拍。
 - 实现截图：`src/web/tmp/`（git 忽略）下的探针挂真组件 `AgentToolsDrawer`，报告夹具按 runner 的 `agent_tools` 事件形状写，vite 起服务、playwright-core 驱动系统 Chromium 以 2x 拍抽屉本身。
+- macOS 截图：分支 `orbit/task-p1-03-agent-tools-skills-7a5e5b-shots`（不合入）的 `.agent-tools-probe/mac/` 在 macos-26 runner 上把本提交的 `AgentToolsSheet.swift` 与 `Typography.swift` 原样拷进一个临时 Mac app，用同样形状的报告夹具挂进窗口，`cacheDisplay` 拍整张 sheet（Client CI run 43608150690，artifact `agent-tools-shots`）。runner 的屏幕只有约 680pt 高，窗口改成不受屏幕约束的高度后再裁掉下方空白。
 - 工具数是本机 `orbit mcp` 的 `tools/list` 实测（编排开 102 个、关 80 个，不算 Claude 的 `permission_prompt` 桥）；引擎版本是本机装的 Claude Code 2.1.325 和 Codex 0.167.2；其余是演示数据。
