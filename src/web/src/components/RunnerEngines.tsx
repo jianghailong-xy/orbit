@@ -87,7 +87,14 @@ import {
 } from '../lib/runnerAccountCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
-import { ago, engineUpdateDismissedFor, engineVersionNumber, updateNoteOf, webShowsEngine } from '../lib/runnerEngines';
+import {
+  ago,
+  ENGINE_UPDATE_WARNING_DISMISSED,
+  engineUpdateDismissedFor,
+  engineVersionNumber,
+  updateNoteOf,
+  webShowsEngine,
+} from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { DshRunnerStatus } from './DshRunnerStatus';
@@ -820,7 +827,10 @@ function EngineRow({
           owner, which error — is one pointer away instead of gone. Absent for a healthy
           engine, which has nothing further to say. */}
       {note && (
-        <span className={`re-upd${warn ? ' warn' : ''}`} title={health?.update?.message}>
+        <span
+          className={`re-upd${warn ? ' warn' : ''}${note.text.endsWith(ENGINE_UPDATE_WARNING_DISMISSED) ? ' dismissed' : ''}`}
+          title={health?.update?.message}
+        >
           {/* Folded, the head shares its width with a status and a quota, so the note takes a line
               of its own (.re-grp.folded) rather than leave half of itself on the next. */}
           {columns ? note.text : <>{' '}· {note.text}</>}

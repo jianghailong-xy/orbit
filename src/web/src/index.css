@@ -17466,6 +17466,11 @@ button.chat-jump-start:hover {
 .re-grp.folded .re-upd {
   display: block;
 }
+/* A dismissed warning keeps its drift on the version line, in grey (`13d behind 0.169.0 · warning
+   dismissed`): longer than the line was sized for, so it wraps rather than lose its end. */
+.re-meta:has(.re-upd.dismissed) {
+  white-space: normal;
+}
 /* "Next: …" over the window it names. */
 .re-quota-next {
   overflow-wrap: anywhere;
