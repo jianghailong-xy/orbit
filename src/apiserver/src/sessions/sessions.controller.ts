@@ -7,7 +7,9 @@ import {
   Get,
   Header,
   Headers,
+  HttpCode,
   MessageEvent,
+  Optional,
   Param,
   Patch,
   Post,
@@ -19,10 +21,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { ModuleRef } from '@nestjs/core';
+import { ProjectsService } from '../projects/projects.service';
 import { PublicIdPipe } from '../common/public-id';
 import { Prisma, RunStatus } from '@prisma/client';
 import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
-import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
+import { ApprovalDecisionRequest, RunEventType, SessionSettingsPatch } from '@orbit/shared';
 import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -274,6 +278,9 @@ export class SessionsController {
     private readonly tags: SessionTagsService,
     private readonly mergeReceipts: MergeReceiptService,
     private readonly autoRetry: AutoRetryService,
+    /** Resolves ProjectsService at call time: SessionsModule does not import ProjectsModule, which
+     *  imports it (the reason MergeReceiptService resolves its dispatcher the same way). */
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   // CreateSessionDto is an interface, so the global ValidationPipe never sees it and its ids
@@ -702,6 +709,27 @@ export class SessionsController {
     return this.sessions.updateConfig(user.userId, id, dto, user.credential);
   }
 
+  /** The session's Settings panel: its own env vars and notification overrides — see
+   *  SessionsService.updateSettings. Validated there, field by field. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Patch(':id/settings')
+  updateSettings(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: SessionSettingsPatch,
+  ) {
+    return this.sessions.updateSettings(user.userId, id, body);
+  }
+
+  /** The Settings panel's Restart: reload the live engine with the session's env, after the turn
+   *  in flight if there is one — see SessionsService.restart. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/restart')
+  @HttpCode(202)
+  restart(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.restart(user.userId, id);
+  }
+
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Patch(':id/account')
@@ -939,8 +967,12 @@ export class SessionsController {
   // Soft-delete: moves the session to the trash (deletedAt), retaining all data.
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.remove(user.userId, id);
+  async remove(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    const removed = await this.sessions.remove(user.userId, id);
+    // A trashed coordinator of an OPEN project is replaced at once (`reopenTrashedCoordinator`).
+    const projects = this.moduleRef?.get(ProjectsService, { strict: false });
+    await projects?.reopenTrashedCoordinator(user.userId, id);
+    return removed;
   }
 
   // Hard-delete: permanently remove a trashed session and all its data (irreversible).

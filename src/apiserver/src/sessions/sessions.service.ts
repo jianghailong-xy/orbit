@@ -3,7 +3,8 @@ import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
-  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionActivity,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionActivity, type SessionSettings,
+  type SessionUsage, type SessionRestartResponse,
 } from '@orbit/shared';
 import {
   BadRequestException,
@@ -256,6 +257,10 @@ import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/sessio
 import { countLiveApprovals, readByLiveBackgroundJob } from './abandoned-approvals';
 import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  parseSessionSettingsPatch, reloadCarriesEnv, RESTART_RELOAD_CONTENT, sameEnv, sessionSettingsOf, stringEnv,
+} from './session-settings';
+import { sessionTokenTotals } from '../runner-api/running-totals';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
@@ -4521,6 +4526,13 @@ export class SessionsService {
       lastUserFromOrbit,
       lastUserFromExternalSource,
       lastUserFromExternalName,
+      // Read, never spread: answered as one `settings` object, the shape PATCH /settings returns.
+      env: _sessionEnv,
+      envChangedAt: _envChangedAt,
+      envAppliedAt: _envAppliedAt,
+      notifyTurnFinished: _notifyTurnFinished,
+      notifyNeedsYou: _notifyNeedsYou,
+      notificationsMuted: _notificationsMuted,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -4557,11 +4569,22 @@ export class SessionsService {
       : undefined;
     // As clients have always read it: `lastHeartbeatAt` is its last beat, from either record of it.
     const assignedRunner = session.assignedRunner && servedRunner(withRunnerLastBeat(session.assignedRunner));
+    // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
+    // tell (docs/provider-engine-contract.md §6.1).
+    const engine = await sessionEngine(this.prisma, session);
+    // Settings → Info: tokens in one aggregate (only Claude ever wrote running totals), and cost and
+    // turns from the row as booked — `numTurns` from the row itself, not the resume projection above.
+    const usage: SessionUsage = {
+      ...(await sessionTokenTotals(this.prisma, session.id, engine === 'claude')),
+      costUsd: session.costUsd,
+      numTurns: session.numTurns,
+    };
+    // Not stored per session: what the assigned runner last reported for this engine.
+    const engineVersion = (engine
+      && sanitizeRunnerEngines(session.assignedRunner?.engines)?.find((e) => e.engine === engine)?.version) || null;
     return withSessionCapabilities({
       ...rest,
-      // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
-      // tell (docs/provider-engine-contract.md §6.1).
-      engine: await sessionEngine(this.prisma, session),
+      engine,
       // What its Trash note says when a file is keeping it there past the 30 days.
       trashHold: session.deletedAt ? await trashHoldOf(this.prisma, session.id) : null,
       workspace: session.workspace ? {
@@ -4610,6 +4633,9 @@ export class SessionsService {
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
+      settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
+      usage,
+      engineVersion,
     });
   }
 
@@ -5850,6 +5876,11 @@ export class SessionsService {
       select: { sessionKind: true },
     });
     if (row) assertEngineSessionRow(row);
+  }
+
+  /** Whether an engine runs for the session now: the test getLive refuses with "the session has ended". */
+  private static engineLive(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
+    return SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt;
   }
 
   /** Load an owner's session and assert it's still live (not ended/cancelled). */
@@ -10790,6 +10821,106 @@ export class SessionsService {
    * effects and is allowed in any status (a dormant/ended session can still be renamed),
    * so there's no terminal guard and no reload turn.
    */
+  /**
+   * The session's Settings panel (docs/mocks/session-settings): its own env vars and notification
+   * overrides. Owner-only, and open on every session not in Trash — live, Completed or ended alike —
+   * because none of it touches the runner: a changed env reaches the engine at its next start
+   * (envChangedAt against envAppliedAt says one is owed). Answers the new `settings`.
+   */
+  async updateSettings(ownerId: string, id: string, body: unknown): Promise<SessionSettings> {
+    const write = parseSessionSettingsPatch(body);
+    const settings = await withTransactionRetry(this.prisma, async (tx) => {
+      // Serialized with other settings patches, so "did env change" is decided on the latest row.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findFirst({
+        where: { id, ownerId },
+        include: { workspace: { select: { env: true } } },
+      });
+      if (!session) throw new NotFoundException('session not found');
+      if (session.deletedAt) {
+        throw new ConflictException('the session is in Trash; restore it before changing its settings');
+      }
+      // A landing's row belongs to the platform (§2.9 LS6), as for rename and config.
+      assertEngineSessionRow(session);
+      const data: Prisma.SessionUpdateInput = {};
+      if (write.env !== undefined) {
+        const next = write.env ?? {};
+        if (!sameEnv(stringEnv(session.env), next)) {
+          data.env = write.env && Object.keys(write.env).length > 0
+            ? (write.env as Prisma.InputJsonValue)
+            : Prisma.DbNull;
+          data.envChangedAt = new Date();
+        }
+      }
+      if (write.notifyTurnFinished !== undefined) data.notifyTurnFinished = write.notifyTurnFinished;
+      if (write.notifyNeedsYou !== undefined) data.notifyNeedsYou = write.notifyNeedsYou;
+      if (write.notificationsMuted !== undefined) data.notificationsMuted = write.notificationsMuted;
+      const updated = Object.keys(data).length > 0
+        ? await tx.session.update({ where: { id }, data })
+        : session;
+      return sessionSettingsOf(updated, session.workspace?.env, SessionsService.engineLive(updated));
+    }, loggedRetry(this.logger, 'sessions.updateSettings'));
+    // The owner's other clients and tabs redraw the panel without waiting for a turn, as for rename.
+    this.realtime.publishSessionUpdated(id);
+    return settings;
+  }
+
+  /**
+   * The Settings panel's Restart (POST /sessions/:id/restart): reload the live engine so it runs on the
+   * session's env as it stands. Queued as a `reload` turn, which the inbox hands out with the env
+   * resolved at that moment (RunnerApiController.reloadProviderEnv) and only while no message or shell
+   * turn is in flight — so a restart asked for mid-turn happens when that turn ends (`afterTurn`).
+   * A reload already queued that will carry the env is the restart: nothing more is queued.
+   *
+   * An ended engine is refused 409 ENGINE_NOT_RUNNING: there is nothing to reload, and the claim that
+   * starts the next one builds it with the env as it is then.
+   */
+  async restart(ownerId: string, id: string): Promise<SessionRestartResponse> {
+    const { afterTurn, queued } = await withTransactionRetry(this.prisma, async (tx) => {
+      // Serialized with the settings PATCH and other restarts, so two restarts cannot both queue one.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findFirst({ where: { id, ownerId } });
+      if (!session) throw new NotFoundException('session not found');
+      if (session.deletedAt) {
+        throw new ConflictException('the session is in Trash; restore it before restarting it');
+      }
+      assertEngineSessionRow(session);
+      if (!SessionsService.engineLive(session)) {
+        throw new ConflictException({
+          code: 'ENGINE_NOT_RUNNING',
+          message: 'The session has ended, so there is no engine to restart. Its next message starts one with the new env.',
+        });
+      }
+      const inFlight = await tx.conversationTurn.findFirst({
+        where: { sessionId: id, kind: { in: ['message', 'shell'] }, status: 'IN_FLIGHT' },
+        select: { id: true },
+      });
+      const pending = await tx.conversationTurn.findMany({
+        where: { sessionId: id, kind: 'reload', status: 'PENDING' },
+        select: { id: true, content: true },
+      });
+      if (pending.some((turn) => reloadCarriesEnv(turn.content))) {
+        return { afterTurn: inFlight != null, queued: false };
+      }
+      await this.insertTurnLocked(tx, id, {
+        kind: 'reload',
+        content: RESTART_RELOAD_CONTENT,
+        clientTurnId: randomUUID(),
+      });
+      return { afterTurn: inFlight != null, queued: true };
+    }, loggedRetry(this.logger, 'sessions.restart'));
+    if (queued) this.realtime.notifyInbox(id);
+    return { queued: true, afterTurn };
+  }
+
   async rename(ownerId: string, id: string, rawTitle: string) {
     const title = (rawTitle ?? '').trim();
     if (!title) throw new BadRequestException('title must not be empty');

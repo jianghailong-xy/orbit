@@ -18,7 +18,6 @@ final class MainCheckoutModel {
     private(set) var loading = false
     private(set) var loadError: String?
     var selection = MainCheckoutSelection(files: [])
-    var message = ""
     /// The file whose diff the sheet shows.
     var focusedPath: String?
     private(set) var diffs: [String: MainCheckoutFileDiff] = [:]
