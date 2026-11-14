@@ -239,6 +239,14 @@ const cases = [
     replace('      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"\n      # Optional: managed runners', '      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-1}"\n      # Optional: managed runners')],
   ['a quota set for every deployment', 'nothing beyond the approved configuration was added',
     replace('ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-}"', 'ORBIT_FILES_QUOTA_BYTES: "${ORBIT_FILES_QUOTA_BYTES:-1073741824}"')],
+  // Claude Code on an OpenAI key of 2026-11-11 (project 34vZPMzFs7c8OTMPJYYHn): both flags off and no upstream host
+  // listed, unless the host's .env says otherwise.
+  ['Claude Code on OpenAI keys on by default', 'nothing beyond the approved configuration was added',
+    replace('${ORBIT_CLAUDE_OPENAI_GATEWAY:-}', '${ORBIT_CLAUDE_OPENAI_GATEWAY:-true}')],
+  ["Claude Code on the owner's Codex login pool on by default", 'nothing beyond the approved configuration was added',
+    replace('${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}', '${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-true}')],
+  ['an upstream host every deployment lets the gateway call', 'nothing beyond the approved configuration was added',
+    replace('${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}', '${ORBIT_GATEWAY_UPSTREAM_HOSTS:-elsewhere.example}')],
   // The mirror's --delete on an empty or wrong mount, which would clear the only off-host copy.
   ['a mirror of an archive with no base backup', 'the mirror refuses an archive that cannot be the real one',
     replaceScript('if [ -z "$(list_backups)" ] || [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then', 'if [ -z "$(ls -A "$WAL_DIR" | segment_lines)" ]; then')],

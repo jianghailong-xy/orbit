@@ -118,6 +118,22 @@
 // guard (the coordinator's decision of that day) makes the apiserver's signing key required: a deployment with no link gets
 // a refusal from Compose naming what to run, and /upgrade's script reads the requirement as the mark of a link-only build.
 //
+// On 2026-11-11 Claude Code on an OpenAI key (project 34vZPMzFs7c8OTMPJYYHn, docs/claude-engine-openai-gateway-design.md,
+// whose decisions the account owner took that day as the design recommends, D4 amended at 09:13Z) added three lines to
+// the apiserver's environment, each empty unless the host's .env sets it: ORBIT_CLAUDE_OPENAI_GATEWAY, the deployment flag
+// of D6, off by default (e1cc642fa0); ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY, the flag of its own that D4 as amended puts the
+// owner's own Codex login pool behind (3e93075ee5); and ORBIT_GATEWAY_UPSTREAM_HOSTS, the hosts besides api.openai.com an
+// admin lists, per D3 (b147aca368). No service, mount or port is added, and a deployment whose .env names none of them
+// gives every key and pool the engines and dispatch environment it had. They reached main without a pin here, which left
+// this file red there; the block below pins them since 2026-11-14, when the two-stage release's project line merged main
+// (task 34xD8F3ipgeg9vzbi4Ny0, whose coordinator asked for it).
+//
+// On 2026-11-11T15:21:29Z the account owner decided to give the apiserver a 30 s stop grace period (question card
+// 34vneMIw93BkO20LqQJnS, "Raise to 30 s"; project 34uUvixOgW5SbuNGvkAKA, task 34vngrzu4tw2WTGXvvxaj), so that the
+// requests in flight when it stops, long polls included, are answered rather than cut at Docker's default 10 s. It adds
+// one line to the apiserver, `stop_grace_period: 30s`, and nothing else: no service, mount, port or environment. A
+// second apiserver defined with `extends` takes it with the rest of the definition. The block below pins it.
+//
 // On 2026-11-13 the two-stage release (project 34wyV15NQg1Aa6H3cr6SH, whose instructions the account owner wrote: images
 // built on one host, pulled on another; task 34wyYuIZzkg1g7DfIqdSR) named every image this file runs through variables
 // which, unset, name it exactly as before, and gave web an image line that is empty unless they are set. postgres and
@@ -396,8 +412,22 @@ function directivesNotInBaseline(block, baselineBlock) {
 // The exception is an approved block of the apiserver's. It is listed here as directives — comments
 // explaining it do not count — so a line added anywhere else still turns this red exactly as it did before.
 const APPROVED_APISERVER_BLOCKS = [
+  // The stop grace period (2026-11-11, card 34vneMIw93BkO20LqQJnS, the top of this file): 30 s, which
+  // src/apiserver/src/common/graceful-stop.spec.ts reads and holds the apiserver's own stop bounds under. Listed first
+  // because the line comes right after `logging`, before the environment.
+  [
+    '    stop_grace_period: 30s',
+  ],
+  // Claude Code on an OpenAI key (2026-11-11, the top of this file): its flag, the flag of the owner's own Codex login
+  // pool, and the upstream hosts an admin lists besides api.openai.com, each empty unless the host's .env sets it. They
+  // come right after PUBLIC_ORIGIN's line in the file, before the proxies'.
+  [
+    '      ORBIT_CLAUDE_OPENAI_GATEWAY: "${ORBIT_CLAUDE_OPENAI_GATEWAY:-}"',
+    '      ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"',
+    '      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"',
+  ],
   // The proxies in front of the gateway (2026-10-28, the top of this file), empty unless the host's .env sets it.
-  // Listed first because the line comes right after PUBLIC_ORIGIN's, before the runner link's.
+  // The line comes right after those of Claude Code on an OpenAI key, before the runner link's.
   [
     '      TRUSTED_PROXIES: "${TRUSTED_PROXIES:-}"',
   ],
