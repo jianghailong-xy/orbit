@@ -1,0 +1,6 @@
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneFoldAndUnfoldOnTheSessionList]' started.
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneFoldAndUnfoldOnTheSessionList]' passed (140.659 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 140.659 (140.663) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 140.659 (140.665) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 140.659 (140.671) seconds
+** TEST SUCCEEDED **

@@ -1,0 +1,25 @@
+==> iPhone 5277349A-B219-4ED4-853A-8AE666B9F5B1
+    iPhone 17 Pro Max (5277349A-B219-4ED4-853A-8AE666B9F5B1) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 3702, after 4s)
+==> ios
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneFoldAndUnfoldOnTheSessionList]' started.
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneFoldAndUnfoldOnTheSessionList]' passed (113.563 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 113.563 (113.566) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 113.563 (113.568) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 113.563 (113.571) seconds
+** TEST SUCCEEDED **
+/Users/runner/work/orbit/tree/.ny-probe/run.sh: line 81:  3702 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+total 3936
+drwxr-xr-x  13 runner  staff     416 Nov 14 18:41 .
+drwxr-xr-x   3 runner  staff      96 Nov 14 18:25 ..
+drwxr-xr-x   9 runner  staff     288 Nov 14 18:41 attachments
+-rw-r--r--   1 runner  staff  275332 Nov 14 18:39 ios-list-dark-folded.png
+-rw-r--r--   1 runner  staff  306781 Nov 14 18:39 ios-list-dark-unfolded.png
+-rw-r--r--   1 runner  staff  334073 Nov 14 18:40 ios-list-light-folded.png
+-rw-r--r--   1 runner  staff  370735 Nov 14 18:40 ios-list-light-unfolded.png
+-rw-r--r--@  1 runner  staff    1053 Nov 14 18:40 NeedsYouShotTeststestIPhoneFoldAndUnfoldOnTheSessionList-notes.txt
+-rw-r--r--   1 runner  staff     194 Nov 14 18:41 not-served.txt
+-rw-r--r--   1 runner  staff    5237 Nov 14 18:40 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 14 18:28 requests.log.out
+-rw-r--r--   1 runner  staff      80 Nov 14 18:41 writes.txt
+-rw-r--r--   1 runner  staff  699669 Nov 14 18:41 xcodebuild-ios.log
