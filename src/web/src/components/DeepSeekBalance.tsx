@@ -14,6 +14,7 @@ import type { ProviderRow } from '../lib/providerAdmin';
 import { useToast } from '../lib/toast';
 import { useNow } from './WatchParts';
 import { Button, LinkButton } from './ui/Button';
+import { Tooltip } from './ui/Tooltip';
 import './DeepSeekBalance.css';
 
 // The DeepSeek account balance behind a DeepSeek key, on Infrastructure's API keys (one line under the
@@ -24,7 +25,7 @@ const NOTE =
   'The balance of the whole DeepSeek account this key belongs to — every app and person using that account draws on it, so it is not what Orbit or this session spent. Granted credit is spent before topped-up credit.';
 const MULTI_CURRENCY = "Each currency is a separate balance; DeepSeek doesn't convert between them.";
 
-function useBalance(row: ProviderRow) {
+export function useBalance(row: ProviderRow) {
   const message = useToast();
   const { query, refresh } = useDeepSeekBalance(row.id);
   const view = balanceView(query.data, query.error);
@@ -85,9 +86,12 @@ function BalanceLine({ view, ask, asking, now }: { view: BalanceView; ask: () =>
   const updated = (
     <>
       updated {balanceAgo(fetchedAt, now)}{' '}
-      <button type="button" className="re-link" title="Refresh" aria-label="Refresh the balance" disabled={asking} onClick={ask}>
-        <ReloadOutlined spin={asking} />
-      </button>
+      {/* Grey and quiet like the line it ends, with a press target the size of a small button. */}
+      <Tooltip content="Refresh balance">
+        <button type="button" className="dsb-refresh" aria-label="Refresh the balance" disabled={asking} onClick={ask}>
+          <ReloadOutlined spin={asking} />
+        </button>
+      </Tooltip>
     </>
   );
   // One currency fits on one line; a second one takes the room the time had.

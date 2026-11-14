@@ -1,6 +1,6 @@
 # 证据永远有人接：标准由服务器绑定，判不了的版本回到能改它的人（设计稿）
 
-> 状态：草稿，2026-11-12，待 owner 拍板 §7 的 D1–D5。本文只做设计，不改代码。
+> 状态：owner 2026-11-12 定稿，D1–D5 全部按推荐（A）。本文只做设计，不改代码。
 > 起因：项目 34vcDOhN0OCStfnVuTyPq（Session translation）。任务 D（34vcF5TXYgAVx3dCr6pnS）01:56 提交的第 1 版证据和任务 W（34vcF4wCdpSLSTPqm5Cnh）02:03 提交的第 1 版，在没有任何人被叫醒的情况下躺了将近 4 小时；协调者自己发现后，D 于 05:42 重交，05:44 被确认。
 > 效果图：`docs/mocks/evidence-addressee/01-board.html` 与 `01-board-1.png` … `01-board-6.png`。
 > 相关：`completion-input-routing.md`、`evidence-waits-for-coordinator-design.md`（2026-11-08 定稿，本文不推翻它）、`criteria-seal-design.md`、`project-integration-line-contract.md` §4.6。

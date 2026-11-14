@@ -34,7 +34,7 @@ import kotlinx.serialization.json.*
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
-/** Settings' own pages; "workspace" is the workspace list's gear and "infrastructure" the Machines & models row, with its pool and key
+/** Settings' own pages; "workspace" is the workspace list's gear and "machines-and-models" the Machines & models row, with its pool and key
  * pages one push further. */
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
@@ -43,10 +43,10 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
         "password" -> ChangePassword(api)
-        "infrastructure" -> InfrastructureSettings(api, revision, route.recordId, open, back)
+        "machines-and-models" -> MachinesAndModelsSettings(api, revision, route.recordId, open, back)
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
-        "sharing" -> SharingSettings(api, revision)
+        "sharing" -> SharingSettings(api, revision, open)
         "access-tokens" -> AccessTokensSettings(api, revision)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
         "admin" -> AdminSettings(api, revision, route.recordId, open, back)
@@ -65,12 +65,12 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     "share" -> ShareCopy.title(record?.substringBefore(':') ?: "SESSION")
     "profile" -> "Edit profile"; "password" -> "Change password"
     // A pool's page and a DeepSeek key's are titled by its name once read, as iOS titles them.
-    "infrastructure" -> when {
+    "machines-and-models" -> when {
         record?.startsWith("key:") == true -> providerKeyTitle(record.removePrefix("key:"))
         record?.startsWith("cursor-key:") == true -> providerKeyTitle(record.removePrefix("cursor-key:"))
         record != null -> poolTitle(record.substringAfter(':'))
         else -> null
-    } ?: Infrastructure.TITLE
+    } ?: MachinesAndModels.TITLE
     "sessions" -> SESSIONS; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
     "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
@@ -151,12 +151,12 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     val preferences = user?.get("preferences") as? JsonObject ?: JsonObject(emptyMap())
     val photo = rememberAccountPhoto(api, user)
     val instance = remember(api) { settingsInstanceName(api.handle.account.server) }
-    // The Infrastructure row's value is what its page's Needs you holds: the machines, and the pools — a Codex one of the account's
+    // The Machines & models row's value is what its page's Needs you holds: the machines, and the pools — a Codex one of the account's
     // own with its people and keys, which say whether it can run. Shown once the machines are read, as on iOS.
     var runners by remember(api) { mutableStateOf<List<JsonObject>?>(null) }
     // Read with the machines: a machine with no coding CLI signed in needs you unless a workspace there runs on a key.
     var workspaces by remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
-    val infrastructure = remember(api) { InfrastructureModel(api) }
+    val machinesAndModels = remember(api) { MachinesAndModelsModel(api) }
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
     var accessTokens by remember(api) { mutableStateOf<String?>(null) }
     var alerts by remember { mutableStateOf(deviceAlerts()) }
@@ -179,8 +179,8 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
-        launch { infrastructure.loadPools() }
-        launch { infrastructure.loadShared() }
+        launch { machinesAndModels.loadPools() }
+        launch { machinesAndModels.loadShared() }
         launch {
             try { sharedLinks = settingsSharedLinksValue(sharingLinks(api).count { it.text("state") == "ACTIVE" }) }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
@@ -219,11 +219,11 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         }
         // First, as on iOS: the one row that says what needs you (docs/mocks/ios-settings-order). No header: the one row says the
         // group's name (iOS SettingsHome.header, docs/mocks/machines-and-models ⑥-2).
-        SettingsGroup(null, footer = Infrastructure.SUBTITLE) {
-            val needsYou = runners?.let { infrastructure.attention(it, workspaces, System.currentTimeMillis()).size } ?: 0
+        SettingsGroup(null, footer = MachinesAndModels.SUBTITLE) {
+            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, System.currentTimeMillis()).size } ?: 0
             // What needs a person is said in amber, as the mock's row says it.
-            SettingsLink(Infrastructure.TITLE, R.drawable.ic_runner, runners?.let { Infrastructure.settingsValue(needsYou, it) },
-                valueColor = if (needsYou > 0) Ink.amber else null) { page("infrastructure") }
+            SettingsLink(MachinesAndModels.TITLE, R.drawable.ic_runner, runners?.let { MachinesAndModels.settingsValue(needsYou, it) },
+                valueColor = if (needsYou > 0) Ink.amber else null) { page("machines-and-models") }
         }
         SettingsGroup("Preferences") {
             // The account's five session settings are a page of their own, as on iOS (SessionSettings).

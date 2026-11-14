@@ -149,8 +149,15 @@ afterEach(async () => {
   vi.mocked(getSession).mockReset();
 });
 
+const phone = () => vi.stubGlobal('matchMedia', (query: string) => ({
+  matches: query === MOBILE_QUERY, media: query, onchange: null,
+  addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {},
+  dispatchEvent: () => false,
+}));
+
 describe('the sidebar’s rows as destinations', () => {
-  it('opens a project’s sessions page over the workspace showing, and lights the project instead of it', async () => {
+  it('opens a project’s sessions page over the workspace showing on a phone, and lights the project instead of it', async () => {
+    phone();
     serve();
     await visit(`/workspaces/${B}`);
     expect(litWorkspaces()).toEqual(['bravo']);
@@ -174,29 +181,54 @@ describe('the sidebar’s rows as destinations', () => {
     await visit(`/sessions/${MEMBER}`);
     await click(projectRow());
     expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
-    expect(projectRow().classList.contains('active')).toBe(true);
+  });
+
+  // Wider than a phone `?project=` is a column beside the conversation, and the list beside the
+  // sidebar stays the workspace's, so the workspace's row stays lit — on a refresh too (owner 2026-11-14).
+  it('keeps the workspace lit, not the project, while a wide screen shows the project’s column', async () => {
+    serve();
+    await visit(`/sessions/${MEMBER}`);
+    await click(projectRow());
+    expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
+    expect(projectRow().classList.contains('active')).toBe(false);
+    expect(litWorkspaces()).toEqual(['bravo']);
+  });
+
+  it('lights the workspace, not the project, when a wide screen loads with the project’s column open', async () => {
+    serve();
+    await visit(`/sessions/${MEMBER}?project=${PROJECT}`);
+    expect(projectRow().classList.contains('active')).toBe(false);
+    expect(litWorkspaces()).toEqual(['bravo']);
+  });
+
+  it('goes nowhere when a wide screen’s project row is clicked while its column is open', async () => {
+    serve();
+    const onNavigate = vi.fn();
+    await visit(`/sessions/${MEMBER}?project=${PROJECT}`, onNavigate);
+    await click(projectRow());
+    expect(location).toBe(`/sessions/${MEMBER}?project=${PROJECT}`);
+    expect(navigations).toBe(0);
+    expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 
   it('opens the project’s page on a phone, which shows one pane, even from a conversation', async () => {
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: query === MOBILE_QUERY, media: query, onchange: null,
-      addListener: () => {}, removeListener: () => {}, addEventListener: () => {}, removeEventListener: () => {},
-      dispatchEvent: () => false,
-    }));
+    phone();
     serve();
     await visit(`/sessions/${MEMBER}`);
     await click(projectRow());
     expect(location).toBe(`/workspaces/${B}?project=${PROJECT}`);
   });
 
-  it('keeps the project lit on a member’s conversation opened from its page', async () => {
+  it('keeps the project lit on a phone on a member’s conversation opened from its page', async () => {
+    phone();
     serve();
     await visit(`/sessions/${MEMBER}?project=${PROJECT}`);
     expect(projectRow().classList.contains('active')).toBe(true);
     expect(litWorkspaces()).toEqual([]);
   });
 
-  it('leaves a project’s sessions page for the workspace’s list when that workspace is clicked', async () => {
+  it('leaves a project’s sessions page on a phone for the workspace’s list when that workspace is clicked', async () => {
+    phone();
     serve();
     await visit(`/workspaces/${B}?project=${PROJECT}`);
     await click(workspaceRow('bravo'));
@@ -206,10 +238,11 @@ describe('the sidebar’s rows as destinations', () => {
   });
 
   it.each([
-    ['a workspace', `/workspaces/${B}`, () => workspaceRow('bravo')],
-    ['a project’s sessions page', `/workspaces/${B}?project=${PROJECT}`, projectRow],
-    ['a section', '/tasks', () => topEntry('Tasks')],
-  ])('goes nowhere when the lit row of %s is clicked, and still says it was clicked', async (_, path, row) => {
+    ['a workspace', `/workspaces/${B}`, () => workspaceRow('bravo'), false],
+    ['a project’s sessions page on a phone', `/workspaces/${B}?project=${PROJECT}`, projectRow, true],
+    ['a section', '/tasks', () => topEntry('Tasks'), false],
+  ])('goes nowhere when the lit row of %s is clicked, and still says it was clicked', async (_, path, row, onPhone) => {
+    if (onPhone) phone();
     serve();
     const onNavigate = vi.fn();
     await visit(path, onNavigate);
@@ -234,15 +267,15 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     expect(labels).toEqual(['Projects', 'Tasks', 'Waiting on you', 'Wiki']);
   });
 
-  it('is a row of the account menu, above Settings, that opens its page', async () => {
+  it('is no row of the account menu either: it is a part of Settings', async () => {
     serve();
     await visit('/tasks');
     await click(container!.querySelector<HTMLElement>('.tp-user-trigger')!);
-    const rows = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')];
-    const labels = rows.map((row) => row.textContent);
-    expect(labels.indexOf('Machines & models')).toBe(labels.indexOf('Settings') - 1);
-    await click(rows.find((row) => row.textContent === 'Machines & models')!);
-    expect(location).toBe(`/settings/machines/${RUNNER}`);
+    const labels = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')].map(
+      (row) => row.textContent,
+    );
+    expect(labels).toContain('Settings');
+    expect(labels).not.toContain('Machines & models');
   });
 
   it.each([

@@ -44,6 +44,8 @@ internal object Steps {
         if (event.type == "thinking") return true
         if (event.type != "tool_use" || row.children.isNotEmpty()) return false
         if (event.toolId()?.startsWith("shell-") == true) return false
+        // The owner's "Chat about this" reply to a card is their message, drawn under the call; folded it would vanish.
+        if (ownerChatWords(row) != null) return false
         return name(event) !in CARD_TOOLS
     }
 
@@ -135,7 +137,7 @@ internal object Steps {
  * [highlighted]: a jump landed on a record inside it, so it opens to show that record.
  */
 @Composable
-internal fun StepsRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean) {
+internal fun StepsRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean) {
     var expanded by rememberSaveable(row.key) { mutableStateOf(highlighted) }
     LaunchedEffect(highlighted) { if (highlighted) expanded = true }
     val events = live?.events

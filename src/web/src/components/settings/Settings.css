@@ -11,7 +11,7 @@
   flex: 0 0 272px;
   overflow-y: auto;
   padding: 18px 12px 24px;
-  background: var(--bg-subtle);
+  background: var(--bg-base);
   border-right: 1px solid var(--border-subtle);
 }
 
@@ -47,11 +47,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 10px;
+  height: 34px;
+  padding: 0 8px;
   margin-bottom: 18px;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: var(--fill-muted);
+  background: var(--bg-sunken);
   color: var(--text-3);
 }
 .settings-search input {
@@ -78,10 +79,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 26px;
+  height: 32px;
   padding: 0 8px;
-  font-size: 12px;
-  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 .settings-nav-add {
   display: inline-flex;
@@ -99,16 +101,27 @@
   background: var(--bg-hover);
   color: var(--text-1);
 }
+/* A group's + shows under the pointer, on keyboard focus, and while the group is empty.
+   Where nothing hovers (touch) it stays in sight. */
+@media (hover: hover) {
+  .settings-nav-group:not(.settings-nav-group--empty) .settings-nav-add {
+    opacity: 0;
+  }
+  .settings-nav-group:hover .settings-nav-add,
+  .settings-nav-group .settings-nav-add:focus-visible {
+    opacity: 1;
+  }
+}
 
 .settings-nav-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 30px;
+  height: 36px;
   padding: 0 8px;
   border-radius: 6px;
   color: var(--text-1);
-  font-size: 13px;
+  font-size: 14px;
   text-decoration: none;
 }
 .settings-nav-row:hover {
@@ -116,8 +129,12 @@
   color: var(--text-1);
 }
 .settings-nav-row.active {
-  background: var(--bg-hover-strong);
-  font-weight: 500;
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.settings-nav-row.active .settings-nav-icon,
+.settings-nav-row.active .settings-nav-meta {
+  color: var(--brand);
 }
 .settings-nav-icon {
   display: inline-flex;
@@ -260,7 +277,7 @@
   overflow-y: auto;
 }
 .settings-column {
-  max-width: 660px;
+  max-width: 880px;
   margin: 0 auto;
   padding: 40px 24px 64px;
 }
@@ -318,6 +335,18 @@
 .settings-row-control {
   flex-shrink: 0;
 }
+/* A row that opens something from a press anywhere on it: lit across the card's width on hover, its
+   control level with the title's line however many lines the description takes. */
+.settings-row--link {
+  align-items: flex-start;
+  cursor: pointer;
+}
+.settings-row--link:hover {
+  background: var(--bg-hover);
+  box-shadow:
+    -16px 0 0 var(--bg-hover),
+    16px 0 0 var(--bg-hover);
+}
 /* The row a search result opened, lit for a moment across the card's width (useFoundRowFlash). */
 .settings-row--found {
   animation: settings-row-found 2s ease-out;
@@ -362,13 +391,14 @@
   color: var(--text-2);
 }
 
-/* Providers: a vendor's page (board-4) and Account pools. */
+/* Providers: the API keys page (settings-providers-compact board-1) and Account pools. */
 .sp-vendor-head {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 .sp-vendor-title {
+  flex: 1;
   margin: 0;
   font-size: 24px;
   font-weight: 600;
@@ -384,6 +414,40 @@
   font-size: 12.5px;
   font-weight: 400;
   color: var(--text-3);
+}
+.sp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -12px 0 20px;
+}
+.sp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  font-size: 12px;
+  color: var(--text-2);
+  text-decoration: none;
+}
+.sp-chip:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+.sp-chip.on {
+  background: var(--text-1);
+  border-color: var(--text-1);
+  color: var(--bg-base);
+}
+.sp-chip-count {
+  opacity: 0.6;
+}
+.sp-vendor-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .sp-pools-link {
   display: inline-flex;
@@ -435,7 +499,7 @@
   flex-shrink: 0;
 }
 .settings-row-description {
-  max-width: 440px;
+  max-width: 600px;
 }
 
 /* A Personal page drawn from ui/Card (Profile's sign-in methods and password, Feishu's sections) reads as a
@@ -475,7 +539,7 @@
 }
 
 /* A page whose body is a table or list of many columns (Shared links, Access tokens) takes the room the
-   window has, rather than the settings rows' 660px. */
+   window has, rather than the settings rows' 880px. */
 .settings-column:has(> .settings-page--wide) {
   max-width: 1080px;
 }
@@ -546,9 +610,141 @@
 .machine-engines {
   border-radius: 12px;
 }
-.machine-disk-bar.rd-disk-bar {
-  width: 180px;
-  margin-top: 0;
+.machine-res-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 700px) {
+  .machine-res-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.machine-res-tile {
+  display: flex;
+  flex-direction: column;
+  min-height: 150px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--brand);
+}
+.machine-res-tile.warn {
+  color: var(--warning-solid);
+}
+.machine-res-tile.off {
+  color: var(--text-3);
+}
+.machine-res-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.machine-res-value {
+  margin-top: 4px;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+.machine-res-value span {
+  margin-left: 1px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.machine-res-tile.warn .machine-res-value {
+  color: var(--warning);
+}
+.machine-res-tile.off .machine-res-value {
+  color: var(--text-3);
+}
+.machine-res-detail {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.machine-res-update {
+  margin-top: 10px;
+}
+.machine-res-update + .machine-res-detail {
+  margin-top: 10px;
+}
+.machine-res-spark {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin-top: auto;
+  padding-top: 10px;
+  overflow: visible;
+}
+.machine-res-spark-top {
+  stroke: var(--border);
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.machine-res-spark-area {
+  fill: currentColor;
+  fill-opacity: 0.12;
+}
+.machine-res-spark-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.machine-res-spark-dot {
+  fill: currentColor;
+}
+.machine-res-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--warning);
+}
+.machine-res-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--success-solid);
+  vertical-align: 1px;
+}
+.machine-res-dot.off {
+  background: var(--text-3);
+}
+/* Capacity's meters: the name, the reading and an action on one line, the bar across the row under
+   them at the row's full width. */
+.settings-row.machine-meter {
+  display: block;
+}
+.machine-meter-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 24px;
+}
+.machine-meter-line .settings-row-title {
+  flex: 1;
+  min-width: 0;
+}
+.machine-meter-value {
+  font-size: 13px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.machine-meter-bar.rd-disk-bar {
+  margin-top: 10px;
+}
+/* Edit ends where the bar under it does. */
+.orbit-button.machine-max-edit {
+  padding-inline: 0;
+}
+.machine-max-concurrent-hint {
+  margin: 0 0 12px;
 }
 .machine-workspace-row {
   display: block;
@@ -592,49 +788,7 @@
   font-weight: 500;
 }
 
-/* Workspaces (board-5): the nav group's Show all and its filter, and a workspace's own page. */
-.settings-nav-filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  margin: 2px 0 4px;
-  padding: 0 8px;
-  border-radius: 6px;
-  background: var(--fill-muted);
-  color: var(--text-3);
-}
-.settings-nav-filter input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  outline: none;
-  background: none;
-  color: var(--text-1);
-  font: inherit;
-  font-size: 12.5px;
-}
-.settings-nav-filter:focus-within {
-  box-shadow: 0 0 0 2px var(--brand-border);
-}
-.settings-nav-more {
-  display: block;
-  width: 100%;
-  height: 30px;
-  padding: 0 8px 0 34px;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-2);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-.settings-nav-more:hover {
-  background: var(--bg-hover);
-  color: var(--text-1);
-}
+/* Workspaces (board-5): a workspace's own page. */
 .settings-nav-none {
   padding: 4px 8px 4px 34px;
   font-size: 12.5px;
@@ -695,4 +849,125 @@
   align-items: center;
   gap: 8px;
   margin-top: 20px;
+}
+
+/* Admin, drawn as Settings is (AdminLayout, docs/mocks/admin-settings-style): text fields 300px wide in a row's
+   control, a value or a code line in place of one, and one Save under the page's sections. Narrower than 760px a
+   row with a field or a picker puts it under the row's text, full width. */
+.admin-form .settings-row-control .admin-row-input {
+  width: 300px;
+}
+.admin-row-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+.admin-form-note {
+  margin-top: 10px;
+}
+.admin-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.admin-email-ok {
+  color: var(--success);
+}
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) {
+  flex-wrap: wrap;
+}
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) .settings-row-control {
+  width: 100%;
+}
+/* Over the picker's own inline width. */
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) .settings-row-control > * {
+  width: 100% !important;
+}
+/* Admin → Users: the search across the column, the table in a card as Settings' are. */
+.admin-users-page .admin-users-search {
+  width: 100%;
+  margin-bottom: 12px;
+}
+.admin-users-page .admin-users-frame {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.admin-users-page .admin-users-frame tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Settings → Storage: each ranking row opens the files it counts. */
+.storage-usage-chevron {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.storage-files-back {
+  margin: 0 0 8px -8px;
+}
+.storage-file-row {
+  align-items: flex-start;
+}
+.storage-file-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 15px;
+}
+.storage-file-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.storage-file-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-file-pin {
+  font-size: 12px;
+  color: var(--brand);
+}
+.storage-file-facts {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.storage-file-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.storage-files-more {
+  margin-top: 12px;
+  text-align: center;
+}
+.storage-menu-blocked {
+  display: flex;
+  flex-direction: column;
+  max-width: 240px;
+  white-space: normal;
+}
+.storage-menu-why {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* A file list goes back to Storage, not to the Settings list. */
+.settings-column:has(.storage-files-page) > .settings-back--list {
+  display: none;
+}
+.storage-files-empty {
+  margin: 24px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
 }

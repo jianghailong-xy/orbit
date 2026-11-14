@@ -23,7 +23,7 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the `SettingsPage`s; from Infrastructure a machine's record and its engine
+/// `NavState.settingsPath` — the `SettingsPage`s; from Machines & models a machine's record and its engine
 /// and name pages, and a pool's page; and an account's record under Admin. A form row pushes with its
 /// `NavigationLink` value; a list row inside a page pushes through `AppModel.push`, which lands here
 /// while the sheet is up.
@@ -73,9 +73,9 @@ private struct SettingsPageView: View {
 
     var body: some View {
         switch page {
-        // The page the Infrastructure section shows, pushing onto Settings' stack: Machines & models'
+        // The page the Machines & models section shows, pushing onto Settings' stack: Machines & models'
         // one row, where the web's Runners and Providers pages became one.
-        case .infrastructure: RunnersListView(rowNavigation: .push)
+        case .machinesAndModels: RunnersListView(rowNavigation: .push)
         case .sessions:       SessionSettingsPage()
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
@@ -148,15 +148,15 @@ struct SettingsHomeView: View {
             Task { await model.savePreferences(UpdatePreferencesRequest(theme: value)) }
         }
         .onAppear(perform: seed)
-        // Each row's value is its own read, so they are asked for side by side. Infrastructure's is what
+        // Each row's value is its own read, so they are asked for side by side. Machines & models' is what
         // its page's Needs you holds: the machines, and the pools — a Codex one of the account's own with
         // its people and keys, which say whether it can run.
         .task { alertsAllowed = await model.notifications.alertsAllowed() }
         .task { await model.runners?.load() }
         .task { await model.agents?.reloadPools() }
         .task { await model.sharedPools?.load() }
-        .task(id: InfrastructureLists.codexPoolIDs(model)) {
-            for id in InfrastructureLists.codexPoolIDs(model) { await model.sharedPools?.loadAccess(id) }
+        .task(id: MachinesAndModelsLists.codexPoolIDs(model)) {
+            for id in MachinesAndModelsLists.codexPoolIDs(model) { await model.sharedPools?.loadAccess(id) }
         }
         .task { await model.sharedLinks?.load() }
         .task { await model.accessTokens?.load() }
@@ -234,10 +234,10 @@ struct SettingsHomeView: View {
             LabeledContent { Text(model.user?.email ?? "") } label: { label }
         case .instance:
             LabeledContent { Text(SettingsHome.instanceName(model.baseURL) ?? "") } label: { label }
-        case .infrastructure:
-            NavigationLink(value: NavNode.settingsPage(.infrastructure)) {
+        case .machinesAndModels:
+            NavigationLink(value: NavNode.settingsPage(.machinesAndModels)) {
                 LabeledContent {
-                    if let value = infrastructureValue {
+                    if let value = machinesAndModelsValue {
                         // What needs a person is said in amber, as the mock's row says it.
                         Text(value.text)
                             .foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)
@@ -255,10 +255,10 @@ struct SettingsHomeView: View {
 
     /// Only an answer the server gave — never the empty list a model starts with: how many lines the
     /// page's Needs you holds, or with none how many machines are online.
-    private var infrastructureValue: (text: String, needsYou: Bool)? {
+    private var machinesAndModelsValue: (text: String, needsYou: Bool)? {
         guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        let needsYou = InfrastructureLists(model).attention.count
-        return (SettingsHome.infrastructureValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
+        let needsYou = MachinesAndModelsLists(model).attention.count
+        return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 
     private func value(of row: SettingsHome.Row) -> String? {
@@ -946,11 +946,11 @@ private struct ChangePasswordPage: View {
 
 // MARK: - Account pools
 
-/// An account pool's page: the pool as Infrastructure last read it, with account pause controls; for a
+/// An account pool's page: the pool as Machines & models last read it, with account pause controls; for a
 /// Codex pool of one's own, its page (`CodexPoolPageView`) with its people and keys read beside its ChatGPT
 /// accounts, run from here: an account signed in, in again or out, keys and people added and taken out,
-/// the pool deleted. Deleting the pool closes the page. Pushed from Infrastructure's Account pools, on
-/// Settings' stack or the Infrastructure section's own.
+/// the pool deleted. Deleting the pool closes the page. Pushed from Machines & models' Account pools, on
+/// Settings' stack or the Machines & models section's own.
 struct AccountPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -1013,7 +1013,7 @@ struct AccountPoolSettingsPage: View {
 
 /// A DeepSeek key's page, read-only: the key as the account's own list last read it, and the balance of
 /// its DeepSeek account — read with the list, and asked of DeepSeek again by Refresh or Retry. Pushed from
-/// Infrastructure's API keys, on Settings' stack or the Infrastructure section's own.
+/// Machines & models' API keys, on Settings' stack or the Machines & models section's own.
 struct ProviderDetailSettingsPage: View {
     @Environment(AppModel.self) private var model
     let providerID: String
@@ -1025,7 +1025,7 @@ struct ProviderDetailSettingsPage: View {
             .first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
             if CursorRuntime.isKey(provider) {
                 CursorKeyPageView(key: provider,
-                                  model: Infrastructure.cursorModel((model.runners?.runners ?? []).filter { $0.online == true }),
+                                  model: MachinesAndModels.cursorModel((model.runners?.runners ?? []).filter { $0.online == true }),
                                   checkAgain: { await agents.recheckCursorKey(providerID) })
             } else {
                 DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],
@@ -1119,6 +1119,7 @@ private struct SharedLinksSettingsPage: View {
 
     @State private var tab: SharedLinksList.Tab = .active
     @State private var pendingTurnOff: OrbitKit.ShareLink?
+    @State private var sharing: OrbitKit.ShareLink?
     @State private var notice: String?
 
     var body: some View {
@@ -1162,6 +1163,13 @@ private struct SharedLinksSettingsPage: View {
         .navigationTitle(SharedLinksList.title)
         .task { await model.sharedLinks?.load() }
         .refreshable { await model.sharedLinks?.load() }
+        // A row's press and its ⋯ → Settings… open the link's own Share panel; what changed there is
+        // read back when it closes.
+        .sheet(item: $sharing, onDismiss: { Task { await model.sharedLinks?.load() } }) { link in
+            if let base = model.baseURL {
+                ShareSheet(kind: link.kind, rootID: link.root.id, baseURL: base, tokenStore: model.tokenStore)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -1180,7 +1188,58 @@ private struct SharedLinksSettingsPage: View {
         Binding(get: { pendingTurnOff != nil }, set: { if !$0 { pendingTurnOff = nil } })
     }
 
+    /// One link (docs/mocks/share-links/13-row-buttons, web's row): a press opens an active link's
+    /// Share panel; a borderless copy button stays out; the rest is in its ⋯ and its long-press menu,
+    /// Turn off… last. A swipe still turns it off.
     private func row(_ link: OrbitKit.ShareLink) -> some View {
+        let url = link.state == .active ? model.baseURL.map { SharedLinksList.publicURL(link, base: $0) } : nil
+        return HStack(spacing: 12) {
+            if SharedLinksList.opens(link) {
+                Button { sharing = link } label: { words(link) }
+                    .buttonStyle(.plain)
+            } else {
+                words(link)
+            }
+            if let url {
+                Button { copy(url) } label: {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(SharePanelCopy.copyLink)
+            }
+            if SharedLinksList.canTurnOff(link) {
+                Menu { menuItems(link, url: url) } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(SharedLinksList.moreLabel(link))
+            }
+        }
+        .padding(.vertical, 2)
+        .swipeActions(edge: .trailing) {
+            if SharedLinksList.canTurnOff(link) {
+                Button(SharePanelCopy.turnOff, role: .destructive) { pendingTurnOff = link }
+            }
+        }
+        .contextMenu { menuItems(link, url: url) }
+        // On the link's own row — the swipe, the ⋯ and the long-press menu all raise it — so the panel opens
+        // against that row rather than at the top of the page.
+        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
+                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
+            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharePanelCopy.turnOffDetail)
+        }
+    }
+
+    private func words(_ link: OrbitKit.ShareLink) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(link.root.title ?? SharedLinksList.kindWord(link.kind))
                 .lineLimit(2)
@@ -1191,40 +1250,36 @@ private struct SharedLinksSettingsPage: View {
                 .font(.orbitListSubtitle)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
-        .swipeActions(edge: .trailing) {
-            if SharedLinksList.canTurnOff(link) {
-                Button(SharePanelCopy.turnOff, role: .destructive) { pendingTurnOff = link }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    /// The ⋯ and the long-press menu alike: an active link's Copy Link, Share Link… and Settings…,
+    /// then Turn off… for any link that can still be ended.
+    @ViewBuilder
+    private func menuItems(_ link: OrbitKit.ShareLink, url: URL?) -> some View {
+        if let url {
+            Button { copy(url) } label: {
+                Label(SharePanelCopy.copyLink, systemImage: "doc.on.doc")
+            }
+            SwiftUI.ShareLink(item: url) {
+                Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
+            }
+            Button { sharing = link } label: {
+                Label(SharedLinksList.settings, systemImage: "slider.horizontal.3")
             }
         }
-        .contextMenu {
-            if link.state == .active, let base = model.baseURL {
-                let url = SharedLinksList.publicURL(link, base: base)
-                Button {
-                    UIPasteboard.general.url = url
-                    show(SharePanelCopy.linkCopied)
-                } label: {
-                    Label(SharePanelCopy.copyLink, systemImage: "doc.on.doc")
-                }
-                SwiftUI.ShareLink(item: url) {
-                    Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
-                }
-            }
-            if SharedLinksList.canTurnOff(link) {
-                Button(role: .destructive) { pendingTurnOff = link } label: {
-                    Label(SharePanelCopy.turnOff, systemImage: "xmark.circle")
-                }
+        if SharedLinksList.canTurnOff(link) {
+            if url != nil { Divider() }
+            Button(role: .destructive) { pendingTurnOff = link } label: {
+                Label(SharedLinksList.turnOffMenu, systemImage: "xmark.circle")
             }
         }
-        // On the link's own row — the swipe and the long-press menu both raise it — so the panel opens
-        // against that row rather than at the top of the page.
-        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
-                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
-            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharePanelCopy.turnOffDetail)
-        }
+    }
+
+    private func copy(_ url: URL) {
+        UIPasteboard.general.url = url
+        show(SharePanelCopy.linkCopied)
     }
 
     private func turnOff(_ link: OrbitKit.ShareLink) async {

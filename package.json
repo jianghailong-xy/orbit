@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.1.254",
+  "version": "0.1.259",
   "private": true,
   "description": "Orbit — AI Agent task scheduling platform (control plane + distributed coding-agent runners)",
   "license": "MIT",
@@ -19,7 +19,9 @@
   },
   "scripts": {
     "docs:check": "node scripts/check-docs.mjs",
-    "test:docs": "node --test test/check-docs.test.mjs",
+    "test:docs": "node --test test/check-docs.test.mjs test/configuration-reference.test.mjs",
+    "test:release-identity": "node --test test/release-identity.test.mjs test/release-skill.test.mjs",
+    "test:supply-chain": "node --test test/supply-chain.test.mjs",
     "build": "npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web",
     "build:runner": "bash scripts/build-binaries.sh dist-bin",
     "db:up": "docker compose up -d postgres",
@@ -37,10 +39,12 @@
     "test:outcome-reconciler:restart-postgres": "node --test --test-concurrency=1 --test-reporter=tap test/outcome-reconciler-restart-postgres.test.mjs",
     "test:upgrade-source-sha": "node --test test/upgrade-source-sha.test.mjs",
     "test:upgrade-runner-link": "node --test test/upgrade-runner-link.test.mjs",
+    "test:upgrade-two-stage": "node --test test/upgrade-two-stage.test.mjs",
     "test:pg-backup-offhost": "node --test test/pg-backup-offhost.test.mjs",
     "test:macos-runner-signing": "node --test test/macos-runner-signing.test.mjs",
     "test:compose-topology": "node --test --test-reporter=tap test/compose-topology.test.mjs",
-    "test:sidecar-removal-orphans": "node --test --test-reporter=tap test/sidecar-removal-orphans.test.mjs"
+    "test:sidecar-removal-orphans": "node --test --test-reporter=tap test/sidecar-removal-orphans.test.mjs",
+    "api:reference": "npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && node src/apiserver/dist/api-reference/generate-api-reference.js"
   },
   "engines": {
     "node": ">=26.0.0"

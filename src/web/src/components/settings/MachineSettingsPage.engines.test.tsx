@@ -260,24 +260,64 @@ describe('the machine’s own controls over its engines', () => {
     ]);
   });
 
-  it('reports what an update did, including what it left alone, until it is dismissed', async () => {
+  it('says only that nothing needs attention when no engine does, until it is dismissed', async () => {
     const { sent } = await mount(
       machine({
         install: relay({
           status: 'done',
           mode: 'update',
           command: 'orbit engine-update',
-          message: 'Claude Code updated 2.1.290 → 2.1.291\nOpenCode — already up to date (1.18.33)',
+          message: [
+            'Claude Code updated 2.1.290 → 2.1.291',
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+            'OpenCode — already up to date (1.18.33)',
+            'Antigravity — not reached, the update pass ran out of time',
+            'DeepSeek Harness — fixed supported version 0.2.0-rc.2',
+            'Cursor CLI — pinned version 2026.10.14-941492e',
+          ].join('\n'),
         }),
       }),
     );
     const report = $('.machine-section-engines .rd-engine-relay');
-    expect(text($('.rd-engine-relay-row', report))).toBe(
-      'Claude Code updated 2.1.290 → 2.1.291\nOpenCode — already up to date (1.18.33)',
-    );
+    expect($$('.rd-engine-relay-row', report).map(text)).toEqual(['Nothing here needs your attention.']);
     expect(text($('code', report))).toBe('orbit engine-update');
     await click(button('Dismiss', report));
     expect(sent).toEqual([{ method: 'DELETE', path: `/runners/${RUNNER_ID}/install` }]);
+  });
+
+  it('lists only the engines that need someone, and marks the failed ones', async () => {
+    await mount(
+      machine({
+        install: relay({
+          status: 'failed',
+          mode: 'update',
+          command: 'orbit engine-update',
+          message: [
+            'Claude Code — installed but does not run: signal: killed',
+            "Codex — 5 sessions running, it'll update once they finish",
+            "Kimi Code — updater finished, but its version couldn't be read",
+            'OpenCode — update timed out after 5m0s',
+            'Antigravity — already up to date (1.5.7)',
+            'Gemini — owned by another user, left alone',
+            'Cursor CLI — update failed: npm error code EACCES',
+          ].join('\n'),
+        }),
+      }),
+    );
+    const report = $('.machine-section-engines .rd-engine-relay');
+    expect(report.classList.contains('bad')).toBe(false);
+    expect($$('.rd-engine-relay-row', report).map(text)).toEqual([
+      'Claude Code — installed but does not run: signal: killed',
+      'OpenCode — update timed out after 5m0s',
+      'Gemini — owned by another user, left alone',
+      'Cursor CLI — update failed: npm error code EACCES',
+    ]);
+    expect($$('.rd-engine-relay-row.bad', report).map(text)).toEqual([
+      'Claude Code — installed but does not run: signal: killed',
+      'OpenCode — update timed out after 5m0s',
+      'Cursor CLI — update failed: npm error code EACCES',
+    ]);
   });
 
   it('leaves an engine’s own install to its row', async () => {

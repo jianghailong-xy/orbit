@@ -40,8 +40,7 @@ private struct SessionRowActions: ViewModifier {
     /// Hands this row to the list, which owns the share panel's sheet. Read on iOS only — see
     /// `shareAction`.
     let onShare: (() -> Void)?
-    /// Hands this row to the list, which owns the Move panel's sheet. Read on iOS only — see
-    /// `moveAction`.
+    /// Hands this row to the list, which owns the Move panel's sheet — see `moveAction`.
     let onMove: (() -> Void)?
     /// Opens the sessions page of the project this row belongs to, where the list has no row for that
     /// project: a member in a workspace its coordinator does not run in (owner 2026-11-07,
@@ -160,16 +159,12 @@ private struct SessionRowActions: ViewModifier {
     }
 
     /// The Move panel, which the list presents for this row (docs/session-folders-move-design.md §4).
-    /// iOS only, as Share is — the Mac shows no folders — and never in Trash.
+    /// Every platform's, as the folders are; never in Trash.
     private var moveAction: RowSwipeAction? {
-        #if os(iOS)
         guard !isTrash, let onMove else { return nil }
         // A member moves with its project's row, unless the list has no row for that project here.
         if onSessions == nil, let membership = session.projectMembership, membership.role != .coordinator { return nil }
         return RowSwipeAction(title: "Move", systemImage: "folder", tint: .indigo, perform: onMove)
-        #else
-        return nil
-        #endif
     }
 
     private var positiveAction: RowSwipeAction {

@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -113,8 +114,12 @@ func init() {
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
 		claudeRegionCapabilityV1,
+		mainCheckoutGitCapabilityV1,
 		selfUpdatePostponeCapabilityV1,
 		selfUpdateNowCapabilityV1,
+		taskForkCapabilityV1,
+		codelessCheckoutCapabilityV1,
+		machineResourcesCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
@@ -237,6 +242,9 @@ type Transport struct {
 	// transport, by startLink; nil everywhere else, where every call goes over HTTPS: `orbit mcp`, the CLI
 	// verbs and the approval hook, which name themselves (runnerCallerHeader), and the release check.
 	link *linkMode
+	// noTakeoverBatch is set once the control plane has answered the batch takeover 404 or 405: it
+	// predates it, and every takeover from then on is one request per session, as before it.
+	noTakeoverBatch atomic.Bool
 }
 
 // eventStreams is the sessions' event streams of the daemon's transport (link_events.go). Nil on any
@@ -555,6 +563,8 @@ func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFina
 	b.LeaseOwner = t.leaseOwner
 	b = scrubRunFinalize(b, sessionID)
 	path := "/runner/sessions/" + sessionID + "/finalize"
+	// The finalize carries the run's last worktree state: no sample scanned before it is newer.
+	worktreeReports.reported(sessionID)
 	if err := t.do(ctx, "POST", path, b, &r, 35*time.Second); err != nil {
 		return true, err
 	}
@@ -691,6 +701,131 @@ func retryTakeoverTurnLeases(ctx context.Context, takeover func(context.Context)
 	return retryIdempotentWhile(ctx, takeover, isRetryableTransportError)
 }
 
+// takeoverBatchMax is the most sessions one batch takeover names: the control plane's
+// BATCH_TAKEOVER_TURN_LEASES_MAX.
+const takeoverBatchMax = 500
+
+// errTakeoverBatchUnsupported is a batch takeover refused for want of the route: a control plane older
+// than it. Nothing was taken over; the caller takes the same sessions over one request at a time.
+var errTakeoverBatchUnsupported = errors.New("the control plane has no batch takeover")
+
+// takeoverRow is one session's answer to a batch takeover: the status the single takeover answers
+// with, or the refusal it would have answered with, as the *transportHTTPError that call returns.
+type takeoverRow struct {
+	status string
+	err    error
+}
+
+// takeoverBatchSize is how many sessions a reclaim phase takes over per request: takeoverBatchMax, or
+// one once the control plane has said it has no batch takeover.
+func (t *Transport) takeoverBatchSize() int {
+	if t.noTakeoverBatch.Load() {
+		return 1
+	}
+	return takeoverBatchMax
+}
+
+// takeoverTurnLeasesBatch is takeoverTurnLeases for every one of jobs in one request
+// (POST /runner/sessions/takeover-leases), each against its own snapshot owner. It answers a row
+// per job, in the jobs' order, or errTakeoverBatchUnsupported when the route is not there.
+func (t *Transport) takeoverTurnLeasesBatch(ctx context.Context, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	type row struct {
+		SessionID          string  `json:"sessionId"`
+		ExpectedLeaseOwner *string `json:"expectedLeaseOwner"`
+	}
+	rows := make([]row, len(jobs))
+	for i, job := range jobs {
+		rows[i] = row{SessionID: job.SessionID}
+		if job.LeaseOwner != "" {
+			owner := job.LeaseOwner
+			rows[i].ExpectedLeaseOwner = &owner
+		}
+	}
+	var response struct {
+		Results []struct {
+			SessionID string `json:"sessionId"`
+			Status    string `json:"status"`
+			Error     *struct {
+				StatusCode int    `json:"statusCode"`
+				Message    string `json:"message"`
+				Code       string `json:"code"`
+			} `json:"error"`
+		} `json:"results"`
+	}
+	err := t.do(ctx, "POST", "/runner/sessions/takeover-leases",
+		map[string]interface{}{"leaseOwner": t.leaseOwner, "sessions": rows}, &response, 30*time.Second)
+	if isTransportHTTPStatus(err, http.StatusNotFound) || isTransportHTTPStatus(err, http.StatusMethodNotAllowed) {
+		t.noTakeoverBatch.Store(true)
+		return nil, errTakeoverBatchUnsupported
+	}
+	if err != nil {
+		return nil, err
+	}
+	// An answer this build cannot line up with what it asked is taken as no batch takeover at all: the
+	// sessions are taken over one at a time, which is safe whatever the batch did, since a session
+	// already taken over by this process answers its own takeover with its status.
+	if len(response.Results) != len(jobs) {
+		logln(fmt.Sprintf("reclaim: batch takeover answered %d rows for %d sessions; taking them over one at a time", len(response.Results), len(jobs)))
+		t.noTakeoverBatch.Store(true)
+		return nil, errTakeoverBatchUnsupported
+	}
+	out := make([]takeoverRow, len(jobs))
+	for i, r := range response.Results {
+		if !strings.EqualFold(r.SessionID, jobs[i].SessionID) {
+			logln(fmt.Sprintf("reclaim: batch takeover answered row %d for %s, not %s; taking them over one at a time", i, r.SessionID, jobs[i].SessionID))
+			t.noTakeoverBatch.Store(true)
+			return nil, errTakeoverBatchUnsupported
+		}
+		if r.Error != nil {
+			body, _ := json.Marshal(map[string]interface{}{"statusCode": r.Error.StatusCode, "message": r.Error.Message, "code": r.Error.Code})
+			out[i].err = &transportHTTPError{
+				method: "POST", path: "/runner/sessions/" + jobs[i].SessionID + "/takeover-leases",
+				statusCode: r.Error.StatusCode, body: string(body),
+			}
+			continue
+		}
+		out[i].status = r.Status
+	}
+	return out, nil
+}
+
+// takeoverClaimedSessions is takeoverClaimedSession for many sessions in one request, retried whole as
+// that one is. A row taken over has its job's lease owner moved to this process; a refused row keeps
+// its own. errTakeoverBatchUnsupported says to take the same sessions over one at a time instead.
+func takeoverClaimedSessions(ctx context.Context, t *Transport, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	if t.noTakeoverBatch.Load() {
+		return nil, errTakeoverBatchUnsupported
+	}
+	var rows []takeoverRow
+	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
+		var err error
+		rows, err = t.takeoverTurnLeasesBatch(attemptCtx, jobs)
+		return err
+	}, func(err error) bool {
+		return !errors.Is(err, errTakeoverBatchUnsupported) && isRetryableTransportError(err)
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i, row := range rows {
+		if row.err == nil {
+			jobs[i].LeaseOwner = t.leaseOwner
+		}
+	}
+	return rows, nil
+}
+
+// takeoverChunk takes jobs over in one batch request, or — against a control plane without the batch
+// takeover, which a reclaim phase then asks for one job at a time — with the single takeover, its
+// refusal as the job's row. Any other failure of the request is returned as the reclaim's.
+func takeoverChunk(ctx context.Context, t *Transport, jobs []*ClaimedSession) ([]takeoverRow, error) {
+	if len(jobs) == 1 && t.noTakeoverBatch.Load() {
+		status, err := takeoverClaimedSession(ctx, t, jobs[0])
+		return []takeoverRow{{status: status, err: err}}, nil
+	}
+	return takeoverClaimedSessions(ctx, t, jobs)
+}
+
 // takeoverClaimedSession always confirms even a matching snapshot owner with the server.
 // A claim/reclaim response can be stale by the time this process handles it, so a local
 // equality check cannot substitute for the Session row lock in takeover-leases.
@@ -712,6 +847,9 @@ func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCo
 	b.LeaseOwner = t.leaseOwner
 	// Every path a completion is sent by, a kept one an earlier process journaled included (secret_wire.go).
 	b = scrubTurnComplete(b, sessionID)
+	// What this completion reports of the worktree is newer than any heartbeat sample scanned before
+	// now (worktreeReportClock). Recorded before the send: one still in flight already outranks them.
+	worktreeReports.reported(sessionID)
 	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
 		r = TurnCompleteResponse{}
 		return t.do(attemptCtx, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second)
@@ -938,6 +1076,16 @@ func (t *Transport) repoCleanupResult(b RepoCleanupResultRequest) error {
 	return t.do(nil, "POST", "/runner/repo-cleanup-result", b, nil, 15*time.Second)
 }
 
+// mainCheckoutSnapshot answers a heartbeat-delivered main checkout read (contract §10.2).
+func (t *Transport) mainCheckoutSnapshot(id string, b MainCheckoutSnapshotAnswer) error {
+	return t.do(nil, "POST", "/runner/main-checkout/"+url.PathEscape(id)+"/snapshot", b, nil, 15*time.Second)
+}
+
+// mainCheckoutResult reports how a heartbeat-delivered main checkout action went (contract §10.2).
+func (t *Transport) mainCheckoutResult(id string, b MainCheckoutActionResult) error {
+	return t.do(nil, "POST", "/runner/main-checkout/"+url.PathEscape(id)+"/result", b, nil, 15*time.Second)
+}
+
 // commitResult reports the outcome of a heartbeat-delivered CommitCommand back to the server.
 func (t *Transport) commitResult(sessionID string, b CommitResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/commit-result", b, nil, 15*time.Second)
@@ -978,6 +1126,7 @@ func (t *Transport) diffResult(sessionID string, b DiffResultRequest) error {
 }
 
 func (t *Transport) diffResultContext(ctx context.Context, sessionID string, b DiffResultRequest) error {
+	worktreeReports.reported(sessionID)
 	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/diff", b, nil, 35*time.Second)
 }
 

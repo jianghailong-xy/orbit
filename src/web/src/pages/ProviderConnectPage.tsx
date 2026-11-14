@@ -713,6 +713,30 @@ function ProviderForm({
           one — the server asks DeepSeek with what is stored, never with what is being typed. */}
       {editing && hasDeepSeekBalance(editing) && <DeepSeekBalanceSection row={editing} />}
 
+      {/* Where an OpenAI-dialect key goes (docs/provider-engine-contract.md §4.6). Claude Code runs on one only
+          through Orbit's own gateway, which keeps the key on the server (docs/claude-engine-openai-gateway-design.md
+          §3): a saved key says so when the server lists Claude Code among its engines. */}
+      {runtime === 'codex' && (
+        <section className="provider-step">
+          <div className="provider-who">
+            <b>Who gets this key</b>
+            <ul>
+              <li>
+                Sessions on {engineList(engines.filter((engine) => engine !== AgentProvider.CLAUDE))} hand this key
+                to the CLI in its environment, where commands the agent runs can read it.
+              </li>
+              {engines.includes(AgentProvider.CLAUDE) && (
+                <li>
+                  Sessions on {ENGINE_CLI_NAMES[AgentProvider.CLAUDE]} never get it: the key stays on the Orbit
+                  server, which sends their requests on. Their runner gets a token that works only for that session.
+                </li>
+              )}
+              <li>Orbit's server uses it to test it when you connect.</li>
+            </ul>
+          </div>
+        </section>
+      )}
+
       {cursor && (
         <section className="provider-step">
           <div className="provider-works">

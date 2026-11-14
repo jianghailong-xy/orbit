@@ -191,7 +191,7 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(project.contains("$0.projectMembership?.role == .coordinator"), "over the coordinator's workspace")
         XCTAssertTrue(project.contains("nav.path = [.sessionProject(address, asDestination: true)]"),
                       "a phone's whole stack, the project's own page")
-        XCTAssertTrue(project.contains("nav.enterProjectSessions(address)"), "the iPad's list column only")
+        XCTAssertTrue(project.contains("nav.enterProjectSessions(address, asDestination: true)"), "the iPad's list column only")
     }
 
     /// The left edge opens the drawer exactly on a destination's own page — a section's root, a
@@ -218,7 +218,12 @@ final class ProjectsWiringTests: XCTestCase {
             "MachineDraftPage(runnerID: runnerID)\n                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n"
             + "                                    .navigationBarBackButtonHidden()\n                                    .drawerToggle(open: openDrawer)"),
                       "a machine's new session page is its Set up row's own page, and leads the same way")
-        XCTAssertEqual(shell.components(separatedBy: "SwipeBackGestureToggle(enabled:").count - 1, 2,
+        XCTAssertTrue(agents.contains(
+            "GuestSessionView(sessionID: sessionID)\n                                    .id(sessionID)\n"
+            + "                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }\n"
+            + "                                    .navigationBarBackButtonHidden()\n                                    .drawerToggle(open: openDrawer)"),
+                      "a shared session's guest view is its Shared with me row's own page, and leads the same way")
+        XCTAssertEqual(shell.components(separatedBy: "SwipeBackGestureToggle(enabled:").count - 1, 3,
                        "no other page turns the system back-swipe off")
         let toggle = try slice(shell, from: "private func setSwipeBacks(enabled: Bool) {", to: "\n        }")
         XCTAssertTrue(toggle.contains("interactiveContentPopGestureRecognizer?.isEnabled = enabled"),
@@ -241,9 +246,9 @@ final class ProjectsWiringTests: XCTestCase {
     func testTheMacSidebarIsTheDrawersRail() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let sidebar = try slice(main, from: "struct SectionSidebar: View {", to: "struct AccountFooter: View {")
-        try assertInOrder(sidebar, ["ForEach(AppSection.workSections) { section in", "OwnerRequestInboxEntry()",
+        try assertInOrder(sidebar, ["ForEach(sections) { row in", "OwnerRequestInboxEntry()",
                                     "Section(AppSection.agents.title, isExpanded: $workspacesExpanded)",
-                                    "ForEach(openProjects) { project in"],
+                                    "ForEach(projects) { row in"],
                           "the drawer's order")
         XCTAssertTrue(sidebar.contains("model.projects?.drawerProjects(coordinators: model.projectCoordinators)"),
                       "every open project, as the drawer lists them")
@@ -270,14 +275,37 @@ final class ProjectsWiringTests: XCTestCase {
                           "the gear, then the account menu")
     }
 
+    /// The `#if os(macOS)` … `#endif` blocks at the top level of a file, nested `#if`s inside them
+    /// included.
+    private func macOSOnlyBlocks(_ text: String) -> [String] {
+        var blocks: [String] = []
+        var current: [Substring]? = nil
+        var depth = 0
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if current == nil {
+                if line == "#if os(macOS)" { current = [line]; depth = 1 }
+                continue
+            }
+            current!.append(line)
+            if trimmed.hasPrefix("#if") { depth += 1 }
+            if trimmed.hasPrefix("#endif") {
+                depth -= 1
+                if depth == 0 { blocks.append(current!.joined(separator: "\n")); current = nil }
+            }
+        }
+        return blocks
+    }
+
     func testTheIPadSidebarIsTheDrawer() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let sidebar = try slice(main, from: "private var sidebar: some View {", to: "\n    }\n")
         XCTAssertTrue(sidebar.contains("#if os(iOS)\n        NavigationDrawer(close: {}, live: true, inSidebarColumn: true)"
                                        + "\n        #else\n        SectionSidebar("),
                       "the iPad seats the drawer; macOS keeps its source list")
-        let macOS = try slice(main, from: "#if os(macOS)", to: "#endif")
-        XCTAssertTrue(macOS.contains("struct SectionSidebar: View {") && macOS.contains("struct AccountFooter: View {"),
+        // Not the first block: MainView also imports AppKit under its own `#if os(macOS)`.
+        let macOS = macOSOnlyBlocks(main).first { $0.contains("struct SectionSidebar: View {") } ?? ""
+        XCTAssertTrue(macOS.contains("struct AccountFooter: View {"),
                       "the source list and its account row are macOS's alone")
 
         let shell = code(try appSource("Views/CompactShell.swift"))

@@ -31,15 +31,15 @@ RUN npm run build -w @orbit/shared \
 
 # ───────────────────────────────── codex ─────────────────────────────────
 # The official codex CLI: "Sign in with ChatGPT" for a Codex pool of one's own runs
-# `codex login --device-auth` on this server (providers/codex-login.service.ts). Pinned to the
-# version the runners run. npm is only how it is fetched: the package's own `codex` is a Node
+# `codex login --device-auth` on this server (providers/codex-login.service.ts). Pinned independently
+# of runner engine updates. npm is only how it is fetched: the package's own `codex` is a Node
 # wrapper that starts the native binary as a child of its own, and the sign-in ends an attempt with
 # SIGKILL, which the wrapper cannot pass on — the native CLI would outlive it, still waiting on the
 # code. So what ships is the platform package's standalone layout (the one a runner's standalone
 # install unpacks), and `codex` on PATH is its native binary. No match here fails the build: npm
 # only warns when an optional dependency — which is how the platform package arrives — is missing.
 FROM node:26-slim AS codex
-RUN npm install -g @openai/codex@0.158.0 \
+RUN npm install -g @openai/codex@0.169.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex
 
 # ──────────────────────────────── runtime ────────────────────────────────
@@ -89,4 +89,8 @@ EXPOSE 3000
 # `require.resolve` runs the ordinary Node lookup from that same directory, so the CLI is found in
 # the workspace's node_modules or in the root one, whichever this install produced; no dependency
 # bump can move it somewhere this command refuses to look.
-CMD ["sh", "-c", "cd src/apiserver && node \"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy && cd /app && node src/apiserver/dist/main.js"]
+# `exec` puts node in place of the shell as PID 1, so `docker stop`'s SIGTERM reaches it and the apiserver stops by
+# itself (src/apiserver/src/common/graceful-stop.ts). A shell left as PID 1 ignores SIGTERM, and Docker then SIGKILLed
+# the container at the end of the grace period, cutting whatever was in flight. A stop during the migration still waits
+# for that: the shell is PID 1 until the `exec`.
+CMD ["sh", "-c", "cd src/apiserver && node \"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy && cd /app && exec node src/apiserver/dist/main.js"]

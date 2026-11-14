@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AgentProvider } from '@orbit/shared';
 import {
   brandForProvider,
+  CODEX_POOL_ON_CLAUDE_NOTICE,
   currentEngineChoice,
   currentProviderChoice,
   defaultModelLabel,
@@ -411,8 +412,7 @@ describe('the runner’s Codex accounts, on Codex’s own sign-in', () => {
     ).toEqual([
       { id: 'default', label: 'Default', quota: '5h 100%', nearLimit: true },
       { id: '3fa91c2e', label: 'Work', quota: 'Weekly 0%' },
-      // Unnamed, unread, and signed out: it is listed, and says why it can't take a session.
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
+      // Signed out on this runner, c0ffee42 is not one it can run: no row.
     ]);
     expect(accountsOf(codex([{ id: 'default', auth: 'yes' }, { id: '3fa91c2e', auth: 'yes' }]), CLAUDE)).toBeUndefined();
   });
@@ -519,7 +519,6 @@ describe('the runner’s Antigravity (Google) accounts, on Antigravity’s own s
     expect(row?.accounts).toEqual([
       { id: 'default', label: 'Default', quota: '3p-weekly 98% left' },
       { id: '5c2e91a0', label: 'Work', quota: 'gemini-5h 4% left', nearLimit: true },
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
     // The Provider menu may still say how the engine signs in.
     expect(row?.labelDetail).toBe('Google account');
@@ -579,7 +578,6 @@ describe('the runner’s Kimi Code accounts, on Kimi Code’s own sign-in', () =
       // is never one of them.
       { id: 'default', label: 'Default', quota: 'Monthly 41%' },
       { id: '5c2e91a0', label: 'Work', quota: '5h 97%', nearLimit: true },
-      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
     ]);
   });
 
@@ -796,6 +794,34 @@ describe('shared pools among the credentials', () => {
     expect(noCodex.find((row) => row.slug === 'team-codex')).toMatchObject({ unavailable: 'Not installed', fixEngine: 'codex' });
     const noClaude = engineProviders(CODEX, sources({ configured, pools: [team], engineHealth: [{ engine: 'claude', installed: false, auth: 'unknown' }] }));
     expect(noClaude.find((row) => row.slug === 'team-codex')?.unavailable).toBeUndefined();
+  });
+});
+
+describe('a Codex pool of one’s own under Claude Code (ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY)', () => {
+  const mine = { id: 'mine', slug: 'my-chatgpt', label: 'My ChatGPT', engine: 'codex', members: [{ slug: 'my-chatgpt' }] };
+  const configured: ConfiguredProvider[] = [
+    deepseek,
+    { slug: mine.slug, label: mine.label, runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
+  ];
+
+  it('is not offered under Claude Code while the server lists no engines for it', () => {
+    expect(slugs(engineProviders(CLAUDE, sources({ configured, pools: [mine] })))).not.toContain('my-chatgpt');
+    expect(slugs(engineProviders(CODEX, sources({ configured, pools: [mine] })))).toContain('my-chatgpt');
+  });
+
+  it('is offered under Claude Code with the notice once the server lists claude, and under Codex without it', () => {
+    const pool = { ...mine, engines: ['codex', 'claude'] };
+    const underClaude = engineProviders(CLAUDE, sources({ configured, pools: [pool] })).find((row) => row.slug === 'my-chatgpt');
+    expect(underClaude).toMatchObject({ kind: 'pool', notice: CODEX_POOL_ON_CLAUDE_NOTICE, glyphKey: 'openai' });
+    const underCodex = engineProviders(CODEX, sources({ configured, pools: [pool] })).find((row) => row.slug === 'my-chatgpt');
+    expect(underCodex).toMatchObject({ kind: 'pool' });
+    expect(underCodex?.notice).toBeUndefined();
+  });
+
+  it('never offers a shared pool under Claude Code, whatever it lists', () => {
+    const team = { ...mine, slug: 'team-codex', engines: ['codex', 'claude'], shared: {} as never };
+    expect(slugs(engineProviders(CLAUDE, sources({ configured, pools: [team] })))).not.toContain('team-codex');
+    expect(slugs(engineProviders(CODEX, sources({ configured, pools: [team] })))).toContain('team-codex');
   });
 });
 

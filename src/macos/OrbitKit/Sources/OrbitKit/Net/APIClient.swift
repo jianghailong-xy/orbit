@@ -580,6 +580,56 @@ public final class APIClient: @unchecked Sendable {
         return list.guests
     }
 
+    // MARK: The guest's door — Shared with me and the guest view (docs/session-guests-design.md §4, §7)
+
+    /// Shared with me: every session the signed-in account was invited to reply in, newest invitation
+    /// first. Web parity: `listGuestSessions`.
+    public func guestSessions() async throws -> [GuestSessionSummary] {
+        let list: GuestSessionList = try await get("guest-sessions")
+        return list.sessions
+    }
+
+    /// The guest view's root: the head and the newest `limit` events. A 404 is "not shared with you"
+    /// — removed, left, Trash and deleted all read the same. Web parity: `getGuestSession`.
+    public func guestSession(_ sessionID: String, limit: Int) async throws -> GuestSession {
+        try await get("guest-sessions/\(sessionID)", query: [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// The page of the guest's transcript just older than `before`. Web parity: `getGuestEventPage`.
+    public func guestEventsBefore(_ sessionID: String, before: Int, limit: Int) async throws -> GuestEventPage {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "before", value: String(before)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// What the conversation added since `after`, and how it stands now: one read follows both.
+    /// Web parity: `getGuestEventsAfter`.
+    public func guestEventsAfter(_ sessionID: String, after: Int, limit: Int) async throws -> GuestSessionNow {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "after", value: String(after)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// One event whole, for a card that came back `truncated`. Web parity: `getGuestEventFull`.
+    public func guestEventFull(_ sessionID: String, seq: Int) async throws -> RunEvent {
+        try await get("guest-sessions/\(sessionID)/events/\(seq)")
+    }
+
+    /// A guest's message — text only, a turn of the owner's session, which restarts it when it has
+    /// ended. Web parity: `sendGuestTurn`.
+    @discardableResult
+    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String) async throws -> GuestTurnAccepted {
+        try await post("guest-sessions/\(sessionID)/turns",
+                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content))
+    }
+
     // MARK: personal access tokens — listed and revoked here, issued only on the web
     // (docs/personal-access-token-design.md §6.5, §9)
 
@@ -626,6 +676,14 @@ public final class APIClient: @unchecked Sendable {
     public func decideEvidence(taskID: String,
                                _ req: EvidenceDecisionRequest) async throws -> EvidenceDecisionResult {
         try await post("tasks/\(taskID)/evidence/decision", body: req)
+    }
+
+    /// Restart the task from the owner's pending row that offers it (`EvidenceRestart`). A Run press:
+    /// `triggerId` is drawn at the gesture (`PublicID.newToken`) and names it.
+    public func restartTaskFromEvidence(taskID: String, evidenceRevision: String,
+                                        triggerId: String) async throws -> EvidenceRestartResult {
+        try await post(EvidenceRestart.path(taskID: taskID, evidenceRevision: evidenceRevision),
+                       body: EvidenceRestartRequest(triggerId: triggerId))
     }
 
     /// What one version of a task's evidence cites, a page at a time, for the card that shows it
@@ -1294,6 +1352,9 @@ public final class APIClient: @unchecked Sendable {
     /// `GET /tasks/:id/attribution`: where this work counts, where it was noticed, which crossing
     /// touches it and what blocks it — the detail page's Attribution block.
     public func taskAttribution(_ id: String) async throws -> TaskAttribution { try await get("tasks/\(id)/attribution") }
+    /// `GET /tasks/:id/evidence`: every version of the task's completion evidence, oldest first,
+    /// each with its decision once it has one.
+    public func taskEvidence(_ id: String) async throws -> [TaskEvidenceRevision] { try await get("tasks/\(id)/evidence") }
     /// `GET /tasks/:id/dependency-graph`, asked the way the browser's panel asks it: both directions,
     /// up to 500 tasks, unary chains paired.
     public func taskDependencyGraph(_ id: String) async throws -> TaskDependencyGraph {
@@ -1937,6 +1998,26 @@ public final class APIClient: @unchecked Sendable {
     /// Ask the runner that owns this workspace to rescue and clean its shared checkout.
     public func repoCleanup(workspaceId: String) async throws -> Agent {
         try await postEmpty("workspaces/\(workspaceId)/repo-cleanup")
+    }
+
+    // MARK: main checkout Git (docs/main-checkout-git-contract.md §10.4)
+
+    /// The main checkout as its runner sees it now, with the patches of `diff` (repeated `diff=` per file,
+    /// at most 20).
+    public func mainCheckout(workspaceId: String, diff: [String] = []) async throws -> MainCheckoutRead {
+        try await get("workspaces/\(workspaceId)/main-checkout",
+                      query: diff.prefix(20).map { URLQueryItem(name: "diff", value: $0) })
+    }
+
+    /// Move, commit, push or rescue. Pending until the runner answers; the outcome is a line in the
+    /// session named by `initiatedFromSessionId`.
+    public func mainCheckoutAction(workspaceId: String, _ post: MainCheckoutActionPost) async throws -> MainCheckoutActionAnswer {
+        try await self.post("workspaces/\(workspaceId)/main-checkout/actions", body: post)
+    }
+
+    /// Cancel an action its runner hasn't been handed yet (the waiting line's Cancel).
+    public func cancelMainCheckoutAction(workspaceId: String, requestId: String) async throws -> MainCheckoutActionAnswer {
+        try await postEmpty("workspaces/\(workspaceId)/main-checkout/actions/\(requestId)/cancel")
     }
 
     // MARK: turns / lifecycle (Phase 2)

@@ -169,6 +169,9 @@ final class ConsoleModel {
     private(set) var sessionSourceState: String?
     private(set) var sessionSourceRefusalCode: String?
     private(set) var sessionSourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's line for a run of a task forked from a session, as the detail read words it. Nil on
+    /// any other session.
+    private(set) var sessionForkSource: String?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
 
@@ -298,7 +301,7 @@ final class ConsoleModel {
         if let key = keys?.first(where: { $0.slug == sessionProvider }), let id = key.providerID {
             return api.baseURL.appendingPathComponent("providers/\(id)")
         }
-        let page = api.baseURL.appendingPathComponent("infrastructure")
+        let page = api.baseURL.appendingPathComponent("machines-and-models")
         var keysSection = URLComponents(url: page, resolvingAgainstBaseURL: false)
         keysSection?.fragment = "keys"
         return keysSection?.url ?? page
@@ -441,6 +444,15 @@ final class ConsoleModel {
         let clocks = ReceiptAnchor.Clocks(state.items)
         clocksCache = (stateRevision, clocks)
         return clocks
+    }
+    /// Which sign-in cards and account switches the conversation has moved past, read once per
+    /// published `state` like the clocks above: every row of the transcript asks.
+    @ObservationIgnored private var settlementCache: (revision: Int, settlement: TranscriptSettlement)?
+    var settlement: TranscriptSettlement {
+        if let cached = settlementCache, cached.revision == stateRevision { return cached.settlement }
+        let settlement = TranscriptSettlement(state.items)
+        settlementCache = (stateRevision, settlement)
+        return settlement
     }
     /// Bumped whenever the LOCAL user sends a message from this console. The transcript observes it
     /// to force a scroll to the live tail on send — even when the user had scrolled up to read
@@ -1069,6 +1081,8 @@ final class ConsoleModel {
     /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
     let worktree: WorktreeModel
+    /// The workspace's main checkout as this session reviews and acts on it (card, bar, review sheet).
+    let mainCheckout: MainCheckoutModel
     /// The "Tasks created here" card's own model — see `CreatedTasksModel`. Polled with the stream.
     let createdTasks: CreatedTasksModel
 
@@ -1164,6 +1178,7 @@ final class ConsoleModel {
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
         self.worktree = WorktreeModel(sessionID: sessionID, api: api)
+        self.mainCheckout = MainCheckoutModel(sessionID: sessionID, api: api)
         self.createdTasks = CreatedTasksModel(sessionID: sessionID, api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
@@ -1200,6 +1215,7 @@ final class ConsoleModel {
         // Inert for a draft (its guards see the empty sessionID); real work starts once the created
         // session's live console replaces this one.
         self.worktree = WorktreeModel(sessionID: "", api: api)
+        self.mainCheckout = MainCheckoutModel(sessionID: "", api: api)
         self.createdTasks = CreatedTasksModel(sessionID: "", api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
@@ -1284,6 +1300,7 @@ final class ConsoleModel {
     private func wireWorktree() {
         worktree.isSessionLive = { [weak self] in self?.sessionStatus.isLive ?? false }
         worktree.onOutcome = { [weak self] request in self?.onToast(request) }
+        mainCheckout.onOutcome = { [weak self] request in self?.onToast(request) }
     }
 
     /// Show a fleeting, informational message — the native equivalent of web's `message.success`
@@ -2071,7 +2088,7 @@ final class ConsoleModel {
         case .assistant(let b): return b.isFinalized
         case .thinking(let b):  return b.isFinalized
         case .toolCall(let c):  return c.status != .running
-        case .user, .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic: return true   // the agent still owes a reply
+        case .user, .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic, .mainCheckout: return true   // the agent still owes a reply
         }
     }
 
@@ -2343,6 +2360,9 @@ final class ConsoleModel {
         sessionSourceState = session.sourceState
         sessionSourceRefusalCode = session.sourceRefusalCode
         sessionSourceRefusalDetail = session.sourceRefusalDetail
+        // Only the detail read carries it, and a fork never changes (SR12): a list row's absence
+        // is not taken as its end.
+        if let fork = session.forkSource { sessionForkSource = fork }
         if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a
@@ -5415,6 +5435,14 @@ final class ConsoleModel {
             engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
             deliver(kind)
         }
+        // A revision nobody else can move, offering the owner Restart the task, is drawn on the same
+        // card at the same address: a card that was a question becomes the restart offer in place.
+        for row in EvidenceRestart.rows(queue: queue) {
+            let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
+                                                                   evidenceRevision: row.evidenceRevision)
+            engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
+            deliver(kind)
+        }
         // Delivery receipts share the evidence card's address.
         for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
             deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
@@ -5450,6 +5478,22 @@ final class ConsoleModel {
             statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
+    }
+
+    /// Restart the task from a card offering it (`EvidenceRestart`): one Run press, named at the
+    /// gesture. Nil is a start; otherwise the refusal, for the card to show. The read is asked again
+    /// either way: a started task leaves the owner's group, and a refusal means the read moved.
+    func restartFromEvidence(_ row: EvidenceDecisionRow) async -> Error? {
+        var failure: Error?
+        do {
+            _ = try await api.restartTaskFromEvidence(taskID: row.taskId,
+                                                      evidenceRevision: row.evidenceRevision,
+                                                      triggerId: PublicID.newToken())
+        } catch {
+            failure = error
+        }
+        await refreshEvidenceDecisions(force: true)
+        return failure
     }
 
     /// Where this console's read of what one version of evidence cites stands: the card and the page it

@@ -46,8 +46,16 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 
+/** Where a row reads an event whole when it came back `truncated`: the owner's reader ([SessionReaderModel]), or the guest door
+ * (GuestSessionPage). */
+internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
+
+/** The heading of a `user` row that names no other sender: the reader's own words, `You` — and in the guest view, where the
+ * conversation is the owner's, the owner's name (GuestSessionPage); the guest's own are attributed to the reader there. */
+internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
+
 @Composable
-internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
+internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
     detailOnly: Boolean = false, target: Long? = null) {
     // The turns Orbit opened, folded with their answers (ExchangeFold): [target] opens the way down to a record a link landed on.
     if (row.exchanges.isNotEmpty()) {
@@ -119,7 +127,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             // Somebody other than the owner — a connected Feishu group's member (`externalSender`, docs/feishu-bot-design.md §8.2), or
             // a guest the owner invited (docs/session-guests-design.md §3): their words, headed `From Feishu · <name>` or `From <name>`
             // so they do not read as the owner's own (web `.chat-user-from`, OrbitKit `UserBubbleView`).
-            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: "You"
+            ?: ExternalSender.parse(event.fields["externalSender"])?.let(ExternalSender::label) ?: LocalOwnerHeading.current
         "assistant" -> "Assistant"
         "thinking" -> "Thinking"
         "tool_use" -> if (questions.isNotEmpty()) "Question" else shown.fields.string("name") ?: shown.fields.string("toolName") ?: "Tool"
@@ -132,7 +140,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
             else -> "Interrupted"
         }
         "error", "auth_error" -> "Error"
-        "notice", "diagnostic" -> "Notice"
+        "notice", "diagnostic", "auth_settled" -> "Notice"
         "auto_retry" -> EngineErrors.autoRetryTitle(shown.fields.string("variant") == "quota", shown.body())
         "background_task" -> "Background work"
         else -> event.type.replace('_', ' ').replaceFirstChar(Char::uppercase)
@@ -168,6 +176,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                 shown.fields["afterUserMsg"] == JsonPrimitive(true)), console)
             return@Column
         }
+        // The main checkout's card (board 01) and an action's outcome line (board 03).
+        if (event.type == MainCheckout.ROW_CARD) { MainCheckout.changedNotice(shown.fields)?.let { MainCheckoutCard(it, row.key, event.seq, event.ts) }; return@Column }
+        if (event.type == MainCheckout.ROW_RESULT) { MainCheckout.resultNotice(shown.fields)?.let { MainCheckoutResultRow(it) }; return@Column }
         // A thinking row is its own one line (A06-11); a question card's line folds and opens it, as its record does.
         if (!detailOnly && event.type != "thinking" && bubble == null) Row(Modifier.fillMaxWidth().then(if (questions.isEmpty()) Modifier else Modifier
             .clickable(onClickLabel = if (questionShown) "Hide options" else "Show options", role = Role.Button) { questionOpen = !questionShown }
@@ -223,6 +234,15 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 else if (taskRunning) progress?.let(TaskProgressCopy::trayLine)?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
+            // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as their turns are, under the
+            // call rather than left inside its output (web `OwnerChatBubble`, OrbitKit `OwnerChatReply`).
+            if (!detailOnly) ownerChatWords(row)?.let { words ->
+                Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(10.dp).testTag("owner-chat-reply"),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("You", style = MaterialTheme.typography.labelMedium)
+                    MarkdownText(words, open = open)
+                }
+            }
             if (expanded || detailOnly) {
                 // A workflow opens to its progress, its script folded under it; a sub-agent's totals close its transcript.
                 if (taskKind == "Workflow" && progress != null) TaskProgressView(progress, row) { card ->
@@ -251,7 +271,7 @@ internal fun TranscriptRowView(row: TranscriptRow, model: SessionReaderModel, li
                     if (nested.size > 4) TextButton(onClick = { childrenOpen = true }) { Text("Open subagent transcript") }
                 }
             } else liveOutput?.let { Text(it.takeLast(240), maxLines = 3, style = MaterialTheme.typography.bodySmall) }
-        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry")) {
+        } else if (event.type in setOf("error", "notice", "diagnostic", "auto_retry", "auth_settled")) {
             EngineLine(shown)
             if (shown.truncated) TextButton(enabled = !loading, onClick = { loadFull() }) { Text(if (error) "Couldn't load full message · Retry" else "Read full message") }
         } else if (event.type == "thinking") {
@@ -355,7 +375,10 @@ private fun EngineLine(event: RunEvent) {
     when (event.type) {
         "error" -> ToolFailureSummary.parse(text)?.let { ToolFailureCard(text, it) }
             ?: GlyphLine("⚠", text, MaterialTheme.colorScheme.error, MaterialTheme.typography.bodyLarge)
-        "notice" -> GlyphLine("⚠", text, LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        // An account switch the conversation has moved past is history, muted with the sign-in failure it came with.
+        "notice" -> GlyphLine("⚠", text, if (event.fields["settled"] == JsonPrimitive(true)) MaterialTheme.colorScheme.onSurfaceVariant
+            else LocalOrbitColors.current.needsYou, MaterialTheme.typography.labelLarge)
+        "auth_settled" -> SettledAuthLine(text, event.fields["resolved"] == JsonPrimitive(true))
         "diagnostic" -> DiagnosticLine(event.fields.string("label").orEmpty(), EngineStderr.logText(text),
             (event.fields["repeats"] as? JsonPrimitive)?.intOrNull ?: 1)
         // The self-healing failure's sentence; the card around it (countdown, Retry) is the auto-retry card's.
@@ -389,6 +412,24 @@ private fun GlyphLine(glyph: String, text: String, color: Color, style: TextStyl
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(glyph, color = color, style = style, modifier = Modifier.clearAndSetSemantics { })
         SelectionContainer { Text(text, color = color, style = style) }
+    }
+}
+
+/** A sign-in failure the conversation moved past (web `.chat-authfix-settled`, iOS `AuthErrorCardView.settledRow`): one muted line,
+ * a check once the agent worked again, and the runtime's words a tap away. */
+@Composable
+private fun SettledAuthLine(message: String, resolved: Boolean) {
+    var expanded by rememberSaveable(message) { mutableStateOf(false) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val style = MaterialTheme.typography.labelLarge
+    Column(Modifier.fillMaxWidth().testTag("auth-settled"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().clickable(onClickLabel = if (expanded) "Hide message" else "Show message", role = Role.Button) { expanded = !expanded },
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (resolved) "✓" else "⚠", Modifier.clearAndSetSemantics { }, color = if (resolved) LocalOrbitColors.current.success else muted, style = style)
+            Text(if (resolved) "Sign-in failed — resolved" else "Sign-in failed", Modifier.weight(1f), color = muted, style = style)
+            Text(if (expanded) "⌄" else "›", Modifier.clearAndSetSemantics { }, color = muted, style = style)
+        }
+        if (expanded) SelectionContainer { Text(message, color = muted, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

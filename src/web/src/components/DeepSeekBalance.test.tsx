@@ -11,7 +11,7 @@ import { ProviderConnectPage } from '../pages/ProviderConnectPage';
 import { deepseekBalanceKey } from '../lib/deepseekBalance';
 import { PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { DeepSeekBalanceLine, DeepSeekBalanceSection } from './DeepSeekBalance';
-import { SettingsVendorPage } from './settings/SettingsProviderPages';
+import { SettingsKeysPage } from './settings/SettingsProviderPages';
 
 vi.mock('../api', async (original) => ({ ...(await original<typeof import('../api')>()), api: vi.fn() }));
 const apiMock = vi.mocked(api);
@@ -144,7 +144,7 @@ describe('the DeepSeek account balance', () => {
       answers.ds = async () => ok();
       await show(<DeepSeekBalanceLine row={row()} />);
       expect(text()).toBe('Account balance ¥110.00 · updated 2 min ago');
-      expect(container.querySelector('button[title="Refresh"]')).not.toBeNull();
+      expect(container.querySelector('button[aria-label="Refresh the balance"]')).not.toBeNull();
       expect(balanceRequests()).toEqual(['/providers/mine/ds/balance']);
     });
 
@@ -324,7 +324,7 @@ describe('the DeepSeek account balance', () => {
             <QueryClientProvider client={client}>
               <MemoryRouter key={vendor} initialEntries={[`/settings/providers/${vendor}`]}>
                 <Routes>
-                  <Route path="/settings/providers/:vendor" element={<SettingsVendorPage />} />
+                  <Route path="/settings/providers/:vendor" element={<SettingsKeysPage />} />
                 </Routes>
               </MemoryRouter>
             </QueryClientProvider>,

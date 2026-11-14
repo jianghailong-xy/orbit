@@ -163,10 +163,13 @@ out="$base_dir/runs/$name"
 # --- What the host allows: refused before anything starts. ------------------------------------------------------------
 read -r port_lo port_hi < /proc/sys/net/ipv4/ip_local_port_range
 ports=$((port_hi - port_lo + 1))
+# The odd ports of the range: bind(0), as the shards bind each connection to its source address, takes them first, and
+# a port bound on any address is passed over by the gateway's own connect()s to the stubs, which keep the even ones.
+odd_ports=$(((port_hi - (port_lo % 2 ? port_lo : port_lo + 1)) / 2 + 1))
 per_source=$(((max_level + ${#source_list[@]} - 1) / ${#source_list[@]}))
 # Each source address has one ephemeral port per connection to the gateway's one address; renewals and TIME_WAIT need room.
-[ "$per_source" -le $((ports * 9 / 10)) ] ||
-  die "$max_level connections from ${#source_list[@]} source address(es) is $per_source each, past 90% of the $ports ephemeral ports ($port_lo-$port_hi): add --sources, or widen net.ipv4.ip_local_port_range (README.md)"
+[ "$per_source" -le $((odd_ports * 9 / 10)) ] ||
+  die "$max_level connections from ${#source_list[@]} source address(es) is $per_source each, past 90% of the $odd_ports odd ephemeral ports ($port_lo-$port_hi) that bind(0) takes before the even ones the gateway's calls to the stubs need: pass at least $(((max_level + odd_ports * 9 / 10 - 1) / (odd_ports * 9 / 10))) --sources, or widen net.ipv4.ip_local_port_range (README.md)"
 nr_open="$(cat /proc/sys/fs/nr_open)"
 fd_limit=$((nr_open < 1048576 ? nr_open : 1048576))
 [ "$fd_limit" -ge $((max_level + 10000)) ] || die "fs.nr_open ($nr_open) leaves no room for $max_level connections' file descriptors"
@@ -178,10 +181,13 @@ if [ -n "$ct_max" ] && [ $((ct_count + max_level * 12 / 10)) -gt "$ct_max" ]; th
 fi
 somaxconn="$(cat /proc/sys/net/core/somaxconn)"
 [ "$somaxconn" -ge 1024 ] || warnings+=("net.core.somaxconn is $somaxconn: the gateway's listen backlog follows it")
+# The gateway's default handshake rate: 100 a second for each CPU it may use, at least 200 (src/link-gateway/config.go).
+gateway_cpu_count="$(awk -v c="$gateway_cpus" -v n="$(nproc)" 'BEGIN { c = (c > 0 ? c : n); r = int(c); print (r < c ? r + 1 : r) }')"
+default_rate=$((gateway_cpu_count * 100 > 200 ? gateway_cpu_count * 100 : 200))
 for i in "${!level_list[@]}"; do
   rate=$(((level_list[i] + ramp_list[i] - 1) / ramp_list[i]))
-  if [ "$rate" -gt 200 ] && [[ " ${gateway_env[*]} " != *" LINK_HANDSHAKE_RATE="* ]]; then
-    warnings+=("level ${level_list[i]} ramps at $rate/s, past the gateway's 200 handshakes a second (LINK_HANDSHAKE_RATE): expect refusals, or set --gateway-env LINK_HANDSHAKE_RATE")
+  if [ "$rate" -gt "$default_rate" ] && [[ " ${gateway_env[*]} " != *" LINK_HANDSHAKE_RATE="* ]]; then
+    warnings+=("level ${level_list[i]} ramps at $rate/s, past the gateway's $default_rate handshakes a second (LINK_HANDSHAKE_RATE): expect refusals, or set --gateway-env LINK_HANDSHAKE_RATE")
   fi
 done
 for w in "${warnings[@]}"; do log "warning: $w"; done

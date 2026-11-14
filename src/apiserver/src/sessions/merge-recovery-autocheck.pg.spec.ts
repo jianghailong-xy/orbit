@@ -53,6 +53,14 @@ class WatchedSessions extends SessionsService {
     return outcome;
   }
 
+  readonly ownMerges: Array<Promise<string>> = [];
+
+  override mergeAfterOwnTurn(id: string, turnSucceeded?: boolean) {
+    const outcome = super.mergeAfterOwnTurn(id, turnSucceeded);
+    this.ownMerges.push(outcome);
+    return outcome;
+  }
+
   /** What every check started so far answered, in the order the doors started them. */
   async outcomes(): Promise<Array<{ id: string; outcome: RepairTurnCheck }>> {
     return Promise.all(this.checks.map(async (c) => ({ id: c.id, outcome: await c.outcome })));
@@ -509,5 +517,48 @@ test('S1 a repair session\'s turn has its parent\'s merge recovery checked again
       assert.equal(row.merge_status, 'pending', label);
       assert.equal(row.merge_recovery_action, 'preview', label);
     }
+  });
+  await t.test('a session merging itself during its turn has the merge queued when that turn ends, and not when it fails', async () => {
+    const w = await world(db, 'self');
+    const lease = randomUUID();
+    const self = await parentSession(db, w, 'self', { recovery: null, running: { leaseOwner: lease } });
+
+    // Asked from inside the turn: no refusal, nothing queued, the request kept on the row.
+    const answer = await sessions.mergeToMain(w.ownerId, self.id, 'main', undefined, { requestedBy: 'AGENT', selfRequest: true });
+    assert.equal((answer as { mergeAfterTurn?: boolean }).mergeAfterTurn, true);
+    const kept = await sql.query(
+      `SELECT merge_status, merge_after_turn_at, merge_after_turn_target FROM "session" WHERE id = $1::uuid`, [self.id]);
+    assert.equal(kept.rows[0].merge_status, null);
+    assert.ok(kept.rows[0].merge_after_turn_at);
+    assert.equal(kept.rows[0].merge_after_turn_target, 'main');
+
+    // The turn ends: the merge is queued as the session's own, and the request is gone.
+    await reply(api, w.runnerId, self.id, self.turnId!, 'Committed; merging.', lease);
+    const mark = sessions.ownMerges.length;
+    await api.turnComplete({ id: w.runnerId }, self.id, completed(self.turnId!, { leaseOwner: lease }));
+    assert.deepEqual(await Promise.all(sessions.ownMerges.slice(mark)), ['QUEUED']);
+    const queued = await sql.query(
+      `SELECT merge_status, merge_target, merge_requested_by, merge_operation_id, merge_after_turn_at
+         FROM "session" WHERE id = $1::uuid`, [self.id]);
+    assert.equal(queued.rows[0].merge_status, 'pending');
+    assert.equal(queued.rows[0].merge_target, 'main');
+    assert.equal(queued.rows[0].merge_requested_by, 'AGENT');
+    assert.equal(queued.rows[0].merge_after_turn_at, null);
+    const [command] = await realtime.drainMergeRequests(w.runnerId, lease);
+    assert.equal(command.sessionId, self.id);
+    assert.equal(command.operationId, queued.rows[0].merge_operation_id);
+
+    // A turn that fails after asking does not have its work merged.
+    const failing = await parentSession(db, w, 'self-failed', { recovery: null, running: { leaseOwner: lease } });
+    await sessions.mergeToMain(w.ownerId, failing.id, undefined, undefined, { requestedBy: 'AGENT', selfRequest: true });
+    await reply(api, w.runnerId, failing.id, failing.turnId!, 'Halfway.', lease);
+    const mark2 = sessions.ownMerges.length;
+    await api.turnComplete({ id: w.runnerId }, failing.id,
+      completed(failing.turnId!, { leaseOwner: lease, status: SharedRunStatus.FAILED, error: 'the model refused' }));
+    assert.deepEqual(await Promise.all(sessions.ownMerges.slice(mark2)), ['DROPPED']);
+    const dropped = await sql.query(
+      `SELECT merge_status, merge_after_turn_at FROM "session" WHERE id = $1::uuid`, [failing.id]);
+    assert.equal(dropped.rows[0].merge_status, null);
+    assert.equal(dropped.rows[0].merge_after_turn_at, null);
   });
 });

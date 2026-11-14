@@ -171,7 +171,10 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                 }
                                 if (!pinned || !pinnedCollapsed) items(group.sessions, key = { it.id }) { session ->
                                     val project = content.projects[session.id]
-                                    if (project != null) SessionProjectRowView(project, { open(OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
+                                    // A project's row opens its coordinator's conversation (owner 2026-11-11, docs/mocks/project-sessions-column
+                                    // board 5), whose bar opens the project's sessions; a project with no coordinator opens them as a page.
+                                    if (project != null) SessionProjectRowView(project, { open(project.coordinator?.let { OrbitRoute(Destination.SESSION, it.id, workspace, folderId) }
+                                        ?: OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
                                         projectMenu = project
                                     }
                                     else SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },

@@ -756,17 +756,40 @@ public enum RunnerPageFormat {
         return install.status == "pending" || install.status == "installing"
     }
 
-    /// Where the last Update Engines Now got to, in the web engine section's words.
-    public static func updateRelayLine(_ install: RunnerInstallState?) -> String? {
-        guard let install, install.mode == "update", let status = install.status else { return nil }
+    /// One line of what the last Update Engines Now said, and whether it is a failure (drawn red).
+    public struct UpdateRelayLine: Equatable {
+        public let text: String
+        public let failed: Bool
+        public init(_ text: String, failed: Bool = false) {
+            self.text = text
+            self.failed = failed
+        }
+    }
+
+    /// Where the last Update Engines Now got to, in the web engine section's words. A finished run
+    /// lists only the engines that need someone (web `engineUpdateReportLines`): the failures, and
+    /// an install Orbit may not replace. Current, updated, pinned, waiting for sessions or retried
+    /// on the next pass sort themselves out, and listing them buried the line that mattered.
+    public static func updateRelayLines(_ install: RunnerInstallState?) -> [UpdateRelayLine] {
+        guard let install, install.mode == "update", let status = install.status else { return [] }
         switch status {
-        case "pending": return "Queued — the runner picks this up on its next check-in."
-        case "installing": return "Updating this machine’s engine CLIs…"
+        case "pending": return [UpdateRelayLine("Queued — the runner picks this up on its next check-in.")]
+        case "installing": return [UpdateRelayLine("Updating this machine’s engine CLIs…")]
         case "done", "failed":
             let message = install.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return message.isEmpty ? "Nothing to update." : message
-        default: return nil
+            if message.isEmpty { return [UpdateRelayLine("Nothing to update.")] }
+            let lines = message.split(separator: "\n").map(String.init)
+                .filter { updateLineFailed($0) || $0.contains("owned by another user") }
+                .map { UpdateRelayLine($0, failed: updateLineFailed($0)) }
+            return lines.isEmpty ? [UpdateRelayLine("Nothing here needs your attention.")] : lines
+        default: return []
         }
+    }
+
+    /// The runner's own rule for a failed run (`updateRunFailed`, src/runner-go/engineinstall.go),
+    /// read per line.
+    static func updateLineFailed(_ line: String) -> Bool {
+        line.contains("update failed") || line.contains("timed out") || line.contains("does not run")
     }
 
     // MARK: Workspaces
@@ -804,6 +827,16 @@ public enum RunnerPageFormat {
 
     // MARK: About This Runner
 
+    /// Whether a newer release than this runner's own is out — the case About This Runner's Update
+    /// Runner Now is there for. False when either version isn't known, so nothing is offered on a guess.
+    public static func isBehindLatest(_ runner: Runner, latest: String?) -> Bool {
+        guard let version = runner.version?.trimmingCharacters(in: .whitespacesAndNewlines), !version.isEmpty,
+              let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty else {
+            return false
+        }
+        return RunnerAttention.compareRunnerVersions(version, latest) < 0
+    }
+
     /// `0.1.197 · Latest`; a runner that is behind and installs the release itself says so
     /// (`0.1.194 · 0.1.197 installs when no turn is running`), and so does one a staged rollout holds
     /// back (`0.1.194 · 0.1.197 not rolled out to it yet`). One that can't update itself is Needs
@@ -816,7 +849,7 @@ public enum RunnerPageFormat {
         guard let latest = latest?.trimmingCharacters(in: .whitespacesAndNewlines), !latest.isEmpty else {
             return version
         }
-        if RunnerAttention.compareRunnerVersions(version, latest) >= 0 {
+        if !isBehindLatest(runner, latest: latest) {
             return version + RunnerPageCopy.RUNNER_LINE_SEPARATOR + RunnerPageCopy.RUNNER_VERSION_LATEST
         }
         // Draining or restarting for a release: `0.1.253 · updating to 0.1.254`.

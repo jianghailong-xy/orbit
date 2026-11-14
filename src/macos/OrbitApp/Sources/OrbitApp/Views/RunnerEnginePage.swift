@@ -100,12 +100,12 @@ private struct RunnerEngineContent: View {
             } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
             } else if let login = RunnerPageFormat.loginEngine(engine) {
-                installSection(Infrastructure.rowKind(Infrastructure.engineHealth(runner, login), install: runner.install,
+                installSection(MachinesAndModels.rowKind(MachinesAndModels.engineHealth(runner, login), install: runner.install,
                                                       engine: login),
-                               installable: Infrastructure.installable(runner, login), offline: offline)
+                               installable: MachinesAndModels.installable(runner, login), offline: offline)
             } else if engine == "opencode" {
-                installSection(Infrastructure.rowKind(health, install: runner.install, slug: engine),
-                               installable: Infrastructure.installsOpenCode(runner), offline: offline)
+                installSection(MachinesAndModels.rowKind(health, install: runner.install, slug: engine),
+                               installable: MachinesAndModels.installsOpenCode(runner), offline: offline)
             }
             // Cursor CLI stays on the build Orbit pins, which a runner release moves: Update Engines Now
             // has nothing to do for it (board iOS 2).
@@ -144,7 +144,7 @@ private struct RunnerEngineContent: View {
 
     /// DeepSeek Harness has no sign-in here: every session runs on the DeepSeek key it was started with.
     /// What this machine decides is whether it can start Harness at all — and the one fix that happens
-    /// here is installing the pinned CLI (web parity: DeepSeek Harness's machine rows on Infrastructure).
+    /// here is installing the pinned CLI (web parity: DeepSeek Harness's machine rows on Machines & models).
     @ViewBuilder private func dshSection(offline: Bool) -> some View {
         let state = DshRuntime.state(of: runner)
         Section {
@@ -172,7 +172,7 @@ private struct RunnerEngineContent: View {
     /// An engine the machine doesn't have — a sign-in engine, or OpenCode — installed from here as the
     /// web's engine row installs it: Install, or Retry after an install that failed, and the relay's own
     /// words while it runs. Nothing for an Antigravity this runner can't run at all (`installable`).
-    @ViewBuilder private func installSection(_ kind: Infrastructure.RowKind, installable: Bool,
+    @ViewBuilder private func installSection(_ kind: MachinesAndModels.RowKind, installable: Bool,
                                              offline: Bool) -> some View {
         if kind == .installing || installable {
             Section {
@@ -341,10 +341,15 @@ private struct RunnerEngineContent: View {
         Section {
             Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                 .disabled(offline || RunnerPageFormat.engineUpdateInFlight(runner.install))
-            if let relay = RunnerPageFormat.updateRelayLine(runner.install) {
-                Text(relay)
-                    .font(.orbitLabel)
-                    .foregroundStyle(Color.secondary)
+            let relay = RunnerPageFormat.updateRelayLines(runner.install)
+            if !relay.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(relay.enumerated()), id: \.offset) { _, line in
+                        Text(line.text)
+                            .font(.orbitLabel)
+                            .foregroundStyle(line.failed ? RunnerInk.red : Color.secondary)
+                    }
+                }
             }
         } footer: {
             Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER

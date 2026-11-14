@@ -7,9 +7,10 @@ import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
+import { AdminLayout } from './components/settings/AdminLayout';
 import { SettingsLayout } from './components/settings';
 import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
-import { SettingsPoolsPage, SettingsProvidersHome, SettingsVendorPage } from './components/settings/SettingsProviderPages';
+import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome } from './components/settings/SettingsProviderPages';
 import { MachineSettingsPage } from './components/settings/MachineSettingsPage';
 import { useRememberOutsideSettings } from './lib/settingsReturn';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
@@ -21,6 +22,7 @@ import { GeneralSettingsPage } from './pages/settings/GeneralPage';
 import { NotificationsSettingsPage } from './pages/settings/NotificationsPage';
 import { AppearanceSettingsPage } from './pages/settings/AppearancePage';
 import { StorageSettingsPage } from './pages/settings/StoragePage';
+import { StorageFilesPage } from './pages/settings/StorageFilesPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { AdminSignInPage } from './pages/AdminSignInPage';
 import { AdminEmailPage } from './pages/AdminEmailPage';
@@ -40,7 +42,7 @@ import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
-import { GuestSessionPage } from './pages/GuestSessionPage';
+import { GuestLinkRedirect } from './pages/GuestSessionPage';
 import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
@@ -205,18 +207,9 @@ export function App() {
       <Route path="/s/:token/c/:sessionId" element={<SharedSessionPage />} />
       <Route path="/s/:token/t/:taskId" element={<SharedProjectTaskRoute />} />
       <Route path="/s/:token/d/:slug" element={<SharedWikiDocRoute />} />
-      {/* A session someone invited you to reply in (docs/session-guests-design.md §4): signed in, in the public
-          page's frame rather than the app's, since none of it is yours. */}
-      <Route
-        path="/g/:sessionId"
-        element={
-          authed ? (
-            <GuestSessionPage />
-          ) : (
-            <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname)}`} replace />
-          )
-        }
-      />
+      {/* The guest page's first address. A session shared with you now opens at the same /sessions/<id> its owner
+          opens (board docs/mocks/share-links/11-guest-one-link, D8); signed out, that address asks for a sign-in. */}
+      <Route path="/g/:sessionId" element={<GuestLinkRedirect />} />
       {/* The privacy policy, which Google's consent screen and the login page link to: public, and the
           same page signed out or in. */}
       <Route path="/privacy" element={<PrivacyPage />} />
@@ -261,14 +254,22 @@ export function App() {
               redirects to it too; the task list lives at "/tasks". Each view wraps itself in its
               layout contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
           {/* Settings takes over the window (owner's choice A1, docs/mocks/settings-redesign): its own nav
-              of four groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
+              of five groups in place of the app's sidebar, "Back to Orbit" and Esc to leave. Machines and
               Workspaces open the pages that manage them today until each has its own. */}
+          {/* Admin is drawn as Settings is: its own window, a nav of its pages, the page in a centred column. */}
+          <Route path="admin" element={<AdminLayout />}>
+            <Route index element={<AdminUsersPage />} />
+            <Route path="sign-in" element={<AdminSignInPage />} />
+            <Route path="email" element={<AdminEmailPage />} />
+            <Route path="integrations" element={<AdminIntegrationsPage />} />
+          </Route>
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/general" replace />} />
             <Route path="general" element={<GeneralSettingsPage />} />
             <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="appearance" element={<AppearanceSettingsPage />} />
             <Route path="storage" element={<StorageSettingsPage />} />
+            <Route path="storage/:kind/:id" element={<StorageFilesPage />} />
             <Route path="profile" element={<ProfilePage />} />
             {/* Old account-settings link, now Profile. Keep the redirect so existing
                 bookmarks/deep links don't 404. */}
@@ -281,16 +282,19 @@ export function App() {
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
             <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
+            {/* Adding a machine from Settings stays in Settings; a new account's first sign-in still lands on the welcome card at /runners/register. */}
+            <Route path="machines/new" element={<RunnerRegisterGuide inSettings />} />
             <Route path="machines/:id" element={<SettingsMachineRoute />} />
-            {/* Providers (owner's choice C1, board-4): a page per connected vendor, Account pools, and a key's
-                connect and edit pages, all in Settings' right-hand column. */}
+            {/* Providers (owner's choice C1, board-4; choice A, docs/mocks/settings-providers-compact): every
+                API key on one page, a vendor's alone at its own address, Account pools, and a key's connect
+                and edit pages, all in Settings' right-hand column. */}
             <Route path="providers" element={<SettingsProvidersHome />} />
             <Route path="providers/new" element={<ProviderPickPage />} />
             <Route path="providers/new/:slug" element={<ProviderConnectPage />} />
             <Route path="providers/keys/:id" element={<ProviderConnectPage />} />
             <Route path="providers/pools" element={<SettingsPoolsPage />} />
             <Route path="providers/pools/:id" element={<ProviderPoolPage />} />
-            <Route path="providers/:vendor" element={<SettingsVendorPage />} />
+            <Route path="providers/:vendor" element={<SettingsKeysPage />} />
             <Route path="workspaces/:id" element={<SettingsWorkspacePage />} />
           </Route>
           <Route element={<AppShell />}>
@@ -299,41 +303,6 @@ export function App() {
             <Route path="tasks" element={<TaskRoute />} />
             <Route path="tasks/:id" element={<TaskRoute />} />
             <Route path="lists/:key" element={<TaskRoute />} />
-            <Route
-              path="admin"
-              element={
-                <DocView>
-                  <AdminUsersPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's Sign-in settings, beside its user management (docs/google-sign-in-design.md §7.1). */}
-            <Route
-              path="admin/sign-in"
-              element={
-                <DocView>
-                  <AdminSignInPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's outgoing email: Resend and the welcome email (docs/welcome-email-design.md §3.1). */}
-            <Route
-              path="admin/email"
-              element={
-                <DocView>
-                  <AdminEmailPage />
-                </DocView>
-              }
-            />
-            {/* The admin area's Integrations: Feishu bots' switch (docs/feishu-bot-design.md §4.1). */}
-            <Route
-              path="admin/integrations"
-              element={
-                <DocView>
-                  <AdminIntegrationsPage />
-                </DocView>
-              }
-            />
             {/* Machines are Settings' now: /infrastructure opens one (InfrastructureRoute), its #keys and
                 #pools, and the old /providers addresses, land on Settings' Providers pages. */}
             <Route path="infrastructure" element={<InfrastructureRoute />} />

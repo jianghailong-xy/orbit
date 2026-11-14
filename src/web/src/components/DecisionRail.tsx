@@ -18,6 +18,7 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
 import './ui/Typography.css';
 import { streamPoll } from '../lib/listBudget';
 import type { CrossingPointer } from './CrossingDecisionCard';
+import { EvidenceRestartAction, RESTART_TASK_OWNER_ACTION } from './EvidenceRestartAction';
 
 /**
  * What is TRUE right now about this session's open questions, pinned under the header.
@@ -161,6 +162,9 @@ export interface PendingDecisionDecidability {
   decidable: boolean;
   refusal: string | null;
   requiredAction: string | null;
+  /** Who can clear an undecidable row now: its live run, the project's coordinator, or the owner.
+   *  Null when decidable; absent from a server older than evidence-always-has-an-addressee §3. */
+  addressee?: 'RUN' | 'COORDINATOR' | 'OWNER' | null;
 }
 
 /**
@@ -195,6 +199,9 @@ export interface PendingDecisionRow {
   citations: PendingDecisionCitation[];
   decidability: PendingDecisionDecidability;
   independence: PendingDecisionIndependence;
+  /** The action the owner can take on an undecidable row nobody else can move: `RESTART_TASK`
+   *  (`EvidenceRestartAction.tsx`). Null or absent on every other row, and from an older server. */
+  ownerAction?: typeof RESTART_TASK_OWNER_ACTION | null;
 }
 
 export interface PendingDecisionQueue {
@@ -547,8 +554,11 @@ function pointsAtCard(
  * The rows waiting on this reader's own resubmission: the facts, and the sentence saying what clears
  * them. Not a control. No card is drawn for one of these anywhere, and a control that goes nowhere
  * is worse than none.
+ *
+ * The one exception is a row that carries `ownerAction`: nobody else can move it, and what the
+ * reader can do is Restart the task, which is a Run press and not a decision.
  */
-function DecisionRows({ group }: { group: PendingDecisionRow[] }) {
+function DecisionRows({ group, sessionId }: { group: PendingDecisionRow[]; sessionId: string }) {
   return (
     <ul className="decision-rail-list">
       {group.map((row) => (
@@ -561,9 +571,13 @@ function DecisionRows({ group }: { group: PendingDecisionRow[] }) {
               {row.decidability.refusal
                 ?? 'no decision can be recorded about this evidence'}
             </span>
-            <div>
-              <span className="orbit-typography">{WAITING_ON_YOU_ACTION}</span>
-            </div>
+            {row.ownerAction === RESTART_TASK_OWNER_ACTION ? (
+              <EvidenceRestartAction key={decisionRowKey(row)} row={row} sessionId={sessionId} />
+            ) : (
+              <div>
+                <span className="orbit-typography">{WAITING_ON_YOU_ACTION}</span>
+              </div>
+            )}
           </div>
         </li>
       ))}
@@ -839,7 +853,7 @@ export function DecisionStrip({
               <span className="decision-rail-label">{WAITING_ON_YOU_LABEL}</span>
               <span className="decision-rail-count">{`${yours.length} to resubmit`}</span>
             </div>
-            <DecisionRows group={yours} />
+            <DecisionRows group={yours} sessionId={queue.decidingSessionId} />
           </section>
         </div>
       )}

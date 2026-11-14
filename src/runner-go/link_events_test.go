@@ -55,41 +55,54 @@ func TestLinkEventsGoUntilAcknowledged(t *testing.T) {
 }
 
 // A session's events go about once a linkEventCadence, and at once when a boundary event comes or somebody waits for
-// them.
+// them. "At once" is shown with a cadence that outlasts the test: a batch that goes at all did not wait for it, however
+// slow the host.
 func TestLinkEventsGoAtTheirCadenceOrAtOnceForABoundary(t *testing.T) {
-	r, in := newLinkEventsRig(t)
-	r.useLink(t)
-	s := r.m.events.open("session-c")
-	defer s.release()
-	handed := time.Now()
-	toolUse := RunEvent{Seq: 1, Type: evToolUse, TS: nowISO(), Payload: map[string]interface{}{"id": "toolu_1", "name": "Bash"}}
-	if err := s.submit([]RunEvent{toolUse}); err != nil {
-		t.Fatal(err)
-	}
-	linkWaitFor(t, 5*time.Second, "the tool call's batch", func() bool { return len(in.batchesOf("session-c")) == 1 })
-	if took := in.batchesOf("session-c")[0].at.Sub(handed); took < linkEventCadence-100*time.Millisecond {
-		t.Errorf("a tool call went %s after it was handed over, sooner than the %s cadence", took, linkEventCadence)
-	}
-	handed = time.Now()
-	result := RunEvent{Seq: 2, Type: evToolResult, TS: nowISO(), Payload: map[string]interface{}{"toolUseId": "toolu_1", "content": "ok"}}
-	if err := s.submit([]RunEvent{result}); err != nil {
-		t.Fatal(err)
-	}
-	linkWaitFor(t, 5*time.Second, "the tool result's batch", func() bool { return len(in.batchesOf("session-c")) == 2 })
-	if took := in.batchesOf("session-c")[1].at.Sub(handed); took > 500*time.Millisecond {
-		t.Errorf("a tool result, a boundary, went %s after it was handed over", took)
-	}
-	// A wait for the events sends them at once too.
-	handed = time.Now()
-	thinking := RunEvent{Seq: 3, Type: evThinking, TS: nowISO(), Payload: map[string]interface{}{"text": "hmm"}}
-	if err := s.submit([]RunEvent{thinking}); err != nil {
-		t.Fatal(err)
-	}
-	linkWaitStored(t, s, 5*time.Second)
-	if took := time.Since(handed); took > 500*time.Millisecond {
-		t.Errorf("events somebody waited for were stored %s after they were handed over", took)
-	}
-	in.assertContiguous(t, "session-c", 1, 3)
+	t.Run("at their cadence", func(t *testing.T) {
+		r, in := newLinkEventsRig(t)
+		r.useLink(t)
+		s := r.m.events.open("session-c")
+		defer s.release()
+		handed := time.Now()
+		toolUse := RunEvent{Seq: 1, Type: evToolUse, TS: nowISO(), Payload: map[string]interface{}{"id": "toolu_1", "name": "Bash"}}
+		if err := s.submit([]RunEvent{toolUse}); err != nil {
+			t.Fatal(err)
+		}
+		linkWaitFor(t, 5*time.Second, "the tool call's batch", func() bool { return len(in.batchesOf("session-c")) == 1 })
+		if took := in.batchesOf("session-c")[0].at.Sub(handed); took < linkEventCadence-100*time.Millisecond {
+			t.Errorf("a tool call went %s after it was handed over, sooner than the %s cadence", took, linkEventCadence)
+		}
+		in.assertContiguous(t, "session-c", 1, 1)
+	})
+	t.Run("at once", func(t *testing.T) {
+		old := linkEventCadence
+		linkEventCadence = time.Hour // before the rig: its sender reads it
+		t.Cleanup(func() { linkEventCadence = old })
+		r, in := newLinkEventsRig(t)
+		r.useLink(t)
+		s := r.m.events.open("session-c")
+		defer s.release()
+		// A tool call waits for the cadence, until a boundary comes: the two go in one batch.
+		toolUse := RunEvent{Seq: 1, Type: evToolUse, TS: nowISO(), Payload: map[string]interface{}{"id": "toolu_1", "name": "Bash"}}
+		if err := s.submit([]RunEvent{toolUse}); err != nil {
+			t.Fatal(err)
+		}
+		result := RunEvent{Seq: 2, Type: evToolResult, TS: nowISO(), Payload: map[string]interface{}{"toolUseId": "toolu_1", "content": "ok"}}
+		if err := s.submit([]RunEvent{result}); err != nil {
+			t.Fatal(err)
+		}
+		linkWaitFor(t, 30*time.Second, "the tool result's batch", func() bool { return len(in.batchesOf("session-c")) > 0 })
+		if b := in.batchesOf("session-c")[0]; b.first != 1 || b.last != 2 {
+			t.Errorf("the first batch carried seqs %d..%d, want the tool call and its result, 1..2", b.first, b.last)
+		}
+		// A wait for the events sends them at once too.
+		thinking := RunEvent{Seq: 3, Type: evThinking, TS: nowISO(), Payload: map[string]interface{}{"text": "hmm"}}
+		if err := s.submit([]RunEvent{thinking}); err != nil {
+			t.Fatal(err)
+		}
+		linkWaitStored(t, s, 30*time.Second)
+		in.assertContiguous(t, "session-c", 1, 3)
+	})
 }
 
 // A session has one batch in flight at a time: the next goes once the EventAck of the last has come.

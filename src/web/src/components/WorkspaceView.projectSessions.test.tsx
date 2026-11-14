@@ -167,7 +167,9 @@ const mounted = (): HTMLDivElement => {
   return container;
 };
 const projectRows = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.session-project-row')];
-const titles = (): string[] => [...mounted().querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
+/** What the session list shows: the workspace's list, or the project's page where it is in the list's place (a phone). */
+const list = (): HTMLElement => mounted().querySelector<HTMLElement>('.session-col:not(.session-project-column)') ?? mounted();
+const titles = (): string[] => [...list().querySelectorAll('.session-row .session-title')].map((el) => el.textContent ?? '');
 const projectRow = (): HTMLElement => {
   const found = projectRows()[0];
   if (!found) throw new Error('no project row');
@@ -306,6 +308,7 @@ beforeEach(() => {
       return reply({ needsYou: [], withCoordinator: withCoordinatorItems, startRequest });
     }
     if (path === `/projects/${PROJECT_ID}/integration`) return reply(integrationView ?? []);
+    if (path === `/projects/${PROJECT_ID}/acceptance/confirmation`) return reply(null);
     if (path.startsWith('/sessions/search?')) return reply({
       q: '', contentSearched: false, total: rows.length,
       hits: rows.map((r) => ({ ...r, matchField: 'title', snippet: null })),
@@ -367,9 +370,13 @@ afterEach(async () => {
   }
 });
 
-const sessionRows = (): HTMLElement[] => [...mounted().querySelectorAll<HTMLElement>('.session-row:not(.session-project-row)')];
+/** The page's rows wherever it is drawn, else the list's. */
+const sessionRows = (): HTMLElement[] => [...(page() ?? list()).querySelectorAll<HTMLElement>('.session-row:not(.session-project-row)')];
+/** The page's row titles, in the column beside the conversation or in the list's place. */
+const pageTitles = (): string[] => [...(page()?.querySelectorAll('.session-row .session-title') ?? [])].map((el) => el.textContent ?? '');
 const memberRow = (title: string): HTMLElement | undefined => sessionRows().find((entry) => entry.querySelector('.session-title')?.textContent === title);
-const page = (): HTMLElement | null => mounted().querySelector('.session-project-page');
+// The project's sessions page: the list's place at phone width, the column beside the conversation wider.
+const page = (): HTMLElement | null => mounted().querySelector('.session-project-page, .session-project-column');
 const projectQueryCalls = (): URLSearchParams[] => listCalls.map((path) => new URLSearchParams(path.split('?')[1])).filter((params) => params.has('projectId'));
 const remote = (n: number, title: string, extra: Record<string, unknown> = {}) => row(n, title, {
   workspaceId: OTHER_WORKSPACE_ID,
@@ -378,8 +385,12 @@ const remote = (n: number, title: string, extra: Record<string, unknown> = {}) =
   ...extra,
 });
 
+// A phone's project row opens the coordinator (board 5), so there the page comes from the row's Sessions item.
 async function openSessions(): Promise<void> {
-  await click(projectRow(), 'the project entry');
+  if (mobile) {
+    await hoverProjectMenu();
+    await click(menuItem('Sessions'), 'the project menu’s Sessions');
+  } else await click(projectRow(), 'the project entry');
   await until(() => expect(page()).not.toBeNull());
 }
 
@@ -453,8 +464,11 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     await click(menuItem('Open Session'), 'the disabled Open Session');
     expect(location).toBe(`/sessions/${LOOSE.id}`);
     await click(projectRow(), 'the project entry without a coordinator');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
+    // No coordinator to open: the column opens the project's latest member beside itself.
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
     await until(() => expect(page()?.textContent).toContain('Build the package'));
+    expect(titles()).toContain(LOOSE.title);
+    expect(projectRows()).toHaveLength(1);
   });
 
   it('draws the progress tag as part of the entry, with the session-count hint', async () => {
@@ -463,7 +477,7 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     expect(progress?.getAttribute('title')).toBe('2 sessions · 1 running');
     expect(progress?.closest('button')).toBeNull();
     await click(progress, 'the project progress tag');
-    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
     expect(page()).not.toBeNull();
   });
 
@@ -576,7 +590,571 @@ describe('project entry navigation and actions', { timeout: 60_000 }, () => {
     expect(location).toBe(`/sessions/${LOOSE.id}`);
     expect(entry.querySelector<HTMLElement>('.session-swipe')?.style.transform).toBe('');
     await click(progress, 'the progress tag after the swipe closes');
-    await until(() => expect(page()).not.toBeNull());
+    // A phone's project row opens its coordinator directly (owner 2026-11-11, board 5).
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+    expect(page()).toBeNull();
+  });
+});
+
+// Owner decisions of 2026-11-11 (docs/mocks/project-sessions-column, board 2): wider than a phone, a
+// project's row keeps the workspace's list and opens the coordinator, with the project's sessions in a
+// column at the conversation's right edge.
+/** The conversation title bar's Project sessions button, left of its ⋮ menu. */
+const projectSessionsButton = (): HTMLButtonElement | null =>
+  mounted().querySelector<HTMLButtonElement>('.workspace-header button[aria-label="Project sessions"]');
+
+describe('the project sessions column beside the conversation', { timeout: 60_000 }, () => {
+  const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
+  const columnTitles = (): string[] => [...(column()?.querySelectorAll('.session-row .session-title') ?? [])].map((el) => el.textContent ?? '');
+
+  it.each(['click', 'Enter'] as const)('opens the coordinator from a project row (%s), keeps the list, and shows the column to the right', async (how) => {
+    await mount();
+    if (how === 'click') await click(projectRow(), 'the project row');
+    else {
+      await act(async () => projectRow().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+      await settle();
+    }
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // The list is the workspace's still: its head, New session, its rows and the project's row, selected.
+    const listCol = mounted().querySelector('aside.session-col:not(.session-project-column)')!;
+    expect(listCol.classList.contains('session-project-page')).toBe(false);
+    expect(listCol.querySelector('.session-scope-menu')).not.toBeNull();
+    expect(listCol.querySelector('.session-new')).not.toBeNull();
+    expect(titles()).toContain(LOOSE.title);
+    expect(projectRows()).toHaveLength(1);
+    expect(projectRow().classList.contains('active')).toBe(true);
+    // Order across the split: list | conversation | column.
+    const split = mounted().querySelector('.workspace-split')!;
+    const panes = [...split.children].filter((el) => !el.classList.contains('session-resizer'));
+    expect(panes.indexOf(listCol)).toBeLessThan(panes.indexOf(split.querySelector('.workspace-view')!));
+    expect(panes.indexOf(split.querySelector('.workspace-view')!)).toBeLessThan(panes.indexOf(column()!));
+    // Today's page, moved: its header, the progress card, the Coordinator section with its row selected.
+    expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project Alpha');
+    expect(column()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
+    const coordinatorRow = column()!.querySelector('.session-project-coordinator .session-row')!;
+    expect(coordinatorRow.querySelector('.session-title')?.textContent).toBe(COORDINATOR.title);
+    expect(coordinatorRow.classList.contains('active')).toBe(true);
+    expect(column()!.querySelectorAll('.session-row.active')).toHaveLength(1);
+  });
+
+  it('folds with its ✕, which keeps ?project= on the address so the title bar’s button brings it back', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    const close = column()!.querySelector('.session-project-page-header .session-folder-back')!;
+    expect(close.getAttribute('aria-label')).toBe('Hide project sessions');
+    await click(close, 'the column ✕');
+    await until(() => expect(column()).toBeNull());
+    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    expect(projectSessionsButton()?.getAttribute('aria-pressed')).toBe('false');
+    expect(projectRows()).toHaveLength(1);
+  });
+
+  it('opens a member from the column with the column kept, and its row selected there', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    const member = [...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
+    await click(member, 'the member row in the column');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    expect(column()).not.toBeNull();
+    const active = column()!.querySelector('.session-row.active .session-title');
+    expect(active?.textContent).toBe(TASK.title);
+    expect(projectRow().classList.contains('active')).toBe(true);
+  });
+
+  // Board 3: the column follows the selection. A member of its project keeps it; another project's row
+  // switches it; a session in no project closes it.
+  const listColumn = (): HTMLElement => mounted().querySelector<HTMLElement>('aside.session-col:not(.session-project-column)')!;
+  const listSnapshot = (): string => [...listColumn().querySelectorAll('.session-row .session-title')]
+    .map((el) => el.textContent).join('|');
+  const press = async (key: 'ArrowDown' | 'ArrowUp'): Promise<void> => {
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })));
+    await settle();
+  };
+
+  it('opens a member clicked in the column beside the same column, with the list as it was', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    const listBefore = listSnapshot();
+    const columnBefore = column()!.innerHTML.replace(/ active/g, '');
+    await click([...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title),
+      'the member row in the column');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(mounted().querySelector('.workspace-view .session-title, .workspace-view h1, .workspace-view')?.textContent).toContain(TASK.title));
+    await settle();
+    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    // The list: same rows, the project's row still the selected one.
+    expect(listSnapshot()).toBe(listBefore);
+    expect(projectRows()).toHaveLength(1);
+    expect(projectRow().classList.contains('active')).toBe(true);
+    // The column: the same rows, with only the selection moved to the member.
+    expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect([...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent)).toEqual([TASK.title]);
+    expect(column()!.innerHTML.replace(/ active/g, '')).toBe(columnBefore);
+  });
+
+  it('switches the column to another project and opens its coordinator when that project’s row is clicked', async () => {
+    const OTHER_PROJECT_ID = pid(830);
+    const otherMembership = (role: string) => ({ projectId: OTHER_PROJECT_ID, projectTitle: 'Project Beta', projectStatus: 'OPEN', role });
+    const otherCoordinator = row(831, 'Coordinate the migration', { projectMembership: otherMembership('COORDINATOR'),
+      projectId: OTHER_PROJECT_ID, projectTitle: 'Project Beta', lastTurnAt: '2026-10-02T08:00:00Z' });
+    const otherTask = row(832, 'Copy the index', { projectMembership: otherMembership('TASK'), lastTurnAt: '2026-10-02T07:00:00Z' });
+    rows = [LOOSE, COORDINATOR, TASK, otherCoordinator, otherTask];
+    projects = [project(), project({ id: OTHER_PROJECT_ID, title: 'Project Beta', lastActivityAt: '2026-10-02T08:00:00Z',
+      coordinatorActivity: { working: false, lastTurnAt: otherCoordinator.lastTurnAt } })];
+    await mount(() => expect(projectRows()).toHaveLength(2));
+    const rowOf = (title: string) => projectRows().find((el) => el.textContent?.includes(title));
+    await click(rowOf('Project Alpha'), 'Project Alpha’s row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // Open a member first, so the switch is from a member's conversation too.
+    await click([...column()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title),
+      'the member row in the column');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await click(rowOf('Project Beta'), 'Project Beta’s row');
+    await until(() => expect(location).toBe(`/sessions/${otherCoordinator.id}?project=${OTHER_PROJECT_ID}`));
+    await until(() => expect(columnTitles()).toEqual([otherCoordinator.title, otherTask.title]));
+    expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project Beta');
+    expect([...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent)).toEqual([otherCoordinator.title]);
+    expect(rowOf('Project Beta')!.classList.contains('active')).toBe(true);
+    expect(rowOf('Project Alpha')!.classList.contains('active')).toBe(false);
+    expect(projectRows()).toHaveLength(2);
+    expect(titles()).toContain(LOOSE.title);
+  });
+
+  it('closes the column when a session in no project is clicked in the list', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await click(await (async () => { await until(() => expect(columnTitles()).toContain(TASK.title)); return [...column()!.querySelectorAll('.session-row')]
+      .find((el) => el.querySelector('.session-title')?.textContent === TASK.title); })(), 'the member row in the column');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await click([...listColumn().querySelectorAll('.session-row:not(.session-project-row)')]
+      .find((el) => el.querySelector('.session-title')?.textContent === LOOSE.title), 'the loose session in the list');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(column()).toBeNull();
+    expect(projectRow().classList.contains('active')).toBe(false);
+  });
+
+  it('closes the column when the arrow keys step to a session in no project, and opens it again stepping back onto the project’s row', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // The list is the project's row (newest) then the loose session.
+    await press('ArrowDown');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(column()).toBeNull();
+    // With no column open, stepping onto the project's row opens it beside the coordinator, as a click does.
+    await press('ArrowUp');
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+  });
+
+  it('closes the column on any other navigation to a session in no project, and keeps it for a member', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // A member reached some other way than the column keeps it.
+    await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await settle();
+    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    expect(column()).not.toBeNull();
+    // A session in no project under the same address closes it, rather than being sent to the coordinator.
+    await act(async () => routerNavigate(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`));
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    await until(() => expect(column()).toBeNull());
+  });
+
+  // Owner 2026-11-13: a member of another project selected from the list switches the column to that
+  // project, as that project's own row does. Beta's coordinator runs in another workspace, so its member
+  // here is a row of its own, marked with Beta, just below Alpha's row.
+  const BETA_ID = pid(840);
+  const betaMembership = (role: string) => ({ projectId: BETA_ID, projectTitle: 'Project Beta', projectStatus: 'OPEN', role });
+  const betaCoordinator = remote(841, 'Coordinate Beta', { projectMembership: betaMembership('COORDINATOR'),
+    projectId: BETA_ID, projectTitle: 'Project Beta', lastTurnAt: '2026-10-02T08:00:00Z' });
+  const betaMember = row(842, 'Index the archive', { projectMembership: betaMembership('TASK'), lastTurnAt: '2026-10-03T09:00:00Z' });
+  const withBeta = (): void => {
+    rows = [LOOSE, COORDINATOR, TASK, betaMember];
+    remoteRows = [betaCoordinator];
+    projects = [project(), project({ id: BETA_ID, title: 'Project Beta', lastActivityAt: betaMember.lastTurnAt,
+      coordinatorActivity: { working: false, lastTurnAt: betaCoordinator.lastTurnAt } })];
+  };
+  const listRow = (title: string): HTMLElement | undefined => [...listColumn().querySelectorAll<HTMLElement>('.session-row:not(.session-project-row)')]
+    .find((el) => el.querySelector('.session-title')?.textContent === title);
+  const activeColumnTitles = (): string[] => [...column()!.querySelectorAll('.session-row.active .session-title')].map((el) => el.textContent ?? '');
+  const expectBetaColumn = async (): Promise<void> => {
+    await until(() => expect(location).toBe(`/sessions/${betaMember.id}?project=${BETA_ID}`));
+    await until(() => expect(columnTitles()).toEqual([betaCoordinator.title, betaMember.title]));
+    expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project Beta');
+    expect(activeColumnTitles()).toEqual([betaMember.title]);
+    // The conversation pane is the member's.
+    await until(() => expect(vi.mocked(apiModule.getSession).mock.calls.some(([id]) => id === betaMember.id)).toBe(true));
+    await until(() => expect(mounted().querySelector('.workspace-view')?.textContent).toContain(betaMember.title));
+    await settle();
+    expect(location).toBe(`/sessions/${betaMember.id}?project=${BETA_ID}`);
+    expect(projectRow().classList.contains('active')).toBe(false);
+  };
+
+  it('switches the column to another project when that project’s member is clicked in the list', async () => {
+    withBeta();
+    await mount(() => expect(listRow(betaMember.title)).toBeTruthy());
+    await click(projectRow(), 'Project Alpha’s row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    await click(listRow(betaMember.title), 'Beta’s member in the list');
+    await expectBetaColumn();
+  });
+
+  it('switches the column to another project when the arrow keys step onto that project’s member', async () => {
+    withBeta();
+    await mount(() => expect(listRow(betaMember.title)).toBeTruthy());
+    await click(projectRow(), 'Project Alpha’s row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // The list is Alpha's row, Beta's member, then the loose session.
+    await press('ArrowDown');
+    await expectBetaColumn();
+    // On to a session in no project, the column closes.
+    await press('ArrowDown');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(column()).toBeNull();
+  });
+
+  it('switches the column to another project’s member reached some other way, and still closes it for a session in no project', async () => {
+    withBeta();
+    await mount(() => expect(listRow(betaMember.title)).toBeTruthy());
+    await click(projectRow(), 'Project Alpha’s row');
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
+    // A member of Alpha keeps Alpha's column.
+    await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await settle();
+    expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}`);
+    expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]);
+    // A member of Beta under Alpha's address switches the column to Beta.
+    await act(async () => routerNavigate(`/sessions/${betaMember.id}?project=${PROJECT_ID}`));
+    await expectBetaColumn();
+    // A session in no project closes it.
+    await click(listRow(LOOSE.title), 'the loose session in the list');
+    await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
+    expect(column()).toBeNull();
+  });
+
+  it('keeps the phone’s page in the list’s place, with no column', async () => {
+    mobile = true;
+    await mount();
+    await openSessions();
+    expect(column()).toBeNull();
+    expect(mounted().querySelector('aside.session-col.session-project-page')).not.toBeNull();
+    expect(location).toBe(`/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
+  });
+});
+
+describe('the title bar’s Project sessions button', { timeout: 60_000 }, () => {
+  const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
+  const button = (): HTMLButtonElement => {
+    const found = projectSessionsButton();
+    if (!found) throw new Error('no Project sessions button');
+    return found;
+  };
+  const pressEscape = async (): Promise<void> => {
+    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await settle();
+  };
+
+  it('sits left of ⋮ on the coordinator’s and a member’s conversation, with the glyph and the session count, and on no other', async () => {
+    await mount();
+    expect(projectSessionsButton()).toBeNull();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(button().getAttribute('title')).toBe('Project sessions');
+    expect(button().classList.contains('orbit-button')).toBe(true);
+    expect(button().querySelector('.orbit-button-icon svg, .orbit-button-icon .anticon, .orbit-button-icon img, .orbit-button-icon *')).not.toBeNull();
+    // Immediately left of the ⋮ More actions button.
+    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    // The column header counts the same sessions.
+    expect(column()!.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
+    // A member of the project carries it too.
+    await act(async () => routerNavigate(`/sessions/${TASK.id}?project=${PROJECT_ID}`));
+    await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(TASK.title));
+    expect(button().textContent).toBe('2');
+    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    // A session in no project has none.
+    await act(async () => routerNavigate(`/sessions/${LOOSE.id}`));
+    await until(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(LOOSE.title));
+    expect(projectSessionsButton()).toBeNull();
+  });
+
+  it('is pressed while the column is open, and a click folds the column and the next unfolds it', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('folds the column on Esc, but not while focus is in a field', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    const composer = mounted().querySelector<HTMLTextAreaElement>('textarea');
+    expect(composer, 'the composer').toBeTruthy();
+    await act(async () => composer!.focus());
+    await pressEscape();
+    expect(column()).not.toBeNull();
+    await act(async () => composer!.blur());
+    await pressEscape();
+    await until(() => expect(column()).toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+  });
+
+  it('opens the column of a project conversation whose column is closed, counting its sessions', async () => {
+    await mount(() => expect(mounted().querySelector('.workspace-header .workspace-name')?.textContent).toBe(COORDINATOR.title),
+      `/sessions/${COORDINATOR.id}`);
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(column()).toBeNull();
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('remembers a hand fold in this browser until the button is pressed again', async () => {
+    const stored = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => { stored.set(key, value); },
+      removeItem: (key: string) => { stored.delete(key); },
+    });
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    await click(column()!.querySelector('.session-project-page-header .session-folder-back'), 'the column ✕');
+    await until(() => expect(column()).toBeNull());
+    expect(stored.get('orbit.projectColumnFolded')).toBe('1');
+    // A fresh page (a reload) keeps it folded, the address still naming the project.
+    await act(async () => root!.unmount());
+    container!.remove();
+    await mount(() => expect(projectSessionsButton()?.textContent).toBe('2'), `/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`);
+    expect(column()).toBeNull();
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(stored.get('orbit.projectColumnFolded')).toBe('0');
+  });
+});
+
+// Owner decisions of 2026-11-11 (docs/mocks/project-sessions-column, board 5): at phone width a project row
+// opens the coordinator's conversation itself, and the title bar's button brings the project's sessions up
+// in a bottom sheet over it.
+describe('the phone’s project sessions sheet', { timeout: 60_000 }, () => {
+  const sheet = (): HTMLElement | null => document.querySelector<HTMLElement>('.project-sessions-sheet');
+  const sheetTitles = (): string[] => [...(sheet()?.querySelectorAll('.session-row .session-title') ?? [])].map((el) => el.textContent ?? '');
+  const conversationName = (): string | null | undefined => mounted().querySelector('.workspace-header .workspace-name')?.textContent;
+  const button = (): HTMLButtonElement => {
+    const found = projectSessionsButton();
+    if (!found) throw new Error('no Project sessions button');
+    return found;
+  };
+  const openCoordinator = async (): Promise<void> => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(conversationName()).toBe(COORDINATOR.title));
+  };
+  const openSheet = async (): Promise<void> => {
+    await openCoordinator();
+    await until(() => expect(button().textContent).toBe('2'));
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(sheetTitles()).toEqual([COORDINATOR.title, TASK.title]));
+  };
+  /** A drag of the grabber from y=`from` to y=`to`, with the sheet `height` px tall in an 852px-tall viewport. */
+  const drag = async (from: number, to: number, height: number): Promise<void> => {
+    vi.stubGlobal('innerHeight', 852);
+    const drawer = sheet()!;
+    Object.defineProperty(drawer, 'getBoundingClientRect', { configurable: true, value: () => ({ height }) });
+    const grabber = drawer.querySelector('.project-sessions-sheet-grabber')!;
+    const pointer = (type: string, clientY: number) => new MouseEvent(type, { bubbles: true, clientY });
+    await act(async () => grabber.dispatchEvent(pointer('pointerdown', from)));
+    await act(async () => grabber.dispatchEvent(pointer('pointermove', to)));
+    await act(async () => grabber.dispatchEvent(pointer('pointerup', to)));
+    await settle();
+  };
+
+  beforeEach(() => { mobile = true; });
+
+  it('opens the coordinator’s conversation from a project row, with no project sessions page', async () => {
+    await openCoordinator();
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(page()).toBeNull();
+    expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(true);
+    // The title bar carries the button, left of ⋮, unpressed, with no sheet up yet.
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(button().nextElementSibling?.getAttribute('title')).toBe('More actions');
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    expect(sheet()).toBeNull();
+  });
+
+  it('opens the project’s sessions in a bottom sheet at medium height from the title bar’s button', async () => {
+    await openSheet();
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    expect(sheet()!.dataset.placement).toBe('bottom');
+    expect(sheet()!.style.height).toBe('62%');
+    expect(sheet()!.querySelector('.project-sessions-sheet-grabber')).not.toBeNull();
+    expect(document.querySelector('.orbit-overlay-backdrop')).not.toBeNull();
+    // Today's page, as the column has it: the head with ✕, the progress card, Coordinator selected.
+    const head = sheet()!.querySelector('.session-project-page-header')!;
+    expect(head.textContent).toContain('Project Alpha');
+    expect(head.textContent).toContain('Project · 2 sessions');
+    expect(head.querySelector('.session-folder-back')?.getAttribute('aria-label')).toBe('Hide project sessions');
+    expect(sheet()!.querySelector('.session-project-page-progress')?.textContent).toBe('2/5 done · 1 running');
+    expect(sheet()!.querySelector('.session-project-coordinator .session-row.active .session-title')?.textContent).toBe(COORDINATOR.title);
+    // The list behind keeps the workspace's rows: no page took its place.
+    expect(page()).toBeNull();
+    expect(titles()).toContain(LOOSE.title);
+  });
+
+  it('closes the sheet and opens a member tapped in it, and Back returns to the session list', async () => {
+    await openSheet();
+    const member = [...sheet()!.querySelectorAll('.session-row')].find((el) => el.querySelector('.session-title')?.textContent === TASK.title);
+    await click(member, 'the member row in the sheet');
+    await until(() => expect(location).toBe(`/sessions/${TASK.id}`));
+    await until(() => expect(sheet()).toBeNull());
+    await until(() => expect(conversationName()).toBe(TASK.title));
+    // The member's title bar carries the same button, unpressed.
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(mounted().querySelector('.workspace-back-mobile'), 'the conversation’s Back');
+    await until(() => expect(location.startsWith('/sessions/')).toBe(false));
+    expect(mounted().querySelector('.workspace-split')?.classList.contains('show-conversation')).toBe(false);
+    expect(page()).toBeNull();
+    expect(projectRows()).toHaveLength(1);
+  });
+
+  it('closes on its ✕ and on Esc, leaving the conversation as it was', async () => {
+    await openSheet();
+    await click(sheet()!.querySelector('.session-project-page-header .session-folder-back'), 'the sheet’s ✕');
+    await until(() => expect(sheet()).toBeNull());
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(sheet()).not.toBeNull());
+    await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await until(() => expect(sheet()).toBeNull());
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+  });
+
+  it('drags up to full height, back to medium, and closes on a drag down', async () => {
+    await openSheet();
+    await drag(330, 30, 528);
+    await until(() => expect(sheet()!.style.height).toBe('94%'));
+    await drag(50, 300, 800);
+    await until(() => expect(sheet()!.style.height).toBe('62%'));
+    await drag(330, 700, 528);
+    await until(() => expect(sheet()).toBeNull());
+    expect(location).toBe(`/sessions/${COORDINATOR.id}`);
+  });
+});
+
+describe('the project column in a window too narrow for it', { timeout: 60_000 }, () => {
+  // The list and the column are 320px each by default, with a 1px divider before each: the column fits
+  // beside a conversation of 480px from a split of 1122px.
+  const NARROW = 1121;
+  const WIDE = 1122;
+  const column = (): HTMLElement | null => mounted().querySelector<HTMLElement>('aside.session-project-column');
+  const button = (): HTMLButtonElement => {
+    const found = projectSessionsButton();
+    if (!found) throw new Error('no Project sessions button');
+    return found;
+  };
+  let observed: Array<{ callback: ResizeObserverCallback; targets: Set<Element> }> = [];
+  let width = NARROW;
+  beforeEach(() => {
+    observed = [];
+    width = NARROW;
+    vi.stubGlobal('ResizeObserver', class {
+      private readonly entry: { callback: ResizeObserverCallback; targets: Set<Element> };
+      constructor(callback: ResizeObserverCallback) {
+        this.entry = { callback, targets: new Set() };
+        observed.push(this.entry);
+      }
+      observe(el: Element) { this.entry.targets.add(el); }
+      unobserve(el: Element) { this.entry.targets.delete(el); }
+      disconnect() { this.entry.targets.clear(); }
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get(this: HTMLElement) { return this.classList.contains('workspace-split') ? width : 0; },
+    });
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  });
+  const resizeTo = async (next: number): Promise<void> => {
+    width = next;
+    const split = mounted().querySelector('.workspace-split')!;
+    await act(async () => {
+      for (const { callback, targets } of observed) {
+        if (targets.has(split)) callback([], {} as ResizeObserver);
+      }
+    });
+    await settle();
+  };
+
+  it('starts folded where the conversation would go under 480px, with the button plain, and unfolds as the window widens', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(column()).toBeNull();
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    // The list keeps the project's row selected, and the coordinator is open.
+    expect(projectRow().classList.contains('active')).toBe(true);
+    await resizeTo(WIDE);
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    expect(column()!.classList.contains('session-project-column-over')).toBe(false);
+    // Narrow again, it folds by itself again.
+    await resizeTo(NARROW);
+    await until(() => expect(column()).toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('unfolds over the conversation on the button while too narrow, and folds again on ✕', async () => {
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(button().textContent).toBe('2'));
+    expect(column()).toBeNull();
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    expect(column()!.classList.contains('session-project-column-over')).toBe(true);
+    await click(column()!.querySelector('.session-project-page-header .session-folder-back'), 'the column ✕');
+    await until(() => expect(column()).toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('keeps a hand fold through widening until the button is pressed again', async () => {
+    width = WIDE;
+    await mount();
+    await click(projectRow(), 'the project row');
+    await until(() => expect(column()).not.toBeNull());
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).toBeNull());
+    await resizeTo(NARROW);
+    await resizeTo(WIDE + 400);
+    expect(column()).toBeNull();
+    expect(button().getAttribute('aria-pressed')).toBe('false');
+    await click(button(), 'the Project sessions button');
+    await until(() => expect(column()).not.toBeNull());
+    expect(button().getAttribute('aria-pressed')).toBe('true');
+    expect(column()!.classList.contains('session-project-column-over')).toBe(false);
   });
 });
 
@@ -697,13 +1275,13 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(projectQueryCalls().some((params) => params.get('view') === 'trash')).toBe(false);
     await click(memberRow('Resolve remote issue'), 'the remote member');
     await until(() => expect(location).toBe(`/sessions/${pid(825)}?project=${PROJECT_ID}`));
-    expect(titles()).toEqual(['Plan the release', 'Resolve remote issue', 'Completed remote work', 'Build the package']);
+    expect(pageTitles()).toEqual(['Plan the release', 'Resolve remote issue', 'Completed remote work', 'Build the package']);
   });
 
   it.each(['open', 'completed'] as const)('gives mixed member rows their own lifecycle actions from the %s page', async (view) => {
     rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
     const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}${view === 'completed' ? '&view=completed' : ''}`;
-    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), address);
+    await mount(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]), address);
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the Completed member menu');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     expect(menuItem('Complete')).toBeUndefined();
@@ -719,7 +1297,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await openSessions();
     await act(async () => client!.setQueryData(projectSessionsQuery({ projectId: PROJECT_ID, view: 'completed' }).queryKey,
       [{ ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }]));
-    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
   });
 
@@ -727,7 +1305,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     mobile = true;
     rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
     const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}${view === 'completed' ? '&view=completed' : ''}`;
-    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), address);
+    await mount(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]), address);
     const leadingLabels = (title: string) => [...memberRow(title)!.querySelectorAll('.session-swipe-actions.leading button')].map((button) => button.getAttribute('aria-label'));
     expect(leadingLabels(COORDINATOR.title)).toEqual(['Complete', 'Pin']);
     expect(leadingLabels(TASK.title)).toEqual(['Move to Open', 'Pin']);
@@ -738,14 +1316,14 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await swipe(memberRow(TASK.title)!, 300);
     await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
     await until(() => expect(leadingLabels(TASK.title)).toEqual(['Move to Open', 'Pin']));
-    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]);
   });
 
   it('uses the selected member’s fresher lifecycle for both phone buttons and the full swipe action', async () => {
     mobile = true;
     rows = [LOOSE, COORDINATOR, { ...TASK, lifecycleState: 'COMPLETED', status: 'SUCCEEDED', runState: 'SUCCEEDED' }];
     vi.mocked(apiModule.getSession).mockResolvedValue({ ...TASK, lifecycleState: 'OPEN', status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT' } as never);
-    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`);
+    await mount(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`);
     await until(() => expect([...memberRow(TASK.title)!.querySelectorAll('.session-swipe-actions.leading button')].map((button) => button.getAttribute('aria-label'))).toEqual(['Complete', 'Pin']));
     await swipe(memberRow(TASK.title)!, 300);
     await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
@@ -783,6 +1361,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('lists all members from Completed, keeps its address in navigation and restores it on refresh', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     rows = [LOOSE, { ...COORDINATOR, lifecycleState: 'COMPLETED' }, { ...TASK, lifecycleState: 'COMPLETED' }];
     remoteRows = [remote(826, 'Completed remote work', { lifecycleState: 'COMPLETED' }), remote(827, 'Open remote work')];
     await mount(() => expect(titles()).toEqual(['Loose conversation']));
@@ -790,15 +1369,15 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(projectRows()).toHaveLength(1));
     await openSessions();
     expect(location).toBe(`/workspaces/${WORKSPACE_ID}?project=${PROJECT_ID}&view=completed`);
-    expect(titles()).toEqual(expect.arrayContaining(['Plan the release', 'Build the package', 'Completed remote work']));
-    expect(titles()).toContain('Open remote work');
+    expect(pageTitles()).toEqual(expect.arrayContaining(['Plan the release', 'Build the package', 'Completed remote work']));
+    expect(pageTitles()).toContain('Open remote work');
     await click(memberRow(TASK.title), TASK.title);
     await until(() => expect(location).toBe(`/sessions/${TASK.id}?project=${PROJECT_ID}&view=completed`));
     const address = location;
     await unmount();
     await mount(() => expect(page()).not.toBeNull(), address);
-    await until(() => expect(titles()).toHaveLength(4));
-    expect(titles()).toContain('Open remote work');
+    await until(() => expect(pageTitles()).toHaveLength(4));
+    expect(pageTitles()).toContain('Open remote work');
     expect(new Set(projectQueryCalls().map((params) => params.get('view')))).toEqual(new Set(['open', 'completed']));
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu after refresh');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
@@ -807,6 +1386,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
 
   // As iOS's toolbar has it (docs/mocks/project-sessions-page-web): one action, the project's page.
   it('has one action in its header, and its back button returns to the workspace list', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     await mount();
     await openSessions();
     const header = page()!.querySelector('.session-project-page-header')!;
@@ -1002,6 +1582,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('returns to the originating folder with the page back button', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     folders = [FOLDER];
     rows = [LOOSE, { ...COORDINATOR, folderId: FOLDER.id }, TASK];
     const folderAddress = `/sessions/${LOOSE.id}?folder=${FOLDER.id}`;
@@ -1015,6 +1596,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('renders an empty scoped project without falling back to the workspace list', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     rows = [LOOSE];
     await mount(() => expect(page()?.querySelector('.session-project-empty')?.textContent).toBe('No sessions'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 0 sessions');
@@ -1023,6 +1605,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('renders project read failures on the same page, with the reason and a retry', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     projectReadError = true;
     const empty = (): HTMLElement | null => page()?.querySelector<HTMLElement>('.session-project-empty') ?? null;
     await mount(() => expect(empty()?.textContent).toContain('Couldn’t load sessions'), `/sessions/${LOOSE.id}?project=${PROJECT_ID}`);
@@ -1031,7 +1614,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     expect(location).toContain(`?project=${PROJECT_ID}`);
     projectReadError = false;
     await click([...empty()!.querySelectorAll('button')].find((button) => button.textContent === 'Retry'), 'Retry');
-    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
+    await until(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]));
   });
 
   it('keeps a completed member in the project page and changes its row actions immediately', async () => {
@@ -1041,7 +1624,7 @@ describe('project sessions page', { timeout: 60_000 }, () => {
     await until(() => expect(menuItem('Complete')).toBeTruthy());
     await click(menuItem('Complete'), 'Complete');
     await until(() => expect(apiModule.completeSession).toHaveBeenCalledWith(TASK.id));
-    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
+    await until(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]));
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     expect(menuItem('Complete')).toBeUndefined();
@@ -1050,14 +1633,15 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it('keeps a restored member and changes its actions while retaining the Completed page address', async () => {
+    mobile = true; // the page in the list's place, as a phone still has it
     rows = [LOOSE, { ...COORDINATOR, lifecycleState: 'COMPLETED' }, { ...TASK, lifecycleState: 'COMPLETED' }];
     const address = `/sessions/${LOOSE.id}?project=${PROJECT_ID}&view=completed`;
-    await mount(() => expect(titles()).toHaveLength(2), address);
+    await mount(() => expect(pageTitles()).toHaveLength(2), address);
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the completed member menu');
     await until(() => expect(menuItem('Move to Open')).toBeTruthy());
     await click(menuItem('Move to Open'), 'Move to Open');
     await until(() => expect(apiModule.restoreSession).toHaveBeenCalledWith(TASK.id));
-    await until(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]));
+    await until(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]));
     await click(memberRow(TASK.title)?.querySelector('[aria-label="More actions"]'), 'the restored member menu');
     await until(() => expect(menuItem('Complete')).toBeTruthy());
     expect(menuItem('Move to Open')).toBeUndefined();
@@ -1066,16 +1650,17 @@ describe('project sessions page', { timeout: 60_000 }, () => {
   });
 
   it.each(['open', 'completed'] as const)('lists and opens the opposite-view coordinator from its row on the %s page', async (view) => {
+    mobile = true; // the page in the list's place, as a phone still has it
     const completed = view === 'completed';
     rows = [LOOSE, { ...TASK, lifecycleState: completed ? 'COMPLETED' : 'OPEN' }];
     remoteRows = [{ ...COORDINATOR, lifecycleState: completed ? 'OPEN' : 'COMPLETED', workspaceId: OTHER_WORKSPACE_ID, workspace: { id: OTHER_WORKSPACE_ID, name: 'other workspace' } }];
     const search = `?project=${PROJECT_ID}${completed ? '&view=completed' : ''}`;
-    await mount(() => expect(titles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${LOOSE.id}${search}`);
+    await mount(() => expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]), `/sessions/${LOOSE.id}${search}`);
     expect(page()?.querySelector('.session-project-page-header')?.textContent).toContain('Project · 2 sessions');
     expect(page()?.querySelector('.session-project-coordinator .session-title')?.textContent).toBe(COORDINATOR.title);
     await click(page()?.querySelector('.session-project-coordinator .session-row'), 'the coordinator row');
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}${search}`));
-    expect(titles()).toEqual([COORDINATOR.title, TASK.title]);
+    expect(pageTitles()).toEqual([COORDINATOR.title, TASK.title]);
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
   });
 });
@@ -1147,7 +1732,8 @@ describe('project-specific supplemental reads', { timeout: 60_000 }, () => {
       await new Promise((resolve) => setTimeout(resolve, 1_200));
     });
     await settle();
-    expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 2 : 1));
+    // The page's two reads, and with the list still the workspace's beside it, the entry's one.
+    expect(projectQueryCalls()).toHaveLength(countBefore + (surface === 'page' ? 3 : 1));
     expect(projectQueryCalls().every((params) => params.get('projectId') === PROJECT_ID)).toBe(true);
   });
 });
@@ -1331,7 +1917,7 @@ describe('the project sessions page — the Landings row', () => {
     await mount();
     await openSessions();
 
-    const heads = [...mounted().querySelectorAll<HTMLElement>('.session-col-list .session-section-head')]
+    const heads = [...page()!.querySelectorAll<HTMLElement>('.session-col-list .session-section-head')]
       .map((head) => head.textContent);
     expect(heads[0]).toBe('Coordinator');
     expect(heads[1]).toBe('Landings');

@@ -305,6 +305,14 @@ private struct CompactSections: View {
                             // A machine's own new session page: the page of its Set up row, so it
                             // leads like the session list it stands in for — the drawer's hamburger,
                             // not a back button (board 03).
+                            // A shared session's guest view: its Shared with me row's own page, so it
+                            // leads like the list it stands in for — the drawer's hamburger, not back.
+                            case .guestSession(let sessionID):
+                                GuestSessionView(sessionID: sessionID)
+                                    .id(sessionID)
+                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
+                                    .navigationBarBackButtonHidden()
+                                    .drawerToggle(open: openDrawer)
                             case .machineDraft(let runnerID):
                                 MachineDraftPage(runnerID: runnerID)
                                     .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
@@ -407,12 +415,12 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
-        // RUNNERS — the Infrastructure page → a machine's record → an engine's or its name's page, a
+        // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a
         // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a
         // deep link (`.runner(id)`) and a row tap are one navigation.
         // The section isn't in the drawer rail, so it is only ever entered by that deep link or an
         // engine's way to its fix (`AppModel.openRunnerEngine`) — neither of which is a `List`
-        // selection in this shell. Settings › Infrastructure is the same page on Settings' own stack.
+        // selection in this shell. Settings › Machines & models is the same page on Settings' own stack.
         case .runners:
             NavigationStack(path: $model.nav.path) {
                 // A new account with no machine lands here: the welcome card (docs/mocks/new-user-onboarding).
@@ -745,7 +753,7 @@ struct NavigationDrawer: View {
             List {
                 // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
                 // from them by a rule; the open projects themselves close it, where the task lists
-                // and Recents used to be. Infrastructure lives under Settings, Settings is the action bar's
+                // and Recents used to be. Machines & models lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
                 ForEach(AppSection.workSections) { section in
                     if section == .projects {
@@ -764,6 +772,7 @@ struct NavigationDrawer: View {
                 workspacesHeader
                 agentsRows
                 projectRows
+                sharedWithMeRows
             }
             .listStyle(.plain)
             // Let each row's own padding set its height and let the drawer background show through, so
@@ -783,6 +792,8 @@ struct NavigationDrawer: View {
             // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
             // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
+            // Shared with me, the rail's last group: read with the drawer, then every minute.
+            .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
@@ -1146,6 +1157,51 @@ struct NavigationDrawer: View {
                     case .idle:
                         EmptyView()
                     }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+    }
+
+    // MARK: Shared with me
+
+    /// The sessions other people invited this account to reply in (docs/session-guests-design.md §4),
+    /// closing the rail. No group while there is none.
+    @ViewBuilder
+    private var sharedWithMeRows: some View {
+        let shared = model.sharedWithMe
+        if SharedWithMe.showsGroup(shared) {
+            drawerGroupLabel(GuestCopy.sharedWithMe, count: shared.count)
+            ForEach(shared) { session in
+                sharedWithMeRow(session)
+            }
+        }
+    }
+
+    /// The session's title, who shared it and how it stands; selected while its guest view is showing.
+    private func sharedWithMeRow(_ session: GuestSessionSummary) -> some View {
+        let selected = model.drawerDestination == .guestSession(sessionID: session.id)
+        return Button {
+            open(.guestSession(sessionID: session.id))
+        } label: {
+            pill(selected: selected) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(SharedWithMe.title(session))
+                            .lineLimit(1)
+                            .fontWeight(selected ? .semibold : .regular)
+                            .foregroundStyle(.primary)
+                        Text(SharedWithMe.subtitle(session))
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    Text(SharedWithMe.ago(session))
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
         }

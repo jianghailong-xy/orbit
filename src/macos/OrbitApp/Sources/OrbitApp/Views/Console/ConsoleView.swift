@@ -45,6 +45,10 @@ struct ConsoleView: View {
     /// A wide shell: a task this conversation opens opens over it, not in the Tasks section
     /// (`opensTasksOverPage`, owner decision 2026-11-12).
     @Environment(\.opensTasksOverPage) private var opensTasksOverPage
+    /// Move… — the ⋯ menu's on iOS, the window toolbar's on the Mac, and the region card's on both —
+    /// and the session's workspace list the Move panel counts its folders over.
+    @State private var movingSession: Session?
+    @State private var moveListed: [Session] = []
     #if os(iOS)
     /// The ⋯ menu's Rename… (web double-clicks its header title). Seeded from the session's own
     /// title — not `SessionHeader.title`, whose agent-name fallback would otherwise be typed in as if
@@ -52,14 +56,18 @@ struct ConsoleView: View {
     @State private var renaming = false
     @State private var renameDraft = ""
     @State private var taggingSession: Session?
-    @State private var movingSession: Session?
-    @State private var moveListed: [Session] = []
     @State private var confirmPurge = false
     /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
     @Environment(\.horizontalSizeClass) private var hSize
     /// A phone's stack: the task or project the ⋯ menu opens goes over this console, so the back
     /// swipe returns here (`opensPagesOverConsole`).
     @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
+    /// The project sessions sheet a phone's navigation bar button puts up (board 5), and what a
+    /// press inside it opens once it has closed.
+    /// Carried by the presentation itself (`.sheet(item:)`): a `.sheet(isPresented:)` whose content
+    /// read the address from a second state built an empty sheet on its first press.
+    @State private var projectSheet: ProjectSheetTarget?
+    @State private var afterProjectSheet: (() -> Void)?
     #endif
 
     var body: some View {
@@ -311,6 +319,17 @@ struct ConsoleView: View {
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
                 WorktreeBar(console: console)
+                // Where a forked task's run took its checkout from (SR18), beside the branch the
+                // bar above names: the server's sentence, as it is.
+                if let fork = console.sessionForkSource {
+                    Text(fork)
+                        .font(.orbitMeta).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, .composerBandGap)
+                        .accessibilityIdentifier("session-fork-source")
+                }
             }
             .modifier(TypingFold(folded: foldsChrome(console)))
             // The landing this conversation's work fed, at the session's own bottom (owner
@@ -468,6 +487,13 @@ struct ConsoleView: View {
         // or task a session belongs to are in the menu; whether it runs, the composer's stop button
         // says.
         .toolbar {
+            // The project's sessions, left of the ⋯ menu, on the coordinator's conversation and on
+            // every member's (owner 2026-11-11, docs/mocks/project-sessions-column board 5). Only a
+            // phone's stack: the iPad and the Mac keep the project's page in their own column.
+            if opensPagesOverConsole,
+               let projectID = SessionProjectSheet.projectID(of: appModel.session(id: sessionID)) {
+                ToolbarItem(placement: .topBarTrailing) { projectSessionsButton(projectID) }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 // A landing session is platform work (LS6): its page carries the ⋯ menu the design
                 // gives it, and none of the conversation's own actions — no rename, share, pin,
@@ -484,11 +510,60 @@ struct ConsoleView: View {
             }
         }
         .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: sessionID)
+        // The project's sessions page read as the conversation opens, so the button's count is the
+        // one the sheet will show before the sheet is ever opened (`projectSessionCount`).
+        .task(id: projectSheetAddress) {
+            if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }
+        }
+        .sheet(item: $projectSheet, onDismiss: {
+            let action = afterProjectSheet
+            afterProjectSheet = nil
+            action?()
+        }) { target in
+            NavigationStack {
+                SessionProjectPage(address: target.address, leaveSheet: { action in
+                    afterProjectSheet = action
+                    projectSheet = nil
+                })
+            }
+            .environment(appModel)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
         .sheet(item: $taggingSession) { session in
             SessionTagSheet(session: session)
                 .environment(appModel)
                 .task { await appModel.loadSessionTags() }
         }
+        #else
+        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
+        // `.primaryAction` there, as the project and task pages' menus do.
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                // No Share on a landing session (LS6): it is platform work, not a conversation,
+                // and its page's own ⋯ menu is the whole of what it offers.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showShare = true } label: {
+                        Label("Share session", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share a read-only link to this session")
+                }
+            }
+            // Move…, the iPhone's ⋯ menu item, beside Share: the same Move panel the list's rows
+            // open. None on a landing session (LS6), nor in Trash, where there is nothing to file.
+            ToolbarItem(placement: .primaryAction) {
+                if let session = appModel.session(id: sessionID), session.isLanding != true,
+                   session.effectiveLifecycleState != .trash {
+                    Button { openMove(session) } label: {
+                        Label("Move…", systemImage: "folder")
+                    }
+                    .help("Move this session to a folder or another workspace")
+                    .disabled(sessionWorkspace(session) == nil)
+                }
+            }
+        }
+        #endif
+        // The Move panel, from Move… or the region card (docs/session-folders-move-design.md §4).
         .sheet(item: $movingSession) { session in
             if let workspace = sessionWorkspace(session) {
                 SessionMoveSheet(session: session, workspace: workspace, listed: moveListed)
@@ -505,22 +580,6 @@ struct ConsoleView: View {
                     }
             }
         }
-        #else
-        // The same link on macOS, from the window toolbar: a detail pane's own actions sit at
-        // `.primaryAction` there, as the project and task pages' menus do.
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                // No Share on a landing session (LS6): it is platform work, not a conversation,
-                // and its page's own ⋯ menu is the whole of what it offers.
-                if appModel.session(id: sessionID)?.isLanding != true {
-                    Button { showShare = true } label: {
-                        Label("Share session", systemImage: "square.and.arrow.up")
-                    }
-                    .help("Share a read-only link to this session")
-                }
-            }
-        }
-        #endif
         .sheet(isPresented: $showShare) {
             if let baseURL = appModel.baseURL {
                 ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore,
@@ -529,18 +588,46 @@ struct ConsoleView: View {
         }
     }
 
-    /// The region card's Move to another machine: the ⋯ menu's Move… (`SessionMoveSheet`). The Mac's
-    /// console has no Move — that sheet is the phone's and the iPad's — so there the card leaves it out.
+    /// The region card's Move to another machine: Move… (`SessionMoveSheet`), on every platform.
     private var moveFromCard: (() -> Void)? {
-        #if os(iOS)
         guard let session = appModel.session(id: sessionID), sessionWorkspace(session) != nil else { return nil }
         return { openMove(session) }
-        #else
-        return nil
-        #endif
     }
 
     #if os(iOS)
+    /// The sessions page this conversation's button reads and opens, on a phone's stack, for a
+    /// session with a project; nil anywhere else.
+    private var projectSheetAddress: SessionProjectAddress? {
+        guard opensPagesOverConsole else { return nil }
+        let session = appModel.session(id: sessionID)
+        return SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }
+    }
+
+    /// The project sessions sheet's subject, as `.sheet(item:)` needs it.
+    private struct ProjectSheetTarget: Identifiable {
+        let address: SessionProjectAddress
+        var id: SessionProjectAddress { address }
+    }
+
+    /// The project glyph and the project's session count ("⊞ 11"); a press puts the project's
+    /// sessions page up as a sheet, opening at medium height.
+    private func projectSessionsButton(_ projectID: String) -> some View {
+        let count = appModel.projectSessionCount(projectID)
+        return Button {
+            projectSheet = ProjectSheetTarget(
+                address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: SessionProjectSheet.glyph)
+                if let count { Text("\(count)").monospacedDigit() }
+            }
+        }
+        .accessibilityLabel(SessionProjectSheet.buttonLabel)
+        .accessibilityValue(count.map { "\($0) sessions" } ?? "")
+        .accessibilityIdentifier("project-sessions-button")
+    }
+    #endif
+
     private func sessionWorkspace(_ session: Session) -> Agent? {
         appModel.agents?.items.first { $0.id == (session.agent?.id ?? session.agentId) }
     }
@@ -556,6 +643,7 @@ struct ConsoleView: View {
         movingSession = session
     }
 
+    #if os(iOS)
     private func sessionMenu(_ session: Session) -> some View {
         Menu {
             if session.effectiveLifecycleState == .trash {
@@ -1129,7 +1217,7 @@ struct TranscriptView: View {
     // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
     // so is a watch's wake, a background job's news, a wakeup coming due or the owner's answer handed to
     // the coordinator, a line inside an answer rather than the head of one (`StickySummary.isAnchor`;
-    // web's line carries no `data-sticky-label`).
+    // web's line carries no `data-orbit-round`).
     //
     // Which turns are questions is read once per published state (`StickyQuestions`, kept on the
     // ruler), so a scroll is a lookup rather than a walk re-reading every turn's text.
@@ -1281,7 +1369,7 @@ struct TranscriptView: View {
         case .steps(let items):
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
-            StepsRowView(items: items, fullPayload: console.fullPayload)
+            StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
@@ -1361,20 +1449,13 @@ struct TranscriptView: View {
     }
 
     // Sticky header that names the turn above the fold and scrolls back to it — web's
-    // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`):
+    // `.chat-sticky-question` (muted `StickySummary.yourQuestion` + the question on one ellipsized line):
     // a band under the toolbar on macOS, a capsule in the nav bar on iOS (see `chrome`).
     // `anchor: .top` lands the bubble just under either (the band is a safe-area inset, so the
     // scroll region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. An exception item's delivery — or another card the
-        // control plane draws — is still the turn the bar points back at, but it is not the person's
-        // question: it gets its card's own title and line (`StickySummary`), so the bar can't say
-        // "your question" above a card reading otherwise. A wake is no such turn (`isAnchor`).
-        let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
-                                       taskStart: bubble.taskStart,
-                                       startedCard: bubble.startedCard,
-                                       sessionMessage: bubble.sessionMessage,
-                                       coordinatorDelivery: bubble.coordinatorDelivery)
+        // Only the person's question reaches here: over a round Orbit opened the bar is hidden
+        // (`StickySummary.isOrbits`), and a wake is no turn (`isAnchor`).
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1392,16 +1473,15 @@ struct TranscriptView: View {
             #endif
         } label: { _ in
             #if os(iOS)
-            questionCapsule(summary)
+            questionCapsule(bubble.text)
             #else
             HStack(spacing: 8) {
                 // Priority, not `fixedSize()`: the label is served first, so the line beside it is
-                // what gives way — but a card's label too long for the row truncates itself rather
-                // than pushing the line off the row entirely.
-                Text(summary.label)
+                // what gives way.
+                Text(StickySummary.yourQuestion)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-                Text(summary.text)
+                Text(bubble.text)
                     .font(.orbitSubtext).foregroundStyle(.primary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 0)
@@ -1421,15 +1501,14 @@ struct TranscriptView: View {
 
     #if os(iOS)
     /// The sticky question in the nav bar: the turn's words in a capsule between back and the ⋯ menu,
-    /// their height and their glass. The label and line are the band's, and give way the same way,
-    /// except that the person's own question is labelled by the arrow alone
-    /// (`StickySummary.compactLabel`).
-    private func questionCapsule(_ summary: (label: String, text: String)) -> some View {
+    /// their height and their glass. The line is the band's and gives way the same way, labelled by
+    /// the arrow alone: the capsule has no room to say whose words they are, and needs none.
+    private func questionCapsule(_ text: String) -> some View {
         HStack(spacing: 6) {
-            Text(StickySummary.compactLabel(summary.label))
+            Text(StickySummary.arrow.trimmingCharacters(in: .whitespaces))
                 .font(.orbitLabel).foregroundStyle(.secondary)
                 .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-            Text(summary.text)
+            Text(text)
                 .font(.orbitSubtext).foregroundStyle(.primary)
                 .lineLimit(1).truncationMode(.tail)
         }
@@ -1504,8 +1583,8 @@ struct TranscriptView: View {
     private var statusBar: some View {
         HStack(spacing: 8) {
             Circle().fill(console.connected ? .green : .orange).frame(width: 7, height: 7)
-            Text(headerStatus)
-                .font(.caption).foregroundStyle(.secondary)
+            headerStatus
+                .font(.caption)
             if let session = app.session(id: console.sessionID) {
                 SessionCoordinatorBadge(session: session)
             }
@@ -1514,23 +1593,44 @@ struct TranscriptView: View {
                 Label("\(console.state.pendingApprovals.count) pending", systemImage: "hand.raised.fill")
                     .font(.caption).foregroundStyle(.orange)
             }
-            if !console.state.background.isEmpty {
-                Label("\(console.state.background.count) background", systemImage: "gearshape.2")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            // No count of background processes here: the Background processes tray above the
+            // composer already says how many, and it is the one that opens them.
         }
         .padding(.horizontal, 16).padding(.vertical, 6)
         .background(.bar)
+        // The band is a shade off the transcript's white; the hairline is what says where it ends.
+        // Wrapped in a stack so the bare `Divider()` draws horizontally (see `stickyQuestion`).
+        .overlay(alignment: .bottom) { VStack(spacing: 0) { Divider() } }
     }
 
-    private var headerStatus: String {
+    /// "run state · lifecycle · when", the run state leading in the colour the session's status
+    /// glyph has in the list (amber when it needs a decision, red when it failed, …) and semibold,
+    /// so the one word that says what to do next is not the same faint grey as the timestamp.
+    private var headerStatus: Text {
         let watching = app.watches?.summary(for: console.sessionID)
+        let now = Date()
         // The machine by name: a session held for the Claude region says Anthropic is unavailable there.
-        if let subtitle = SessionHeader.subtitle(for: app.session(id: console.sessionID), watching: watching,
-                                                 machine: console.runnerName) {
-            return subtitle
+        guard let session = app.session(id: console.sessionID),
+              let subtitle = SessionHeader.subtitle(for: session, watching: watching, now: now,
+                                                    machine: console.runnerName) else {
+            return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
+                .foregroundColor(.secondary)
         }
-        return console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized
+        let word = SessionHeader.statusWord(for: session, watching: watching, now: now, machine: console.runnerName)
+        guard subtitle.hasPrefix(word) else { return Text(subtitle).foregroundColor(.secondary) }
+        let tone = SessionStatusGlyph.make(for: session, watching: watching, now: now, machine: console.runnerName).tone
+        return Text(word).fontWeight(.semibold).foregroundColor(Self.statusWordColor(tone))
+            + Text(subtitle.dropFirst(word.count)).foregroundColor(.secondary)
+    }
+
+    private static func statusWordColor(_ tone: SessionStatusGlyph.Tone) -> Color {
+        switch tone {
+        case .brand:   return .blue
+        case .success: return .green
+        case .warning: return .orange
+        case .error:   return .red
+        case .neutral: return .primary
+        }
     }
     #endif
 }
@@ -2044,7 +2144,17 @@ struct TranscriptItemView: View {
             UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
-        case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
+        case .toolCall(let c):
+            // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
+            // theirs under the call rather than left inside its result (`OwnerChatReply`).
+            if let words = OwnerChatReply.words(of: c) {
+                VStack(alignment: .leading, spacing: 12) {
+                    ToolCardView(card: c, fullPayload: fullPayload)
+                    UserBubbleView(bubble: UserBubble(id: "owner-chat-\(c.id)", text: words, pending: false))
+                }
+            } else {
+                ToolCardView(card: c, fullPayload: fullPayload)
+            }
         case .interrupt(_, _, let runnerRestart, let runnerUpdate):
             if let runnerUpdate {
                 // The owner's Update Now cut it: the web's line, its ⊘ included (D4).
@@ -2066,9 +2176,9 @@ struct TranscriptItemView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red).textSelection(.enabled)
             }
-        case .authError(_, let message):
+        case .authError(let id, let message):
             if let console {
-                AuthErrorCardView(console: console, message: message)
+                AuthErrorCardView(console: console, message: message, settled: console.settlement.auth[id])
             } else {
                 // No console to act through (a preview / detached render): the diagnosis alone,
                 // which is what the runtime said in the first place.
@@ -2084,13 +2194,27 @@ struct TranscriptItemView: View {
                 Label(notice.message, systemImage: "clock.fill")
                     .foregroundStyle(.secondary).textSelection(.enabled)
             }
-        case .notice(_, let message):
+        case .notice(let id, let message, _):
             // A heads-up, not a failure — web's `.chat-notice`: the warning tone at label size,
-            // behind the triangle.
+            // behind the triangle. An account switch the conversation has moved past is history,
+            // muted with the sign-in card it came with.
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+                .font(.orbitLabel)
+                .foregroundStyle(console?.settlement.settledNotices.contains(id) == true ? Color.secondary : Color.orange)
+                .textSelection(.enabled)
         case .diagnostic(let notice):
             DiagnosticNoticeRow(notice: notice)
+        case .mainCheckout(let item):
+            // The main checkout's card (board 01) or one action's line (board 03). Without a console to
+            // act through, the event's own sentence, as the notice it used to be.
+            if let console, let changed = item.changed {
+                MainCheckoutCardView(console: console, item: item, notice: changed)
+            } else if let console, let result = item.result {
+                MainCheckoutResultRow(console: console, result: result)
+            } else {
+                Label(item.notice, systemImage: "exclamationmark.triangle.fill")
+                    .font(.orbitLabel).foregroundStyle(.orange).textSelection(.enabled)
+            }
         }
     }
 
