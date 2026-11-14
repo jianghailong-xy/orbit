@@ -311,7 +311,7 @@ export function MachineSettingsPage() {
     onError: (e: Error) => message.error("Couldn't start the engine update", e.message),
   });
   // Dismiss until next <Engine> release: hides this card and that engine's row panel until a newer release.
-  const dismissUpdateWarning = useDismissEngineUpdateWarning(runnerId);
+  const dismissUpdateWarning = useDismissEngineUpdateWarning(runnerId ?? '');
   const dismissEngineUpdate = useMutation({
     mutationFn: () => api(`/runners/${runnerId}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
