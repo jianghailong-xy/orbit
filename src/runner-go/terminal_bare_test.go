@@ -324,19 +324,78 @@ func TestStartSessionInDirPickOpensThePicker(t *testing.T) {
 	}
 }
 
-// A cwd in no workspace on this machine creates nothing (T7 adds the [Y/n]).
-func TestStartSessionInDirRefusesACwdInNoWorkspace(t *testing.T) {
-	f := newTUIFakeServer(t)
-	raw, _ := json.Marshal([]tuiWorkspace{{ID: "w-shop", Name: "shop-api", WorkDir: t.TempDir()}})
-	f.workspacesJSON = string(raw)
-	dir := t.TempDir()
-	var out lockedBuffer
-	cred := &terminalCredential{RunnerID: bareTestRunner, MachineName: "dev-laptop"}
-	_, _, err := startSessionInDir(context.Background(), newTUIClient(f.URL, "orbit_term_test"), cred, newSessionRequest{}, dir, strings.NewReader(""), &out)
-	if err == nil || !strings.Contains(err.Error(), dir+" is not in a workspace on dev-laptop") {
-		t.Fatalf("err %v", err)
+// A cwd in no workspace on this machine (board-2 ⑧): `Add it as a workspace? [Y/n]`. Y and Enter make the
+// workspace with the session through POST /sessions `newWorkspace`, on this machine's runner and with no
+// worktree; then the first message is asked for as in any other folder.
+func TestStartSessionInDirAddsACwdInNoWorkspace(t *testing.T) {
+	for _, answer := range []string{"y\n", "\n", "Y\r", "yes\n"} {
+		f := newTUIFakeServer(t)
+		raw, _ := json.Marshal([]tuiWorkspace{{ID: "w-shop", Name: "shop-api", WorkDir: t.TempDir()}})
+		f.workspacesJSON = string(raw)
+		dir := filepath.Join(t.TempDir(), "billing")
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		r, w, _ := os.Pipe()
+		var out lockedBuffer
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		go func() {
+			_ = keysAfter(t, w, &out, "Add it as a workspace? [Y/n]", answer) &&
+				keysAfter(t, w, &out, "enter send", "hi\r")
+		}()
+		cred := &terminalCredential{RunnerID: bareTestRunner, MachineName: "dev-laptop"}
+		id, prompt, err := startSessionInDir(ctx, newTUIClient(f.URL, "orbit_term_test"), cred, newSessionRequest{}, dir, r, &out)
+		cancel()
+		r.Close()
+		w.Close()
+		if err != nil {
+			t.Fatalf("answer %q: %v; output:\n%s", answer, err, tuiPlain(out.String()))
+		}
+		if id != "new-session-1" || prompt != "hi" {
+			t.Fatalf("answer %q: id %q prompt %q", answer, id, prompt)
+		}
+		plain := tuiPlain(out.String())
+		if !strings.Contains(plain, dir+" is not in a workspace on dev-laptop.\nAdd it as a workspace? [Y/n] ") {
+			t.Fatalf("answer %q: output:\n%s", answer, plain)
+		}
+		if !strings.Contains(plain, "◆ Orbit billing · dev-laptop") {
+			t.Fatalf("answer %q: status line; output:\n%s", answer, plain)
+		}
+		want := map[string]any{"newWorkspace": map[string]any{"workDir": dir}, "assignedRunnerId": bareTestRunner,
+			"worktree": false, "prompt": "hi"}
+		if got := f.body("POST /api/sessions"); !reflect.DeepEqual(got, want) {
+			t.Fatalf("answer %q: POST /sessions body\n got: %v\nwant: %v", answer, got, want)
+		}
 	}
-	if posts := f.posts(); len(posts) != 0 {
-		t.Fatalf("posted %v", posts)
+}
+
+// n (or no answer at all) creates nothing: no POST of any kind, and `orbit` exits non-zero.
+func TestStartSessionInDirDeclinedCreatesNothing(t *testing.T) {
+	for _, answer := range []string{"n\n", "N\n", "no\n", ""} {
+		f := newTUIFakeServer(t)
+		raw, _ := json.Marshal([]tuiWorkspace{{ID: "w-shop", Name: "shop-api", WorkDir: t.TempDir()}})
+		f.workspacesJSON = string(raw)
+		dir := t.TempDir()
+		var out lockedBuffer
+		cred := &terminalCredential{RunnerID: bareTestRunner, MachineName: "dev-laptop"}
+		_, _, err := startSessionInDir(context.Background(), newTUIClient(f.URL, "orbit_term_test"), cred, newSessionRequest{}, dir, strings.NewReader(answer), &out)
+		if !errors.Is(err, errWorkspaceDeclined) {
+			t.Fatalf("answer %q: err %v", answer, err)
+		}
+		if !strings.Contains(tuiPlain(out.String()), dir+" is not in a workspace on dev-laptop.\nAdd it as a workspace? [Y/n] ") {
+			t.Fatalf("answer %q: output:\n%s", answer, tuiPlain(out.String()))
+		}
+		if posts := f.posts(); len(posts) != 0 {
+			t.Fatalf("answer %q: posted %v", answer, posts)
+		}
+	}
+
+	writeTestRunnerConfig(t)
+	prev := bareOpenNewSession
+	bareOpenNewSession = func(newSessionRequest, string, io.Reader, io.Writer) error { return errWorkspaceDeclined }
+	t.Cleanup(func() { bareOpenNewSession = prev })
+	var out, errOut bytes.Buffer
+	if code := cmdBareOrbit(nil, true, &out, &errOut); code == 0 || !strings.Contains(errOut.String(), errWorkspaceDeclined.Error()) {
+		t.Fatalf("declined: exit %d, stderr %q", code, errOut.String())
 	}
 }

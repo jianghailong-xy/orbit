@@ -235,19 +235,28 @@ func startSessionInDir(ctx context.Context, client *tuiClient, cred *terminalCre
 		return "", "", err
 	}
 	ws, ok := workspaceForDir(list, cwd)
-	if !ok {
+	var body map[string]any
+	if ok {
+		if resolvedDir(ws.WorkDir) != resolvedDir(cwd) {
+			fmt.Fprintf(out, "%s◆ Orbit%s %s is inside the workspace %s; the session runs in %s.\n", tuiBlue, tuiReset, cwd, ws.Name, ws.WorkDir)
+		}
+		body = newSessionBody(ws, cred.RunnerID, req)
+	} else {
+		// board-2 ⑧: a folder in no workspace on this machine becomes one, made with the session by POST
+		// /sessions `newWorkspace` (sessions/new-workspace.ts), on this machine's runner.
 		machine := cred.MachineName
 		if machine == "" {
 			machine = "this machine"
 		}
-		// T7 turns this into `Add it as a workspace? [Y/n]` (board-2 ⑧).
-		return "", "", fmt.Errorf("%s is not in a workspace on %s. Add it as a workspace in the Orbit app, then run `orbit` here again.", cwd, machine)
+		fmt.Fprintf(out, "%s is not in a workspace on %s.\nAdd it as a workspace? [Y/n] ", cwd, machine)
+		if !readYesDefault(in) {
+			return "", "", errWorkspaceDeclined
+		}
+		ws = tuiWorkspace{Name: filepath.Base(filepath.Clean(cwd)), WorkDir: cwd}
+		body = newSessionBody(ws, cred.RunnerID, req)
+		delete(body, "workspaceId")
+		body["newWorkspace"] = map[string]any{"workDir": cwd}
 	}
-	if resolvedDir(ws.WorkDir) != resolvedDir(cwd) {
-		fmt.Fprintf(out, "%s◆ Orbit%s %s is inside the workspace %s; the session runs in %s.\n", tuiBlue, tuiReset, cwd, ws.Name, ws.WorkDir)
-	}
-
-	body := newSessionBody(ws, cred.RunnerID, req)
 	label := []string{ws.Name, cred.MachineName}
 	if req.Pick {
 		choice, err := pickEngineAndModel(ctx, client, cred.RunnerID, in, out)
@@ -270,6 +279,33 @@ func startSessionInDir(ctx context.Context, client *tuiClient, cred *terminalCre
 		return "", "", fmt.Errorf("starting a session in %s: %w", ws.Name, err)
 	}
 	return id, prompt, nil
+}
+
+// errWorkspaceDeclined is answering n to `Add it as a workspace?`: nothing was sent, and `orbit` exits non-zero.
+var errWorkspaceDeclined = errors.New("The folder was not added as a workspace; no session was created.")
+
+// readYesDefault reads one answer line from in, a byte at a time so nothing past it is taken from the
+// programs that read in next: empty (Enter), y or yes is yes; anything else, or no line at all, is no.
+func readYesDefault(in io.Reader) bool {
+	var line []byte
+	b := make([]byte, 1)
+	for {
+		n, err := in.Read(b)
+		if n == 1 {
+			if b[0] == '\n' || b[0] == '\r' {
+				break
+			}
+			line = append(line, b[0])
+		}
+		if err != nil {
+			if len(line) == 0 {
+				return false
+			}
+			break
+		}
+	}
+	s := strings.ToLower(strings.TrimSpace(string(line)))
+	return s == "" || s == "y" || s == "yes"
 }
 
 func engineLabelOrEmpty(engine string) string {
