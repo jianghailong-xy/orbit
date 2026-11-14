@@ -204,6 +204,11 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let ruler = try slice(console, from: "func refreshRulerQuestions(force: Bool = false) async {",
                               to: "lastRulerRead = Date()\n    }")
         XCTAssertTrue(ruler.contains("followPendingWaitingCard()"), "a delivered card's read lands on it")
+        let deliver = try slice(console, from: "private func deliver(_ kind: DeliveredDecisionCard.Kind,\n                         placement: DeliveredDecisionCard.Placement) {", to: "\n    }")
+        XCTAssertTrue(deliver.contains("followPendingWaitingCard()"), "a card delivered by any read lands on it")
+        let requests = try slice(console, from: "func adoptOwnerRequests(_ requests: [OwnerRequest]) {", to: "\n    }")
+        XCTAssertTrue(requests.contains("followPendingWaitingCard()"),
+                      "an owner request — the board's card — arrives from the account's list, not from a publish")
 
         let view = code(try appSource("Views/Console/ConsoleView.swift"))
         let card = try slice(view, from: ".onChange(of: console.cardRequest, initial: true) { _, request in",

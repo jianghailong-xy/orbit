@@ -4997,6 +4997,7 @@ final class ConsoleModel {
         for request in requests {
             deliver(.ownerRequest(requestID: request.id), placement: .at(request.createdAt))
         }
+        followPendingWaitingCard()
     }
 
     /// The owner requests of this conversation still pending, by storage key.
@@ -5071,6 +5072,9 @@ final class ConsoleModel {
         guard !closedCards.contains(card.id), !decisionCards.contains(where: { $0.id == card.id })
         else { return }
         decisionCards.append(card)
+        // A card arriving by a read of its own — an owner request comes from the account's list, not
+        // from a publish or the ruler's read — may be the one a project row's tap is waiting for.
+        followPendingWaitingCard()
     }
 
     /// Put the answers this project's read publishes into the conversation as records, and let go of
