@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 420 |
+| `user` | 421 |
 | `admin` | 28 |
 | `runner` | 176 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **659** |
+| **Total** | **660** |
 
 ## Public routes
 
@@ -290,6 +290,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runners/:id/login/code` | body `SubmitLoginCodeDto`; path `id` | `RunnersController.submitLoginCode` |
 | `POST` | `/api/runners/:id/refresh-models` | path `id` | `RunnersController.refreshModels` |
 | `POST` | `/api/runners/:id/region-check` | path `id` | `RunnersController.requestRegionCheck` |
+| `GET` | `/api/runners/:id/resources` | path `id` | `RunnersController.resources` |
 | `POST` | `/api/runners/:id/rotate-token` | path `id` | `RunnersController.rotateToken` |
 | `POST` | `/api/runners/:id/self-update` | path `id` | `RunnersController.requestSelfUpdate` |
 | `POST` | `/api/runners/:id/self-update/now` | body `Object`; path `id` | `RunnersController.updateSelfNow` |

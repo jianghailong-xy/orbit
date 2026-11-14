@@ -519,7 +519,14 @@ func (c *ModelCatalog) models(engine string) *[]ModelInfo {
 // has said something true rather than failed: it isn't worth a log line on every refresh, and it
 // mustn't be covered over with the list it had while signed in (see mergeModelCatalog). Only the
 // probe's conclusive "no" counts — an engine whose sign-in is unknown, or not probed yet, that can't
-// list its models is a fault, and is logged as one.
+// list its models is a fault, and is logged as one. So is Claude Code or Codex coming back empty
+// signed out: their lists never came from the sign-in, so the empty answer is a failed probe, and
+// treating it as a sign-out left a signed-out Mac mini's picker with no Claude list and no log line —
+// the composer showed the bare `claude-opus-5-5` where it reads "Opus 5.5".
+//
+// A signed-out Claude's fast-lane answer is dropped to unknown: with no account, `/fast` answers
+// "Fast mode has been disabled by your organization" for every model (Claude Code 2.1.325), which
+// says nothing about the model, and a catalog row's "no" outranks the clients' fallback.
 func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut func(engine string) bool, logf func(...interface{})) (*ModelCatalog, map[string]bool) {
 	catalog := &ModelCatalog{}
 	empty := map[string]bool{}
@@ -528,13 +535,19 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 			continue
 		}
 		models, err := rt.fetch(ctx)
-		if len(models) == 0 && signedOut(rt.engine) {
+		listsSignedOut := rt.engine == providerClaude || rt.engine == providerCodex
+		if len(models) == 0 && signedOut(rt.engine) && !listsSignedOut {
 			empty[rt.engine] = true
 			continue
 		}
 		if err != nil {
 			logf(rt.engine, "model catalog refresh failed:", err)
 			continue
+		}
+		if rt.engine == providerClaude && signedOut(rt.engine) {
+			for i := range models {
+				models[i].FastMode = nil
+			}
 		}
 		*catalog.models(rt.engine) = models
 	}
@@ -1836,6 +1849,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// The root this machine reports as where it keeps checkouts. A fact of the account this
 	// process runs as, so it is resolved once rather than on every beat.
 	machineReposRoot := reposRoot()
+	// The CPU reading is a difference between two beats: this one primes it, so the first beat has one.
+	machineResources(nil, "")
 
 	// Before the heartbeat, which is what claims work: a result an earlier process of this image ran
 	// and could not deliver is offered to the control plane first, so a job this machine is holding a
@@ -1922,6 +1937,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				report := sleeper.report(managedWorkload())
 				workload = &report
 			}
+			probes := agentDirs.snapshot()
+			resources := machineResources(probes, machineReposRoot)
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -1930,7 +1947,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
-				AgentDirProbes:       agentDirs.snapshot(),
+				AgentDirProbes:       probes,
+				Resources:            &resources,
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
 				ReposRoot:            machineReposRoot,

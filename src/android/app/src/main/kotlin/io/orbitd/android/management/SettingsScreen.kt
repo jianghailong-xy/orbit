@@ -46,7 +46,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "machines-and-models" -> MachinesAndModelsSettings(api, revision, route.recordId, open, back)
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
-        "sharing" -> SharingSettings(api, revision)
+        "sharing" -> SharingSettings(api, revision, open)
         "access-tokens" -> AccessTokensSettings(api, revision)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
         "admin" -> AdminSettings(api, revision, route.recordId, open, back)

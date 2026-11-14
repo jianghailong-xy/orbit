@@ -33,6 +33,9 @@ const SHIPPED = [
   'gateway/several-apiservers/server/routes.conf', 'scripts/pg-archive-wal.sh', 'scripts/pg-backup.sh', 'src/link-gateway/nats.conf',
 ];
 const DEPLOY_ORDER = ['postgres', 'db-proxy', 'nats', 'apiserver', 'wiki-worker', 'web', 'link-gateway', 'gateway', 'pgbackup'];
+// Without a gap, a web gateway the release recreates goes first, so that the gateway handing the apiserver and web over
+// runs the release's gateway/nginx.conf.
+const GATEWAY_FIRST = ['postgres', 'db-proxy', 'nats', 'gateway', 'apiserver', 'wiki-worker', 'web', 'link-gateway', 'pgbackup'];
 const PINNED = 'docker-compose.yml:deploy/postgres-pinned.yml:deploy/db-proxy.yml';
 const TARGET_ENV = `JWT_SECRET="target-secret"
 PROVIDER_SECRET_KEY="target-key"
@@ -66,6 +69,42 @@ case "$side $*" in
   "target ps -aq "*)
     service="$(printf '%s\n' "$@" | sed -n 's/^label=com.docker.compose.service=//p')"
     [ ! -e "$state/$service" ] || echo "c-$service" ;;
+  # What a handover reads and does: the running containers, by service; a container's name, state and health; a -next
+  # container started by \`compose run\` (kept under run/), stopped and removed; and the file the deploy writes inside the
+  # gateway, with each reload, whose workers' pids follow the reloads.
+  "target ps -q "*)
+    service="$(printf '%s\n' "$@" | sed -n 's/^label=com.docker.compose.service=//p')"
+    [ ! -e "$state/$service" ] || [ -e "$state/$service.stopped" ] || echo "c-$service" ;;
+  "target inspect -f {{.Name}} c-"*) echo "/orbit-${'$'}{4#c-}" ;;
+  "target inspect -f {{.State.Status}} "*)
+    name="${'$'}{!#}"
+    if [ -e "$state/run/$name" ]; then cat "$state/run/$name"
+    elif [ -e "$state/${'$'}{name#orbit-}" ] && [ ! -e "$state/${'$'}{name#orbit-}.stopped" ]; then echo "running ${'$'}{FAKE_HEALTH:-healthy}"
+    else echo "exited "; fi ;;
+  "target inspect -f {{.State.ExitCode}} "*) echo 0 ;;
+  "target container inspect "*) [ -e "$state/run/$3" ] || exit 1 ;;
+  "target compose run "*)
+    name="$(printf '%s\n' "$@" | sed -n '/^--name$/{n;p;}')"
+    mkdir -p "$state/run"
+    if [ "${'$'}{!#}" = "${'$'}{FAKE_NEXT_FAIL:-}" ]; then echo "running unhealthy" >"$state/run/$name"; else echo "running healthy" >"$state/run/$name"; fi ;;
+  "target stop orbit-"*)
+    if [ -e "$state/run/$2" ]; then echo "exited " >"$state/run/$2"; else touch "$state/${'$'}{2#orbit-}.stopped"; fi ;;
+  "target rm orbit-"*) rm -f "$state/run/$2" ;;
+  "target exec -i c-gateway sh -c "*)
+    file="$(printf '%s\n' "$*" | sed -n 's|.*cat >/etc/nginx/handover/\([a-z]*\.conf\)\.new.*|\1|p')"
+    mkdir -p "$state/handover"
+    cat >"$state/handover/$file"
+    printf '%s\t\t%s\n' "$side" "wrote $file: $(cat "$state/handover/$file")" >>"$FAKE_DOCKER_LOG" ;;
+  "target exec c-gateway rm -f /etc/nginx/handover/"*)
+    rm -f "$state/handover/$(basename "${'$'}{!#}")"
+    printf '%s\t\t%s\n' "$side" "removed $(basename "${'$'}{!#}")" >>"$FAKE_DOCKER_LOG" ;;
+  "target exec c-gateway test -e /etc/nginx/handover/"*) [ -e "$state/handover/$(basename "${'$'}{!#}")" ] || exit 1 ;;
+  "target exec c-gateway nginx -s reload")
+    echo "$(($(cat "$state/reloads" 2>/dev/null || echo 0) + 1))" >"$state/reloads" ;;
+  "target exec c-gateway ps -o pid,args")
+    reloads="$(cat "$state/reloads" 2>/dev/null || echo 0)"
+    printf 'PID   COMMAND\n    1 nginx: master process nginx -g daemon off;\n   %s1 nginx: worker process\n   %s2 nginx: worker process\n' \
+      "$reloads" "$reloads" ;;
   "target inspect -f "*)
     service="${'$'}{4#c-}"
     if [ -e "$state/$service.stopped" ]; then echo "false $(cat "$state/$service")"; else echo "true $(cat "$state/$service")"; fi ;;
@@ -209,6 +248,29 @@ function snapshot(dir) {
 const ups = (run) => run.target.filter((call) => call.args.startsWith('compose up ')).map((call) => call.args);
 const upped = (run) => ups(run).map((call) => call.split(' ').at(-1));
 const releaseLines = (text) => text.slice(text.indexOf('# >>> The release this host runs')).trim().split('\n');
+// What a deploy did to the apiserver, wiki-worker and web, in order: each -next it started, stopped and removed, each
+// container it stopped or brought up, and each file it wrote or removed inside the gateway, with each reload.
+const HANDED = /^(compose run |stop |rm |wrote |removed |exec c-gateway nginx -s reload$|compose up -d --wait --no-deps --no-build (apiserver|wiki-worker|web)$)/;
+const handover = (run) => run.target.map((call) => call.args).filter((args) => HANDED.test(args))
+  .map((args) => args.replace('compose up -d --wait --no-deps --no-build ', 'up ').replace('exec c-gateway nginx -s reload', 'reload'));
+// A release that recreates both, handed over: each -next serves through the gateway while the other is replaced. The
+// apiserver's answers to the apiserver's names too, so the gateway names the apiserver itself until -next is gone.
+const WITHOUT_A_GAP = [
+  'compose run -d --no-deps --name orbit-apiserver-next --use-aliases apiserver',
+  'wrote apiserver.conf: set $apiserver orbit-apiserver-next:3000;', 'reload',
+  'stop orbit-apiserver', 'up apiserver',
+  'wrote apiserver.conf: set $apiserver orbit-apiserver:3000;', 'reload',
+  'stop orbit-apiserver-next', 'rm orbit-apiserver-next',
+  'removed apiserver.conf', 'reload',
+  'up wiki-worker',
+  'compose run -d --no-deps --name orbit-web-next web',
+  'wrote web.conf: set $web orbit-web-next:80;', 'reload',
+  'stop orbit-web', 'up web',
+  'removed web.conf', 'reload',
+  'stop orbit-web-next', 'rm orbit-web-next',
+];
+// The same release replaced as every release was before handovers.
+const STOP_THEN_START = ['up apiserver', 'up wiki-worker', 'up web'];
 
 test('the two-stage section is the same in both copies of /upgrade\'s script', () => {
   const section = (relative) => {
@@ -362,7 +424,9 @@ for (const upgrade of UPGRADES) {
     assert.ok(run.build.some((call) => call.args.startsWith('compose build ') && call.tag === second), run.output);
     assert.ok(!run.build.some((call) => call.args.startsWith('build ')), 'the link gateway, unchanged, is in the registry already');
     assert.match(run.stdout, /orbit-link-gateway:[0-9a-f]{40} is in the registry already/);
-    assert.deepEqual(upped(run), DEPLOY_ORDER.filter((service) => service !== 'postgres'));
+    // Without a gap: the gateway, recreated for its file, goes first, and hands the apiserver and web over.
+    assert.deepEqual(upped(run), GATEWAY_FIRST.filter((service) => service !== 'postgres'));
+    assert.deepEqual(handover(run), WITHOUT_A_GAP);
     for (const [service, file] of [['gateway', 'gateway/nginx.conf'], ['db-proxy', 'deploy/db-proxy/haproxy.cfg']]) {
       assert.ok(ups(run).includes(`compose up -d --wait --no-deps --no-build --force-recreate ${service}`), ups(run).join('\n'));
       assert.match(run.stdout, new RegExp(` {4}${service} +recreate \\(it runs another ${file.replaceAll('.', '\\.')}\\)`));
@@ -390,6 +454,141 @@ for (const upgrade of UPGRADES) {
     for (const service of DEPLOY_ORDER) assert.match(run.stdout, new RegExp(`    ${service} +unchanged`));
   });
 }
+
+test('a release replaces the apiserver and web without a gap, and a plan says which way it will', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const first = fixture.commit('the first release');
+  // The first deploy creates everything: no web gateway runs yet, so there is nothing to hand over.
+  let run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, /==> Replacing the apiserver and web: stop, then start \(no web gateway runs here\)/);
+  assert.deepEqual(handover(run), STOP_THEN_START);
+  // A second release recreates the apiserver, wiki-worker and web, and nothing else.
+  const second = fixture.commit('the second release');
+  run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  const plan = fixture.run(upgrade, ['--plan', second]);
+  assert.equal(plan.status, 0, plan.output);
+  assert.match(plan.stdout, /==> Replacing the apiserver and web: without a gap\. Each new one starts beside the running one/);
+  assert.doesNotMatch(plan.stdout, /The web gateway is recreated first/);
+  assert.deepEqual(handover(plan), []);
+  run = fixture.run(upgrade, ['--deploy', second]);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, /==> Replacing the apiserver and web: without a gap\./);
+  assert.deepEqual(handover(run), WITHOUT_A_GAP);
+  assert.deepEqual(upped(run), DEPLOY_ORDER.filter((service) => service !== 'postgres'), 'an unchanged gateway keeps its place');
+  for (const name of ['orbit-apiserver', 'orbit-apiserver-next', 'orbit-web', 'orbit-web-next']) {
+    assert.match(run.stdout, new RegExp(` {4}${name} stopped in \\d+ ms, exit code 0\n`));
+  }
+  // Every -next is gone, and the gateway runs on its own file's routes again.
+  assert.deepEqual(readdirSync(path.join(fixture.state, 'run')), []);
+  assert.deepEqual(readdirSync(path.join(fixture.state, 'handover')), []);
+  // A rollback is handed over the same way.
+  run = fixture.run(upgrade, ['--deploy', first]);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(handover(run), WITHOUT_A_GAP);
+  assert.equal(releaseLines(readFileSync(path.join(fixture.target, '.env'), 'utf8'))[2], `ORBIT_IMAGE_TAG=${first}`);
+});
+
+test('--stop-then-start replaces the apiserver and web as every release did before, and belongs to the two-stage release', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[1];
+  fixture.commit('the first release');
+  let run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  fixture.commit('the second release');
+  run = fixture.run(upgrade, ['--stop-then-start']);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, /==> Replacing the apiserver and web: stop, then start \(--stop-then-start\)/);
+  assert.deepEqual(handover(run), STOP_THEN_START);
+  assert.deepEqual(upped(run), DEPLOY_ORDER.filter((service) => service !== 'postgres'));
+  assert.ok(run.ssh.some((call) => call.includes('ORBIT_DEPLOY_STOP_THEN_START=1')), run.ssh.join('\n'));
+  // Without ORBIT_REGISTRY there is no release to hand over.
+  run = fixture.run(upgrade, ['--stop-then-start'], { ORBIT_REGISTRY: undefined });
+  assert.equal(run.status, 2, run.output);
+  assert.match(run.stderr, /belong to the two-stage release, which ORBIT_REGISTRY turns on/);
+});
+
+test('a release from before handovers is replaced by stop, then start; going back from it, the gateway is recreated first', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const first = fixture.commit('the first release');
+  let run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  // A gateway/nginx.conf from before releases were handed over: no route includes the file a handover writes.
+  const conf = path.join(fixture.checkout, 'gateway/nginx.conf');
+  writeFileSync(conf, readFileSync(conf, 'utf8').replace(/^[ \t]*include \/etc\/nginx\/handover\/[a-z]+\*\.conf;\n/gm, ''));
+  assert.doesNotMatch(readFileSync(conf, 'utf8'), /^\s*include \/etc\/nginx\/handover\//m);
+  fixture.commit('a release from before handovers');
+  run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, /==> Replacing the apiserver and web: stop, then start \(this release's gateway\/nginx\.conf is from before/);
+  assert.deepEqual(handover(run), STOP_THEN_START);
+  assert.deepEqual(upped(run), DEPLOY_ORDER.filter((service) => service !== 'postgres'), 'its gateway is recreated where it always was');
+  assert.ok(ups(run).includes('compose up -d --wait --no-deps --no-build --force-recreate gateway'), ups(run).join('\n'));
+  // Back to the first release: its gateway comes first, and hands the apiserver and web over.
+  run = fixture.run(upgrade, ['--deploy', first]);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.stdout, /The web gateway is recreated first, ahead of the apiserver/);
+  assert.deepEqual(upped(run), GATEWAY_FIRST.filter((service) => service !== 'postgres'));
+  assert.deepEqual(handover(run), WITHOUT_A_GAP);
+});
+
+test('a -next that fails its health check stops the deploy before the gateway is pointed at it, and is left running', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  fixture.commit('the first release');
+  let run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  fixture.commit('the second release');
+  run = fixture.run(upgrade, [], { FAKE_NEXT_FAIL: 'apiserver' });
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.output, /orbit-apiserver-next did not pass its health check/);
+  assert.match(run.output, /it may be applying the database migrations, which stopping it\s+would cut short/);
+  assert.deepEqual(handover(run), ['compose run -d --no-deps --name orbit-apiserver-next --use-aliases apiserver']);
+  assert.equal(readFileSync(path.join(fixture.state, 'run/orbit-apiserver-next'), 'utf8').trim(), 'running unhealthy');
+  assert.ok(!existsSync(path.join(fixture.state, 'apiserver.stopped')), 'the running apiserver goes on');
+  assert.equal(readFileSync(path.join(fixture.target, '.upgrade/history'), 'utf8').trim().split('\n').length, 1);
+});
+
+test('what a deploy that did not finish left is put back once the apiserver it was replacing is healthy', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[1];
+  const first = fixture.commit('the first release');
+  let run = fixture.run(upgrade);
+  assert.equal(run.status, 0, run.output);
+  // What a deploy that stopped after pointing the gateway at orbit-apiserver-next leaves.
+  const left = () => {
+    mkdirSync(path.join(fixture.state, 'run'), { recursive: true });
+    mkdirSync(path.join(fixture.state, 'handover'), { recursive: true });
+    writeFileSync(path.join(fixture.state, 'run/orbit-apiserver-next'), 'running healthy\n');
+    writeFileSync(path.join(fixture.state, 'handover/apiserver.conf'), 'set $apiserver orbit-apiserver-next:3000;\n');
+  };
+  left();
+  const second = fixture.commit('the second release');
+  run = fixture.run(upgrade, ['--build-only']);
+  assert.equal(run.status, 0, run.output);
+  // While the apiserver is not healthy, -next may be all that serves: refused, with the way out.
+  run = fixture.run(upgrade, ['--deploy', second], { FAKE_HEALTH: 'unhealthy' });
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stdout, / {4}orbit-apiserver-next is left from a deploy that did not finish/);
+  assert.match(run.output, /Deploy with --stop-then-start, which brings orbit-apiserver up first/);
+  assert.deepEqual(handover(run), []);
+  assert.ok(existsSync(path.join(fixture.state, 'handover/apiserver.conf')));
+  // --stop-then-start brings the apiserver up, then sends the gateway back to it and removes -next.
+  run = fixture.run(upgrade, ['--deploy', second, '--stop-then-start']);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(handover(run), [
+    'up apiserver', 'removed apiserver.conf', 'reload', 'stop orbit-apiserver-next', 'rm orbit-apiserver-next', 'up wiki-worker', 'up web',
+  ]);
+  // Without a gap, what was left goes first, and the release is handed over as any other.
+  left();
+  run = fixture.run(upgrade, ['--deploy', first]);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(handover(run), ['removed apiserver.conf', 'reload', 'stop orbit-apiserver-next', 'rm orbit-apiserver-next', ...WITHOUT_A_GAP]);
+  assert.deepEqual(readdirSync(path.join(fixture.state, 'run')), []);
+});
 
 test('a deploy that cannot run changes nothing on either host', { skip: !compose && 'needs docker compose' }, (t) => {
   const fixture = makeFixture(t);

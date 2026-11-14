@@ -803,6 +803,9 @@ export interface RunnerHeartbeatRequest {
    *  field; absent from an older one — or one rolled back to an older release — which the control
    *  plane stores as NULL, "not reported", rather than keeping what a newer binary last said. */
   selfUpdate?: RunnerSelfUpdate;
+  /** The machine's CPU, memory and disk now (RunnerResources). Sent on every beat by a runner that declares
+   *  MACHINE_RESOURCES_CAPABILITY; absent from an older one. */
+  resources?: RunnerResources;
   /** What a managed runner's instance is doing (managedRunner.ts, MANAGED_RUNNER_SLEEP_CAPABILITY).
    *  Sent only by a managed instance that declares that capability; the control plane stores it only
    *  from the instance the manager authorized. Absent: nothing about this runner may be put to sleep. */
@@ -1060,6 +1063,44 @@ export const DIR_PROBE_CAPABILITY = 'dir-probe/v1';
  *  (ClaimedSession.createWorkDir, docs/first-workspace-contract.md §4). POST /sessions makes a
  *  workspace in a new folder only on a runner that declares it. */
 export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
+
+/** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
+ *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
+export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
+
+/** One reading of a machine (RunnerHeartbeatRequest.resources; the runner's MachineResources). A figure the
+ *  platform has no answer for is absent — the page shows a dash, never a zero. Bytes are whole numbers. */
+export interface RunnerResources {
+  /** The whole machine's CPU in use since the runner's previous reading, 0–100. */
+  cpuPercent?: number;
+  cpuCores?: number;
+  /** The one-minute load average. */
+  load1?: number;
+  memTotalBytes?: number;
+  /** What the system can hand out without swapping; dropped page cache counts as available. */
+  memAvailableBytes?: number;
+  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. */
+  diskTotalBytes?: number;
+  diskFreeBytes?: number;
+}
+
+/** One point of a machine's last hour: percentages in use, null where that reading had no figure. */
+export interface RunnerResourceSample {
+  at: string;
+  cpu: number | null;
+  mem: number | null;
+  disk: number | null;
+}
+
+/** GET /api/runners/:id/resources: the machine's latest reading and its last hour, kept beside its presence
+ *  (runner_presence.resources, migration 0720). `at` and `latest` are null when nothing is kept — a runner that
+ *  has not beaten since the control plane's database last started, or one that does not report. */
+export interface RunnerResourcesAnswer {
+  at: string | null;
+  latest: RunnerResources | null;
+  /** Oldest first, one per heartbeat, none older than an hour before `at`. */
+  samples: RunnerResourceSample[];
+}
 
 /** Control plane → runner: what is at one path on this machine (docs/first-workspace-contract.md §2).
  *

@@ -54,6 +54,43 @@ export const RUNNER_ENGINES = 'Engines';
 export const RUNNER_WORKSPACES = 'Workspaces';
 export const RUNNER_ABOUT = 'About This Runner';
 
+// MARK: Resources
+
+export const RUNNER_RESOURCES = 'Resources';
+export const RUNNER_RESOURCES_CPU = 'CPU';
+export const RUNNER_RESOURCES_MEMORY = 'Memory';
+export const RUNNER_RESOURCES_LIVE = 'Live · every 30 s · last hour';
+export const RUNNER_RESOURCES_OFFLINE = 'Offline';
+export const RUNNER_RESOURCES_DISK_ONLY = 'Disk is read from your workspaces';
+export const RUNNER_RESOURCES_UPDATE = 'Update runner';
+export const RUNNER_RESOURCES_NO_READING = 'No reading yet';
+export const RUNNER_RESOURCES_MEMORY_FULL = 'Nearly full — new sessions may be slow to start.';
+
+/** The header of an offline machine's Resources: when its last reading came, as `ago` says it (`14m ago`). */
+export function runnerResourcesLastReading(ago: string): string {
+  return `Offline · last reading ${ago}`;
+}
+
+/** A runner too old to report CPU or memory; `what` is the tile's own name. */
+export function runnerResourcesPredates(what: 'CPU' | 'memory'): string {
+  return `This runner predates ${what} readings.`;
+}
+
+export const RUNNER_CPU_ONE_CORE = '1 core';
+
+export function runnerCpuCores(count: string): string {
+  return `${count} cores`;
+}
+
+/** The one-minute load average, already formatted (`3.0`). */
+export function runnerCpuLoad(load: string): string {
+  return `load ${load}`;
+}
+
+export function runnerDiskFree(free: string): string {
+  return `${free} GB free`;
+}
+
 // MARK: Capacity
 
 export const RUNNER_MAX_CONCURRENT = 'Max Concurrent';
