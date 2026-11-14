@@ -2748,7 +2748,8 @@ private struct ContextActionsSheet: View {
                     .frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).foregroundStyle(enabled ? Color.accentColor : Color.secondary)
-                    Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
+                    // The system's grey, not the button's tint at secondary strength (board 03).
+                    Text(detail).font(.orbitLabel).foregroundStyle(Color(uiColor: .secondaryLabel))
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
