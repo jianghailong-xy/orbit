@@ -161,13 +161,17 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
                         Text(text, Modifier.weight(1f).testTag("needs-you-bar-text"), color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         // "+N" for those behind it, with a ⌄ when the press unfolds them rather than going.
-                        if (more > 0 || unfolds) Row(Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp),
+                        if (more > 0) Row(Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp),
                             horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (more > 0) Text("+$more", Modifier.testTag("needs-you-bar-more"), style = MaterialTheme.typography.labelSmall,
+                            Text("+$more", Modifier.testTag("needs-you-bar-more"), style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold, color = muted)
                             if (unfolds) Icon(painterResource(R.drawable.ic_chevron_down), null,
                                 Modifier.size(10.dp).testTag("needs-you-bar-unfolds"), tint = muted)
                         }
+                        // No count to carry it (sessions blocked on a tool call have no "+N"): the ⌄ stands bare, as the fold's
+                        // ↑ does — a pill around the chevron alone squashed to the glyph's height.
+                        else if (unfolds) Icon(painterResource(R.drawable.ic_chevron_down), null,
+                            Modifier.size(14.dp).testTag("needs-you-bar-unfolds"), tint = muted)
                         since?.let { NeedsYouAge(it) }
                     }
                     detail?.let {
