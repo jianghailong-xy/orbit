@@ -28,6 +28,7 @@ test('GET runners always returns a sanitized runtimeDefaultModels map', async ()
       ],
     },
     session: { groupBy: async () => [] },
+    $queryRaw: async () => [],
   } as unknown as PrismaService;
 
   const rows = await new RunnersService(prisma).listRunners('owner-1');

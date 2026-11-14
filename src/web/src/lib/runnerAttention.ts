@@ -4,7 +4,7 @@ import type { Runner } from '../components/TasksSidePanel';
 import { CLAUDE_REGION_ATTENTION, claudeRegionAttentionDetail } from './claudeRegionCopy';
 import { engineKeepsAccounts, runsOnEnvKey } from './engineAccounts';
 import { planUsageRows, planUsageSnapshotForProvider, type PlanUsageDisplayRow } from './planUsage';
-import { ago, ENGINE_CLI_NAME, updateNoteOf, webShowsEngine } from './runnerEngines';
+import { ago, ENGINE_CLI_NAME, engineUpdateDismissedFor, updateNoteOf, webShowsEngine } from './runnerEngines';
 import {
   ATTENTION_CANT_UPDATE_ITSELF,
   ATTENTION_CHECKOUT_DETAIL,
@@ -123,6 +123,7 @@ export type AttentionRunner = Pick<
   | 'selfUpdate'
   | 'minFreeDiskMb'
   | 'engines'
+  | 'engineUpdateDismissals'
   | 'planUsage'
   | 'region'
 >;
@@ -744,12 +745,13 @@ function cannotSelfUpdateItem(
   }
 }
 
-/** An installed CLI whose update note is a warning (runnerEngines' updateNoteOf). */
+/** An installed CLI whose update note is a warning (runnerEngines' updateNoteOf) — not one whose
+ *  warning was dismissed against the release that is still the latest (runner.engineUpdateDismissals). */
 function engineUpdateItems(runner: AttentionRunner, nowMs: number): AttentionItem[] {
   return reportedEngines(runner).flatMap((engine): AttentionItem[] => {
     const health = runner.engines?.find((e) => e.engine === engine);
     if (!health?.installed) return [];
-    const note = updateNoteOf(health.update, nowMs);
+    const note = updateNoteOf(health.update, nowMs, false, engineUpdateDismissedFor(runner, engine));
     if (note?.tone !== 'warn') return [];
     const summary = attentionEngineUpdateFailed(ENGINE_CLI_NAME[engine]);
     return [

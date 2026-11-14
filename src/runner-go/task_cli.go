@@ -2982,7 +2982,7 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if len(body) == 0 {
 		return fmt.Errorf("no fields to update")
 	}
-	if err := requireHandoffNamesItsDestination(body); err != nil {
+	if err := requireMoveRequestNamesItsDestination(body); err != nil {
 		return err
 	}
 	t, err := cliTaskTransport()
