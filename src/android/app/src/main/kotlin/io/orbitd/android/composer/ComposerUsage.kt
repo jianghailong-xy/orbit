@@ -13,7 +13,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.R
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.realtime.SessionState
+import io.orbitd.android.directory.directoryError
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import io.orbitd.android.management.CursorCopy
 import io.orbitd.android.management.Ink
 import io.orbitd.android.management.ManagementApi
@@ -23,6 +28,8 @@ import kotlinx.serialization.json.*
 @Composable
 fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject, session: SessionState?) {
     var expanded by remember { mutableStateOf(false) }
+    var confirming by remember { mutableStateOf(false) }
+    val running = detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING"
     val events = session?.transcript?.events.orEmpty()
     fun reported(key: String) = events.asReversed().firstNotNullOfOrNull { event ->
         (event.fields[key] as? JsonPrimitive)?.longOrNull?.takeIf { it > 0 }
@@ -115,6 +122,41 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
                 CodexResetCreditCard(reset, resetBlock, CodexReset.accountOverride(detail, model.target != null, state.draft.resumeConfig.text("account")),
                     model.target?.workspaceId ?: detail.text("agentId") ?: (detail["workspace"] as? JsonObject)?.text("id"))
             }
+            // Board 03: under the readings, a divider and the actions — Compact where the engine has `/compact` (greyed while a turn
+            // runs), Start a new coordinator in a project's current coordinator. Neither, no divider.
+            val compact = model.target == null && CoordinatorHandoff.compactOffered(state.catalog?.let { it.slashItems(it.engineOf(detail), detail.text("agentId")) }.orEmpty())
+            val handOver = model.target == null && CoordinatorHandoff.startOffered(detail)
+            if (compact || handOver) HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            if (compact) {
+                val enabled = CoordinatorHandoff.compactEnabled(running)
+                ContextActionRow(R.drawable.ic_compact, CoordinatorHandoffCopy.COMPACT,
+                    if (enabled) CoordinatorHandoffCopy.COMPACT_DETAIL else CoordinatorHandoffCopy.COMPACT_WHILE_RUNNING, enabled, "context-action-compact") {
+                    expanded = false; model.compact()
+                }
+            }
+            if (handOver) ContextActionRow(R.drawable.ic_handoff, CoordinatorHandoffCopy.START_NEW_COORDINATOR,
+                CoordinatorHandoffCopy.START_NEW_COORDINATOR_DETAIL, true, "context-action-new-coordinator") {
+                expanded = false; confirming = true
+            }
         }
     }, confirmButton = { TextButton(onClick = { expanded = false }) { Text("Close") } })
+    // Board 03 ③: the dialog closes and the confirm takes its place; the waits that move are read for it, as a count.
+    val projectId = CoordinatorHandoff.projectId(detail)
+    if (confirming && projectId != null) {
+        val api = remember(model) { CoordinatorHandoffApi(model.auth, model.handle) }
+        var waits by remember { mutableStateOf<List<HandoffWait>?>(null) }
+        var busy by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
+        val scope = rememberCoroutineScope()
+        LaunchedEffect(projectId) { waits = runCatching { api.pendingWaits(projectId) }.getOrNull() }
+        HandoverConfirm(CoordinatorHandoff.projectTitle(detail), running, waits, busy, error, onHandOver = {
+            busy = true; error = null
+            scope.launch {
+                try { api.post(projectId); confirming = false }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (e: Exception) { error = (e as? ApiError)?.messages?.firstOrNull() ?: directoryError(e) }
+                finally { busy = false }
+            }
+        }, onCancel = { confirming = false })
+    }
 }

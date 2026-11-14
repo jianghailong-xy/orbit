@@ -105,7 +105,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     var withdrawingWake by remember { mutableStateOf<String?>(null) }
     var slashScope by remember { mutableStateOf<String?>(null) }
     var selectionNotice by remember { mutableStateOf<String?>(null) }
-    val usable = state.loaded && session.canCompose()
+    // Board 02 ②: while the coordinator writes its handoff note, and while it hands over, nothing is sent into it.
+    val handingOver = target == null && CoordinatorHandoff.outgoing(session?.snapshot?.detail)?.locksComposer == true
+    val usable = state.loaded && session.canCompose() && !handingOver
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         uris.forEach { importAttachment(context, model, it, "file") }
     }
@@ -235,12 +237,13 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                             if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
                                 send(false); true
                             } else false
-                        }, enabled = state.loaded,
+                        }, enabled = state.loaded && !handingOver,
                     placeholder = {
                         if (suggestion != null) SuggestionPlaceholder(suggestion)
                         // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (iOS 5 ⑥).
                         else Text(when {
                             placeholder != null -> placeholder
+                            handingOver -> CoordinatorHandoffCopy.HANDING_OVER
                             target?.isMachineDraft == true || (target != null && MachineSetup.standsInForMachine(detail)) ->
                                 detail.text("name")?.takeIf { it.isNotEmpty() }?.let(MachineSetupCopy::composerPlaceholderFor) ?: "Message…"
                             target == null && running && engine == CursorRuntime.ENGINE -> CursorRuntime.RUNNING_PLACEHOLDER

@@ -240,6 +240,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             transmit(pending, firstAttempt = true)
         } finally { mutable.update { it.copy(busy = false) } }
     }
+    /** The context dialog's Compact (board 03): the engine's `/compact`, sent as [sendMessage] sends, a refusal shown as the box's. */
+    fun compact() { launch { sendMessage(CoordinatorHandoffCopy.COMPACT_COMMAND) } }
     fun retrySend() {
         if (state.value.busy || state.value.waiting) return
         if (state.value.acknowledgementPending) {
