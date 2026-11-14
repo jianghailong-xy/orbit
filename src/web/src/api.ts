@@ -2012,6 +2012,10 @@ export interface SessionDetail {
   /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
   mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
+  /** When the merge operation now pending was requested. */
+  mergeRequestedAt?: string | null;
+  /** The runner this session runs on, as far as the merge slot names it. */
+  assignedRunner?: { name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the
   // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.

@@ -282,6 +282,8 @@ export function App() {
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}
             <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
+            {/* Adding a machine from Settings stays in Settings; a new account's first sign-in still lands on the welcome card at /runners/register. */}
+            <Route path="machines/new" element={<RunnerRegisterGuide inSettings />} />
             <Route path="machines/:id" element={<SettingsMachineRoute />} />
             {/* Providers (owner's choice C1, board-4; choice A, docs/mocks/settings-providers-compact): every
                 API key on one page, a vendor's alone at its own address, Account pools, and a key's connect
