@@ -40,12 +40,7 @@ const TABS: readonly { key: Tab; state: ShareLinkState; label: string; empty: st
 
 const isTab = (value: string | null): value is Tab => TABS.some((tab) => tab.key === value);
 
-const KIND_WORD: Record<ShareLink['kind'], string> = {
-  SESSION: 'Session',
-  TASK: 'Task',
-  PROJECT: 'Project',
-  WIKI: 'Wiki',
-};
+const KIND_WORD: Record<ShareLink['kind'], string> = { SESSION: 'Session', TASK: 'Task', PROJECT: 'Project', WIKI: 'Wiki' };
 const KIND_LETTER: Record<ShareLink['kind'], string> = { SESSION: 'S', TASK: 'T', PROJECT: 'P', WIKI: 'W' };
 /** A project's status in the words the projects pages use (ProjectsPage STATUS_LABEL). */
 const PROJECT_WORD: Record<string, string> = { OPEN: 'Open', DONE: 'Completed', CANCELLED: 'Cancelled' };
