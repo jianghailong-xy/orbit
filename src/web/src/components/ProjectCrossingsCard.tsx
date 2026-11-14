@@ -358,6 +358,15 @@ export function CrossingRow({
 }
 
 /** The write. `acknowledgedCrossingKey` is what makes the second press a fence and not a habit. */
+/**
+ * Whether a coordinator conversation answers this row as a decision card (CrossingDecisionCard),
+ * which takes it off both ends' project pages (docs/mocks/crossings-page-only-uncovered). A row the
+ * server does not say this about — an older server — stays: a duplicate beats an unanswerable one.
+ */
+export function answeredInConversation(row: ProjectCrossingRow): boolean {
+  return row.toProject?.coordinatorSessionId != null;
+}
+
 export function decideCrossing(
   projectId: string,
   row: ProjectCrossingRow,
@@ -386,8 +395,9 @@ export function ProjectCrossingsCard({ projectId }: { projectId: string }) {
     },
   });
 
-  const rows = orderCrossings(crossings.data ?? []);
+  const rows = orderCrossings((crossings.data ?? []).filter((row) => !answeredInConversation(row)));
   const pending = rows.filter((row) => isAnswerable(row.state)).length;
+  if (crossings.isSuccess && rows.length === 0) return null;
 
   return (
     <Card
@@ -408,8 +418,6 @@ export function ProjectCrossingsCard({ projectId }: { projectId: string }) {
           title="Crossings could not be loaded"
           description={crossings.error instanceof Error ? crossings.error.message : undefined}
         />
-      ) : rows.length === 0 ? (
-        <Text muted>Nothing has been asked about work crossing into or out of this project.</Text>
       ) : (
         <ul style={{ margin: 0, padding: 0 }}>
           {rows.map((row) => (

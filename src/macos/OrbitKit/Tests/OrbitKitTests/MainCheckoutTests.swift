@@ -38,7 +38,7 @@ final class MainCheckoutTests: XCTestCase {
     /// Every result the fixture holds reads, word for word, as the shared builder writes it.
     func testEveryFixtureResultReadsAsTheSharedLine() throws {
         let results = try XCTUnwrap(Self.fixture()["results"] as? [[String: Any]])
-        XCTAssertEqual(results.count, 24)
+        XCTAssertEqual(results.count, 26)
         for sample in results {
             let name = sample["name"] as? String ?? "?"
             let result = try Self.decode(MainCheckoutActionResult.self, try XCTUnwrap(sample["result"]))
@@ -95,7 +95,7 @@ final class MainCheckoutTests: XCTestCase {
             MainCheckoutCopy.moveToThisWorktree, MainCheckoutCopy.moveToAWorktree, MainCheckoutCopy.saveAndClean,
             MainCheckoutCopy.saveAndCleanHint, MainCheckoutCopy.askAgent, MainCheckoutCopy.askAgentHint,
             MainCheckoutCopy.leaveAsIs, MainCheckoutCopy.reviewAndCommitShort, MainCheckoutCopy.reviewMainCheckout,
-            MainCheckoutCopy.commitMessagePlaceholder, MainCheckoutCopy.notShown, MainCheckoutCopy.targetOpenedFrom,
+            MainCheckoutCopy.notShown, MainCheckoutCopy.targetOpenedFrom,
             MainCheckoutCopy.targetBusy, MainCheckoutCopy.cleanUpCheckout,
             WorktreeIsolationDialog.turnOnTitle, WorktreeIsolationDialog.turnOffTitle,
             WorktreeIsolationDialog.unchanged, WorktreeIsolationDialog.reviewFiles, WorktreeIsolationDialog.turnOn,
@@ -362,20 +362,39 @@ final class MainCheckoutTests: XCTestCase {
 
     // MARK: review sheet (board 02)
 
-    func testSelectionStartsWithEveryFileAndGatesCommitOnAMessage() {
-        var selection = MainCheckoutSelection(files: [MainCheckoutFile(path: "b", status: "M"),
+    func testSelectionStartsWithEveryFileAndNamesTheCommitAfterThem() {
+        var selection = MainCheckoutSelection(files: [MainCheckoutFile(path: "src/b", status: "M"),
                                                       MainCheckoutFile(path: "a", status: "A")])
-        XCTAssertEqual(selection.paths, ["b", "a"])
-        XCTAssertFalse(selection.canCommit(message: "  \n"))
-        XCTAssertTrue(selection.canCommit(message: "Add retry backoff"))
-        selection.toggle("b")
+        XCTAssertEqual(selection.paths, ["src/b", "a"])
+        XCTAssertTrue(selection.canCommit)
+        XCTAssertEqual(selection.defaultMessage, "Update b and a")
+        selection.toggle("src/b")
         XCTAssertEqual(selection.paths, ["a"])
+        XCTAssertEqual(selection.defaultMessage, "Add a")
         XCTAssertEqual(MainCheckoutCopy.chooseFiles(chosen: selection.paths.count, total: selection.all.count),
                        "Choose files to commit · 1 of 2")
         XCTAssertEqual(MainCheckoutCopy.commitButton(chosen: 1, branch: "main"), "Commit 1 file to main")
         selection.toggle("a")
         XCTAssertFalse(selection.canMove)
-        XCTAssertFalse(selection.canCommit(message: "Add retry backoff"))
+        XCTAssertFalse(selection.canCommit)
+    }
+
+    /// The default commit messages the shared fixture holds, word for word.
+    func testDefaultCommitMessagesFollowTheSharedFixture() throws {
+        let table = try XCTUnwrap(Self.fixture()["defaultCommitMessages"] as? [String: Any])
+        let cases = try XCTUnwrap(table["cases"] as? [[String: Any]])
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let files = try Self.decode([MainCheckoutFile].self, try XCTUnwrap(c["files"]))
+            XCTAssertEqual(MainCheckoutCopy.defaultCommitMessage(files), c["message"] as? String)
+        }
+    }
+
+    func testDiscardAsksFirstAndSaysWhereTheCopyGoes() {
+        XCTAssertEqual(MainCheckoutCopy.discardButton(chosen: 2), "Discard 2 files")
+        XCTAssertEqual(MainCheckoutCopy.discardTitle(chosen: 1), "Discard 1 file?")
+        XCTAssertEqual(MainCheckoutCopy.discardBody(chosen: 2, branch: "main"),
+                       "They go back to the last commit on main; new files are deleted. A copy of the main checkout is saved on orbit/rescue-… first.")
     }
 
     // MARK: isolation dialogs (board 04)
@@ -446,7 +465,9 @@ final class MainCheckoutTests: XCTestCase {
                     requestId: "req-commit", from: nil),
             .push(root: "/root/orbit", fingerprint: fp, requestId: "req-push", from: nil),
             .rescue(root: "/root/orbit", fingerprint: fp, requestId: "req-rescue", from: nil),
+            .discard(root: "/root/orbit", fingerprint: fp, files: ["src/api/retry.ts"], requestId: "req-discard", from: nil),
         ]
+        XCTAssertEqual(posts.count, requests.count)
         for (post, expected) in zip(posts, requests) {
             let body = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(post)) as? NSDictionary)
             XCTAssertEqual(body, expected as NSDictionary, post.kind.rawValue)
