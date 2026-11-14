@@ -291,3 +291,69 @@ describe('ProjectCrossingsCard — a move out to no project', () => {
     expect(answers).toEqual([{ decision: 'APPROVE', acknowledgedCrossingKey: KEY }]);
   });
 });
+
+describe('ProjectCrossingsCard — only what no conversation answers (docs/mocks/crossings-page-only-uncovered)', () => {
+  async function mountWith(rows: ProjectCrossingRow[]): Promise<HTMLElement> {
+    vi.mocked(api).mockImplementation((async (path: string) => {
+      if (path === `/projects/${PROJECT}/handoffs`) return rows;
+      throw new Error(`nothing is stubbed at ${path}`);
+    }) as unknown as typeof api);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
+    client = qc;
+    const node = document.createElement('div');
+    document.body.appendChild(node);
+    container = node;
+    const tree = createRoot(node);
+    root = tree;
+    await act(async () => {
+      tree.render(
+        <QueryClientProvider client={qc}>
+          <ProjectCrossingsCard projectId={PROJECT} />
+        </QueryClientProvider>,
+      );
+    });
+    await until(() => qc.getQueryCache().getAll().every((q) => q.state.status !== 'pending'), 'the read');
+    await turn();
+    return node;
+  }
+
+  const covered = (over: Partial<ProjectCrossingRow> = {}) =>
+    moveRow({
+      toProject: { title: 'Runner hardening', status: 'OPEN', coordinatorSessionId: 'AAACoordinator' },
+      ...over,
+    });
+
+  it('draws nothing at all when every row is answered in a coordinator conversation', async () => {
+    const node = await mountWith([covered(), covered({ id: 'AAAOther', state: 'APPLIED' })]);
+    expect(node.textContent).toBe('');
+  });
+
+  it('draws nothing when nothing has been asked, rather than an empty panel', async () => {
+    const node = await mountWith([]);
+    expect(node.textContent).toBe('');
+  });
+
+  it('keeps a move out of every project, and a target with no coordinator, and counts only those', async () => {
+    const node = await mountWith([
+      covered({ title: 'Answered in the conversation', subjectTask: null }),
+      moveRow({ id: 'AAAOut', toProjectId: null, toProjectPublicId: null, toProject: null, title: 'Leave the project', subjectTask: null }),
+      moveRow({
+        id: 'AAANoCoord',
+        toProject: { title: 'Runner hardening', status: 'OPEN', coordinatorSessionId: null },
+        title: 'No coordinator to ask',
+        subjectTask: null,
+      }),
+    ]);
+    const text = node.textContent ?? '';
+    expect(text).toContain('Leave the project');
+    expect(text).toContain('No coordinator to ask');
+    expect(text).not.toContain('Answered in the conversation');
+    expect(text).toContain('2 waiting');
+  });
+
+  it('keeps every row from a server that does not say where a row is answered', async () => {
+    const node = await mountWith([moveRow()]);
+    expect(node.textContent).toContain('Wire the drain watchdog');
+    expect(node.textContent).toContain('1 waiting');
+  });
+});
