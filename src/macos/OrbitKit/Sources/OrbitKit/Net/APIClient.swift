@@ -599,6 +599,56 @@ public final class APIClient: @unchecked Sendable {
         return list.guests
     }
 
+    // MARK: The guest's door — Shared with me and the guest view (docs/session-guests-design.md §4, §7)
+
+    /// Shared with me: every session the signed-in account was invited to reply in, newest invitation
+    /// first. Web parity: `listGuestSessions`.
+    public func guestSessions() async throws -> [GuestSessionSummary] {
+        let list: GuestSessionList = try await get("guest-sessions")
+        return list.sessions
+    }
+
+    /// The guest view's root: the head and the newest `limit` events. A 404 is "not shared with you"
+    /// — removed, left, Trash and deleted all read the same. Web parity: `getGuestSession`.
+    public func guestSession(_ sessionID: String, limit: Int) async throws -> GuestSession {
+        try await get("guest-sessions/\(sessionID)", query: [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// The page of the guest's transcript just older than `before`. Web parity: `getGuestEventPage`.
+    public func guestEventsBefore(_ sessionID: String, before: Int, limit: Int) async throws -> GuestEventPage {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "before", value: String(before)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// What the conversation added since `after`, and how it stands now: one read follows both.
+    /// Web parity: `getGuestEventsAfter`.
+    public func guestEventsAfter(_ sessionID: String, after: Int, limit: Int) async throws -> GuestSessionNow {
+        try await get("guest-sessions/\(sessionID)/events", query: [
+            URLQueryItem(name: "after", value: String(after)),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)),
+        ])
+    }
+
+    /// One event whole, for a card that came back `truncated`. Web parity: `getGuestEventFull`.
+    public func guestEventFull(_ sessionID: String, seq: Int) async throws -> RunEvent {
+        try await get("guest-sessions/\(sessionID)/events/\(seq)")
+    }
+
+    /// A guest's message — text only, a turn of the owner's session, which restarts it when it has
+    /// ended. Web parity: `sendGuestTurn`.
+    @discardableResult
+    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String) async throws -> GuestTurnAccepted {
+        try await post("guest-sessions/\(sessionID)/turns",
+                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content))
+    }
+
     // MARK: personal access tokens — listed and revoked here, issued only on the web
     // (docs/personal-access-token-design.md §6.5, §9)
 
