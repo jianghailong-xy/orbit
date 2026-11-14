@@ -108,8 +108,11 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(page.contains("return projectListing.entries.map(\\.timeGroupingSession)"))
         XCTAssertTrue(page.contains("let projectRows = Dictionary(uniqueKeysWithValues: projectListing.projects.map { ($0.id, $0) })"))
         XCTAssertTrue(page.contains("let projectMarks = grouping.projectListing.marks"))
-        XCTAssertTrue(page.contains("listRow(session, projects: projectRows, marks: projectMarks)"))
-        XCTAssertFalse(page.contains("listRow(session, projects: projectRows)"), "every row is handed the marks")
+        XCTAssertTrue(page.contains("folderSection(index: index, section: section, projects: projectRows, marks: projectMarks)"),
+                      "the list's one ForEach hands the section its rows and marks")
+        XCTAssertTrue(page.contains("listRow(session, projects: projects, marks: marks)"),
+                      "and the section hands every row the marks")
+        XCTAssertFalse(page.contains("listRow(session, projects: projects)"), "every row is handed the marks")
         let folderRow = try slice(page, from: "@ViewBuilder private func listRow(_ s: Session, projects: [String: SessionProjectRow],", to: "\n    }")
         XCTAssertTrue(folderRow.contains("if let project = projects[s.id]"))
         XCTAssertTrue(folderRow.contains("projectRow(project)"))

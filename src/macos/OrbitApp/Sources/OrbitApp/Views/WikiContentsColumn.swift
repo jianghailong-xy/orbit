@@ -17,13 +17,17 @@ struct WikiContentsColumn: View {
             // A space with a confirmed plan reads by its documents; before one, by its topic articles.
             let docGroups = WikiDocLogic.readsByDocs(wiki.docsDirectory) ? wiki.docsDirectory.map(WikiDocLogic.directoryGroups) ?? [] : []
             List {
-                if let space = wiki.currentSpace {
-                    head(space, wiki)
+                ForEach(WikiContentsListLogic.columnRows(hasSpace: wiki.currentSpace != nil)) { row in
+                    switch row {
+                    case .head:
+                        columnHead(wiki)
+                    case .contents:
+                        WikiContentsRows(groups: docGroups.isEmpty ? wiki.directory.map(WikiArticleLogic.directoryGroups) ?? [] : [],
+                                         at: model.nav.wikiContentsAt, docGroups: docGroups,
+                                         planPending: wiki.plan.map { WikiPlanLogic.pending($0, runnerOnline: model.wikiMaintenanceRunnerOnline) } ?? 0,
+                                         pick: select)
+                    }
                 }
-                WikiContentsRows(groups: docGroups.isEmpty ? wiki.directory.map(WikiArticleLogic.directoryGroups) ?? [] : [],
-                                 at: model.nav.wikiContentsAt, docGroups: docGroups,
-                                 planPending: wiki.plan.map { WikiPlanLogic.pending($0, runnerOnline: model.wikiMaintenanceRunnerOnline) } ?? 0,
-                                 pick: select)
             }
             .listStyle(.plain)
             .softTopEdgeEffect()
@@ -41,6 +45,14 @@ struct WikiContentsColumn: View {
         }
     }
 
+    /// The space's name as the first row, while a space is in view.
+    @ViewBuilder
+    private func columnHead(_ wiki: WikiModel) -> some View {
+        if let space = wiki.currentSpace {
+            head(space, wiki)
+        }
+    }
+
     /// The space's name as the column's title, as the phone's home heads its page: plain with one space, a picker
     /// among several (design §12.3.4, board docs/mocks/wiki-rail-name B). Another space starts at its home.
     private func head(_ space: WikiSpace, _ wiki: WikiModel) -> some View {
@@ -50,7 +62,8 @@ struct WikiContentsColumn: View {
                                 model.nav.popToRoot()
                                 wiki.selectedSlug = slug
                             },
-                            manage: { open(.wikiSettings) })
+                            manage: { open(.wikiSettings) },
+                            create: { wiki.creating = true })
             Spacer(minLength: 0)
         }
         .padding(.vertical, 4)

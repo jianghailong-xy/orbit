@@ -812,6 +812,8 @@ const COORDINATOR_STATUS_SESSION_SELECT = {
   // Read by the approval count below: the live set a card's `background_job_id` has to be in to
   // still be a question on a conversation that is not generating (migration 0291).
   runningBgShells: true,
+  // And the SubAgents still running, whose cards are questions on it too (docs/subagent-design.md §5.3).
+  runningSubagents: true,
 } satisfies Prisma.SessionSelect;
 
 type CoordinatorStatusSessionRow = Prisma.SessionGetPayload<{
@@ -5129,6 +5131,47 @@ export class ProjectsService {
     return replaced.created
       ? { ...replaced, replacedSessionId: standing, replaceReason: blockedReason }
       : replaced;
+  }
+
+  /**
+   * After a person or an agent moves a session to Trash: when it was the coordinator of an OPEN
+   * project, open the next one at once (account owner, 2026-11-14). A project with no live
+   * coordinator has nowhere to draw its decision cards — crossings, criteria — and nobody to carry
+   * its work; DONE and CANCELLED projects are left without one. The trashed conversation is not
+   * revived: `coordinator` treats a trashed pointer as unbound and swaps it on what it read.
+   *
+   * An agent that trashes another project's coordinator opens the next one through
+   * `ensureCoordinator`, so the account-default gate applies to it as to any agent opening one.
+   * Best effort: the delete has already happened and stands. A failure is logged, and the project
+   * page lists the crossings no conversation can answer until someone opens the coordinator.
+   */
+  async reopenTrashedCoordinator(
+    ownerId: string,
+    sessionId: string,
+    actingSessionId?: string,
+  ): Promise<{ projectId: string; sessionId: string } | null> {
+    const project = await this.prisma.project.findFirst({
+      where: {
+        ownerId,
+        coordinatorSessionId: sessionId,
+        status: ProjectStatus.OPEN,
+        coordinatorSession: { deletedAt: { not: null } },
+      },
+      select: { id: true },
+    });
+    if (!project) return null;
+    try {
+      const opened = actingSessionId && actingSessionId !== sessionId
+        ? await this.ensureCoordinator(ownerId, project.id, actingSessionId)
+        : await this.coordinator(ownerId, project.id);
+      return { projectId: project.id, sessionId: opened.sessionId };
+    } catch (e) {
+      this.logger.error(
+        `project ${project.id}: could not open a coordinator after ${sessionId} was trashed`,
+        e instanceof Error ? e.stack : String(e),
+      );
+      return null;
+    }
   }
 
   /**

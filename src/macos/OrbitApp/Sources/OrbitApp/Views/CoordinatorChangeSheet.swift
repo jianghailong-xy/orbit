@@ -25,16 +25,15 @@ struct CoordinatorChangeSheet: View {
         NavigationStack {
             List {
                 Section {
-                    if let rows {
-                        ForEach(rows) { row in
+                    ForEach(CoordinatorChangeLogic.listRows(rows, failure: targetsFailure)) { item in
+                        switch item {
+                        case .pick(let row):
                             Button { onPick(row, targets) } label: { label(row) }
                                 .buttonStyle(.plain)
                                 .disabled(row.way == nil)
+                        case .note(let text):
+                            Text(text).foregroundStyle(.secondary)
                         }
-                    } else if let targetsFailure {
-                        Text(targetsFailure).foregroundStyle(.secondary)
-                    } else {
-                        Text(SessionMoveCopy.loadingWorkspaces).foregroundStyle(.secondary)
                     }
                 } header: {
                     Text(CoordinatorChangeCopy.sub(projectTitle, from: currentWorkspaceName))

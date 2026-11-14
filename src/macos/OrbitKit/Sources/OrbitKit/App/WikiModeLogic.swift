@@ -663,3 +663,33 @@ public enum WikiModeLogic {
         return lines
     }
 }
+
+/// One row of a run's page: the head, the counts, then one group per change kind that has entries.
+/// The page's List draws one row per case through one ForEach, so an empty group is absent from the
+/// array rather than an `if` inside it.
+public enum WikiRunPageListRow: Equatable, Sendable, Identifiable {
+    case head
+    case counts
+    case group(title: String, rows: [WikiModeLogic.RunRow])
+
+    public var id: String {
+        switch self {
+        case .head: "head"
+        case .counts: "counts"
+        case .group(let title, _): "group:\(title)"
+        }
+    }
+}
+
+public enum WikiRunPageListLogic {
+    public static func rows(_ summary: WikiModeLogic.RunSummary) -> [WikiRunPageListRow] {
+        var rows: [WikiRunPageListRow] = [.head, .counts]
+        let groups = [(WikiModeCopy.runAdded, summary.added),
+                      (WikiModeCopy.runAmended, summary.amended),
+                      (WikiModeCopy.runReinforced, summary.reinforced)]
+        for (title, entries) in groups where !entries.isEmpty {
+            rows.append(.group(title: title, rows: entries))
+        }
+        return rows
+    }
+}
