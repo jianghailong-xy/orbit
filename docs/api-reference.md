@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 418 |
+| `user` | 420 |
 | `admin` | 28 |
 | `runner` | 176 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **657** |
+| **Total** | **659** |
 
 ## Public routes
 
@@ -114,9 +114,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/attachments` | query `sessionId`, `taskId` | `AttachmentsController.upload` |
 | `DELETE` | `/api/attachments/:id` | path `id` | `AttachmentsController.removeTaskInput` |
 | `GET` | `/api/attachments/:id` | path `id` | `AttachmentsController.download` |
+| `DELETE` | `/api/attachments/:id/everywhere` | path `id` | `AttachmentsController.deleteEverywhere` |
 | `DELETE` | `/api/attachments/:id/pin` | path `id` | `AttachmentsController.unpin` |
 | `PUT` | `/api/attachments/:id/pin` | path `id` | `AttachmentsController.pin` |
 | `GET` | `/api/attachments/usage` | — | `AttachmentsController.usage` |
+| `GET` | `/api/attachments/usage/projects/:id/files` | path `id`; query `cursor`, `order` | `AttachmentsController.projectFiles` |
+| `GET` | `/api/attachments/usage/tasks/:id/files` | path `id`; query `cursor`, `order` | `AttachmentsController.taskFiles` |
+| `GET` | `/api/attachments/usage/weeks/:week/files` | path `week`; query `cursor`, `order` | `AttachmentsController.weekFiles` |
 | `GET` | `/api/auth/capabilities` | — | `AuthController.capabilities` |
 | `POST` | `/api/auth/change-password` | body `ChangePasswordDto` | `AuthController.changePassword` |
 | `DELETE` | `/api/auth/google/link` | — | `GoogleAuthController.unlink` |
@@ -347,12 +351,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/pin` | path `id` | `SessionsController.pin` |
 | `DELETE` | `/api/sessions/:id/purge` | path `id` | `SessionsController.purge` |
 | `POST` | `/api/sessions/:id/recap` | path `id` | `SessionsController.refreshRecap` |
-| `POST` | `/api/sessions/:id/restart` | path `id` | `SessionsController.restart` |
 | `POST` | `/api/sessions/:id/restore` | path `id` | `SessionsController.restore` |
 | `POST` | `/api/sessions/:id/resume` | body `Object`; path `id` | `SessionsController.resume` |
 | `GET` | `/api/sessions/:id/retry-message` | path `id` | `SessionsController.retryMessage` |
 | `POST` | `/api/sessions/:id/retry-message` | body `Object`; path `id` | `SessionsController.resendRetryMessage` |
-| `PATCH` | `/api/sessions/:id/settings` | body `Object`; path `id` | `SessionsController.updateSettings` |
 | `DELETE` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.turnOffSessionLink` |
 | `GET` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.sessionLink` |
 | `POST` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.enableSessionLink` |
