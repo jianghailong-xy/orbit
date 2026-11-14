@@ -74,7 +74,11 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: "Running…", tone: .running)
         }
         if live && s.effectiveRunState == .queued {
-            return SessionLine(text: ClaudeRegion.heldWords(s, machine: machine) ?? "Queued", tone: .queued)
+            if let held = ClaudeRegion.heldWords(s, machine: machine) { return SessionLine(text: held, tone: .queued) }
+            // A runner draining for its update is the one queue word in the warning colour (board 5,
+            // web `sessionLine`): it can last hours, and only the owner can shorten it.
+            if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
+            return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
         // working, so it outranks the wait it is parked on and anything it left running (web's
@@ -87,6 +91,11 @@ public struct SessionLine: Equatable, Sendable {
         // line, so the row and the strip above its composer read the same (web parity).
         if live, let watching, s.effectiveRunState == .awaitingInput {
             return SessionLine(text: watching.rowLine, tone: .watching)
+        }
+        // The same place for a wait the server reports and this caller holds no watch for — a
+        // scheduled wake-up, an armed auto-retry (web `resumeWords`).
+        if live, s.resumesOnItsOwn {
+            return SessionLine(text: SessionHeader.waitingToResume, tone: .watching)
         }
         // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
         // not the agent working either (see the glyph): muted, not the working blue.
@@ -125,9 +134,10 @@ public struct SessionLine: Equatable, Sendable {
         SessionLine(text: "\(sender(from)): \(plainPreview(text))", tone: .preview)
     }
 
-    /// The line for a message somebody outside Orbit sent — a member of a connected Feishu group
-    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) — or nil for anybody else's: named the way
-    /// the conversation names them over their words, `From Feishu · <name>: …`, never "You". One message
+    /// The line for a message somebody other than the owner sent — a member of a connected Feishu group
+    /// (`lastUserFromExternal`, docs/feishu-bot-design.md §8.2) or a guest the owner invited
+    /// (docs/session-guests-design.md §3) — or nil for anybody else's: named the way the conversation
+    /// names them over their words, `From Feishu · <name>: …` or `From <name>: …`, never "You". One message
     /// has one sender; the web asks it inside `sentBy`, before another session's title.
     static func externalLine(_ text: String, _ from: ExternalMessageFrom?) -> SessionLine? {
         guard let from else { return nil }

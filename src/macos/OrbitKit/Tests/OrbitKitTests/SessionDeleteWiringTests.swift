@@ -78,6 +78,30 @@ final class SessionDeleteWiringTests: XCTestCase {
                        "the console closes once, on the tap")
     }
 
+    /// Complete answers the tap the same way (iOS and macOS share this code): the row and its console
+    /// go before the request instead of once the server has answered and every list has been read again.
+    func testCompleteTakesTheRowOutOnTheTap() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let cases: [(start: String, toast: String?)] = [
+            ("func completeSession(_ id: String) {", "showToast(\"Session completed\""),
+            ("private func performCurrentSessionCompletion(_ id: String) {", nil),
+        ]
+        for (start, toast) in cases {
+            let complete = try slice(app, from: start, to: "\n    }\n")
+            let refused = try slice(complete, from: "catch {", to: "return\n")
+            let done = String(complete[try XCTUnwrap(complete.range(of: refused)).upperBound...])
+
+            let tap = try positions(["hideTrashedSession(id)", "dropIfOpen(id)", "try await api.completeSession(id)"], in: complete)
+            XCTAssertEqual(tap, tap.sorted(), "\(start): the row goes before the request")
+            let undo = try positions(["revealTrashedSession(id)", "await reload"], in: refused)
+            XCTAssertEqual(undo, undo.sorted(), "\(start): a refusal lets the row back before the read that brings it")
+            let settled = try positions((toast.map { [$0] } ?? []) + ["await ", "revealTrashedSession(id)"], in: done)
+            XCTAssertEqual(settled, settled.sorted(), "\(start): the row stays out until the re-read has landed")
+            XCTAssertEqual(complete.components(separatedBy: "dropIfOpen(id)").count - 1, 1,
+                           "\(start): the console closes once, on the tap")
+        }
+    }
+
     /// Hidden from every loaded list at once — the Open snapshot without announcing anything, the
     /// pane's own lists, and on iOS the project page's members, Completed ones included, since a poll
     /// draws those from what its page last read.
@@ -90,8 +114,7 @@ final class SessionDeleteWiringTests: XCTestCase {
                      "projectCompletedSessions = projectCompletedSessions.mapValues { SessionFilter.removing(id, from: $0) }"] {
             XCTAssertTrue(hide.contains(part), "hiding writes `\(part)`")
         }
-        let iOS = try slice(hide, from: "#if os(iOS)", to: "#endif")
-        XCTAssertTrue(iOS.contains("projectSessions"), "the project page is iOS only")
+        XCTAssertFalse(hide.contains("#if os(iOS)"), "the project page is the iPad's and the Mac's column alike")
 
         let reveal = try slice(app, from: "private func revealTrashedSession(_ id: String) {", to: "\n    }\n")
         for part in ["guard trashingSessions.remove(id) != nil else { return }", "agents?.revealTrashedSession(id)",

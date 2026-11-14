@@ -44,13 +44,18 @@ struct ProjectDoneCard: View {
     var onNotYet: ((String) async -> Bool)? = nil
     /// Reopen project, on the receipt.
     var onReopen: (() async -> Void)? = nil
+    /// Open, Change, Move to a follow-up… and Confirm… (`ProjectDoneFollowUps.swift`).
+    var followUps = ProjectDoneFollowUpActions()
 
     @Environment(\.inApprovalReview) private var inReview
     @State private var recording = false
     @State private var notYetOpen = false
     @State private var note = ""
     @State private var sending = false
-    @State private var criteriaOpen = false
+    /// Nil until the reader folds or unfolds Done when: it starts open up to twelve criteria.
+    @State private var criteriaOpen: Bool?
+    @State private var moving: MoveCriterionSubject?
+    @State private var confirming: ConfirmCriterionSubject?
 
     var body: some View {
         if ProjectDone.recorded(subject, record: record) {
@@ -80,7 +85,7 @@ struct ProjectDoneCard: View {
 
     private var question: some View {
         ApprovalReviewLayout(title: ProjectDone.heading, symbol: "checkmark.circle", tone: .blue,
-                             summary: "\(subject.title) · \(ProjectDone.cardTally(counts, main: subject.main))",
+                             summary: "\(subject.title) · \(ProjectDone.cardTally(subject))",
                              badge: doneQuestionBadge) {
             content
         } actions: {
@@ -94,12 +99,23 @@ struct ProjectDoneCard: View {
                 }
             }
         }
+        .sheet(item: $moving) { moving in
+            if let move = followUps.move {
+                MoveCriterionSheet(subject: moving, move: move, openProjects: followUps.openProjects)
+            }
+        }
+        .sheet(item: $confirming) { confirming in
+            if let confirm = followUps.confirm {
+                ConfirmCriterionSheet(subject: confirming, confirm: confirm, upload: followUps.upload)
+            }
+        }
     }
 
     @ViewBuilder
     private var content: some View {
         Text(ProjectDone.meta(projectTitle: subject.title, asked: request != nil, waiting: waiting))
             .font(.orbitLabel).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         if let request {
             DoneSectionHead(title: ProjectDone.coordinatorCall)
@@ -110,6 +126,9 @@ struct ProjectDoneCard: View {
                     .doneRow()
             }
         }
+        if subject.nonCode {
+            NonCodeBanner(mark: subject.nonCodeMark, onChange: followUps.openDelivers)
+        }
         doneWhen
         if request != nil { ProjectDoneGapList(subject: subject, gaps: gaps) }
         HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -117,29 +136,26 @@ struct ProjectDoneCard: View {
             Text(ProjectDone.orbitCheckedLine(counts: counts, confirmedAt: confirmedAt,
                                               openItems: openItems, running: running))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.orbitLabel)
         if request == nil, let findings = doneCheck?.findings, !findings.isEmpty {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(ProjectDone.findingsHeading.replacingOccurrences(of: "{n}", with: String(findings.count))).bold()
-                ForEach(Array(findings.enumerated()), id: \.offset) { _, finding in
-                    Text(finding.line(main: subject.main))
-                }
-            }
-            .font(.orbitLabel)
-            .foregroundStyle(Color.red)
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.red.opacity(0.3)))
-            Text(ProjectDone.findingsAccepted).font(.orbitLabel).foregroundStyle(.secondary)
+            DoneFindingsView(subject: subject, findings: findings, openTask: followUps.openTask,
+                             onMove: followUps.move == nil ? nil : { finding in
+                                 moving = MoveCriterionSubject(subject: subject, finding: finding)
+                             })
         } else if request != nil {
+            // Wraps rather than truncates: in the transcript's list a Text that may shrink is cut
+            // to one line, and the row comes out short enough to leave the card's buttons below
+            // the list's end, out of the scroll's reach.
             Text(ProjectDone.recordingExplanation).font(.orbitProse)
+                .fixedSize(horizontal: false, vertical: true)
         }
         if let error {
             Text("\(ProjectDone.notRecorded) — \(error)")
                 .font(.orbitLabel).foregroundStyle(Color.red)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         if notYetOpen {
@@ -156,36 +172,81 @@ struct ProjectDoneCard: View {
         }
     }
 
-    /// Done when: the three counts, and every criterion one toggle away.
+    /// How many criteria Done when shows open before it folds behind Show all (the browser's
+    /// `DONE_WHEN_OPEN_UP_TO`).
+    private static let openUpTo = 12
+
+    /// Done when: the counts, and every criterion — open up to twelve, one toggle away beyond.
     @ViewBuilder
     private var doneWhen: some View {
         let criteria = subject.derivedDone?.criteria ?? []
         let count = counts?.criteria ?? criteria.count
+        let open = criteriaOpen ?? (count <= Self.openUpTo)
         DoneSectionHead(title: ProjectDone.doneWhenHead(count),
-                        aside: count > 0 ? (criteriaOpen ? ProjectDone.showLess : ProjectDone.showAll(count)) : nil,
-                        onAside: { criteriaOpen.toggle() })
-        Text(ProjectDone.cardTally(counts, main: subject.main))
+                        aside: count > Self.openUpTo ? (open ? ProjectDone.showLess : ProjectDone.showAll(count)) : nil,
+                        onAside: { criteriaOpen = !open })
+        Text(ProjectDone.cardTally(subject))
             .font(.orbitLabel).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-        if criteriaOpen {
+        if open, !criteria.isEmpty {
             DonePanel {
                 ForEach(Array(criteria.enumerated()), id: \.element.id) { index, criterion in
                     if index > 0 { Divider() }
-                    let item = subject.criterion(criterion.definitionId)
-                    HStack(alignment: .top, spacing: 8) {
-                        DoneOrdinal(text: "\(item?.ordinal ?? index + 1)")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item?.text ?? criterion.definitionId).font(.orbitSubtext)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(ProjectDone.criterionState(criterion, main: subject.main))
-                                .font(.orbitLabel).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .doneRow()
+                    criterionRow(criterion, index: index)
                 }
             }
         }
+        if !subject.criteriaMovedOut.isEmpty {
+            MovedOutLines(movedOut: subject.criteriaMovedOut)
+        }
+    }
+
+    /// One Done when row: the number, the words, and — at the trailing edge — met or not, with who
+    /// confirmed it or where its work is (`criterionRowState`); Confirm… on an unmet criterion met
+    /// by confirmation.
+    private func criterionRow(_ criterion: ProjectDoneCriterion, index: Int) -> some View {
+        let item = subject.criterion(criterion.definitionId)
+        let state = ProjectDone.criterionRowState(criterion, nonCode: subject.nonCode, main: subject.main)
+        let confirmed = criterion.satisfiedBy == .confirmation && criterion.satisfied
+            ? ProjectDone.confirmationLine(criterion.confirmation?.current) : nil
+        let canConfirm = criterion.satisfiedBy == .confirmation && !criterion.satisfied
+            && followUps.confirm != nil && item != nil
+        return HStack(alignment: .top, spacing: 8) {
+            Text("\(item?.ordinal ?? index + 1)")
+                .font(.orbitLabel).monospacedDigit().foregroundStyle(.secondary)
+                .frame(minWidth: 14, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item?.text ?? criterion.definitionId).font(.orbitSubtext)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let confirmed {
+                    Text(confirmed).font(.orbitLabel).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 6)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(state.text)
+                    .font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(state.warn ? ProjectPalette.warningInk
+                                     : criterion.satisfied ? Color.green : Color.red)
+                    .multilineTextAlignment(.trailing)
+                if canConfirm, let item {
+                    Button(ProjectDone.confirmLabel(criterion.confirmation)) {
+                        confirming = ConfirmCriterionSubject(criterionID: item.id, ordinal: item.ordinal,
+                                                             text: item.text,
+                                                             verificationMethod: item.verificationMethod,
+                                                             revision: item.revision)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityIdentifier("done-confirm-\(item.ordinal)")
+                }
+            }
+        }
+        .doneRow()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("done-criterion-\(item?.ordinal ?? index + 1)")
     }
 
     // MARK: the answers
@@ -201,7 +262,7 @@ struct ProjectDoneCard: View {
                 recording = false
             }
         } label: {
-            Text(ProjectDone.recordLabel(counts, asked: request != nil)).approvalActionLabel()
+            Text(ProjectDone.recordLabel(counts, asked: request != nil, check: doneCheck)).approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
         .disabled(recording || !sealRead)
@@ -260,6 +321,7 @@ struct ProjectDoneGapList: View {
         if gaps.isEmpty {
             Text(ProjectDone.noGaps)
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             let shown = expanded ? gaps : Array(gaps.prefix(3))
@@ -322,12 +384,15 @@ struct ProjectDoneReceiptCard: View {
                            tone: .green, badge: ProjectDone.provenance)
             Text(ProjectDone.receiptMeta(subject, record: record))
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(ProjectDone.receiptLine(subject, record: record))
                 .font(.orbitProse.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(ProjectDone.receiptTally(subject, record: record))
                 .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if !accepted.isEmpty {
                 Button {

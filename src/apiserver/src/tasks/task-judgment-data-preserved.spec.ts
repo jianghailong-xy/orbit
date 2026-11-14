@@ -2918,9 +2918,97 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0521_wiki_repo_snapshot_source',
       // 0530 swaps two CHECKs and lets a probe's wiki_repo_op name no job; no preserved rows, triggers or DONE fence change.
       '0530_wiki_repo_probe',
-      // 0538 adds github_app_config, github_connection and github_oauth_flow, and seven nullable workspace columns with
+      // 0534 creates main_checkout_request only; no preserved rows, triggers or DONE fence change.
+      '0534_main_checkout_request',
+      // 0535 adds project's non-code mark, who wrote it and when, and one CHECK; no preserved rows, triggers or DONE
+      // fence change, and no row is written.
+      '0535_project_non_code_mark',
+      // 0545 adds criterion_satisfied_by on the criterion definition and the
+      // project_criterion_confirmation table, and restates 0234's normalize function with the mode
+      // as a third input (a TASKS row's hashes are computed exactly as before). No completion ledger,
+      // DONE fence, preserved trigger or function is changed, and no row is written.
+      '0545_criterion_confirmation',
+      // 0555 adds project.non_code_reason, the confirmed wording on project_criterion_confirmation
+      // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
+      // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
+      '0555_project_done_card_records',
+      // 0560 adds the session_guest table and widens three CHECKs (external sender, its session-row preview, the
+      // activity credential kind); no preserved rows, triggers or DONE fence change.
+      '0560_session_guest',
+      // 0571 adds one nullable TIMESTAMP(3) `self_update_postpone_until` on `runner` (no default, catalog-only); no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0571_runner_self_update_postpone',
+      // 0572 adds session_guest's daily message count (two columns); no preserved rows, triggers or DONE fence change.
+      '0572_session_guest_daily_turns',
+      // 0585 adds project_orphan_notice, the orphan sweep's ledger: one new table, no existing row read
+      // or rewritten. No completion ledger, DONE fence, preserved trigger or function is changed.
+      '0585_project_orphan_notice',
+      // 0590 adds one nullable TIMESTAMP(3) `self_update_now_requested_at` on `runner` (no default, catalog-only); no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0590_runner_self_update_now',
+      // 0595 adds one nullable TIMESTAMP(3) `drain_waiting_pushed_at` on `runner` (no default, catalog-only); no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0595_runner_drain_waiting_push',
+      // 0610 lets project_handoff_approval.to_project_id be NULL for a MOVE_TASK (one CHECK),
+      // rebuilds 0386's pending-move index NULLS NOT DISTINCT, and restates 0389's
+      // task_claimed_project_move_guard with the target compared IS NOT DISTINCT FROM. No preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0610_project_handoff_move_out',
+      // 0611 creates `key_gateway_token` only; no existing table, trigger or DONE fence is touched.
+      '0611_key_gateway_token',
+      // 0612 adds a nullable `model_provider.spent_until` only; no preserved row, trigger or DONE fence changes.
+      '0612_model_provider_spent_until',
+      // 0613 creates `key_gateway_usage` only; no existing table, trigger or DONE fence is touched.
+      '0613_key_gateway_usage',
+      // 0615 adds five nullable task fork columns, their CHECK and an immutability trigger on them alone,
+      // and swaps four session SOURCE CHECKs; no preserved rows, triggers or DONE fence change.
+      '0615_task_session_fork',
+      // 0616 only validates 0615's five CHECKs.
+      '0616_task_session_fork_checks',
+      // 0617 adds `task.fork_changed_files` (TEXT[] NOT NULL DEFAULT '{}', catalog-only) and restates 0615's fork
+      // guard to cover it; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0617_task_fork_changed_files',
+      // 0618 adds a nullable email_outbox.session_id, its foreign key and index, two CHECKs and a wider unique index
+      // only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0618_email_outbox_session_invite',
+      // 0641 adds statement triggers on session_scheduled_wakeup and watch that bump the Open list's epoch, and the
+      // function one of them calls; no preserved rows, no preserved table's triggers or DONE fence change, and no row
+      // is written.
+      '0641_open_list_epoch_session_waits',
+      // 0660 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
+      // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0660_terminal_credential',
+      // 0661 widens approval_decided_via_chk to allow 'TERMINAL' (docs/terminal-session-design.md); approval only, no
+      // preserved rows, triggers or DONE fence change, and no row is written.
+      '0661_approval_decided_by_terminal',
+      // 0662 adds two nullable columns to conversation_turn, sender_client and sender_client_detail (which client
+      // sent the turn, sessions/turn-sender-client.ts); no preserved rows, triggers or DONE fence change, and no row
+      // is written.
+      '0662_turn_sender_client',
+      // 0663 adds the nullable approval.decided_terminal_machine_name, ties it to a TERMINAL decision in
+      // approval_decided_via_chk and lets activity_credential_chk say TERMINAL; no preserved rows, triggers or DONE
+      // fence change, and no row is written.
+      '0663_approval_decided_terminal_machine',
+      // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
+      // preserved relations, no trigger or DONE fence changes, and no row is written.
+      '0705_runner_engine_update_dismissals',
+      // 0720 adds a nullable runner_presence.resources (JSONB) only; no preserved rows, triggers or DONE fence change,
+      // and no row is written.
+      '0720_runner_presence_resources',
+      // 0730 adds one nullable column to session, work_subdir (the folder below its workspace's directory a no-worktree
+      // session runs in, sessions/work-subdir.ts); no preserved rows, triggers or DONE fence change, and no row is
+      // written.
+      '0730_session_work_subdir',
+      // 0740 adds two nullable session columns (merge_after_turn_at, merge_after_turn_target) only; no preserved
+      // rows, triggers or DONE fence change, and no row is written.
+      '0740_session_merge_after_turn',
+      // 0760 adds a nullable `runner.attention_fixes` JSONB only, catalog-only; `runner` is none of the preserved
+      // relations, no trigger or DONE fence changes, and no row is written.
+      '0760_runner_attention_fixes',
+      // 0762 adds github_app_config, github_connection and github_oauth_flow, and seven nullable workspace columns with
       // one CHECK; no preserved rows, triggers or DONE fence change, and no row is written.
-      '0538_github_app_connection'],
+      '0762_github_app_connection'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

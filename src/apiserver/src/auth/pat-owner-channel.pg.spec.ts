@@ -190,6 +190,24 @@ test('the owner channel refuses a personal access token door by door and field b
   const chatToRemove = await connectedChat('to-remove');
   const chatRow = (id: string) => db.feishuChatRoute.findUnique({ where: { id } });
 
+  // Two terminal sign-ins waiting on the account's runner: the approve card's doors stood up for real.
+  const terminalRequest = async () => (await db.terminalLogin.create({
+    data: {
+      deviceCodeHash: `owner-channel-${randomUUID()}`, userCode: '7KQ-4MZ', ownerId: userId, runnerId,
+      machineName: 'a runner', expiresAt: new Date(Date.now() + 10 * 60_000),
+    },
+  })).id;
+  const terminalToApprove = await terminalRequest();
+  const terminalToDeny = await terminalRequest();
+  const terminalStatus = async (id: string) => (await db.terminalLogin.findUniqueOrThrow({ where: { id } })).status;
+  // Two other accounts: one to invite through the guest door, one already invited for the remove door to take out.
+  const guestEmail = `owner-channel-guest-${RUN}@personal-access-token.invalid`;
+  await db.user.create({ data: { email: guestEmail, name: 'Invited' } });
+  const guestToRemove = (await db.user.create({
+    data: { email: `owner-channel-removed-${RUN}@personal-access-token.invalid`, name: 'Removed' },
+  })).id;
+  await db.sessionGuest.create({ data: { sessionId, ownerId: userId, userId: guestToRemove } });
+
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
   const doors: Door[] = [
@@ -222,11 +240,24 @@ test('the owner channel refuses a personal access token door by door and field b
       body: { decision: 'CONFIRM', evidenceRevision: '1', decidingSessionId: nobody() },
       login: 404,
     },
+    { route: 'POST /tasks/:taskId/evidence/:revision/restart', path: `/tasks/${nobody()}/evidence/1/restart`, body: {}, login: 404 },
     {
       route: 'POST /sessions/:id/approvals/:approvalId/decision',
       path: `/sessions/${sessionId}/approvals/${nobody()}/decision`,
       body: { behavior: 'allow' },
       login: 404,
+    },
+    // Session guests (docs/session-guests-design.md §3): the People list, inviting by email, removing.
+    { route: 'GET /sessions/:id/guests', path: `/sessions/${sessionId}/guests`, login: 200 },
+    {
+      route: 'POST /sessions/:id/guests', path: `/sessions/${sessionId}/guests`,
+      body: { email: guestEmail }, login: 201,
+      observe: () => db.sessionGuest.count({ where: { sessionId, removedAt: null } }),
+    },
+    {
+      route: 'DELETE /sessions/:id/guests/:userId', path: `/sessions/${sessionId}/guests/${guestToRemove}`,
+      login: 200,
+      observe: () => db.sessionGuest.count({ where: { sessionId, userId: guestToRemove, removedAt: null } }),
     },
     {
       route: 'POST /projects/:id/acceptance/confirmation',
@@ -278,6 +309,13 @@ test('the owner channel refuses a personal access token door by door and field b
       path: `/projects/${toPause}/resume`,
       login: 201,
       observe: async () => (await projectRow(toPause)).pausedAt,
+    },
+    // A criterion the project does not state: a login is answered 404, and nothing moves.
+    {
+      route: 'POST /projects/:id/criteria/:criterionKey/move',
+      path: `/projects/${anyProject}/criteria/${nobody()}/move`,
+      body: { newProject: { title: 'a follow-up' } },
+      login: 404,
     },
     // The project is OPEN, so a login is answered by the door's own refusal: PROJECT_STILL_OPEN.
     {
@@ -424,6 +462,16 @@ test('the owner channel refuses a personal access token door by door and field b
       path: `/integrations/feishu/chats/${chatToRemove}`,
       login: 200,
       observe: async () => (await chatRow(chatToRemove)) !== null,
+    },
+    // A terminal asking to be approved (docs/terminal-session-design.md): two real requests on the account's runner.
+    { route: 'GET /terminals/requests', path: '/terminals/requests', login: 200 },
+    {
+      route: 'POST /terminals/requests/:id/approve', path: `/terminals/requests/${terminalToApprove}/approve`,
+      login: 200, observe: () => terminalStatus(terminalToApprove),
+    },
+    {
+      route: 'POST /terminals/requests/:id/deny', path: `/terminals/requests/${terminalToDeny}/deny`,
+      login: 200, observe: () => terminalStatus(terminalToDeny),
     },
   ];
 

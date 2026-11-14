@@ -5,7 +5,7 @@
  * services over that database. Only GitHub is not real: the in-process fake (test-support/fake-github.ts)
  * answers it, and nothing reaches the network. What it is held to:
  *
- *   (1) 0538 made what it describes: the three tables, the seven nullable workspace columns, the CHECK on
+ *   (1) 0762 made what it describes: the three tables, the seven nullable workspace columns, the CHECK on
  *       clone_state, and it runs again unchanged;
  *   (2) the admin setting: off with no row; a save GitHub does not vouch for — a key of another App, an
  *       App ID GitHub does not know, a client ID that is not the App's, a key that is not a key — is
@@ -65,7 +65,7 @@ import { GithubCallbackController, GithubController } from './github.controller'
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
 const CALLBACK = 'https://orbit.example.test/api/integrations/github/callback';
-const MIGRATION = readFileSync(path.resolve(__dirname, '../../prisma/migrations/0538_github_app_connection/migration.sql'), 'utf8');
+const MIGRATION = readFileSync(path.resolve(__dirname, '../../prisma/migrations/0762_github_app_connection/migration.sql'), 'utf8');
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 const s256 = (text: string) => createHash('sha256').update(text).digest('base64url');
 
@@ -197,7 +197,7 @@ test('GitHub P0 on PostgreSQL: the App setting, connecting through the code flow
   };
   const goodSave = { enabled: true, appId: String(github.appId), clientId: github.clientId, clientSecret: github.clientSecret, privateKey: github.privateKey };
 
-  await t.test('(1) 0538 made the tables and columns it describes, and runs again', async () => {
+  await t.test('(1) 0762 made the tables and columns it describes, and runs again', async () => {
     const columns = await rows(
       `SELECT column_name, udt_name, is_nullable FROM information_schema.columns
         WHERE table_schema = current_schema() AND table_name = 'workspace' AND column_name IN

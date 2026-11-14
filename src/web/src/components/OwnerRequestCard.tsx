@@ -1,4 +1,4 @@
-import { useMemo, useState, type JSX, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -121,11 +121,15 @@ function StepValue({ value, action, onAction, href }: {
 
 function CopyValue({ value }: { value: string }): JSX.Element {
   const [copied, setCopied] = useState(false);
+  // The "Copied" reset is cancelled when the card goes, so it never updates a card that is gone.
+  const reset = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(reset.current), []);
   const copy = () => {
     void copyText(value).then((ok) => {
       if (!ok) return;
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      window.clearTimeout(reset.current);
+      reset.current = window.setTimeout(() => setCopied(false), 1500);
     });
   };
   return <StepValue value={value} action={copied ? 'Copied' : 'Copy'} onAction={copy} />;

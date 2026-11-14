@@ -92,6 +92,21 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("Text(\"+\\(more)\")"))
     }
 
+    /// Several waiting (the owner, 2026-11-13, option B of 03-expand.html): folded, the press
+    /// unfolds and the "+N" carries a ⌄; unfolded, one capsule per conversation in `entries`'
+    /// order, each opening its own, the first carrying the ↑ that folds them — a press of its own.
+    func testSeveralWaitingUnfoldIntoOneCapsuleEach() throws {
+        let view = try banner
+        XCTAssertTrue(view.contains("model.needsYouEntries(excluding: excluding)"))
+        XCTAssertTrue(view.contains("if banner.count > 1 { setUnfolded(true) } else { open(banner) }"))
+        XCTAssertTrue(view.contains("if unfolds { Image(systemName: \"chevron.down\")"))
+        XCTAssertTrue(view.contains("fold: index == 0 ? { setUnfolded(false) } : nil"))
+        XCTAssertTrue(view.contains("Image(systemName: \"chevron.up\")"))
+        XCTAssertTrue(view.contains("entries.prefix(NeedsYouLogic.unfoldedLimit)"), "at most five")
+        let model = code(try source("AppModel.swift"))
+        XCTAssertTrue(model.contains("NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)"))
+    }
+
     /// Where the press goes elsewhere the capsule carries no chevron — the whole of it is the press;
     /// in the conversation on screen the chevron stays, pointing the way the card lies.
     func testOnlyTheInConversationBarPoints() throws {
@@ -102,13 +117,18 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
 
     /// On iOS 26 a conversation's bar is a safe-area BAR, so the transcript's scroll-edge effect
     /// runs on under the capsule as it does under the composer band; the capsule then stands on
-    /// nothing. Everywhere else — the session list, an older system — it stands on the page's colour.
+    /// nothing. Over the session list on iOS 26 it stands on its own soft edge (`listSoftEdge`, the
+    /// owner's option B of docs/mocks/ios-header-soft-edge/02-board.html, guarded in
+    /// `ListHeaderEdgeWiringTests`); on an older system it stands on the page's colour.
     func testItFloatsOverTheTranscriptOnIOS26() throws {
         let console = code(try source("Views/Console/ConsoleView.swift"))
         let top = try slice(console, from: "func needsYouTop<Bar: View>(", to: "\n    }\n")
         XCTAssertTrue(top.contains("safeAreaBar(edge: .top, spacing: 0) { content.environment(\\.floatsOverTranscript, true) }"))
         XCTAssertTrue(top.contains("safeAreaInset(edge: .top, spacing: 0, content: bar)"))
         XCTAssertTrue(console.contains(".needsYouTop {\n            if hSize == .compact {"))
-        XCTAssertTrue(try banner.contains(".background(floats ? Color.clear : Color(uiColor: .systemBackground))"))
+        let view = try banner
+        XCTAssertTrue(view.contains(".background { surface }"))
+        XCTAssertTrue(view.contains("if floats {\n            Color.clear"))
+        XCTAssertTrue(view.contains("if #available(iOS 26.0, *) { listSoftEdge } else { Color(uiColor: .systemBackground) }"))
     }
 }

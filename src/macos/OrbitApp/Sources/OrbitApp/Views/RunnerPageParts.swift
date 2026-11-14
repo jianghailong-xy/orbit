@@ -11,7 +11,7 @@ import OrbitKit
 // `RunnerPageFormat`), where they are tested; iOS and macOS draw these same views.
 
 /// The inks the runner pages speak in: the mock's on light — the system green/orange/red read too
-/// faint on white — and the system colours on dark. The same inks `PoolTone` (InfrastructureSections)
+/// faint on white — and the system colours on dark. The same inks `PoolTone` (MachinesAndModelsSections)
 /// uses; that one lived with the iOS-only pool pages when these were drawn, and these are macOS's too.
 enum RunnerInk {
     static let green = Color(light: Color(red: 0.141, green: 0.541, blue: 0.239), dark: .green)   // #248A3D
@@ -259,6 +259,64 @@ struct RunnerAttentionRow<Action: View>: View {
     }
 }
 
+/// Fix with an agent's button: gone while an agent is fixing the warning, greyed while it is blocked.
+struct RunnerAgentFixButton: View {
+    let state: RunnerAgentFixState
+    let pressing: Bool
+    let press: () -> Void
+
+    var body: some View {
+        switch state {
+        case .fixing:
+            EmptyView()
+        case .ready, .blocked:
+            Button(RunnerPageCopy.AGENT_FIX_BUTTON, action: press)
+                .buttonStyle(RunnerCapsuleButtonStyle())
+                .disabled(pressing || blocked)
+        }
+    }
+
+    private var blocked: Bool {
+        if case .blocked = state { return true }
+        return false
+    }
+}
+
+/// The line under Fix with an agent's row: why it is greyed, where its session would start, or — while an
+/// agent is at it — "An agent is fixing this in <workspace> · " with a blue dot and Open session.
+struct RunnerAgentFixLine: View {
+    let state: RunnerAgentFixState
+    let openSession: (String) -> Void
+
+    var body: some View {
+        switch state {
+        case .ready(let hint):
+            if let hint {
+                Text(hint)
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .blocked(let reason):
+            Text(reason)
+                .font(.orbitLabel)
+                .foregroundStyle(Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        case .fixing(let entry):
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 6, height: 6)
+                Text(RunnerPageCopy.agentFixFixing(workspace: entry.workspaceName))
+                    .foregroundStyle(Color.secondary)
+                Button(RunnerPageCopy.AGENT_FIX_OPEN_SESSION) { openSession(entry.sessionId) }
+                    .linkButtonStyle()
+            }
+            .font(.orbitLabel)
+        }
+    }
+}
+
 /// An in-row press drawn as a tinted capsule — Set a Reserve…, Copy Command. Its own style, so a
 /// list row that holds one doesn't hand the whole row's tap to it.
 struct RunnerCapsuleButtonStyle: ButtonStyle {
@@ -316,7 +374,8 @@ struct RunnerEngineRow: View {
                     Text(statusLine)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(Color.secondary)
-                    if let failed = RunnerPageFormat.updateFailedLine(health, now: now) {
+                    let dismissed = runner.engineUpdateDismissals?[health.engine]
+                    if let failed = RunnerPageFormat.updateFailedLine(health, now: now, dismissed: dismissed) {
                         Text(failed)
                             .font(.orbitListSubtitle)
                             .foregroundStyle(RunnerInk.amber)
@@ -374,12 +433,12 @@ struct RunnerEngineRow: View {
     static let textInset: CGFloat = 28 + 12
 
     /// Whether the row opens the engine's page: an engine the machine has, one it lacks whose page installs
-    /// it (`Infrastructure.installsFromPage`) — and Cursor CLI where the fix is on its page, its Install
+    /// it (`MachinesAndModels.installsFromPage`) — and Cursor CLI where the fix is on its page, its Install
     /// (board iOS 2, the four states).
     static func opensPage(_ health: RunnerEngineHealth, runner: Runner) -> Bool {
         if health.installed == true { return true }
         if health.engine == CursorRuntime.engine { return CursorRuntime.state(of: runner) == .notInstalled }
-        return Infrastructure.installsFromPage(runner, engine: health.engine)
+        return MachinesAndModels.installsFromPage(runner, engine: health.engine)
     }
 
     /// `2.1.284 · Signed in`, the state in its colour — and Kimi's site after its version,
@@ -525,5 +584,144 @@ extension View {
             }
         }
         .animation(.default, value: text)
+    }
+}
+
+// MARK: Resources (docs/mocks/runner-resource-monitor)
+
+/// Resources' header: the title, and on its right where the readings come from — a green dot while
+/// live, a grey one offline, none for a runner that reads only its workspaces' disk.
+struct RunnerResourcesHeader: View {
+    let note: String
+    let dot: MachineResources.Dot?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(RunnerPageCopy.RUNNER_RESOURCES)
+            Spacer(minLength: 8)
+            HStack(spacing: 6) {
+                if let dot {
+                    Circle()
+                        .fill(dot == .live ? Color.green : RunnerInk.idle)
+                        .frame(width: 7, height: 7)
+                }
+                Text(note)
+                    .fontWeight(.regular)
+                    .lineLimit(1)
+            }
+        }
+        .font(.orbitLabel.weight(.semibold))
+        .foregroundStyle(Color.secondary)
+        .textCase(nil)
+    }
+}
+
+/// One Resources tile: the figure's name, its reading large, what that is in cores or GB, and its last
+/// hour as a line — or, from a runner too old to read it, Update runner and why.
+struct RunnerResourceTile: View {
+    let tile: MachineResources.Tile
+    /// Nil when the runner reads no resources: no line is drawn.
+    let line: [[MachineResources.Point]]?
+
+    private var ink: Color {
+        switch tile.tone {
+        case .normal: return Color.accentColor
+        case .warn: return RunnerInk.full
+        case .off: return RunnerInk.idle
+        }
+    }
+
+    private var valueInk: Color {
+        switch tile.tone {
+        case .normal: return Color.primary
+        case .warn: return RunnerInk.amber
+        case .off: return Color.secondary
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(tile.label)
+                .font(.orbitListSubtitle.weight(.medium))
+                .foregroundStyle(Color.secondary)
+            if let update = tile.update {
+                Text(RunnerPageCopy.RUNNER_RESOURCES_UPDATE)
+                    .font(.orbitLabel.weight(.medium))
+                    .foregroundStyle(RunnerInk.amber)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(RunnerInk.amber.opacity(0.12)))
+                    .padding(.top, 8)
+                Text(update)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(Color.secondary)
+                    .padding(.top, 8)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    Text(verbatim: tile.value)
+                        .font(.orbitFigure)
+                        .foregroundStyle(valueInk)
+                    if tile.percent != nil {
+                        Text(verbatim: "%")
+                            .font(.orbitFigureUnit)
+                            .foregroundStyle(Color.secondary)
+                    }
+                }
+                .monospacedDigit()
+                if !tile.detail.isEmpty {
+                    Text(tile.detail)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(Color.secondary)
+                }
+                if let line {
+                    RunnerResourceLine(runs: line, ink: ink)
+                        .frame(height: 44)
+                        .padding(.top, 10)
+                        .accessibilityHidden(true)
+                }
+                if let note = tile.note {
+                    Text(note)
+                        .font(.orbitLabel)
+                        .foregroundStyle(RunnerInk.amber)
+                        .padding(.top, 4)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A figure's last hour: a dashed guide near the top, and each run of readings as a line over a faint
+/// fill — a lone reading as a dot. Broken wherever the machine went unheard.
+struct RunnerResourceLine: View {
+    let runs: [[MachineResources.Point]]
+    let ink: Color
+
+    var body: some View {
+        Canvas { context, size in
+            var guide = Path()
+            guide.move(to: CGPoint(x: 0, y: size.height * 0.1))
+            guide.addLine(to: CGPoint(x: size.width, y: size.height * 0.1))
+            context.stroke(guide, with: .color(Color.secondary.opacity(0.4)),
+                           style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            for run in runs {
+                let points = run.map { CGPoint(x: $0.x * size.width, y: size.height * (1 - $0.y)) }
+                guard let first = points.first, let last = points.last else { continue }
+                if points.count == 1 {
+                    context.fill(Path(ellipseIn: CGRect(x: first.x - 1.5, y: first.y - 1.5, width: 3, height: 3)),
+                                 with: .color(ink))
+                    continue
+                }
+                var line = Path()
+                line.addLines(points)
+                var area = line
+                area.addLine(to: CGPoint(x: last.x, y: size.height))
+                area.addLine(to: CGPoint(x: first.x, y: size.height))
+                area.closeSubpath()
+                context.fill(area, with: .color(ink.opacity(0.12)))
+                context.stroke(line, with: .color(ink), style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
+            }
+        }
     }
 }

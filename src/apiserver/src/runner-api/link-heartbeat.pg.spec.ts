@@ -16,6 +16,7 @@
  *   8. a presence table a crash or a failover emptied: the next beat reconciles in full;
  *   9. an HTTPS heartbeat is answered as it always was, and a link heartbeat after it reconciles in full;
  *  10. a managed runner is admitted with its instance and reconciles in full on every beat.
+ *  13. a draining beat asks for the drain's one push even when quiet, so work queuing behind a drain is told once.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/link-heartbeat.pg.spec.ts
  *
@@ -99,7 +100,11 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
   };
   const hints = new RunnerHints(prisma as never, 'nats://nats.invalid:4222', () => bus, Date.now, true);
   hints.onModuleInit();
-  const push = { notifyEngineSignedOut: () => undefined };
+  const drainPushes: Array<{ runnerId: string; waiting: unknown }> = [];
+  const push = {
+    notifyEngineSignedOut: () => undefined,
+    notifyRunnerDrainWaiting: async (p: { runnerId: string; waiting: unknown }) => { drainPushes.push(p); },
+  };
   const realtime = new RealtimeService(prisma as unknown as PrismaService, push as never, hints);
   await realtime.onModuleInit();
   const db = counting.prisma as unknown as PrismaService;
@@ -439,7 +444,16 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     await t3.test('repoCleanupRequest (WorkspacesService.requestRepoCleanup)', async () => {
       // The runner reports the checkout wedged: a report, written without a full reconcile.
       body = { ...body, repos: [{ root: workDir, branch: 'main', state: 'rebase', agentIds: [workspaceId] }] } as never;
+      // ... and the owner's clients are told that workspace's checkout moved, so a Main checkout bar follows it.
+      const told: Array<{ type: string; data: Record<string, unknown> }> = [];
+      const stream = realtime.streamForUser(ownerId).subscribe((e) => told.push(e as never));
       assert.equal(isFull((await beat()).answer), false);
+      await new Promise((r) => setTimeout(r, 200));
+      stream.unsubscribe();
+      assert.deepEqual(
+        told.filter((e) => e.type === 'agent.changed').map((e) => e.data),
+        [{ agentId: workspaceId, affectsTaskRows: false, repoHealth: true }],
+      );
       const cleanup = await untilSettled(() => workspaces.requestRepoCleanup(ownerId, workspaceId), (a) => a.repoCleanupRequest,
         () => sql.query(`UPDATE "runner" SET repo_cleanup_status = 'done' WHERE id = $1`, [runnerId]));
       assert.equal(cleanup?.root, workDir);
@@ -800,6 +814,26 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     assert.equal(readFactsHash((await presence()).factsHash)?.agentDirProbes, undefined, 'which no longer holds them');
     assert.deepEqual(await probed(), before, 'and the workspace keeps what the last probe wrote, as a full reconcile would');
     assert.equal((await beat(without)).statements.length, 1, 'the next beat is quiet');
+  });
+
+  // ── 13 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('13. a draining beat stays one statement, and work queuing behind the drain is pushed to no one', async () => {
+    const draining = { draining: true, selfUpdate: { state: 'waitingForIdle', phase: 'draining', targetVersion: '0.1.254', turnsInFlight: 1 } } as
+      Partial<RunnerHeartbeatRequest>;
+    for (let i = 0; i < 4 && isFull((await beat(draining)).answer); i += 1);
+    const idleDrain = await beat(draining);
+    assert.equal(isFull(idleDrain.answer), false, 'a draining beat with nothing changed is quiet');
+    assert.equal(idleDrain.statements.length, 1, idleDrain.statements.join('\n---\n'));
+
+    const waiting = await session(RunStatus.PENDING, { numTurns: 0, inboxLeaseOwner: null });
+    const queued = await beat(draining);
+    assert.equal(isFull(queued.answer), false, 'the work queued moved nothing a quiet beat reads');
+    assert.equal(queued.statements.length, 1, queued.statements.join('\n---\n'));
+    assert.equal(drainPushes.length, 0, 'the web\'s update indicator says it; nothing is pushed (docs/mocks/runner-update-indicator)');
+
+    await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED } });
+    for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
+    await settle();
   });
 
   // The open statuses the lease check reads are the leaseLostSessionIds rule's (common/session-scheduling.ts).

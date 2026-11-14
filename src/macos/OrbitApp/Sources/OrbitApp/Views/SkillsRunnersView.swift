@@ -67,8 +67,8 @@ struct SkillRow: View {
 
 // MARK: - Runners
 
-/// The Infrastructure page (docs/mocks/infrastructure-page/03-ios.png): the Infrastructure section's list
-/// on a Mac and an iPad, the section's own page on a phone, and Settings › Infrastructure there — what needs
+/// The Machines & models page (docs/mocks/infrastructure-page/03-ios.png): the Machines & models section's list
+/// on a Mac and an iPad, the section's own page on a phone, and Settings › Machines & models there — what needs
 /// a person, the machines (each opening its record; reordered and removed here), then the account pools
 /// and the API keys. Every way out stays in the app: an engine is signed in on its page, a machine on its
 /// record, a pool on its page — iOS's own; the Mac has none.
@@ -83,7 +83,7 @@ struct RunnersListView: View {
     var body: some View {
         @Bindable var model = model
         if let runners = model.runners {
-            let lists = InfrastructureLists(model)
+            let lists = MachinesAndModelsLists(model)
             // An account with no runner at all, while the server offers managed runners: its managed
             // runner — Set up, or why there is none — above the machines, as the web's default landing
             // shows it (`ManagedRunnerLogic.onboarding`). Add Runner stays where it is.
@@ -103,7 +103,7 @@ struct RunnersListView: View {
                 if lists.settled {
                     let attention = lists.attention
                     if !attention.isEmpty {
-                        InfrastructureNeedsYouSection(items: attention, opensPools: opensPools,
+                        MachinesAndModelsNeedsYouSection(items: attention, opensPools: opensPools,
                                                       open: openAttention)
                     }
                 }
@@ -114,16 +114,16 @@ struct RunnersListView: View {
                     .onMove { moveRunners(runners, from: $0, to: $1) }
                     .onDelete { pendingRemoval = runnerToRemove(runners, at: $0) }
                 } header: {
-                    RunnerSectionHeader(Infrastructure.machines,
-                                        trailing: Infrastructure.machinesCount(runners.runners))
+                    RunnerSectionHeader(MachinesAndModels.machines,
+                                        trailing: MachinesAndModels.machinesCount(runners.runners))
                 } footer: {
-                    Text(Infrastructure.machinesDetail)
+                    Text(MachinesAndModels.machinesDetail)
                 }
                 RunnerAddSection { addingRunner = true }
-                InfrastructurePoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
+                MachinesAndModelsPoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
                                            open: opensPools ? push : nil)
-                InfrastructureKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
-                                          cursorModel: Infrastructure.cursorModel(lists.runners.filter { $0.online == true }),
+                MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
+                                          cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
                                           open: opensPools ? push : nil)
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -148,8 +148,8 @@ struct RunnersListView: View {
             .task { await self.model.agents?.loadOwnKeys() }
             .task { await self.model.agents?.loadDeepSeekBalances() }
             .task { await self.model.sharedPools?.load() }
-            .task(id: InfrastructureLists.codexPoolIDs(model)) {
-                for id in InfrastructureLists.codexPoolIDs(self.model) { await self.model.sharedPools?.loadAccess(id) }
+            .task(id: MachinesAndModelsLists.codexPoolIDs(model)) {
+                for id in MachinesAndModelsLists.codexPoolIDs(self.model) { await self.model.sharedPools?.loadAccess(id) }
             }
         } else {
             ProgressView()
@@ -183,9 +183,9 @@ struct RunnersListView: View {
     private func push(_ page: NavNode) { model.push(page) }
 
     /// A line of Needs you, opened: the machine's record, the pool's page.
-    private func openAttention(_ item: Infrastructure.Attention) {
+    private func openAttention(_ item: MachinesAndModels.Attention) {
         switch item.kind {
-        case .offline(let runnerID), .noCliSignedIn(let runnerID):
+        case .offline(let runnerID), .noCliSignedIn(let runnerID), .updating(let runnerID):
             if rowNavigation == .selection {
                 model.selectedRunnerID = runnerID
             } else {
@@ -252,7 +252,7 @@ private struct RunnersLoadOverlay: ViewModifier {
 }
 
 /// The list's last card: Add Runner, and what it will ask of the new machine.
-/// The managed runner above Infrastructure's list on the Mac, for an account with no runner
+/// The managed runner above Machines & models' list on the Mac, for an account with no runner
 /// (`ManagedRunnerLogic.onboarding`). A Mac list is a table that keeps its rows where they were when
 /// a row or a top inset that arrives after it has drawn changes its height, so there the banner takes
 /// room of its own above the list; on iOS it is the list's first section.
@@ -343,7 +343,7 @@ private struct RunnerListEditing: ViewModifier {
 
 /// One machine in the list (03-ios.png): its status dot and name, the bar of its slots in use at the end
 /// of the line — or Offline; under it how many of them run and how many of its engines are signed out,
-/// in amber, or where its engines stand (`Infrastructure.machineLine`); and, only when something needs a
+/// in amber, or where its engines stand (`MachinesAndModels.machineLine`); and, only when something needs a
 /// person, the list's third line in amber or red — `RunnerAttention`'s, the line the web card and the
 /// machine's own page say.
 struct RunnerRow: View {
@@ -382,7 +382,7 @@ struct RunnerRow: View {
                                 .foregroundStyle(Color.secondary)
                         }
                     }
-                    Text(Infrastructure.machineLine(runner, now: now))
+                    Text(MachinesAndModels.machineLine(runner, now: now))
                         .font(.orbitListSubtitle)
                         .foregroundStyle(Color.secondary)
                         .lineLimit(1)
@@ -468,27 +468,31 @@ private struct RunnerSubpageBack: ViewModifier {
 }
 
 /// A runner's page (ios-detail.png), in the order the questions come: what it needs from me (Needs
-/// Attention), how much it gets (Capacity), what it runs (Engines), where (Workspaces), what it is
-/// (About This Runner) — and the two ways to be done with it, each on a card of its own that asks
+/// Attention), how busy the machine is (Resources), how much it gets (Capacity), what it runs
+/// (Engines), where (Workspaces), what it is (About This Runner) — and the two ways to be done with it, each on a card of its own that asks
 /// first. iOS and macOS draw the same grouped form.
 struct RunnerDetailContent: View {
     let runners: RunnersModel
     let runner: Runner
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var hSize
+    #endif
 
-    /// Max Concurrent as the stepper shows it, saved when the press lets go.
-    @State private var maxConc = 1
-    /// A press on the stepper is under way — hold the save until it ends.
-    @State private var stepping = false
-    /// The limit last sent, so a release and the settle after it save it once.
-    @State private var committedMax: Int?
+    /// Max Concurrent's sheet, and the limit its stepper holds while open — saved on Save.
+    @State private var editingMax = false
+    @State private var maxDraft = 1
     /// Keep Free as the picker shows it; nil is Off. Saved as it changes.
     @State private var keepFree: Int?
     @State private var seeded = false
     @State private var choosingReserve = false
     @State private var confirmingRotate = false
     @State private var confirmingRemove = false
+    /// The postponed Update card's Update Now… asks first (a runner without `self-update-now/v1`).
+    @State private var confirmingUpdateNow = false
+    /// A Fix with an agent press is on its way: its button holds until the list read after it.
+    @State private var fixPressing = false
     /// The token a rotation just minted: shown on this page once, and gone with it.
     @State private var rotatedToken: String?
     @State private var notice: String?
@@ -502,10 +506,14 @@ struct RunnerDetailContent: View {
                                                     latestVersion: runners.latestVersion)
         Form {
             head(now: now)
+            if let card = RunnerPageFormat.updateCard(runner, now: now) {
+                updateSection(card)
+            }
             if !items.isEmpty {
                 attentionSection(items, now: now)
             }
-            capacitySection(workspaces)
+            resourcesSection(workspaces, now: now)
+            capacitySection(now: now)
             enginesSection(offline: offline, now: now)
             workspacesSection(workspaces)
             aboutSection(now: now)
@@ -520,24 +528,12 @@ struct RunnerDetailContent: View {
         #endif
         .runnerNotice(notice)
         .onAppear(perform: seed)
-        .onChange(of: runner.maxConcurrent) { _, value in
-            guard !stepping else { return }
-            maxConc = value ?? 1
-            committedMax = nil
-        }
         .onChange(of: runner.minFreeDiskMb) { _, value in
             keepFree = RunnerPageFormat.keepFreeValue(value)
         }
         .onChange(of: keepFree) { _, value in
             guard seeded, value != RunnerPageFormat.keepFreeValue(runner.minFreeDiskMb) else { return }
             saveKeepFree(value)
-        }
-        // The stepper's release saves; this catches a change that ended without one (a keyboard's
-        // arrow on a Mac), once it has settled.
-        .task(id: maxConc) {
-            try? await Task.sleep(for: .milliseconds(900))
-            guard !Task.isCancelled, seeded, !stepping else { return }
-            saveMaxConcurrent(maxConc)
         }
         .task {
             await runners.loadReleaseVersion()
@@ -549,6 +545,17 @@ struct RunnerDetailContent: View {
             await ViewPoll.run(model, every: 15, inFlight: { 15 }) {
                 await runners.load()
                 await runners.loadSessionCounts()
+            }
+        }
+        // Resources asks again every heartbeat while the machine is online, once when it is not, and
+        // never for a runner that reads none (MachineResources).
+        .task(id: "\(runner.id)|\(offline)|\(MachineResources.reports(runner))") {
+            guard MachineResources.reports(runner) else { return }
+            await runners.loadResources(runner.id)
+            guard !offline else { return }
+            await ViewPoll.run(model, every: MachineResources.pollSeconds,
+                               inFlight: { MachineResources.pollSeconds }) {
+                await runners.loadResources(runner.id)
             }
         }
         .refreshable {
@@ -587,6 +594,94 @@ struct RunnerDetailContent: View {
         }
     }
 
+    /// The Update card (board 4): a release this runner is behind, in the phase it reports — amber
+    /// while it holds work back or restarts, and Updated for a day after. Later ▾ while draining;
+    /// Change ▾ once postponed. Update Now… (`RunnerUpdateNowControl`) while available, draining or
+    /// postponed for a runner that declares `self-update-now/v1`; one without it keeps the postponed
+    /// card's Update Now…, which asks for Update Runner Now.
+    @ViewBuilder private func updateSection(_ card: RunnerPageFormat.UpdateCard) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(card.title)
+                        .fontWeight(.semibold)
+                    Spacer(minLength: 8)
+                    Text(card.tag)
+                        .font(.orbitLabel)
+                        .foregroundStyle(card.warn ? RunnerInk.amber : Color.secondary)
+                        .lineLimit(1)
+                }
+                if !card.body.isEmpty {
+                    Text(card.body)
+                        .foregroundStyle(Color.secondary)
+                }
+                if let label = card.progressLabel {
+                    Text(label)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                        .padding(.top, 4)
+                    ProgressView(value: card.progress ?? 0)
+                        .tint(RunnerInk.amber)
+                }
+            }
+            .padding(.vertical, 4)
+            .listRowBackground(card.warn ? Color.orange.opacity(0.08) : nil)
+            // The turns it waits for (board 4): each opens its session.
+            ForEach(card.turns, id: \.id) { turn in
+                Button { openSession(turn.id) } label: {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(turn.title)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 8)
+                        if let running = turn.running {
+                            Text(running)
+                                .font(.orbitLabel)
+                                .foregroundStyle(Color.secondary)
+                                .lineLimit(1)
+                        }
+                        RunnerChevron()
+                    }
+                    .foregroundStyle(Color.primary)
+                    .contentShape(Rectangle())
+                }
+                .runnerRowButtonStyle()
+            }
+            if card.phase == "available", RunnerUpdateNow.offered(runner) {
+                RunnerUpdateNowControl(runnerID: runner.id, machine: RunnerPageFormat.displayName(runner),
+                                       onNotice: show)
+            }
+            if card.phase == "draining" || card.phase == "postponed" {
+                HStack(spacing: 8) {
+                    RunnerUpdateLaterControl(runnerID: runner.id, version: runner.selfUpdate?.targetVersion,
+                                             machine: RunnerPageFormat.displayName(runner),
+                                             change: card.phase == "postponed")
+                    if RunnerUpdateNow.offered(runner) {
+                        RunnerUpdateNowControl(runnerID: runner.id, machine: RunnerPageFormat.displayName(runner),
+                                               onNotice: show)
+                    } else if card.phase == "postponed" {
+                        Button(RunnerPageCopy.RUNNER_UPDATE_NOW) { confirmingUpdateNow = true }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("runner-update-now")
+                    }
+                }
+                .orbitConfirmation(RunnerPageCopy.runnerUpdateNowConfirmTitle(version: runner.selfUpdate?.targetVersion ?? ""),
+                                   isPresented: $confirmingUpdateNow) {
+                    Button(RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM) { updateRunner() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text(RunnerPageCopy.RUNNER_UPDATE_NOW_CONFIRM_BODY)
+                }
+            }
+        }
+    }
+
+    /// A turn the Update card names: its conversation, after the Settings sheet comes down.
+    private func openSession(_ id: String) {
+        model.settingsPresented = false
+        model.route(to: .session(id))
+    }
+
     /// Only what needs a person, most severe first, each with what to do about it.
     @ViewBuilder private func attentionSection(_ items: [RunnerAttentionItem], now: Date) -> some View {
         Section {
@@ -601,22 +696,72 @@ struct RunnerDetailContent: View {
         }
     }
 
-    /// How much it is given: slots, saved when the stepper lets go; the disk it fills; and the reserve
-    /// under which task runs stop being sent here.
-    @ViewBuilder private func capacitySection(_ workspaces: [Agent]) -> some View {
+    /// The machine's CPU, memory and disk, each with its last hour (docs/mocks/runner-resource-monitor):
+    /// three tiles side by side, stacked as rows on a phone.
+    @ViewBuilder private func resourcesSection(_ workspaces: [Agent], now: Date) -> some View {
+        let answer = runners.resources[runner.id]
+        let section = MachineResources.section(runner: runner, answer: answer,
+                                               workspaceDisk: RunnerAttention.runnerDisk(workspaces), now: now)
+        let draw = { (tile: MachineResources.Tile) in
+            RunnerResourceTile(tile: tile, line: section.showsLines
+                ? MachineResources.line(answer?.samples ?? [], kind: tile.kind, endMs: section.endMs) : nil)
+        }
         Section {
-            Stepper(value: $maxConc, in: 1...64, onEditingChanged: steppingChanged) {
-                HStack {
+            #if os(iOS)
+            if hSize == .compact {
+                ForEach(section.tiles) { draw($0).padding(.vertical, 6) }
+            } else {
+                resourceTilesInARow(section, draw)
+            }
+            #else
+            resourceTilesInARow(section, draw)
+            #endif
+        } header: {
+            RunnerResourcesHeader(note: section.note, dot: section.dot)
+        }
+    }
+
+    private func resourceTilesInARow(_ section: MachineResources.Section,
+                                     _ draw: @escaping (MachineResources.Tile) -> RunnerResourceTile) -> some View {
+        HStack(alignment: .top, spacing: 16) {
+            ForEach(section.tiles) { tile in
+                if tile.kind != section.tiles.first?.kind { Divider() }
+                draw(tile)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    /// How much it is given: slots, saved when the stepper lets go; and the reserve under which task
+    /// runs stop being sent here.
+    @ViewBuilder private func capacitySection(now: Date) -> some View {
+        Section {
+            // A meter: the name, `3 of 16 running` and Edit on a line, a bar of the slots
+            // taken across the row under them (online only), amber once all are. Edit opens the sheet
+            // that changes the limit.
+            let slots = RunnerPageFormat.slots(runner, now: now)
+            let limit = runner.maxConcurrent ?? 1
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .firstTextBaseline) {
                     Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
                     Spacer(minLength: 8)
-                    Text(verbatim: "\(maxConc)")
+                    Text(verbatim: slots.map { RunnerPageCopy.runnerRunningOf(active: $0.active, max: $0.max) } ?? "\(limit)")
+                        .font(.orbitListSubtitle)
                         .foregroundStyle(Color.secondary)
                         .monospacedDigit()
+                    Button(RunnerPageCopy.RUNNER_EDIT) {
+                        maxDraft = limit
+                        editingMax = true
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("\(RunnerPageCopy.RUNNER_EDIT) \(RunnerPageCopy.RUNNER_MAX_CONCURRENT)")
+                }
+                if let slots {
+                    RunnerGauge(fraction: slots.fraction, tint: slots.full ? RunnerInk.full : Color.accentColor, height: 7)
                 }
             }
-            if let disk = RunnerAttention.runnerDisk(workspaces) {
-                diskRow(disk)
-            }
+            .padding(.vertical, slots == nil ? 0 : 4)
+            .sheet(isPresented: $editingMax) { maxConcurrentSheet }
             Picker(RunnerPageCopy.RUNNER_KEEP_FREE, selection: $keepFree) {
                 ForEach(RunnerPageFormat.keepFreeChoices(runner.minFreeDiskMb), id: \.label) { tier in
                     Text(tier.label).tag(tier.mb)
@@ -628,6 +773,45 @@ struct RunnerDetailContent: View {
         } footer: {
             Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
         }
+    }
+
+    /// Max Concurrent's sheet: the limit on a stepper, what it means, and Cancel or Save.
+    private var maxConcurrentSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper(value: $maxDraft, in: 1...64) {
+                        HStack {
+                            Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
+                            Spacer(minLength: 8)
+                            Text(verbatim: "\(maxDraft)")
+                                .foregroundStyle(Color.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                } footer: {
+                    Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { editingMax = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        editingMax = false
+                        saveMaxConcurrent(maxDraft)
+                    }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 380, minHeight: 180)
+        #else
+        .presentationDetents([.medium])
+        #endif
     }
 
     /// What it runs: each engine — a row that opens the engine's page — and the two presses that act
@@ -645,10 +829,15 @@ struct RunnerDetailContent: View {
             if !offline {
                 Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                     .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
-                if let relay = RunnerPageFormat.updateRelayLine(runner.install) {
-                    Text(relay)
-                        .font(.orbitLabel)
-                        .foregroundStyle(Color.secondary)
+                let relay = RunnerPageFormat.updateRelayLines(runner.install)
+                if !relay.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(relay.enumerated()), id: \.offset) { _, line in
+                            Text(line.text)
+                                .font(.orbitLabel)
+                                .foregroundStyle(line.failed ? RunnerInk.red : Color.secondary)
+                        }
+                    }
                 }
                 Button(RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS) { refreshModels() }
             }
@@ -716,7 +905,9 @@ struct RunnerDetailContent: View {
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,
                      RunnerPageFormat.versionValue(runner, latest: runners.latestVersion))
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))
-            if RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
+            // Only while a release is waiting: a check with nothing newer to install is not offered.
+            if RunnerPageFormat.isBehindLatest(runner, latest: runners.latestVersion),
+               RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
                 Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }
             }
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_RUNS_AS, RunnerPageFormat.runsAsValue(runner))
@@ -789,9 +980,45 @@ struct RunnerDetailContent: View {
     }
 
     @ViewBuilder private func attentionAction(_ item: RunnerAttentionItem) -> some View {
-        if let action = item.action {
-            attentionButton(action)
-                .buttonStyle(RunnerCapsuleButtonStyle())
+        // Fix with an agent, on an engine not updating and a runner that can't update itself: after the
+        // card's own press, before its dismissal; the line under the row says why it is greyed, or which
+        // session is fixing it.
+        let fix = RunnerAgentFixLogic.attentionState(runner, item: item)
+        if let fix, let target = RunnerAgentFixLogic.target(item) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    if let action = item.action {
+                        attentionButton(action)
+                            .buttonStyle(RunnerCapsuleButtonStyle())
+                    }
+                    RunnerAgentFixButton(state: fix, pressing: fixPressing) { fixWithAnAgent(target) }
+                    if let engine = RunnerPageFormat.updateWarningDismissEngine(item) {
+                        Button(RunnerPageCopy.attentionDismissUntilNextRelease(
+                            engine: RunnerPageFormat.engineName(engine))) { dismissUpdateWarning(engine) }
+                            .linkButtonStyle()
+                            .font(.orbitListSubtitle)
+                            .padding(.top, 7)
+                    }
+                }
+                RunnerAgentFixLine(state: fix) { openSession($0) }
+            }
+        } else if let action = item.action {
+            // An engine not updating against a known latest can be dismissed until its next release,
+            // beside Update Engines Now.
+            if let engine = RunnerPageFormat.updateWarningDismissEngine(item) {
+                HStack(spacing: 12) {
+                    attentionButton(action)
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                    Button(RunnerPageCopy.attentionDismissUntilNextRelease(
+                        engine: RunnerPageFormat.engineName(engine))) { dismissUpdateWarning(engine) }
+                        .linkButtonStyle()
+                        .font(.orbitListSubtitle)
+                        .padding(.top, 7)
+                }
+            } else {
+                attentionButton(action)
+                    .buttonStyle(RunnerCapsuleButtonStyle())
+            }
         }
     }
 
@@ -828,23 +1055,6 @@ struct RunnerDetailContent: View {
             Button(ClaudeRegionCopy.CLAUDE_REGION_CHECK_AGAIN_TITLE) { checkRegion() }
                 .disabled(runners.regionChecking.contains(runner.id))
         }
-    }
-
-    private func diskRow(_ disk: RunnerDisk) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(RunnerPageCopy.RUNNER_DISK)
-                Spacer(minLength: 8)
-                Text(RunnerPageFormat.diskUsedLine(disk))
-                    .font(.orbitListSubtitle)
-                    .foregroundStyle(Color.secondary)
-            }
-            RunnerGauge(fraction: Double(disk.usedPercent) / 100,
-                        tint: RunnerPageFormat.diskIsTight(disk, minFreeDiskMb: runner.minFreeDiskMb)
-                            ? RunnerInk.full : Color.accentColor,
-                        height: 7)
-        }
-        .padding(.vertical, 4)
     }
 
     /// An engine the machine has opens its page, as does one it lacks whose page installs it; any other is
@@ -891,24 +1101,15 @@ struct RunnerDetailContent: View {
 
     private func seed() {
         guard !seeded else { return }
-        maxConc = runner.maxConcurrent ?? 1
         keepFree = RunnerPageFormat.keepFreeValue(runner.minFreeDiskMb)
         seeded = true
     }
 
-    private func steppingChanged(_ editing: Bool) {
-        stepping = editing
-        if !editing { saveMaxConcurrent(maxConc) }
-    }
-
     private func saveMaxConcurrent(_ value: Int) {
-        guard value != (committedMax ?? runner.maxConcurrent ?? 1) else { return }
-        committedMax = value
+        guard value != (runner.maxConcurrent ?? 1) else { return }
         let id = runner.id
         Task {
             guard let failure = await runners.setMaxConcurrent(id, value) else { return }
-            committedMax = nil
-            maxConc = runners.runner(id)?.maxConcurrent ?? maxConc
             show(failure)
         }
     }
@@ -926,6 +1127,26 @@ struct RunnerDetailContent: View {
         let id = runner.id
         Task {
             if let failure = await runners.updateEngines(id) { show(failure) }
+        }
+    }
+
+    private func dismissUpdateWarning(_ engine: String) {
+        let id = runner.id
+        Task {
+            if let failure = await runners.dismissEngineUpdateWarning(id, engine: engine) { show(failure) }
+        }
+    }
+
+    /// One press, no sheet: the session starts and the list read after it turns the button into the
+    /// fixing line; the page stays where it is. A refusal is the server's own sentence.
+    private func fixWithAnAgent(_ target: RunnerAgentFixTarget) {
+        let id = runner.id
+        fixPressing = true
+        Task {
+            if let failure = await runners.fixAttention(id, target: target) {
+                show("\(RunnerPageCopy.AGENT_FIX_FAILED) — \(failure)")
+            }
+            fixPressing = false
         }
     }
 

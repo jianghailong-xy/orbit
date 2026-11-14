@@ -77,6 +77,17 @@ func (s engineSpec) loginHint() string {
 	return s.loginCmd() + "   (headless: " + s.loginHeadless + ")"
 }
 
+// codexInstallAlt is the by-hand install offered when `npm install -g @openai/codex` fails —
+// usually because npm itself is missing, so the alternative must need neither npm nor, off
+// macOS, brew. OpenAI's own standalone installer (README: "Mac or Linux install script")
+// puts a release binary in ~/.local/bin.
+func codexInstallAlt(goos string) string {
+	if goos == "darwin" {
+		return "brew install codex   (macOS)"
+	}
+	return "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+}
+
 var engineSpecs = []engineSpec{
 	{
 		name:          "Claude Code",
@@ -98,7 +109,7 @@ var engineSpecs = []engineSpec{
 		// never execs (root: standalone ~/.local/bin wins over the npm global), and failing
 		// with EACCES when the service user doesn't own that prefix.
 		updateCmd:  "codex update",
-		installAlt: "brew install codex   (macOS)",
+		installAlt: codexInstallAlt(runtime.GOOS),
 		// npm is where `codex update` reads its own newest version from, standalone install or not.
 		latestURL:   "https://registry.npmjs.org/@openai/codex/latest",
 		latestField: "version",
@@ -314,10 +325,17 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	return h
 }
 
-// engineVersion runs `<binPath> --version` with a short timeout so a wedged CLI
-// can't hang `orbit doctor`. Returns "" if it errors.
+// engineVersionTimeout is how long a CLI gets to print its version. Five seconds was the number
+// until 2026-11-13, when opencode's 214 MB binary measured 3.3–6.3 s just to answer on a loaded
+// box — so the probe failed often enough that the machine could never be shown as current (the
+// drift clock needs both versions to clear, engineupdate.go's driftSince) and every failure
+// message about it lost its left-hand side.
+const engineVersionTimeout = 20 * time.Second
+
+// engineVersion runs `<binPath> --version` with a timeout so a wedged CLI can't hang
+// `orbit doctor`. Returns "" if it errors.
 func engineVersion(binPath string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), engineVersionTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, binPath, "--version").Output()
 	if err != nil {

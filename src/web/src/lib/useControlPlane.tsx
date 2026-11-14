@@ -363,6 +363,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchWiki = (): void => {
       refresh({ queryKey: ['wiki'] });
     };
+    // The owner's terminals: one asked to be approved, a request was decided or collected, or one was revoked
+    // (`terminals.changed`). The approve card and Settings → Terminals both re-read.
+    const refetchTerminals = (): void => {
+      refresh({ queryKey: ['terminals'] });
+    };
     const REFETCH: Record<string, () => void> = {
       sessions: refetchSessions,
       openList: refetchOpenList,
@@ -375,6 +380,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       decisions: refetchPendingDecisions,
       watches: refetchWatches,
       wiki: refetchWiki,
+      terminals: refetchTerminals,
     };
     // Which cache groups an event dirties. An event is only ever a nudge to refetch (never a
     // delta), so this is a plain type → group map, and a type it does not name reads nothing (R5):
@@ -406,6 +412,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // decided ops in Review, or the space's own settings or bindings moved (contract
       // `realtime.publishedWhen`).
       if (type.startsWith('wiki.')) return ['wiki'];
+      if (type === 'terminals.changed') return ['terminals'];
       // A session's state, its approvals, and a background job of its ending, which moves its row's
       // job mark and its workspace's tally.
       if (type.startsWith('session.') || type.startsWith('approval.') || type === 'background.task') {
@@ -431,9 +438,12 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const scheduleRefresh = (
       type: string,
       sessionId: string,
-      data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown } | null | undefined,
+      data: { id?: unknown; taskId?: unknown; taskIds?: unknown; resync?: unknown; repoHealth?: unknown } | null | undefined,
     ): void => {
-      for (const g of groupsFor(type)) pending.add(g);
+      // A runner's heartbeat saw a workspace's checkout change (counts, branch, state): only the workspace list draws
+      // that — the Main checkout bar — so the session lists are not read again for it.
+      const healthOnly = type === 'agent.changed' && data?.repoHealth === true;
+      for (const g of healthOnly ? ['workspaces'] : groupsFor(type)) pending.add(g);
       if (watchFollows(type, sessionId, data)) pending.add('watches');
       // Only the `session.*` family: those are the events that can move a session's run state,
       // and so the ones a frozen detail has to be corrected by. An approval or a background task
@@ -526,6 +536,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
             taskId?: unknown;
             taskIds?: unknown;
             resync?: unknown;
+            repoHealth?: unknown;
           } | null;
         };
         try {

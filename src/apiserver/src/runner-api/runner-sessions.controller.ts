@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -161,6 +162,8 @@ export class RunnerSessionsController {
       engine?: string;
       provider?: string;
       permissionMode?: string;
+      /** `false`: no worktree for this child (SessionsService.spawnFromSession). */
+      worktree?: boolean;
     },
   ) {
     if (isHeadlessCaller(parentSessionId)) {
@@ -172,6 +175,9 @@ export class RunnerSessionsController {
         throw new ForbiddenException('this service token may only start its own workspace');
       }
       if (!scope.workspaceId) throw new ForbiddenException('this service token has no workspace to start');
+      if (dto.worktree === false) {
+        throw new BadRequestException('worktree: false is only for a session started by another session');
+      }
       return this.sessions.spawnForServiceToken(
         runner.ownerId,
         { assignedRunnerId: runner.id, workspaceId: scope.workspaceId, tokenId: grant!.tokenId },
@@ -378,6 +384,9 @@ export class RunnerSessionsController {
     const turn = { clientTurnId, content: dto.message };
     const charge = {
       senderSessionId,
+      // A headless credential is the runner's own: the `orbit` CLI or a script on the machine (turn-sender-client.ts).
+      // A session's message is said by its sender column instead.
+      ...(senderSessionId ? {} : { senderClient: { client: 'runner' as const } }),
       // AU3/TH3, but only for a NEW turn that has already passed idempotency and placement. The
       // callback runs under createTurn's Session lock and in its transaction: a retry observes the
       // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and
@@ -522,8 +531,11 @@ export class RunnerSessionsController {
     const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     await this.sessions.assertMayReach(runner.ownerId, caller, id, 'merge');
     // A Merge pressed from a session (§10.6 O-R3): recorded with the operation, so a landing it makes
-    // on a PLATFORM project's main is put in front of the owner.
-    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, { requestedBy: 'AGENT' });
+    // on a PLATFORM project's main is put in front of the owner. A session merging itself asks from
+    // inside its own turn, so its merge waits that turn out instead of being refused for it.
+    return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch, dto.waitSeconds, {
+      requestedBy: 'AGENT', selfRequest: caller === id,
+    });
   }
 
   /**

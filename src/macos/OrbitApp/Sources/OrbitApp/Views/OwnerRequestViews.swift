@@ -439,6 +439,75 @@ struct OwnerRequestSteps: View {
     }
 }
 
+/// A terminal asking to be approved (docs/terminal-session-design.md, board 2 marker 7): the owner request card's
+/// frame, header and action row — no look of its own. Approve mints the terminal's credential for 30 days; Deny tells
+/// the terminal so. Web parity: `TerminalApproveCard.tsx`; the words are OrbitKit's `Terminals`.
+struct TerminalApproveCard: View {
+    let model: OwnerRequestsModel
+    let request: TerminalRequest
+    @State private var busy = false
+    @State private var failure: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Circle().fill(Color.ownerRequestAccent).frame(width: 8, height: 8)
+                Text(OwnerRequests.waitingOnYou).font(.orbitLabel.weight(.semibold))
+                    .foregroundStyle(Color.ownerRequestAccent)
+                Spacer(minLength: 8)
+                Text("Asked \(RelativeTime.ago(request.createdAt) ?? "")").font(.orbitLabel).foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(Color.ownerRequestAccent.opacity(0.10))
+            Divider().overlay(Color.ownerRequestAccent.opacity(0.35))
+            VStack(alignment: .leading, spacing: 12) {
+                Text(Terminals.approveTitle).font(.headline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Terminals.requestLine(request))
+                    Text(Terminals.approveDetail)
+                }
+                .font(.orbitProse)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                if let failure {
+                    Label { Text("\(OwnerRequests.notRecorded): \(failure)") } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                    }
+                    .font(.orbitLabel).foregroundStyle(.red)
+                }
+                HStack(spacing: 10) {
+                    Button { decide(approve: false) } label: {
+                        Text(Terminals.deny).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("terminal-deny-\(request.id)")
+                    Button { decide(approve: true) } label: {
+                        Text(Terminals.approve).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("terminal-approve-\(request.id)")
+                }
+                .disabled(busy)
+            }
+            .padding(16)
+        }
+        .background(Color.ownerRequestAccent.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.ownerRequestAccent.opacity(0.45)))
+        // A container, so its own identifier does not overwrite its buttons'.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("terminal-request-\(request.id)")
+    }
+
+    private func decide(approve: Bool) {
+        busy = true
+        Task { @MainActor in
+            do { try await model.decideTerminal(request, approve: approve) } catch { failure = error.localizedDescription }
+            busy = false
+        }
+    }
+}
+
 /// A request that has ended, as one row: how, who, when, and from which device (panel 4).
 struct OwnerRequestResolvedLine: View {
     let model: OwnerRequestsModel
@@ -547,8 +616,16 @@ struct OwnerRequestInboxView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         let rows = model.rows(model.tab)
                         let entries = model.openEntries
-                        if model.tab == .open ? entries.isEmpty : rows.isEmpty {
+                        if model.tab == .open ? entries.isEmpty && model.terminalRequests.isEmpty : rows.isEmpty {
                             Text(model.tab.empty).font(.orbitSubtext).foregroundStyle(.secondary).padding(16)
+                        }
+                        // A terminal asking to be approved waits ten minutes at most: its card is whole, at the top.
+                        if model.tab == .open {
+                            ForEach(model.terminalRequests) { request in
+                                TerminalApproveCard(model: model, request: request)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
+                                Divider()
+                            }
                         }
                         if model.tab == .open {
                             ForEach(entries) { entry in
@@ -679,14 +756,14 @@ struct OwnerRequestInboxEntry: View {
                 requests.tab = .open
                 requests.inboxPresented = true
             } label: {
+                // The drawer's row: the count in amber, written like the Projects and Wiki rows above it.
                 HStack {
                     Label(OwnerRequests.waitingOnYou, systemImage: "hand.raised")
-                    Spacer()
+                    Spacer(minLength: 6)
                     if requests.waitingCount > 0 {
                         Text("\(requests.waitingCount)")
-                            .font(.orbitLabel.weight(.bold)).foregroundStyle(.white)
-                            .padding(.horizontal, 7).padding(.vertical, 1)
-                            .background(Color.ownerRequestAccent, in: Capsule())
+                            .font(.orbitMeta.weight(.semibold)).monospacedDigit()
+                            .foregroundStyle(.orange)
                     }
                 }
                 .contentShape(Rectangle())

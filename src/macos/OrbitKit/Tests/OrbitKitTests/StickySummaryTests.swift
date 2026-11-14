@@ -67,9 +67,6 @@ final class StickySummaryTests: XCTestCase {
     /// names any question.
     func testWordsTypedOnAWakesTurnAreStillAQuestion() {
         XCTAssertTrue(StickySummary.isAnchor(text: "and check the dark theme too", note: Self.jobNote))
-        let summary = StickySummary.of(text: "and check the dark theme too", note: Self.jobNote)
-        XCTAssertEqual(summary.label, StickySummary.yourQuestion)
-        XCTAssertEqual(summary.text, "and check the dark theme too")
     }
 
     /// Every other turn is still one the bar points at: a person's message — including one the
@@ -84,38 +81,19 @@ final class StickySummaryTests: XCTestCase {
 
     // MARK: the turns somebody did type
 
-    /// What the bar has always said, unchanged — including for a message the control plane appended
-    /// a note to that is not a wake (a continuation nudge), which is still the person's message.
-    func testAPersonsMessageKeepsItsLabelAndItsOwnWords() {
-        XCTAssertEqual(StickySummary.of(text: "部署").label, StickySummary.yourQuestion)
-        XCTAssertEqual(StickySummary.of(text: "部署").label, "↑ Your question")
-        XCTAssertEqual(StickySummary.of(text: "部署").text, "部署")
-        let nudged = StickySummary.of(text: "check the dark theme too",
-                                      note: "Continue where the previous turn left off.")
-        XCTAssertEqual(nudged.label, StickySummary.yourQuestion)
-        XCTAssertEqual(nudged.text, "check the dark theme too")
+    /// The bar's one label, over the person's own words.
+    func testTheBarCallsTheTurnYourQuestion() {
+        XCTAssertEqual(StickySummary.yourQuestion, "↑ Your question")
     }
 
     /// The guard `WatchWakeText.parse` already holds, read through this bar: a person who pastes a
     /// wake's head line into the composer is a person typing. All three parts have to be there —
     /// head, mark, and a payload naming the same watch — and a paste has one.
-    func testAPersonWhoPastedAWakesHeadLineStillGetsTheirOwnLabel() {
+    func testAPersonWhoPastedAWakesHeadLineIsStillAsking() {
         let pasted = "Orbit Watch \(F.wakeWatchID) matched at generation 1: \(F.wakeReason)"
-        let summary = StickySummary.of(text: "what does this mean?\n\n\(pasted)")
-        XCTAssertEqual(summary.label, StickySummary.yourQuestion)
-        XCTAssertEqual(summary.text, "what does this mean?\n\n\(pasted)")
-        // Even opening with it, which is the shape that comes closest to a wake.
-        let opening = StickySummary.of(text: "\(pasted)\n\nwhat does this mean?")
-        XCTAssertEqual(opening.label, StickySummary.yourQuestion)
-        XCTAssertEqual(opening.text, "\(pasted)\n\nwhat does this mean?")
-    }
-
-    /// The iPhone's capsule keeps the arrow and drops "Your question" — the words beside it are the
-    /// person's own — and leaves every card's label as the card has it.
-    func testTheCompactLabelDropsOnlyWhoseQuestionItIs() {
-        XCTAssertEqual(StickySummary.compactLabel(StickySummary.of(text: "部署").label), "↑")
-        for card in ["↑ Task started", "↑ Project started", "↑ Exception item"] {
-            XCTAssertEqual(StickySummary.compactLabel(card), card)
+        for text in ["what does this mean?\n\n\(pasted)", "\(pasted)\n\nwhat does this mean?"] {
+            XCTAssertTrue(StickySummary.isAnchor(text: text), text)
+            XCTAssertFalse(StickySummary.isOrbits(UserBubble(id: "u", text: text, ts: nil, pending: false, queued: false)), text)
         }
     }
 }

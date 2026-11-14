@@ -13,62 +13,10 @@ import (
 	"testing"
 )
 
-// Tools that deliberately have no CLI command. permission_prompt is the runtime's live approval
-// bridge — Claude calls it mid-turn over MCP and nobody types it — so it is the one tool the
-// parity check below must not demand.
-var cliParityExemptTools = map[string]string{
-	"permission_prompt": "runtime approval bridge, called by the engine mid-turn",
-	// The bg_* family is the other kind of exception: not a second door onto the
-	// control-plane API, but a call into the local runner over the socket in one
-	// session's scratch dir (background_socket.go). Typed at a terminal there is
-	// no session and no socket, so `orbit bg run` would have nothing to talk to.
-	// Stage 4 adds a CLI door for the engines that cannot speak MCP, and it will
-	// carry the session's socket path explicitly — at which point these gain
-	// commands and come off this list.
-	"bg_run":    "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
-	"bg_output": "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
-	"bg_kill":   "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
-	"bg_list":   "runner-hosted background jobs: a per-session socket call, not a control-plane API call",
-	// schedule_wakeup takes no session id: it wakes the session it is called from, which a terminal
-	// outside one does not have, and inside one the agent reaches it over MCP.
-	"schedule_wakeup": "wakes the calling session: there is no session to wake at a terminal outside one",
-	// ask_owner asks AS the project's coordinator conversation, and the server checks the acting
-	// session against the project's own coordinator pointer (§5.2 R8). A terminal outside a session
-	// sends no session header and is refused every time, so the command would be one that can only
-	// fail; inside one, the coordinator reaches it over MCP.
-	"ask_owner": "asks as the project's coordinator session: a terminal outside one is refused by the server",
-	// request_owner_action files AS the calling session, and the door refuses a call with no session
-	// header. The outcome comes back as a turn in that session, which a terminal does not have.
-	"request_owner_action": "files as the calling session and answers it with a turn: a terminal outside one is refused by the server",
-	// withdraw_owner_request withdraws what the calling session filed, as that session: the door refuses a call with
-	// no session header, which is all a terminal outside one could send.
-	"withdraw_owner_request": "withdraws as the calling session what it filed: a terminal outside one is refused by the server",
-	// open_item_resolve closes an item AS the project's coordinator conversation, and the server
-	// checks the acting session against the project's own coordinator pointer (contract §4.7). A
-	// terminal outside a session sends no session header, and the door deliberately does not read a
-	// missing header as the account owner — the owner's press is the user API's — so the command
-	// would be one that can only fail; inside one, the coordinator reaches it over MCP.
-	"open_item_resolve": "closes an item as the project's coordinator session: a terminal outside one is refused by the server",
-	// open_item_hand_over is the matching coordinator-session door: a terminal outside a live
-	// coordinator conversation has no authority header, so the CLI would only produce a refusal;
-	// the coordinator reaches it over MCP.
-	"open_item_hand_over": "hands an item to the account owner as the project's coordinator session: a terminal outside one is refused by the server",
-	// integration_retry reruns a failed landing AS the project's coordinator conversation (contract
-	// §2.3 J-T1b), and the runner door reads no missing header as the account owner. So, like
-	// open_item_resolve, a command typed outside a session could only ever be refused; inside one,
-	// the coordinator reaches it over MCP.
-	"integration_retry": "reruns a landing as the project's coordinator session: a terminal outside one is refused by the server",
-	// integration_abandon ends a running job AS the project's coordinator conversation (contract
-	// §2.2 J-T10), and the runner door reads no missing header as the account owner — the owner's
-	// abandon is the user API's own door. A command typed outside a session could only ever be
-	// refused; inside one, the coordinator reaches it over MCP.
-	"integration_abandon": "abandons a running job as the project's coordinator session: a terminal outside one is refused by the server",
-	// integration_observe asks for the project's line to be looked at again AS the project's
-	// coordinator conversation (contract §10.8), and the runner door reads no missing header as the
-	// account owner — the owner's own press is the user API's door. A command typed outside a session
-	// could only ever be refused; inside one, the coordinator reaches it over MCP.
-	"integration_observe": "asks for an observation as the project's coordinator session: a terminal outside one is refused by the server",
-}
+// Operations that deliberately have no CLI command are declared in the operation catalogue
+// (operation_catalog.go, CLIExempt) rather than listed here: the catalogue row is what the tool
+// description, the capability document and the parity checks all read. TestEveryDeliberateSurfaceGapIsRecorded
+// holds that table to the advertised surfaces.
 
 // Params whose CLI spelling is not the mechanical --kebab-case of the MCP name.
 var cliParityParamAlias = map[string]string{
@@ -78,6 +26,9 @@ var cliParityParamAlias = map[string]string{
 	// Singular at a terminal, like --depends-on above: one flag carries one label and repeats,
 	// which is also what makes a label containing a comma expressible.
 	"labels": "--label",
+	// session_create's worktree only ever turns isolation off, so at a terminal it is the switch
+	// that says so.
+	"worktree": "--no-worktree",
 	// One array of {op, taskId, dependsOnTaskId} over MCP; at a terminal the same batch is typed
 	// as repeated --add A:B / --remove C:D, because nobody hand-writes JSON into a flag.
 	"ops": "--add",
@@ -129,9 +80,9 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 
 	for _, descriptor := range toolDescriptors(true, true) {
 		name, _ := descriptor["name"].(string)
-		if _, exempt := cliParityExemptTools[name]; exempt {
+		if op := catalogOperation(name); op != nil && op.CLIExempt != "" {
 			if _, present := specs[name]; present {
-				t.Errorf("%s is documented as CLI-exempt but has a command", name)
+				t.Errorf("%s is declared CLI-exempt in the catalogue but has a command", name)
 			}
 			continue
 		}

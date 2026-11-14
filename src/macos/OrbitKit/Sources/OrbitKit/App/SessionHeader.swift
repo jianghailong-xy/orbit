@@ -36,7 +36,8 @@ public enum SessionHeader {
         if s.confirmationUnderReview != nil { return OwnerConfirmations.underReview }
         switch s.effectiveRunState {
         case .queued:
-            return ClaudeRegion.heldWords(s, machine: machine) ?? "Queued"
+            return ClaudeRegion.heldWords(s, machine: machine)
+                ?? (RunnerUpdating.holds(s) ? RunnerUpdating.title(s) : "Queued")
         case .running:
             return "Running"
         case .awaitingInput:
@@ -49,6 +50,9 @@ public enum SessionHeader {
             // it is parked on and whatever it left running (web `statusLabel`).
             if let n = s.runningSubagentCount, n > 0 { return SessionLine.subagentRunningLabel(n) }
             if let watching = parkedOnWatch(s, watching) { return watching.word }
+            // Something else will resume it (a wake-up, a retry, a watch this caller holds none
+            // of): not waiting for your reply either (web `resumeWords`).
+            if s.resumesOnItsOwn, (s.pendingApprovals ?? 0) == 0 { return SessionHeader.waitingToResume }
             if (s.runningBgCount ?? 0) > 0 { return SessionLine.bgRunningLabel(s.runningBgCount ?? 0) }
             return "Waiting for your reply"
         case .succeeded:
@@ -86,6 +90,8 @@ public enum SessionHeader {
         // and was not asked about in time: the two rows web's `waitingLabel` names.
         case .doneRequest:       return ProjectDone.readyToClose
         case .recordAsDone:      return ProjectDone.recordAsDoneRow
+        // An owner request this session filed: its card's and the inbox's words.
+        case .ownerRequest:      return OwnerRequests.waitingOnYou
         default:                 return unnamedWord
         }
     }
@@ -93,6 +99,9 @@ public enum SessionHeader {
     /// What a row waiting on you says when the server named no kind, or named one this build has no
     /// words for: somebody is waiting, and this is the row's own long-standing way of saying it.
     static let unnamedWord = "Waiting for approval"
+    /// The words for a wait the server reports that will resume a parked session by itself
+    /// (`Session.resumesOnItsOwn`; web `SESSION_ACTIVITY_WORD.WAITING`).
+    public static let waitingToResume = "Waiting to resume"
 
     /// The full "run state · lifecycle · when" subtitle. Keeping both dimensions visible prevents
     /// "Succeeded" from being mistaken for Completed. `now` is injectable for deterministic tests.

@@ -3,43 +3,12 @@ import XCTest
 
 final class AppSectionTests: XCTestCase {
 
-    func testVisibleGatesAdminByRole() {
-        XCTAssertFalse(AppSection.visible(isAdmin: false).contains(.admin))
-        XCTAssertTrue(AppSection.visible(isAdmin: true).contains(.admin))
-    }
-
-    func testSkillsHiddenFromNav() {
-        // Skills is intentionally not a top-level nav destination for either role.
-        XCTAssertFalse(AppSection.visible(isAdmin: false).contains(.skills))
-        XCTAssertFalse(AppSection.visible(isAdmin: true).contains(.skills))
-    }
-
-    func testNavOrder() {
-        // Agents first, then Projects just before the Tasks they are for (where Skills used to sit),
-        // then the Wiki — what the work learned — then Following (watches), then Settings; Admin last
-        // for admins. Machines & models, which led until 2026-10-26, is reached from Settings, as on
-        // the phone and the web (docs/mocks/machines-and-models, 02).
-        XCTAssertEqual(AppSection.visible(isAdmin: false),
-                       [.agents, .projects, .tasks, .wiki, .following, .settings])
-        XCTAssertEqual(AppSection.visible(isAdmin: true),
-                       [.agents, .projects, .tasks, .wiki, .following, .settings, .admin])
-    }
-
-    /// macOS's source list draws no Wiki row for an account the server has the wiki off for
-    /// (WIKI_DISABLED), as the drawer and the web sidebar draw none; the rest keep their places.
-    func testTheWikiRowFollowsWhetherTheAccountHasTheWiki() {
-        XCTAssertEqual(AppSection.visible(isAdmin: false, wiki: false),
-                       [.agents, .projects, .tasks, .following, .settings])
-        XCTAssertEqual(AppSection.visible(isAdmin: true, wiki: false),
-                       [.agents, .projects, .tasks, .following, .settings, .admin])
-        XCTAssertEqual(AppSection.visible(isAdmin: true, wiki: true), AppSection.visible(isAdmin: true))
-    }
-
-    /// The drawer — on iPhone, and as the iPad's sidebar — leads with the work — projects and
-    /// tasks — and the Wiki, set apart from, and above, the Workspaces. Following is not work you
-    /// open: it has no drawer row.
+    /// The drawer — on iPhone, as the iPad's sidebar, and as the Mac's source list — leads with the
+    /// work — projects and tasks — and the Wiki, set apart from, and above, the Workspaces. Following is
+    /// not work you open: it has no row. Skills is no destination at all.
     func testWorkSectionsLead() {
         XCTAssertEqual(AppSection.workSections, [.projects, .tasks, .wiki])
+        XCTAssertFalse(AppSection.workSections.contains(.skills))
     }
 
     /// The Wiki's row says the web sidebar's word and draws SF Symbols' book, the glyph AntD's
@@ -47,7 +16,6 @@ final class AppSectionTests: XCTestCase {
     func testTheWikiSectionsTitleAndGlyph() {
         XCTAssertEqual(AppSection.wiki.title, "Wiki")
         XCTAssertEqual(AppSection.wiki.systemImage, "book.closed")
-        XCTAssertFalse(AppSection.wiki.adminOnly)
     }
 
     /// The machines, the account pools and the API keys are one page, as the web's /infrastructure is
@@ -56,7 +24,7 @@ final class AppSectionTests: XCTestCase {
     func testTheRunnersSectionIsMachinesAndModels() {
         XCTAssertEqual(AppSection.runners.title, "Machines & models")
         XCTAssertEqual(AppSection.runners.systemImage, "desktopcomputer")
-        XCTAssertEqual(SettingsHome.title(.infrastructure), AppSection.runners.title)
+        XCTAssertEqual(SettingsHome.title(.machinesAndModels), AppSection.runners.title)
         XCTAssertFalse(AppSection.allCases.map(\.title).contains("Runners"))
         XCTAssertFalse(AppSection.allCases.map(\.title).contains("Providers"))
     }

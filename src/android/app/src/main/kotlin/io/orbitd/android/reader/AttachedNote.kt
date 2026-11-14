@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -24,18 +25,31 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 internal fun AttachedNoteEntry(note: String) {
+    if (remember(note) { describeNote(note) }.isEmpty()) return
     var open by rememberSaveable(note) { mutableStateOf(false) }
-    val kind = remember(note) { describeNote(note) }
-    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("${if (open) "⊖" else "⊕"} Orbit attached: $kind",
-            Modifier.clickable(role = Role.Button) { open = !open }.semantics {
-                contentDescription = "⊕ Orbit attached: $kind"; stateDescription = if (open) "Expanded" else "Collapsed"
-            },
-            color = secondary, style = MaterialTheme.typography.labelSmall)
-        if (open) SelectionContainer(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)).padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Text(note, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = secondary)
-        }
+        AttachedNoteLabel(note, open) { open = !open }
+        if (open) AttachedNotePanel(note)
+    }
+}
+
+/** The entry's one line, [suffix] after it where it sits in a line of others (a session message's foot). */
+@Composable
+internal fun AttachedNoteLabel(note: String, open: Boolean, suffix: String = "", color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    toggle: () -> Unit) {
+    val kind = remember(note) { describeNote(note) }
+    Text("${if (open) "⊖" else "⊕"} Orbit attached: $kind$suffix",
+        Modifier.clickable(role = Role.Button) { toggle() }.semantics {
+            contentDescription = "⊕ Orbit attached: $kind"; stateDescription = if (open) "Expanded" else "Collapsed"
+        },
+        color = color, style = MaterialTheme.typography.labelSmall)
+}
+
+/** The block verbatim and selectable, on a quiet panel under the entry's line. */
+@Composable
+internal fun AttachedNotePanel(note: String) {
+    SelectionContainer(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)).padding(horizontal = 10.dp, vertical = 8.dp)) {
+        Text(note, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

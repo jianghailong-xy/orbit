@@ -167,13 +167,20 @@ func (s *consentSession) answers(t *testing.T, n int) map[int]map[string]interfa
 	return got
 }
 
-// consentParams is the request Codex 0.166 sends for one MCP tool call, as captured from the real
-// CLI: thread and turn, the tool's arguments and description, and nothing that names the call.
+// consentParams is the request Codex 0.166 sends for one MCP tool call of Orbit's own server, as captured
+// from the real CLI: thread and turn, the tool's arguments and description, and nothing that names the call.
 func consentParams(tool string) string {
+	return consentParamsFrom(codexOrbitMCPServer, tool)
+}
+
+// consentParamsFrom is the same request for a tool of any server. Orbit answers a consent for one of its own
+// tools by name, with no card (codexAutomaticApproval); the card-per-consent tests below ask about a
+// third-party server's, which is where a card is still the answer.
+func consentParamsFrom(server, tool string) string {
 	return fmt.Sprintf(`{
 	  "threadId": "01a19d20-a2e0-7551-8555-a79b5ec6afa8",
 	  "turnId": "01a19d20-a314-7fa0-8fff-069ba2d6ea81",
-	  "serverName": "orbit",
+	  "serverName": %q,
 	  "mode": "form",
 	  "_meta": {
 	    "codex_approval_kind": "mcp_tool_call",
@@ -182,9 +189,9 @@ func consentParams(tool string) string {
 	    "tool_params": {"note": %q},
 	    "tool_params_display": [{"name": "note", "value": %q, "display_name": "note"}]
 	  },
-	  "message": "Allow the orbit MCP server to run tool \"%s\"?",
+	  "message": "Allow the %s MCP server to run tool \"%s\"?",
 	  "requestedSchema": {"type": "object", "properties": {}}
-	}`, tool, tool, tool)
+	}`, server, tool, tool, server, tool)
 }
 
 // Only the first MCP call of a Codex session in an ask mode ever reached a person. Consent carries
@@ -195,10 +202,10 @@ func TestEveryMCPConsentOfACodexSessionGetsItsOwnCard(t *testing.T) {
 	for _, mode := range []string{"default", "acceptEdits"} {
 		t.Run(mode, func(t *testing.T) {
 			session := newConsentSession(t, mode)
-			session.raise(t, 0, codexMCPElicitationMethod, consentParams("bg_kill"))
+			session.raise(t, 0, codexMCPElicitationMethod, consentParamsFrom("acme", "deploy"))
 			// Answered before the next is raised, as Codex does for calls made one after another.
 			first := session.answers(t, 1)
-			session.raise(t, 1, codexMCPElicitationMethod, consentParams("bg_output"))
+			session.raise(t, 1, codexMCPElicitationMethod, consentParamsFrom("acme", "status"))
 			second := session.answers(t, 1)
 
 			if first[0]["action"] != "accept" || second[1]["action"] != "accept" {
@@ -211,11 +218,33 @@ func TestEveryMCPConsentOfACodexSessionGetsItsOwnCard(t *testing.T) {
 			if cards[0].ToolUseID == "" || cards[0].ToolUseID == cards[1].ToolUseID {
 				t.Fatalf("toolUseIds %q and %q, want two different ids", cards[0].ToolUseID, cards[1].ToolUseID)
 			}
-			if !strings.Contains(fmt.Sprint(cards[0].Input["message"]), "bg_kill") || !strings.Contains(fmt.Sprint(cards[1].Input["message"]), "bg_output") {
+			if !strings.Contains(fmt.Sprint(cards[0].Input["message"]), "deploy") || !strings.Contains(fmt.Sprint(cards[1].Input["message"]), "status") {
 				t.Fatalf("cards ask about %#v and %#v", cards[0].Input, cards[1].Input)
 			}
-			if cards[0].ToolName != "mcp__orbit__bg_kill" || cards[1].ToolName != "mcp__orbit__bg_output" {
+			if cards[0].ToolName != "mcp__acme__deploy" || cards[1].ToolName != "mcp__acme__status" {
 				t.Fatalf("cards are named %q and %q", cards[0].ToolName, cards[1].ToolName)
+			}
+		})
+	}
+}
+
+// A Codex consent for one of Orbit's own tools is answered through the runner's real read loop and
+// bridge with no card, in every mode: a read, a write and a destructive write alike. Codex 0.167 sends
+// one at all only for a call whose annotations do not say it is read-only or harmless
+// (withCatalogAnnotations), and what the call may do once consented to is the gates' behind it to say —
+// in Plan, Orbit's own gate refuses the write with what to do instead (plan_gate_test.go).
+func TestACodexConsentForAnOrbitToolRaisesNoCard(t *testing.T) {
+	for _, mode := range []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"} {
+		t.Run(mode, func(t *testing.T) {
+			session := newConsentSession(t, mode)
+			for id, tool := range []string{"task_list", "task_update", "task_delete"} {
+				session.raise(t, id, codexMCPElicitationMethod, consentParams(tool))
+				if got := session.answers(t, 1)[id]["action"]; got != "accept" {
+					t.Fatalf("%s consent answered %v, want accept", tool, got)
+				}
+			}
+			if cards := session.table.snapshot(); len(cards) != 0 {
+				t.Fatalf("cards = %#v, want none for Orbit's own tools", cards)
 			}
 		})
 	}
@@ -248,7 +277,7 @@ func TestEachAnswerReachesOnlyTheMCPConsentItWasGivenFor(t *testing.T) {
 	session.table.deny("approval-2")
 	want := map[int]string{0: "accept", 1: "decline", 2: "accept"}
 	for id := 0; id < 3; id++ {
-		session.raise(t, id, codexMCPElicitationMethod, consentParams("bg_kill"))
+		session.raise(t, id, codexMCPElicitationMethod, consentParamsFrom("acme", "deploy"))
 		if got := session.answers(t, 1)[id]["action"]; got != want[id] {
 			t.Fatalf("request %d answered %v, want %s", id, got, want[id])
 		}
@@ -326,7 +355,7 @@ func TestAnMCPConsentInAnUnknownWordingStillReachesAPerson(t *testing.T) {
 // (measured on 0.166). It is the same question, so it finds the card already filed.
 func TestAReplayedMCPConsentKeepsItsOneCard(t *testing.T) {
 	session := newConsentSession(t, "default")
-	params := consentParams("bg_kill")
+	params := consentParamsFrom("acme", "deploy")
 	session.raise(t, 0, codexMCPElicitationMethod, params)
 	replies := session.answers(t, 1)
 	session.raise(t, 0, codexMCPElicitationMethod, params)
@@ -347,7 +376,7 @@ func TestAnMCPConsentFromANewCodexProcessIsANewCard(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	dir := t.TempDir()
 	bin := t.TempDir()
-	request := fmt.Sprintf(`{"id":0,"method":%q,"params":%s}`, codexMCPElicitationMethod, strings.ReplaceAll(consentParams("bg_kill"), "\n", " "))
+	request := fmt.Sprintf(`{"id":0,"method":%q,"params":%s}`, codexMCPElicitationMethod, strings.ReplaceAll(consentParamsFrom("acme", "deploy"), "\n", " "))
 	writeFakeBin(t, bin, "codex", "printf '%s\\n' '"+request+"'\nexec cat >/dev/null")
 	t.Setenv("PATH", bin+":"+"/usr/bin:/bin")
 

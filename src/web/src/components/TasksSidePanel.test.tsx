@@ -23,6 +23,16 @@ const source = readFileSync(fileURLToPath(new URL('./TasksSidePanel.tsx', import
 const styles = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
 
 describe('TasksSidePanel nav', () => {
+  // The Wiki's chat column narrower than 1440 asks for the icon rail (board docs/mocks/wiki-rail 03 C2): shown collapsed
+  // while it asks, and the toggle opens it back for that while — neither writes the choice the owner keeps.
+  it('shows the icon rail while a page asks for it, and keeps the owner’s own choice untouched', () => {
+    expect(source).toContain('const folded = useSidebarFolded();');
+    expect(source).toContain('const collapsed = kept || (folded && !unfolded);');
+    const toggle = source.match(/const toggleCollapsed = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[folded, kept\]\);/)?.[1] ?? '';
+    expect(toggle.indexOf('setUnfolded((u) => !u);\n      return;')).toBeGreaterThan(-1);
+    expect(toggle.indexOf('setUnfolded')).toBeLessThan(toggle.indexOf('localStorage.setItem(SIDEBAR_COLLAPSED_KEY'));
+  });
+
   it('adds Projects (icon, label, and shortcut) to the fixed TOP nav', () => {
     const topBlock =
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
@@ -126,11 +136,11 @@ describe('TasksSidePanel nav', () => {
     expect({ opened, prevented }).toEqual({ opened: 1, prevented: 1 });
     expect(handleNavActivation({ key: ' ', preventDefault: () => { prevented += 1; } },
       () => { opened += 1; })).toBe(false);
-    // The two surfaces, and a wiki's row in the group under them; and the group's Trash row, which opens a dialog and
-    // is a button (docs/mocks/wiki-trash).
+    // The two surfaces, and a wiki's row in the group under them. The Wiki group has no Trash row: Trash opens from
+    // Wiki settings (docs/mocks/wiki-trash/02-trash-entry), so no row here is a button.
     expect(source.match(/role="link"/g)).toHaveLength(3);
-    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(4);
-    expect(source.match(/role="button"\s+tabIndex=\{0\}/g)).toHaveLength(1);
+    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(3);
+    expect(source.match(/role="button"\s+tabIndex=\{0\}/g)).toBeNull();
     expect(source.match(/aria-current=\{sel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
     expect(source.match(/aria-current=\{railSel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
   });
@@ -212,23 +222,16 @@ describe('TasksSidePanel scrolling', () => {
   const rule = (selector: string) =>
     styles.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
 
-  it('scrolls Workspaces and Projects as one under the fixed entries, or only Projects while pinned', () => {
+  it('scrolls the groups as one under the fixed entries, each head held at the top', () => {
     // The middle itself no longer scrolls: the fixed entries stay put above the list.
     expect(rule('.tp-scroll')).not.toMatch(/overflow/);
     expect(rule('.tp-lists')).toMatch(/overflow-y:\s*auto;/);
-    expect(rule('.tp-lists.pin-workspaces')).toMatch(/overflow:\s*hidden;/);
-    expect(rule('.tp-lists.pin-workspaces > .tp-group-projects')).toMatch(/overflow-y:\s*auto;/);
-    expect(rule('.tp-lists.pin-workspaces > .tp-group-projects .tp-group-head')).toMatch(/position:\s*sticky;/);
+    expect(rule('.tp-lists .tp-group-head')).toMatch(/position:\s*sticky;/);
+    expect(styles).not.toMatch(/pin-workspaces/);
   });
 
-  it('keeps one scrollbar gutter on every block, so ⌘P lines up with ⌘1 whichever one scrolls', () => {
-    for (const selector of [
-      '.tp-scroll > .tp-section',
-      '.tp-lists',
-      '.tp-lists.pin-workspaces > .tp-group-workspaces',
-      '.tp-lists.pin-workspaces > .tp-group-wiki',
-      '.tp-lists.pin-workspaces > .tp-group-projects',
-    ]) {
+  it('keeps one scrollbar gutter on every block, so ⌘P lines up with ⌘1', () => {
+    for (const selector of ['.tp-scroll > .tp-section', '.tp-lists']) {
       expect(rule(selector)).toMatch(/scrollbar-gutter:\s*stable;/);
     }
   });
@@ -253,6 +256,16 @@ describe('TasksSidePanel workspace rows', () => {
     expect(html).toContain('tp-workspace-runner');
     expect(html).toContain('wikova');
     expect(html).not.toContain('inset');
+  });
+
+  // Board docs/mocks/workspace-runner-label E1: with a pointer the machine shows on the hovered row only.
+  it('shows the machine only on the hovered row, and on every row of a touch screen', () => {
+    const block = styles.match(/@media \(hover: hover\) and \(min-width: 961px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(block).toContain(
+      '.tp-item:not(:hover):not(.menu-open) .tp-workspace-separator,\n' +
+        '  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {\n    display: none;',
+    );
+    expect(block).toMatch(/\.tp-workspace-runner \{\n {4}flex: none;\n {4}max-width: 60%;/);
   });
 
   it('puts a folder in the shared first-level icon column and keeps the collapsed rail unchanged', () => {

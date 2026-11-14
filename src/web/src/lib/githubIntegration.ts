@@ -39,16 +39,6 @@ export function githubErrorText(code: string): string {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** "@octo-dev · 14 repositories in 2 accounts" — the Settings row (board 02). */
-export function githubConnectedSummary(integration: GithubIntegration): string {
-  const login = `@${integration.login}`;
-  const installations = integration.installations;
-  if (!installations) return login;
-  if (installations.length === 0) return `${login} · Orbit's app isn't installed anywhere yet`;
-  const repositories = installations.reduce((sum, i) => sum + i.repositoryCount, 0);
-  return `${login} · ${plural(repositories, 'repository', 'repositories')} in ${plural(installations.length, 'account', 'accounts')}`;
-}
-
 /** "Personal account · 3 selected repositories" or "Organization · All repositories (11)". */
 export function installationText(installation: GithubInstallation): string {
   const kind = installation.type === 'Organization' ? 'Organization' : 'Personal account';

@@ -193,17 +193,107 @@ struct EngineSwitchSheet: View {
     }
 }
 
+extension Font {
+    /// The name drawn bare on a list's bar (`WorkspaceTitle`, `WorkspaceTitleSwitcher`): body size at
+    /// medium weight, one step lighter than `.headline` — the owner's pick on 2026-11-12, after
+    /// Gemini's bar (docs/mocks/ios-header-soft-edge/01-board.html, ② and D2).
+    static let barTitle = Font.body.weight(.medium)
+}
+
+extension View {
+    /// The soft iOS 26 scroll-edge effect at the top of a list: rows blur and fade into the page as
+    /// they pass under the bar, with no frosted strip and no hairline. Left alone, iOS 26 picks the
+    /// hard style for a plain list whose section headers pin. The app's one rule (the owner,
+    /// 2026-11-12, docs/mocks/ios-header-soft-edge 01, 04 and 05): every plain list asks for this,
+    /// except the transcript, which has no effect at all (`ConsoleView.noTopEdgeEffect`), and the
+    /// phone drawer, which draws its own (`SoftEdgeLayer`). `ListHeaderEdgeWiringTests` holds every
+    /// list to it.
+    @ViewBuilder func softTopEdgeEffect() -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) { scrollEdgeEffectStyle(.soft, for: .top) } else { self }
+        #else
+        self
+        #endif
+    }
+}
+
+/// A soft edge drawn by hand, where the system's scroll-edge effect cannot reach: a material blur
+/// and a wash of `color`, full at `solidAt` and fading to nothing at the other end, so rows passing
+/// under it blur and fade rather than end at a line. Used under the needs-you bar over the Sessions
+/// list and under the iPhone drawer's header and action bar (the owner, 2026-11-12;
+/// docs/mocks/ios-header-soft-edge 02 and 03). The caller sizes it, extends it into the safe area
+/// and turns its hit testing off.
+struct SoftEdgeLayer: View {
+    var solidAt: VerticalEdge
+    var color: Color
+
+    var body: some View {
+        let from: UnitPoint = solidAt == .top ? .top : .bottom
+        let to: UnitPoint = solidAt == .top ? .bottom : .top
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial)
+                .mask(LinearGradient(stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: 0.6),
+                    .init(color: .clear, location: 1),
+                ], startPoint: from, endPoint: to))
+            LinearGradient(stops: [
+                .init(color: color.opacity(0.92), location: 0),
+                .init(color: color.opacity(0.7), location: 0.6),
+                .init(color: color.opacity(0), location: 1),
+            ], startPoint: from, endPoint: to)
+        }
+    }
+}
+
 /// Static workspace name for the iOS session list and new-session navigation bars.
 /// `.fixedSize()` keeps iOS 26's leading toolbar slot from compressing even short names. The list
 /// also hides this item's shared background so the drawer button keeps its own glass circle.
+///
+/// The session list passes `status`: a line under the name while the Open list on screen is not yet
+/// known to be the server's (`AppModel.openListStatus`; docs/mocks/ios-launch-updating). `empty`
+/// says the list has no rows to be stale yet, and `retry` is what the Offline line's tap does.
 struct WorkspaceTitle: View {
     let name: String
+    var status: OpenListFreshness.Status? = nil
+    var empty = false
+    var retry: () -> Void = {}
 
     var body: some View {
-        Text(name)
-            .font(.headline).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail)
-            .fixedSize()
-            .accessibilityLabel("Workspace: \(name)")
+        VStack(alignment: .leading, spacing: 1) {
+            Text(name)
+                .font(.barTitle).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail)
+                .accessibilityLabel("Workspace: \(name)")
+            if let status {
+                statusLine(status).transition(.opacity)
+            }
+        }
+        .fixedSize()
+        .animation(.easeOut(duration: 0.2), value: status)
+    }
+
+    @ViewBuilder
+    private func statusLine(_ status: OpenListFreshness.Status) -> some View {
+        switch status {
+        case .updating, .connecting:
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.mini)
+                Text(status == .connecting ? "Connecting…" : empty ? "Loading sessions…" : "Updating…")
+            }
+            .font(.orbitMeta).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        case .offline:
+            Button(action: retry) {
+                HStack(spacing: 4) {
+                    Circle().fill(Color.orange).frame(width: 6, height: 6)
+                    Text("Offline · Tap to retry")
+                }
+                .font(.orbitMeta).foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Offline. Showing the saved list")
+            .accessibilityHint("Reads the session list again")
+        }
     }
 }
 
@@ -241,7 +331,7 @@ struct WorkspaceTitleSwitcher: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Text(name)
-                    .font(.headline).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail)
+                    .font(.barTitle).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail)
                     .frame(maxWidth: maxNameWidth, alignment: .leading)
                 Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)

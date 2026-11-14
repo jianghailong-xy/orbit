@@ -19,6 +19,9 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// Which credential an engine's own sign-in is, in small type beside it: Antigravity's Google
     /// account or the machine's Gemini key, OpenCode's `opencode auth`.
     public let labelDetail: String?
+    /// A sentence the menu shows with the row, for what picking it risks: a Codex pool under Claude
+    /// Code (`SessionProviderChoices.codexPoolOnClaudeNotice`). Nil for anything else.
+    public let notice: String?
     public let kind: Kind
     /// Which brand's mark/tint to draw. An engine's own sign-in borrows its vendor preset, a key uses
     /// the preset it was created from, and a self-maintained endpoint has none.
@@ -35,7 +38,7 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// (`ProviderPool.unavailable`) — a reason no machine fixes, which is why `fixEngine` stays nil for
     /// it. Not for one whose accounts are only spent: that one waits for a reset (`note`).
     public let unavailable: String?
-    /// Which engine row on Infrastructure fixes `unavailable` — the engine the menu is for. Set whenever
+    /// Which engine row on Machines & models fixes `unavailable` — the engine the menu is for. Set whenever
     /// a runner can fix `unavailable`; nil on a pool whose accounts are what is missing, whose row is
     /// greyed out rather than sent anywhere.
     public let fixEngine: String?
@@ -65,10 +68,12 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
                 poolUnit: String? = nil, inPool: Bool = false, note: String? = nil,
-                accounts: [AccountChoice]? = nil, labelDetail: String? = nil, regionBlocked: Bool = false) {
+                accounts: [AccountChoice]? = nil, labelDetail: String? = nil, regionBlocked: Bool = false,
+                notice: String? = nil) {
         self.slug = slug
         self.label = label
         self.labelDetail = labelDetail
+        self.notice = notice
         self.kind = kind
         self.brandKey = brandKey
         self.modelLabel = modelLabel
@@ -218,11 +223,11 @@ public struct EnginePick: Equatable, Sendable {
 public enum SessionProviderChoices {
     /// The runner's accounts of an engine (`health`) as picker rows, each with its own quota — nil
     /// unless it has signed in more than one (web `accountChoices`). `usage` is the engine's snapshot
-    /// (`CodexAccounts.usage`).
+    /// (`CodexAccounts.usage`). An account signed out on this runner is not one it can run: no row.
     public static func accountChoices(_ health: RunnerEngineHealth?, usage: PlanUsageSnapshot?,
                                       now: Date = Date()) -> [AccountChoice]? {
         guard let health, let accounts = health.accounts, accounts.count >= 2 else { return nil }
-        return accounts.map { account in
+        return accounts.filter { $0.auth != "no" || RunnerPageFormat.runsOnEnvKey(health, account: $0.id, auth: $0.auth) }.map { account in
             // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its
             // own to show (`RunnerPageFormat.runsOnEnvKey`): not an account that is signed out.
             if RunnerPageFormat.runsOnEnvKey(health, account: account.id, auth: account.auth) {
@@ -253,8 +258,7 @@ public enum SessionProviderChoices {
                 id: account.id,
                 label: CodexAccounts.label(account.id, accounts: accounts),
                 quota: row.map(quotaText),
-                nearLimit: (row?.window.utilization ?? 0) >= 90,
-                unavailable: account.auth == "no" ? "Not signed in" : nil)
+                nearLimit: (row?.window.utilization ?? 0) >= 90)
         }
     }
 
@@ -386,6 +390,24 @@ public enum SessionProviderChoices {
         ProviderPools.runsCodex(pool) ? "codex" : "claude"
     }
 
+    /// Whether `engine` runs on the pool: the engines the server lists for a pool of one's own, else
+    /// the one it was made on. A shared pool runs on Codex alone, whatever it lists (web's `poolRunsOn`).
+    static func poolRuns(_ pool: ProviderPool, on engine: String) -> Bool {
+        if pool.shared == nil, let engines = pool.engines { return engines.contains(engine) }
+        return poolEngine(pool) == engine
+    }
+
+    /// Said with a Codex pool of one's own listed under Claude Code, which runs on its ChatGPT account
+    /// through Orbit's gateway rather than the Codex CLI (web's `CODEX_POOL_ON_CLAUDE_NOTICE`).
+    public static let codexPoolOnClaudeNotice =
+        "Runs Claude Code on your ChatGPT account outside the official Codex CLI. OpenAI may restrict the account."
+
+    /// The notices of a menu group's rows, each once, in row order.
+    public static func notices(_ choices: [ProviderChoice]) -> [String] {
+        var seen = Set<String>()
+        return choices.compactMap(\.notice).filter { seen.insert($0).inserted }
+    }
+
     /// What an engine's sign-in is called in the menu: the one account the runner reports by its own
     /// name, else Default — the account dispatch resolves a session on the sign-in to.
     static func signInLabel(_ health: RunnerEngineHealth?) -> String {
@@ -401,7 +423,7 @@ public enum SessionProviderChoices {
     ///
     /// Each carries the health the runner last reported, because a choice is a claim about someone
     /// else's machine. The engine's CLI not installed there, or its sign-in signed out → listed with the
-    /// reason, pointing at Infrastructure, where that machine gets its install or its sign-in. A key or a
+    /// reason, pointing at Machines & models, where that machine gets its install or its sign-in. A key or a
     /// pool brings its own credential, so only the CLI has to be there; a pool also needs one of its
     /// accounts able to run, which the server says (`ProviderPool.unavailable`). Mirrors web's
     /// `engineProviders`.
@@ -449,13 +471,13 @@ public enum SessionProviderChoices {
         // none can (pool-credential-select.ts, 2026-10-03), so what the pool holds is what they can run
         // on, and the pool's own answer (`unavailable`) is the reason. A missing CLI outranks the
         // members, because it is the one of the two a runner can fix.
-        let pools = sources.pools.filter { poolEngine($0) == engine }.map { pool -> ProviderChoice in
+        let pools = sources.pools.filter { poolRuns($0, on: engine) }.map { pool -> ProviderChoice in
             let region = regionBlocked(engine, sources: sources, credential: .pool(engine: poolEngine(pool)))
             return ProviderChoice(
                 slug: pool.slug,
                 label: pool.label,
                 kind: .pool,
-                brandKey: enginePreset[engine],
+                brandKey: enginePreset[poolEngine(pool)],
                 modelLabel: modelLabel(engine: engine, provider: pool.slug, sources: sources),
                 unavailable: region ? ClaudeRegionCopy.CLAUDE_REGION_NOT_SUPPORTED : carried ?? poolBlocker(pool),
                 fixEngine: region || carried != nil ? engine : nil,
@@ -464,7 +486,8 @@ public enum SessionProviderChoices {
                 // accounts counts accounts (the reader's own words — ProviderPools.memberNoun).
                 poolUnit: pool.shared != nil && !pool.members.contains { $0.login != nil } ? "key" : nil,
                 note: ProviderPools.spentNote(pool, now: sources.now),
-                regionBlocked: region)
+                regionBlocked: region,
+                notice: engine == "claude" && poolEngine(pool) == "codex" ? codexPoolOnClaudeNotice : nil)
         }
 
         let poolSlugs = Set(sources.pools.map(\.slug))

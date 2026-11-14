@@ -36,6 +36,7 @@ import {
   freezeSessionSourcePin,
   sessionSourceSnapshot,
   SESSION_SOURCE_SELECT,
+  SESSION_SOURCE_TASK_SELECT,
 } from './session-source';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -129,10 +130,7 @@ async function createSession(
   const task = taskId
     ? await db.task.findUniqueOrThrow({
         where: { id: taskId },
-        select: {
-          id: true, projectId: true, verifiesTaskId: true, pinnedRevision: true,
-          codeless: true, attemptGeneration: true, knownGoodSha: true,
-        },
+        select: SESSION_SOURCE_TASK_SELECT,
       })
     : null;
   const decision = await decideSessionSource(db as unknown as PrismaService, task);

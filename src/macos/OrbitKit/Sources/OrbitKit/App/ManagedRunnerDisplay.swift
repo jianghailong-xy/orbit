@@ -260,7 +260,7 @@ public enum ManagedRunnerLogic {
                                    canComplete: capabilities.canComplete, canRestore: capabilities.canRestore)
     }
 
-    /// The managed runner Infrastructure shows above its runners: only to an account with no runner
+    /// The managed runner Machines & models shows above its runners: only to an account with no runner
     /// at all, where the web's default landing shows it too. Any other account finds its managed
     /// runner in the console of its workspace.
     public static func onboarding(_ display: ManagedRunnerDisplay?, runnerCount: Int) -> ManagedRunnerDisplay? {

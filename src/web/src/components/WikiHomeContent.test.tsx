@@ -298,9 +298,10 @@ describe('the Wiki home, by the confirmed plan', () => {
     ]);
   });
 
-  it('reads nothing of how the wiki is kept: no review, no timeline, no decisions, no health', async () => {
+  // The health is read once, for the directory column's Activity dot (board docs/mocks/wiki-rail ③); the home draws none of it.
+  it('reads nothing of how the wiki is kept: no review, no timeline, no decisions', async () => {
     await open();
-    expect(reads.filter((url) => /\/review|\/timeline|kind=decision|\/health/.test(url))).toEqual([]);
+    expect(reads.filter((url) => /\/review|\/timeline|kind=decision/.test(url))).toEqual([]);
     expect(container.querySelector('.wk-status-row, .wk-banner, .wk-card')).toBeNull();
   });
 });

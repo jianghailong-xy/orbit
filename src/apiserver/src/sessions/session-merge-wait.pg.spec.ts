@@ -432,8 +432,10 @@ function assertNoBareOk(answer: Record<string, unknown>): void {
  */
 test('the MCP schema and the CLI document the same wait parameter', () => {
   const root = path.resolve(__dirname, '../../../..');
-  const mcp = readFileSync(path.join(root, 'src/runner-go/mcp.go'), 'utf8');
-  const cli = readFileSync(path.join(root, 'src/runner-go/session_cli.go'), 'utf8');
+  const mcp = readFileSync(path.join(root, 'src/runner-go/mcp.go'), 'utf8')
+    + readFileSync(path.join(root, 'src/runner-go/operation_catalog.go'), 'utf8');
+  const cli = readFileSync(path.join(root, 'src/runner-go/session_cli.go'), 'utf8')
+    + readFileSync(path.join(root, 'src/runner-go/operation_catalog.go'), 'utf8');
 
   const descriptor = mcp.slice(mcp.indexOf('"name":        "session_merge"'));
   const schema = descriptor.slice(0, descriptor.indexOf('"name":        "session_end"'));

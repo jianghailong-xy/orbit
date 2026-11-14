@@ -25,8 +25,6 @@ struct WikiHomeActions {
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
     /// The space's Wiki settings: the gear in the bar (mock 12 ①) and Manage spaces.
     var openSettings: () -> Void = {}
-    /// Trash, from the space menu under Manage spaces (docs/mocks/wiki-trash).
-    var openTrash: () -> Void = {}
     /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
     /// Activity, from the bar's history mark (design §12.3.2).
@@ -80,8 +78,6 @@ struct WikiHomePage: View {
     var waiting = 0
     /// The space has a public link open: the bar's globe is green.
     var shareLive = false
-    /// How many wikis are in Trash: the space menu offers it while any is.
-    var trashed = 0
     /// Drawn beside the directory column: no head, no Contents in the bar, no foot.
     var besideContents = false
     var actions = WikiHomeActions()
@@ -127,7 +123,7 @@ struct WikiHomePage: View {
         .wikiHomeListStyle()
         // The line sits right under the title and the search under it (mock 30 ③): no 44 pt floor under a row.
         .environment(\.defaultMinListRowHeight, 0)
-        .navigationTitle(besideContents || headerOnScreen ? "" : WikiCopy.title)
+        .navigationTitle(besideContents || headerOnScreen ? "" : spaceName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -176,17 +172,18 @@ struct WikiHomePage: View {
 
     // MARK: header
 
-    /// The title and the space on one row — the web's page head.
+    /// The space's name as the page's title, a picker among several — the web's page head (board docs/mocks/wiki-rail-name B).
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            Text(WikiCopy.title)
-                .font(.largeTitle.bold())
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
-            WikiSpacePicker(space: space, spaces: spaces, pick: actions.pickSpace, manage: actions.openSettings,
-                            trashed: trashed, openTrash: actions.openTrash)
+            WikiSpacePicker(space: space, spaces: spaces, title: .largeTitle.bold(), pick: actions.pickSpace, manage: actions.openSettings)
+            Spacer(minLength: 0)
         }
         .padding(.top, 4)
+    }
+
+    /// The name the head shows, which the bar takes once the head scrolls away.
+    private var spaceName: String {
+        WikiSpaceLogic.names(spaces)[space.id] ?? space.title ?? space.slug
     }
 
     // MARK: the bands
@@ -610,20 +607,79 @@ struct WikiFirstStartPage: View {
 /// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
 /// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
 /// draws in its own column, its name the title and the repository and documents the line under it — what waits
-/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings, with Trash under it while Trash
-/// holds a wiki (docs/mocks/wiki-trash).
+/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings. Trash is not in it: it opens
+/// from Wiki settings (docs/mocks/wiki-trash/02-trash-entry).
+///
+/// Given a `title` font, the name is the head's title (board docs/mocks/wiki-rail-name B): no capsule, the name in that
+/// type, and with several spaces a small chevron after it that opens the same menu.
 struct WikiSpacePicker: View {
     let space: WikiSpace
     let spaces: [WikiSpace]
+    var title: Font? = nil
     var pick: (String) -> Void = { _ in }
     var manage: () -> Void = {}
-    /// How many wikis are in Trash.
-    var trashed = 0
-    var openTrash: () -> Void = {}
 
     var body: some View {
         let names = WikiSpaceLogic.names(spaces)
         let name = names[space.id] ?? space.title ?? space.slug
+        if let title {
+            titled(name, names: names, font: title)
+        } else {
+            capsule(name, names: names)
+        }
+    }
+
+    @ViewBuilder private func titled(_ name: String, names: [String: String], font: Font) -> some View {
+        if spaces.count < 2 {
+            Text(name)
+                .font(font)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityLabel(WikiCopy.spacePickerHint)
+                .accessibilityValue(name)
+        } else {
+            Menu {
+                menuRows(names)
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(name)
+                        .font(font)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(Color.primary)
+                .contentShape(Rectangle())
+            }
+            .menuIndicator(.hidden)
+            .accessibilityAddTraits(.isHeader)
+            .accessibilityLabel(WikiCopy.spacePickerHint)
+            .accessibilityValue(name)
+        }
+    }
+
+    @ViewBuilder private func menuRows(_ names: [String: String]) -> some View {
+        ForEach(WikiSpaceLogic.menuRows(spaces, names: names)) { row in
+            Toggle(isOn: Binding(get: { row.id == space.id },
+                                 set: { if $0 { pick(row.slug) } })) {
+                // The name with its icon cell, then the line under it: a menu takes the Text
+                // after the Label as the row's subtitle (inside the Label it drops it).
+                Label {
+                    Text(row.name)
+                } icon: {
+                    if wikiMenuIconsDrawAmber, let symbol = row.waitingSymbol { wikiAmberSymbol(symbol) }
+                }
+                Text(row.subtitle(sayWaiting: !wikiMenuIconsDrawAmber))
+            }
+        }
+        Divider()
+        Button(action: manage) {
+            Label(WikiCopy.manageSpaces, systemImage: "gearshape")
+        }
+    }
+
+    @ViewBuilder private func capsule(_ name: String, names: [String: String]) -> some View {
         if spaces.count < 2 {
             Text(name)
                 .font(.orbitLabel)
@@ -636,28 +692,7 @@ struct WikiSpacePicker: View {
                 .accessibilityValue(name)
         } else {
             Menu {
-                ForEach(WikiSpaceLogic.menuRows(spaces, names: names)) { row in
-                    Toggle(isOn: Binding(get: { row.id == space.id },
-                                         set: { if $0 { pick(row.slug) } })) {
-                        // The name with its icon cell, then the line under it: a menu takes the Text
-                        // after the Label as the row's subtitle (inside the Label it drops it).
-                        Label {
-                            Text(row.name)
-                        } icon: {
-                            if wikiMenuIconsDrawAmber, let symbol = row.waitingSymbol { wikiAmberSymbol(symbol) }
-                        }
-                        Text(row.subtitle(sayWaiting: !wikiMenuIconsDrawAmber))
-                    }
-                }
-                Divider()
-                Button(action: manage) {
-                    Label(WikiCopy.manageSpaces, systemImage: "gearshape")
-                }
-                if trashed > 0 {
-                    Button(action: openTrash) {
-                        Label(WikiModeCopy.trashPickerItem, systemImage: "trash")
-                    }
-                }
+                menuRows(names)
             } label: {
                 HStack(spacing: 4) {
                     Text(name)

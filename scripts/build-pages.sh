@@ -59,7 +59,11 @@ required_files=(
   "$output/assets/brand/logo.svg"
   "$output/assets/brand/favicon.svg"
   "$output/assets/social/og-image.svg"
-  "$output/assets/product/hero-preview.svg"
+  "$output/assets/social/og-image.png"
+  "$output/assets/product/screenshot-task-graph.png"
+  "$output/assets/product/screenshot-runner.png"
+  "$output/assets/product/screenshot-approval.png"
+  "$output/assets/product/screenshot-result.png"
   "$output/assets/README.md"
   "$output/.nojekyll"
 )
@@ -71,6 +75,7 @@ for file in "${required_files[@]}"; do
 done
 
 node scripts/check-pages-links.mjs "$output"
+node scripts/check-pages-media.mjs "$output"
 
 {
   echo "# GitHub Pages build"
@@ -83,6 +88,9 @@ node scripts/check-pages-links.mjs "$output"
   echo "- deployment_branch: gh-pages"
   echo "- preservation: peaceiris/actions-gh-pages keep_files=true (appcast.xml)"
   echo "- local_link_check: passed (appcast.xml is preserved by the release workflow)"
+  echo "- media_check: passed (screenshots match the onboarding evidence set)"
+  echo "- browser_layout_check: run separately with scripts/check-pages-layout.mjs"
+  echo "- external_link_check: run separately with scripts/check-pages-external-links.mjs"
 } > "$output/build-report.md"
 
 echo "GitHub Pages build complete: $output"

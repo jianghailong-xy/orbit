@@ -2,9 +2,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/r
 import { useId } from 'react';
 import type { FeishuAdminSettings } from '@orbit/shared';
 import { api } from '../api';
-import { AdminNav } from '../components/AdminNav';
-import { Badge } from '../components/ui/Badge';
-import { Card } from '../components/ui/Card';
+import { SettingsCard, SettingsHeader, SettingsRow } from '../components/settings';
 import { Spinner } from '../components/ui/Spinner';
 import { Switch } from '../components/ui/Switch';
 import { useToast } from '../lib/toast';
@@ -49,9 +47,8 @@ export function AdminIntegrationsPage() {
   });
 
   return (
-    <div className="admin-page">
-      <AdminNav />
-      <h1 className="page-title">Integrations</h1>
+    <div className="settings-page">
+      <SettingsHeader title="Feishu bots" description="Lets each account connect a Feishu or Lark app of its own." />
       {settings.isPending ? (
         <Spinner />
       ) : settings.isError ? (
@@ -59,32 +56,21 @@ export function AdminIntegrationsPage() {
           Couldn’t load the integrations: {settings.error.message}
         </p>
       ) : (
-        <Card
-          title="Feishu bots"
-          className="admin-signin"
-          extra={<Badge tone={settings.data.allowed ? 'success' : 'default'}>{settings.data.allowed ? 'On' : 'Off'}</Badge>}
-        >
-          <div className="admin-signin-fields">
-            <div className="admin-signin-row">
-              <div>
-                <div className="admin-signin-label" id={switchId}>
-                  {ALLOW_FEISHU_LABEL}
-                </div>
-                <div className="admin-signin-hint">{ALLOW_FEISHU_HINT}</div>
-              </div>
+        <SettingsCard>
+          <SettingsRow
+            title={<span id={switchId}>{ALLOW_FEISHU_LABEL}</span>}
+            description={ALLOW_FEISHU_HINT}
+            control={
               <Switch
                 aria-labelledby={switchId}
                 checked={settings.data.allowed}
                 loading={save.isPending}
                 onCheckedChange={(allowed) => save.mutate(allowed)}
               />
-            </div>
-            <div className="admin-signin-field">
-              <div className="admin-signin-label">Connected apps</div>
-              <div className="admin-feishu-count">{connectedAppsText(settings.data)}</div>
-            </div>
-          </div>
-        </Card>
+            }
+          />
+          <SettingsRow title="Connected apps" description={connectedAppsText(settings.data)} />
+        </SettingsCard>
       )}
       <GithubAppCard />
     </div>

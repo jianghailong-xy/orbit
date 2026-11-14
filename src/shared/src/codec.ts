@@ -69,6 +69,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'promotionRequestId',
   // `project_integration_job.codebase_id` — the project code binding a job ran against (0281).
   'codebaseId',
+  // `project_criterion_confirmation.check_task_id` — the task an Agent check of a criterion ran as (0545).
+  'checkTaskId',
   'id',
   'ownerId',
   'userId',
@@ -77,6 +79,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'rootSessionId',
   'creatorSessionId',
   'authorSessionId',
+  // A main checkout request's initiating session (migration 0534): where its result line is written.
+  'initiatedFromSessionId',
   // An exception item, the work it is about and the rows other tasks of the integration-line contract
   // attach to it (migration 0273). Every one of them addresses a row a caller may be handed and hand
   // back: the item in `GET /projects/:id/open-items`, and the job, promotion or pause behind it.
@@ -144,6 +148,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // beside the event and names the user row exactly as ownerId/userId do.
   'signedById',
   'coordinatorSessionId',
+  // The coordinator conversation that last wrote a project's non-code mark (migration 0535): an address.
+  'nonCodeSetBySessionId',
   'workspaceId',
   // The workspaces a personal access token is confined to (migration 0383): addresses its owner
   // picks when issuing it and reads back in the token list — never a fence.
@@ -458,6 +464,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // `owner_request.blocks_task_ids` (0503): the tasks an owner request blocks — task addresses like `taskIds`.
   'blocksTaskIds',
   'dependsOnTaskIds',
+  // `POST /projects/:id/criteria/:criterionKey/move`: the tasks that went with the criterion, the
+  // ones that stayed, and the open items that went with them — and, on a refusal, the items in the way.
+  'movedTaskIds',
+  'keptTaskIds',
+  'movedOpenItemIds',
+  'itemIds',
   'anchorTaskId',
   'attachmentIds',
   // An account pool's membership (migration 0265): the pool and the provider a member row names, and
@@ -640,6 +652,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // session page's From Wiki label opens. A history reference with no foreign key, so it may 404 —
   // never a fence.
   'wikiChatSpaceId',
+  // A forked task's session and that session's machine (migration 0615, SR55): addresses a reader follows to the
+  // session the task started from and the runner its snapshot is on. History references with no foreign key — never a
+  // fence: the fork's placement is decided on the task's own row.
+  'forkSessionId',
+  'forkRunnerId',
   // A wiki chat's cards (migration 0483, contract `chat.drafts`): the card a drafting tool answers (`draftId`), which the
   // panel draws and `GET /wiki/chat-drafts/:id` reads, and the card a newer one replaced (`replacesId`, a history
   // reference with no foreign key). Addresses a reader follows — never a fence: a press is decided on the card's row.

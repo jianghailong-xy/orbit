@@ -93,7 +93,7 @@ class ManagementDeviceTest {
     @Volatile private var modelRouting: Boolean? = null
     @Volatile private var revoked = emptySet<String>()
     @Volatile private var deepSeekLow = false
-    /** A13g: the Infrastructure pass — Codex signed out on the remote and OpenCode missing there, a second machine offline, a pool no
+    /** A13g: the Machines & models pass — Codex signed out on the remote and OpenCode missing there, a second machine offline, a pool no
      * session can start on, and no keys, so OpenCode is Not set up. POST runners/:id/install starts [installRelay] for its engine. */
     @Volatile private var infraPass = false
     @Volatile private var installRelay = "null"
@@ -119,7 +119,7 @@ class ManagementDeviceTest {
                 signIn(server)
                 settings()
                 assertTrue(compose.onAllNodes(hasText("Admin") and hasClickAction()).fetchSemanticsNodes().isEmpty())
-                // The runner is offline here: a line of Infrastructure's Needs you, which the row counts (A13g, iOS 5e75edbde).
+                // The runner is offline here: a line of Machines & models' Needs you, which the row counts (A13g, iOS 5e75edbde).
                 await("1 needs you"); await("1 active")
                 capture("settings-home")
                 // Default permission and Appearance are menus on their rows — the first on Sessions' page (docs/mocks/ios-settings-order);
@@ -156,7 +156,9 @@ class ManagementDeviceTest {
                 click(hasText("Shared links") and hasClickAction())
                 await("Fixture shared session")
                 capture("shared-links")
-                click(hasText("Turn off") and hasClickAction())
+                // Turn off… is last in the row's ⋯ (docs/mocks/share-links/13-row-buttons).
+                click(hasContentDescription("More for Fixture shared session") and hasClickAction())
+                click(hasText("Turn off…") and hasClickAction(), scroll = false)
                 compose.onNode(hasText("Turn off") and hasAnyAncestor(isDialog())).performClick()
                 compose.waitUntil(10_000) { !sharingActive }
                 await("Nothing is shared right now. Share a session from its ⋯ menu.")
@@ -239,7 +241,7 @@ class ManagementDeviceTest {
                 settings()
                 click(hasText("Machines & models") and hasClickAction())
                 await("Controlled remote")
-                capture("infrastructure")
+                capture("machines-and-models")
                 click(hasText("Controlled remote") and hasClickAction())
                 await("Max Concurrent")
                 compose.onAllNodes(hasText("Refresh Model Lists")).assertCountEquals(0)
@@ -278,7 +280,7 @@ class ManagementDeviceTest {
                 click(hasText("Machines & models") and hasClickAction())
                 await("Team Codex")
                 compose.onNodeWithText("Account pools").performScrollTo()
-                capture("infrastructure-pools")
+                capture("machines-and-models-pools")
                 click(hasText("Team Codex") and hasClickAction())
                 await("Who can use it")
                 capture("codex-pool")
@@ -514,7 +516,7 @@ class ManagementDeviceTest {
                 click(hasText("Machines & models") and hasClickAction()); await(" slots busy")
                 compose.onAllNodesWithText("API keys").onFirst().performScrollTo()
                 await("¥110.00 · $5.00"); await("Unavailable")
-                capture("a13d-infrastructure-keys")
+                capture("a13d-machines-and-models-keys")
                 click(hasText("DeepSeek") and hasClickAction()); await("DeepSeek account balance"); await("Total")
                 capture("a13d-deepseek-key")
                 deepSeekLow = true
@@ -594,12 +596,12 @@ class ManagementDeviceTest {
         click(hasText("Notifications") and hasClickAction()); await("When a session finishes"); capture("$pass-notifications"); back()
         click(hasText("Shared links") and hasClickAction()); await("Fixture shared session"); capture("$pass-shared-links"); back()
         click(hasText("Admin") and hasClickAction()); await("Second user"); capture("$pass-admin-users"); back()
-        click(hasText("Machines & models") and hasClickAction()); await("Controlled remote"); capture("$pass-infrastructure")
+        click(hasText("Machines & models") and hasClickAction()); await("Controlled remote"); capture("$pass-machines-and-models")
         click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent"); capture("$pass-runner")
         click(hasText("Claude Code") and hasClickAction()); await("Add Account"); capture("$pass-runner-engine")
         back(); back(); back()
         click(hasText("Machines & models") and hasClickAction()); await("Team Codex")
-        compose.onNodeWithText("Account pools").performScrollTo(); capture("$pass-infrastructure-pools")
+        compose.onNodeWithText("Account pools").performScrollTo(); capture("$pass-machines-and-models-pools")
         click(hasText("Team Codex") and hasClickAction()); await("Who can use it"); capture("$pass-codex-pool")
         back(); back()
     }
@@ -656,13 +658,13 @@ class ManagementDeviceTest {
     }
 
     /**
-     * A13g (A13-17 with A07-15 ②, iOS 5e75edbde): Settings' one Infrastructure row says how many things need you; the page says each —
+     * A13g (A13-17 with A07-15 ②, iOS 5e75edbde): Settings' one Machines & models row says how many things need you; the page says each —
      * a machine offline, a pool no session can start on, and no engine signed out (as on the web's card) — with its way out in the app, then
      * the machines, Add Runner, the pools and the keys, top to bottom; it installs OpenCode from the page of the machine that lacks it,
      * and reads the machines again every 15 s while it is up (on the compose rule's clock, which a test's effects run on) and not while
      * the app is in the background.
      */
-    @Test fun infrastructureSaysWhatNeedsYouAndInstallsOpenCode() {
+    @Test fun machinesAndModelsSaysWhatNeedsYouAndInstallsOpenCode() {
         start()
         MockWebServer().use { server ->
             server.dispatcher = dispatcher()
@@ -672,34 +674,34 @@ class ManagementDeviceTest {
                 await("2 need you")
                 compose.onNodeWithText("Where your agents run, and whose model quota they spend.").assertExists()
                 listOf("Runners", "Providers").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
-                capture("infrastructure-settings-row")
+                capture("machines-and-models-settings-row")
                 click(hasText("Machines & models") and hasClickAction())
                 await("ThinkPad is offline"); await("Old keys is unavailable")
                 compose.onAllNodesWithText("is signed out on", substring = true).assertCountEquals(0)
-                capture("infrastructure-needs-you")
+                capture("machines-and-models-needs-you")
                 val sections = listOf("Needs you", "Machines", "Add Runner", "Account pools", "API keys")
                 // Down the page, on screen or scrolled out of it (boundsInRoot clips to what is on screen).
                 val tops = sections.map { compose.onNodeWithText(it).fetchSemanticsNode().positionInRoot.y }
                 assertEquals("top to bottom: $sections", tops.sorted(), tops)
                 compose.onNodeWithText("2 machines · 1 / 4 slots busy").performScrollTo()
-                await("1 / 4 running · 1 of 3 signed in"); capture("infrastructure-machines")
-                compose.onNodeWithText("API keys").performScrollTo(); await("No keys yet"); capture("infrastructure-pools-keys")
+                await("1 / 4 running · 1 of 3 signed in"); capture("machines-and-models-machines")
+                compose.onNodeWithText("API keys").performScrollTo(); await("No keys yet"); capture("machines-and-models-pools-keys")
                 // Every line's way out stays in the app: the machine's record, the pool's page.
                 click(hasText("Details") and hasClickAction() and hasAnyAncestor(hasTestTag("needs-you:offline:$thinkPadId")))
-                await("Max Concurrent"); await("Offline"); capture("infrastructure-details-thinkpad")
+                await("Max Concurrent"); await("Offline"); capture("machines-and-models-details-thinkpad")
                 back(); await("Needs you")
                 click(hasText("Manage") and hasClickAction() and hasAnyAncestor(hasTestTag("needs-you:pool:P3")))
-                await("Account pool"); capture("infrastructure-manage-pool")
+                await("Account pool"); capture("machines-and-models-manage-pool")
                 back(); await("Needs you")
                 // OpenCode, which the machine lacks: its row on the machine's page opens OpenCode's page, where Install is.
                 click(hasText("Controlled remote") and hasText(" running", substring = true) and hasClickAction())
                 compose.waitUntil(15_000) { compose.onAllNodesWithTag("engine-row:opencode").fetchSemanticsNodes().isNotEmpty() }
                 compose.onNodeWithTag("engine-row:opencode").performScrollTo()
                 click(hasTestTag("engine-row:opencode"))
-                await("Install OpenCode"); capture("infrastructure-opencode-page")
+                await("Install OpenCode"); capture("machines-and-models-opencode-page")
                 click(hasText("Install OpenCode") and hasClickAction())
                 compose.waitUntil(10_000) { installs.contains("opencode") }
-                await("Installing…"); capture("infrastructure-opencode-installing")
+                await("Installing…"); capture("machines-and-models-opencode-installing")
                 back(); back(); await("Needs you")
                 // The machines, read again every 15 s while the page is up — and not while the app is in the background.
                 compose.waitForIdle(); SystemClock.sleep(1_000)
@@ -713,7 +715,7 @@ class ManagementDeviceTest {
                 val inBackground = pageReads().size - paused
                 compose.activityRule.scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
                 compose.waitUntil(10_000) { pageReads().size >= paused + inBackground + 1 }
-                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("infrastructure-reads.txt")
+                File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("machines-and-models-reads.txt")
                     .writeText("GET /api/runners at (elapsed ms): $runnerReads\ndirectory snapshots at: $snapshots\n" +
                         "after 2 × 15.5 s on the page: ${paused - before}\nin the background for 46 s: $inBackground\n" +
                         "back in front: ${pageReads().size - paused - inBackground}\n")
@@ -788,29 +790,33 @@ class ManagementDeviceTest {
                 compose.onNode(hasText("Settings") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
                 await("Appearance")
                 page("settings-home", report, problems)
-                activate("Machines & models", "talkback-settings-infrastructure", report, problems); await("Controlled remote")
-                report.appendLine("double tap Infrastructure -> the Infrastructure page opened")
-                page("infrastructure", report, problems)
+                activate("Machines & models", "talkback-settings-machines-and-models", report, problems); await("Controlled remote")
+                report.appendLine("double tap Machines & models -> the Machines & models page opened")
+                page("machines-and-models", report, problems)
                 // The row's own words: its ⋯ button is "More for Controlled remote", and the engines' lines name the machine too.
-                activate("1 / 4 running", "talkback-infrastructure-row", report, problems); await("Max Concurrent")
+                activate("1 / 4 running", "talkback-machines-and-models-row", report, problems); await("Max Concurrent")
                 report.appendLine("double tap the Controlled remote row (1 / 4 running) -> the runner page opened")
                 page("runner", report, problems)
-                activate("Increase Max Concurrent", "talkback-runner-capacity", report, problems)
+                activate("Edit Max Concurrent", "talkback-runner-capacity", report, problems)
+                activate("Increase Max Concurrent", "talkback-runner-capacity-dialog", report, problems)
+                activate("Save", "talkback-runner-capacity-save", report, problems)
                 compose.waitUntil(10_000) { calls.any { it == "PATCH /api/runners/$runnerId" } }
-                report.appendLine("double tap Increase Max Concurrent -> PATCH /api/runners/$runnerId sent")
+                report.appendLine("double tap Edit Max Concurrent, Increase Max Concurrent, Save -> PATCH /api/runners/$runnerId sent")
                 back(); back(); await("Appearance")
-                activate("Machines & models", "talkback-settings-infrastructure-pools", report, problems); await("Team Codex")
-                report.appendLine("double tap Infrastructure -> the Infrastructure page opened again")
+                activate("Machines & models", "talkback-settings-machines-and-models-pools", report, problems); await("Team Codex")
+                report.appendLine("double tap Machines & models -> the Machines & models page opened again")
                 // The pool's row by its SHARED mark: "Team Codex" is also the Codex engine's pool line, which opens nothing.
-                activate("SHARED", "talkback-infrastructure-pool", report, problems); await("Who can use it")
+                activate("SHARED", "talkback-machines-and-models-pool", report, problems); await("Who can use it")
                 report.appendLine("double tap Team Codex (SHARED) -> the pool page opened")
                 page("codex-pool", report, problems)
                 back(); back(); await("Appearance")
                 activate("Shared links", "talkback-settings-shared-links", report, problems); await("Fixture shared session")
                 report.appendLine("double tap Shared links -> the shared links page opened")
                 page("shared-links", report, problems)
-                activate("Turn off", "talkback-shared-links-turn-off", report, problems); await("Turn off this link")
-                report.appendLine("double tap Turn off -> the confirmation opened")
+                activate("More for Fixture shared session", "talkback-shared-links-more", report, problems); await("Turn off…")
+                report.appendLine("double tap the link's ⋯ -> its menu opened")
+                activate("Turn off…", "talkback-shared-links-turn-off", report, problems); await("Turn off this link")
+                report.appendLine("double tap Turn off… -> the confirmation opened")
                 compose.onNode(hasText("Cancel") and hasClickAction() and hasAnyAncestor(isDialog())).performSemanticsAction(SemanticsActions.OnClick)
                 // The key goes to the window in front: let the dialog go first.
                 compose.waitUntil(5_000) { compose.onAllNodes(isDialog()).fetchSemanticsNodes().isEmpty() }
@@ -1252,7 +1258,7 @@ class ManagementDeviceTest {
           "kimi":${if (kimiOld) "null" else """{${kimiWindows(12, 34, 8, 2 * 3600, 4 * 86400, 23 * 86400)},
             "accounts":{"5c2e91a0":{${kimiWindows(91, 61, 22, 3600, 86400, 20 * 86400)}}}}"""}},"install":null}"""
     }
-    /** The remote in the Infrastructure pass: Claude Code signed in, Codex signed out, Kimi Code and OpenCode not installed. */
+    /** The remote in the Machines & models pass: Claude Code signed in, Codex signed out, Kimi Code and OpenCode not installed. */
     private fun infraRunner() = """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.200",
         "online":true,"status":"ONLINE","lastHeartbeatAt":"$now","maxConcurrent":4,"activeSessions":1,"runsAsRoot":false,"selfUpdate":null,
         "minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1","os:linux"],

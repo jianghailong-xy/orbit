@@ -1,10 +1,11 @@
 import { ExportOutlined, GithubOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import type { GithubIntegration } from '@orbit/shared';
 import { api } from '../api';
 import { Alert } from '../components/ui/Alert';
+import { SettingsHeader } from '../components/settings';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Popconfirm } from '../components/ui/Popconfirm';
@@ -12,6 +13,7 @@ import { Spinner } from '../components/ui/Spinner';
 import '../components/ui/Card.css';
 import {
   GITHUB_NOT_SET_UP,
+  GITHUB_ROW_HINT,
   connectGithub,
   githubErrorText,
   githubIntegrationQuery,
@@ -78,15 +80,15 @@ export function GithubIntegrationPage() {
 
   if (integration.isPending) {
     return (
-      <div className="github-page">
+      <div className="settings-page github-page">
         <Spinner />
       </div>
     );
   }
   if (integration.isError) {
     return (
-      <div className="github-page">
-        <h1 className="page-title">GitHub</h1>
+      <div className="settings-page github-page">
+        <SettingsHeader title="GitHub" />
         <Alert
           type="error"
           title="Couldn't load your GitHub connection"
@@ -99,11 +101,8 @@ export function GithubIntegrationPage() {
 
   const view = integration.data;
   return (
-    <div className="github-page">
-      <div className="github-crumb">
-        <Link to="/settings">Settings</Link> / Integrations
-      </div>
-      <h1 className="page-title">GitHub</h1>
+    <div className="settings-page github-page">
+      <SettingsHeader title="GitHub" description={GITHUB_ROW_HINT} />
       {error && <Alert type="error" title={githubErrorText(error)} className="github-alert" />}
       {!view.available && <Alert type="warning" title={GITHUB_NOT_SET_UP} className="github-alert" />}
 

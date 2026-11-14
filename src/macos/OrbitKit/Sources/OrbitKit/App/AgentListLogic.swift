@@ -1,14 +1,62 @@
 import Foundation
 
-// Pure logic for workspace navigation order. macOS renders runner groups; iOS uses the flat
-// workspace order shared with the web.
+// Pure logic for workspace navigation order. Every client's rail uses the flat workspace order shared
+// with the web.
 
 public struct AgentGroup: Equatable, Sendable, Identifiable {
     public let runnerId: String?
     public let agents: [Agent]
-    /// A machine with no workspace: its group has this one row instead of workspaces (rule 9).
-    public var setUp: MachineToSetUp? = nil
     public var id: String { runnerId ?? "host" }
+}
+
+/// One row of the macOS sidebar's Workspaces section. The section draws exactly one view per row, so the
+/// outline list sees one flat, stable-id row set: an `if`/`else` swapping the placeholder for the rows,
+/// or a `ForEach` element yielding a varying number of rows, is the shape whose row reload
+/// NSOutlineView aborted on (beta.196, `-[NSLayoutConstraint setActive:]` under
+/// `reloadItem:reloadChildren:`).
+public enum SidebarWorkspaceRow: Equatable, Sendable, Identifiable {
+    case agent(Agent)
+    case setUp(MachineToSetUp)
+    /// Stands in for the rows while there are none: loading, failed, or empty.
+    case placeholder
+
+    public var id: String {
+        switch self {
+        case .agent(let a): return "agent:\(a.id)"
+        case .setUp(let m): return "setup:\(m.id)"
+        case .placeholder: return "placeholder"
+        }
+    }
+}
+
+/// One top-level work row of the macOS sidebar (Projects, Tasks, Wiki). The section draws one view
+/// per row from this array, so the Wiki's visibility is data here rather than an `if` around the
+/// row builder — the shape beta.242 crashed in. A count of 0 is drawn hidden, never removed.
+public struct SidebarSectionRow: Equatable, Sendable, Identifiable {
+    public let section: AppSection
+    /// What waits on the reader there — the drawer's amber count.
+    public let waiting: Int
+
+    public var id: String { "section:\(section.rawValue)" }
+
+    public init(_ section: AppSection, waiting: Int = 0) {
+        self.section = section
+        self.waiting = waiting
+    }
+}
+
+/// One open project row, with the drawer's one trailing mark. Like the work rows, the Projects group
+/// draws one view per row from this array.
+public struct SidebarProjectRow: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let mark: ProjectDrawerMark
+
+    public init(id: String, title: String, mark: ProjectDrawerMark) {
+        self.id = id
+        self.title = title
+        self.mark = mark
+    }
 }
 
 /// Where New session goes (rule 11, board 03): the workspace in view, else the first machine that can
@@ -67,6 +115,46 @@ public enum AgentListLogic {
         #endif
     }
 
+    /// The Mac sidebar's Workspaces rows: the workspaces in `ordered` order, then a Set up row per machine
+    /// with no workspace; the placeholder alone when there is neither. A row id seen twice keeps its first
+    /// row only, since a duplicate id is itself a row set the outline list can't reconcile.
+    public static func sidebarRows(_ ordered: [Agent], machines: [MachineToSetUp]) -> [SidebarWorkspaceRow] {
+        var seen = Set<String>()
+        let rows = (ordered.map(SidebarWorkspaceRow.agent) + machines.map(SidebarWorkspaceRow.setUp))
+            .filter { seen.insert($0.id).inserted }
+        return rows.isEmpty ? [.placeholder] : rows
+    }
+
+    /// The work rows the Mac source list opens with, in `sections`' order. `wiki` is the server's
+    /// answer (`WikiLogic.shown`): a false one drops the Wiki row here, as data, so the List body
+    /// holds no branch. The waiting counts are the drawer's amber numbers, 0 when nothing waits.
+    public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
+                                       projectsWaiting: Int, wikiWaiting: Int) -> [SidebarSectionRow] {
+        sections.filter { $0 != .wiki || wiki }.map { section in
+            let waiting: Int
+            switch section {
+            case .projects: waiting = projectsWaiting
+            case .wiki:     waiting = wikiWaiting
+            default:        waiting = 0
+            }
+            return SidebarSectionRow(section, waiting: waiting)
+        }
+    }
+
+    /// The open projects, each with the one trailing mark the drawer gives it: what waits on you,
+    /// or its work in flight, or nothing. Duplicate ids keep their first row, as `sidebarRows` does.
+    public static func sidebarProjects(_ projects: [ProjectSummary],
+                                       coordinators: [String: ProjectCoordinatorPulse]) -> [SidebarProjectRow] {
+        var seen = Set<String>()
+        return projects.map { project in
+            SidebarProjectRow(
+                id: project.id,
+                title: project.title,
+                mark: ProjectAttention.drawerMark(
+                    project, coordinator: coordinators[PublicID.storageKey(project.id)]))
+        }.filter { seen.insert($0.id).inserted }
+    }
+
     /// Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no
     /// workspace of this account on them: an offline one is already what Machines & models says needs
     /// you. A runner the server hasn't said is online is not one.
@@ -79,14 +167,6 @@ public enum AgentListLogic {
     /// `GET /runners`' answer for this machine, read the way the rest of the rail reads it.
     public static func isOnline(_ runner: Runner) -> Bool {
         WorkspaceRunnerAvailabilityLogic.onlineValue(explicit: runner.online, status: runner.status) == true
-    }
-
-    /// The macOS sidebar's groups: each machine's workspaces, then each machine that has none, with its
-    /// header and Set up row after every workspace (rule 9).
-    public static func sidebarGroups(_ agents: [Agent], runnerOrder: [String] = [],
-                                     machines: [MachineToSetUp]) -> [AgentGroup] {
-        grouped(agents, runnerOrder: runnerOrder)
-            + machines.map { AgentGroup(runnerId: $0.id, agents: [], setUp: $0) }
     }
 
     /// Where New session goes. `list` is the workspace list's state, `currentAgentID` the workspace ⌘N

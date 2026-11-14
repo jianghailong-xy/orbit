@@ -353,6 +353,7 @@ test('(c) the completion-ACK owner-decision doors are gone from every client sur
     ['src/apiserver/src/runner-api/runner-projects.controller.ts', 'completion-ack/owner-decisions'],
     ['src/runner-go/transport.go', 'completion-ack/owner-decisions'],
     ['src/runner-go/mcp.go', 'project_owner_decision_request'],
+    ['src/runner-go/operation_catalog.go', 'project_owner_decision_request'],
     ['src/runner-go/project_cli.go', 'owner-decision-request'],
   ] as const) {
     assert.equal(read(file).includes(needle), false, `${file} must not still name ${needle}`);

@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
@@ -137,6 +139,14 @@ test('a runner nobody asked is told nothing', async () => {
   assert.equal((await h.beat()).checkSelfUpdate, undefined);
 });
 
+// A runner draining for an update claims for the sessions whose engine is at work on it only when this
+// word is on the answer (runner-go drainClaimScope): an older server would ignore the scope.
+test('the answer to a draining beat says the claim takes a drain scope, and no other answer changes', async () => {
+  const h = heartbeatHarness();
+  assert.equal((await h.beat({ draining: true })).drainScopedClaims, true);
+  assert.equal((await h.beat()).drainScopedClaims, undefined);
+});
+
 // ── Update Runner Now, as the owner asks for it ───────────────────────────────────────────────
 
 function serviceHarness(runner: Record<string, unknown> | null) {
@@ -202,6 +212,7 @@ function viewHarness(rows: Array<Record<string, unknown>>) {
           .map(({ ownerId: _ownerId, ...r }) => r),
     },
     session: { groupBy: async () => [] },
+    $queryRaw: async () => [],
   } as unknown as PrismaService;
   return new RunnersService(prisma);
 }
@@ -249,4 +260,71 @@ test('a personal access token may read the detail, as it reads the list, but nev
   assert.deepEqual(declared('get'), declared('list'));
   assert.deepEqual(declared('requestSelfUpdate'), { kind: 'FORBIDDEN', reason: 'RUNNER_CONTROL' });
   assert.deepEqual(declared('requestSelfUpdate'), declared('refreshModels'));
+});
+
+// ── the Update card's phase (docs/runner-update-drain-design.md §4) ──────────────────────────
+
+/** The reports the Go runner writes (src/shared/src/runner-self-update.fixture.json). */
+function phaseFixture(): Map<string, Record<string, unknown>> {
+  const raw = readFileSync(join(__dirname, '../../../shared/src/runner-self-update.fixture.json'), 'utf8');
+  const file = JSON.parse(raw) as { cases: Array<{ name: string; report: Record<string, unknown> }> };
+  return new Map(file.cases.map((c) => [c.name, c.report]));
+}
+
+const iso = (at: unknown) => (typeof at === 'string' ? new Date(at).toISOString() : at);
+
+test('each phase the runner sends is kept, its times as ISO', () => {
+  for (const [name, report] of phaseFixture()) {
+    const want = Object.fromEntries(
+      Object.entries(report).map(([key, value]) => [key, key.endsWith('Since') || key.endsWith('Until') ? iso(value) : value]),
+    );
+    assert.deepEqual(sanitizeRunnerSelfUpdate(report), want, name);
+  }
+});
+
+test('an old runner, which sends no phase, is returned as it was before the field', () => {
+  assert.deepEqual(sanitizeRunnerSelfUpdate(phaseFixture().get('oldRunner')), { state: 'waitingForIdle' });
+});
+
+test('the quiet window is kept with or without a phase; a malformed one is dropped', () => {
+  assert.deepEqual(sanitizeRunnerSelfUpdate({ state: 'enabled', quietWindowSeconds: 600 }), {
+    state: 'enabled',
+    quietWindowSeconds: 600,
+  });
+  for (const bad of [0, -600, 600.5, '600', 86_401, null]) {
+    assert.deepEqual(sanitizeRunnerSelfUpdate({ state: 'enabled', quietWindowSeconds: bad }), { state: 'enabled' }, String(bad));
+  }
+});
+
+test('an unknown phase drops the card fields, keeping the release and drain start; malformed ones are dropped one by one', () => {
+  // targetVersion and drainingSince also explain a queued session (queuedRunnerUpdateOf), phase or not.
+  assert.deepEqual(
+    sanitizeRunnerSelfUpdate({
+      state: 'waitingForIdle',
+      phase: 'installing',
+      targetVersion: '0.1.254',
+      availableSince: '2026-11-12T08:58:00Z',
+      drainingSince: '2026-11-12T09:58:00Z',
+      turnsInFlight: 2,
+      turnsAtDrain: 8,
+    }),
+    { state: 'waitingForIdle', targetVersion: '0.1.254', drainingSince: '2026-11-12T09:58:00.000Z' },
+  );
+  assert.deepEqual(
+    sanitizeRunnerSelfUpdate({
+      state: 'waitingForIdle',
+      phase: 'draining',
+      targetVersion: 7,
+      availableSince: 'an hour ago',
+      drainingSince: '2026-11-12T09:58:00Z',
+      postponedUntil: null,
+      turnsInFlight: 1.5,
+      turnsAtDrain: -3,
+    }),
+    { state: 'waitingForIdle', phase: 'draining', drainingSince: '2026-11-12T09:58:00.000Z' },
+  );
+  assert.equal(
+    sanitizeRunnerSelfUpdate({ state: 'enabled', phase: 'restarting', targetVersion: 'v'.repeat(500) })?.targetVersion?.length,
+    64,
+  );
 });

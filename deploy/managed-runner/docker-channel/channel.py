@@ -4,8 +4,8 @@
 docs/managed-runner-design.md, "Implementation record: Docker backend", and this directory's
 README. The apiserver's Docker backend (src/apiserver/src/managed-runners/docker-backend.ts) never
 holds the Docker socket: it reaches Docker only through this process, a small HTTP service on a
-local unix socket (or a loopback port) that requires a bearer token and offers exactly what a
-managed runner needs:
+local unix socket (or a loopback port, or a private address for the peers it names) that requires a
+bearer token and offers exactly what a managed runner needs:
 
   volumes      create, read and remove a runner's data volume; what still holds one
   credentials  keep the runner credential of one generation until its container starts
@@ -57,6 +57,7 @@ import hmac
 import http.client
 import http.server
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -197,13 +198,7 @@ def parse_config(value):
          "must name the dedicated network managed runners join (never host, none or the default bridge)")
     need("stopGraceSeconds", lambda v: positive(v, 3600), "must be an integer from 1 to 3600")
     need("diskCheckSeconds", lambda v: positive(v, 86400) and v >= 10, "must be an integer from 10 to 86400")
-    listen = value.get("listen")
-    if not isinstance(listen, dict) or len(listen) != 1 or not (
-            ("unixSocket" in listen and absolute(listen["unixSocket"]))
-            or ("tcp" in listen and isinstance(listen["tcp"], dict)
-                and listen["tcp"].get("host") in ("127.0.0.1", "::1")
-                and positive(listen["tcp"].get("port"), 65535))):
-        problems.append("listen must be {\"unixSocket\": <absolute path>} or {\"tcp\": {\"host\": \"127.0.0.1\" or \"::1\", \"port\": <port>}}")
+    problems.extend(listen_problems(value.get("listen"), absolute, positive))
     limits = value.get("limits")
     limit_keys = ("maxCpuMillis", "maxMemoryBytes", "maxPids", "maxTmpBytes", "maxVolumeBytes", "maxConcurrent")
     if not isinstance(limits, dict) or not set(limit_keys) <= set(limits) <= {*limit_keys, "maxContainers"} or not all(
@@ -239,6 +234,53 @@ def parse_config(value):
     config.setdefault("logMaxFiles", 3)
     config.setdefault("allowVolumeRemoval", False)
     return config
+
+
+# The private ranges a TCP listener other than loopback may bind, and its peers may come from (D1 of
+# docs/managed-runner-remote-host-design.md): never 0.0.0.0, never a public address.
+PRIVATE_NETWORKS = tuple(ipaddress.IPv4Network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"))
+LOOPBACK_HOSTS = ("127.0.0.1", "::1")
+
+
+def private_ipv4(text):
+    """The address if text is one IPv4 address, written canonically, in a private range; otherwise None."""
+    try:
+        address = ipaddress.IPv4Address(text) if isinstance(text, str) else None
+    except ValueError:
+        return None
+    if address is None or str(address) != text or not any(address in network for network in PRIVATE_NETWORKS):
+        return None
+    return address
+
+
+def listen_problems(listen, absolute, positive):
+    shape = ("listen must be {\"unixSocket\": <absolute path>}, {\"tcp\": {\"host\": \"127.0.0.1\" or \"::1\", \"port\": <port>}}, "
+             "or {\"tcp\": {\"host\": <one private IPv4 address of this host>, \"port\": <port>}, \"allowPeers\": [<IPv4 addresses>]}")
+    if not isinstance(listen, dict):
+        return [shape]
+    if set(listen) == {"unixSocket"}:
+        return [] if absolute(listen["unixSocket"]) else [shape]
+    if not ("tcp" in listen and set(listen) <= {"tcp", "allowPeers"} and isinstance(listen["tcp"], dict)
+            and positive(listen["tcp"].get("port"), 65535)):
+        return [shape]
+    host, problems = listen["tcp"].get("host"), []
+    if host not in LOOPBACK_HOSTS and private_ipv4(host) is None:
+        problems.append(f"listen.tcp.host {host!r} is refused: give 127.0.0.1, ::1 or one private IPv4 address of this host "
+                        "(10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 or 100.64.0.0/10), never 0.0.0.0 or a public address")
+    if "allowPeers" in listen:
+        peers = listen["allowPeers"]
+        if not isinstance(peers, list) or not peers:
+            problems.append("listen.allowPeers must be a non-empty list of the IPv4 addresses allowed to connect")
+        elif host == "::1":
+            problems.append("listen.allowPeers lists IPv4 addresses and cannot be given with listen.tcp.host ::1")
+        else:
+            wrong = [peer for peer in peers if peer != "127.0.0.1" and private_ipv4(peer) is None]
+            if wrong:
+                problems.append(f"listen.allowPeers may hold only private IPv4 addresses (10.0.0.0/8, 172.16.0.0/12, "
+                                f"192.168.0.0/16, 100.64.0.0/10) or 127.0.0.1, written plainly; refused: {json.dumps(wrong)}")
+    elif host not in LOOPBACK_HOSTS:
+        problems.append(f"listen.allowPeers is required with listen.tcp.host {host}: name the IPv4 addresses allowed to connect")
+    return problems
 
 
 def default_max_containers(info):
@@ -1496,8 +1538,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.close_connection = True
 
 
+# socketserver listens with a backlog of 5. A burst of more simultaneous connects than that is refused at once on a
+# unix socket (connect() fails with EAGAIN; a TCP peer retries its SYN after a second): the apiserver's own bursts,
+# and several managers sharing one channel host. The kernel caps this at net.core.somaxconn.
+LISTEN_BACKLOG = socket.SOMAXCONN
+
+
 class UnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
+    request_queue_size = LISTEN_BACKLOG
 
     def get_request(self):
         request, _ = super().get_request()
@@ -1506,6 +1555,15 @@ class UnixServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
 class TcpServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
+    request_queue_size = LISTEN_BACKLOG
+    allow_peers = None  # a frozenset of source addresses where listen.allowPeers is given; None lets any through
+
+    def verify_request(self, request, client_address):
+        """Close a connection from an address outside listen.allowPeers before a byte of it is read."""
+        if self.allow_peers is None or client_address[0] in self.allow_peers:
+            return True
+        log(f"refused a connection from {client_address[0]}: not in listen.allowPeers")
+        return False
 
 
 def make_server(config, channel):
@@ -1529,6 +1587,8 @@ def make_server(config, channel):
         if ":" in tcp["host"]:
             server_class = type("TcpServer6", (TcpServer,), {"address_family": socket.AF_INET6})
         server = server_class((tcp["host"], tcp["port"]), Handler)
+        if "allowPeers" in listen:
+            server.allow_peers = frozenset(listen["allowPeers"])
     server.channel = channel
     return server
 
@@ -1562,6 +1622,8 @@ def serve(config_path, disk_probe_path=None):
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
     where = config["listen"].get("unixSocket") or f"{config['listen']['tcp']['host']}:{config['listen']['tcp']['port']}"
+    if "allowPeers" in config["listen"]:
+        where += f" for {', '.join(config['listen']['allowPeers'])} only"
     log(f"instance {config['instanceId']} serving on {where}; image {config['image']}, network {config['network']}")
     try:
         server.serve_forever(poll_interval=0.5)

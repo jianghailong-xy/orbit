@@ -42,6 +42,8 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
     public let selfUpdate: RunnerSelfUpdate?
     public let minFreeDiskMb: Int?
     public let engines: [RunnerEngineHealth]?
+    /// The engine update warnings dismissed on it, by engine (`Runner.engineUpdateDismissals`).
+    public let engineUpdateDismissals: [String: String]?
     public let planUsage: PlanUsage?
     /// Where its Claude connection last came out (`Runner.region`); nil for one that doesn't check.
     public let region: RunnerRegionView?
@@ -58,6 +60,7 @@ public struct RunnerAttentionRunner: Decodable, Equatable, Sendable {
         selfUpdate = runner.selfUpdate
         minFreeDiskMb = runner.minFreeDiskMb
         engines = runner.engines
+        engineUpdateDismissals = runner.engineUpdateDismissals
         planUsage = runner.planUsage
         region = runner.region
     }
@@ -371,8 +374,24 @@ public enum RunnerAttention {
     /// `pinned` is an engine Orbit keeps on one build rather than the newest (Cursor CLI, whose version a
     /// runner release moves): its routine note says so, since "checked" alone would read as "and it is
     /// the latest" (web `updateNoteOf`).
+    /// `dismissed` is the release this engine's warning was dismissed against on the runner
+    /// (`Runner.engineUpdateDismissals`): while it is still `update.latest` the warning goes quiet, with
+    /// the drift kept on the version line (`13d behind 0.169.0 · warning dismissed`); a newer latest no
+    /// longer matches, and warns again.
     public static func updateNoteOf(_ update: RunnerEngineUpdate?, nowMs: Int64,
-                                    pinned: Bool = false) -> RunnerEngineUpdateNote? {
+                                    pinned: Bool = false, dismissed: String? = nil) -> RunnerEngineUpdateNote? {
+        let note = undismissedUpdateNoteOf(update, nowMs: nowMs, pinned: pinned)
+        if let note, note.tone == .warn, let dismissed, !dismissed.isEmpty, update?.latest == dismissed {
+            return RunnerEngineUpdateNote(tone: .quiet, text: note.text + ENGINE_UPDATE_WARNING_DISMISSED)
+        }
+        return note
+    }
+
+    /// What the version line adds after the drift once its warning is dismissed.
+    public static let ENGINE_UPDATE_WARNING_DISMISSED = " · warning dismissed"
+
+    private static func undismissedUpdateNoteOf(_ update: RunnerEngineUpdate?, nowMs: Int64,
+                                                pinned: Bool) -> RunnerEngineUpdateNote? {
         guard let update else { return nil }
         if update.status == "skipped" {
             return RunnerEngineUpdateNote(tone: .quiet, text: "not auto-updated")
@@ -492,7 +511,7 @@ public enum RunnerAttention {
     /// it has a workspace yet (web's `noCliSignedIn`). Nil when one is signed in or its sign-in is unknown,
     /// when none is installed, and when a workspace runs on a key: that machine runs without any sign-in,
     /// so a signed-out login is news only to the workspaces on it (`signedOutItems`). Settings counts the
-    /// machine by the same answer (`Infrastructure.attention`).
+    /// machine by the same answer (`MachinesAndModels.attention`).
     ///
     /// A signed-out Claude Code on a machine blocked for the Claude region (`region`) is no CLI to sign
     /// in: Orbit won't start a Claude sign-in there, and the region's own item says why.
@@ -790,12 +809,15 @@ public enum RunnerAttention {
         }
     }
 
-    /// An installed CLI whose update note is a warning (`updateNoteOf`).
+    /// An installed CLI whose update note is a warning (`updateNoteOf`) — not one whose warning was
+    /// dismissed against the release that is still the latest (`engineUpdateDismissals`).
     private static func engineUpdateItems(_ runner: RunnerAttentionRunner, nowMs: Int64) -> [RunnerAttentionItem] {
         reportedEngines.compactMap { engine, cliName in
             guard let health = runner.engines?.first(where: { $0.engine == engine }),
                   health.installed == true,
-                  let note = updateNoteOf(health.update, nowMs: nowMs), note.tone == .warn else { return nil }
+                  let note = updateNoteOf(health.update, nowMs: nowMs,
+                                         dismissed: runner.engineUpdateDismissals?[engine]),
+                  note.tone == .warn else { return nil }
             let summary = RunnerPageCopy.attentionEngineUpdateFailed(engine: cliName)
             return RunnerAttentionItem(
                 kind: .engineNotUpdating, tone: .warn, short: summary, title: summary,

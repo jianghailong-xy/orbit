@@ -76,7 +76,10 @@ import { FeishuController } from '../feishu/feishu.controller';
 // says otherwise". An allowlist would let a param nobody classified through unchecked. UUID
 // exceptions are route-specific below: a generic `requestId` exemption would also silently exempt
 // future public request-row addresses.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part', 'revision', 'key']);
+// `week` is a Monday, YYYY-MM-DD (GET /attachments/usage/weeks/:week/files), checked as a date by its route.
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version', 'account', 'slug', 'engine', 'part', 'revision', 'key', 'requestId', 'week']);
+// `requestId` is the client's own idempotency key for a main checkout action (POST /workspaces/:id/main-checkout/
+// actions/:requestId/cancel), looked up only by (the caller, requestId) — never a row's id.
 // `part` is an article's number within its topic (0 the article or overview, 1… its subtopic
 // parts): GET /wiki/spaces/:id/articles/:slug/:part, an integer ParseIntPipe guards.
 // `engine` is a provider name (`claude`, `codex`), the engine whose account store a removal is

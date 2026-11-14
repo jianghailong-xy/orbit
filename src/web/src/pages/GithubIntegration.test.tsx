@@ -20,7 +20,7 @@ vi.mock('../lib/toast', () => ({ useToast: () => toast }));
 const { api } = await import('../api');
 const { GithubAppCard, githubConnectedText } = await import('./GithubAppCard');
 const { GithubIntegrationPage, disconnectWarning } = await import('./GithubIntegrationPage');
-const { githubConnectedSummary, installationText, installationSettingsUrl } = await import('../lib/githubIntegration');
+const { installationText, installationSettingsUrl } = await import('../lib/githubIntegration');
 
 let admin: GithubAppSettings;
 let integration: GithubIntegration;
@@ -136,8 +136,7 @@ describe('Admin → Integrations → GitHub App', () => {
 });
 
 describe('Settings → Integrations → GitHub', () => {
-  it('summarises the connection as the Settings row does', () => {
-    expect(githubConnectedSummary(connected)).toBe('@octo-dev · 14 repositories in 2 accounts');
+  it('describes each installation and where it is configured', () => {
     expect(installationText(connected.installations![0])).toBe('Personal account · 3 selected repositories');
     expect(installationText(connected.installations![1])).toBe('Organization · All repositories (11)');
     expect(installationSettingsUrl(connected.installations![1])).toBe('https://github.com/organizations/orbit-labs/settings/installations/72');

@@ -9,7 +9,12 @@ package main
 // a test times a stretch of reasoning against. On the same prompt the child also writes the
 // main agent's wire (turn.prompt + turn.ended) under the KIMI_CODE_HOME it was spawned with —
 // through the overlay's sessions link, so it lands in the account home the runner reads the
-// turn's outcome from (kimiTurnUsageLimit).
+// turn's outcome from (kimiTurnUsageLimit). A wires.json beside the script, when there is one,
+// is the records each prompt appends instead, the nth prompt the nth entry (the last one past
+// its end); prompts.json counts the prompts the fake was sent. An ownturn.json ({"ms": N}) has
+// the fake open a turn of its own as a session resumes and end it N ms later, as kimi 2.6.0 does
+// for a background task its previous process lost: a prompt sent meanwhile is answered end_turn at
+// once with nothing streamed, and runs — on the wire only — when that turn ends.
 
 import (
 	"bufio"
@@ -17,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -36,6 +42,22 @@ func runFakeKimiACP(dir string) int {
 	var updates []map[string]interface{}
 	if data, err := os.ReadFile(filepath.Join(dir, "script.json")); err == nil {
 		_ = json.Unmarshal(data, &updates)
+	}
+	var wires [][]map[string]interface{}
+	if data, err := os.ReadFile(filepath.Join(dir, "wires.json")); err == nil {
+		_ = json.Unmarshal(data, &wires)
+	}
+	var ownTurn struct{ Ms int }
+	if data, err := os.ReadFile(filepath.Join(dir, "ownturn.json")); err == nil {
+		_ = json.Unmarshal(data, &ownTurn)
+	}
+	home := os.Getenv("KIMI_CODE_HOME")
+	var mu sync.Mutex // the wire, and what is queued behind the fake's own turn
+	ownOpen, queued := false, false
+	prompts := 0
+	countPrompt := func() {
+		prompts++
+		_ = os.WriteFile(filepath.Join(dir, "prompts.json"), []byte(fmt.Sprint(prompts)), 0o644)
 	}
 	out := bufio.NewWriter(os.Stdout)
 	write := func(msg map[string]interface{}) {
@@ -65,7 +87,40 @@ func runFakeKimiACP(dir string) int {
 		case "authenticate", "session/set_config_option":
 		case "session/new", "session/resume":
 			result["sessionId"] = fakeKimiACPSession
+			// Kimi makes the session's directory as it opens it, before any prompt.
+			writeFakeKimiACPWire(home, []map[string]interface{}{})
+			if method == "session/resume" && ownTurn.Ms > 0 {
+				mu.Lock()
+				ownOpen = true
+				writeFakeKimiACPWire(home, []map[string]interface{}{{"type": "turn.prompt", "agentId": "main", "turnId": 50,
+					"origin": map[string]interface{}{"kind": "task", "status": "lost"}}})
+				mu.Unlock()
+				go func() {
+					time.Sleep(time.Duration(ownTurn.Ms) * time.Millisecond)
+					mu.Lock()
+					defer mu.Unlock()
+					ownOpen = false
+					writeFakeKimiACPWire(home, []map[string]interface{}{{"type": "turn.ended", "agentId": "main", "turnId": 50, "reason": "completed"}})
+					if queued {
+						writeFakeKimiACPWire(home, []map[string]interface{}{
+							{"type": "turn.prompt", "agentId": "main", "turnId": 51, "origin": map[string]interface{}{"kind": "user"}},
+							{"type": "context.append_loop_event", "agentId": "main", "event": map[string]interface{}{
+								"type": "content.part", "turnId": "51", "part": map[string]interface{}{"type": "text", "text": "ran after the own turn"}}},
+							{"type": "turn.ended", "agentId": "main", "turnId": 51, "reason": "completed"},
+						})
+					}
+				}()
+			}
 		case "session/prompt":
+			mu.Lock()
+			if ownOpen {
+				queued = true
+				countPrompt()
+				mu.Unlock()
+				result["stopReason"] = "end_turn"
+				break
+			}
+			mu.Unlock()
 			for _, update := range updates {
 				if ms := update["sleepMs"]; ms != nil {
 					if f, ok := ms.(float64); ok {
@@ -82,7 +137,14 @@ func runFakeKimiACP(dir string) int {
 					},
 				})
 			}
-			writeFakeKimiACPWire(os.Getenv("KIMI_CODE_HOME"))
+			var records []map[string]interface{}
+			if len(wires) > 0 {
+				records = wires[min(prompts, len(wires)-1)]
+			}
+			mu.Lock()
+			countPrompt()
+			writeFakeKimiACPWire(home, records)
+			mu.Unlock()
 			result["stopReason"] = "end_turn"
 		default:
 			write(map[string]interface{}{
@@ -97,9 +159,10 @@ func runFakeKimiACP(dir string) int {
 	return 0
 }
 
-// writeFakeKimiACPWire writes the records the runner reads the turn's outcome from. state.json
-// is what makes the session's directory real to kimiSessionDirIn.
-func writeFakeKimiACPWire(home string) {
+// writeFakeKimiACPWire appends the records the runner reads the turn's outcome from — a turn that
+// completed when records is nil. state.json is what makes the session's directory real to
+// kimiSessionDirIn.
+func writeFakeKimiACPWire(home string, records []map[string]interface{}) {
 	if home == "" {
 		return
 	}
@@ -109,9 +172,11 @@ func writeFakeKimiACPWire(home string) {
 		return
 	}
 	_ = os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{}`), 0o600)
-	records := []map[string]interface{}{
-		{"type": "turn.prompt", "agentId": "main", "turnId": "t-1"},
-		{"type": "turn.ended", "agentId": "main", "turnId": "t-1", "reason": "completed"},
+	if records == nil { // nil, not empty: an empty list writes no records
+		records = []map[string]interface{}{
+			{"type": "turn.prompt", "agentId": "main", "turnId": "t-1"},
+			{"type": "turn.ended", "agentId": "main", "turnId": "t-1", "reason": "completed"},
+		}
 	}
 	var wire []byte
 	for _, rec := range records {
@@ -121,12 +186,46 @@ func writeFakeKimiACPWire(home string) {
 			wire = append(wire, '\n')
 		}
 	}
-	_ = os.WriteFile(filepath.Join(wireDir, "wire.jsonl"), wire, 0o600)
+	f, err := os.OpenFile(filepath.Join(wireDir, "wire.jsonl"), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return
+	}
+	_, _ = f.Write(wire)
+	_ = f.Close()
 }
 
 type fakeKimiEngine struct {
 	t   *testing.T
 	Dir string // holds the `kimi` shim; prepend to PATH to have it spawned as the CLI
+	rec string // the fake's own files: script.json, wires.json, prompts.json
+}
+
+// withWires has the nth prompt append wires[n] to the main agent's wire (the last entry past the end).
+func (f *fakeKimiEngine) withWires(wires ...[]map[string]interface{}) *fakeKimiEngine {
+	f.t.Helper()
+	data, err := json.Marshal(wires)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.rec, "wires.json"), data, 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	return f
+}
+
+// withOwnTurn has the fake open a turn of its own as the session resumes, ending it after ms.
+func (f *fakeKimiEngine) withOwnTurn(ms int) *fakeKimiEngine {
+	f.t.Helper()
+	if err := os.WriteFile(filepath.Join(f.rec, "ownturn.json"), []byte(fmt.Sprintf(`{"ms":%d}`, ms)), 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	return f
+}
+
+// prompts is how many session/prompt requests the fake was sent.
+func (f *fakeKimiEngine) prompts() string {
+	data, _ := os.ReadFile(filepath.Join(f.rec, "prompts.json"))
+	return string(data)
 }
 
 // newFakeKimi writes a `kimi` shim streaming the scripted session/update entries on each
@@ -157,5 +256,5 @@ func newFakeKimiEngine(t *testing.T, updates ...map[string]interface{}) *fakeKim
 	if err := os.WriteFile(filepath.Join(binDir, "kimi"), []byte(shim), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return &fakeKimiEngine{t: t, Dir: binDir}
+	return &fakeKimiEngine{t: t, Dir: binDir, rec: rec}
 }

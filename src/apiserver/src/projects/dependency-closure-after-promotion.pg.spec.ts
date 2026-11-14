@@ -22,7 +22,7 @@ import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
 import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
-import { decideSessionSource } from './session-source';
+import { decideSessionSource, SESSION_SOURCE_TASK_SELECT } from './session-source';
 
 /**
  * P4's dependency closure right after a prerequisite was promoted into upstream, driven against a
@@ -208,10 +208,7 @@ async function dependentOf(stack: Stack, ids: World, prerequisiteId: string, tit
 async function resolvedSource(stack: Stack, taskId: string) {
   const row = await stack.db.task.findUniqueOrThrow({
     where: { id: taskId },
-    select: {
-      id: true, projectId: true, verifiesTaskId: true, pinnedRevision: true, codeless: true,
-      attemptGeneration: true, knownGoodSha: true,
-    },
+    select: SESSION_SOURCE_TASK_SELECT,
   });
   return await decideSessionSource(stack.prisma, row);
 }

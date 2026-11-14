@@ -796,10 +796,11 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
     assert.equal((await answerTurns(stack, w.coordinatorSessionId)).length, 1);
   });
 
-  await t.test('(h) after a rotation the new coordinator receives the answer too', async () => {
+  await t.test('(h) after a rotation the new coordinator receives the answers it still needs', async () => {
     const w = await asked(stack, owner, 'rotation');
-    // Two questions, for the two conditions R11 redelivers on: one still blocks a task nobody has
-    // settled, and one blocks nothing but was asked by the conversation this rotation replaces.
+    // Three questions. One still blocks a task nobody has settled; one blocks nothing and its asker
+    // read the answer; one blocks nothing and was answered while nobody coordinated, so its asker
+    // never read it. R11 redelivers the first and the third.
     const blocking = await ask(w, w.coordinatorSessionId, {
       question: QUESTION,
       options: OPTIONS,
@@ -812,10 +813,18 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
       question: 'Should this project keep its integration line after the last task lands?',
       clientQuestionId: 'standalone',
     });
+    const unread = await ask(w, w.coordinatorSessionId, {
+      question: 'Should the release notes name the integration line?',
+      clientQuestionId: 'unread',
+    });
     await answer(w, blocking.itemId, { option: 1 });
     await answer(w, standalone.itemId, { text: 'keep it' });
     assert.equal((await answerTurns(stack, w.coordinatorSessionId)).length, 2,
       'the conversation that asked is told both answers while it is still the coordinator');
+    await sql.query(`UPDATE "project" SET "coordinator_session_id" = NULL WHERE "id" = $1::uuid`, [w.projectId]);
+    await answer(w, unread.itemId, { text: 'no' });
+    assert.equal((await answerTurns(stack, w.coordinatorSessionId)).length, 2,
+      'an answer given while nobody coordinates reaches nobody');
 
     const next = await coordinatorConversation(stack, owner, 'rotation-2');
     await sql.query(
@@ -827,24 +836,42 @@ test('the coordinator asks the owner, and the answer reaches the coordinator of 
     await doors.deliverOwed!.call(items, w.projectId, w.coordinatorSessionId);
 
     const arrived = await answerTurns(stack, next);
-    assert.equal(arrived.length, 2,
-      'both answers reach the conversation that coordinates the project now (§5.2 R11)');
     assert.deepEqual(arrived.map((turn) => turn.clientTurnId).sort(), [
       `owner-answer:v1:${blocking.itemId}:${next}`,
-      `owner-answer:v1:${standalone.itemId}:${next}`,
-    ].sort(), 'each keyed by the generation it was delivered to, so no generation reads one twice');
+      `owner-answer:v1:${unread.itemId}:${next}`,
+    ].sort(), 'the answer still blocking work and the one its asker never read reach the new '
+      + 'coordinator (§5.2 R11), each keyed by the generation it was delivered to');
     assert.ok(arrived.some((turn) => turn.content.includes(OPTIONS[1]!.label)));
-    assert.ok(arrived.some((turn) => turn.content.includes('keep it')));
-    assert.equal((await answerTurns(stack, w.coordinatorSessionId)).length, 2,
-      'and the conversation that already had them is not written to a second time');
+    assert.ok(!arrived.some((turn) => turn.content.includes('keep it')),
+      'an answer its asker already read, blocking nothing, is not replayed');
+    const told = await answerTurns(stack, w.coordinatorSessionId);
+    assert.equal(told.length, 2, 'and the conversation that already had them is not written to a second time');
+    const { resolvedAt: askerWords } = await stack.db.projectOpenItem.findUniqueOrThrow({
+      where: { id: standalone.itemId }, select: { resolvedAt: true },
+    });
+    assert.ok(told.some((turn) => turn.content === 'From Orbit · owner answer: you asked '
+      + `"Should this project keep its integration line after the last task lands?". `
+      + `The owner answered: keep it (${askerWords!.toISOString()}).`),
+      'the conversation that asked is told in the words it always was, byte for byte');
+    const byItem = (itemId: string) => arrived.find((turn) => turn.clientTurnId.includes(itemId))!.content;
+    for (const itemId of [blocking.itemId, unread.itemId]) {
+      assert.match(byItem(itemId), /^From Orbit · owner answer: a previous coordinator of this project asked "/,
+        'the new coordinator did not ask, so it is not told it did');
+      assert.ok(!byItem(itemId).includes('you asked'));
+    }
+    assert.ok(byItem(blocking.itemId).endsWith(' That question still blocks unfinished tasks.'),
+      'the answer to a question holding up an open task says so');
+    assert.ok(byItem(unread.itemId).endsWith(' That question no longer blocks any unfinished task.'),
+      'and one that blocks nothing says that');
 
     await doors.deliverOwed!.call(items, w.projectId, w.coordinatorSessionId);
     assert.equal((await answerTurns(stack, next)).length, 2,
       'running the same edge again sends nothing more');
-    for (const itemId of [blocking.itemId, standalone.itemId]) {
-      assert.deepEqual((await deliveriesOf(stack, itemId)).map((row) => row.session_id).sort(),
-        [w.coordinatorSessionId, next].sort(), 'one delivery per item per generation');
-    }
+    assert.deepEqual((await deliveriesOf(stack, blocking.itemId)).map((row) => row.session_id).sort(),
+      [w.coordinatorSessionId, next].sort(), 'one delivery per item per generation');
+    assert.deepEqual((await deliveriesOf(stack, standalone.itemId)).map((row) => row.session_id),
+      [w.coordinatorSessionId]);
+    assert.deepEqual((await deliveriesOf(stack, unread.itemId)).map((row) => row.session_id), [next]);
   });
 });
 

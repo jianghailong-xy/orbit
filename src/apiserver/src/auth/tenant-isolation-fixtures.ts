@@ -663,6 +663,15 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     })).id;
     const feishuChatRouteId = await feishuChatRoute('group');
     const spareFeishuChatRouteId = await feishuChatRoute('spare-group');
+    // Two other accounts invited to reply in the session (docs/session-guests-design.md): one the owner invites again, one
+    // the owner's remove takes out.
+    const guest = async (label: string) => {
+      const invited = await account(`${name}-${label}`, 'MEMBER');
+      await db.sessionGuest.create({ data: { sessionId, ownerId, userId: invited.userId } });
+      return invited;
+    };
+    const guestEmail = (await guest('guest')).email;
+    const spareGuestUserId = (await guest('guest-spare')).userId;
 
     const purgedSessionId = await session(ownerId, workspaceId, runnerId, `${name} trashed session`);
     await db.session.update({ where: { id: purgedSessionId }, data: { deletedAt: new Date() } });
@@ -747,6 +756,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       wikiPlanCardId,
       wikiTopicSlug: 'census',
       feishuChatRouteId,
+      guestEmail,
       adminSubjectId: adminSubject.userId,
       adminSubjectTokenId,
       adminProviderId: await adminProvider(`${name}-admin-provider`),
@@ -757,6 +767,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         agentId: await workspace(ownerId, runnerId, `${name}-spare-agent`),
         workspaceId: await workspace(ownerId, runnerId, `${name}-spare-workspace`),
         attachmentId: await attachment(),
+        // Its own, because the owner's delete from Settings → Storage really removes it.
+        storedFileId: await attachment(),
         projectId: await project(`${name} spare project`),
         providerId: await provider(`${name}-spare-provider`),
         poolId: idOf(await as('POST', '/providers/pools', { label: `${name} spare pool` }), 'a spare pool'),
@@ -773,6 +785,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         tagId: idOf(await as('POST', '/session-tags', { name: `${name} spare tag`, color: '#663399' }), 'a spare tag'),
         shareLinkId,
         feishuChatRouteId: spareFeishuChatRouteId,
+        guestUserId: spareGuestUserId,
         listId: idOf(await as('POST', '/task-lists', { title: `${name} spare list` }), 'a spare list'),
         taskId: await task(`${name} spare task`),
       },

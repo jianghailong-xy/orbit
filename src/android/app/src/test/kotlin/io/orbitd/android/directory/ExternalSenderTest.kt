@@ -19,6 +19,7 @@ class ExternalSenderTest {
     private val now = Instant.parse("2026-11-08T10:00:00Z")
     private val ask = "Can you also check why the export **failed last night**?"
     private fun feishu(name: String? = "Li Lei"): JsonElement = buildJsonObject { put("source", "FEISHU"); put("name", name) }
+    private fun guest(name: String? = "Alice Chen"): JsonElement = buildJsonObject { put("source", "ORBIT_GUEST"); put("name", name) }
 
     private fun session(status: String, lastAssistantText: String? = null, lastToolUse: String? = null, lastUserText: String? = ask,
         lastUserFrom: SessionMessageFrom? = null, lastUserFromOrbit: JsonElement? = null, lastUserFromExternal: JsonElement? = feishu(),
@@ -41,6 +42,41 @@ class ExternalSenderTest {
         assertNull(ExternalSender.parse(JsonNull))
         assertNull(ExternalSender.parse(JsonPrimitive("FEISHU")))
         assertNull(ExternalSender.parse(null))
+    }
+
+    /** A guest the owner invited (docs/session-guests-design.md §3) is an Orbit account, which always has a name: one without it is no
+     * guest this build can name (OrbitKit `testReadsAGuestOnlyWithTheirName`). */
+    @Test fun readsAGuestOnlyWithTheirName() {
+        assertEquals(ExternalMessageFrom("Alice Chen", "ORBIT_GUEST"), ExternalSender.parse(guest(" Alice Chen ")))
+        assertNull(ExternalSender.parse(guest(null)))
+        assertNull(ExternalSender.parse(guest("  ")))
+        assertNull(ExternalSender.parse(buildJsonObject { put("source", "ORBIT_GUEST") }))
+        assertNull(ExternalSender.parse(buildJsonObject { put("source", "ORBIT_GUEST"); put("name", 7) }))
+    }
+
+    /** The guest view's own messages (core `GuestTranscript.ownMessages`) are headed `You`, where another guest's say `From <name>`. */
+    @Test fun theReadersOwnMessageIsHeadedYou() {
+        val mine = buildJsonObject { put("source", "ORBIT_READER") }
+        assertEquals(ExternalMessageFrom(null, "ORBIT_READER"), ExternalSender.parse(mine))
+        assertEquals("You", ExternalSender.label(ExternalSender.parse(mine)!!))
+        val rewritten = io.orbitd.android.core.guests.GuestTranscript.ownMessages(listOf(io.orbitd.android.core.realtime.RunEvent("user", 1,
+            buildJsonObject { put("text", "hi"); put("externalSender", guest("Bo")) })), "Bo").single()
+        assertEquals("You", ExternalSender.label(ExternalSender.parse(rewritten.fields["externalSender"])!!))
+    }
+
+    @Test fun theGuestsLabelIsFromAndTheirName() {
+        assertEquals("From Alice Chen", ExternalSender.label(ExternalMessageFrom("Alice Chen", "ORBIT_GUEST")))
+    }
+
+    @Test fun theRowNamesAGuestInsteadOfYou() {
+        val named = SessionLine("From Alice Chen: Can you also check why the export failed last night?", Tone.PREVIEW)
+        assertEquals(named, line(session("RUNNING", "previous reply", lastUserFromExternal = guest())))
+        assertEquals(named, line(session("AWAITING_INPUT", "previous reply", lastUserFromExternal = guest())))
+        assertEquals(named, line(session("FAILED", lastUserFromExternal = guest()), live = false))
+        fun row(extra: String) = Wire.json.decodeFromString(DirectorySession.serializer(), """{"id":"s1","status":"RUNNING","lastUserText":"Fix the build"$extra}""")
+        assertEquals("From Alice Chen: Fix the build", line(row(""","lastUserFromExternal":{"source":"ORBIT_GUEST","name":"Alice Chen"}""")).text)
+        assertEquals("nameless, it reads as the turn always has", "You: Fix the build",
+            line(row(""","lastUserFromExternal":{"source":"ORBIT_GUEST","name":null}""")).text)
     }
 
     @Test fun labelsTheSenderWithItsNameOrFeishuAlone() {

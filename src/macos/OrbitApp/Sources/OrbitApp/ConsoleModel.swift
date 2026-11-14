@@ -169,6 +169,9 @@ final class ConsoleModel {
     private(set) var sessionSourceState: String?
     private(set) var sessionSourceRefusalCode: String?
     private(set) var sessionSourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's line for a run of a task forked from a session, as the detail read words it. Nil on
+    /// any other session.
+    private(set) var sessionForkSource: String?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
 
@@ -298,7 +301,7 @@ final class ConsoleModel {
         if let key = keys?.first(where: { $0.slug == sessionProvider }), let id = key.providerID {
             return api.baseURL.appendingPathComponent("providers/\(id)")
         }
-        let page = api.baseURL.appendingPathComponent("infrastructure")
+        let page = api.baseURL.appendingPathComponent("machines-and-models")
         var keysSection = URLComponents(url: page, resolvingAgainstBaseURL: false)
         keysSection?.fragment = "keys"
         return keysSection?.url ?? page
@@ -441,6 +444,15 @@ final class ConsoleModel {
         let clocks = ReceiptAnchor.Clocks(state.items)
         clocksCache = (stateRevision, clocks)
         return clocks
+    }
+    /// Which sign-in cards and account switches the conversation has moved past, read once per
+    /// published `state` like the clocks above: every row of the transcript asks.
+    @ObservationIgnored private var settlementCache: (revision: Int, settlement: TranscriptSettlement)?
+    var settlement: TranscriptSettlement {
+        if let cached = settlementCache, cached.revision == stateRevision { return cached.settlement }
+        let settlement = TranscriptSettlement(state.items)
+        settlementCache = (stateRevision, settlement)
+        return settlement
     }
     /// Bumped whenever the LOCAL user sends a message from this console. The transcript observes it
     /// to force a scroll to the live tail on send — even when the user had scrolled up to read
@@ -1069,6 +1081,8 @@ final class ConsoleModel {
     /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
     let worktree: WorktreeModel
+    /// The workspace's main checkout as this session reviews and acts on it (card, bar, review sheet).
+    let mainCheckout: MainCheckoutModel
     /// The "Tasks created here" card's own model — see `CreatedTasksModel`. Polled with the stream.
     let createdTasks: CreatedTasksModel
 
@@ -1164,6 +1178,7 @@ final class ConsoleModel {
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
         self.worktree = WorktreeModel(sessionID: sessionID, api: api)
+        self.mainCheckout = MainCheckoutModel(sessionID: sessionID, api: api)
         self.createdTasks = CreatedTasksModel(sessionID: sessionID, api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
@@ -1200,6 +1215,7 @@ final class ConsoleModel {
         // Inert for a draft (its guards see the empty sessionID); real work starts once the created
         // session's live console replaces this one.
         self.worktree = WorktreeModel(sessionID: "", api: api)
+        self.mainCheckout = MainCheckoutModel(sessionID: "", api: api)
         self.createdTasks = CreatedTasksModel(sessionID: "", api: api)
         // Live SSE transport on both macOS and iOS — `URLSessionEventStream` is available on both
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
@@ -1284,6 +1300,7 @@ final class ConsoleModel {
     private func wireWorktree() {
         worktree.isSessionLive = { [weak self] in self?.sessionStatus.isLive ?? false }
         worktree.onOutcome = { [weak self] request in self?.onToast(request) }
+        mainCheckout.onOutcome = { [weak self] request in self?.onToast(request) }
     }
 
     /// Show a fleeting, informational message — the native equivalent of web's `message.success`
@@ -2071,7 +2088,7 @@ final class ConsoleModel {
         case .assistant(let b): return b.isFinalized
         case .thinking(let b):  return b.isFinalized
         case .toolCall(let c):  return c.status != .running
-        case .user, .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic: return true   // the agent still owes a reply
+        case .user, .interrupt, .error, .authError, .autoRetry, .notice, .diagnostic, .mainCheckout: return true   // the agent still owes a reply
         }
     }
 
@@ -2343,6 +2360,9 @@ final class ConsoleModel {
         sessionSourceState = session.sourceState
         sessionSourceRefusalCode = session.sourceRefusalCode
         sessionSourceRefusalDetail = session.sourceRefusalDetail
+        // Only the detail read carries it, and a fork never changes (SR12): a list row's absence
+        // is not taken as its end.
+        if let fork = session.forkSource { sessionForkSource = fork }
         if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a
@@ -4430,6 +4450,9 @@ final class ConsoleModel {
             case .ownerRequest(let requestID):
                 // Answered on its card, by pressing — like the exceptions above.
                 return waiting(pendingOwnerRequests.contains(PublicID.storageKey(requestID)), question: false)
+            case .crossingBatch(let batchID):
+                // Answered on its card, by pressing.
+                return waiting(crossingBatch(batchID)?.isLive == true, question: false)
             }
         }
         // Oldest in the CONVERSATION first — which is not the order these were delivered in, now
@@ -4675,6 +4698,10 @@ final class ConsoleModel {
             reopenConfirmationForANewVersion()
             deliver(.acceptanceConfirmation)
         }
+        // The cross-project requests into this project, one card per batch (`CrossingBatches`).
+        if let rows = try? await api.projectCrossings(projectID: projectID) {
+            adoptCrossings(rows)
+        }
         // A press that arrived before this read now has its row to land on.
         scrollToPendingOwnerItem()
         lastRulerRead = Date()
@@ -4814,6 +4841,41 @@ final class ConsoleModel {
         return true
     }
 
+    /// Move to a follow-up…, from the done card in this conversation. Nil when it moved; otherwise
+    /// the door's own words.
+    func moveCriterion(_ criterionKey: String, _ body: MoveCriterionBody) async -> String? {
+        guard let projectID else { return nil }
+        do {
+            _ = try await api.moveCriterion(projectID: projectID, criterionKey: criterionKey, body)
+        } catch {
+            return APIClient.failureReason(error)
+        }
+        await refreshRulerQuestions(force: true)
+        return nil
+    }
+
+    /// The owner's Confirm sheet, from the done card in this conversation.
+    func confirmCriterion(_ criterionID: String, _ body: ConfirmCriterionBody) async -> String? {
+        guard let projectID else { return nil }
+        do {
+            try await api.confirmCriterion(projectID: projectID, criterionID: criterionID, body)
+        } catch {
+            return APIClient.failureReason(error)
+        }
+        await refreshRulerQuestions(force: true)
+        return nil
+    }
+
+    /// The Confirm sheet's one screenshot.
+    func uploadConfirmationShot(_ data: Data, filename: String, mimeType: String) async throws -> String {
+        try await api.uploadAttachment(sessionID: nil, filename: filename, mimeType: mimeType, data: data)
+    }
+
+    /// The open projects a criterion can move to.
+    func openProjectsForMove() async -> [ProjectSummary] {
+        (try? await api.projects(status: .open)) ?? []
+    }
+
     /// Reopen project, from the receipt — the same status door the project page's menu presses.
     func reopenProject() async {
         guard let projectID else { return }
@@ -4937,6 +4999,69 @@ final class ConsoleModel {
 
     /// The owner requests of this conversation still pending, by storage key.
     private(set) var pendingOwnerRequests: Set<String> = []
+
+    // MARK: cross-project requests into this project
+
+    /// The project's handoffs as last read, both directions; nil while unread.
+    private(set) var crossings: [ProjectCrossing]?
+    /// Batches this process saw with a row still pending, by batch id.
+    private var crossingBatchesSeenLive: Set<String> = []
+    /// Batches pressed in this process, and when.
+    private var crossingBatchesPressedAt: [String: Date] = [:]
+    /// The door's refusal of the last answer sent for a row, by row id.
+    private(set) var crossingRefusals: [String: ProjectCrossings.Refusal] = [:]
+
+    /// The batches asking this project, oldest first.
+    var crossingBatches: [CrossingBatch] {
+        guard let crossings, let projectID else { return [] }
+        return CrossingBatches.batches(crossings, projectID: projectID)
+    }
+
+    func crossingBatch(_ batchID: String) -> CrossingBatch? {
+        crossingBatches.first { $0.id == batchID }
+    }
+
+    func crossingStanding(_ batch: CrossingBatch) -> CrossingBatches.Standing {
+        CrossingBatches.standing(batch, sawLive: crossingBatchesSeenLive.contains(batch.id),
+                                 pressedAt: crossingBatchesPressedAt[batch.id])
+    }
+
+    /// Pressed here, and every row now answered — what lets the review sheet leave.
+    func crossingAnsweredHere(_ batchID: String) -> Bool {
+        crossingBatchesPressedAt[batchID] != nil && crossingBatch(batchID)?.answered == true
+    }
+
+    /// Adopt a handoffs read: remember which batches were seen waiting, and put one card per batch
+    /// where its first row was asked.
+    private func adoptCrossings(_ rows: [ProjectCrossing]) {
+        crossings = rows
+        for batch in crossingBatches {
+            if batch.isLive { crossingBatchesSeenLive.insert(batch.id) }
+            deliver(.crossingBatch(batchID: batch.id), placement: .at(batch.moment))
+        }
+    }
+
+    /// Answer every row of the batch still pending, one decision POST each with its own crossing
+    /// key, through the project page's door. A refused POST keeps the door's refusal on its row;
+    /// the ones taken are not rolled back. Then the handoffs are read again.
+    func decideCrossingBatch(_ batchID: String, _ decision: ProjectCrossingDecision) async {
+        guard let projectID, let batch = crossingBatch(batchID), batch.isLive else { return }
+        let pressedAt = Date()
+        var taken = 0
+        for (row, _) in CrossingBatches.requests(batch, decision) {
+            do {
+                try await api.decideProjectCrossing(projectID: projectID, crossing: row, decision)
+                crossingRefusals[row.id] = nil
+                taken += 1
+            } catch {
+                crossingRefusals[row.id] = ProjectCrossings.refusal(error)
+            }
+        }
+        if taken > 0 { crossingBatchesPressedAt[batchID] = pressedAt }
+        if let rows = try? await api.projectCrossings(projectID: projectID) {
+            adoptCrossings(rows)
+        }
+    }
 
     private func deliver(_ kind: DeliveredDecisionCard.Kind,
                          placement: DeliveredDecisionCard.Placement) {
@@ -5310,6 +5435,14 @@ final class ConsoleModel {
             engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
             deliver(kind)
         }
+        // A revision nobody else can move, offering the owner Restart the task, is drawn on the same
+        // card at the same address: a card that was a question becomes the restart offer in place.
+        for row in EvidenceRestart.rows(queue: queue) {
+            let kind = DeliveredDecisionCard.Kind.evidenceDecision(taskID: row.taskId,
+                                                                   evidenceRevision: row.evidenceRevision)
+            engagedEvidence.insert(DeliveredDecisionCard(kind: kind).id)
+            deliver(kind)
+        }
         // Delivery receipts share the evidence card's address.
         for sent in EvidenceDecisions.sentRows(queue: queue, projectId: projectID) {
             deliver(.evidenceDecision(taskID: sent.taskId, evidenceRevision: sent.evidenceRevision))
@@ -5345,6 +5478,22 @@ final class ConsoleModel {
             statusMessage = "That decision was not recorded — \(APIClient.failureReason(error))."
         }
         await refreshRulerQuestions(force: true)
+    }
+
+    /// Restart the task from a card offering it (`EvidenceRestart`): one Run press, named at the
+    /// gesture. Nil is a start; otherwise the refusal, for the card to show. The read is asked again
+    /// either way: a started task leaves the owner's group, and a refusal means the read moved.
+    func restartFromEvidence(_ row: EvidenceDecisionRow) async -> Error? {
+        var failure: Error?
+        do {
+            _ = try await api.restartTaskFromEvidence(taskID: row.taskId,
+                                                      evidenceRevision: row.evidenceRevision,
+                                                      triggerId: PublicID.newToken())
+        } catch {
+            failure = error
+        }
+        await refreshEvidenceDecisions(force: true)
+        return failure
     }
 
     /// Where this console's read of what one version of evidence cites stands: the card and the page it

@@ -12,4 +12,17 @@
  *
  * In priority order: a session doing more than one of these reports the first.
  */
-export type TaskRunReason = 'TURN' | 'BACKGROUND_JOB' | 'WAITING';
+export type TaskRunReason = SessionActivity;
+
+/**
+ * What any live session is doing, beyond what its `status` says — the same three answers, for every
+ * session and not only one carrying a task. Decided once on the server (`sessionActivitySql` in
+ * `sessions/task-work-carrier.ts`) and sent with the session wherever its state is shown, so no
+ * surface reads AWAITING_INPUT alone as "idle, waiting for a reply": a self-driven turn, a sub-agent,
+ * a `bg_run` job or a wait that will wake it all sit at AWAITING_INPUT too.
+ *
+ * Null when none of them holds: queued or running sessions say so through `status`, and a parked one
+ * with nothing in flight is really waiting on its next message. A `service` left up (a dev server)
+ * does not count — it never ends, so it never wakes anyone.
+ */
+export type SessionActivity = 'TURN' | 'BACKGROUND_JOB' | 'WAITING';

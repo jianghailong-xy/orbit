@@ -661,7 +661,7 @@ test.describe('P4.4 Activity and a run', () => {
 });
 
 test.describe('P4.4 Settings → Shared links', () => {
-  test('tabs, the turn-off questions, share again, loading and a failed read', async ({ evidence }, testInfo) => {
+  test('tabs, the turn-off question, share again, loading and a failed read', async ({ evidence }, testInfo) => {
     const { page, capture } = evidence;
     const fixtures = await installP44Fixtures(page);
     const trace = [];
@@ -676,21 +676,12 @@ test.describe('P4.4 Settings → Shared links', () => {
     hold.release();
     await expect(page.locator('.shared-link-row:not(.is-head)').first()).toBeVisible();
     trace.push({ ...(await observe(page, [fixtures], 'active')), rows: await page.locator('.shared-link-row:not(.is-head) .shared-link-title').allTextContents() });
-    await capture('p44-links', { banner: '.shared-links-banner', list: '.shared-links-list' });
-
-    await button(page.locator('.shared-links-banner'), 'Turn off these 3').click();
-    const batch = question(page, 'Turn off these 3 links?');
-    await expect(batch).toBeVisible();
-    await settled(page);
-    trace.push(await observe(page, [fixtures], 'turn off three'));
-    await capture('p44-links-turn-off-three', { question: batch });
-    await button(batch, 'Turn off').click();
-    await expect(notifications(page).getByText('3 links turned off', { exact: true })).toBeVisible();
-    trace.push(await observe(page, [fixtures], 'three turned off'));
-    await toastsGone(page);
+    await capture('p44-links', { list: '.shared-links-list' });
 
     const row = page.locator('.shared-link-row').filter({ hasText: 'Summarize the latest commits' });
-    await button(row, 'Turn off').click();
+    // Turn off… sits last in the row's ⋯ (docs/mocks/share-links/13-row-buttons).
+    await row.getByRole('button', { name: /^More for / }).click();
+    await item(page, 'Turn off…').click();
     const one = question(page, 'Turn off this link?');
     await expect(one).toBeVisible();
     await settled(page);

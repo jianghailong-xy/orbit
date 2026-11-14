@@ -625,7 +625,10 @@ button.toast--pill:focus-visible {
   flex: 1;
   min-width: 0;
   height: var(--app-vh);
-  overflow: hidden;
+  /* clip, not hidden: a hidden box is still a scroll container, so a scrollIntoView inside it (the
+     sticky `↑` bar's jump to a turn near the tail) scrolled the whole region up once the transcript
+     ran out of room, hiding the header and the list's top under a gap below the composer. */
+  overflow: clip;
 }
 /* A view fills the main region. .app-view--doc adds the page gutter and owns its
    scroll; the bare class is full-bleed (the agent console / runner install guide). */
@@ -695,10 +698,8 @@ button.toast--pill:focus-visible {
   font-weight: 600;
   color: var(--text-1);
 }
-/* The rail's middle: the fixed entries stay put, and under them the groups scroll as one
-   (.tp-lists), unless every workspace and wiki fits with the Projects head still showing under them:
-   then those stay put too and only Projects scrolls (.pin-workspaces, which TasksSidePanel sets from
-   its measurements). */
+/* The rail's middle: the fixed entries stay put, and under them the groups scroll as one (.tp-lists),
+   each group's head held at the top while its rows pass under it. */
 .tp-scroll {
   flex: 1;
   min-height: 0;
@@ -722,30 +723,7 @@ button.toast--pill:focus-visible {
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
-.tp-lists.pin-workspaces {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  scrollbar-gutter: auto;
-}
-.tp-lists.pin-workspaces > * {
-  flex: none;
-}
-.tp-lists.pin-workspaces > .tp-group-workspaces {
-  overflow: hidden;
-  scrollbar-gutter: stable;
-}
-.tp-lists.pin-workspaces > .tp-group-wiki {
-  overflow: hidden;
-  scrollbar-gutter: stable;
-}
-.tp-lists.pin-workspaces > .tp-group-projects {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-}
-.tp-lists.pin-workspaces > .tp-group-projects .tp-group-head {
+.tp-lists .tp-group-head {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -795,6 +773,33 @@ button.toast--pill:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Shared with me (SharedWithMe): two lines — the title and when, then who shared it and how it stands. */
+.tp-item.tp-guest-session {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  height: auto;
+  padding: 6px 8px;
+}
+.tp-guest-session-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.tp-guest-session-time,
+.tp-guest-session-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.tp-guest-session-time {
+  flex: none;
+}
+.tp-guest-session-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 /* Workspace identity and its runner now share one compact line. The runner is secondary metadata:
    it absorbs truncation first, while the workspace name keeps as much room as possible. */
 .tp-workspace-label {
@@ -832,6 +837,19 @@ button.toast--pill:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-3);
+}
+/* With a pointer, the machine shows only on the row pointed at (board docs/mocks/workspace-runner-label,
+   E1): the list reads as names, the hovered row says where it runs, and there the machine stays whole
+   while the name gives way. A touch screen has no hover, so it keeps the machine on every row. */
+@media (hover: hover) and (min-width: 961px) {
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-separator,
+  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {
+    display: none;
+  }
+  .app-shell .app-nav:not(.collapsed) .tp-workspace-runner {
+    flex: none;
+    max-width: 60%;
+  }
 }
 .tp-workspace-icon {
   position: relative;
@@ -1898,50 +1916,6 @@ button.toast--pill:focus-visible {
 }
 
 /* ---- Machines: Infrastructure's machine cards, a machine's page, Add a runner, Rotate token ---- */
-.runners-empty {
-  max-width: 920px;
-  margin: 24px auto 0;
-  color: var(--text-3);
-  font-size: 14px;
-}
-.runner-drag-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 28px;
-  margin-left: -5px;
-  padding: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-4);
-  font-size: 15px;
-  cursor: grab;
-  touch-action: none;
-  flex: none;
-}
-.runner-drag-handle:hover,
-.runner-drag-handle:focus-visible {
-  background: var(--bg-hover-strong);
-  color: var(--text-2);
-  outline: none;
-}
-.runner-drag-handle:active {
-  cursor: grabbing;
-}
-.runner-drag-handle:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-.runner-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
-  align-self: flex-start;
-  margin-top: 5px;
-}
 .runner-sub {
   font-size: 12px;
   color: var(--text-3);
@@ -1970,28 +1944,6 @@ button.toast--pill:focus-visible {
 /* A spent quota window: the whole track red, even where its percent counts what is left and is 0. */
 .runner-util.spent .runner-util-fill {
   background: var(--error-solid);
-}
-/* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
-   triangle stays with its first line. */
-.runner-attention {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin-top: 5px;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-.runner-attention.bad {
-  color: var(--error);
-}
-.runner-attention.warn {
-  color: var(--warning);
-}
-.runner-attention .anticon {
-  flex: none;
-  margin-top: 2.5px;
-  font-size: 11px;
 }
 .runner-token-box {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -2158,34 +2110,9 @@ button.toast--pill:focus-visible {
   text-decoration: underline;
 }
 /* ---- Runner detail / settings page ---- */
-.rd-head {
-  margin-bottom: 8px;
-}
-.rd-back,
-.rd-link {
-  color: var(--text-2);
-  font-size: 13px;
-  cursor: pointer;
-}
-.rd-back:hover,
-.rd-link:hover {
-  color: var(--brand);
-}
-.rd-back .anticon {
-  margin-right: 4px;
-}
-.rd-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 .rd-sub {
   font-size: 13px;
   color: var(--text-3);
-}
-.rd-page {
-  max-width: 920px;
-  margin: 0 auto;
 }
 .rd-section {
   margin-top: 28px;
@@ -2200,31 +2127,6 @@ button.toast--pill:focus-visible {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
-}
-/* A section heading with more than one control: they stay one group at the right edge
-   rather than pushing the title around. */
-.rd-section-actions {
-  display: flex;
-  gap: 8px;
-}
-/* The runner's identity line: status/slots/version/host as one scannable row, so the
-   agent list clears the fold instead of sitting under an eight-field grid. */
-.rd-metaline {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0 8px;
-  margin: 6px 0 0 19px;
-  font-size: 13px;
-  color: var(--text-3);
-}
-.rd-metaline > span + span::before {
-  content: '·';
-  margin-right: 8px;
-  color: var(--text-4);
-}
-.rd-meta-ok {
-  color: var(--success);
 }
 /* Needs Attention: one card per item, under the title and across both columns — two abreast on a
    desktop, one alone taking the row. Amber for a warning, red for what already stops sessions, grey
@@ -2290,19 +2192,277 @@ button.toast--pill:focus-visible {
 }
 .rd-attention-action {
   margin-top: 9px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
-/* The machine's contents on the left, its settings and facts in a narrower column on the right. */
-.rd-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
-  gap: 0 24px;
-  align-items: start;
+/* Dismiss until next <Engine> release, beside Update Engines Now: a link, not a second button. */
+.rd-attention-action .re-link {
+  font-size: 12.5px;
 }
-.rd-col {
+/* Fix with an agent (components/AgentFix.tsx): the line under a card's or an Install failed panel's
+   buttons — where the agent is at work, why none can start, or where it would run. */
+.agent-fix-line {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.re-panel .agent-fix-line {
+  font-size: 11.5px;
+}
+.agent-fix-line.fixing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  color: var(--text-2);
+}
+.agent-fix-row .agent-fix-line.fixing {
+  margin-top: 0;
+}
+.agent-fix-dot {
+  width: 7px;
+  height: 7px;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: var(--accent, #2563eb);
+  flex: none;
+}
+.re-panel-hint.agent-fix-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+/* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
+   holds work back or restarts, plain while work goes on as usual. */
+.rd-update-card {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+.rd-update-card.warn {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+.rd-update-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rd-update-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+.rd-update-tag {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rd-update-card.warn .rd-update-tag {
+  color: var(--warning);
+  font-weight: 500;
+}
+.rd-update-body {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.rd-update-progress-label {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.rd-update-progress {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill-muted);
+  overflow: hidden;
+}
+.rd-update-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--warning);
+}
+/* The turns a drain waits for (board 4): one bordered list, a row each — the session, and how long
+   it has run. */
+/* Update Now…'s confirmation (board 3 ⑧): the turns it interrupts, as the Update card lists them. */
+.runner-update-now p {
+  margin: 0 0 12px;
+}
+.runner-update-now .runner-update-now-jobs {
+  margin: 12px 0 0;
+}
+.runner-update-now-turns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.runner-update-now-turns > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.runner-update-now-turns > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.runner-update-now-turn-title {
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-/* A settings panel: label left, value or control right, hairlines between rows — Capacity and
-   About. */
+.runner-update-now-turn-running {
+  flex: none;
+  color: var(--text-3);
+}
+.rd-update-turns {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.rd-update-turns > li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+.rd-update-turns > li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.rd-update-turns a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+.rd-update-turns a:hover {
+  text-decoration: underline;
+}
+.rd-update-turns span {
+  flex: none;
+  color: var(--text-3);
+}
+/* Later ▾ and Update Now… under the card (board 3 ⑦), and under the queued page's wait. */
+.rd-update-actions,
+.runner-update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.runner-update-actions {
+  justify-content: center;
+}
+.runner-updating-pop .runner-update-actions {
+  justify-content: flex-start;
+}
+/* docs/mocks/runner-update-indicator: a quiet pill left of the header's ⋯ while the runner drains with the
+   reader's work waiting; its popover holds the rest. */
+.runner-update-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.runner-update-pill:hover,
+.runner-update-pill[data-popup-open] {
+  background: var(--bg-hover-strong);
+}
+.runner-update-pill-short {
+  display: none;
+}
+@media (max-width: 640px) {
+  .runner-update-pill { padding: 0 8px; }
+  .runner-update-pill-label { display: none; }
+  .runner-update-pill-short { display: inline; }
+}
+.runner-update-popover {
+  width: 380px;
+  font-size: 13px;
+}
+.runner-update-popover-body,
+.runner-update-popover-waits {
+  margin: 0 0 10px;
+  color: var(--text-2);
+}
+.runner-update-popover-turns {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.runner-update-popover-turns li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.runner-update-popover-turns li:last-child {
+  border-bottom: 0;
+}
+.runner-update-popover-turns a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.runner-update-popover-turns span,
+.runner-update-popover-more {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.runner-update-popover-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.runner-update-popover-open {
+  margin-left: auto;
+}
+/* A Later row: what it does on the left, the clock time on the right in the meta voice. */
+.runner-update-later-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 240px;
+}
+.runner-update-later-time {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+/* A panel with hairlines between its rows: abandoned checkouts. */
 .rd-box {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
@@ -2310,37 +2470,6 @@ button.toast--pill:focus-visible {
 }
 .rd-box > * + * {
   border-top: 1px solid var(--border-subtle);
-}
-.rd-kv,
-.rd-kv-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 13px;
-}
-.rd-kv {
-  min-height: 42px;
-  padding: 7px 14px;
-}
-.rd-kv-label {
-  flex: none;
-  color: var(--text-2);
-}
-.rd-kv-value {
-  min-width: 0;
-  color: var(--text-1);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-.rd-kv-value small {
-  margin-left: 5px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.rd-kv-value small.warn {
-  color: var(--warning);
-  font-weight: 500;
 }
 .rd-inline-link {
   margin-left: 8px;
@@ -2407,16 +2536,13 @@ button.toast--pill:focus-visible {
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
 }
-.rd-engine-relay.bad {
-  background: var(--error-bg);
-  border-color: var(--error-border);
-}
 .rd-engine-relay-row {
   font-size: 12.5px;
   color: var(--text-2);
   white-space: pre-wrap;
 }
-.rd-engine-relay.bad .rd-engine-relay-row {
+/* Only the engines that failed: the card stays neutral, so the lines that were fine read as fine. */
+.rd-engine-relay-row.bad {
   color: var(--error);
   font-weight: 500;
 }
@@ -2424,87 +2550,6 @@ button.toast--pill:focus-visible {
   margin-top: 7px;
   font-size: 11.5px;
   color: var(--text-3);
-}
-.rd-workspace-list {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  overflow: hidden;
-}
-/* One panel with hairline dividers between rows, instead of boxing each row —
-   denser and faster to scan. */
-.rd-workspace-list > * + * {
-  border-top: 1px solid var(--border-subtle);
-}
-/* The row is the click target for its config — the settings it shows are the ones the
-   editor holds, so aiming at the row is the natural move. */
-.rd-workspace-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.rd-workspace-row:hover,
-.rd-workspace-row.is-open {
-  background: var(--bg-hover);
-}
-.rd-workspace-row.is-disabled .rd-workspace-ico {
-  background: var(--fill-muted);
-  color: var(--text-4);
-}
-.rd-workspace-row.is-disabled .rd-workspace-name,
-.rd-workspace-row.is-disabled .rd-workspace-meta {
-  color: var(--text-4);
-}
-/* Quiet by default: the caret appears on hover, or stays while this row's editor is open,
-   so a resting list isn't a column of chevrons. */
-.rd-row-caret {
-  font-size: 11px;
-  color: var(--text-4);
-  opacity: 0;
-  transition:
-    opacity 0.15s ease,
-    transform 0.18s ease;
-}
-.rd-workspace-row:hover .rd-row-caret {
-  opacity: 1;
-}
-.rd-workspace-row.is-open .rd-row-caret {
-  opacity: 1;
-  color: var(--text-2);
-  transform: rotate(180deg);
-}
-.rd-workspace-ico {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--brand-tint);
-  color: var(--brand);
-  flex: none;
-}
-.rd-workspace-main {
-  flex: 1;
-  min-width: 0;
-}
-.rd-workspace-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-1);
-}
-.rd-workspace-meta {
-  font-size: 12px;
-  color: var(--text-3);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 /* Sessions of this workspace running right now — the sidebar's own count. */
 .rd-workspace-running {
@@ -2567,30 +2612,6 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   line-height: 1.55;
 }
-/* In-place agent editor card — replaces the old modal; lives inside the list. */
-.rd-workspace-form {
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  padding: 16px 16px 14px;
-}
-.rd-workspace-form-new {
-  box-shadow: inset 3px 0 0 var(--brand);
-}
-/* Two-column grid for the short fields; long fields below span full width. */
-.rd-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
-}
-.rd-form-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
-}
 /* Section headers inside the editor: Essentials / Defaults, with Advanced folded below. */
 .rd-form-section {
   font-size: 11px;
@@ -2616,11 +2637,6 @@ button.toast--pill:focus-visible {
   font-weight: 500;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
-}
-.rd-dirty-note {
-  font-size: 12px;
-  color: var(--warning);
-  margin-right: 4px;
 }
 /* What the runner last saw at the agent's working directory — answered from its own disk, so a
    typo is caught here instead of when a session fails to start. */
@@ -2688,30 +2704,6 @@ button.toast--pill:focus-visible {
 .rd-history-choice .rd-set-desc {
   display: block;
 }
-.rd-history-removal {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-.rd-quiet-btn.orbit-button {
-  color: var(--text-3);
-}
-.rd-quiet-btn:hover {
-  color: var(--text-1);
-}
-/* Settings-row toggle: label + explanation left, control right-aligned. */
-.rd-set-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 11px 0;
-  border-top: 1px solid var(--border-subtle);
-}
-.rd-set-main {
-  flex: 1;
-  min-width: 0;
-}
 .rd-set-label {
   font-size: 13px;
   color: var(--text-1);
@@ -2721,10 +2713,6 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   margin-top: 3px;
   line-height: 1.5;
-}
-.rd-set-row .orbit-switch {
-  margin-top: 2px;
-  flex: none;
 }
 /* The engines smart selection may move a task run to (model routing §6), under the switch's own
    explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
@@ -2781,44 +2769,6 @@ button.toast--pill:focus-visible {
   font-weight: 400;
   color: var(--text-3);
 }
-/* Advanced disclosure — folded by default, but it has to admit when it hides something. */
-.rd-adv-toggle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  user-select: none;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--text-3);
-  margin-top: 16px;
-  padding: 6px 0;
-}
-.rd-adv-toggle:hover {
-  color: var(--text-1);
-}
-.rd-adv-caret {
-  font-size: 10px;
-  transition: transform 0.18s ease;
-}
-.rd-adv-toggle.open .rd-adv-caret {
-  transform: rotate(180deg);
-}
-.rd-adv-badge {
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--fill-muted);
-  color: var(--text-3);
-}
-.rd-adv-body {
-  padding-top: 6px;
-}
 /* Which Codex account the workspace runs on: each option is the account, with its own quota and
    sign-in on a quieter line under it. */
 .rd-codex-account {
@@ -2830,85 +2780,10 @@ button.toast--pill:focus-visible {
   color: var(--text-3);
   margin-top: 1px;
 }
-@media (max-width: 600px) {
-  .rd-form-grid {
-    grid-template-columns: 1fr;
-  }
-}
-/* A phone's width: one column, in the order the iPhone's runner page reads — Needs Attention,
-   Capacity, Engines, Workspaces, About. The two column boxes step aside (display: contents) so
-   their sections can be ordered as one list. */
+/* A phone's width: Needs Attention's cards one to a row. */
 @media (max-width: 640px) {
   .rd-attention {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .rd-cols {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .rd-col {
-    display: contents;
-  }
-  .rd-capacity {
-    order: 1;
-  }
-  .rd-engines {
-    order: 2;
-  }
-  .rd-workspaces {
-    order: 3;
-  }
-  .rd-about {
-    order: 4;
-  }
-}
-/* Edit-in-place: the clicked row stays as a header and the editor expands below
-   it, the two merged into one bordered card. */
-.rd-workspace-editing {
-  overflow: hidden;
-  box-shadow: inset 3px 0 0 var(--brand);
-}
-.rd-workspace-editing > .rd-workspace-row {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-.rd-workspace-editing > .rd-workspace-form-wrap > .rd-workspace-form {
-  border: none;
-  border-radius: 0;
-  border-top: 1px solid var(--border-subtle);
-}
-/* Create form sits inline at the top of the panel — shed its own card frame too. */
-.rd-workspace-list > .rd-workspace-form-wrap > .rd-workspace-form {
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-/* Expand the editor open: grow its row track 0fr→1fr while fading in, so the
-   rows below slide down smoothly. (Collapse is immediate — React unmounts it.) */
-.rd-workspace-form-wrap {
-  display: grid;
-  grid-template-rows: 1fr;
-  animation: rd-form-expand 0.2s ease;
-}
-.rd-workspace-form-wrap > * {
-  min-height: 0;
-  overflow: hidden;
-}
-@keyframes rd-form-expand {
-  from {
-    grid-template-rows: 0fr;
-    opacity: 0;
-  }
-  to {
-    grid-template-rows: 1fr;
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .rd-workspace-form-wrap {
-    animation: none;
   }
 }
 
@@ -3153,6 +3028,7 @@ button.toast--pill:focus-visible {
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
 .workspace-split {
   display: flex;
+  position: relative;
   height: 100%;
   min-height: 0;
   /* One gutter token drives every horizontal gap. It lives on the panes (.session-col /
@@ -3169,6 +3045,65 @@ button.toast--pill:focus-visible {
   flex-direction: column;
   min-height: 0;
   padding: 24px var(--pane-gutter);
+}
+/* The project column unfolded on demand in a window too narrow for it beside the conversation:
+   it lies over the conversation's right edge rather than squeezing it under 480px. */
+.session-project-column-over {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+}
+/* At phone width the project's sessions page comes up as a bottom sheet over the conversation
+   (owner 2026-11-11, board 5): the shared bottom drawer, rounded on top, its title kept for the
+   reader only (the page head inside draws it), and a grabber that drags it between medium and full. */
+.project-sessions-sheet {
+  border-radius: 14px 14px 0 0;
+  background: var(--bg-raised);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .project-sessions-sheet:not(.dragging) { transition: translate .3s, height .25s; }
+}
+.project-sessions-sheet > .orbit-overlay-header {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  border: 0;
+}
+.project-sessions-sheet > .orbit-overlay-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.project-sessions-sheet-grabber {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 6px;
+  cursor: grab;
+  touch-action: none;
+}
+.project-sessions-sheet-grabber > span {
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--text-4);
+  opacity: 0.6;
+}
+/* Portalled out of .workspace-split, so it sets the phone's pane gutter itself. */
+.project-sessions-sheet-page {
+  --pane-gutter: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--pane-gutter);
 }
 /* Draggable divider between the session list and the conversation. The visible
    1px line matches the old column border; ::before widens the grab area. */
@@ -3465,6 +3400,11 @@ button.toast--pill:focus-visible {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
+/* The title bar's Project sessions button (docs/mocks/project-sessions-column, boards 2-4): a text
+   button, tinted like a selected row while the project column is open, plain grey while it is folded. */
+.workspace-header-project { flex: none; color: var(--text-2); }
+.workspace-header-project[aria-pressed='true'],
+.workspace-header-project[aria-pressed='true']:hover:where(:not(:disabled)) { color: var(--brand); background: var(--brand-tint); }
 .workspace-status-dot {
   width: 9px;
   height: 9px;
@@ -4972,6 +4912,18 @@ button.toast--pill:focus-visible {
     border-radius: 6px;
   }
 }
+/* A project entry is the one focusable session row. Keyboard focus takes the row's hover tint, not a
+   ring: the browser's outer ring is clipped by the list's edge, and an inner one is covered on the
+   right by the kebab's fade. */
+.session-project-row:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
+  --session-menu-surface: var(--bg-hover);
+}
+.session-project-row.active:focus-visible {
+  background: var(--brand-tint-hover);
+  --session-menu-surface: var(--brand-tint-hover);
+}
 /* Trash rows are managed, not opened — no pointer affordance. */
 .session-row.no-open {
   cursor: default;
@@ -5768,6 +5720,13 @@ button.toast--pill:focus-visible {
   color: var(--success);
   font-size: 12px;
 }
+/* People the owner invited can reply here (the row's `hasGuests`): two people beside the time. */
+.session-guests {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
 /* The conversation header's "Shared · Live": says the session is public, and opens its dialog. */
 .session-shared-pill {
   display: inline-flex;
@@ -5966,9 +5925,11 @@ button.toast--pill:focus-visible {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
 }
+/* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --row-bg: var(--bg-hover);
 }
 .session-folder-row.editing {
   height: auto;
@@ -8092,6 +8053,36 @@ button.chat-jump-start:hover {
   line-height: 1;
   color: var(--text-3);
 }
+/* A message its runner's update holds (board 2 ⑤): `Queued · runner updating` in the meta voice,
+   always shown. No colour and no border — the bubble stays the visual centre; the reason is only
+   dotted-underlined, because a press opens why. */
+.chat-runner-updating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-3);
+}
+.chat-runner-updating-reason {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.runner-updating-pop {
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.runner-updating-pop p {
+  margin: 0;
+}
 /* A message the engine never received, at the end of the meta row. Always visible (unlike the
    copy button and time before it): the whole point is that nobody has to hover to find out their
    message did not land. */
@@ -9082,6 +9073,13 @@ button.chat-jump-start:hover {
   font-size: 12px;
   line-height: 1.5;
 }
+/* The one press an owner row offers (Restart the task): its sentence, then its action. */
+.evidence-restart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
 /* A PENDING session before its first event: instead of a lonely top-left note in a
    blank pane, fill the transcript area with a calm, centered "waiting to run" state. */
 .chat-queued-state {
@@ -9133,6 +9131,19 @@ button.chat-jump-start:hover {
   line-height: 1.5;
   color: var(--text-3);
   max-width: 320px;
+}
+
+/* A runner draining for its update (board 2 ②–③): a longer sentence, naming the turns it waits for
+   as links, then how long it has waited. */
+.chat-queued-desc.chat-runner-updating-desc {
+  max-width: 560px;
+}
+.chat-runner-updating-desc a {
+  color: var(--brand);
+}
+.chat-queued-waited {
+  font-size: 13px;
+  color: var(--text-3);
 }
 
 /* An existing conversation can return to PENDING while it waits to reacquire a turn
@@ -9557,6 +9568,38 @@ button.chat-jump-start:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+/* A sign-in card the session has moved past: one muted row, the runtime's words behind it. */
+.chat-notice-settled {
+  color: var(--text-3);
+}
+.chat-authfix-settled {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.chat-authfix-settled > summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.chat-authfix-settled > summary::-webkit-details-marker {
+  display: none;
+}
+.chat-authfix-settled > summary::after {
+  content: '›';
+  margin-left: auto;
+}
+.chat-authfix-settled[open] > summary::after {
+  content: '⌄';
+}
+.chat-authfix-settled-ok {
+  color: var(--success);
 }
 /* Browser-driven runner sign-in, inside the sign-in card. */
 /* No panel of its own: the card is already the container, and buttons are self-delimiting —
@@ -12442,7 +12485,9 @@ button.chat-jump-start:hover {
 }
 .project-done-criteria-list li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  /* number · text · state (decided board ③): the state reads on the right. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
   gap: 8px;
   padding: 7px 10px;
   border-top: 1px solid var(--border-subtle);
@@ -12451,9 +12496,15 @@ button.chat-jump-start:hover {
 }
 .project-done-criteria-list li:first-child { border-top: 0; }
 .project-done-criterion-state {
-  grid-column: 2;
+  grid-column: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+  text-align: right;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 .project-done-gap-list {
   margin: 0;
@@ -12893,6 +12944,42 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   white-space: nowrap;
 }
+/* A provider write's fields: caption and value side by side, so a short write reads as one line. */
+.provider-write-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 18px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+}
+.provider-write-fields > div {
+  display: contents;
+}
+.provider-write-fields dt {
+  color: var(--text-2);
+}
+.provider-write-fields dd {
+  margin: 0;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.provider-write-models li {
+  padding: 4px 0;
+}
+.provider-write-model {
+  color: var(--text-2);
+  text-align: right;
+}
+.provider-write-default {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
 .dag-approval-foot {
   margin: 0;
   color: var(--text-3);
@@ -13244,7 +13331,7 @@ button.chat-jump-start:hover {
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--bg-base);
   font-size: 13.5px;
   cursor: pointer;
 }
@@ -13737,6 +13824,13 @@ button.chat-jump-start:hover {
   margin: -2px 0 6px;
   font-size: 12.5px;
   color: var(--text-3);
+}
+/* Where a task forked from a session took its checkout from, under its meta row. */
+.tdp-fork-source {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  word-break: break-word;
 }
 /* How this row is judged, under its title. One pill either way: the judgment method on a row that
    has its own work, and the plain statement that a gate row has none. */
@@ -15236,6 +15330,203 @@ button.chat-jump-start:hover {
   flex: 1;
 }
 
+/* The task page led by the run (docs/mocks/task-detail-agent-first): Now, Evidence, the folded
+   brief, the plan in a sentence, the envelope as one line, and one Activity timeline. */
+.tdp-compose-target.orbit-segmented {
+  flex: none;
+  align-self: center;
+  font-size: 12px;
+}
+.tdp-link-button {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.tdp-link-button:hover {
+  color: var(--brand-strong);
+}
+.tdp-acceptance-head .tdp-link-button {
+  margin-left: auto;
+}
+.tdp-now {
+  border: 1px solid var(--brand-border);
+  background: var(--brand-tint);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.tdp-now-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tdp-now-who {
+  min-width: 0;
+}
+.tdp-now-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.tdp-now-sub,
+.tdp-now-when {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.tdp-now-progress {
+  margin-top: 10px;
+}
+.tdp-now-step {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 13px;
+}
+.tdp-now-step span {
+  color: var(--text-2);
+}
+.tdp-now-bar {
+  height: 6px;
+  margin: 6px 0;
+  border-radius: 3px;
+  background: var(--brand-tint-hover);
+  overflow: hidden;
+}
+.tdp-now-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand);
+}
+.tdp-now-message {
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--bg-raised);
+  border: 1px dashed var(--brand-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin: 6px 0 4px;
+  overflow-wrap: anywhere;
+}
+.tdp-evidence {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.tdp-evidence.tone-green {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+.tdp-evidence.tone-amber {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.tdp-evidence-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.tdp-evidence-claim {
+  margin: 8px 0 4px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tdp-evidence-checks {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.tdp-evidence-checks li {
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+.tdp-evidence-mark {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  color: var(--success);
+  font-weight: 700;
+}
+.tdp-evidence-mark.is-failed {
+  color: var(--error);
+}
+.tdp-evidence-gaps,
+.tdp-evidence-note {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--warning);
+}
+.tdp-brief {
+  margin-top: 14px;
+}
+.tdp-prose.is-folded {
+  max-height: 7.5em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 60%, transparent);
+  mask-image: linear-gradient(#000 60%, transparent);
+}
+.tdp-plan-say {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.tdp-envelope {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tdp-envelope-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-1);
+  font-size: 12.5px;
+}
+.tdp-envelope-chip-label {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.tdp-envelope-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.tdp-activity-row {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.tdp-activity-time {
+  flex: none;
+  min-width: 96px;
+  color: var(--text-3);
+  font-size: 12px;
+  padding-top: 1px;
+}
+
 /* Task comment @-mentions: highlighted chip in rendered comments + composer menu. */
 .tdp-mention {
   color: var(--brand);
@@ -15426,6 +15717,34 @@ button.chat-jump-start:hover {
   /* As the sole top bar the header sits a touch tighter than the roomy desktop version. */
   .workspace-split.show-conversation .workspace-header {
     padding-bottom: 10px;
+  }
+  /* Beside ←, the Project sessions button and ⋯, a title sharing its row with the Coordinator badge
+     and the watch chips is left a few letters. Here the title takes the row to itself and the badges
+     and chips drop onto the status line under it: the title line's box steps aside (display:
+     contents) so its children wrap in the header column, the title a full row. The status text
+     follows the badges while it fits beside them and takes the next line when it does not. */
+  .workspace-header-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 2px;
+  }
+  .workspace-header-main > .workspace-title-line {
+    display: contents;
+  }
+  .workspace-header-main > .workspace-header-task,
+  .workspace-title-line > .workspace-name,
+  .workspace-title-line > .workspace-name-input {
+    flex: 0 0 100%;
+  }
+  .workspace-header-main > .workspace-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   /* In-pane back button: leaves the open conversation for the session list. */
   .workspace-back-mobile {
@@ -15801,41 +16120,6 @@ button.chat-jump-start:hover {
   background: var(--success-solid);
   box-shadow: 0 0 0 3px var(--success-bg);
 }
-.share-download {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-sunken);
-  color: var(--text-1);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
-}
-.share-download:hover:not(:disabled) {
-  background: var(--bg-hover-strong);
-}
-.share-download:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.share-download-icon {
-  flex: none;
-}
-.share-download-spin {
-  flex: none;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  border: 2px solid var(--border);
-  border-top-color: var(--text-1);
-  animation: runner-spin 0.7s linear infinite;
-}
 .share-badge {
   padding: 1px 8px;
   border-radius: 999px;
@@ -15862,9 +16146,8 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--text-3);
 }
-/* Phone: the header runs out of room, so tighten it and collapse the download
-   button to a square icon — the title keeps the space instead of the action. Read-only
-   goes too: the footer says it. */
+/* Phone: the header runs out of room, so tighten it — the title keeps the space.
+   Read-only goes: the footer says it. */
 @media (max-width: 600px) {
   .share-header {
     gap: 10px;
@@ -15874,15 +16157,6 @@ button.chat-jump-start:hover {
     gap: 8px;
   }
   .share-right .share-badge {
-    display: none;
-  }
-  .share-download {
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    justify-content: center;
-  }
-  .share-download-label {
     display: none;
   }
 }
@@ -16181,6 +16455,107 @@ button.chat-jump-start:hover {
   font-size: 13px;
 }
 
+/* The guest view (GuestSessionPage, docs/session-guests-design.md §4; boards 10-session-guests-3, 11-guest-one-link-2):
+   drawn inside the app's own main pane at /sessions/<id>, so it fills that pane rather than the window. */
+.share-page.guest-view {
+  height: 100%;
+  min-height: 0;
+  /* Nothing in it may reach past the pane, as nothing in the owner's console does (.workspace-view,
+     .workspace-scroll-wrap): a box the transcript positions against otherwise sits outside the
+     conversation's scroller, and the page grew taller than the window with it. */
+  position: relative;
+  overflow: hidden;
+}
+.share-page.guest-view > .share-scroll {
+  position: relative;
+  /* Reaching the end of the conversation ends the scroll there: it is not handed on to the page. */
+  overscroll-behavior: contain;
+}
+.share-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+}
+.share-subtitle::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--text-4);
+}
+.guest-dock {
+  flex: none;
+  padding: 0 20px 16px;
+}
+.guest-dock-inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.guest-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.guest-waiting i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+.guest-composer {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  padding: 10px 12px;
+}
+.guest-composer-input {
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  max-height: 200px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+}
+.guest-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.guest-composer-hint {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.guest-composer-hint.is-error {
+  color: var(--error);
+}
+.guest-composer-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+}
+.guest-composer-send:disabled {
+  background: var(--bg-sunken);
+  color: var(--text-4);
+  cursor: default;
+}
+
 /* ── Share dialog (ShareModal) ─────────────────────────────────────────────────
    docs/mocks/share-links/03-share-dialog: Access, the link, Includes with counts, the Live line,
    Expires, and a foot with the views and the two buttons. */
@@ -16403,39 +16778,68 @@ button.chat-jump-start:hover {
   color: var(--text-4);
 }
 
-/* ============================================================================
-   Infrastructure (InfrastructurePage) and provider
-   onboarding — logo gallery + guided add flow (ProviderGallery, ProviderConnectPage).
-   ========================================================================== */
-.prov-page-head {
+/* People who can reply (SessionGuests, docs/session-guests-design.md §3; board 10-session-guests-2). */
+.share-people-box {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.share-people-invite {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+}
+.share-people-invite .orbit-input {
+  flex: 1;
+  min-width: 0;
+}
+.share-people-error {
+  padding: 0 10px 8px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+.share-person {
+  display: flex;
   align-items: center;
-  gap: 6px 12px;
+  gap: 10px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
 }
-.prov-page-sub {
-  flex-basis: 100%;
-  color: var(--text-3);
-  font-size: 12px;
+.share-person-main {
+  flex: 1;
+  min-width: 0;
 }
-/* Infrastructure's Add: each choice says what it makes under its name. */
-.infra-add {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  max-width: 300px;
-  padding: 3px 0;
-  white-space: normal;
-}
-.infra-add b {
-  font-weight: 600;
+.share-person-name {
   color: var(--text-1);
+  font-size: 13.5px;
 }
-.infra-add span {
-  font-size: 12px;
+.share-person-email {
   color: var(--text-3);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.share-person-today {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.share-people-consequence {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+/* Auto, Don't ask or Bypass: the agent acts on a guest's message without asking. */
+.share-people-consequence.is-warn {
+  color: var(--warning);
+}
+.share-people-ack.orbit-choice {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
 /* The model a key starts on, on its row in its vendor's card. */
 .infra-model {
   padding: 0 5px;
@@ -16622,25 +17026,6 @@ button.chat-jump-start:hover {
   border-top: 1px solid var(--border-subtle);
 }
 
-.provider-empty {
-  margin-top: 12px;
-  padding: 28px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-}
-.provider-empty h3 {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.provider-empty p {
-  margin: 0 0 20px;
-  font-size: 14px;
-  color: var(--text-3);
-}
-
 /* A vendor whose CLI is already signed in on one of the user's machines — the cheaper route,
    pointed at in the brand colour so it reads as a hint rather than a status. */
 .provider-card .pc-sub.pc-local {
@@ -16648,112 +17033,34 @@ button.chat-jump-start:hover {
   font-weight: 500;
 }
 
-/* Infrastructure's API keys (ProviderKeyCards): a card per vendor, drawn as a machine's and a pool's are,
-   and a row per key — what it is and runs on, the model it starts on, whether it is on and when it was
-   last used, and its Edit and Delete. The name column gives way first; the model's keeps one width so
-   each card's rows line up. */
-.vk-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 236px 120px auto;
-  align-items: center;
-  gap: 10px 14px;
-  padding: 10px 14px;
-}
-.vk-row + .vk-row {
-  border-top: 1px solid var(--border-subtle);
-}
-.vk-id {
-  min-width: 0;
-}
-.vk-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.vk-model {
+/* One vendor's keys on its Settings page (ProviderKeyRows, docs/mocks/settings-redesign board-4): a
+   SettingsRow per key, its name over one line of what it runs on, the model it starts on, the pools it
+   is in and when it was last used; a borderless ⋯ and the › that says the row opens (settings-buttons
+   board 01) on its right. */
+.vk-line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 6px;
-  min-width: 0;
-  font-size: 11.5px;
-  color: var(--text-3);
+  gap: 2px 4px;
 }
-.vk-model .infra-model {
-  font-size: 11.5px;
-  color: var(--text-2);
-  white-space: normal;
+.vk-line .infra-model {
+  color: var(--text-1);
 }
-.vk-state {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-}
-/* When a session last ran on it; a key nobody has run on says so, a state rather than a time. */
-.vk-used {
-  font-size: 11.5px;
-  color: var(--text-3);
+.vk-used,
+.vk-used-item {
   white-space: nowrap;
 }
 .vk-act {
-  gap: 8px;
-  justify-content: flex-end;
-}
-.vk-loading {
-  display: grid;
-  place-items: center;
-  min-height: 64px;
-}
-/* A narrow card stacks the row: the key, then the model, then its state beside its buttons. */
-@container re-card (max-width: 620px) {
-  .vk-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .vk-id,
-  .vk-model {
-    grid-column: 1 / -1;
-  }
-  .vk-state {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-  }
-}
-
-/* The vendors with no key yet, in one line under the keys (ProviderPills). */
-.pv-more {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  font-size: 12px;
-  color: var(--text-3);
-}
-.pv-more-l {
-  margin-right: 2px;
-}
-.pv-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 10px 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12px;
-  white-space: nowrap;
-  text-decoration: none;
+  gap: 2px;
 }
-.pv-pill:hover {
-  border-color: var(--brand-border);
-  color: var(--brand);
+.vk-act .orbit-button-text {
+  color: var(--text-3);
+}
+.vk-chev {
+  color: var(--text-3);
+  font-size: 11px;
 }
 
 /* ============================================================================
@@ -16784,12 +17091,6 @@ button.chat-jump-start:hover {
   flex-basis: 100%;
   font-size: 12px;
   color: var(--text-3);
-}
-.re-sec-count {
-  margin-left: auto;
-  font-size: 11.5px;
-  color: var(--text-4);
-  white-space: nowrap;
 }
 
 .re-card {
@@ -16870,30 +17171,10 @@ button.chat-jump-start:hover {
   padding-left: 9px;
   white-space: nowrap;
 }
-.re-dot {
-  flex: none;
-  /* Onto the name's line rather than the middle of the two-line block it heads (see
-     .re-runner-card .re-toggle), and 9px with a ring of its own so it holds its own beside the
-     chevron instead of reading as a speck of dust. */
-  width: 9px;
-  height: 9px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: var(--dot-idle);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--dot-idle) 20%, transparent);
-}
-.re-dot.on {
-  background: var(--success-solid);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--success-solid) 20%, transparent);
-}
 .re-runner {
   font-size: 13px;
   font-weight: 650;
   color: var(--text-1);
-}
-.re-runner-meta {
-  font-size: 11.5px;
-  color: var(--text-3);
 }
 .re-head-sp {
   flex: 1;
@@ -16902,225 +17183,6 @@ button.chat-jump-start:hover {
   font-size: 12px;
   color: var(--brand);
   white-space: nowrap;
-}
-
-/* Identity expands the runner; its status and Manage link stay separate. */
-.re-runner-card .re-head {
-  /* What the handle stands against, in the card's left margin (below). */
-  position: relative;
-  flex-wrap: wrap;
-  gap: 0;
-  padding: 0;
-}
-/* What a machine's sessions can run on, a chip per engine on a line of its own under the name
-   (MachineChips) — amber for one with an account signed out. */
-.mc-row {
-  flex-basis: 100%;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  /* Under the name: past the chevron's column, the dot and the gaps beside them. */
-  padding: 0 14px 11px 71px;
-}
-.mc-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 8px 0 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12px;
-  white-space: nowrap;
-}
-.mc-n {
-  color: var(--text-3);
-}
-.mc-chip.out {
-  border-color: var(--warning-border);
-  background: var(--warning-bg);
-  color: var(--warning);
-}
-.mc-out {
-  font-weight: 600;
-}
-/* An offline machine's are what it last said, as its rows are. */
-.re-card.offline .mc-row {
-  opacity: 0.62;
-}
-.re-runner-card.offline .re-head {
-  background: var(--bg-subtle);
-}
-.re-runner-card .re-toggle {
-  flex: 1;
-  align-self: stretch;
-  /* The chevron and the dot lead the identity, which stacks a name over a host and version: a
-     mark centred on that block lands in the gap between the two lines, belonging to neither. */
-  align-items: flex-start;
-  gap: 10px;
-  min-height: 64px;
-  padding: 10px 14px;
-  border-radius: 11px 0 0 11px;
-}
-.re-runner-card .re-toggle:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -3px;
-}
-.re-runner-card .re-chev {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* The column the engine rows put their icon in: the header and the rows under it then share one
-     grid, and the chevron never moves again with whatever a row's summary happens to say. */
-  width: 28px;
-  height: 24px;
-  color: var(--text-2);
-  transition: color 0.15s, transform 0.15s;
-}
-/* Lit wherever a press would fold the card — anywhere on its head but Details, the handle and ⋯. */
-.re-runner-card .re-chev.open,
-.re-runner-card .re-head:hover:not(:has(.re-manage:hover, .re-drag:hover, .re-machine-menu:hover)) .re-chev {
-  color: var(--brand);
-}
-.re-runner-copy {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-.re-runner-copy .re-runner,
-.re-runner-copy .re-runner-meta {
-  overflow-wrap: anywhere;
-}
-.re-runner-copy .re-runner {
-  font-size: 15px;
-}
-.re-runner-copy .re-runner-meta {
-  font-size: 12px;
-}
-.re-runner-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.re-runner-status .re-summary {
-  border-left: 0;
-  padding-left: 0;
-  font-size: 12px;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.re-runner-status .re-summary.warn {
-  color: var(--warning);
-}
-.re-runner-status .re-summary .anticon {
-  margin-right: 5px;
-}
-.re-runner-card .re-manage {
-  display: flex;
-  flex: none;
-  align-items: center;
-  min-height: 44px;
-  margin: 0 4px 0 8px;
-}
-.re-runner-card .re-manage:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-/* The card is the machine too: it moves by the handle in its left margin, its own actions sit behind
-   the ⋯ at the end, and under its name are how busy it is and what it needs a person for. */
-.re-runner-card.dragging {
-  position: relative;
-  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16);
-}
-/* The handle stands in the card's own left margin, level with the chevron, and out of the head's
-   flow, where it pushed the chevron 22px right of the column the chevron leads: the one the engine
-   rows put their icon in. */
-.re-runner-card .re-drag {
-  position: absolute;
-  top: 8px;
-  left: 0;
-  margin: 0;
-}
-/* Where a pointer can hover, the handle comes up with the card under it, or with its own keyboard
-   focus; a touch screen shows it always, and so does a narrow card, which gives it a column of its
-   own (below). */
-@media (hover: hover) {
-  @container re-card (width > 600px) {
-    .re-runner-card .re-drag {
-      transition: opacity 0.15s;
-    }
-    .re-runner-card:not(:hover, .dragging) .re-drag:not(:focus-visible) {
-      opacity: 0;
-    }
-  }
-}
-.re-runner-copy .runner-util {
-  display: block;
-  margin-top: 3px;
-}
-.re-runner-copy .runner-attention {
-  margin-top: 2px;
-}
-.re-runner-card .re-machine-menu {
-  flex: none;
-  margin-right: 10px;
-}
-@container re-card (max-width: 600px) {
-  .re-runner-card .re-head {
-    position: static;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto auto;
-    column-gap: 8px;
-    padding: 0 14px 0 6px;
-  }
-  .re-runner-card .re-drag {
-    position: static;
-    grid-row: 1;
-    grid-column: 1;
-    align-self: start;
-    margin: 13px 0 0;
-  }
-  .re-runner-card .re-drag + .re-toggle {
-    border-radius: 0;
-  }
-  .re-runner-card .re-toggle {
-    grid-row: 1;
-    grid-column: 2 / -1;
-    align-items: flex-start;
-    min-height: 54px;
-    padding: 10px 0 0;
-    border-radius: 11px;
-  }
-  /* Under 600px the chevron stays where it has always been: the top-right of the row, beside
-     the name. Only the wide card leads with it. */
-  .re-runner-card .re-chev {
-    order: 2;
-  }
-  .re-runner-status {
-    grid-column: 2;
-    margin-left: 17px;
-  }
-  .re-runner-card .re-manage {
-    grid-column: 3;
-    margin: 0;
-  }
-  .re-runner-card .re-machine-menu {
-    grid-column: 4;
-    align-self: center;
-    margin: 0 -6px 0 0;
-  }
-  .mc-row {
-    grid-column: 2 / -1;
-    padding: 0 0 10px;
-  }
 }
 
 .re-row {
@@ -17196,8 +17258,10 @@ button.chat-jump-start:hover {
   /* Too narrow for those floors (665px, 663 inside the border), as above: name and status, then
      quota and actions. */
   @container re-card (max-width: 662px) {
+    /* The right column keeps the wide layout's status width as its floor, so a long status such as
+       "Spent · resets 16:20" does not shorten that one row's quota bars against its neighbours'. */
     .re-runner-card .re-row {
-      grid-template-columns: minmax(0, 1fr) max-content;
+      grid-template-columns: minmax(0, 1fr) minmax(168px, max-content);
     }
     .re-runner-card .re-row > :nth-child(2) {
       justify-self: end;
@@ -17480,6 +17544,11 @@ button.chat-jump-start:hover {
 .re-grp.folded .re-upd {
   display: block;
 }
+/* A dismissed warning keeps its drift on the version line, in grey (`13d behind 0.169.0 · warning
+   dismissed`): longer than the line was sized for, so it wraps rather than lose its end. */
+.re-meta:has(.re-upd.dismissed) {
+  white-space: normal;
+}
 /* "Next: …" over the window it names. */
 .re-quota-next {
   overflow-wrap: anywhere;
@@ -17699,31 +17768,6 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 
-.re-empty {
-  padding: 26px;
-  text-align: center;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-raised);
-}
-.re-empty-logos {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-bottom: 14px;
-}
-.re-empty h4 {
-  margin: 0 0 4px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.re-empty p {
-  margin: 0 0 16px;
-  font-size: 13px;
-  color: var(--text-3);
-}
-
 /* ============================================================================
    Infrastructure → "Account pools": several Claude subscriptions under one name. The
    runner cards' skeleton (fold, head, three-column rows), with a status column
@@ -17740,7 +17784,11 @@ button.chat-jump-start:hover {
   margin-top: 10px;
 }
 .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 140px 110px;
+  /* Top-aligned (settings-buttons board 02): the status, the quota's head and the actions sit level with
+     the name's line, however many lines the quota column takes. The last column holds a way back
+     (Resume Now, Sign in again) beside the ⋯. */
+  grid-template-columns: minmax(0, 1fr) 160px 140px 146px;
+  align-items: start;
 }
 .pool-status {
   min-width: 0;
@@ -17775,7 +17823,7 @@ button.chat-jump-start:hover {
 /* The pool's page takes accounts out, so its rows carry up to two actions: Re-add key and the
    remove mark (88 + 8 + 24px measured). */
 .pool-detail .pool-row {
-  grid-template-columns: minmax(0, 1fr) 196px 130px 124px;
+  grid-template-columns: minmax(0, 1fr) 160px 130px 146px;
 }
 /* The head's gauge: the account the next session runs on, never an average of them. */
 .pool-gauge {
@@ -17989,8 +18037,70 @@ button.chat-jump-start:hover {
 .re-chip.pool-shared-chip {
   flex: none;
   margin-left: 0;
-  background: var(--brand-tint);
-  color: var(--brand);
+  font-weight: 500;
+}
+/* The pool card's head (settings-buttons board 02): a chevron that can be seen, the name on one line,
+   the whole head lit under the pointer since a press anywhere on it folds (foldFromAnywhere). */
+.pool-card .re-head:hover {
+  background: var(--bg-hover);
+}
+.re-chev.pool-chev {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.pool-card .re-runner {
+  white-space: nowrap;
+}
+.pool-card .re-summary {
+  border-left: 0;
+  padding-left: 0;
+}
+/* A row's ⋯, quiet beside the buttons that are a way back. */
+.pool-row .pool-more.orbit-button:not(:hover):not(:active) {
+  color: var(--text-3);
+}
+/* A status as a dot before plain words (AccountPauseStatus dot): on rows whose buttons sit beside it. */
+.account-status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 24px;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.account-status-dot::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+.account-status-dot-success::before,
+.account-status-dot-green::before {
+  background: var(--success-solid);
+}
+.account-status-dot-warning::before,
+.account-status-dot-orange::before,
+.account-status-dot-gold::before {
+  background: var(--warning-solid);
+}
+.account-status-dot-error::before,
+.account-status-dot-red::before {
+  background: var(--error-solid);
+}
+.account-status-dot-info::before,
+.account-status-dot-blue::before {
+  background: var(--brand);
+}
+.account-status-dot-error,
+.account-status-dot-red {
+  color: var(--error);
 }
 .pool-people {
   display: inline-flex;
@@ -18022,9 +18132,8 @@ button.chat-jump-start:hover {
   margin-top: 1px;
   font-size: 12px;
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps rather than cut: an ellipsis left "· …" where the last part was (settings-buttons board 02). */
+  overflow-wrap: anywhere;
 }
 
 /* ── the pool's page: its title, its people and its rules ─────────────────────── */
@@ -18415,12 +18524,6 @@ button.chat-jump-start:hover {
 }
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
-}
-/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
-   as something wrong with it. At rest only: under the pointer and pressed it keeps the danger
-   button's own red. */
-.pool-row .pool-signout.orbit-button:not(:hover):not(:active) {
-  color: var(--text-3);
 }
 .pool-login-reset {
   margin-top: 3px;
@@ -19167,6 +19270,17 @@ button.chat-jump-start:hover {
   min-width: 0;
 }
 /* The one sentence under OpenCode's keys, for the key it cannot run (board 4 ⑤). */
+/* The task pin's Provider list: what a pool's row risks, under the options (TaskDetailPanel pinNotices). */
+.tdp-pin-foot {
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.tdp-pin-foot p {
+  margin: 0;
+}
 .composer-provider-foot {
   display: block;
   max-width: 280px;
@@ -21219,6 +21333,11 @@ div.landing-jobs-open {
    the list. Styled as the quiet twisty it is rather than as a button: nothing about it should
    compete with the state sentence above it. */
 .acceptance-method {
+  /* How it's checked, and beside it the Met by menu (board 03 ③). */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
   margin-top: 5px;
   font-size: 12px;
   line-height: 1.55;
@@ -21251,6 +21370,9 @@ div.landing-jobs-open {
   text-decoration: none;
 }
 .acceptance-method-body {
+  /* Its own line under the toggle and the Met by menu, which share the row above it. */
+  flex-basis: 100%;
+  order: 1;
   margin-top: 4px;
   padding-inline-start: 10px;
   border-inline-start: 2px solid var(--border-subtle);
@@ -21774,28 +21896,6 @@ div.landing-jobs-open {
 .shared-links-page {
   max-width: 1080px;
 }
-.shared-links-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 12px;
-  padding: 9px 12px;
-  border: 1px solid var(--warning-border);
-  border-radius: 8px;
-  background: var(--warning-bg);
-  color: var(--text-1);
-  font-size: 13px;
-}
-.shared-links-banner-icon {
-  color: var(--warning);
-}
-.shared-links-banner-text {
-  flex: 1;
-  min-width: 0;
-}
-.shared-links-banner-text b {
-  font-weight: 600;
-}
 .shared-links-list {
   display: flex;
   flex-direction: column;
@@ -21803,7 +21903,7 @@ div.landing-jobs-open {
 }
 .shared-link-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px 236px;
+  grid-template-columns: 26px minmax(0, 1fr) 180px 110px 110px auto;
   gap: 12px;
   align-items: center;
   padding: 10px 12px;
@@ -21885,10 +21985,29 @@ div.landing-jobs-open {
 .shared-link-since {
   color: var(--text-3);
 }
+.shared-link-row.is-pressable {
+  cursor: pointer;
+}
+.shared-link-row.is-pressable:hover {
+  background: var(--bg-hover);
+}
 .shared-link-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 2px;
+  min-width: 92px;
+}
+.shared-link-actions .orbit-button-text {
+  color: var(--text-3);
+}
+.shared-link-chev {
+  width: 16px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.shared-link-chev.is-ghost {
+  visibility: hidden;
 }
 @media (max-width: 900px) {
   .shared-link-row {
@@ -21940,52 +22059,14 @@ div.landing-jobs-open {
   color: var(--text-3);
   font-size: 12px;
 }
-
-/* The admin area: its sections side by side (AdminNav), and the Sign-in settings (AdminSignInPage). */
-.admin-nav {
+.signin-method-actions {
   display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  flex: none;
+  align-items: center;
+  gap: 8px;
 }
-.admin-nav-link {
-  margin-bottom: -1px;
-  padding: 8px 12px;
-  border-bottom: 2px solid transparent;
-  color: var(--text-2);
-  font-weight: 500;
-  text-decoration: none;
-}
-.admin-nav-link:hover {
-  color: var(--text-1);
-}
-.admin-nav-link.active {
-  border-bottom-color: var(--brand);
-  color: var(--brand);
-}
-.admin-nav-link:focus-visible {
-  border-radius: 4px;
-  outline: 2px solid var(--brand);
-  outline-offset: 1px;
-}
-/* One width for every admin page, so their shared tabs stay put between them: wide enough for the
-   user list's columns. */
-.admin-page {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-.admin-page > .page-title {
-  margin-bottom: 16px;
-}
-/* Its form is a card (the class names of components/ui/Card, which a form root cannot render). */
-.admin-signin {
-  max-width: 640px;
-  margin-bottom: 16px;
-}
-.admin-signin-fields {
-  display: grid;
-  gap: 20px;
-}
+
+/* The admin area's Sign-in settings (AdminSignInPage), whose label, hint and row classes other pages reuse. */
 .admin-signin-row {
   display: flex;
   align-items: center;
@@ -22005,7 +22086,7 @@ div.landing-jobs-open {
   font-size: 12px;
 }
 .admin-signin-note {
-  margin-top: -12px;
+  margin-top: 10px;
   color: var(--warning);
   font-size: 12px;
 }
@@ -22024,32 +22105,8 @@ div.landing-jobs-open {
   background: var(--warning-bg);
   color: var(--warning);
 }
-.admin-signin-redirect {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.admin-signin-redirect code {
-  min-width: 0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: var(--fill-muted);
-  color: var(--text-1);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 12.5px;
-  overflow-wrap: anywhere;
-}
-.admin-signin-actions {
-  display: flex;
-  justify-content: flex-end;
-}
 .admin-signin-error {
   color: var(--error);
-}
-/* Admin → Integrations: how many Feishu apps accounts have connected. */
-.admin-feishu-count {
-  color: var(--text-2);
 }
 /* Settings → Integrations → Feishu (FeishuIntegrationPage): the account's own app, then the steps in Feishu's
    console. Its fields reuse the admin Sign-in settings' rows, labels and hints. */
@@ -22080,18 +22137,6 @@ div.landing-jobs-open {
 }
 
 /* Settings → Integrations → GitHub. */
-.settings-github-row {
-  border-top: 1px solid var(--border-subtle);
-}
-.github-page {
-  max-width: 720px;
-  margin: 0 auto;
-}
-.github-crumb {
-  color: var(--text-3);
-  font-size: 12px;
-  margin-bottom: 4px;
-}
 .github-alert {
   margin-bottom: 16px;
 }
@@ -22152,10 +22197,6 @@ div.landing-jobs-open {
 .feishu-page {
   max-width: 720px;
   margin: 0 auto;
-}
-.feishu-intro {
-  margin: 4px 0 20px;
-  color: var(--text-3);
 }
 .feishu-card {
   margin-bottom: 16px;
@@ -22262,29 +22303,6 @@ div.landing-jobs-open {
    Orbit, since when — and its actions: the one most often wanted in sight, the rest in its menu
    (docs/mocks/admin-users-redesign, direction A). Columns give way as the table's own box narrows,
    whatever the side nav's width: Created first, then Sign-in, Status and Last active. */
-.admin-users-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-.admin-users-head .page-title {
-  margin: 0;
-}
-.admin-users-sub {
-  margin-top: 4px;
-  color: var(--text-3);
-  font-size: 13px;
-}
-.admin-users-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.admin-users-search {
-  width: 240px;
-}
 .admin-users-frame {
   container: admin-users / inline-size;
 }
@@ -22439,16 +22457,6 @@ div.landing-jobs-open {
     max-width: 200px;
   }
 }
-@media (max-width: 768px) {
-  .admin-users-head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .admin-users-search {
-    flex: 1;
-    width: auto;
-  }
-}
 /* Add user: the fields stacked 8px apart. */
 .admin-user-form {
   display: flex;
@@ -22460,12 +22468,6 @@ div.landing-jobs-open {
 /* Settings → Access tokens (docs/personal-access-token-design.md §9). */
 .access-tokens-page {
   max-width: 1100px;
-}
-.access-tokens-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
 }
 .access-token-title {
   color: var(--text-1);
@@ -23347,6 +23349,7 @@ div.landing-jobs-open {
 }
 .oic {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--warning-border);
   border-radius: 12px;
@@ -23522,6 +23525,7 @@ div.landing-jobs-open {
 }
 .tsc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -23712,53 +23716,77 @@ div.landing-jobs-open {
   margin: 8px 0;
 }
 .smc {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--brand-border);
-  border-radius: 12px;
-  background: var(--bg-raised);
-  color: var(--text-1);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: fit-content;
+  max-width: min(720px, 100%);
+  min-width: 0;
 }
 .smc-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  margin-bottom: 3px;
   color: var(--text-2);
   font-size: 12px;
+  line-height: 1.4;
 }
-.smc-mark {
-  flex: none;
-  color: var(--brand);
+.smc-head > .smc-mark {
+  margin-right: 4px;
+  color: var(--text-3);
+}
+.smc-head > .smc-from {
+  margin-left: 4px;
+}
+/* Said by the side the message sits on and the "From" line; the sentence is for a screen reader. */
+.smc-not-you {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 .smc-from {
-  color: var(--brand);
+  color: var(--text-2);
   font-weight: 600;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
+a.smc-from:hover {
+  color: var(--brand);
+}
 .smc-agent {
-  flex: none;
-  padding: 0 8px;
-  border: 1px solid var(--brand-border);
-  border-radius: 9px;
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 18px;
+  color: var(--text-3);
 }
-.smc-body {
-  margin-top: 6px;
+.smc-agent::before {
+  content: ' · ';
+  white-space: pre;
 }
-/* A long message shows its first 8 lines, fading out, until "Show more" (SessionMessageCard). */
+.smc-bubble {
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.smc-body > :first-child {
+  margin-top: 0;
+}
+.smc-body > :last-child {
+  margin-bottom: 0;
+}
+/* A long message shows its first 4 lines, fading out, until "Show more" (SessionMessageCard). */
 .smc-body.is-clamped {
-  max-height: 12.4em;
-  max-height: 8lh;
+  max-height: 6.2em;
+  max-height: 4lh;
   overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
-  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
 }
 .smc-more {
-  margin: 4px 0 2px;
+  margin: 2px 0 0;
   padding: 0;
   border: 0;
   background: none;
@@ -23767,16 +23795,41 @@ div.landing-jobs-open {
   font-size: 13px;
   cursor: pointer;
 }
+/* One grey foot row: time · its task · the request and where it stands · what Orbit attached. Items
+   keep whole and the row wraps between them. */
 .smc-meta {
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--bg-hover-strong);
+  margin-top: 3px;
   color: var(--text-3);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 18px;
+}
+.smc-meta > * {
+  white-space: nowrap;
+}
+.smc-meta > :not(:last-child)::after {
+  content: '\00a0· ';
+  white-space: normal;
 }
 .smc-meta a {
-  color: var(--brand);
+  color: var(--text-3);
   text-decoration: none;
+}
+.smc-meta a:hover {
+  color: var(--brand);
+}
+.smc-meta > .chat-injected {
+  display: inline;
+  margin: 0;
+}
+.smc-meta > .chat-injected > .chat-injected-panel {
+  white-space: normal;
+}
+/* A sender that runs narrower than this session: in the foot row's voice, under it. */
+.smc-narrower {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 18px;
 }
 .smc-undelivered {
   margin-top: 4px;
@@ -23785,7 +23838,7 @@ div.landing-jobs-open {
 }
 /* Still waiting to be delivered (WorkspaceView's queued tail): dashed like a queued message, with the
    queue's status line at its foot — the same shape the delivery and project-start cards take. */
-.smc.is-queued {
+.smc.is-queued > .smc-bubble {
   border-style: dashed;
 }
 .smc-queued {
@@ -23803,32 +23856,13 @@ div.landing-jobs-open {
 }
 /* A message that asks for a reply (session requests): what it asks, by when, and where it stands —
    read live, so the state word moves while the card does not. */
-.smc-request {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 6px;
-  color: var(--text-2);
-  font-size: 12px;
-}
-.smc-request-asks {
-  font-weight: 600;
-}
-.smc-request-state {
-  padding: 0 8px;
-  border: 1px solid var(--bg-hover-strong);
-  border-radius: 9px;
-  line-height: 18px;
-  font-size: 11px;
+.smc-request > :not(:last-child)::after {
+  content: '\00a0· ';
+  white-space: normal;
+  color: var(--text-3);
 }
 .smc-request-state-open {
-  border-color: var(--brand-border);
   color: var(--brand);
-}
-.smc-request-state-replied {
-  border-color: var(--success);
-  color: var(--success);
 }
 .smc-request-state-no_reply,
 .smc-request-state-recipient_ended,
@@ -23927,6 +23961,7 @@ div.landing-jobs-open {
 }
 .psc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -24061,6 +24096,7 @@ div.landing-jobs-open {
 }
 .crc {
   width: 100%;
+  max-width: 720px;
   padding: 10px 12px;
   border: 1px solid var(--brand-border);
   border-radius: 12px;
@@ -24967,6 +25003,27 @@ button.project-open-item-action:disabled {
 .wk-space-tag { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 13px;
                 background: var(--fill-muted); font-size: 12.5px; color: var(--text-2); white-space: nowrap;
                 max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* The space's name is the Wiki's title, on every head that has a space (board docs/mocks/wiki-rail-name B): the heading's
+   type, no box, and with more than one space a picker drawn as the Tasks title's scope picker (.tasks-scope-trigger). */
+.wk-name-title { display: flex; align-items: center; min-width: 0; }
+.wk-name-title .wk-select, .wk-name-title .wk-space-tag { height: auto; max-width: 100%; margin-left: -6px; padding: 0 6px; gap: 6px;
+                                                         border: 0; border-radius: 6px; background: transparent; font: inherit; color: inherit; }
+.wk-name-title .wk-space-tag { display: block; }
+.wk-name-title .wk-select .v { max-width: 190px; }
+.wk-name-title .wk-select:hover { background: var(--bg-hover); }
+.wk-name-title .wk-select:focus-within { box-shadow: 0 0 0 2px var(--brand-tint); }
+.wk-name-title .wk-select .ic.caret { position: static; font-size: 12px; color: var(--text-3); }
+/* The space menu the name opens (board docs/mocks/wiki-space-menu): a row a space, its name over its repository and
+   documents, the sidebar's amber count at its end; the current one lit and ticked, Manage spaces at the foot. */
+.orbit-menu.wk-space-menu { min-width: 260px; max-width: min(420px, calc(100vw - 24px)); max-height: 70vh; overflow-y: auto; }
+.wk-space-menu .orbit-menu-item { align-items: flex-start; padding-top: 7px; padding-bottom: 7px; }
+.wk-space-menu .orbit-menu-icon { padding-top: 3px; }
+.wk-space-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.wk-space-row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.wk-space-row-text .n { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row-text .s { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; }
+.wk-space-row .tp-count.needs-you { flex: none; }
+.wk-name-title .wk-select { cursor: pointer; }
 .wk-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 /* The space's public link, as the head's buttons are sized (mock share-links 08 ②). */
 .wk-actions > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
@@ -25357,7 +25414,6 @@ button.project-open-item-action:disabled {
   .wk-trash-acts { grid-column: 2; }
   .wk-trash-row .wk-trash-error { grid-column: 2; }
 }
-.tp-group-wiki .tp-wiki-trash { color: var(--text-3); }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
@@ -25488,6 +25544,9 @@ button.project-open-item-action:disabled {
   .wk-page, .rv-page { max-width: none; }
   .wk-drawer { width: 100%; }
   .wk-select .v, .wk-space-tag { max-width: 120px; }
+  .wk-title-row .wk-name-title .wk-select .v { max-width: none; overflow: hidden; text-overflow: ellipsis; }
+  .wk-title-row .wk-name-title .wk-select { min-width: 0; }
+  .wk-title-row .wk-name-title .wk-space-tag { max-width: 100%; }
   .wk-dkv, .wk-pkv { grid-template-columns: minmax(0, 1fr); }
   .wk-pkv > .k { padding-top: 6px; }
   .rv-head { flex-direction: column; align-items: flex-start; }
@@ -25506,6 +25565,7 @@ button.project-open-item-action:disabled {
 .wk-page .wk-contents-btn { display: none; }
 
 .wk-toc { display: block; min-width: 0; margin-left: -8px; padding-top: 2px; }
+.wk-dir-resizer { display: none; }
 .wk-toc-item { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border-radius: 6px;
                font-size: 13.5px; color: var(--text-1); white-space: nowrap; min-width: 0; text-decoration: none; }
 .wk-toc-item:hover { background: var(--bg-hover); color: var(--text-1); }
@@ -25677,8 +25737,39 @@ button.project-open-item-action:disabled {
   /* Prose: 47 Chinese characters to the line at .wk-art's size, where 880px is 55. */
   .wk-page--reading > .wk-layout > .wk-main > .wk-art-page { max-width: 760px; }
   .wk-layout > .wk-dir-col { position: sticky; top: 0; max-height: calc(var(--app-vh, 100vh) - 48px); overflow-y: auto;
-                             overscroll-behavior: contain; margin-left: -8px; scrollbar-width: thin; }
+                             overscroll-behavior: contain; margin-left: -8px; }
   .wk-layout > .wk-dir-col > .wk-toc { margin-left: 0; }
+  /* The head, the search and the directory as one column from the window's top to its foot (board
+     docs/mocks/wiki-rail ③): the title and the space, the search, then the rows, which scroll on their own, and
+     Settings and Share at the foot. The head row and the search line above it give way to it; the main column
+     starts at the top, the home's line first. */
+  .wk-page--railed { display: grid; grid-template-columns: var(--wk-dir-w, 248px) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+                     column-gap: 32px; align-items: start; }
+  .wk-page--railed > .wk-title-row, .wk-page--railed > .wk-search { display: none; }
+  /* The home's line was the head's; Activity has its own head and status row (as on a phone). */
+  .wk-page--railed.wk-page--activity > .wk-home-state { display: none; }
+  .wk-page--railed > .wk-layout { display: contents; }
+  .wk-page--railed > .wk-home-state, .wk-page--railed > .wk-layout > .wk-main { grid-column: 2; }
+  .wk-page--railed > .wk-layout > .wk-dir-col { grid-column: 1; grid-row: 1 / span 2; display: flex; flex-direction: column;
+                                                top: -24px; height: var(--app-vh, 100vh); max-height: none; overflow: hidden;
+                                                margin: -24px 0 -24px -32px; padding: 16px 0 0 24px;
+                                                border-right: 1px solid var(--border-subtle); background: var(--bg-raised); }
+  /* The column's border drags its width, as the app sidebar's does (.tp-resizer). Inside the column's edge: the column
+     clips what lies past it. */
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer { display: block; position: absolute; top: 0; right: 0; width: 6px;
+                                                                  height: 100%; z-index: 5; cursor: col-resize; }
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-dir-resizer:hover { background: rgba(51, 112, 255, 0.12); }
+  .wk-rail-top { flex: none; padding: 0 16px 10px 0; }
+  .wk-rail-head { height: 32px; }
+  .wk-page--railed > .wk-layout > .wk-dir-col > .wk-toc { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+                                                         padding: 0 10px 12px 0; }
+  .wk-rail-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px 12px 0;
+                  border-top: 1px solid var(--border-subtle); }
+  .wk-rail-foot > .session-shared-pill { height: 32px; padding: 0 12px; font-size: 13px; }
+  .wk-toc-alarm { flex: none; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; }
+  .wk-toc-alarm--error { background: var(--error); }
+  .wk-toc-alarm--warn { background: var(--warning-solid); }
+  .wk-toc-alarm + .tp-count { margin-left: 6px; }
   .wk-layout.home > .wk-main { container: wk-home / inline-size; }
   .wk-home { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
   .wk-home > .wk-pl-cat { margin: 0; padding: 12px 18px 4px; border: 1px solid var(--border-subtle); border-radius: 10px;
@@ -25749,7 +25840,7 @@ button.project-open-item-action:disabled {
   .wk-maint-wide { display: none; }
   .wk-maint-narrow { display: contents; }
   .wk-maint-spin { display: none; }
-  .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search, .wk-page--reading > .wk-status-row { display: none; }
+  .wk-page--reading > .wk-title-row, .wk-page--reading > .wk-search { display: none; }
   /* The head's space sits beside its buttons (mock 30 ③). */
   .wk-title-row > .page-title { flex: 1; min-width: 0; }
   /* The home ends on the ways to everything else (mock 31 ①); a desktop has them atop the directory. */
@@ -25760,8 +25851,7 @@ button.project-open-item-action:disabled {
   .wk-page--activity > .wk-home-state { display: none; }
   /* Review's own head is the one its mock draws on a phone (09): `← Wiki` over the title, no Wiki head. */
   .wk-page:has(> .wk-body > .rv-page) > .wk-title-row,
-  .wk-page:has(> .wk-body > .rv-page) > .wk-search,
-  .wk-page:has(> .wk-body > .rv-page) > .wk-status-row { display: none; }
+  .wk-page:has(> .wk-body > .rv-page) > .wk-search { display: none; }
   .wk-crumb--back .ic, .wk-crumb--back > span { display: none; }
   .wk-crumb--back .back { display: inline-flex; margin-right: 4px; }
   .wk-act-head { margin-top: 2px; }
@@ -26453,6 +26543,23 @@ button.agent-progress-agent:hover {
 .wt-recovery { margin: 0 12px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); font-size: 12px; overflow-wrap: anywhere; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
+/* What the last check found scrolls inside the panel: the panel stands in the band above the composer, and a long
+   push list must not push the composer off screen. The title, the repair row and the actions stay in view. */
+/* A recovery with a repair session folds into one row of the branch bar, in the strip's row language (.bg-tray-row):
+   where the repair stands, its next step, and the arrow that opens the panel under it (docs/mocks/merge-repair-strip-row). */
+.wt-repair-row { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 6px 3px 10px; font-size: 12px; border-top: 1px solid var(--border-subtle); cursor: pointer; }
+.wt-repair-row:hover { background: var(--bg-hover); }
+.wt-repair-row-icon { flex: none; display: inline-flex; font-size: 14px; color: var(--text-3); }
+.wt-repair-row.is-running .wt-repair-row-icon, .wt-repair-row.is-checking .wt-repair-row-icon { color: var(--brand); }
+.wt-repair-row-head { flex: none; color: var(--text-1); font-weight: 500; white-space: nowrap; }
+.wt-repair-row-note { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.wt-repair-row.is-ready :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--success); }
+.wt-repair-row:is(.is-conflict, .is-reply) :is(.wt-repair-row-icon, .wt-repair-row-note) { color: var(--warning); }
+.wt-repair-row.is-failed .wt-repair-row-icon { color: var(--error); }
+.wt-repair-row-step { flex: none; padding: 3px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.wt-repair-row-step:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); }
+.wt-repair-row-step:disabled { opacity: .55; cursor: default; }
+.wt-recovery-snapshot { max-height: 28vh; overflow-y: auto; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .wt-recovery-histories > :only-child { grid-column: 1 / -1; }
 .wt-recovery-route code { font-size: 11px; }
@@ -26461,7 +26568,7 @@ button.agent-progress-agent:hover {
 .wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
 .wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
-.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
+.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg-base); color: var(--text-1); font: inherit; }
 .wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
 .wt-recovery-repair-status { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); color: var(--text-1); text-align: left; cursor: pointer; font: inherit; }
 .wt-recovery-repair-status.is-running { border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
@@ -26480,6 +26587,11 @@ button.agent-progress-agent:hover {
 .wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
 .wt-recovery-link:disabled { opacity: .55; cursor: default; }
 .wt-recovery-snapshot.is-stale { opacity: .45; }
+.wt-recovery .wt-recovery-failure { color: var(--error); }
+/* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue. */
+.wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
+.wt-merge-op span { color: var(--text-2); }
+.wt-merge-op.is-overdue { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--bg-raised)); }
 .wt-recovery-files { margin: 10px 0; }
 .wt-recovery-files ul { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
 .wt-recovery-files code { font-size: 11px; }
@@ -27323,17 +27435,33 @@ button.agent-progress-agent:hover {
 
 /* ── the wiki chat (docs/wiki-chat-design.md §3–§4, board 42 ⓪ ①) ──────────────────────────────────────────
    The round button at the window's bottom right, the panel it opens, the composer's chips and a document's Ask
-   (components/WikiChat*.tsx). Both the button and the panel are fixed to the window: the button floats over the
-   entry drawer (z 5) and its scrim (z 4); the panel stands beside the drawer, which opens to its left. A docked
-   panel pushes everything under the Wiki's head over by its width (`--wk-chat-w`), the head's buttons staying
-   where they are (board 42 ①); narrower than 1440 the directory folds into the Contents drawer. The page's foot
-   keeps 88 clear so the button never sits on its last line. */
+   (components/WikiChat*.tsx). The button is fixed to the window and floats over the entry drawer (z 5) and its scrim
+   (z 4). From 1200 the panel is a column of the page (board docs/mocks/wiki-rail 03 Ⓑ), the entry drawer opening to
+   its left; narrower than 1440 the app sidebar shows as its icon rail for it (C2). Narrower than 1200 the panel lies
+   over the page and the directory folds into the Contents drawer. The page's foot keeps 88 clear so the button never
+   sits on its last line. */
 .wk-chat-host.has-fab .wk-page,
 .wk-chat-host.has-fab .wk-drawer { padding-bottom: 88px; }
-.wk-chat-host.is-docked .wk-page > :not(.wk-title-row) { margin-right: var(--wk-chat-w, 400px); }
+/* Beside the directory's column the clearance is the main column's: on the page it would stop the column short of the
+   window's foot when the page scrolls to its end. */
+.wk-chat-host.has-fab .wk-page--railed { padding-bottom: 0; }
+.wk-chat-host.has-fab .wk-page--railed .wk-main { padding-bottom: 88px; }
+/* Where it docks the panel is a column of the page (board docs/mocks/wiki-rail 03 Ⓑ): beside the page, from the window's
+   top to its foot as the directory's column is, held there while the page scrolls; before the chats are read an empty
+   slot of its width keeps the page from moving when it comes. */
+.wk-chat-frame.is-columned { display: flex; align-items: flex-start; }
+.wk-chat-frame.is-columned > .wk-chat-host { flex: 1; min-width: 0; }
+.wk-chat-frame.is-columned > .wk-chat-panel,
+.wk-chat-frame.is-columned > .wk-chat-slot { position: sticky; top: -24px; right: auto; bottom: auto; flex: none; box-sizing: border-box;
+                                             height: var(--app-vh, 100vh); margin: -24px -32px -24px 32px;
+                                             border: 0; border-left: 1px solid var(--border-subtle); border-radius: 0; }
 .wk-chat-host.is-open:not(.is-sheet) .wk-drawer,
 .wk-chat-host.is-open:not(.is-sheet) .wk-with-drawer .wk-scrim { right: var(--wk-chat-w, 400px); }
 .wk-chat-host.is-fold .wk-layout { display: block; }
+/* Folded, the column is gone with the directory: the head row and the search line are back over the page. */
+.wk-chat-host.is-fold .wk-page--railed { display: block; }
+.wk-chat-host.is-fold .wk-page--railed > .wk-title-row { display: flex; }
+.wk-chat-host.is-fold .wk-page--railed > .wk-search { display: flex; }
 .wk-chat-host.is-fold .wk-dir-col { display: none; }
 .wk-chat-host.is-fold .wk-page .wk-contents-btn { display: inline-flex; }
 .wk-chat-host .wk-dc-page { position: relative; }
@@ -27612,70 +27740,29 @@ button.agent-progress-agent:hover {
 }
 
 .project-done-findings {
+  /* What Orbit cannot prove about where work landed: a warning, not a blocker (decided board ④). */
+  margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--error);
+  border: 1px solid var(--warning-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--error) 8%, transparent);
-  color: var(--error);
+  background: var(--warning-bg);
+  color: var(--text-1);
   font-size: 13px;
   line-height: 1.5;
 }
 .project-done-findings ul { list-style: none; padding: 0; margin: 0; }
-/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the Sign-in card's rows, with From and
-   Reply-To side by side, the test email's answer beside its buttons, and the last week under a rule. */
-.admin-email-off {
-  margin-top: -8px;
-}
-.admin-email-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 600px) {
-  .admin-email-pair {
-    grid-template-columns: 1fr;
-  }
-}
-.admin-email-divided {
-  padding-top: 20px;
-  border-top: 1px solid var(--border-subtle, var(--border));
-}
-.admin-email-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.admin-email-buttons {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
+/* Admin → Email (AdminEmailPage, docs/welcome-email-design.md §3.1): the unreadable-key alert, failed counts and
+   the last week's failures. */
 .admin-email-result {
   padding: 8px 12px;
   border: 1px solid;
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
-.admin-email-result-ok {
-  border-color: var(--success-border);
-  background: var(--success-bg);
-  color: var(--success);
-}
 .admin-email-result-error {
   border-color: var(--error-border);
   background: var(--error-bg);
   color: var(--error);
-}
-.admin-email-week {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-subtle, var(--border));
-  color: var(--text-2);
 }
 .admin-email-failed {
   color: var(--error);
@@ -27683,9 +27770,471 @@ button.agent-progress-agent:hover {
 .admin-email-failures {
   display: grid;
   gap: 6px;
-  margin: -8px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
   color: var(--text-2);
   font-size: 12.5px;
+}
+
+/* Main checkout Git (docs/mocks/main-checkout-git boards 01–04): the card a worktree turn leaves when files
+   appear in the main checkout, its result lines, its bar above the worktree bar, the review drawer's
+   extras and the worktree isolation dialogs. */
+.mck-card {
+  margin: 10px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.mck-card-head {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px 10px;
+}
+.mck-card-icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1px solid var(--warning-border);
+  border-radius: 50%;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.mck-card-heading {
+  min-width: 0;
+}
+.mck-card-title {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 600;
+}
+.mck-card-sub {
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.mck-card-sub code,
+.mck-card-hint code,
+.mck-result-text code,
+.wt-iso-body code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.95em;
+  color: var(--text-1);
+}
+.mck-card-files {
+  padding: 6px 14px 8px 42px;
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+}
+.mck-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.mck-file:disabled {
+  cursor: default;
+}
+.mck-file:hover:not(:disabled) .mck-file-path {
+  text-decoration: underline;
+}
+.mck-file-st {
+  flex: none;
+  width: 12px;
+  color: var(--warning-solid);
+}
+.mck-file-st.st-a {
+  color: var(--success-solid);
+}
+.mck-file-st.st-d {
+  color: var(--error-solid);
+}
+.mck-file-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mck-file-stat {
+  display: inline-flex;
+  gap: 6px;
+}
+.mck-file-stat .add {
+  color: var(--success-solid);
+}
+.mck-file-stat .del {
+  color: var(--error-solid);
+}
+.mck-card-more {
+  padding: 2px 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.mck-card-actions {
+  padding: 10px 14px 12px 42px;
+}
+/* A handled card: history, its buttons unpressable and this line under them. */
+.mck-card-handled {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mck-card-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.mck-card-hint {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mck-btn {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font-size: 13px;
+  cursor: pointer;
+}
+.mck-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.mck-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.mck-btn-primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.mck-btn-primary:hover:not(:disabled) {
+  background: var(--brand-strong);
+}
+.mck-btn-more {
+  border-color: transparent;
+  background: none;
+  color: var(--text-3);
+}
+/* Board 01④ / 02②: the hints wrap under their item at the board's width. */
+.orbit-menu.mck-menu {
+  max-width: min(420px, var(--available-width));
+}
+.mck-menu .orbit-menu-item {
+  white-space: normal;
+}
+.mck-menu-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: normal;
+}
+.mck-menu-label {
+  color: var(--text-1);
+}
+.mck-menu-hint {
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.mck-menu-branch {
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* A target running a turn: listed, not choosable (board 02②). */
+.mck-menu [data-disabled] .mck-menu-label {
+  color: var(--orbit-control-disabled-text);
+}
+.mck-result {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 6px 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.mck-result-icon {
+  flex: none;
+  font-size: 12px;
+}
+.mck-result-ok .mck-result-icon {
+  color: var(--success-solid);
+}
+.mck-result-refused .mck-result-icon,
+.mck-result-waiting .mck-result-icon {
+  color: var(--warning-solid);
+}
+.mck-result-text strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.mck-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+.mck-link:hover {
+  text-decoration: underline;
+}
+.mck-bar .wt-row {
+  gap: 8px;
+}
+.mck-bar-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning-solid);
+}
+.mck-bar-label {
+  color: var(--text-2);
+}
+.mck-bar-branch {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  font-size: 11.5px;
+}
+.mck-bar-status {
+  color: var(--text-3);
+}
+.mck-drawer-file {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.mck-drawer-file .session-file-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.mck-drawer-head {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.mck-drawer-title {
+  font-weight: 600;
+}
+.mck-chip {
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 400;
+}
+.mck-chip-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.mck-drawer-checked {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 400;
+}
+.mck-drawer-choose {
+  padding: 4px 8px 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.mck-choose-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.mck-drawer-error {
+  color: var(--error);
+}
+.mck-drawer-note {
+  margin-top: auto;
+  padding: 8px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.mck-drawer-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.mck-managed {
+  color: var(--warning);
+  font-size: 12.5px;
+}
+.mck-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mck-commit-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.wt-iso-body p {
+  margin: 0 0 10px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.wt-iso-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* Done card follow-ups (docs/mocks/project-done-landing-untracked ③④, project-done-followups 01–03): rows read
+   number · text · state, the state green when met and red when not; "Ran without a branch" and a confirmation of an
+   earlier wording in the warning colour. What stands in the way is a red box naming its tasks; what Orbit cannot prove
+   about landing is a yellow one. */
+.project-done-criteria-list .project-done-gap-number { width: 18px; height: 18px; line-height: 18px; font-size: 10px;
+  background: transparent; color: var(--text-3); }
+.project-done-criterion-text { min-width: 0; color: var(--text-1); }
+.project-done-criterion-confirmed { display: block; margin-top: 2px; font-size: 11px; color: var(--text-3); }
+.project-done-criterion-state.is-met { color: var(--success); }
+.project-done-criterion-state.is-unmet { color: var(--error); }
+.project-done-criterion-state.is-warn { color: var(--warning); }
+.project-done-confirm { padding: 2px 8px; font-size: 11.5px; }
+.project-done-non-code { display: flex; gap: 9px; align-items: flex-start; margin: 8px 0 4px; padding: 9px 11px;
+  border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-subtle); font-size: 12.5px;
+  line-height: 1.5; color: var(--text-2); }
+.project-done-non-code b { color: var(--text-1); font-weight: 650; }
+.project-done-non-code-icon { flex: none; width: 16px; height: 16px; margin-top: 2px; border: 1px solid var(--text-3);
+  border-radius: 50%; color: var(--text-3); font-size: 10px; font-weight: 700; font-style: italic; line-height: 14px; text-align: center; }
+.project-done-non-code-change { color: var(--brand); font-weight: 600; }
+.project-done-non-code-reason { display: block; margin-top: 2px; color: var(--text-2); }
+.project-done-moved-out, .acceptance-moved-out { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px;
+  font-size: 12px; color: var(--text-3); }
+.project-done-moved-out a, .acceptance-moved-out a, .acceptance-moved a { color: var(--brand); }
+.project-done-blockers { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--error); border-radius: 10px;
+  background: color-mix(in srgb, var(--error) 6%, transparent); font-size: 13px; line-height: 1.5; color: var(--text-1); }
+.project-done-blockers > b { display: block; margin-bottom: 6px; }
+.project-done-blockers ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.project-done-blocker-line { display: flex; gap: 8px; align-items: baseline; }
+.project-done-blocker-line .project-done-gap-number { width: 18px; height: 18px; line-height: 18px; font-size: 10px;
+  background: transparent; color: var(--text-3); }
+.project-done-blocker-task { display: flex; gap: 8px; align-items: center; margin: 6px 0 0 26px; padding: 6px 10px;
+  border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-raised); font-size: 12.5px; }
+.project-done-blocker-dot { color: var(--warning); font-size: 9px; }
+.project-done-blocker-task-title { flex: 1; min-width: 0; }
+.project-done-open { padding: 2px 10px; font-size: 12px; text-decoration: none; }
+.project-done-blocker-move { display: flex; gap: 10px; align-items: center; margin: 8px 0 0 26px; }
+.project-done-blocker-hint { font-size: 11.5px; color: var(--text-3); }
+.project-done-findings > b { display: block; margin-bottom: 4px; }
+/* Project page: the non-code line where the branch would be, the Delivers provenance, and Landing Off. */
+.project-integration-non-code .project-integration-facts { color: var(--text-2); font-size: 12.5px; }
+.project-run-non-code-by { margin-top: 6px; color: var(--text-1); }
+.project-run-non-code-reason { margin-top: 2px; color: var(--text-2); }
+.project-run-non-code-consequence { margin: 10px 0 0; color: var(--text-1); }
+/* Acceptance rows met by confirmation (board 03 ⑤⑥) and the Met by menu. */
+.acceptance-confirmation { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.acceptance-work-state.is-stale { color: var(--warning); }
+.acceptance-confirmation-note { margin-top: 4px; font-size: 12.5px; color: var(--text-2); }
+.acceptance-confirmation-note.is-failed { color: var(--error); }
+.acceptance-confirmation-actions { display: flex; gap: 6px; margin-top: 6px; }
+.acceptance-moved { margin-top: 2px; font-size: 12px; color: var(--text-3); }
+.acceptance-confirmation-shots { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.acceptance-confirmation-shot { display: block; width: 44px; height: 44px; border: 1px solid var(--border-subtle); border-radius: 6px;
+  overflow: hidden; background: var(--bg-subtle); }
+.acceptance-confirmation-shot img { width: 100%; height: 100%; object-fit: cover; }
+.acceptance-confirmation-shot-count { font-size: 12px; color: var(--text-3); }
+.acceptance-what-changed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; font-size: 12.5px; line-height: 1.5; }
+.acceptance-what-changed-side { padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.acceptance-what-changed-side.is-now { background: var(--bg-raised); }
+.acceptance-what-changed-label { margin-bottom: 3px; font-size: 11px; font-weight: 650; color: var(--text-3); }
+.acceptance-what-changed-text { color: var(--text-1); }
+.acceptance-what-changed-method, .acceptance-what-changed-missing { margin-top: 3px; color: var(--text-2); }
+.acceptance-mode-trigger { padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--text-3); cursor: pointer; }
+.acceptance-mode-trigger b { color: var(--text-2); font-weight: 600; }
+.acceptance-mode-option { display: grid; gap: 2px; max-width: 320px; white-space: normal; }
+.acceptance-mode-hint { font-size: 12px; color: var(--text-3); }
+.acceptance-mode-held { display: block; margin-top: 4px; font-size: 12px; color: var(--warning); }
+/* Move to a follow-up and Confirm criterion dialogs. */
+.move-criterion-body, .confirm-criterion-body { display: grid; gap: 10px; font-size: 13px; line-height: 1.5; }
+.move-criterion-body p, .confirm-criterion-body p { margin: 0; }
+.move-criterion-label, .confirm-criterion-label { font-size: 11.5px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); }
+.confirm-criterion-label { text-transform: none; letter-spacing: 0; font-size: 12.5px; color: var(--text-1); }
+.confirm-criterion-optional { font-weight: 400; color: var(--text-3); }
+.move-criterion-moves { padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.move-criterion-hint, .confirm-criterion-hint, .move-criterion-stays { font-size: 12px; color: var(--text-3); }
+.move-criterion-new, .move-criterion-existing { display: grid; gap: 6px; }
+.move-criterion-projects { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.move-criterion-projects li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 11px; border-top: 1px solid var(--border-subtle); cursor: pointer; }
+.move-criterion-projects li:first-child { border-top: 0; }
+.move-criterion-projects li.is-picked { background: var(--brand-tint); }
+.move-criterion-meta { color: var(--text-3); font-size: 12px; }
+.confirm-criterion-text { padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); }
+.confirm-criterion-method { color: var(--text-2); }
+.confirm-criterion-drop { display: grid; gap: 2px; justify-items: center; padding: 14px 11px; border: 1px dashed var(--border-strong, var(--border-subtle));
+  border-radius: 8px; background: none; font: inherit; color: var(--text-3); cursor: pointer; }
+.confirm-criterion-drop:hover:not(:disabled) { border-color: var(--brand); }
+.confirm-criterion-drop-action { color: var(--brand); font-weight: 600; }
+.confirm-criterion-drop-hint { font-size: 12px; }
+.confirm-criterion-shot { display: flex; gap: 10px; align-items: flex-end; }
+.confirm-criterion-shot img { max-width: 220px; max-height: 140px; border: 1px solid var(--border-subtle); border-radius: 6px; }
+.acceptance-mode-row { margin-top: 4px; }
+
+/* Settings → Terminals (TerminalsPage) */
+.terminals-empty {
+  margin: 0;
+  color: var(--text-3);
+}
+.terminals-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.terminals-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.terminals-row:first-child {
+  border-top: 0;
+}
+.terminals-machine {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.terminals-sub {
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* A coordinator question still waiting on the owner: orange and heavier-edged, the colour of the
+   `open question below` capsule that points at it (the owner's pick, 2026-11-13). */
+.approval-card.coordinator-question {
+  border: 1.5px solid var(--warning-solid);
 }

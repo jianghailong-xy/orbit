@@ -14,6 +14,7 @@
   <a href="docs/launch-copy.md">Launch kit</a> ·
   <a href="examples/demo-repo/">Demo repo</a> ·
   <a href="docs/self-hosting.md">Operations</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
   <a href="SUPPORT.md">Support</a>
 </p>
 
@@ -92,8 +93,8 @@ and Go are not required for the Compose install.
 ```bash
 git clone https://github.com/jianghailong-xy/orbit.git
 cd orbit
-# Optional but recommended: pin a reviewed release, for example:
-# git checkout v0.1.2-beta.138
+# Optional but recommended: pin a reviewed release tag (the package version with a v prefix):
+# git checkout vX.Y.Z
 scripts/install-server.sh
 docker compose ps
 ```
@@ -263,24 +264,32 @@ Orbit is a pre-1.0 open-source project under active development. Pin deployments
 upgrade notes before changing versions. The latest published release receives best-effort security fixes; `main`
 is a development branch and older releases are not supported.
 
-At this commit the release story is still being reconciled: the runner source version in the root
-`package.json` is `0.1.198`, while the newest repository tag is `v0.1.2-beta.138`. Treat this checkout as
-development, and verify the tag, runner manifest, web image, and native artifacts together before a production
-upgrade. The open issue and proposed sequence are tracked in [Project maturity and roadmap](docs/project-maturity.md).
+The root `package.json` version is the version of record. A release tag is that version with a `v` prefix,
+and the GitHub Release, macOS DMG, TestFlight build, Android APK, runner binaries and update feeds all
+derive from it. The rules, support window, release notes and checklist are in
+[Release process](docs/release-process.md); run `node scripts/release-identity.mjs check-tag <tag>` to check
+one release's identity. The [curated changelog](CHANGELOG.md) summarizes notable changes across releases,
+and each tag's operator-facing notes are on the [Releases page](https://github.com/jianghailong-xy/orbit/releases). Every release also publishes `SHA256SUMS`, a CycloneDX SBOM, an in-toto/SLSA
+provenance statement and a GitHub artifact attestation; [Verifiable release supply chain](docs/supply-chain.md)
+gives the commands that verify them and the signing identities behind them. Tags published before this rule
+do not share the package version; treat them as history, not as a pattern.
 
 ## Roadmap (direction, not dates)
 
 The roadmap is intentionally a set of adoption gates rather than a promise of delivery dates.
 
-- **Now:** make the clean-install smoke test repeatable, keep the README/demo/security claims in sync, and
-  reconcile one version scheme across server, web, runner, and native artifacts.
-- **Next:** screenshot-led onboarding, an operator configuration reference, a public roadmap/changelog with
-  checksums and upgrade notes, and stronger project-owned community/release operations.
+- **Now:** make the clean-install smoke test repeatable, keep the README/demo/security claims in sync, keep
+  one version scheme across server, web, runner, and native artifacts, and keep the public roadmap and
+  changelog current.
+- **Next:** v1.0 readiness review, the OpenSSF best-practices baseline, broader maintainer coverage, and
+  compatibility and migration guarantees only after the evidence gates are met.
 - **Later:** recurring schedules and inbound task sources (ticket/chat ingestion), which are designed for but not
-  built; v1.0 compatibility, migration, and support guarantees come only after the evidence gates are met.
+  built; versioned docs for a stable line. Any name, repository-organization, domain, or release-account change
+  is a project-owner decision and is not scheduled here.
 
-See the [full maturity roadmap](docs/project-maturity.md) and the [canonical launch brief](docs/messaging-brief.md)
-for the evidence required before calling a release production-ready.
+See the [public roadmap](ROADMAP.md), the [curated changelog](CHANGELOG.md), the [full maturity
+roadmap](docs/project-maturity.md), and the [canonical launch brief](docs/messaging-brief.md) for the evidence
+required before calling a release production-ready.
 
 ## Develop locally
 
@@ -323,6 +332,8 @@ and inbound task sources are not yet built.
 ## Community
 
 - Start with the [community guide](COMMUNITY.md), [public roadmap](ROADMAP.md), or [documentation index](docs/README.md).
+- Read the [curated changelog](CHANGELOG.md), and give feedback on a release you upgraded to in the fixed
+  [release feedback discussion](https://github.com/jianghailong-xy/orbit/discussions/159).
 - Ask questions, share a deployment, or discuss direction in [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions).
 - Report a reproducible bug or scoped proposal with [GitHub Issues](https://github.com/jianghailong-xy/orbit/issues); the repository's Issue Forms explain what to include.
 - Pick a small, independently scoped task from the [good first issue list](https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
