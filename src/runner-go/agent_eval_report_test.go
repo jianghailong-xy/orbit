@@ -868,3 +868,36 @@ func writeEvalReport(rep *evalReport, path string) error {
 	}
 	return os.WriteFile(strings.TrimSuffix(path, filepath.Ext(path))+".md", []byte(rep.markdown()), 0o644)
 }
+
+// mergeEvalReports is one report of several written by the same suite: their runs and skips together, their matrix
+// joined, the summary and the gate computed again. A report per engine (one per machine, or per workflow job) becomes
+// the one a release reads; reports graded by different suites do not merge.
+func mergeEvalReports(reports []*evalReport) (*evalReport, error) {
+	if len(reports) == 0 {
+		return nil, fmt.Errorf("no reports to merge")
+	}
+	out := *reports[0]
+	out.Runs, out.Skipped, out.Matrix, out.Comparison = nil, nil, nil, nil
+	out.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
+	matrix := map[string]evalMatrixEntry{}
+	for _, rep := range reports {
+		if rep.Suite.Hash != out.Suite.Hash {
+			return nil, fmt.Errorf("a report graded by suite %.12s does not merge with one graded by %.12s", rep.Suite.Hash, out.Suite.Hash)
+		}
+		if rep.Source.RepoSHA != out.Source.RepoSHA {
+			out.Source.RepoSHA = "several"
+		}
+		out.Runs = append(out.Runs, rep.Runs...)
+		out.Skipped = append(out.Skipped, rep.Skipped...)
+		for _, m := range rep.Matrix {
+			matrix[m.key()] = m
+		}
+	}
+	for _, m := range matrix {
+		out.Matrix = append(out.Matrix, m)
+	}
+	sort.Slice(out.Matrix, func(i, j int) bool { return out.Matrix[i].key() < out.Matrix[j].key() })
+	out.Summary = summarize(out.Runs)
+	out.Gate = gateOf(&out, evalGate())
+	return &out, nil
+}

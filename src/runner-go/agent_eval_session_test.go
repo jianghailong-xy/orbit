@@ -134,6 +134,10 @@ func newEvalSession(sc *evalScenario, provider string) (*evalSession, error) {
 		s.close()
 		return nil, err
 	}
+	if err := writeEvalRepo(s.work, sc.Setup.Files); err != nil {
+		s.close()
+		return nil, fmt.Errorf("the session's checkout: %w", err)
+	}
 	previousHome, hadHome := os.LookupEnv("ORBIT_HOME")
 	_ = os.Setenv("ORBIT_HOME", s.home)
 	s.cleanup = append(s.cleanup, func() {
@@ -175,6 +179,39 @@ func (s *evalSession) close() {
 		s.cleanup[i]()
 	}
 	s.cleanup = nil
+}
+
+// writeEvalRepo makes dir the checkout a session runs in: evalBaseRepo and the scenario's own files, committed.
+func writeEvalRepo(dir string, extra map[string]string) error {
+	files := map[string]string{}
+	for path, content := range evalBaseRepo {
+		files[path] = content
+	}
+	for path, content := range extra {
+		files[path] = content
+	}
+	for path, content := range files {
+		full := filepath.Join(dir, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main"},
+		{"add", "-A"},
+		{"-c", "user.name=agent-eval", "-c", "user.email=agent-eval@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "acme-web"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("git %s: %v: %s", args[0], err, out)
+		}
+	}
+	return nil
 }
 
 // env is the environment a process of this session runs with: what spawnClaude gives the engine, which its `orbit

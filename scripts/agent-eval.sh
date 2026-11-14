@@ -19,6 +19,9 @@
 #   scripts/agent-eval.sh compare BASELINE.json REPORT.json
 #       Prints the comparison of two reports and exits non-zero on a regression.
 #
+#   scripts/agent-eval.sh merge OUT.json REPORT.json REPORT.json...
+#       One report of several graded by the same suite (one per engine or per machine), its gate read again.
+#
 # The eval must not see the calling Orbit session: a session's ORBIT_* variables would send the eval's own
 # `orbit` processes to the real control plane, so they are removed here, as they are for every runner-go test run
 # from inside a session.
@@ -41,7 +44,7 @@ clean_env=(env
 deterministic_tests='^(TestAgentEval|TestAgentContractTelemetry|TestOrbitCLIInvocationReadsInsideAShell|TestATurnThatTouchedOrbitFilesItsTelemetryBeforeItsTurnEnd|TestTheMessageAfterACompactionCarriesTheContextResetNote|TestCodexTurnAfterACompactionOrAResumeCarriesTheContextResetNote|TestEveryAdvertisedArgvAndHelpArgvRuns|TestContract|TestCLIReceipt|TestCLIRefusesAnInvalidBatchDocumentBeforeAnyRequest|TestEveryAdvertisedObjectSchemaIsClosed|TestCatalogSchemasUseOnlyTheValidatedSubset|TestPlanGate|TestOrbitMCPRefusesAWriteInPlanBeforeItReachesTheControlPlane|TestTheInSessionCLIRefusesAWriteInPlan|TestCLIPlanGateRefusesTheSameWrites|TestAgentPrimer|TestMCPInitializeAnswersWithTheVersionedPrimer|TestEveryEngineIsGivenTheSamePrimer|TestCodexPutsThePrimerBackAfterCompaction|TestMCPToolListIsProjectedFromCatalog)'
 
 usage() {
-  sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 }
 
@@ -95,6 +98,16 @@ case "$cmd" in
     cur="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
     cd "$runner"
     exec "${clean_env[@]}" ORBIT_AGENT_EVAL_COMPARE="$base,$cur" go test -count=1 -v -run '^TestAgentEvalCompareReports$' .
+    ;;
+  merge)
+    [ $# -ge 2 ] || usage
+    spec=""
+    for f in "$@"; do
+      abs="$(cd "$(dirname "$f")" && pwd)/$(basename "$f")"
+      spec="${spec:+$spec,}$abs"
+    done
+    cd "$runner"
+    exec "${clean_env[@]}" ORBIT_AGENT_EVAL_MERGE="$spec" go test -count=1 -v -run '^TestAgentEvalMergeReports$' .
     ;;
   *)
     usage

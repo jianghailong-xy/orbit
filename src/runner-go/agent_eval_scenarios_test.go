@@ -79,6 +79,26 @@ type evalSetup struct {
 	MCPBroken bool
 	// DropCreateAnswers drops the answer to that many task creates after writing them.
 	DropCreateAnswers int
+	// Files is the repository the session's working directory holds, beside evalBaseRepo: a session runs in a
+	// checkout, and an empty directory sends an agent looking for code that is not there.
+	Files map[string]string
+}
+
+// evalBaseRepo is the checkout every session runs in: a small service, committed, with no CLAUDE.md or AGENTS.md —
+// nothing the eval measures may come from a repository's own instructions (contract §2.6).
+var evalBaseRepo = map[string]string{
+	"README.md": "# acme-web\n\nThe Acme web service: accounts, billing exports and user sessions.\n\n" +
+		"- `sessions/` keeps user sessions (in Redis today).\n- `billing/` writes the nightly billing export.\n" +
+		"- `uploader/` sends the export to the bank's SFTP.\n",
+	"go.mod": "module example.com/acme-web\n\ngo 1.23\n",
+	"sessions/store.go": "package sessions\n\n// Store keeps a user's session in Redis, keyed by the session token, with a 30-day expiry.\n" +
+		"type Store struct{ redisAddr string }\n\nfunc (s *Store) Get(token string) (string, error) { return \"\", nil }\n",
+	"billing/export.go": "package billing\n\n// Export writes the nightly billing export and hands it to the uploader.\nfunc Export() error { return nil }\n",
+	"billing/export_test.go": "package billing\n\nimport (\n\t\"testing\"\n\t\"time\"\n)\n\n" +
+		"// TestBillingExportRetries fails about one run in ten on CI: it races the uploader's retry timer.\n" +
+		"func TestBillingExportRetries(t *testing.T) {\n\tdone := make(chan struct{})\n\tgo func() { time.Sleep(9 * time.Millisecond); close(done) }()\n" +
+		"\tselect {\n\tcase <-done:\n\tcase <-time.After(10 * time.Millisecond):\n\t\tt.Fatal(\"export did not retry in time\")\n\t}\n}\n",
+	"uploader/upload.go": "package uploader\n\n// Upload sends one file to the bank's SFTP. It does not retry: a 503 fails the upload.\nfunc Upload(path string) error { return nil }\n",
 }
 
 // evalClause is one checked sentence of a scenario.
@@ -554,8 +574,26 @@ func evalScenarioByID(id string) *evalScenario {
 // evalSuiteHash names the suite a report was graded with: the scenarios, their words and their clauses.
 func evalSuiteHash() string {
 	var b strings.Builder
+	files := make([]string, 0, len(evalBaseRepo))
+	for path, content := range evalBaseRepo {
+		files = append(files, path+"="+sha256Hex([]byte(content)))
+	}
+	sort.Strings(files)
+	fmt.Fprintf(&b, "repo %s\n", strings.Join(files, ","))
 	for _, s := range evalScenarios() {
 		fmt.Fprintf(&b, "%s|%s|%s\n", s.ID, s.Case, strings.Join(s.Covers, ","))
+		st := s.Setup
+		fmt.Fprintf(&b, "  setup orch=%v project=%v task=%v %q %q mcpBroken=%v drop=%d\n", st.Orchestration, st.Project,
+			st.TaskLinked, st.CurrentTitle, st.CurrentDescription, st.MCPBroken, st.DropCreateAnswers)
+		for _, seed := range st.Seeds {
+			fmt.Fprintf(&b, "  seed %s %q %s %v %v\n", seed.Name, seed.Title, seed.Status, seed.InProject, seed.Assigned)
+		}
+		extra := make([]string, 0, len(st.Files))
+		for path, content := range st.Files {
+			extra = append(extra, path+"="+sha256Hex([]byte(content)))
+		}
+		sort.Strings(extra)
+		fmt.Fprintf(&b, "  files %s\n", strings.Join(extra, ","))
 		for _, turn := range s.Turns {
 			fmt.Fprintf(&b, "  turn %s %s %q %q\n", turn.Mode, turn.Before, turn.Prompt, turn.FollowUp)
 		}

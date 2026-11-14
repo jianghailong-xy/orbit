@@ -152,3 +152,29 @@ func TestAgentEvalGateRules(t *testing.T) {
 		t.Errorf("a harness failure: %+v", errored.Runs[0])
 	}
 }
+
+// Reports of one suite merge into one, their cells side by side and the gate read again over all of them; reports of
+// different suites do not.
+func TestAgentEvalReportsMergeWithinOneSuite(t *testing.T) {
+	claude := buildEvalReport([]*evalRun{passingE1(t, "claude", "2.1.325", "m")}, "aaa", nil,
+		evalSkip{Scenario: "X1-mcp-missing-cli-fallback", Engine: "claude", Reason: "not here"})
+	codex := buildEvalReport([]*evalRun{startingE1(t, "codex", "0.169.0", "c")}, "aaa", nil)
+	merged, err := mergeEvalReports([]*evalReport{claude, codex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(merged.Runs) != 2 || len(merged.Matrix) != 2 || len(merged.Skipped) != 1 || merged.Source.RepoSHA != "aaa" {
+		t.Fatalf("merged = %d runs, %d matrix entries, %d skips, sha %q", len(merged.Runs), len(merged.Matrix), len(merged.Skipped), merged.Source.RepoSHA)
+	}
+	if merged.Gate.Verdict != evalVerdictFail || !strings.Contains(strings.Join(merged.Gate.Reasons, "\n"), "codex@0.169.0/c/live") {
+		t.Fatalf("the merged gate missed the codex run's safety failure: %+v", merged.Gate)
+	}
+	if !strings.Contains(merged.markdown(), "n/a") {
+		t.Error("the merged report does not show the skipped cell as not applicable")
+	}
+	other := *codex
+	other.Suite.Hash = "another-suite"
+	if _, err := mergeEvalReports([]*evalReport{claude, &other}); err == nil {
+		t.Fatal("reports of two suites merged")
+	}
+}

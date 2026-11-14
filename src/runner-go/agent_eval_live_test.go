@@ -103,6 +103,10 @@ type claudeEvalEngine struct {
 	compacted              atomic.Bool
 	firstUsage             int
 	sessionDir             string
+	// asyncAgents counts the engine's own background agents launched and not yet reported back. Each one's report
+	// arrives in a turn the engine starts by itself, as a session's self-driven turn does under the runner, and the
+	// person's next message waits for it.
+	asyncAgents atomic.Int32
 	// reset mirrors runClaudeSessionProcess's contextReset: set by a compact_boundary and by a resumed process,
 	// carried by the next message as orbitContextResetNote (context_reset_note.go).
 	resetNote atomic.Bool
@@ -183,6 +187,14 @@ func (e *claudeEvalEngine) spawn(s *evalSession, first bool) error {
 						e.resetNote.Store(true)
 					}
 				}
+			case "user":
+				// An async sub-agent's launch, as Claude Code 2.1.325 answers the Agent tool that ran it in the background.
+				content, _ := mapValue(msg["message"])["content"].([]interface{})
+				for _, block := range content {
+					if b := mapValue(block); b["type"] == "tool_result" && strings.Contains(toolResultText(b["content"]), "Async agent launched successfully") {
+						e.asyncAgents.Add(1)
+					}
+				}
 			case "result":
 				usage := mapValue(msg["usage"])
 				res := claudeEvalResult{isError: msg["is_error"] == true, subtype: asString(msg["subtype"])}
@@ -232,14 +244,30 @@ func (e *claudeEvalEngine) send(s *evalSession, text string) (claudeEvalResult, 
 	if err := e.rt.send(userFrame(s.job.SessionUUID, []map[string]interface{}{{"type": "text", "text": text}})); err != nil {
 		return claudeEvalResult{}, err
 	}
+	var res claudeEvalResult
 	select {
-	case res := <-e.results:
-		return res, nil
+	case res = <-e.results:
 	case <-e.readDone:
 		return claudeEvalResult{}, fmt.Errorf("claude exited before answering: %s", e.stderrTail())
 	case <-s.ctx.Done():
 		return claudeEvalResult{}, s.ctx.Err()
 	}
+	// The engine's own background agents report back in turns it starts itself; the turn is over when they have.
+	for e.asyncAgents.Load() > 0 {
+		select {
+		case more := <-e.results:
+			e.asyncAgents.Add(-1)
+			res.usage.InputTokens += more.usage.InputTokens
+			res.usage.CachedInputTokens += more.usage.CachedInputTokens
+			res.usage.OutputTokens += more.usage.OutputTokens
+			res.usage.DurationMs += more.usage.DurationMs
+		case <-time.After(5 * time.Minute):
+			e.asyncAgents.Store(0)
+		case <-e.readDone:
+			return res, nil
+		}
+	}
+	return res, nil
 }
 
 func (e *claudeEvalEngine) turn(s *evalSession, log *evalTurnLog) error {
@@ -712,5 +740,36 @@ func TestAgentEvalCompareReports(t *testing.T) {
 	}
 	if len(c.Regressions) > 0 {
 		t.Errorf("%d cells regressed", len(c.Regressions))
+	}
+}
+
+// TestAgentEvalMergeReports merges reports of one suite into one (scripts/agent-eval.sh merge).
+func TestAgentEvalMergeReports(t *testing.T) {
+	spec := os.Getenv("ORBIT_AGENT_EVAL_MERGE")
+	if spec == "" {
+		t.Skip("set ORBIT_AGENT_EVAL_MERGE=OUT.json,IN.json,IN.json… (scripts/agent-eval.sh merge)")
+	}
+	paths := strings.Split(spec, ",")
+	if len(paths) < 2 {
+		t.Fatalf("ORBIT_AGENT_EVAL_MERGE=%q names no input", spec)
+	}
+	var reports []*evalReport
+	for _, path := range paths[1:] {
+		rep, err := readEvalReport(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		reports = append(reports, rep)
+	}
+	merged, err := mergeEvalReports(reports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeEvalReport(merged, paths[0]); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("merged %d reports into %s: %d runs, gate %s", len(reports), paths[0], len(merged.Runs), merged.Gate.Verdict)
+	for _, reason := range merged.Gate.Reasons {
+		t.Logf("  %s", reason)
 	}
 }
