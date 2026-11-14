@@ -301,6 +301,7 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 		envWatches:                  watchesEnv(job.WatchesDisabled),
 		envWiki:                     wikiEnv(job.WikiDisabled),
 		envMCPPermissionPrompt:      "0",
+		envSpawnDepth:               strconv.Itoa(job.SpawnDepth),
 		// Without it every start spawns a detached `agy --bg-updater` that replaces the binary in
 		// place, and only the lowercase "true" turns it off (§6). The binary changes when Orbit's
 		// engine updater says so.
