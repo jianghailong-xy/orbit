@@ -15,10 +15,13 @@ struct OwnerRequestView: View {
     let requestID: String
     /// The input a push or a link asked for: the card puts the cursor there when it appears.
     var focus: OwnerRequestLink.Focus? = nil
+    /// Hands a talk about the request to the conversation's composer. Only a conversation has one,
+    /// so the inbox passes none and its cards offer no Chat about this.
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
         if let model = appModel.ownerRequests, let request = model.request(requestID) {
-            OwnerRequestContent(model: model, request: request, focus: focus)
+            OwnerRequestContent(model: model, request: request, focus: focus, onChat: onChat)
         }
     }
 }
@@ -28,6 +31,7 @@ struct OwnerRequestContent: View {
     let model: OwnerRequestsModel
     let request: OwnerRequest
     var focus: OwnerRequestLink.Focus? = nil
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     var body: some View {
         if request.state != .pending {
@@ -35,7 +39,7 @@ struct OwnerRequestContent: View {
         } else if focus == nil, let until = model.snoozedUntil(request.id) {
             OwnerRequestSnoozedLine(model: model, request: request, until: until)
         } else {
-            OwnerRequestCard(model: model, request: request, focus: focus)
+            OwnerRequestCard(model: model, request: request, focus: focus, onChat: onChat)
         }
     }
 }
@@ -46,6 +50,7 @@ struct OwnerRequestCard: View {
     let model: OwnerRequestsModel
     let request: OwnerRequest
     var focus: OwnerRequestLink.Focus? = nil
+    var onChat: ((OwnerRequest) -> Void)? = nil
 
     private enum Field: Hashable { case secret, answer, reason }
 
@@ -61,11 +66,15 @@ struct OwnerRequestCard: View {
     /// WIKI_CREATE's Change settings…: the Create wiki form on the asking session's workspace.
     @State private var changingSettings = false
     @FocusState private var field: Field?
+    /// Closes the review sheet this card may be drawn in, so the composer it arms is in view.
+    @Environment(\.dismissApprovalReview) private var dismissReview
 
-    init(model: OwnerRequestsModel, request: OwnerRequest, focus: OwnerRequestLink.Focus? = nil) {
+    init(model: OwnerRequestsModel, request: OwnerRequest, focus: OwnerRequestLink.Focus? = nil,
+         onChat: ((OwnerRequest) -> Void)? = nil) {
         self.model = model
         self.request = request
         self.focus = focus
+        self.onChat = onChat
         _draft = State(initialValue: OwnerRequests.SecretDraft(spec: request.secretSpec))
         _chosen = State(initialValue: request.recommendedOption)
     }
@@ -290,7 +299,8 @@ struct OwnerRequestCard: View {
         }
     }
 
-    /// Two rows, so a phone's width never breaks a button's words: what to do, then the ways out. A WIKI_CREATE card's
+    /// The buttons as every other card draws them (`ApprovalActions`: stacked full width on a phone,
+    /// one row on a Mac), Chat about this after the press; then the ways out, as links. A WIKI_CREATE card's
     /// are its own three (design §3.6): Create wiki, Change settings…, Not for this repository.
     @ViewBuilder private var actions: some View {
         if request.kind == .wikiCreate { wikiCreateActions } else { kindActions }
@@ -298,19 +308,39 @@ struct OwnerRequestCard: View {
 
     private var kindActions: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) { doors }
+            ApprovalActions {
+                doors
+                chat
+            }
             HStack(spacing: 12) { exits }
         }
         .lineLimit(1)
     }
 
+    /// Chat about this: on any pending card in its conversation (an `onChat` to hand it to), none past the deadline.
+    @ViewBuilder private var chat: some View {
+        if let onChat, !closed {
+            Button {
+                PlatformHaptics.tap()
+                dismissReview()
+                onChat(request)
+            } label: {
+                Text(Approvals.chatAction).approvalActionLabel()
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("owner-request-chat")
+        }
+    }
+
     @ViewBuilder private var doors: some View {
             if grant?.state == .pendingDelivery {
-                Button(OwnerRequests.cancel) { run { try await model.cancelSecret(request) } }
-                    .buttonStyle(.bordered).disabled(busy)
+                Button { run { try await model.cancelSecret(request) } } label: {
+                    Text(OwnerRequests.cancel).approvalActionLabel()
+                }
+                .buttonStyle(.bordered).disabled(busy)
             } else {
                 Button { pressPrimary() } label: {
-                    Text(OwnerRequests.primaryLabel(request.kind)).bold()
+                    Text(OwnerRequests.primaryLabel(request.kind)).bold().approvalActionLabel()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
@@ -318,10 +348,12 @@ struct OwnerRequestCard: View {
                           || !OwnerRequests.canSubmit(request, draft: draft, option: chosen, text: text))
                 .accessibilityIdentifier("owner-request-primary")
                 if request.kind == .secret, draft.savedID == nil, let saved = model.savedSecrets.first {
-                    Button(OwnerRequests.useSaved(saved.label)) {
+                    Button {
                         draft.value = ""
                         draft.save = false
                         draft.savedID = saved.id
+                    } label: {
+                        Text(OwnerRequests.useSaved(saved.label)).approvalActionLabel()
                     }
                     .buttonStyle(.bordered)
                 }
@@ -347,23 +379,26 @@ struct OwnerRequestCard: View {
 
     private var wikiCreateActions: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+            ApprovalActions {
                 Button {
                     run {
                         try await model.createWiki(request)
                         await appModel.wiki?.loadSpaces()
                     }
                 } label: {
-                    Text(OwnerRequests.primaryLabel(request.kind)).bold()
+                    Text(OwnerRequests.primaryLabel(request.kind)).bold().approvalActionLabel()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(busy || closed)
                 .accessibilityIdentifier("owner-request-primary")
-                Button(WikiStartCopy.changeSettings) { changingSettings = true }
-                    .buttonStyle(.bordered)
-                    .disabled(busy || closed || appModel.wiki == nil)
-                    .accessibilityIdentifier("owner-request-wiki-settings")
+                Button { changingSettings = true } label: {
+                    Text(WikiStartCopy.changeSettings).approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(busy || closed || appModel.wiki == nil)
+                .accessibilityIdentifier("owner-request-wiki-settings")
+                chat
             }
             HStack(spacing: 12) {
                 Button(WikiStartCopy.notHere) { run { try await model.decline(request, reason: WikiStartCopy.notHere) } }

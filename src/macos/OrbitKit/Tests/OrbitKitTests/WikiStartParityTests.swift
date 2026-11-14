@@ -925,7 +925,8 @@ final class WikiStartParityTests: XCTestCase {
         assertSays(card, "if request.kind == .wikiCreate { wikiCreateActions } else { kindActions }", in: "OwnerRequestViews.swift")
         let actions = try slice(card, from: "private var wikiCreateActions: some View {", to: "private var declineForm: some View {")
         assertOrder(actions, ["try await model.createWiki(request)", "await appModel.wiki?.loadSpaces()", "Text(OwnerRequests.primaryLabel(request.kind)).bold()",
-                              ".buttonStyle(.borderedProminent)", "Button(WikiStartCopy.changeSettings) { changingSettings = true }",
+                              ".buttonStyle(.borderedProminent)", "Button { changingSettings = true } label: {",
+                              "Text(WikiStartCopy.changeSettings).approvalActionLabel()", "chat",
                               "Button(WikiStartCopy.notHere) { run { try await model.decline(request, reason: WikiStartCopy.notHere) } }",
                               "WikiCreateSheet(wiki: wiki, workspaceID: request.workspaceId, created: { await model.load() })"], "the native buttons")
         let requests = try native("OwnerRequestsModel.swift")

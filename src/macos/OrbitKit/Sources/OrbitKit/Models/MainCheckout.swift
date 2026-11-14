@@ -6,6 +6,8 @@ import Foundation
 
 /// The runner capability that unlocks the actions. Without it the clients draw the text and no buttons.
 public let mainCheckoutGitCapability = "main-checkout-git/v1"
+/// The runner capability for Discard, on top of the one above.
+public let mainCheckoutDiscardCapability = "main-checkout-discard/v1"
 
 /// One changed path in the main checkout (`MainCheckoutFile`). Ignored files never appear; untracked ones do.
 public struct MainCheckoutFile: Codable, Equatable, Sendable, Identifiable {
@@ -107,22 +109,26 @@ public struct MainCheckoutRead: Codable, Equatable, Sendable {
     public var diffs: [MainCheckoutFileDiff]? = nil
     /// The runner declared the capability: draw the action buttons.
     public let actionsSupported: Bool
+    /// The runner declared the Discard capability too: draw Discard.
+    public var discardSupported: Bool? = nil
     public var managedBranch: MainCheckoutManagedBranch? = nil
     public var inFlight: MainCheckoutInFlight? = nil
 
     public init(snapshot: MainCheckoutSnapshot, diffs: [MainCheckoutFileDiff]? = nil, actionsSupported: Bool,
+                discardSupported: Bool? = nil,
                 managedBranch: MainCheckoutManagedBranch? = nil, inFlight: MainCheckoutInFlight? = nil) {
         self.snapshot = snapshot
         self.diffs = diffs
         self.actionsSupported = actionsSupported
+        self.discardSupported = discardSupported
         self.managedBranch = managedBranch
         self.inFlight = inFlight
     }
 }
 
-/// The four actions (§5).
+/// The actions (§5).
 public enum MainCheckoutActionKind: String, Codable, Equatable, Sendable, CaseIterable {
-    case move, commit, push, rescue
+    case move, commit, push, rescue, discard
 }
 
 /// `POST /workspaces/:id/main-checkout/actions` (`MainCheckoutActionPost`). Build it with the per-kind
@@ -170,6 +176,12 @@ public struct MainCheckoutActionPost: Encodable, Equatable, Sendable {
 
     public static func rescue(root: String, fingerprint: String, requestId: String, from sessionId: String?) -> Self {
         Self(kind: .rescue, root: root, fingerprint: fingerprint, requestId: requestId, initiatedFromSessionId: sessionId)
+    }
+
+    public static func discard(root: String, fingerprint: String, files: [String], requestId: String,
+                               from sessionId: String?) -> Self {
+        Self(kind: .discard, root: root, fingerprint: fingerprint, files: files, requestId: requestId,
+             initiatedFromSessionId: sessionId)
     }
 }
 
