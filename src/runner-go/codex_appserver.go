@@ -1043,30 +1043,35 @@ func codexApprovalsReviewer(permissionMode string) string {
 // kimiAutomaticPermissionOption. The second result reports whether the mode decided at all;
 // otherwise the request goes to the user.
 func codexAutomaticApproval(permissionMode string, request codexApprovalRequest) (allowed, decided bool) {
-	// What bg_run may do is the runner's gate's to say, in every mode (background_gate.go). A consent here
-	// would be a second card about the same call, and Plan's refusal of the consent would hide what the
-	// gate says to do instead.
-	if request.mcpTool && request.server == codexOrbitMCPServer && request.tool == "bg_run" {
+	// Orbit's own tools, each recognized by its name in the operation catalogue, are consented to in every mode.
+	// Every session may call them without a card (ALWAYS_ALLOWED_TOOLS, apiserver common/permission-mode.ts: the
+	// rule Claude Code is given as its mcp__orbit__* allow rule), so a consent card would only ask the owner to let
+	// Orbit talk to Orbit. What a call may do is decided by the gates behind it, each of which says what to do
+	// instead, where a declined consent tells the model only that it was declined: a write that needs the owner
+	// files its own card, Plan's refusal of a write is Orbit's Plan gate's (plan_gate.go), and bg_run's is the
+	// background-job gate's (background_gate.go). Codex itself asks about an Orbit call only when its annotations
+	// say it may destroy something or reach beyond Orbit (withCatalogAnnotations), so the consents that still reach
+	// this are the destructive writes and bg_run.
+	if request.mcpTool && request.server == codexOrbitMCPServer && catalogMCPTool(request.tool) {
 		return true, true
 	}
-	// Codex asks for MCP tool-call consent on every call, including under the `never` policy the
-	// non-asking modes run on. Decide those here: a card in a mode that promises not to interrupt
+	// Codex has asked for MCP tool-call consent under the `never` policy the non-asking modes run on as
+	// well (measured on 0.166; 0.167.2 answers it itself under full disk access, which is what those
+	// modes run with). Decide any that still come here: a card in a mode that promises not to interrupt
 	// would be a new prompt, and the task runs that mode exists for would wait on a human forever.
 	if request.mcpTool && codexApprovalPolicy(permissionMode) == "never" {
 		return true, true
 	}
-	// Auto means the model decides when to ask — but Codex's MCP consent is not the model's
-	// judgement, it fires on every MCP tool call regardless. Left to the card, Auto would raise a
-	// prompt for each `task_list`, which is not the posture that mode describes. Orbit answers it
-	// for the server Orbit itself registers and scopes to this owner; a third-party MCP server
-	// still reaches the user, and the modes whose whole point is being consulted (default,
-	// acceptEdits) still ask about every server.
+	// An Orbit consent whose tool could not be read (codexMCPConsentTool) is still Orbit's own server's, scoped to
+	// this owner: Auto, which lets the model decide when to ask, answers it, and the modes whose point is being
+	// consulted (Default, Accept Edits) put it on the card, as they do a third-party server's.
 	if request.mcpTool && permissionMode == "auto" && request.server == codexOrbitMCPServer {
 		return true, true
 	}
 	switch permissionMode {
 	case "plan":
-		// Plan mode is read-only by definition: nothing it proposes may execute or edit.
+		// Plan mode is read-only by definition: nothing it proposes may execute or edit. That includes an Orbit
+		// consent whose tool could not be read, which cannot be told apart from a write.
 		return false, true
 	case "acceptEdits":
 		if request.fileChange {
@@ -1074,6 +1079,12 @@ func codexAutomaticApproval(permissionMode string, request codexApprovalRequest)
 		}
 	}
 	return false, false
+}
+
+// catalogMCPTool reports whether a name is one of the MCP tools the operation catalogue declares.
+func catalogMCPTool(name string) bool {
+	entry, declared := planGateTable()[name]
+	return declared && entry.mcp
 }
 
 // bridgeCodexApproval answers one Codex approval request: the agent's own policy first, then a
@@ -1202,15 +1213,7 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	// invents (cache_root.go). The cache root is also a writable root of the sandbox policy
 	// (codexRuntimeWorkspaceRoots), so a confined command may write it.
 	cmd.Env = append(cmd.Env, runnerCacheEnv()...)
-	cmd.Env = append(cmd.Env,
-		"ORBIT_SESSION_ID="+publicID(job.SessionID),
-		"ORBIT_AGENT_ID="+publicID(job.AgentID),
-		"ORBIT_TASK_ID="+publicID(job.TaskID),
-		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
-		envWatches+"="+watchesEnv(job.WatchesDisabled),
-		envWiki+"="+wikiEnv(job.WikiDisabled),
-		envMCPPermissionPrompt+"=0",
-	)
+	cmd.Env = append(cmd.Env, codexOrbitSessionEnv(job)...)
 	// Runner-hosted background jobs (mcp__orbit__bg_run). Codex also needs the two
 	// names on the MCP env allowlist — see codexOrbitMCPEnvVarsConfig.
 	//
@@ -1840,8 +1843,10 @@ func (r codexApprovalRequest) toolName() string {
 
 // isCodexMCPToolConsent reports whether an elicitation is Codex's own "Allow the X MCP server to
 // run tool Y?" prompt: a form whose requested schema is empty because the only answer wanted is
-// accept or decline. Codex raises it for every MCP tool call whatever the turn's approvalPolicy
-// is, so this is the one elicitation Orbit can answer with the approval card it already has.
+// accept or decline. Codex raises it for an MCP tool call that needs approval by its annotations
+// (codex-rs 0.167.2: not read-only, and destructive or open-world, which a tool that declares
+// nothing is), whatever the turn's approvalPolicy, so this is the one elicitation Orbit can answer
+// with the approval card it already has.
 func isCodexMCPToolConsent(params map[string]interface{}) bool {
 	return firstString(mapValue(params["_meta"]), "codex_approval_kind") == "mcp_tool_call"
 }

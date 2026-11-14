@@ -38,7 +38,9 @@ Usage:
   orbit session delete SESSION_ID [--json]
 
 Session orchestration is available inside a live Orbit session while the account's
-Session orchestration switch (Settings) is on. Outside any session — a launchd/cron process with no
+Session orchestration switch (Settings) is on. The same switch grants 'orbit agent' and
+'orbit runner' (managing this account's agents and runners) and 'orbit project send' and
+'orbit project ensure-coordinator'. Outside any session — a launchd/cron process with no
 ORBIT_SESSION_ID — the runner credential alone allows get, list, send and import, scoped to
 the sessions this runner hosts; set ORBIT_SERVICE_TOKEN to a credential from
 'orbit token mint' to get exactly its scopes instead, including create. Inside a

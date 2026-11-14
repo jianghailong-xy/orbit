@@ -1,8 +1,9 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.2.0, 2026-11-13 (v1.0.0 review record in §11; the 1.1.0 and 1.2.0 changes
-> are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
-> card-free task-write door on the runner's machine credential. This file is the authority for how an
+> **Status:** frozen at v1.3.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0, 1.2.0 and 1.3.0
+> changes are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
+> card-free task-write door on the runner's machine credential; v1.3.0 makes the permission modes mean the
+> same for Orbit's calls on Claude and Codex (§4.1). This file is the authority for how an
 > in-session Claude or Codex agent uses Orbit: which object an intent belongs to, whether it travels
 > over MCP or the CLI, what a person must approve, how failures and retries are handled, and what
 > counts as a success receipt. The implementation tasks P0-02 … P2-01 work from this file. If the code
@@ -253,26 +254,48 @@ receipts. The one trap is `autoRunWhenReady`, which is **true by default**.
 ### 4.1 Permission modes and what they mean for Orbit calls
 
 A session's mode decides what runs without a person. The shell and background-job columns are the
-product's (`runner-cli.md` §Permission modes, `background_gate.go`). The Orbit column is split by
-engine because the two engines enforce it differently, and that difference is part of this contract.
+product's (`runner-cli.md` §Permission modes, `background_gate.go`); the Orbit columns are the same on
+Claude and Codex since v1.3.0 (P1-02), and the authoritative per-engine, per-surface table is
+[`permission-matrix.md`](./permission-matrix.md), generated from the test (`permission_matrix_test.go`)
+that derives every cell from the code deciding it.
 
-| Mode | Claude shell (`Bash`/`Monitor`) | Background jobs (`bg_run`) | Orbit MCP / CLI calls — Claude | Orbit MCP / CLI calls — Codex | Target (P1-02) |
+| Mode | Claude shell (`Bash`/`Monitor`) | Background jobs (`bg_run`) | Orbit reads, waits, questions for the owner, previews | Orbit writes | Orbit write with its own card |
 | --- | --- | --- | --- | --- | --- |
-| `plan` | a card per command; the Auto classifier is off | **refused**, with what to do instead | no runner gate; a consequential write still files its card (whether Claude's own plan policy refuses an MCP call is not measured) | **refused**: Codex's MCP consent is answered `false` automatically, reads included | reads allowed on both engines, writes refused without leaving plan |
-| `default`, `acceptEdits` | a card per command not already allowed | a card showing what would run | no runner gate; a consequential write still files its card | **every MCP call raises a consent card** (Codex asks per call; acceptEdits auto-answers only file changes) | no card for routine Orbit reads; writes keep their own card |
-| `dontAsk` | refused unless already allowed | refused | no runner gate; the create cards still ask (a question is not a job) | MCP consents auto-approved (the `never` policy); writes keep their own card | unchanged, but state it |
-| `auto` | runs without asking (Auto's own classifier decides) | started | no runner gate | Orbit's own MCP server auto-approved; third-party servers still reach the person | unchanged |
-| `bypassPermissions` | runs without asking | started | no runner gate | MCP consents auto-approved | unchanged |
+| `plan` | a card per command not already allowed (every `orbit` command is); the Auto classifier is off | **refused**, with what to do instead | run, nobody asked | **refused**, with what to do instead; nothing written | **refused**; no card is filed |
+| `default`, `acceptEdits` | a card per command not already allowed | a card showing what would run | run, nobody asked | run, nobody asked | the card |
+| `dontAsk` | refused unless already allowed | refused | run | run | the card (a question is not a job) |
+| `auto` | runs without asking (Auto's own classifier decides) | started | run | run (a destructive one goes to Codex's own Auto reviewer first) | the card |
+| `bypassPermissions` | runs without asking | started | run | run | the card |
+
+What makes the two engines agree, and what each still does its own way:
+
+- **Orbit's own tools never ask through the engine** (`ALWAYS_ALLOWED_TOOLS`, `mcp__orbit__*`). Claude Code
+  is given that allow rule and one rule per `orbit` command the session is offered, generated from the
+  operation catalogue (`orbitCLIAllowedTools`), so the allowlist cannot fall behind the commands
+  `capabilities --json` advertises. On Codex the runner answers each MCP consent for an Orbit tool yes by its
+  catalogue name (`codexAutomaticApproval`); a consent whose tool cannot be read, or a third-party server's,
+  is declined in `plan` and goes to a card in `default`/`acceptEdits`.
+- **The catalogue annotates every tool** (`readOnlyHint`, `destructiveHint`, `openWorldHint`), so neither
+  engine asks about Orbit's reads at all: Claude Code's Plan runs a tool annotated read-only and holds back
+  any other to ask its permission prompt, which Orbit answers itself with no card (measured on Claude Code
+  2.1.325, `TestRealClaudePlanModeHoldsOnlyTheOrbitToolsThatWrite`); Codex asks consent only for a call
+  that is not read-only and is destructive or open-world (codex-rs 0.167.2).
+- **Plan's write refusal is Orbit's own gate** (`plan_gate.go`), in `orbit mcp`, in Claude's permission
+  prompt for Orbit's tools, in the hosted owner wait and in the in-session CLI, by the session's live mode
+  read from the runner: an owner's switch and Claude Code leaving Plan once a plan is approved count from
+  the next call. What Plan runs is the catalogue's `Plan` column: every read, the waits (`task_await`,
+  `session_await`, watches, `schedule_wakeup`), the lines and questions for the owner (`notify`,
+  `ask_owner`, `request_owner_action`, `withdraw_owner_request`) and previews; `bg_run` is the
+  background-job gate's.
+- **A schedule and a dependency edge need no card outside Plan**: `task_update` with `runAt`
+  (`PATCH /runner/tasks/:id`) and `task_dependency_add`/`_remove` (`POST`/`DELETE
+  /runner/tasks/:id/dependencies`) start recorded work no sooner than `task_start`, which needs none (R1.4).
+- **Codex's shell takes no Orbit allowlist**: an `orbit` command there is a command like any other (a
+  card in `default`/`acceptEdits`, declined in `plan`); Codex reaches Orbit through the MCP tools.
 
 The person, not the mode, is the stop for a create/batch/project/provider write: the create card is
 filed even in `auto`. What the mode changes is whether the *engine's shell* is allowed to run the same
-thing another way, and whether a background job starts.
-
-Codex's consent rule is implemented in the runner (`codexAutomaticApproval`,
-`bridgeCodexApprovalWithContext`): `plan` denies, `auto` approves Orbit's own server, the `never`
-modes approve every MCP consent, and `default`/`acceptEdits` hand each call to the person. This is why
-the same Codex session can be unusable in `default` (a card per `task_list`) and silent in `auto`, and
-why P1-02's matrix must be per engine rather than one table.
+thing another way, whether a background job starts, and, in `plan`, whether Orbit writes at all.
 
 ### 4.2 The human gates
 
@@ -293,8 +316,10 @@ do not re-file the same question, and do not sign the person's answer for them.
 ### 4.3 Orchestration
 
 One account-level switch (Settings → Session orchestration). It gates the `session_*`, `agent_*` and
-`runner_*` tool families, `project_send`, `project_ensure_coordinator`, and the same CLI commands.
-It requires an exact live session; ending the session, reassigning it, or turning the switch off
+`runner_*` tool families, `project_send`, `project_ensure_coordinator`, and the same CLI commands, so
+turning it on grants managing the account's agents and runners as well as its sessions. Since v1.3.0 the
+switch's own copy says so on every client (web, macOS/iOS, Android), and so do `orbit capabilities --help`
+and the `orbit session`, `orbit agent` and `orbit runner` help. It requires an exact live session; ending the session, reassigning it, or turning the switch off
 revokes access immediately, without waiting for a proof to expire.
 
 With it **off**, an agent has no delegation surface at all. The correct behaviour is: file the work
@@ -443,7 +468,7 @@ engine difference in *how a prompt is asked* is not a difference in what the age
 | `E2-private-plan` | Private plan, then "keep that plan" | default mode; plan mode for the first turn |
 | `E3-create-no-start` | Create without start | default mode; card answered both ways |
 | `E4-batch-plan` | Batch plan | default mode; `dryRun` then a real batch |
-| `E5-read-only-project` | Read-only project inspection | default mode; plan-mode reads are P1-02's target (G9) |
+| `E5-read-only-project` | Read-only project inspection | default mode; plan mode too, where reads run and writes are refused (G9 closed by P1-02) |
 | `E6-immediate-delegation` | Immediate delegation | orchestration on |
 | `E7-no-orchestration` | Same request, orchestration off | orchestration off |
 | `E8-compaction-recovery` | Continue after compaction/resume | default mode; both engines |
@@ -669,10 +694,10 @@ Other measured facts:
 | Case | Verdict | Evidence | What does not hold (feeds which task) |
 | --- | --- | --- | --- |
 | S1 record task | **PARTIAL** | Tool exists and the card is filed (`task_create` handler; card `acceptsStartAfterCreate`); create receipt is the entity JSON; a declined card is the `APPROVAL_DECLINED` document on both surfaces (v1.1.0, G4 closed). | Unknown fields ignored (G1); receipt is text-only (G3). P0-04. |
-| S2 private plan | **PARTIAL** | The injected primer states the durable-vs-private rule (`agent_instructions.go`, tested by `agent_instructions_test.go`); no structural enforcement; the runner adds no plan-mode gate to Orbit calls (P1-02). | No test that a private plan is not presented as a record; whether an engine's own plan mode refuses an Orbit write is not measured. P1-02, P2-01. |
+| S2 private plan | **PARTIAL** | The injected primer states the durable-vs-private rule (`agent_instructions.go`, tested by `agent_instructions_test.go`); since v1.3.0 an Orbit write made in Plan is refused on both engines and both surfaces with what to do instead (`plan_gate.go`; measured on Claude Code 2.1.325). | No test that a private plan is not presented as a record (P2-01). |
 | S3 create without start | **PARTIAL** | `task_create` supports the full separation (`startNow`/`runAt`/`autoRunWhenReady`/card override; `mcp.go` `askBeforeTaskCreate`, `task_start_now.go`). | `autoRunWhenReady` defaults to true (`schema.prisma:5602`; the tool property says so), and the create card's top-level description does not lead with it, so "file it for later" can start work unless the agent sets false (G11). P0-05. |
 | S4 batch plan | **PARTIAL** (capability passes; real-write receipt unmeasured) | Measured dry-run receipt; atomic items with `ref`/`dependsOnRefs`/`parentRef`; one card. Since v1.1.0 the server refuses a session batch no answered card covers (`TASK_WRITE_NEEDS_OWNER_CARD`), so the CLI cannot write one unasked. | No per-item id receipt observed for a real write (not measured). P0-04. |
-| S5 read-only inspection | **PASS** | `project_get` returned the project (5,219 chars) over a read-only MCP call; `task_list --project-id` exists. | No project list surface (§8.2); project id must be learned elsewhere (P0-02/P1-01); in Codex plan mode even the read is refused (G9, P1-02). |
+| S5 read-only inspection | **PASS** | `project_get` returned the project (5,219 chars) over a read-only MCP call; `task_list --project-id` exists; since v1.3.0 the reads run in Plan on both engines, unasked (G9 closed). | No project list surface (§8.2); project id must be learned elsewhere (P0-02/P1-01). |
 | S6 immediate delegation | **PASS** | `task_start` returns the session id; `startNow` covers create+start; `session_create` is orchestration-gated (tool descriptions + code); a declined card is one document on both surfaces (v1.1.0). | Start receipt split across document and prose/stderr (G3). P0-04. |
 | S7 no orchestration | **PARTIAL** | Measured: 22 tools disappear; `orchestrationOffMsg` names the switch; CLI hides the commands. | No injected instruction tells an agent what to do when the family is absent; it only says "when your tool list has them". P0-05/P1-02. |
 | S8 compaction recovery | **PARTIAL** (code-inspected; not black-box measured) | Codex: three instruction modes with an explicit refresh after `thread/compacted` (`codex_appserver.go`); Claude: `--append-system-prompt` persists per process and MCP tools are re-sent per request; no MCP `initialize.instructions`. | No black-box compaction test for either engine; the project scope is not surfaced by any tool default, so a compacted agent must re-read it. P0-05, P2-01. |
@@ -689,7 +714,7 @@ Other measured facts:
 | G6 | No project list surface on either agent surface. | P0-02 / P1-01 (P0-02 records it as deliberately absent; graded discovery belongs to P1-01) |
 | G7 | The catalogue is one 255 KB document in the fullest context (214 KB with orchestration off, 177 KB headless); there is no graded discovery (`summary`/`family`/`id`/guide). | P1-01 |
 | G8 | **Satisfied by P0-02.** `src/runner-go/operation_catalog.go` is the single versioned catalogue: one row per operation with object, intent, input schema, availability, mutates, approval, destructive, idempotency, retry, success evidence and next step. MCP `tools/list`, `orbit capabilities` (with `catalogVersion` and `catalogHash`) and the public catalogue document are projected from it, every deliberate one-surface absence carries its reason in the row, and a mandatory test executes every advertised `argv`/`helpArgv`. | P0-02 |
-| G9 | Permission-mode behaviour for Orbit calls is not uniform: the runner adds no gate of its own; Codex `plan` refuses every MCP call (reads included), Codex `default`/`acceptEdits` cards every MCP call, and Claude's own plan policy is unmeasured. | P1-02 |
+| G9 | ~~Permission-mode behaviour for Orbit calls is not uniform: the runner adds no gate of its own; Codex `plan` refuses every MCP call (reads included), Codex `default`/`acceptEdits` cards every MCP call, and Claude's own plan policy is unmeasured.~~ **Closed by P1-02 (v1.3.0):** one matrix for both engines (§4.1, `permission-matrix.md`), held by a test that derives every cell from the code; Orbit's Plan gate refuses writes and runs reads on both engines and surfaces; Codex consents to Orbit's tools by name; Claude's own Plan policy is measured. | P1-02 (closed) |
 | G10 | No black-box evaluation exists for the eight scenarios on either engine. | P2-01 |
 | G11 | `autoRunWhenReady` defaults to true and the create tool's top-level description does not lead with it: "file it for later" can start work once the project starts unless the agent passes false. | P0-05 |
 
@@ -715,6 +740,7 @@ Other measured facts:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.0 | 2026-11-14 | P1-02. The permission modes mean the same for Orbit's calls on Claude and Codex, and §4.1 says what they mean rather than what they should: Plan reads, waits and asks the owner and refuses every other Orbit write, on both engines and both surfaces, with what to do instead (Orbit's own Plan gate, by the session's live mode); Orbit's own tools never ask through either engine — Codex consents to them by their catalogue name, and every tool carries `readOnlyHint`/`destructiveHint`/`openWorldHint`; Claude Code's own Plan policy is measured (2.1.325: an allow rule holds in Plan, and Plan holds back any MCP tool not annotated read-only); the Claude CLI allowlist is generated from the operation catalogue; a schedule (`runAt`) and a dependency edge need no card outside Plan. The authoritative matrix is `permission-matrix.md`. Codex sessions now pass `ORBIT_SPAWN_DEPTH` to `orbit mcp`, so a nested session's wait is halved per level as on Claude. Settings and the CLI help say the orchestration switch grants managing agents and runners as well as sessions. G9 closed; §4.1, S2, S5 updated. |
 | 1.2.0 | 2026-11-13 | P0-03. The approval row is enforced by the control plane, by caller: a session's `task_create`, `task_create_batch` (including one that starts work at once) and `task-list propose-dag --apply` each require an ALLOWED card covering that exact write, refused otherwise as `TASK_WRITE_NEEDS_OWNER_CARD`. The in-session CLI's DAG restructure now asks on the same card as the MCP tool (it previously applied with no approval); the injected primer no longer says the two surfaces are interchangeable, and says instead that they take the same approval. A declined card is one document, `APPROVAL_DECLINED` (G4 closed). §0 rule 8, §2.4, §6.1–2, §8.3, §8.4 updated. Revision 2 closes the machine-credential door itself: there is no card-free task write on it. `POST /runner/tasks`, `/runner/tasks/batch-create` and `/runner/task-lists/:id/dag-apply` now require a usable acting session (this runner's, this account's, not ended) as well as the answered card covering the exact write; a request naming no session, a forged id or an ended one is refused `TASK_WRITE_NEEDS_OWNER_CARD` with `USE_A_PERSONAL_ACCESS_TOKEN`, because `x-orbit-session-id` is attribution and an agent can unset it. The card-free door is a person's own credential on the user routes, stated as deliberate in the new §4.5. §2.2, §2.4, §4.4 updated; the CLI copy no longer offers a headless machine-credential create. |
 | 1.1.0 | 2026-11-13 | P0-02: the operation catalogue. `orbit capabilities` gains per-operation `object`, `intent`, `risk`, `approval`, `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns` and `availability`, and the document gains `catalogVersion`/`catalogHash` (all additive; `schemaVersion` stays 2). MCP `tools/list` and the CLI capabilities are both projections of the catalogue, every deliberate surface gap is declared with a reason, and every advertised `argv`/`helpArgv` is executed by a mandatory test. G8 is satisfied; G6 is recorded as deliberately absent. |
 | 1.0.0 | 2026-11-13 | First frozen version: object model, routing, surfaces, create/start, permissions, errors, receipts, eight scenarios, baseline. |

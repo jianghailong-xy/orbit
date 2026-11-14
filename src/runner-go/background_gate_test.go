@@ -681,14 +681,21 @@ func TestBgGateCardThatCannotBeFiled(t *testing.T) {
 	}
 }
 
-// The hosted wait of a call that asks a person is not a job the gate judges: its own operation runs in every mode.
-// It can do nothing else: what it runs is fixed by the runner, for a call that puts a card in front of the owner.
+// The hosted wait of a call that asks a person is not a job the gate judges: its own operation runs in a mode that
+// refuses every job (Don't Ask). It can do nothing else: what it runs is fixed by the runner, for a call that puts a
+// card in front of the owner. Plan is the one mode that refuses it, because Plan refuses the write the card is about
+// (plan_gate.go) — said here too, since the hosted `orbit mcp` has no socket to read the mode from.
 func TestBgOwnerWaitIsItsOwnOperation(t *testing.T) {
 	f := newGateFixture(t, "plan")
+	if _, err := bgSocketCall(f.socket, "tok", "owner_wait", map[string]interface{}{"tool": "task_create", "arguments": map[string]interface{}{"title": "x"}}); err == nil ||
+		!strings.Contains(err.Error(), "this session is in Plan mode") {
+		t.Fatalf("Plan let the hosted wait of a write start: %v", err)
+	}
+	f.setMode("dontAsk")
 	f.svc.agentID, f.svc.taskID = "agent-1", "task-1"
 	raw, err := bgSocketCall(f.socket, "tok", "owner_wait", map[string]interface{}{"tool": "task_create", "arguments": map[string]interface{}{"title": "x"}})
 	if err != nil {
-		t.Fatalf("Plan refused the hosted wait: %v", err)
+		t.Fatalf("Don't Ask refused the hosted wait: %v", err)
 	}
 	var status bgJobStatus
 	if err := json.Unmarshal(raw, &status); err != nil {

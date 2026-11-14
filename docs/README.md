@@ -32,6 +32,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
 | Look up every operation an agent can call, with its risk, approval and receipt | [Operation catalogue](operation-catalog.md) |
+| See what each permission mode does with Orbit's own calls on Claude Code and Codex | [Permission matrix](permission-matrix.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
 | Back up, restore or recover managed runners on Docker | [Managed runners on Docker: operations](managed-runner-docker-operations.md) |
 | Deploy, back up, restore, roll back or fail over managed runners on Kubernetes (test environments) | [Managed runners on Kubernetes: operations](managed-runner-kubernetes-operations.md) |

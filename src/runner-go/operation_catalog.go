@@ -32,7 +32,7 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.1.0"
+const operationCatalogVersion = "1.2.0"
 
 // operationObject is the Orbit object an operation acts on (docs/orbit-agent-contract.md §1.1),
 // plus the auxiliary resources (watch, wiki, file) and the two doors that are not writes at all
@@ -104,6 +104,21 @@ const (
 	gatePermissionPrompt
 )
 
+// operationPlan is what Plan mode does with an operation (docs/orbit-agent-contract.md §4.1). Plan reads, waits
+// and asks the owner; it changes nothing until the plan is approved. Orbit's own Plan gate (plan_gate.go) holds
+// every engine to this, on both surfaces, by the session's live permission mode.
+type operationPlan string
+
+const (
+	// The call reads, waits on Orbit's own work for this session, or puts something in front of the owner.
+	planRuns operationPlan = "runs"
+	// The call changes Orbit's record of work, or starts, stops, steers or configures work: refused in Plan,
+	// with what to do instead.
+	planRefused operationPlan = "refused"
+	// The operation's own gate decides in every mode, Plan included (catalogPlanOwnGates).
+	planOwnGate operationPlan = "own_gate"
+)
+
 // operationMCP is the descriptor content a tools/list entry is made of. Extra carries the keys
 // beyond name/description/inputSchema a descriptor may declare — the wiki tools' annotations
 // (readOnlyHint/destructiveHint) and outputSchema — so a tool that says more about itself keeps
@@ -138,6 +153,11 @@ type operation struct {
 	// Returns is the output document a success hands back, in prose: Orbit returns JSON documents,
 	// not a fixed typed schema (P0-04 owns structured receipts).
 	Returns string
+
+	// What Plan mode does with the call, and why when that is not what its Mutates alone says
+	// (finishOperationCatalog).
+	Plan       operationPlan
+	PlanReason string
 
 	Gate operationGate
 	MCP  *operationMCP
@@ -251,6 +271,42 @@ var catalogCallerKeyOperations = map[string]bool{
 var catalogServerKeyOperations = map[string]bool{
 	"task_create":       true,
 	"task_create_batch": true,
+}
+
+// catalogPlanRunsWrites are the writes Plan mode runs, with the reason. Every other write is refused in Plan
+// (planRefused) and every read runs. What these have in common is that they change no work: each waits on
+// Orbit's own work for this session, or puts something in front of the owner, which is what Plan is for.
+var catalogPlanRunsWrites = map[string]string{
+	"task_await":             "waits on Orbit's own work for this session; a wait changes no work",
+	"session_await":          "waits on Orbit's own work for this session; a wait changes no work",
+	"watch_create":           "waits on Orbit's own work for this session; a wait changes no work",
+	"watch_update":           "changes what this session waits for, and nothing else",
+	"watch_cancel":           "stops a wait of this session's own",
+	"schedule_wakeup":        "schedules this session's own next turn; it changes no work",
+	"notify":                 "puts a line in front of the owner; a message is not work",
+	"ask_owner":              "puts a question to the owner; a question is not work",
+	"request_owner_action":   "asks the owner for an action that is theirs to take; a question is not work",
+	"withdraw_owner_request": "takes back a question this session asked",
+}
+
+// catalogPlanOwnGates are the operations whose own gate decides in every mode, Plan included, with the reason.
+// Orbit's Plan gate leaves them to it, so the refusal the caller reads is that gate's, which says what to do
+// instead.
+var catalogPlanOwnGates = map[string]string{
+	"bg_run": "the background-job gate (background_gate.go) decides in every mode: Plan refuses the job, with what to do instead",
+}
+
+// catalogPlanPreviewArgs names, per MCP tool, the argument that makes a call of it a preview, which writes nothing
+// and so runs in Plan like a read. The CLI's previews are its own flags (cliPlanPreview).
+var catalogPlanPreviewArgs = map[string]string{
+	"task_create_batch": "dryRun",
+}
+
+// catalogOpenWorld is the one operation whose effect is not confined to Orbit's own records: a background job runs
+// any command on the runner. Every other operation reads or writes Orbit's control plane, the session's own
+// directories, or the owner's devices through Orbit, and declares openWorldHint false.
+var catalogOpenWorld = map[string]bool{
+	"bg_run": true,
 }
 
 func buildOperationCatalog() []*operation {
@@ -4359,10 +4415,53 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		if op.Returns == "" {
 			op.Returns = catalogReturnsDefault(op)
 		}
+		// What Plan does with the call: a read runs, its own gate decides where it has one, a write runs only
+		// when it changes no work (catalogPlanRunsWrites), and every other write is refused.
+		switch {
+		case catalogPlanOwnGates[op.Tool] != "":
+			op.Plan, op.PlanReason = planOwnGate, catalogPlanOwnGates[op.Tool]
+		case !op.Mutates:
+			op.Plan = planRuns
+		case catalogPlanRunsWrites[op.Tool] != "":
+			op.Plan, op.PlanReason = planRuns, catalogPlanRunsWrites[op.Tool]
+		default:
+			op.Plan = planRefused
+		}
+		if op.MCP != nil {
+			op.MCP.Extra = withCatalogAnnotations(op)
+		}
 	}
 
 	sort.SliceStable(ops, func(i, j int) bool { return ops[i].Tool < ops[j].Tool })
 	return ops
+}
+
+// withCatalogAnnotations is the descriptor's extra keys with the MCP tool annotations the catalogue states about the
+// operation: readOnlyHint (it writes nothing), destructiveHint (a write that destroys, said either way for a write)
+// and openWorldHint (catalogOpenWorld). An engine reads these to decide whether a call needs a person, so they are
+// what keeps Orbit's own reads from raising one (docs/orbit-agent-contract.md §4.1): Claude Code's Plan mode runs
+// a call it is told is read-only and holds any other, and Codex asks for consent only for a call that is not
+// read-only and is destructive or open-world. A descriptor that declares annotations of its own keeps them: those
+// were written for that tool (the wiki and file tools'), and the catalogue only fills in what they leave out.
+func withCatalogAnnotations(op *operation) map[string]interface{} {
+	annotations := map[string]interface{}{
+		"readOnlyHint":  !op.Mutates,
+		"openWorldHint": catalogOpenWorld[op.Tool],
+	}
+	if op.Mutates {
+		annotations["destructiveHint"] = op.Destructive
+	}
+	extra := make(map[string]interface{}, len(op.MCP.Extra)+1)
+	for key, value := range op.MCP.Extra {
+		extra[key] = value
+	}
+	if declared, ok := extra["annotations"].(map[string]interface{}); ok {
+		for key, value := range declared {
+			annotations[key] = value
+		}
+	}
+	extra["annotations"] = annotations
+	return extra
 }
 
 func catalogRetryRule(kind operationIdempotency) string {
@@ -5146,6 +5245,8 @@ func operationCatalogHash(ops []*operation) string {
 		SuccessEvidence string                 `json:"successEvidence"`
 		NextStep        string                 `json:"nextStep,omitempty"`
 		Returns         string                 `json:"returns"`
+		Plan            operationPlan          `json:"plan"`
+		PlanReason      string                 `json:"planReason,omitempty"`
 		Gate            operationGate          `json:"gate"`
 		MCPDescription  string                 `json:"mcpDescription,omitempty"`
 		MCPInputSchema  map[string]interface{} `json:"mcpInputSchema,omitempty"`
@@ -5174,6 +5275,8 @@ func operationCatalogHash(ops []*operation) string {
 			SuccessEvidence: op.SuccessEvidence,
 			NextStep:        op.NextStep,
 			Returns:         op.Returns,
+			Plan:            op.Plan,
+			PlanReason:      op.PlanReason,
 			Gate:            op.Gate,
 			CLIExempt:       op.CLIExempt,
 			MCPExempt:       op.MCPExempt,

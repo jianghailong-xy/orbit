@@ -3356,6 +3356,8 @@ type cliCapability struct {
 	NextStep        string                    `json:"nextStep,omitempty"`
 	Returns         string                    `json:"returns"`
 	Availability    cliCapabilityAvailability `json:"availability"`
+	// What Plan mode does with the command: runs, refused, or own_gate (docs/orbit-agent-contract.md §4.1).
+	PlanMode operationPlan `json:"planMode"`
 }
 
 type cliCapabilityContext struct {
@@ -3540,6 +3542,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 			command.NextStep = op.NextStep
 			command.Returns = op.Returns
 			command.Availability = op.availability()
+			command.PlanMode = op.Plan
 		}
 		commands = append(commands, command)
 	}

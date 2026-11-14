@@ -235,7 +235,9 @@ Usage:
 
 Shows the commands available through this binary. --json emits a stable,
 machine-readable document including argument schemas from the built-in Orbit MCP
-server. Session commands appear only inside an orchestration-enabled agent session.
+server. The session, agent and runner commands, and project send and
+ensure-coordinator, appear only inside an agent session whose account has Session
+orchestration on: that one switch grants managing sessions, agents and runners alike.
 `,
 	"hostd": `orbit hostd — serve the machine broker on /run/orbit/host.sock
 
@@ -353,6 +355,11 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 	// `orbit task create --help`). Other commands keep the flat help behavior.
 	if !ownsLeafHelp(cmd) && wantsHelp(args[1:]) {
 		_, err := fmt.Fprint(out, helpFor(cmd))
+		return err
+	}
+	// A session in Plan mode changes nothing until the plan is approved: a command Plan refuses says so before it
+	// files or writes anything, in the words the MCP tool uses (plan_gate.go).
+	if err := cliPlanRefusal(args, sessionPermissionMode); err != nil {
 		return err
 	}
 
