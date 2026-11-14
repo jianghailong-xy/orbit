@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 // Through the package's own entry: what the clients import is the thing under test.
 import {
   MANAGED_RUNNER_COPY,
+  MANAGED_RUNNER_ROW_TONE,
   firstSessionProvider,
   managedRunnerDisplay,
+  managedRunnerRow,
   managedRunnersOffered,
   type ManagedRunnerDisplay,
   type ManagedRunnerStatus,
@@ -20,6 +22,11 @@ const fixture = JSON.parse(
   readFileSync(path.join(__dirname, 'managed-runner-states.fixture.json'), 'utf8'),
 ) as {
   copy: Record<string, string>;
+  short: Record<string, string>;
+  rowTone: Record<string, string>;
+  entry: Record<string, string>;
+  confirm: Record<string, string>;
+  asleep: Record<string, string>;
   capabilities: { name: string; httpStatus: number; body: unknown; offered: boolean }[];
   states: { name: string; status: ManagedRunnerStatus; display: ManagedRunnerDisplay | null }[];
   newer: { name: string; status: ManagedRunnerStatus; display: null }[];
@@ -99,7 +106,53 @@ describe('managed-runner-states.fixture.json', () => {
   });
 
   it('has one set of action words: the copy the clients render is the copy in the fixture', () => {
-    const { title: _title, detail: _detail, ...actions } = MANAGED_RUNNER_COPY;
+    const { title: _title, detail: _detail, short, entry, confirm, asleep, ...actions } = MANAGED_RUNNER_COPY;
     expect(fixture.copy).toEqual(actions);
+    expect(fixture.short).toEqual(short);
+    expect(fixture.rowTone).toEqual(MANAGED_RUNNER_ROW_TONE);
+    expect(fixture.entry).toEqual(entry);
+    expect(fixture.confirm).toEqual(confirm);
+    expect(fixture.asleep).toEqual(asleep);
+  });
+
+  it('gives every display kind but notOffered a short row label, and none reads Offline', () => {
+    const kinds = Object.keys(MANAGED_RUNNER_COPY.title).filter((kind) => kind !== 'notOffered').sort();
+    expect(Object.keys(MANAGED_RUNNER_COPY.short).sort()).toEqual(kinds);
+    expect(Object.keys(MANAGED_RUNNER_ROW_TONE).sort()).toEqual(kinds);
+    for (const label of Object.values(MANAGED_RUNNER_COPY.short)) expect(label).not.toMatch(/offline/i);
+    expect(MANAGED_RUNNER_COPY.short.sleeping).toBe('Asleep');
+    expect(MANAGED_RUNNER_ROW_TONE.sleeping).toBe('idle');
+  });
+
+  it("reads the managed runner's machine row by its state, and any other runner as before", () => {
+    let asleep = 0;
+    for (const { name, status, display } of fixture.states) {
+      const runnerId = status.runnerId;
+      // Not the managed runner, or no runner at all: shown by its heartbeat.
+      expect(managedRunnerRow('another-runner', status), name).toBeNull();
+      expect(managedRunnerRow(null, status), name).toBeNull();
+      const row = managedRunnerRow(runnerId, status);
+      if (!runnerId || !display || display.kind === 'notOffered') {
+        expect(row, name).toBeNull();
+        continue;
+      }
+      const kind = display.kind as keyof typeof MANAGED_RUNNER_COPY.short;
+      const tone = MANAGED_RUNNER_ROW_TONE[kind];
+      expect(row, name).toEqual({
+        kind,
+        label: fixture.short[kind],
+        tone: tone === 'progress' && !display.moving ? 'idle' : tone,
+        detail: kind === 'sleeping' && display.acceptsWork ? fixture.asleep.row : null,
+        acceptsWork: display.acceptsWork,
+        asleep: (kind === 'sleeping' || kind === 'stopping') && display.acceptsWork,
+      });
+      expect(row!.label, name).not.toMatch(/offline/i);
+      if (kind === 'sleeping') {
+        expect(row!.tone, name).toBe('idle');
+        if (row!.asleep) asleep += 1;
+      }
+    }
+    // A sleeping runner a message wakes is in the fixture, read as asleep and not as a fault.
+    expect(asleep).toBeGreaterThan(0);
   });
 });

@@ -36,7 +36,16 @@
     "with `patch` applied: a management state or a contract version this client does not know. Each",
     "must decode and show no managed UI (`display` null), never fail or wait.",
     "",
-    "`copy` is MANAGED_RUNNER_COPY's action words, the same in every client."
+    "`copy` is MANAGED_RUNNER_COPY's action words, the same in every client.",
+    "",
+    "The managed runner as one machine in the machine list (docs/managed-runner-existing-account-entry-design.md):",
+    "`short` is MANAGED_RUNNER_COPY.short, the row's label per display kind in place of the heartbeat's",
+    "Online/Offline (an asleep runner reads Asleep, never Offline; `notOffered` has no row), and `rowTone`",
+    "MANAGED_RUNNER_ROW_TONE, how the row marks it (`ready` green, `progress` a spinner, `idle` grey,",
+    "`attention` orange). `entry` is the list's Managed runner · Set up entry, its subtitle, the web Set up",
+    "page's sentence and Register a machine's line; `confirm` the question asked before Set up on an",
+    "account that already has a runner or a workspace; `asleep` the calm row line and the composer line",
+    "for a managed runner asleep, which sending wakes."
   ],
   "now": "2026-10-09T08:00:00.000Z",
   "heartbeatFreshMs": 90000,
@@ -49,6 +58,53 @@
     "ensure": "Set up",
     "signIn": "Open Machines & models",
     "registerOwn": "Register your own machine"
+  },
+  "short": {
+    "setup": "Set up",
+    "preparing": "Preparing",
+    "waking": "Waking up…",
+    "modelUnavailable": "Needs a model",
+    "waitingCapacity": "Waiting for capacity",
+    "available": "Ready",
+    "unresponsive": "Not responding",
+    "stopping": "Going to sleep",
+    "sleeping": "Asleep",
+    "waitingOperator": "Waiting for an operator",
+    "failed": "Failed",
+    "removing": "Removing",
+    "removed": "Removed"
+  },
+  "rowTone": {
+    "setup": "idle",
+    "preparing": "progress",
+    "waking": "progress",
+    "modelUnavailable": "attention",
+    "waitingCapacity": "progress",
+    "available": "ready",
+    "unresponsive": "progress",
+    "stopping": "progress",
+    "sleeping": "idle",
+    "waitingOperator": "attention",
+    "failed": "attention",
+    "removing": "progress",
+    "removed": "idle"
+  },
+  "entry": {
+    "title": "Managed runner",
+    "action": "Set up",
+    "subtitle": "Orbit runs a runner for you on this server.",
+    "page": "Your own machines are not changed. Setting it up adds one machine and its workspace to this list.",
+    "register": "Or let Orbit run one for you"
+  },
+  "confirm": {
+    "title": "Set up a managed runner?",
+    "body": "Orbit will start a runner for you on this server and add a workspace for it. Your own machines and workspaces stay as they are.",
+    "cancel": "Cancel",
+    "confirm": "Set up"
+  },
+  "asleep": {
+    "row": "Wakes automatically when you start a session",
+    "composer": "Your managed runner is asleep. Sending wakes it (about 10 s)."
   },
   "capabilities": [
     {
