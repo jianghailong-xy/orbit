@@ -20,13 +20,14 @@ import { TERMINAL_REFUSED_ROUTES } from './terminal-refused-routes';
 // guards there know only their own. They are enumerated too, and none of them may carry a terminal declaration.
 
 const TERMINAL_ALLOWED: Readonly<Record<string, TerminalRouteKind>> = {
-  // A conversation on this machine: create it, open it, send, interrupt, read its events, answer its approval cards.
+  // A conversation on this machine: create it, open it, send, interrupt, read its events, read and answer its approval cards.
   'POST /sessions': 'CREATE_SESSION',
   'GET /sessions/:id': 'SESSION',
   'POST /sessions/:id/turns': 'SESSION',
   'POST /sessions/:id/interrupt': 'SESSION',
   'GET /sessions/:id/events/page': 'SESSION',
   'GET /sessions/:id/events': 'SESSION',
+  'GET /sessions/:id/approvals': 'SESSION',
   'POST /sessions/:id/approvals/:approvalId/decision': 'SESSION',
   // A file attached to a turn: to a session on this machine, by `?sessionId`, and never a task's input.
   'POST /attachments': 'SESSION_UPLOAD',

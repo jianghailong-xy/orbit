@@ -4,7 +4,7 @@
  * migrates from empty. One account with two machines: runner A, whose terminal knocks, and runner B. What it is held to:
  *
  *   (a) on runner A's sessions a terminal creates, opens, sends, interrupts, reads events (page and SSE) and answers an
- *       approval card; on runner B's — and on another account's — every one of them is refused 403
+ *       approval card and reads its pending cards; on runner B's — and on another account's — every one of them is refused 403
  *       TERMINAL_RUNNER_OUT_OF_SCOPE and writes nothing; it cannot make a session on B, nor one that names no machine
  *       or a task;
  *   (b) GET /workspaces and GET /agents answer runner A's workspaces and none of B's;
@@ -174,6 +174,14 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
     assert.equal(stream.status, 200, `following A's events answered ${stream.status}: ${stream.text}`);
     assert.match(String(stream.headers['content-type']), /^text\/event-stream/);
 
+    // Read the pending cards the TUI shows on open (terminal_tui_client.go pendingApprovals): on A, the card is there.
+    // A PENDING read lists only the cards a turn in flight still asks, so A's turn is in flight for the read.
+    const before = await db.session.findUniqueOrThrow({ where: { id: onA.id }, select: { status: true, engineTurnActive: true } });
+    await db.session.update({ where: { id: onA.id }, data: { status: 'AWAITING_INPUT', engineTurnActive: true } });
+    const pending = expect(await api('GET', `/sessions/${onA.id}/approvals?status=PENDING`, terminal), 200, 'reading A\'s pending cards') as Array<{ id: string }>;
+    assert.deepEqual(pending.map((a) => toUuid(a.id)), [onA.approvalId], 'A\'s pending card is listed');
+    await db.session.update({ where: { id: onA.id }, data: before });
+
     // Send, interrupt, answer the approval card: on A, each reaching its handler and writing.
     const clientTurnId = randomUUID();
     const sent = await api('POST', `/sessions/${onA.id}/turns`, terminal, { clientTurnId, content: 'sent from a terminal' });
@@ -189,7 +197,7 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
     assert.equal(card.status, 'ALLOWED');
     assert.equal(card.decidedCredentialKind, 'TERMINAL', 'the answer says it came from a terminal (0661)');
 
-    // The same seven doors on B's session and on another account's: 403, and nothing moves.
+    // The same eight doors on B's session and on another account's: 403, and nothing moves.
     for (const other of [onB, strangers]) {
       const what = other === onB ? 'runner B\'s session' : 'another account\'s session';
       const turns = await db.conversationTurn.count({ where: { sessionId: other.id } });
@@ -197,6 +205,7 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
       outOfScope(await api('GET', `/sessions/${other.id}`, terminal), `opening ${what}`, [':id']);
       outOfScope(await api('GET', `/sessions/${other.id}/events/page?tail=50`, terminal), `reading ${what}'s events page`, [':id']);
       outOfScope(await api('GET', `/sessions/${other.id}/events`, terminal), `following ${what}'s events`, [':id']);
+      outOfScope(await api('GET', `/sessions/${other.id}/approvals?status=PENDING`, terminal), `reading ${what}'s pending cards`, [':id']);
       outOfScope(await api('POST', `/sessions/${other.id}/turns`, terminal, { clientTurnId: randomUUID(), content: 'x' }), `sending to ${what}`, [':id']);
       outOfScope(await api('POST', `/sessions/${other.id}/interrupt`, terminal), `interrupting ${what}`, [':id']);
       outOfScope(await api('POST', `/sessions/${other.id}/approvals/${other.approvalId}/decision`, terminal, { behavior: 'allow' }), `answering ${what}'s card`, [':id']);
@@ -232,7 +241,7 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
     }
     assert.ok(refused.length >= 20, `knocked on ${refused.length} owner-channel routes`);
     const ordinary = [
-      'GET /sessions', `GET /sessions/${onA.id}/approvals`, `POST /sessions/${onA.id}/end`, `PATCH /sessions/${onA.id}/config`,
+      'GET /sessions', `POST /sessions/${onA.id}/end`, `PATCH /sessions/${onA.id}/config`,
       `DELETE /sessions/${onA.id}`, `POST /sessions/${onA.id}/merge`, `GET /sessions/${onA.id}/diff`, 'POST /workspaces',
       `PATCH /workspaces/${owner.a.workspaceId}`, 'GET /tasks', 'POST /tasks', 'GET /projects', 'POST /projects', `GET /runners/${owner.a.runnerId}`,
       'GET /providers/mine', 'GET /attachments/usage',

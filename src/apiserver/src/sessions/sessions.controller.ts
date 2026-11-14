@@ -952,6 +952,7 @@ export class SessionsController {
 
   /** Tool-permission approvals for this session (optionally filtered by status). */
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Get(':id/approvals')
   approvals(
     @CurrentUser() user: AuthUser,
