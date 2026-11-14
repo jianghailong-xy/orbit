@@ -972,16 +972,53 @@ func cmdStatus() {
 		st = "online"
 	}
 	fmt.Printf("status:  %s (last heartbeat %s)\n", st, ago)
-	if len(me.Agents) > 0 {
-		fmt.Println("agents:")
-		for _, a := range me.Agents {
-			dir := a.WorkDir
-			if dir == "" {
-				dir = "—"
-			}
-			fmt.Printf("  • %s → %s\n", a.Name, dir)
+	printStatusAgents(os.Stdout, me.Agents)
+}
+
+// printStatusAgents lists the runner's workspaces and, under each, what its unattended work starts on
+// as the server's dispatch resolves it — the same answer the task page's "Runs with" shows.
+func printStatusAgents(w io.Writer, agents []RunnerAgent) {
+	if len(agents) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "agents:")
+	for _, a := range agents {
+		dir := a.WorkDir
+		if dir == "" {
+			dir = "—"
+		}
+		fmt.Fprintf(w, "  • %s → %s\n", a.Name, dir)
+		if a.RunsWith != nil {
+			fmt.Fprintf(w, "      runs with: %s\n", runsWithLine(*a.RunsWith))
+		}
+		for _, p := range a.Projects {
+			fmt.Fprintf(w, "      project %q: %s\n", p.Title, runsWithLine(p.RunsWith))
 		}
 	}
+}
+
+// runsWithLine is "engine · provider (where it came from)", and why such a start would be refused.
+func runsWithLine(r RunsWith) string {
+	text := func(v *string) string {
+		if v == nil || *v == "" {
+			return "—"
+		}
+		return *v
+	}
+	from := map[string]string{
+		"TASK_PIN":            "the task's pin",
+		"PROJECT_COORDINATOR": "the project's coordinator session",
+		"WORKSPACE":           "the newest session a person opened here",
+		"DEFAULT":             "the default",
+	}[r.Source]
+	if from == "" {
+		from = r.Source
+	}
+	line := fmt.Sprintf("%s · %s (%s)", text(r.Engine), text(r.Provider), from)
+	if r.Refusal != nil && *r.Refusal != "" {
+		line += " — a start would be refused: " + *r.Refusal
+	}
+	return line
 }
 
 func cmdResume(args []string) {

@@ -127,10 +127,18 @@ import {
   credentialIsAnthropicBound,
   type WikiChatContext,
 } from '@orbit/shared';
-import { ANCHOR_ROLE, anchoredSeed, sessionAnchor, type AnchorSeed } from '../workspaces/start-anchor';
+import {
+  ANCHOR_ROLE,
+  anchoredSeed,
+  sessionAnchor,
+  taskRunAnchor,
+  type AnchorSeed,
+  type TaskRunsWith,
+} from '../workspaces/start-anchor';
 import {
   lastProviderByWorkspace,
   SESSION_OPENED_BY_PERSON,
+  type AgentProviderSeed,
   type SessionOpenedBy,
 } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -858,6 +866,9 @@ function refuseUnlessProjectFinished(project: { status: string } | null | undefi
   }
 }
 
+/** A seed as the resolution read it: an anchor's carries the session it came from (start-anchor.ts). */
+type ReadSeed = AgentProviderSeed & Partial<Pick<AnchorSeed, 'anchor'>>;
+
 @Injectable()
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
@@ -1253,14 +1264,7 @@ export class SessionsService {
     // caller changes engine) — else where this project last started, derived rather than stored (see
     // workspace-provider.ts for why a workspace holds no provider of its own). Anything named is
     // resolved rather than trusted: a command-line caller typed it, and no picker checked it first.
-    const resolved = await resolveEngineProvider(this.engineProviderDeps(), {
-      ownerId,
-      engine: dto.engine,
-      provider: dto.provider,
-      model: dto.model,
-      door: 'session',
-      seed: anchoredSeed(this.prisma, opts?.anchor, dto.workspaceId),
-    });
+    const resolved = await this.startResolution(ownerId, { ...dto, anchor: opts?.anchor });
     const { provider, providerBuiltin } = resolved;
     // The model as asked; an old OpenCode request's `orbit-<key>/<model>` is stored as its bare id.
     const model = resolved.model ?? undefined;
@@ -2692,17 +2696,87 @@ export class SessionsService {
     },
   ): Promise<string | null> {
     try {
-      const resolved = await resolveEngineProvider(this.engineProviderDeps(), {
-        ownerId,
-        engine: target.engine ?? undefined,
-        provider: target.provider ?? undefined,
-        model: target.model ?? undefined,
-        door: 'session',
-        seed: anchoredSeed(this.prisma, target.anchor, target.workspaceId),
-      });
-      return resolved.engine;
+      return (await this.startResolution(ownerId, target)).engine;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * The engine and credential a new session started this way runs on: create()'s own resolution, which
+   * engineOfStart and taskRunsWith read too, so what a surface shows is what a start gets. `seen` is
+   * handed the seed when one is read (neither an engine nor a provider named).
+   */
+  private startResolution(
+    ownerId: string,
+    target: {
+      engine?: string | null;
+      provider?: string | null;
+      model?: string | null;
+      workspaceId?: string | null;
+      anchor?: () => Promise<AnchorSeed | null>;
+    },
+    seen?: (seed: ReadSeed | null) => void,
+  ) {
+    const seed = anchoredSeed(this.prisma, target.anchor, target.workspaceId);
+    return resolveEngineProvider(this.engineProviderDeps(), {
+      ownerId,
+      engine: target.engine ?? undefined,
+      provider: target.provider ?? undefined,
+      model: target.model ?? undefined,
+      door: 'session',
+      seed: seed && seen
+        ? async () => {
+          const read = await seed();
+          seen(read);
+          return read;
+        }
+        : seed,
+    });
+  }
+
+  /**
+   * What a task's next fresh run starts on (start-anchor.ts TaskRunsWith), by the resolution its
+   * dispatch makes (TasksService.execute → create() with the task's pins and taskRunAnchor): the task
+   * payload's `runsWith` and `orbit status` read this. Routing aside, a run created now gets this pair.
+   */
+  async taskRunsWith(
+    ownerId: string,
+    task: { id?: string | null; engine?: string | null; provider?: string | null; workspaceId?: string | null },
+  ): Promise<TaskRunsWith> {
+    const taskId = task.id;
+    const pinned = !!(task.engine || task.provider);
+    let seed: ReadSeed | null | undefined;
+    const target = {
+      engine: task.engine,
+      provider: task.provider,
+      workspaceId: task.workspaceId,
+      anchor: taskId ? () => taskRunAnchor(this.prisma, taskId) : undefined,
+    };
+    const source = (): Pick<TaskRunsWith, 'source' | 'anchorSessionId'> => pinned
+      ? { source: 'TASK_PIN', anchorSessionId: null }
+      : seed?.anchor
+        ? { source: 'PROJECT_COORDINATOR', anchorSessionId: seed.anchor.sessionId }
+        : { source: seed ? 'WORKSPACE' : 'DEFAULT', anchorSessionId: null };
+    try {
+      const resolved = await this.startResolution(ownerId, target, (read) => { seed = read; });
+      return {
+        engine: resolved.engine, provider: resolved.provider, providerBuiltin: resolved.providerBuiltin,
+        ...source(), refusal: null,
+      };
+    } catch (e) {
+      if (!(e instanceof BadRequestException)) throw e;
+      const body = e.getResponse();
+      const refusal = typeof body === 'string'
+        ? body
+        : typeof (body as { message?: unknown }).message === 'string' ? (body as { message: string }).message : e.message;
+      return {
+        engine: task.engine ?? seed?.engine ?? null,
+        provider: task.provider ?? seed?.provider ?? null,
+        providerBuiltin: !task.provider && (seed?.providerBuiltin ?? false),
+        ...source(),
+        refusal,
+      };
     }
   }
 

@@ -182,6 +182,7 @@ import {
   type SessionMessageFrom,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
+import type { TaskRunsWith } from '../workspaces/start-anchor';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
@@ -1785,6 +1786,7 @@ export class RunnerApiController {
     @CurrentRunner()
     runner: {
       id: string;
+      ownerId: string;
       name: string;
       status: string;
       lastHeartbeatAt: Date | null;
@@ -1819,6 +1821,7 @@ export class RunnerApiController {
       workspaces,
       await lastProviderByWorkspace(this.prisma, workspaces.map((a) => a.id)),
     );
+    const runsWith = await this.workspaceRunsWith(runner.ownerId, workspaces.map((a) => a.id));
     return {
       id: runner.id,
       name: runner.name,
@@ -1834,8 +1837,54 @@ export class RunnerApiController {
         provider: a.provider,
         agentKey: a.agentKey ?? undefined,
         workDir: a.workDir ?? undefined,
+        ...runsWith.get(a.id),
       })),
     };
+  }
+
+  /**
+   * What `orbit status` says each workspace's unattended work starts on, by the resolution dispatch
+   * makes (SessionsService.taskRunsWith), so the two cannot disagree: `runsWith` for a task outside any
+   * project, and per open project with open work assigned here, what an unpinned task of it runs on —
+   * read off one such task with its pins set aside. Absent when it could not be read: a status line,
+   * never a reason to fail the call.
+   */
+  private async workspaceRunsWith(
+    ownerId: string,
+    workspaceIds: string[],
+  ): Promise<Map<string, { runsWith: TaskRunsWith; projects: Array<{ id: string; title: string; runsWith: TaskRunsWith }> }>> {
+    const out = new Map<string, { runsWith: TaskRunsWith; projects: Array<{ id: string; title: string; runsWith: TaskRunsWith }> }>();
+    const sessions = this.sessions;
+    if (!sessions || workspaceIds.length === 0) return out;
+    try {
+      const open = await this.prisma.task.findMany({
+        where: {
+          ownerId,
+          assigneeId: { in: workspaceIds },
+          status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+          project: { status: 'OPEN' },
+        },
+        distinct: ['assigneeId', 'projectId'],
+        select: { id: true, assigneeId: true, project: { select: { id: true, title: true } } },
+        orderBy: [{ assigneeId: 'asc' }, { projectId: 'asc' }],
+        take: 200,
+      });
+      for (const workspaceId of workspaceIds) {
+        const projects = [];
+        for (const row of open) {
+          if (row.assigneeId !== workspaceId || !row.project) continue;
+          projects.push({
+            id: row.project.id,
+            title: row.project.title,
+            runsWith: await sessions.taskRunsWith(ownerId, { id: row.id, workspaceId }),
+          });
+        }
+        out.set(workspaceId, { runsWith: await sessions.taskRunsWith(ownerId, { workspaceId }), projects });
+      }
+    } catch (e) {
+      this.logger.warn(`runner status: runsWith not read: ${(e as Error)?.message ?? e}`);
+    }
+    return out;
   }
 
   /** `orbit unregister` — the runner deletes itself from the control plane. */

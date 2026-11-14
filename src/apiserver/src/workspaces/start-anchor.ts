@@ -132,3 +132,21 @@ export function anchoredSeed(
   if (!anchor && !workspaceId) return undefined;
   return async () => (anchor ? await anchor() : null) ?? (workspaceId ? agentProviderSeed(db, workspaceId) : null);
 }
+
+/**
+ * What a task's next fresh run starts on, as the task payload and `orbit status` say it
+ * (SessionsService.taskRunsWith): the (engine, provider) the dispatch resolution reaches for it, and
+ * where that came from — the task's own pin, its project's coordinator session, the workspace's
+ * newest person-opened session, or the claude floor. `refusal` is set when that start would be
+ * refused (an anchor whose credential is gone): the pair is then the one asked for, which no run gets.
+ * Smart model selection, when on, routes each run from this same pair (model-routing-design.md §2).
+ */
+export interface TaskRunsWith {
+  engine: string | null;
+  provider: string | null;
+  providerBuiltin: boolean;
+  source: 'TASK_PIN' | 'PROJECT_COORDINATOR' | 'WORKSPACE' | 'DEFAULT';
+  /** The coordinator session, when source is PROJECT_COORDINATOR. */
+  anchorSessionId: string | null;
+  refusal: string | null;
+}

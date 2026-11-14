@@ -9284,7 +9284,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
-      forkSource,
+      forkSource, runsWith,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9302,6 +9302,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.modelHintOptions(ownerId, task),
         task.projectId ? readTaskIntegrationViews(this.prisma, ownerId, task.projectId, [id]) : new Map(),
         forkSourceLine(this.prisma, task),
+        this.runsWith(ownerId, task),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -9336,6 +9337,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       progress,
       // What each suggested tier runs as for this task, so no client keeps a tier table of its own.
       modelHintOptions,
+      // What the next fresh run starts on, by the resolution dispatch makes (SessionsService.taskRunsWith):
+      // "Runs with" on every client reads this rather than the assignee's lastEngine/lastProvider.
+      runsWith,
       // Where the work stands between DONE and main, with its newest LAND_TASK (§2.7a): the read
       // the project's task rows make, so the task's page and the project's cannot disagree.
       integration: integrations.get(id) ?? {
@@ -9354,6 +9358,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       forkSource,
       ...supersession,
     };
+  }
+
+  /** The task's TaskRunsWith, or null when it could not be read: a decoration, never a reason to fail the read. */
+  private async runsWith(
+    ownerId: string,
+    task: { id: string; engine: string | null; provider: string | null; assigneeId: string | null },
+  ) {
+    try {
+      return await this.sessions.taskRunsWith(ownerId, {
+        id: task.id, engine: task.engine, provider: task.provider, workspaceId: task.assigneeId,
+      });
+    } catch (e) {
+      this.logger.warn(`task ${task.id}: runsWith not read: ${(e as Error)?.message ?? e}`);
+      return null;
+    }
   }
 
   /**

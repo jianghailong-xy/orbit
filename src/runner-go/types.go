@@ -1315,6 +1315,26 @@ type RunnerAgent struct {
 	Provider string `json:"provider,omitempty"`
 	AgentKey string `json:"agentKey,omitempty"`
 	WorkDir  string `json:"workDir,omitempty"`
+	// What the workspace's unattended work starts on, as dispatch resolves it (apiserver
+	// SessionsService.taskRunsWith): RunsWith for a task outside any project, Projects for an unpinned
+	// task of each open project with open work here. Absent from an older apiserver.
+	RunsWith *RunsWith         `json:"runsWith,omitempty"`
+	Projects []RunsWithProject `json:"projects,omitempty"`
+}
+
+// RunsWith is the apiserver's TaskRunsWith (workspaces/start-anchor.ts).
+type RunsWith struct {
+	Engine          *string `json:"engine"`
+	Provider        *string `json:"provider"`
+	Source          string  `json:"source"`
+	AnchorSessionID *string `json:"anchorSessionId"`
+	Refusal         *string `json:"refusal"`
+}
+
+type RunsWithProject struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	RunsWith RunsWith `json:"runsWith"`
 }
 
 type AgentExecConfig struct {
