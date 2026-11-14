@@ -175,6 +175,10 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 ### 5.3 权限与审批
 
 - 权限模式：定义里 `readonly` → plan；否则与父会话相同。不会比父会话宽（沿用 `assertChildModeOrNarrow` 的规则）。
+  只读子 Agent 在各引擎上怎样读仓库：Claude、Kimi、OpenCode、Cursor、Antigravity 在 plan 下保留各自的读文件工具；
+  DSH 没有 plan，用它的只读文件策略（Don't Ask）。Codex 只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以只读的
+  Codex 子 Agent 不走 plan 的 Codex 配置，改用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：命令不问人，
+  在沙箱里跑，写入由沙箱拒绝；要求越出沙箱的请求一律拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
 - 审批卡用父会话的 `sessionId` 发出，`toolUseId` 加 runId 前缀，并带 `subagentRunId`（与 `backgroundJobId` 同一作用：
   父会话的 tool_result 到达时不把它当作已返回的调用收走）。卡片出现在父会话的审批区，标题写明来自哪个 SubAgent。
 - 子 Agent 的 AskUserQuestion / 计划审批一律拒绝，提示它把疑问写进结果里交回。Cursor 在 subagent 里也是这样。

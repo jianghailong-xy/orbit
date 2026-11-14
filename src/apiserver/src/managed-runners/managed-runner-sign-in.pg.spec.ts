@@ -705,7 +705,20 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     assert.equal(unavailable.reason.code, 'MODEL_UNAVAILABLE');
     assert.match(unavailable.reason.message, /add a model key/);
 
-    // The owner's own enabled key: READY at the next pass, on it.
+    // The owner's own Kimi (Moonshot) key, which only Kimi Code or OpenCode runs: no supply on a Claude
+    // Code/Codex runner, and no first session named on it — the add-key reason stays.
+    const kimiKey = await call(server, 'POST', '/api/providers/mine', token,
+      { label: 'kimi', presetSlug: 'moonshot', baseUrl: 'https://api.moonshot.ai/v1', apiKey: `sk-pg-kimi-${RUN}-not-a-key` });
+    assert.equal(kimiKey.status, 201, kimiKey.text);
+    await heartbeat(waiting.runnerId, signedOut);
+    await sleep(2_500); // manager passes over the Kimi key
+    assert.equal((await mappingOf(user.id))!.managementState, 'STARTING', 'a Kimi key is no supply here');
+    const kimiOnly = await statusOf(token);
+    assert.deepEqual([kimiOnly.initialProvider, kimiOnly.firstSessionProvider], [null, null]);
+    assert.equal(kimiOnly.reason.code, 'MODEL_UNAVAILABLE');
+    assert.match(kimiOnly.reason.message, /add a model key/);
+
+    // The owner's own enabled key: READY at the next pass, on it — not on the Kimi key before it.
     const own = await call(server, 'POST', '/api/providers/mine', token, keyBody('own'));
     assert.equal(own.status, 201, own.text);
     assert.equal(new Set([others.json.slug, disabled.json.slug, shared.slug, own.json.slug]).size, 4);
@@ -719,6 +732,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     const status = await statusOf(token);
     assert.equal(status.usable, true);
     assert.equal(status.initialProvider, own.json.slug);
+    assert.equal(status.firstSessionProvider, own.json.slug);
 
     // The default workspace starts on that key, on the engine the key runs on.
     const [workspace] = (await call(server, 'GET', '/api/workspaces', token)).json;

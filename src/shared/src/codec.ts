@@ -689,6 +689,10 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // tell an identity the database worked out from one somebody chose. It appears in no request and
   // no response, and decoding it on the way in is the one way to make that comparison lie.
   'coordinatorIdentityLandingId',
+  // The sessions a runner's background jobs hold slots for (runner_presence, migration 0780): the machine protocol's raw
+  // UUIDs, kept only where they equal the id of a session assigned to that runner and counted by that equality. It
+  // appears in no response, and a decode on the way in could only refuse a heartbeat over one id it cannot read.
+  'backgroundJobSessionIds',
   'generation',
   'leaseGeneration',
   'leaseOwner',

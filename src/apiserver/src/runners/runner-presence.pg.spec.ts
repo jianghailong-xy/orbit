@@ -26,6 +26,9 @@
  *   (4) POST /api/runner/heartbeat upserts the runner's one presence row with every beat — the
  *       process, HTTP, no gateway — and rewrites the runner row's own record only once it is five
  *       minutes old;
+ *  (4b) the runners list's `activeSessions` counts the sessions a beat names as held by background jobs
+ *       (backgroundJobSessionIds, migration 0780) beside those in a turn, a session both ways once, and a
+ *       runner that omits the member as before;
  *   (5) every reading answers from presence: with the runner row's own record ten minutes old and a
  *       presence row ten seconds old, the runners list, the runner's own detail, `orbit status`, the
  *       session list (its row and its queue gate) and the session detail all read the runner as
@@ -156,6 +159,8 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
       ['lost_at', 'timestamp without time zone', 'YES'],
       // 0720: the machine's CPU, memory and disk and its last hour of them (runners/runner-resources.ts).
       ['resources', 'jsonb', 'YES'],
+      // 0780: the sessions its background jobs hold slots for (runners/runner-background-holders.ts).
+      ['background_job_session_ids', 'ARRAY', 'NO'],
     ]);
     const { rows: [pk] } = await sql.query(
       `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'runner_presence_pkey'`,
@@ -402,6 +407,41 @@ test('runner presence: an UNLOGGED table every heartbeat upserts, and the one so
     const staleRow = await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: stale.id } });
     const staleOwn = await db.runner.findUniqueOrThrow({ where: { id: stale.id }, select: { lastHeartbeatAt: true } });
     assert.equal(staleOwn.lastHeartbeatAt?.getTime(), staleRow.lastBeatAt.getTime(), 'a five-minute-old record takes the beat');
+  });
+
+  await t.test('(4b) the runners list counts a session a background job holds a slot for as running, once, and an older runner as before', async () => {
+    const dana = await owner('dana');
+    const jwtToken = await dana.login();
+    const r = await runner(dana.id, 'holders', { maxConcurrent: 16 });
+    const workspaceId = randomUUID();
+    await db.workspace.create({ data: { id: workspaceId, ownerId: dana.id, runnerId: r.id, name: `holders-${RUN}`, enabled: true } });
+    const session = async (status: RunStatus) => {
+      const id = randomUUID();
+      await db.session.create({
+        data: {
+          id, ownerId: dana.id, creatorId: dana.id, workspaceId, assignedRunnerId: r.id, title: status, prompt: 'work',
+          provider: 'claude', providerBuiltin: true, status, dispatchOrigin: SessionDispatchOrigin.USER,
+        },
+      });
+      return id;
+    };
+    const inTurn = await session(RunStatus.RUNNING);
+    const jobOnly = await session(RunStatus.AWAITING_INPUT);
+    const running = async (beat: Record<string, unknown>) => {
+      const answer = await call(server!, 'POST', '/api/runner/heartbeat', r.token, { status: 'ONLINE', idleCapacity: 14, ...beat });
+      assert.equal(answer.status, 201, answer.text);
+      const runners = await call(server!, 'GET', '/api/runners', jwtToken);
+      assert.equal(runners.status, 200, runners.text);
+      return (runners.json as Array<Record<string, unknown>>).find((x) => toUuid(String(x.id)) === r.id)!.activeSessions;
+    };
+    assert.equal(await running({}), 1, 'an older runner, which omits the member: its sessions in a turn, as before');
+    assert.equal(await running({ backgroundJobSessionIds: [jobOnly] }), 2, 'a RUNNING session and a background-job holder are 2');
+    assert.equal(await running({ backgroundJobSessionIds: [inTurn] }), 1, 'the RUNNING session named by its job too counts once');
+    assert.equal(await running({ backgroundJobSessionIds: [inTurn, jobOnly] }), 2);
+    const kept = await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: r.id }, select: { backgroundJobSessionIds: true } });
+    assert.deepEqual(kept.backgroundJobSessionIds.sort(), [inTurn, jobOnly].sort(), 'the HTTPS beat keeps them on the presence row');
+    assert.equal(await running({}), 1, 'the next beat without the member clears them');
+    assert.deepEqual((await db.runnerPresence.findUniqueOrThrow({ where: { runnerId: r.id } })).backgroundJobSessionIds, []);
   });
 
   await t.test('(5) every reading answers from presence, and falls back to the runner’s own record when the table is emptied', async () => {

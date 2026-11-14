@@ -242,7 +242,8 @@ import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
 import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
 import type { LoginEngine } from '@orbit/shared';
-import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
+import { managedRowOf, managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
+import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
   currentEngineChoice,
   currentProviderChoice,
@@ -987,6 +988,14 @@ const STRANDED_AFTER_MS = 400;
 // plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
 // 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
 const STICKY_LABEL = 'Your question';
+/** A card still waiting on the reader, in the order the transcript draws them: a tool approval or
+ *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
+ *  item. Answered and snoozed forms carry none of these. */
+export const WAITING_CARD_SELECTOR =
+  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), [data-open-item]';
+/** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
+ *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
+export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
 // recall only this session's recently sent prompts (never another session's). Stored
@@ -3189,6 +3198,8 @@ export function WorkspaceView({
   // refused as offline: the server queues a message for it, and the resume of an ended session
   // too (SessionsService.resume). Sending is what wakes it.
   const runnerTakesWork = !!runner.online || !!managed?.display.acceptsWork;
+  // The managed runner's shared state, for the column head's dot and the composer's asleep line.
+  const managedHeadRow = managedRowOf(managed, runner.id);
   const managedResumes = !!managed?.display.acceptsWork && selectedResumeBlockedReason === 'RUNNER_OFFLINE';
   const resumable = selectedSession
     ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable) || managedResumes
@@ -4633,6 +4644,7 @@ export function WorkspaceView({
     jumpingToStartRef.current = false; // a walk to the start belongs to the session it was run on
     setHasMoreOlder(false); // measure() re-reads it once this session's window is established
     pendingRecordRef.current = null;
+    setWaitingReveal((pending) => (pending === selectedId ? pending : null));
   }, [selectedId, landingSession]);
 
   // Tail-first prepend: after loadOlder grows older content above the viewport, restore the
@@ -5408,6 +5420,10 @@ export function WorkspaceView({
   const [chatReveal, setChatReveal] = useState<{ sessionId: string; about: ChatAbout } | null>(
     null,
   );
+  // A session opened from a project row whose line says it is waiting on you (owner 2026-11-14,
+  // docs/mocks/project-row-opens-waiting): it opens at the TOP of its waiting card rather than at
+  // the transcript's end, once. Any other way of opening a session leaves this null.
+  const [waitingReveal, setWaitingReveal] = useState<string | null>(null);
   useEffect(() => {
     if (!chatIntentItem && !chatIntentPromotion) return;
     const read = openItems.data;
@@ -5464,6 +5480,21 @@ export function WorkspaceView({
     else card.scrollIntoView?.({ block: 'center' });
     setChatReveal(null);
   }, [chatReveal, currentPromotion.data, openItems.data, seeding, selectedId, transcriptEvents]);
+  // The waiting card a project row opened this session for: its header and title brought to the top
+  // of the transcript, below the pinned bar, with the tail pin let go first as above. A card not drawn
+  // yet (its read still on the way) leaves the request standing for the next render.
+  useEffect(() => {
+    if (!waitingReveal || waitingReveal !== selectedId || seeding || eventsSessionId !== selectedId) return;
+    const root = scrollRef.current;
+    const card = root?.querySelector<HTMLElement>(WAITING_CARD_SELECTOR);
+    // Not before this session's own transcript is drawn under it, in a pane that has its size.
+    const view = root?.getBoundingClientRect();
+    if (!root || !card || !view?.height) return;
+    setWaitingReveal(null);
+    atBottomRef.current = false;
+    setAtBottom(false);
+    root.scrollTop += card.getBoundingClientRect().top - view.top - waitingCardGap(hasMoreOlder);
+  }, [waitingReveal, selectedId, seeding, eventsSessionId, transcriptEvents, transcriptInserts, approvals, hasMoreOlder]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the
@@ -9346,9 +9377,15 @@ export function WorkspaceView({
                 setMenuOpenId(null);
                 // A phone opens the coordinator's conversation itself, with no push into the project's
                 // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
-                if (isMobile && coordinator) navigateWithPaneSlide('push', () =>
-                  navigate(sessionPath(coordinator.id), { state: stampFromList() }));
-                else enterProjectSessions(s.projectId, coordinator?.id);
+                // A row whose line says a member is waiting on you opens that member instead, at its
+                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting).
+                const waiting = s.line.tone === 'approval' && s.target.kind === 'session' &&
+                  s.target.id !== coordinator?.id ? s.target.id : null;
+                const opens = waiting ?? coordinator?.id;
+                setWaitingReveal(waiting);
+                if (isMobile && opens) navigateWithPaneSlide('push', () =>
+                  navigate(sessionPath(opens), { state: stampFromList() }));
+                else enterProjectSessions(s.projectId, opens);
               }}
               menuOpen={menuOpenId === s.id}
               onMenuOpenChange={(open) => { setMenuOpenId(open ? s.id : null); if (open) setSwipeOpen(null); }}
@@ -9688,7 +9725,18 @@ export function WorkspaceView({
           </div>
         ) : (
           <div className="session-col-head">
-            <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
+            {managedHeadRow ? (
+              // The managed runner's dot is its shared state: grey asleep, never the dot of an offline runner.
+              <span
+                className={`workspace-status-dot managed-mark--${managedHeadRow.tone}`}
+                role="img"
+                aria-label={managedHeadRow.label}
+                title={managedHeadRow.detail ? `${managedHeadRow.label} · ${managedHeadRow.detail}` : managedHeadRow.label}
+                data-managed-kind={managedHeadRow.kind}
+              />
+            ) : (
+              <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
+            )}
             <span className="session-col-title">{headWorkspaceName}</span>
             {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
                 chip row — both read as clutter in a narrow column, and Open is nearly always
@@ -10606,8 +10654,8 @@ export function WorkspaceView({
                 // Only the first (oldest) still-answerable approval with a shortcut owns Enter;
                 // once it's decided the next one becomes first, so the key walks the queue in
                 // order — stepping over any card whose question is already over.
+                <div key={a.id} data-waiting-card="">
                 <ApprovalPanel
-                  key={a.id}
                   approval={a}
                   onDecide={decide}
                   active={a.id === activeApprovalId}
@@ -10617,6 +10665,7 @@ export function WorkspaceView({
                   rememberable={approvalRememberOffered(shownEngine)}
                   subagent={subagentCards.get(a.id)?.description ?? null}
                 />
+                </div>
               ))}
               <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
               {!selectedTrashed && queuedTailEvents.map(({ turn: q, event }) => {
@@ -10691,7 +10740,8 @@ export function WorkspaceView({
                   {sessionEndedBanner(
                     selectedSession ?? selected,
                     !!resumable,
-                    !!runner.online,
+                    // A sleeping managed runner takes work (sending wakes it): never "Runner offline".
+                    runnerTakesWork,
                     !resumable ? selectedResumeBlockedCopy : null,
                   )}
                 </div>
@@ -10811,7 +10861,16 @@ export function WorkspaceView({
         />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
-        {managed && managed.display.kind !== 'available' && !managedWelcome && <ManagedRunnerNotice managed={managed} />}
+        {managed && managed.display.kind !== 'available' && !managedWelcome && (
+          // Asleep is not a fault: one calm line that sending wakes it, rather than the notice.
+          managedHeadRow?.asleep && managedHeadRow.kind === 'sleeping' ? (
+            <div className="managed-runner-composer-line" role="status" data-kind="sleeping">
+              {MANAGED_RUNNER_COPY.asleep.composer}
+            </div>
+          ) : (
+            <ManagedRunnerNotice managed={managed} />
+          )
+        )}
         {/* What this session is waiting on: live watches it observes. A watch waits on the server,
             not in a process, so it gets its own strip rather than a row in the tray below
             (docs/watch-contract.md §9.2). Hidden when there are none. */}
