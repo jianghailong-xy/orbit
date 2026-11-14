@@ -5869,9 +5869,11 @@ button.toast--pill:focus-visible {
   background: var(--bg-hover);
   --row-bg: var(--bg-hover);
 }
+/* Keyboard focus takes the hover tint, as a project row's does, not a ring. */
 .session-folder-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
+  outline: none;
+  background: var(--bg-hover);
+  --row-bg: var(--bg-hover);
 }
 .session-folder-row.editing {
   height: auto;

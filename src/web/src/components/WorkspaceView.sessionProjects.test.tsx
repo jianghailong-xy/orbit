@@ -324,6 +324,10 @@ describe('project entry typography', () => {
     expect(rule?.[2]).toMatch(/outline\s*:\s*none/u);
     expect(rule?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
     expect(rule?.[2]).toMatch(/--session-menu-surface\s*:\s*var\(--bg-hover\)/u);
+    const folder = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
+      /^\.session-folder-row:focus-visible\s*$/u.test(selector.trim()));
+    expect(folder?.[2], 'folder rows show focus the same way').toMatch(/outline\s*:\s*none/u);
+    expect(folder?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
   });
 });
 
