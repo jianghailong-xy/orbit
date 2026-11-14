@@ -3032,7 +3032,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0800 adds two nullable pool_login_token columns (account_id, key_id: a SubAgent's token's own credential),
       // catalog-only; `pool_login_token` is none of the preserved relations, no trigger, function or DONE fence
       // changes, and no row is written.
-      '0800_pool_login_token_subagent_credential'],
+      '0800_pool_login_token_subagent_credential',
+      // 0810 adds two nullable schedule_run columns (not_before_at, held_reason) and a partial index; catalog-only,
+      // `schedule_run` is none of the preserved relations, no trigger, function or DONE fence changes, and no row is
+      // written.
+      '0810_schedule_run_start'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -45,6 +45,7 @@ import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
 import { EmailModule } from './email/email.module';
 import { TerminalsModule } from './terminals/terminals.module';
+import { ScheduleRunsModule } from './schedules/schedule-runs.module';
 import { SchedulesModule } from './schedules/schedules.module';
 
 @Module({
@@ -102,6 +103,7 @@ import { SchedulesModule } from './schedules/schedules.module';
     TerminalsModule,
     // Scheduled tasks (docs/scheduled-tasks-design.md): the domain service, for the tools and doors built on it.
     SchedulesModule,
+    ScheduleRunsModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

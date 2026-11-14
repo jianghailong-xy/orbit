@@ -1094,6 +1094,12 @@ export class SessionsService {
        * opening turn is then laid down now, carrying the sender, rather than by the claim, which knows of none.
        */
       externalSender?: ExternalTurnSender;
+      /**
+       * The scheduled task's run this session serves (docs/scheduled-tasks-design.md §6.3). Internal: set only by
+       * the schedule starter (schedules/schedule-runs.service.ts), together with `runSource: SCHEDULE`, in the
+       * session's own INSERT so no claim can see the session before it names its run.
+       */
+      scheduleRunId?: string;
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1616,6 +1622,7 @@ export class SessionsService {
         contextTaskId: opts?.contextTaskId ?? null,
         dispatchOrigin: opts?.dispatchOrigin ?? SessionDispatchOrigin.USER,
         runSource: opts?.runSource ?? SessionRunSource.MANUAL,
+        ...(opts?.scheduleRunId ? { scheduleRunId: opts.scheduleRunId } : {}),
         startsTaskWork: opts?.startsTaskWork ?? false,
         // A task session must remain discoverable in Open even if an internal caller
         // accidentally asks for the legacy "system" provenance.
