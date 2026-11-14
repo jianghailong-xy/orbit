@@ -99,6 +99,7 @@ struct ConsoleView: View {
             progress: { console.state.taskProgress[$0] },
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
+            subagentRun: { console.subagentRuns[$0] },
             fullPayload: { await console.fullPayload(seq: $0) })
     }
 
@@ -1724,6 +1725,17 @@ private extension View {
     }
 }
 #endif
+
+/// The session page's transcript in a wiki chat's panel (design §9): the same rows, cards and approvals,
+/// with the sticky question kept out of a navigation bar the panel does not have. It sits here, beside
+/// the view it initializes: an initializer for this struct declared in another file crashes Xcode 27's
+/// IRGen on the private `HeldScroll` (`Global is external, but doesn't have external or weak linkage`).
+extension TranscriptView {
+    init(wikiChat console: ConsoleModel) {
+        self.console = console
+        self.hidesStickyQuestion = true
+    }
+}
 
 /// A tap target that still fires while the enclosing `List` is coasting (momentum scroll) — the whole
 /// reason these controls aren't plain `Button`s. On iOS the scroll view's stop-on-tap arbitration eats

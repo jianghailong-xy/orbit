@@ -570,6 +570,50 @@ export function buildBackgroundStallBlock(wakes: StoredWake[], turnKind: string 
   return lines.join('\n');
 }
 
+/** The kind a SubAgent's wake is filed under (runner-api/subagent-wake.ts): delivered in its own block. */
+export const SUBAGENT_WAKE_KIND = 'subagent';
+
+/** What each end of a run means for the agent that sent it. */
+const ENDED_BECAUSE: Record<string, string> = {
+  INTERRUPTED:
+    'The runner process hosting it stopped (a restart, an update or a crash), and the SubAgent ended with it before it finished.',
+  STOPPED: 'It was stopped before it finished.',
+  FAILED: 'It did not finish its work.',
+};
+
+/**
+ * The block a SubAgent's wake is delivered in. It names the SubAgent by its description and run, says how it
+ * ended (and why, for one that did not finish), and quotes its result. `turnKind` is the delivering turn's, as for
+ * a background job's wake: a steer says it joined the turn the agent is already in.
+ */
+export function buildSubagentFinishedBlock(wakes: StoredWake[], turnKind: string = 'message'): string {
+  const lines = ['<orbit-subagent-finished>'];
+  for (const wake of wakes) {
+    const name = (wake.description ?? wake.command).trim() || 'without a description';
+    lines.push(`  SubAgent ${name} (run ${wake.jobId}) finished: ${wake.status}`);
+    const because = ENDED_BECAUSE[wake.status];
+    if (because) lines.push(`  ${because}`);
+    const result = wake.outputExcerpt.replace(/\r\n?/g, '\n').replace(/\s+$/, '');
+    if (result) {
+      lines.push('  Result:');
+      for (const line of result.split('\n')) lines.push(`    ${line}`);
+    } else {
+      lines.push('  (no result)');
+    }
+  }
+  lines.push(
+    turnKind === 'steer'
+      ? '  It ended while you were working, so this was added to the turn you are in.'
+      : '  The control plane opened this turn for it.',
+  );
+  lines.push(
+    '  The control plane recorded this for you; the user did not say it. Whatever a SubAgent changed is in your working ' +
+      'tree, uncommitted: review it before you commit. To continue one, call delegate with resume set to its run id.',
+  );
+  lines.push('</orbit-subagent-finished>');
+  return lines.join('\n');
+}
+
 /**
  * Write a wake turn's wakes into the content being delivered.
  *
@@ -591,10 +635,14 @@ export async function appendBackgroundWakeContext(
   if (wakes.length === 0) return content;
   // In the order the wakes first arrived, ordered here rather than trusted from the read.
   wakes.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.jobId.localeCompare(b.jobId));
-  // A stall goes in a block of its own, after the exits and output beside it.
-  const news = wakes.filter((wake) => wake.trigger !== 'stall');
-  const stalls = wakes.filter((wake) => wake.trigger === 'stall');
+  // A SubAgent's end reads as a SubAgent's, in a block of its own; a stall goes in a block of its own, after the
+  // exits and output beside it.
+  const subagents = wakes.filter((wake) => wake.kind === SUBAGENT_WAKE_KIND);
+  const jobs = wakes.filter((wake) => wake.kind !== SUBAGENT_WAKE_KIND);
+  const news = jobs.filter((wake) => wake.trigger !== 'stall');
+  const stalls = jobs.filter((wake) => wake.trigger === 'stall');
   const blocks = [
+    ...(subagents.length > 0 ? [buildSubagentFinishedBlock(subagents, turnKind)] : []),
     ...(news.length > 0 ? [buildBackgroundWakeBlock(news, turnKind)] : []),
     ...(stalls.length > 0 ? [buildBackgroundStallBlock(stalls, turnKind)] : []),
   ];

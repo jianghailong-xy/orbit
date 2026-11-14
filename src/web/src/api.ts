@@ -6,6 +6,7 @@ import type {
   MergeRecovery,
   MergeRecoveryAction,
   SessionGuestPerson,
+  SubagentRunView,
 } from '@orbit/shared';
 import type {
   BgShell,
@@ -464,6 +465,10 @@ export const readDirProbe = (runnerId: string, path: string, signal?: AbortSigna
 export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
   api<BgShell[]>(`/sessions/${id}/background`);
 
+/** The session's SubAgent runs, oldest first: what each `delegate` block shows beside its call. */
+export const getSessionSubagents = (id: string): Promise<SubagentRunView[]> =>
+  api<SubagentRunView[]>(`/sessions/${id}/subagents`);
+
 // ── Interactive sessions (Route B) ──
 
 /** Start a long-lived interactive session. Pick a workspace (its machine + project dir
@@ -901,6 +906,9 @@ export interface ApprovalInfo {
    *  it names (`shared/dto.ts`): the reader that outlives the turn, and what the local
    *  "is this still a question" predicate below reads against `Session.runningBgShells`. */
   backgroundJobId?: string;
+  /** The SubAgent run that asked this under the session (`shared/dto.ts`); its `toolUseId` is then the child's
+   *  call as the transcript writes it. */
+  subagentRunId?: string;
   status: 'PENDING' | 'ALLOWED' | 'DENIED';
   message?: string;
   createdAt: string;

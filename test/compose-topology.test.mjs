@@ -141,6 +141,12 @@
 // environment is added. Each such line is read below as the line it replaced, web's is dropped with its comment, and so
 // is the comment that introduces the variables; test/upgrade-two-stage.test.mjs renders the file both ways and finds it
 // unchanged with the variables unset.
+//
+// On 2026-11-15 the downloadable runner built from the newest release tag (1f187cac2, "feat(upgrade): build the
+// downloadable runner from the newest release tag") added two build args to web: ORBIT_RUNNER_SOURCE, the release tag's
+// tree the runner binaries are built from, `.` (the context) unless set, and ORBIT_RUNNER_SOURCE_SHA, its commit, empty
+// unless set. The upgrade skill sets both. No service, mount, port or environment is added. It reached main without a
+// pin here, which left this file red there; the block below pins its two lines.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -502,6 +508,11 @@ const APPROVED_APISERVER_BLOCKS = [
   ],
 ];
 const APPROVED_APISERVER_ADDITIONS = APPROVED_APISERVER_BLOCKS.flat();
+// The runner binaries' source (2026-11-15, 1f187cac2, the top of this file): two of web's build args.
+const APPROVED_WEB_BLOCK = [
+  '        ORBIT_RUNNER_SOURCE: "${ORBIT_RUNNER_SOURCE:-.}"',
+  '        ORBIT_RUNNER_SOURCE_SHA: "${ORBIT_RUNNER_SOURCE_SHA:-}"',
+];
 // Orbit Files' off-host copy (2026-11-02, the top of this file): the sidecar reads the files directory and cannot write it.
 const PGBACKUP_FILES_MOUNT = '      - ./data/files:/var/lib/orbit/files:ro';
 // The approved additions to postgres's command that (k) sets aside, which (i) pins byte for byte with the rest of the
@@ -518,7 +529,7 @@ const APPROVED_POSTGRES_BLOCKS = [
   ],
 ];
 test('nothing beyond the approved configuration was added to pgbackup, apiserver or web', () => {
-  const approved = { pgbackup: [PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: [] };
+  const approved = { pgbackup: [PGBACKUP_FILES_MOUNT], apiserver: APPROVED_APISERVER_ADDITIONS, web: APPROVED_WEB_BLOCK };
   for (const [name, additions] of Object.entries(approved)) {
     assert.deepEqual(
       directivesNotInBaseline(currentServices.get(name), survivingConfigurationServices.get(name)),
@@ -551,7 +562,7 @@ function withoutService(source, name) {
  */
 function withoutApprovedAdditions(source) {
   let lines = source.split('\n');
-  for (const block of [...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT]]) {
+  for (const block of [...APPROVED_APISERVER_BLOCKS, [PGBACKUP_FILES_MOUNT], APPROVED_WEB_BLOCK]) {
     const first = lines.indexOf(block[0]);
     assert.ok(first > 0, `docker-compose.yml no longer has the approved ${block[0].trim()}`);
     const last = lines.indexOf(block[block.length - 1], first);

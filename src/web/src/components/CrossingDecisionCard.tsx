@@ -9,13 +9,12 @@ import { streamPoll } from '../lib/listBudget';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { CROSSING_STATE_LABEL, labelFor, type ProjectCrossingRow } from '../lib/attribution';
 import {
-  CROSSING_APPROVE_LABEL,
   CROSSING_LINK_ANSWERED,
   CROSSING_LINK_LIVE,
   CROSSING_NOT_RECORDED,
   CROSSING_PROVENANCE,
+  CROSSING_NO_PROJECT,
   CROSSING_RECORDED,
-  CROSSING_REFUSE_LABEL,
   CROSSING_SHOWN_ROWS,
   CROSSING_TO_THIS_PROJECT,
   anotherEndLine,
@@ -29,6 +28,7 @@ import {
   crossingListHead,
   crossingSummary,
   crossingTitle,
+  decisionLabels,
   isLive,
   notRecordedNote,
   pendingRows,
@@ -117,8 +117,9 @@ export function CrossingDecisionCard({
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const live = isLive(batch);
-  const title = crossingTitle(batch.kind, batch.rows.length);
-  const badge = live ? crossingBadge(batch.kind) : answeredBadge(batch.kind, batchVerdict(batch));
+  const title = crossingTitle(batch.kind, batch.rows.length, batch.out);
+  const badge = live ? crossingBadge(batch.kind) : answeredBadge(batch.kind, batchVerdict(batch), batch.out);
+  const labels = decisionLabels(batch);
   const summary = crossingSummary(batch);
   const refused = batch.rows.filter((row) => refusals[row.id]).length;
   const shown = all ? batch.rows : batch.rows.slice(0, CROSSING_SHOWN_ROWS);
@@ -155,8 +156,8 @@ export function CrossingDecisionCard({
             {live ? <p className="crossing-decision-waiting">{waitingLine(batch)}</p> : null}
             <p className="crossing-decision-provenance">{CROSSING_PROVENANCE}</p>
             <p className="crossing-decision-route"><span>From</span> {batch.sourceTitle}</p>
-            <p className="crossing-decision-route"><span>To</span> {CROSSING_TO_THIS_PROJECT}</p>
-            <p className="crossing-decision-label">{crossingListHead(batch.kind)}</p>
+            <p className="crossing-decision-route"><span>To</span> {batch.out ? CROSSING_NO_PROJECT : CROSSING_TO_THIS_PROJECT}</p>
+            <p className="crossing-decision-label">{crossingListHead(batch.kind, batch.out)}</p>
             <ul className="crossing-decision-list">
               {shown.map((row) => (
                 <CrossingItem key={row.id} row={row} refusal={refusals[row.id]} />
@@ -178,10 +179,10 @@ export function CrossingDecisionCard({
           {live ? (
             <CardActions className="approval-actions crossing-decision-actions">
               <CardActionButton tone="primary" disabled={busy} onClick={() => onDecide('APPROVE')}>
-                {CROSSING_APPROVE_LABEL}
+                {labels.approve}
               </CardActionButton>
               <CardActionButton tone="secondary" disabled={busy} onClick={() => onDecide('DENY')}>
-                {CROSSING_REFUSE_LABEL}
+                {labels.refuse}
               </CardActionButton>
             </CardActions>
           ) : null}
@@ -300,7 +301,7 @@ export function useCrossingDecisionCards(
         const at = Date.parse(batch.moment);
         return {
           id: batch.id,
-          label: crossingTitle(batch.kind, batch.rows.length),
+          label: crossingTitle(batch.kind, batch.rows.length, batch.out),
           ageSeconds: Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null,
         };
       }),

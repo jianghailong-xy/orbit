@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { RunEventType } from '@orbit/shared';
 import { RealtimeService } from '../realtime/realtime.service';
-import { catalogFingerprint, parseModelCatalog, setModelCatalog } from './model-catalog';
+import { catalogFingerprint, parseModelCatalog, parseModelPrices, setModelCatalog, setModelPrices } from './model-catalog';
 
 /** The third-party provider → models mapping the vendor lists refresh from. Overridable so a
  *  deployment can point at a mirror (or a pinned copy) instead of reaching the public one. */
@@ -43,7 +43,11 @@ export class ModelCatalogService implements OnModuleInit, OnModuleDestroy {
     try {
       const resp = await fetch(CATALOG_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      catalog = parseModelCatalog(await resp.json());
+      const payload: unknown = await resp.json();
+      catalog = parseModelCatalog(payload);
+      // Prices change no picker, so they are installed whether or not the lists moved.
+      const prices = parseModelPrices(payload);
+      if (prices.size > 0) setModelPrices(prices);
     } catch (e) {
       this.log.warn(`model catalogue refresh failed (${(e as Error).message}) — keeping current lists`);
       return;

@@ -211,6 +211,35 @@ final class ProjectCrossingsTests: XCTestCase {
         XCTAssertTrue(try decoded().allSatisfy(ProjectCrossings.isShownOnProjectPage))
     }
 
+    /// A move out to no project is answered in its SOURCE project's coordinator conversation: the
+    /// page drops it when that conversation exists, and keeps it when it does not.
+    func testAMoveOutFollowsItsSourcesConversation() throws {
+        func moveOut(fromProject: String) throws -> ProjectCrossing {
+            let json = #"{"id":"34bOutRow","fromProjectId":"34bFrom","fromProjectPublicId":"34bFrom","#
+                + #""toProjectId":null,"kind":"MOVE_TASK","crossingKey":"k","state":"PENDING","#
+                + #""title":"t","requestedAt":"2026-10-07T08:00:00.000Z","fromProject":\#(fromProject)}"#
+            return try JSONDecoder().decode(ProjectCrossing.self, from: Data(json.utf8))
+        }
+        let answered = try moveOut(fromProject:
+            #"{"title":"Coordinator control loop","coordinatorSessionId":"34bCoord"}"#)
+        XCTAssertEqual(answered.fromProject?.coordinatorSessionId, "34bCoord")
+        XCTAssertFalse(ProjectCrossings.isShownOnProjectPage(answered), "its source conversation answers it")
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(try moveOut(fromProject:
+            #"{"title":"Coordinator control loop","coordinatorSessionId":null}"#)),
+            "a source with no coordinator conversation leaves the page to answer it")
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(try moveOut(fromProject:
+            #"{"title":"Coordinator control loop"}"#)),
+            "an older server that does not say: better a duplicate than a request nowhere to answer")
+
+        // A move into a project still follows its TARGET end, whatever its source conversation says.
+        let into = try JSONDecoder().decode(ProjectCrossing.self, from: Data(
+            (#"{"id":"into","fromProjectId":"a","toProjectId":"b","kind":"MOVE_TASK","crossingKey":"k","#
+             + #""state":"PENDING","title":"t","requestedAt":"2026-10-07T08:00:00.000Z","#
+             + #""fromProject":{"title":"A","coordinatorSessionId":"34bCoord"},"#
+             + #""toProject":{"title":"B","coordinatorSessionId":null}}"#).utf8))
+        XCTAssertTrue(ProjectCrossings.isShownOnProjectPage(into))
+    }
+
     func testTheCountAndTheSectionHoldOnlyTheListedRows() throws {
         let rows = [
             try row("card", toProject: #"{"title":"A","coordinatorSessionId":"34bCoord"}"#),

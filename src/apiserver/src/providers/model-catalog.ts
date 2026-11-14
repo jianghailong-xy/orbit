@@ -27,6 +27,7 @@ interface CatalogEntry {
   release_date?: unknown;
   modalities?: { output?: unknown };
   limit?: { context?: unknown };
+  cost?: { output?: unknown };
 }
 
 /** Resolved model lists by preset slug. A slug is absent until a refresh finds models for it. */
@@ -57,6 +58,39 @@ export function catalogModels(preset: ProviderPreset): ProviderPresetModel[] {
  */
 export function catalogDefaultModel(preset: ProviderPreset): string {
   return live.get(preset.slug)?.[0]?.value ?? preset.defaultModel;
+}
+
+/** USD per million output tokens by model id, for each preset with a `prices` source, from the last refresh. */
+export type ModelPrices = Map<string, Map<string, number>>;
+
+let livePrices: ModelPrices = new Map();
+
+/** Install the prices a refresh read. */
+export function setModelPrices(next: ModelPrices): void {
+  livePrices = next;
+}
+
+/** What one more million output tokens of `model` cost on this preset's key: the last refresh, else the shipped floor. */
+export function presetModelPrice(preset: ProviderPreset, model: string): number | undefined {
+  return livePrices.get(preset.slug)?.get(model) ?? preset.prices?.floor[model];
+}
+
+/** The models.dev output price of every model of each preset with a `prices` source. Malformed entries are skipped. */
+export function parseModelPrices(payload: unknown, presets: ProviderPreset[] = PROVIDER_PRESETS): ModelPrices {
+  const prices: ModelPrices = new Map();
+  if (!payload || typeof payload !== 'object') return prices;
+  const vendors = payload as Record<string, { models?: Record<string, CatalogEntry> } | undefined>;
+  for (const preset of presets) {
+    const models = preset.prices ? vendors[preset.prices.source]?.models : undefined;
+    if (!models || typeof models !== 'object') continue;
+    const byModel = new Map<string, number>();
+    for (const m of Object.values(models)) {
+      const price = m?.cost?.output;
+      if (typeof m?.id === 'string' && typeof price === 'number' && Number.isFinite(price) && price >= 0) byModel.set(m.id, price);
+    }
+    if (byModel.size > 0) prices.set(preset.slug, byModel);
+  }
+  return prices;
 }
 
 /** What each preset offers right now, for the connect form — which is offering a vendor's models
@@ -98,11 +132,18 @@ export function parseModelCatalog(payload: unknown, presets: ProviderPreset[] = 
     if (!preset.catalog) continue;
     const models = vendors[preset.catalog.source]?.models;
     if (!models || typeof models !== 'object') continue;
+    // A shipped model's tier is Orbit's own judgement, which models.dev does not carry: kept across a
+    // refresh, beside the price the refresh brings.
+    const tiers = new Map(preset.models.map((m) => [m.value, m.tier]));
     const fresh = Object.values(models)
       .filter((m) => usable(m, preset.catalog!.match))
       .sort(byNewest)
       .slice(0, PER_VENDOR_LIMIT)
-      .map(toPresetModel);
+      .map((m) => {
+        const model = toPresetModel(m);
+        const tier = tiers.get(model.value);
+        return tier ? { ...model, tier } : model;
+      });
     // Nothing recognizable for this vendor (a renamed source, a shape we don't understand) — leave
     // the slug unset so reads keep falling back to the shipped list.
     if (fresh.length === 0) continue;
@@ -137,9 +178,11 @@ function byNewest(a: CatalogEntry, b: CatalogEntry): number {
 function toPresetModel(m: CatalogEntry): ProviderPresetModel {
   const id = m.id as string;
   const context = m.limit?.context;
+  const price = m.cost?.output;
   return {
     value: id,
     label: typeof m.name === 'string' && m.name.trim() ? m.name.trim() : id,
     ...(typeof context === 'number' && context > 0 ? { contextWindow: context } : {}),
+    ...(typeof price === 'number' && Number.isFinite(price) && price >= 0 ? { outputPricePerMTok: price } : {}),
   };
 }
