@@ -6,6 +6,7 @@ import { MODEL_UNAVAILABLE } from '@orbit/shared';
 import {
   assertManagedFirstSessionRuntime,
   managedFirstSessionKey,
+  managedFirstSessionKeyOf,
   managedFirstSessionProvider,
   managedKeySupply,
   managedRuntimeReady,
@@ -104,14 +105,22 @@ const key = (slug: string, change: Record<string, unknown> = {}) => ({
   ...change,
 });
 
-/** The owner's keys as the database answers the query, and the query it was asked. */
-function keysOf(rows: unknown[]) {
+/** The owner's keys as the database answers the query, and the query it was asked; with `runner`, the
+ *  owner's managed runner row as its last heartbeat left it (absent: no mapping). */
+function keysOf(rows: unknown[], runner?: unknown) {
   const asked: unknown[] = [];
   return {
     asked,
-    prisma: { modelProvider: { findMany: async (args: unknown) => (asked.push(args), rows) } } as never,
+    prisma: {
+      modelProvider: { findMany: async (args: unknown) => (asked.push(args), rows) },
+      managedRunner: { findUnique: async () => (runner === undefined ? null : { runnerId: 'r' }) },
+      runner: { findUnique: async () => runner ?? null },
+    } as never,
   };
 }
+
+/** A Kimi (Moonshot) key, which runs on Kimi Code (or OpenCode), neither in the managed image. */
+const moonshot = () => key('moonshot', { runtime: 'kimi', baseUrl: 'https://api.moonshot.ai/v1', presetSlug: 'moonshot' });
 
 test("an owner's key is supply when the runner has the key's engine installed, signed in or not", async () => {
   const { prisma, asked } = keysOf([key('deepseek')]);
@@ -203,8 +212,10 @@ test('the first session the status names is the one the create takes: READY\'s r
   // Before READY, with no key of the owner's own: nothing to start on.
   assert.equal(managedFirstSessionProvider(null, null, { defaultRemoved: [], engines: null }), null);
   assert.equal(managedFirstSessionProvider(null, null, { defaultRemoved: [], engines: [engine('claude')] }), null);
-  // A runner row not read is treated as one that has reported nothing: the key is named.
+  // A runner row not read is treated as one that has reported nothing: the key is named when the
+  // managed image has its engine.
   assert.equal(managedFirstSessionProvider(null, deepseek, null), 'deepseek');
+  assert.equal(managedFirstSessionProvider(null, kimi, null), null);
 
   const prisma = { session: { findFirst: async () => null } } as never;
   const cases: Array<[string, { slug: string; engine: 'claude' | 'kimi' }, { defaultRemoved: [], engines: unknown; capabilities?: string[] }, string | null]> = [
@@ -212,7 +223,8 @@ test('the first session the status names is the one the create takes: READY\'s r
     ["reported the key's engine installed, not signed in", deepseek, { defaultRemoved: [], engines: [engine('claude', { auth: 'no' })] }, 'deepseek'],
     ["reported without the key's engine (MODEL_UNAVAILABLE)", deepseek, { defaultRemoved: [], engines: [engine('codex', { auth: 'no' })] }, null],
     ['reported an empty list', deepseek, { defaultRemoved: [], engines: [] }, null],
-    ['a Kimi key, nothing reported yet', kimi, { defaultRemoved: [], engines: null }, 'kimi-key'],
+    // The managed image installs Claude Code and Codex only: a Kimi key waits for nothing.
+    ['a Kimi key, nothing reported yet', kimi, { defaultRemoved: [], engines: null }, null],
     ['a Kimi key on a runner that reported no Kimi Code', kimi, { defaultRemoved: [], engines: [engine('claude', { auth: 'no' })] }, null],
   ];
   for (const [name, key, runner, named] of cases) {
@@ -222,4 +234,42 @@ test('the first session the status names is the one the create takes: READY\'s r
       .then(() => true, () => false);
     assert.equal(taken, named !== null, `${name}: the create agrees`);
   }
+});
+
+// Found in the production rollout (2026-11-14): a runner of the managed image (Claude Code and Codex)
+// was offered the owner's Kimi key, which only Kimi Code or OpenCode runs, and the session was refused.
+
+test('a first session is never named on a key no engine on the runner runs: only a Kimi key on a Claude/Codex runner is none', async () => {
+  const claudeCodex = { defaultRemoved: [], engines: [engine('claude', { auth: 'no' }), engine('codex', { auth: 'no' })] };
+  const unreported = { defaultRemoved: [], engines: null, capabilities: [] };
+  for (const [name, runner] of [['reported Claude Code and Codex', claudeCodex], ['nothing reported yet', unreported], ['no mapping', undefined]] as const) {
+    assert.equal(await managedFirstSessionKey(keysOf([moonshot()], runner).prisma, 'o'), null, name);
+    assert.equal(managedFirstSessionKeyOf([{ slug: 'moonshot', engine: 'kimi' }], runner ?? null), null, name);
+  }
+  // READY records nothing on it either: the runner stays without supply, with its sign-in/add-key reason.
+  assert.equal(await managedKeySupply(keysOf([moonshot()]).prisma, 'o', claudeCodex), null);
+  // And the create refuses it rather than queueing it for a runner that will never have Kimi Code.
+  const prisma = { session: { findFirst: async () => null } } as never;
+  for (const runner of [claudeCodex, unreported]) {
+    await assert.rejects(
+      assertManagedFirstSessionRuntime(prisma, { workspaceId: 'w', runtime: 'kimi', bringsOwnCredentials: true, runner }),
+      (error: unknown) => error instanceof ConflictException && (error.getResponse() as { code: string }).code === MODEL_UNAVAILABLE,
+    );
+  }
+});
+
+test('with a Kimi key first and a DeepSeek key after it, a Claude/Codex runner is offered DeepSeek', async () => {
+  const claudeCodex = { defaultRemoved: [], engines: [engine('claude', { auth: 'no' }), engine('codex', { auth: 'no' })] };
+  const unreported = { defaultRemoved: [], engines: null, capabilities: [] };
+  for (const [name, runner] of [['reported Claude Code and Codex', claudeCodex], ['nothing reported yet', unreported], ['no mapping', undefined]] as const) {
+    assert.equal(await managedFirstSessionKey(keysOf([moonshot(), key('deepseek')], runner).prisma, 'o'), 'deepseek', name);
+    const picked = managedFirstSessionKeyOf([{ slug: 'moonshot', engine: 'kimi' as const }, { slug: 'deepseek', engine: 'claude' as const }], runner ?? null);
+    assert.deepEqual(picked, { slug: 'deepseek', engine: 'claude' }, name);
+    assert.equal(managedFirstSessionProvider(null, picked, runner ?? null), 'deepseek', name);
+  }
+  // A runner that does report Kimi Code takes the owner's order: the Kimi key first.
+  const withKimi = { defaultRemoved: [], engines: [engine('kimi', { auth: 'no' }), engine('claude', { auth: 'no' })] };
+  assert.equal(await managedFirstSessionKey(keysOf([moonshot(), key('deepseek')], withKimi).prisma, 'o'), 'moonshot');
+  // READY on the same runner records DeepSeek too.
+  assert.equal(await managedKeySupply(keysOf([moonshot(), key('deepseek')]).prisma, 'o', claudeCodex), 'deepseek');
 });
