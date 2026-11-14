@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Delivery is handled by the runner and may not be visible in Codex's tool result.
@@ -245,6 +246,20 @@ func withOrbitCLIInstructions(configured, executable string, insideRecordedWork,
 	return strings.TrimRight(configured, "\r\n") + "\n\n" + orbit
 }
 
+// orbitCLIAllowedTools is Claude Code's allowlist for the Orbit CLI: `capabilities --json` and its graded views
+// (`capabilities *`), and one Bash rule per command the operation catalogue offers an agent's session. It is generated from the catalogue (orbitCLICommands)
+// rather than enumerated, so no command `capabilities --json` tells an agent to run is pre-approved for nobody: a
+// command missing here is one the agent hits a permission prompt for, which is what happened to every verb the
+// hand-written list fell behind on. Each rule is still one command, never `task *`, so a verb added to the CLI is
+// pre-approved only once the catalogue declares it.
+//
+// A rule takes the command past Claude Code's own permission check and no further. Whether it then writes is still
+// Orbit's to say, by the same rules the MCP tools are held to: a consequential write files its card, and in Plan
+// mode every write is refused by Orbit's Plan gate (plan_gate.go), which reads the session's live mode. That is why
+// the list does not shrink in Plan: Claude Code honours these rules there too (measured on 2.1.325), and a list
+// chosen when the process starts could not follow a mode that changes under it — Claude Code entering Plan by
+// itself, or leaving it once a plan is approved — while a refused write that went to a card first would only put a
+// question in front of the owner that has one answer.
 func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	if executable == "" {
 		return nil
@@ -259,125 +274,47 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	rules := []string{}
 	for _, command := range commandForms {
 		rules = append(rules, "Bash("+command+" capabilities --json)")
-		// The graded views of the same document (--summary, --family, --id) and the guide: reads of the
-		// catalogue that ask the server nothing, and the commands the instructions send an agent to
-		// instead of the whole document.
+		// The graded views of the same document (--summary, --family, --id): reads of the catalogue that ask the
+		// server nothing, and where the instructions send an agent instead of the whole document. The guide is a
+		// catalogued command, so its rule comes from the loop below like every other.
 		rules = append(rules, "Bash("+command+" capabilities *)")
-		rules = append(rules, "Bash("+command+" guide *)")
-		// Every task verb the CLI has. An action missing here is pre-approved for nobody: the agent
-		// hits a permission prompt for a command `capabilities --json` just told it to run — which is
-		// what happened to the twelve this list was short of. Still enumerated rather than `task *`,
-		// for the reason the project list gives below, and TestEveryAdvertisedCapabilityIsPreApproved
-		// walks baseCLICapabilities and fails when it falls behind it, so the next verb cannot be
-		// added to the document and forgotten here.
-		for _, action := range []string{
-			"list", "get", "create", "update", "delete", "start", "comment", "await", "progress",
-			"labels", "attribution", "dependency-graph", "dependency-add", "dependency-remove",
-			"evidence-list", "evidence-submit", "evidence-decide",
-			"create-batch", "batch-pin", "reopen", "request-confirmation",
-			"confirmation-review", "confirmation-return",
-		} {
-			rules = append(rules, "Bash("+command+" task "+action+" *)")
-		}
-		// Every task-list subcommand the CLI has. An action missing here is pre-approved for
-		// nobody: the agent hits a permission prompt for a command `capabilities --json` just
-		// told it to run — which is what happened to get/update when they were added.
-		for _, action := range []string{"list", "create", "get", "update", "delete", "propose-dag"} {
-			rules = append(rules, "Bash("+command+" task-list "+action+" *)")
-		}
-		// Every project verb the CLI has. An action missing here is pre-approved for nobody: the
-		// agent hits a permission prompt for a command `capabilities --json` just told it to run.
-		// Still enumerated rather than `project *`, so a verb added later is a decision somebody
-		// makes here rather than one it inherits. Three of them are answers an agent had to be
-		// refused to reach: crossings says what a refusal is waiting on, resolve-blocker ends this
-		// project's own wait with the owner's answer on a card in front of them, and merge-evidence
-		// records what a target branch was observed to contain. request-start is the coordinator
-		// asking the owner to start the project, which starts nothing by itself, and request-done the
-		// same coordinator asking the owner to record it done, which records nothing. skip-merge-check
-		// is the fourth of the asks: the coordinator puts a red check it believes is the check's own
-		// fault in front of the owner, and nothing is skipped unless they answer the card.
-		// integration is the read of the line itself — the queue, why each job waits, the generations
-		// and each candidate's check and merge — and the door that replaces a coordinator querying
-		// the production database. It writes nothing, so it needs no grant and no card.
-		// The two project verbs NOT here — ensure-coordinator and send — are the deliveries to a
-		// coordinator, which OPEN a conversation and so ride the orchestration gate below.
-		for _, action := range []string{"get", "integration", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done", "request-promotion", "skip-merge-check"} {
-			rules = append(rules, "Bash("+command+" project "+action+" *)")
-		}
-		// Every watch verb: they wait on Orbit's own work for the session they run in, which is the
-		// command the instructions send an agent to instead of a sleep loop.
-		for _, action := range []string{"create", "get", "list", "update", "cancel"} {
-			rules = append(rules, "Bash("+command+" watch "+action+" *)")
-		}
-		// Every wiki verb: reading what the session's own workspace shares and proposing what it
-		// learned is not a power over anybody else's session, so it needs no orchestration grant —
-		// and the agent most likely to learn something worth recording is the plain single-session
-		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
-		// verify asks the server to verify the session's own proposals and waits for its verdicts, and note
-		// leaves a claim for maintenance to check against the session's own records: no more of a power.
-		// draft makes a card in the session's own wiki chat, which only the owner can press (the server refuses it
-		// to any other session): less of a power than propose.
-		for _, action := range []string{"search", "get", "propose", "verify", "note", "draft"} {
-			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
-		}
-		// Every file verb: keeping and reading back your own files is no power over anybody else's session, and the
-		// instructions send every agent here for its evidence.
-		for _, action := range []string{"upload", "fetch", "list", "pin"} {
-			rules = append(rules, "Bash("+command+" file "+action+" *)")
-		}
-		// import hands the server, for a space its owner named, files the owner asked for, and the
-		// server's model reads them: no more of a power than propose, and the server holds what it
-		// proposes to the same review mode and floors.
-		rules = append(rules, "Bash("+command+" wiki import *)")
-		// `orbit notify` is how a session reaches the human the runner works for — the reader most
-		// likely to be stuck without one is the plain single-session agent — and `orbit provider list`
-		// answers for the `--provider` field the task commands above take, which need no orchestration
-		// to be given one. The provider writes are the owner's own configuration, and each is put on a
-		// confirmation card in front of them before it is made (askBeforeCreate), as a task create is.
-		rules = append(rules, "Bash("+command+" notify *)")
-		for _, action := range []string{"list", "create", "update", "delete"} {
-			rules = append(rules, "Bash("+command+" provider "+action+" *)")
-		}
-		// The merge receipts are the one pair of session verbs advertised OUTSIDE the orchestration
-		// gate (mergeReceiptCLICapabilities, §13.7): recording that a branch was merged is evidence
-		// about the caller's own work rather than a power over somebody else's session, and the agent
-		// most likely to need it is the plain single-session one with no session_* tools at all.
-		for _, action := range []string{"merge-receipt", "merge-receipts"} {
-			rules = append(rules, "Bash("+command+" session "+action+" *)")
-		}
-		if allowOrchestration {
-			// The session family as advertised, `import` included: it brings a conversation on this
-			// machine's disk into Orbit as a new session, behind the same gate as create.
-			for _, action := range []string{"create", "import", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
-				rules = append(rules, "Bash("+command+" session "+action+" *)")
+		for _, cli := range orbitCLICommands() {
+			if cli.orchestration && !allowOrchestration {
+				continue
 			}
-			// The agent verbs ride the same gate and have no headless form: no service-token scope
-			// names them, so they are advertised only where a live session has the grant. A delete, and a
-			// write of what decides the agent's next session, are put on a confirmation card in front of the
-			// owner first, and the server refuses them without one.
-			for _, action := range []string{"list", "create", "update", "delete"} {
-				rules = append(rules, "Bash("+command+" agent "+action+" *)")
-			}
-			// The runner verbs ride the same gate: the list reads the ids those agent verbs bind to,
-			// install runs an engine's installer on one of those machines, as the runner page's Install does,
-			// and delete removes one on the owner's confirmation card, as the agent delete does.
-			for _, action := range []string{"list", "install", "install-status", "delete"} {
-				rules = append(rules, "Bash("+command+" runner "+action+" *)")
-			}
-			// The one project verb that OPENS a conversation, and so spends the orchestration
-			// credential rather than the machine's own: it is advertised where that grant exists
-			// (RequiresOrchestration), which is where its rule belongs too.
-			rules = append(rules, "Bash("+command+" project ensure-coordinator *)")
-			// Its delivery half, on the same grant and for the same reason: the coordinator is
-			// resolved at the moment of delivery and may be replaced to take the message, so the
-			// credential it spends is the one that makes the ask a session's own. Pre-approving it
-			// anywhere else would be a rule for a command `capabilities --json` never offers that
-			// agent — which is what TestEveryAdvertisedCapabilityIsPreApproved refuses.
-			rules = append(rules, "Bash("+command+" project send *)")
+			rules = append(rules, "Bash("+command+" "+cli.words+" *)")
 		}
 	}
 	return rules
 }
+
+// orbitCLICommand is one catalogue command as the allowlist names it: its words after `orbit`, and whether the
+// capabilities document offers it only where the orchestration grant exists.
+type orbitCLICommand struct {
+	words         string
+	orchestration bool
+}
+
+// orbitCLICommands is every command the catalogue offers an agent's session, in catalogue order: each CLI command
+// but the person's own account commands (HeadlessOnly), which no running agent is offered. The orchestration
+// families — session, agent, runner, and the two project deliveries that open a conversation — are marked, since
+// `capabilities --json` offers them only with the grant, and that is where their rules belong. The watch and wiki
+// commands are not: their rules cost nothing in a session spawned with the switch off, and a missing one costs the
+// prompt this list exists to remove. Built once: none of it depends on the environment the catalogue is otherwise
+// projected for.
+var orbitCLICommands = sync.OnceValue(func() []orbitCLICommand {
+	var commands []orbitCLICommand
+	for _, op := range operationCatalog().Ops {
+		if op.CLI == nil || op.CLI.HeadlessOnly || len(op.CLI.Argv) < 2 {
+			continue
+		}
+		commands = append(commands, orbitCLICommand{
+			words:         strings.Join(op.CLI.Argv[1:], " "),
+			orchestration: strings.HasPrefix(op.availability().CLI, "orchestration"),
+		})
+	}
+	return commands
+})
 
 func shellWordSafe(value string) bool {
 	if value == "" {

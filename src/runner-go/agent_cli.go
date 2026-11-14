@@ -25,7 +25,7 @@ An agent is a machine plus a project directory. It has no provider of its own â€
 orchestration cannot be switched here: it is one switch for the whole account, in Settings.
 
 These commands run inside a live Orbit session while the account's Session orchestration
-switch is on.
+switch is on: the switch that grants managing other sessions grants managing agents too.
 Run 'orbit agent <command> --help' for options.
 `
 

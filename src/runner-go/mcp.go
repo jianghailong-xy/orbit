@@ -64,6 +64,18 @@ type mcpServer struct {
 	callTimeout time.Duration
 	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
 	rec *callRecord
+	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
+	// (sessionPermissionMode).
+	permissionMode func() (string, bool, error)
+}
+
+// planRefusal is Orbit's Plan gate for one call of this server: the refusal to answer it with, or "" to run it.
+func (s *mcpServer) planRefusal(name string, args map[string]interface{}) string {
+	mode := s.permissionMode
+	if mode == nil {
+		mode = sessionPermissionMode
+	}
+	return mcpPlanRefusal(name, args, mode)
 }
 
 const envMCPPermissionPrompt = "ORBIT_MCP_PERMISSION_PROMPT"
@@ -345,6 +357,12 @@ const maxProjectAcceptanceCriteriaItems = 100
 const maxProjectAcceptanceVerificationMethodChars = 4000
 
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
+	// A session in Plan mode changes nothing until the plan is approved, whichever engine it runs on: a call Plan
+	// refuses is answered with what to do instead, before anything is filed or written (plan_gate.go). Ahead of the
+	// hand-off below too, whose job carries no socket to read the mode from.
+	if refusal := s.planRefusal(name, args); refusal != "" {
+		return toolResult(refusal, true)
+	}
 	// Runner-hosted background jobs are not a control-plane call at all: they are
 	// forwarded to the local runner over this session's socket (mcp_bg.go).
 	if result, handled := s.callBgTool(name, args); handled {
@@ -1335,7 +1353,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
-		if err := requireHandoffNamesItsDestination(body); err != nil {
+		if err := requireMoveRequestNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
 		s.rec.sentBody(body)
@@ -2749,6 +2767,9 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 	if s.sessionID == "" {
 		return toolResult(denyJSON("no session context (ORBIT_SESSION_ID unset)"), false)
 	}
+	if answer, decided := s.answerOrbitToolPrompt(args); decided {
+		return answer
+	}
 	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
 		"toolName":  getString(args, "tool_name"),
 		"input":     args["input"],
@@ -2780,6 +2801,28 @@ func (s *mcpServer) permissionPrompt(args map[string]interface{}) map[string]int
 		msg = "denied by the user"
 	}
 	return toolResult(denyJSON(msg), false)
+}
+
+// answerOrbitToolPrompt answers Claude's permission prompt for one of Orbit's own tools without a card. Every session
+// may call those without one (ALWAYS_ALLOWED_TOOLS, apiserver common/permission-mode.ts, which Claude Code is given
+// as its mcp__orbit__* allow rule), and Claude Code asks about one anyway only in Plan mode, where it holds back any
+// MCP tool whose annotations do not say it is read-only (measured on 2.1.325:
+// TestRealClaudePlanModeHoldsOnlyTheOrbitToolsThatWrite). So the answer is Orbit's Plan gate's: a call Plan runs is
+// allowed, and a call Plan refuses is denied with the refusal the tool itself would have returned, which is what the
+// model then reads. A name this catalogue does not declare goes to the card, as any other tool's does.
+func (s *mcpServer) answerOrbitToolPrompt(args map[string]interface{}) (map[string]interface{}, bool) {
+	tool, ours := strings.CutPrefix(getString(args, "tool_name"), claudeToolName(""))
+	if !ours {
+		return nil, false
+	}
+	if entry, declared := planGateTable()[tool]; !declared || !entry.mcp {
+		return nil, false
+	}
+	input, _ := args["input"].(map[string]interface{})
+	if refusal := s.planRefusal(tool, input); refusal != "" {
+		return toolResult(denyJSON(refusal), false), true
+	}
+	return toolResult(allowJSON(args["input"], nil), false), true
 }
 
 // askQuestionInput rebuilds AskUserQuestion's input for an allow decision: the

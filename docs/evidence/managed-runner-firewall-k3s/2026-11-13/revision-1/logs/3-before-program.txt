@@ -1,0 +1,108 @@
+
+### The firewall program before this task (a5e20f8ef) on this host (2026-11-13T20:21:57Z)
+ Container orbit-managed-runner-firewall Stopping 
+ Container orbit-managed-runner-firewall Stopped 
+ Container orbit-channel-host-managed-runner-firewall-run-d985ab223c9c Creating 
+ Container orbit-channel-host-managed-runner-firewall-run-d985ab223c9c Created 
+nft IPv4: deleted -A INPUT -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+nft IPv4: deleted -A FORWARD -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+nft IPv4: deleted -A DOCKER-USER -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+nft IPv4: removed chain ORBIT-MR-INPUT
+nft IPv4: removed chain ORBIT-MR-FORWARD
+nft IPv4: deleted nat -A PREROUTING -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-PREROUTING
+nft IPv4: removed nat chain ORBIT-MR-PREROUTING
+nft IPv6: deleted -A INPUT -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+nft IPv6: deleted -A FORWARD -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+nft IPv6: deleted -A DOCKER-USER -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+nft IPv6: removed chain ORBIT-MR-INPUT
+nft IPv6: removed chain ORBIT-MR-FORWARD
+nft IPv6: deleted nat -A PREROUTING -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-PREROUTING
+nft IPv6: removed nat chain ORBIT-MR-PREROUTING
+{"backend": "nft", "enforced": false, "problems": ["IPv4: FORWARD does not start with Docker's jump to DOCKER-USER", "IPv6: FORWARD does not start with Docker's jump to DOCKER-USER"], "written": ["IPv4", "IPv6"]}
+apply (before this task): exit 1
+
+### Rule listing: the program before this task, k3s running (2026-11-13T20:22:00Z)
+-- iptables -t filter -S FORWARD
+ 1: -A FORWARD -m comment --comment "kube-router netpol - TEMCG2JMHZYE7H7T" -j KUBE-ROUTER-FORWARD
+ 2: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+ 3: -A FORWARD -m comment --comment "kubernetes forwarding rules" -j KUBE-FORWARD
+ 4: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+ 5: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+ 6: -A FORWARD -j DOCKER-USER
+ 7: -A FORWARD -j DOCKER-FORWARD
+ 8: -A FORWARD -m comment --comment "flanneld forward" -j FLANNEL-FWD
+-- iptables -t filter -S INPUT
+ 1: -A INPUT -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+ 2: -A INPUT -m comment --comment "kube-router netpol - 4IA2OSFRMVNDXBVV" -j KUBE-ROUTER-INPUT
+ 3: -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+ 4: -A INPUT -m comment --comment "kubernetes health check service ports" -j KUBE-NODEPORTS
+ 5: -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+ 6: -A INPUT -j KUBE-FIREWALL
+-- iptables -t filter -S DOCKER-USER
+ 1: -N DOCKER-USER
+ 2: -A DOCKER-USER -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+-- iptables -t nat -S PREROUTING
+ 1: -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+ 2: -A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
+-- iptables -S ORBIT-MR-FORWARD
+-A ORBIT-MR-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A ORBIT-MR-FORWARD -p tcp -m conntrack --ctstate DNAT --ctorigdst 172.18.0.1 --ctorigdstport 2086 -j RETURN
+-A ORBIT-MR-FORWARD -d 10.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 172.16.0.0/12 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.168.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 100.64.0.0/10 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 169.254.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 127.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 0.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.0.0.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.0.2.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 198.18.0.0/15 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 198.51.100.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 203.0.113.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 224.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 240.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
+-- iptables -S ORBIT-MR-INPUT
+-A ORBIT-MR-INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A ORBIT-MR-INPUT -d 172.18.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN
+-A ORBIT-MR-INPUT -j REJECT --reject-with icmp-admin-prohibited
+-- iptables -t nat -S ORBIT-MR-PREROUTING
+iptables: No chain/target/match by that name.
+-- ip6tables -t filter -S FORWARD
+ 1: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+ 2: -A FORWARD -m comment --comment "kubernetes forwarding rules" -j KUBE-FORWARD
+ 3: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+ 4: -A FORWARD -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+ 5: -A FORWARD -j DOCKER-USER
+ 6: -A FORWARD -j DOCKER-FORWARD
+-- ip6tables -t filter -S INPUT
+ 1: -A INPUT -i br-9e958c5a5c2a -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+ 2: -A INPUT -j KUBE-FIREWALL
+ 3: -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes load balancer firewall" -j KUBE-PROXY-FIREWALL
+ 4: -A INPUT -m comment --comment "kubernetes health check service ports" -j KUBE-NODEPORTS
+ 5: -A INPUT -m conntrack --ctstate NEW -m comment --comment "kubernetes externally-visible service portals" -j KUBE-EXTERNAL-SERVICES
+-- ip6tables -t nat -S PREROUTING
+ 1: -A PREROUTING -m comment --comment "kubernetes service portals" -j KUBE-SERVICES
+ 2: -A PREROUTING -m addrtype --dst-type LOCAL -j DOCKER
+-- ip6tables -S ORBIT-MR-FORWARD / -t nat -S ORBIT-MR-PREROUTING
+-A ORBIT-MR-FORWARD -j REJECT --reject-with icmp6-adm-prohibited
+ip6tables: No chain/target/match by that name.
+
+### From a runner container on orbit-managed-runners, as the runner's user (2026-11-13T20:22:00Z)
+runner container: orbit-managed-runner:local user 10001:10001 172.18.0.2, gateway 172.18.0.1, CoreDNS pod 10.42.0.3
+{"target": "kube-dns ClusterIP", "to": "10.43.0.10:53", "result": "CONNECTED", "ms": 0}
+{"target": "kubernetes API ClusterIP", "to": "10.43.0.1:443", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "CoreDNS pod IP", "to": "10.42.0.3:53", "result": "CONNECTED", "ms": 0}
+{"target": "CoreDNS pod IP, readiness port", "to": "10.42.0.3:8181", "result": "CONNECTED", "ms": 0}
+{"target": "the node address, k3s API", "to": "172.31.92.20:6443", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "the node address, kubelet", "to": "172.31.92.20:10250", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "the node address, a NodePort", "to": "172.31.92.20:30053", "result": "CONNECTED", "ms": 0}
+{"target": "the node's flannel cni0 address, kubelet", "to": "10.42.0.1:10250", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "this host on the runners' network, port 22", "to": "172.18.0.1:22", "result": "EHOSTUNREACH", "ms": 0}
+{"target": "this host on the runners' network, the k3s API", "to": "172.18.0.1:6443", "result": "EHOSTUNREACH", "ms": 1021}
+{"target": "the HPC host on the lab bridge", "to": "172.31.92.1:22", "result": "EHOSTUNREACH", "ms": 1020}
+{"target": "the HPC host's LAN address", "to": "192.168.1.12:22", "result": "EHOSTUNREACH", "ms": 1028}
+{"target": "the HPC host's wg1 address", "to": "10.66.0.2:22", "result": "EHOSTUNREACH", "ms": 1020}
+{"target": "cloud metadata", "to": "169.254.169.254:80", "result": "EHOSTUNREACH", "ms": 1024}
+{"target": "a public address, port 443", "to": "1.1.1.1:443", "result": "CONNECTED", "ms": 4}
+{"target": "a public https endpoint", "to": "https://www.cloudflare.com/cdn-cgi/trace", "result": "HTTP 200", "ms": 29}
+{"target": "another public https endpoint", "to": "https://github.com/", "result": "HTTP 200", "ms": 30}

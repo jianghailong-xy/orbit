@@ -25,7 +25,9 @@ func renderOperationCatalogMarkdown() string {
 	b.WriteString("or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. ")
 	b.WriteString("Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). ")
 	b.WriteString("`Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), ")
-	b.WriteString("`server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying).\n\n")
+	b.WriteString("`server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). ")
+	b.WriteString("`Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, ")
+	b.WriteString("or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.\n\n")
 
 	b.WriteString("## Reading it a piece at a time\n\n")
 	b.WriteString("`orbit capabilities --json` is the whole catalogue as one process is offered it, which is larger ")
@@ -59,8 +61,8 @@ func renderOperationCatalogMarkdown() string {
 	}
 	b.WriteString("\n")
 
-	b.WriteString("| Operation | Object | Risk | Writes | Approval | Destructive | Idempotency | MCP | CLI | Intent |\n")
-	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+	b.WriteString("| Operation | Object | Risk | Writes | Approval | Destructive | Idempotency | Plan | MCP | CLI | Intent |\n")
+	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, op := range built.Ops {
 		availability := op.availability()
 		approval := string(op.Approval)
@@ -71,9 +73,21 @@ func renderOperationCatalogMarkdown() string {
 		if op.CLI != nil {
 			cli += " — `" + strings.Join(op.CLI.Argv, " ") + "`"
 		}
-		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			op.Tool, op.Object, op.Risk, yesNo(op.Mutates), approval, yesNo(op.Destructive),
-			op.Idempotency, availability.MCP, cli, escapeTable(op.Intent))
+			op.Idempotency, op.Plan, availability.MCP, cli, escapeTable(op.Intent))
+	}
+
+	b.WriteString("\n## Writes Plan mode runs\n\n")
+	b.WriteString("Plan reads, waits and asks the owner, and refuses every other write. These are the writes it runs, ")
+	b.WriteString("and the operations whose own gate decides there; a preview (`task_create_batch` with `dryRun`, ")
+	b.WriteString("`orbit task create-batch --dry-run`, `orbit task-list propose-dag` without `--apply`) writes nothing ")
+	b.WriteString("and runs like a read.\n\n")
+	b.WriteString("| Operation | Plan | Why |\n| --- | --- | --- |\n")
+	for _, op := range built.Ops {
+		if op.PlanReason != "" {
+			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", op.Tool, op.Plan, escapeTable(op.PlanReason))
+		}
 	}
 
 	var mcpOnly, cliOnly []*operation

@@ -652,7 +652,7 @@ struct WikiSpacePicker: View {
                 .foregroundStyle(Color.primary)
                 .contentShape(Rectangle())
             }
-            .menuIndicatorHidden()
+            .menuIndicator(.hidden)
             .accessibilityAddTraits(.isHeader)
             .accessibilityLabel(WikiCopy.spacePickerHint)
             .accessibilityValue(name)

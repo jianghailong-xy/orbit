@@ -163,8 +163,10 @@ Creating sessions and using lifecycle operations requires a live caller session 
 Session orchestration on (one switch for every workspace, on unless the owner turns it off in Settings). The
 runner receives a short-lived, session-bound proof. Every request rechecks the live session assignment and that
 switch, so ending, deleting, reassigning, or turning orchestration off revokes access without waiting for proof
-expiry. When orchestration is on, `orbit agent list`, `agent create`, and `agent update` expose the same
-agent-management surface to the CLI. Only a human can switch orchestration.
+expiry. The same switch grants managing the account's agents and runners, not only its sessions: with it on,
+`orbit agent list|create|update|delete` and `orbit runner list|install|install-status|delete` (MCP `agent_*`,
+`runner_*`), and `orbit project send` and `ensure-coordinator`, are offered beside the session commands, and with
+it off all of them are hidden and refused. Only a human can switch orchestration.
 
 ### Permission modes, shell commands and background jobs
 
@@ -175,7 +177,7 @@ asks and whichever way the request reaches the runner.
 
 | Mode | `bg_run` | Claude Code's `Bash` and `Monitor` |
 | --- | --- | --- |
-| Plan | Refused, with what to do instead | A card for each command; the Auto classifier is off in Plan |
+| Plan | Refused, with what to do instead | A card for each command not already allowed; the Auto classifier is off in Plan |
 | Default, Accept Edits | A card showing what would run: allow once, always allow, or reject | A card for each command not already allowed |
 | Don't Ask | Refused, with what to do instead | Refused unless already allowed |
 | Auto | Started | Run without asking |
@@ -199,7 +201,8 @@ asks and whichever way the request reaches the runner.
 - **Other engines' own shell tools** follow each engine's own rules for the mode. Codex does not enforce Don't Ask on
   its shell tool: it runs commands there without asking, although a job is refused.
 - **A question for a person is not a job.** A call that files a card and waits for the answer, such as `task_create`,
-  works in every mode, on the engines whose tool calls have a deadline too.
+  works in every mode but Plan, which refuses the write itself (below), on the engines whose tool calls have a
+  deadline too.
 
 An upgrade changes two things people may notice. Background jobs now follow this table on every engine; before, a job
 started in nearly any mode. And Claude Code in Default and Accept Edits now asks before each `Bash` command that is not
@@ -208,6 +211,30 @@ unattended has to move to Auto.
 
 This protects against an agent acting ahead of a person, not against a hostile process on the machine. See
 [Security notes](#security-notes).
+
+### Orbit's own calls in each mode
+
+Orbit's own MCP tools and `orbit` commands never put an engine's own prompt in front of the owner, in any mode:
+every session may call them. Claude Code is given the `mcp__orbit__*` allow rule and a rule for each `orbit` command
+the session is offered; on Codex the runner consents to each Orbit tool by its name, and the tools' annotations
+tell Codex that Orbit's reads need no consent at all. What a call may then do is Orbit's to say:
+
+- **A write that needs the owner files its own card**, in every mode: `task_create`, a batch, a project, a
+  provider, an agent change.
+- **Plan reads, waits and asks the owner, and refuses every other write**, on every engine and through the MCP
+  tools and the CLI alike, with what to do instead and nothing written. Reads (`task_get`, `project_get`,
+  `task_dependency_graph`), waits (`task_await`, watches), lines and questions for the owner (`notify`,
+  `request_owner_action`) and previews (`orbit task create-batch --dry-run`, `orbit task-list propose-dag` without
+  `--apply`) still run. The mode is the session's live one, read from the runner at each call: an owner's switch,
+  and Claude Code leaving Plan once a plan is approved, count from the next call. A session that cannot read its
+  mode makes no Orbit write, in any mode, and says why: restarting the session or its runner gives it back.
+- **Outside Plan, a schedule and a dependency edge need no card**: `task_update` with `runAt`, and
+  `task_dependency_add` / `task_dependency_remove`, start recorded work no sooner than `task_start` does, which needs
+  no card once the work is recorded.
+
+The whole matrix, per engine, surface and mode, is [the permission matrix](permission-matrix.md). Codex is handed no
+allowlist, so an `orbit` command in its shell is asked about like any other command; Orbit's MCP tools are its way
+in.
 
 ### Installing an engine on a runner
 

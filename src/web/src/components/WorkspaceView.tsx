@@ -48,6 +48,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { WAITING_ON_YOU } from '../lib/ownerRequests';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -189,6 +190,7 @@ import {
   sessionEngineOf,
   sessionPick,
   supportsAuto,
+  claudeModelName,
 } from '../lib/workspaceDefaults';
 import {
   LOCAL_SLASH_ITEMS,
@@ -450,7 +452,7 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
 import { RunnerUpdateIndicator } from './RunnerUpdateIndicator';
 import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
-import { RunnerUpdateNowButton } from './RunnerUpdateNow';
+import { RunnerUpdateNowButton, RunnerUpdateNowPress, useRunnerUpdateNow } from './RunnerUpdateNow';
 import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
@@ -1210,6 +1212,8 @@ const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
   if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
+  // An owner request this session filed (a step, a decision, a key, a confirmation): its card's words.
+  if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;
   return 'Waiting for approval';
 };
 
@@ -1999,23 +2003,32 @@ export function RunnerUpdatingTag({
   gate,
   machine,
   actions,
+  updateNow,
 }: {
   gate: QueuedGate;
   machine?: string | null;
+  /** Later ▾. */
   actions?: ReactNode;
+  /** The runner, when it takes Update Now…: the press closes the popover and its confirmation opens outside it. */
+  updateNow?: Runner;
 }) {
   const now = useMinuteNow();
+  const [open, setOpen] = useState(false);
+  const reason = useRef<HTMLButtonElement>(null);
+  const updateRunnerNow = useRunnerUpdateNow(updateNow, machine ?? '');
   const waited = runnerUpdatingWaited(gate, now);
   return (
     <span className="chat-runner-updating">
       Queued
       <span className="chat-meta-sep">·</span>
       <Popover
+        open={open}
+        onOpenChange={setOpen}
         title={runnerUpdatingTitle(gate)}
         side="bottom"
         align="end"
         trigger={
-          <button type="button" className="chat-runner-updating-reason">
+          <button ref={reason} type="button" className="chat-runner-updating-reason">
             {runnerUpdatingTag(gate)}
           </button>
         }
@@ -2030,9 +2043,17 @@ export function RunnerUpdatingTag({
               </>
             )}
           </p>
-          {actions}
+          {(actions || updateNow) && (
+            <div className="runner-update-actions">
+              {actions}
+              {updateNow && (
+                <RunnerUpdateNowPress pending={updateRunnerNow.pending} onClick={() => { setOpen(false); updateRunnerNow.open(reason); }} />
+              )}
+            </div>
+          )}
         </div>
       </Popover>
+      {updateRunnerNow.confirmation}
     </span>
   );
 }
@@ -4509,7 +4530,8 @@ export function WorkspaceView({
           <RunnerUpdatingTag
             gate={runnerUpdatingGate}
             machine={machineName(runner)}
-            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
+            updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
           />
         ),
       };
@@ -7297,7 +7319,11 @@ export function WorkspaceView({
         {
           value: shownModelName,
           label:
-            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModelName,
+            !shownProviderCapabilitiesResolved && !selected
+              ? 'Runtime default'
+              : shownEngine === AgentProvider.CLAUDE
+                ? claudeModelName(shownModelName)
+                : shownModelName,
         },
         ...catalogModelOptions,
       ];

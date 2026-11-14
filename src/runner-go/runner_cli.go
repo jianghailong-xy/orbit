@@ -26,7 +26,7 @@ A runner is a machine that runs Orbit sessions. Its id is what --runner-id takes
 'orbit agent create' and 'orbit agent update'.
 
 These commands run inside a live Orbit session while the account's Session orchestration
-switch is on.
+switch is on: the switch that grants managing other sessions grants managing runners too.
 Run 'orbit runner <command> --help' for options.
 `
 

@@ -957,6 +957,15 @@ model Runner {
   /// `default`, taken back out by restoreDefault, and never by the runner. Empty is every Default
   /// listed and used, as before. NOT NULL DEFAULT '{}' in SQL, like every scalar list here.
   defaultRemoved String[]  @default([]) @map("default_removed")
+  /// The engine update warnings dismissed on this runner (migration 0705), each until the next release:
+  /// { "<engine>": "<latest>" }, the `update.latest` the failure was against when Dismiss was pressed.
+  /// Clients hide that engine's update warning while it equals the engine's current `update.latest`.
+  /// Written by RunnersService.dismissEngineUpdateWarning, never by the runner. NULL is nothing dismissed.
+  engineUpdateDismissals Json? @map("engine_update_dismissals")
+  /// The sessions Fix with an agent started here, one per warning (migration 0760):
+  /// { "<kind>[:<engine>]": { "sessionId": "<uuid>", "at": "<iso>" } }. A second start for a warning is
+  /// refused while its session is open. Written by RunnerAttentionFixService.fix, never by the runner.
+  attentionFixes Json? @map("attention_fixes")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).
@@ -1056,6 +1065,10 @@ model RunnerPresence {
   /// gateway opened a new connection for it, or when a link beat came after it missed one. Null until either has
   /// (migration 0450). What the reaper reads a mass disconnection off once the runner is back.
   lostAt        DateTime? @map("lost_at")
+  /// The machine's CPU, memory and disk as its beats report them, and its last hour of them (migration 0720):
+  /// {at, latest, samples: [[ms, cpu %, memory %, disk %], …]}. Null until the runner reports one; a beat without
+  /// one leaves it as it is (runners/runner-presence.ts).
+  resources     Json?     @map("resources")
 
   @@map("runner_presence")
 }
@@ -2117,6 +2130,12 @@ model Session {
   /// this session runs a turn of its own — when a merge is refused — the check waits here until that
   /// turn ends. Null when no check is owed (migration 0431).
   mergeRepairTurnEndedAt DateTime? @map("merge_repair_turn_ended_at")
+  /// A merge this session asked for of itself during its own turn (SessionsService.mergeToMain), which
+  /// could not be queued while that turn ran: when it was asked, and the target it named (null → the
+  /// default). Taken up when the turn ends (SessionsService.mergeAfterOwnTurn) and cleared by any merge
+  /// that queues. Null when none is owed (migration 0740).
+  mergeAfterTurnAt     DateTime? @map("merge_after_turn_at")
+  mergeAfterTurnTarget String?   @map("merge_after_turn_target")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
   /// Who pressed Merge for the operation queued (0454, contract §10.6 O-R3): `USER` for a request carrying
   /// the account owner's credential, `AGENT` for one made from a session, NULL for one the server queued

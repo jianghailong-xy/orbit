@@ -2982,7 +2982,7 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if len(body) == 0 {
 		return fmt.Errorf("no fields to update")
 	}
-	if err := requireHandoffNamesItsDestination(body); err != nil {
+	if err := requireMoveRequestNamesItsDestination(body); err != nil {
 		return err
 	}
 	t, err := cliTaskTransport()
@@ -3451,6 +3451,8 @@ type cliCapability struct {
 	// The groups of arguments of which a call may send one (operationMeta.Exclusive); refused before
 	// any request when two are sent together.
 	MutuallyExclusive [][]string `json:"mutuallyExclusive,omitempty"`
+	// What Plan mode does with the command: runs, refused, or own_gate (docs/orbit-agent-contract.md §4.1).
+	PlanMode operationPlan `json:"planMode"`
 }
 
 type cliCapabilityContext struct {
@@ -3641,6 +3643,7 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 			command.Returns = op.Returns
 			command.Availability = op.availability()
 			command.MutuallyExclusive = op.Exclusive
+			command.PlanMode = op.Plan
 		}
 		commands = append(commands, command)
 	}

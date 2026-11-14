@@ -198,6 +198,10 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "count === 1 ? '\(SharedLinksList.turnedOff(1))' : `${count} links turned off`",
                    in: Self.sharedLinks)
         XCTAssertEqual(SharedLinksList.turnedOff(7), "7 links turned off")
+        // The row's ⋯ (board 13): the web's words for its two items, and its name.
+        assertSays(page, "label: '\(SharedLinksList.settings)'", in: Self.sharedLinks)
+        assertSays(page, "label: '\(SharedLinksList.turnOffMenu)'", in: Self.sharedLinks)
+        assertSays(page, "aria-label={`More for ${link.root.title}`}", in: Self.sharedLinks)
     }
 
     /// Access tokens: the web page's tabs and words, the table's lines, and how `lib/accessTokens.ts`

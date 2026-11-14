@@ -208,13 +208,15 @@ func TestWorkspaceWriteOfRetiredFieldsAsksNobodyAndWritesNothing(t *testing.T) {
 // names no value: the request reaches it through a private file it unlinks once open.
 func TestWorkspaceWriteHandedToAJobKeepsTheValueOutOfTheJobRecord(t *testing.T) {
 	const secret = "value-that-stays-out-of-the-job-record"
-	f := newGateFixture(t, "plan")
+	// Don't Ask refuses every background job and still hosts this wait, which is not one. (Plan refuses the write
+	// itself before any wait: TestBgOwnerWaitIsItsOwnOperation.)
+	f := newGateFixture(t, "dontAsk")
 	raw, err := bgSocketCall(f.socket, "tok", "owner_wait", map[string]interface{}{
 		"tool":      "agent_update",
 		"arguments": map[string]interface{}{"agentId": "a1", "env": map[string]interface{}{"API_KEY": secret}},
 	})
 	if err != nil {
-		t.Fatalf("Plan refused the hosted wait: %v", err)
+		t.Fatalf("Don't Ask refused the hosted wait: %v", err)
 	}
 	if strings.Contains(string(raw), secret) || !strings.Contains(string(raw), envMCPTools+"='agent_update'") {
 		t.Fatalf("the job's record = %s", raw)

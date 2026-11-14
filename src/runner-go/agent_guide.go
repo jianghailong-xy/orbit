@@ -338,9 +338,9 @@ func guideTopicIDs() []string {
 
 // ── the catalogue row ───────────────────────────────────────────────────────────────────────────
 
-// guideToolDescriptor is the guide's MCP descriptor: always listed, read-only by its own annotation (so a
-// client's plan mode may call it), with an outputSchema of its own because its answer is a document, not
-// a receipt.
+// guideToolDescriptor is the guide's MCP descriptor: always listed, with an outputSchema of its own because
+// its answer is a document, not a receipt. It writes nothing, so the catalogue annotates it readOnlyHint
+// (withCatalogAnnotations), which is what lets a client's Plan mode call it.
 func guideToolDescriptor(obj func(map[string]interface{}, ...string) map[string]interface{}) map[string]interface{} {
 	return map[string]interface{}{
 		"name": "guide",
@@ -369,7 +369,6 @@ func guideToolDescriptor(obj func(map[string]interface{}, ...string) map[string]
 			},
 			"required": []string{"view", "guideVersion", "catalogVersion", "context"},
 		},
-		"annotations": map[string]interface{}{"readOnlyHint": true},
 	}
 }
 
@@ -459,16 +458,18 @@ type guideSurface struct {
 }
 
 type guideStepView struct {
-	Step            int               `json:"step"`
-	ID              string            `json:"id"`
-	Why             string            `json:"why"`
-	Optional        bool              `json:"optional,omitempty"`
-	Mutates         bool              `json:"mutates"`
-	Approval        operationApproval `json:"approval"`
-	ApprovalKey     string            `json:"approvalKey,omitempty"`
-	SuccessEvidence string            `json:"successEvidence"`
-	MCP             *guideSurface     `json:"mcp,omitempty"`
-	CLI             *guideSurface     `json:"cli,omitempty"`
+	Step        int               `json:"step"`
+	ID          string            `json:"id"`
+	Why         string            `json:"why"`
+	Optional    bool              `json:"optional,omitempty"`
+	Mutates     bool              `json:"mutates"`
+	Approval    operationApproval `json:"approval"`
+	ApprovalKey string            `json:"approvalKey,omitempty"`
+	// What Plan mode does with the step (docs/orbit-agent-contract.md §4.1): runs, refused or own_gate.
+	PlanMode        operationPlan `json:"planMode"`
+	SuccessEvidence string        `json:"successEvidence"`
+	MCP             *guideSurface `json:"mcp,omitempty"`
+	CLI             *guideSurface `json:"cli,omitempty"`
 }
 
 type guideTopicDocument struct {
@@ -598,6 +599,7 @@ func (f guideFacts) topic(built *builtOperationCatalog, topic *guideTopic) guide
 			Mutates:         op.Mutates,
 			Approval:        op.Approval,
 			ApprovalKey:     op.ApprovalKey,
+			PlanMode:        op.Plan,
 			SuccessEvidence: op.SuccessEvidence,
 		}
 		withStep := guideStepOperation(op, step.Example)

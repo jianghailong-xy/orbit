@@ -46,7 +46,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "machines-and-models" -> MachinesAndModelsSettings(api, revision, route.recordId, open, back)
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
-        "sharing" -> SharingSettings(api, revision)
+        "sharing" -> SharingSettings(api, revision, open)
         "access-tokens" -> AccessTokensSettings(api, revision)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
         "admin" -> AdminSettings(api, revision, route.recordId, open, back)
@@ -89,7 +89,7 @@ internal const val SESSIONS = "Sessions"
 
 /** SettingsCopy's hints for the Sessions page's other rows, each its row's footer there, in the web Settings page's words. */
 internal const val DEFAULT_PERMISSION_HINT = "The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
-internal const val SESSION_ORCHESTRATION_HINT = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
+internal const val SESSION_ORCHESTRATION_HINT = "Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused."
 internal const val SUGGESTED_REPLIES = "Suggested replies"
 internal const val SUGGESTED_REPLIES_HINT = "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
 

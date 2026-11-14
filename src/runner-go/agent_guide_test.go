@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -248,7 +249,10 @@ func TestGuideAnswersTheSameDocumentOnBothDoors(t *testing.T) {
 		for i := range mcpSteps {
 			m, _ := mcpSteps[i].(map[string]interface{})
 			c, _ := cliSteps[i].(map[string]interface{})
-			for _, key := range []string{"step", "id", "why", "optional", "mutates", "approval", "approvalKey", "successEvidence", "mcp"} {
+			if op := catalogOperation(fmt.Sprint(m["id"])); op == nil || m["planMode"] != string(op.Plan) {
+				t.Errorf("guide %q step %d: planMode %v is not the catalogue's", topic, i+1, m["planMode"])
+			}
+			for _, key := range []string{"step", "id", "why", "optional", "mutates", "approval", "approvalKey", "planMode", "successEvidence", "mcp"} {
 				if !reflect.DeepEqual(m[key], c[key]) {
 					t.Errorf("guide %q step %d: %s differs between the doors: %v / %v", topic, i+1, key, m[key], c[key])
 				}

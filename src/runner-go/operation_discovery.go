@@ -21,9 +21,9 @@ import (
 //     runs here — and the commands this process is not offered, grouped under why.
 //   - `--family NAME`: the commands of one family with how to call each: the absolute argv, its usage, the
 //     approval, what proves a success and a minimal example.
-//   - `--id ID`: one operation in full — its description, every leaf parameter, the retry rule, and the
-//     example for both surfaces — apart from the JSON schema, which the MCP tool carries and the full
-//     document keeps.
+//   - `--id ID`: one operation in full — its description, every leaf parameter, the retry rule, what Plan
+//     mode does with it, and the example for both surfaces — apart from the JSON schema, which the MCP tool
+//     carries and the full document keeps.
 //
 // The examples and the leaf parameters are generated from the catalogue (catalogMCPExample,
 // catalogCLIExample, cliParameters): an MCP example is the tool's required fields, a CLI example the
@@ -134,6 +134,7 @@ type capabilityView struct {
 	Parameters        []cliParameter             `json:"parameters,omitempty"`
 	MutuallyExclusive [][]string                 `json:"mutuallyExclusive,omitempty"`
 	Idempotency       operationIdempotency       `json:"idempotency,omitempty"`
+	PlanMode          operationPlan              `json:"planMode,omitempty"`
 	Retry             string                     `json:"retry,omitempty"`
 	Returns           string                     `json:"returns,omitempty"`
 	Availability      *cliCapabilityAvailability `json:"availability,omitempty"`
@@ -451,6 +452,7 @@ func (d *cliDiscovery) view(op *operation, full bool) capabilityView {
 	}
 	v.MutuallyExclusive = op.Exclusive
 	v.Idempotency = op.Idempotency
+	v.PlanMode = op.Plan
 	v.Retry = op.Retry
 	v.Returns = op.Returns
 	availability := op.availability()

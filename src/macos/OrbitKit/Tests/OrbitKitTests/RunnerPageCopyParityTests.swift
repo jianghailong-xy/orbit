@@ -96,6 +96,8 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_WORKSPACES", RunnerPageCopy.RUNNER_WORKSPACES),
         ("RUNNER_ABOUT", RunnerPageCopy.RUNNER_ABOUT),
         ("RUNNER_MAX_CONCURRENT", RunnerPageCopy.RUNNER_MAX_CONCURRENT),
+        ("RUNNER_MAX_CONCURRENT_HINT", RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT),
+        ("RUNNER_EDIT", RunnerPageCopy.RUNNER_EDIT),
         ("RUNNER_DISK", RunnerPageCopy.RUNNER_DISK),
         ("RUNNER_KEEP_FREE", RunnerPageCopy.RUNNER_KEEP_FREE),
         ("RUNNER_KEEP_FREE_OFF", RunnerPageCopy.RUNNER_KEEP_FREE_OFF),
@@ -113,6 +115,10 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_ENGINE_NO_READING", RunnerPageCopy.RUNNER_ENGINE_NO_READING),
         ("RUNNER_SIGN_IN", RunnerPageCopy.RUNNER_SIGN_IN),
         ("RUNNER_UPDATE_ENGINES_NOW", RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW),
+        ("RUNNER_ENGINE_UPDATE_DISMISS", RunnerPageCopy.RUNNER_ENGINE_UPDATE_DISMISS),
+        ("AGENT_FIX_BUTTON", RunnerPageCopy.AGENT_FIX_BUTTON),
+        ("AGENT_FIX_OPEN_SESSION", RunnerPageCopy.AGENT_FIX_OPEN_SESSION),
+        ("AGENT_FIX_FAILED", RunnerPageCopy.AGENT_FIX_FAILED),
         ("RUNNER_REFRESH_MODEL_LISTS", RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS),
         ("RUNNER_ENGINES_FOOTER", RunnerPageCopy.RUNNER_ENGINES_FOOTER),
         ("RUNNER_ENGINES_OFFLINE_FOOTER", RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER),
@@ -378,6 +384,11 @@ final class RunnerPageCopyParityTests: XCTestCase {
                                                           latest: "${latest}")),
         ("attentionEngineUpdateFailed", RunnerPageCopy.attentionEngineUpdateFailed(engine: "${engine}")),
         ("attentionEngineUpdateDetail", RunnerPageCopy.attentionEngineUpdateDetail(note: "${note}")),
+        ("attentionDismissUntilNextRelease",
+         RunnerPageCopy.attentionDismissUntilNextRelease(engine: "${engine}")),
+        ("agentFixFixing", RunnerPageCopy.agentFixFixing(workspace: "${workspace}")),
+        ("agentFixStartsIn", RunnerPageCopy.agentFixStartsIn(workspace: "${workspace}", engine: "${engine}")),
+        ("agentFixSignInAbove", RunnerPageCopy.agentFixSignInAbove(engine: "${engine}")),
     ]
 
     // MARK: the words

@@ -170,9 +170,9 @@ func TestGradedViewsAnswerForExactlyWhatTheFullDocumentOffers(t *testing.T) {
 						}
 					}
 				}
-				if view.Idempotency != op.Idempotency || view.Retry != op.Retry || view.Returns != op.Returns ||
+				if view.Idempotency != op.Idempotency || view.Retry != op.Retry || view.Returns != op.Returns || view.PlanMode != op.Plan ||
 					!reflect.DeepEqual(view.MutuallyExclusive, op.Exclusive) || view.Object != op.Object {
-					t.Errorf("id %s: retry, idempotency, returns, exclusive groups or object are not the catalogue's", op.Tool)
+					t.Errorf("id %s: retry, idempotency, Plan mode, returns, exclusive groups or object are not the catalogue's", op.Tool)
 				}
 			}
 		})
