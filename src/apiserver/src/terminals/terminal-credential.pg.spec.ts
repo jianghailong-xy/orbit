@@ -14,7 +14,7 @@
  *       30 days after the approval;
  *   (c) a live TERMINAL credential authenticates — GET /terminals/self answers its machine and account — and is
  *       refused 403 TERMINAL_ROUTE_NOT_ALLOWED on routes off its allowlist (terminal-routes.pg.spec.ts holds the
- *       allowlist): the session list, a session's approval list on its own runner, GET and POST project routes, an owner-channel route (an
+ *       allowlist): the session list, a session's merge receipts on its own runner, GET and POST project routes, an owner-channel route (an
  *       evidence decision), its own account's list and the approval of another terminal; it writes nothing there, a
  *       login is answered by the same routes, and it is never taken from a URL;
  *   (d) denying tells the terminal so and mints nothing; approving a denied request is 409;
@@ -222,8 +222,9 @@ test('the TERMINAL credential: started by a runner, approved only by the owner\'
     const before = await counts();
     const routes: Array<{ method: string; path: string; body?: unknown; login: number }> = [
       { method: 'GET', path: '/sessions', login: 200 },
-      // A session route off the allowlist, on a session of the terminal's own runner.
-      { method: 'GET', path: `/sessions/${sessionId}/approvals`, login: 200 },
+      // A session route off the allowlist, on a session of the terminal's own runner. (Its approval list is on the
+      // allowlist since 21c1921d3: the TUI reads it on open; terminal-routes.pg.spec.ts holds that.)
+      { method: 'GET', path: `/sessions/${sessionId}/merge-receipts`, login: 200 },
       // An owner-channel door other than answering an approval card: a task's evidence decision (no such task).
       {
         method: 'POST', path: `/tasks/${randomUUID()}/evidence/decision`,
