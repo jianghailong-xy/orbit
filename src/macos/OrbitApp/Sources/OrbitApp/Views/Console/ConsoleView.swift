@@ -1294,8 +1294,8 @@ struct TranscriptView: View {
                              clocks: console.receiptClocks,
                              recap: recapCard,
                              watchName: watchWakeName,
-                             createdWorkspace: console.createdWorkspaceLine,
-                             handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived)
+                             handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
+                             createdWorkspace: console.createdWorkspaceLine)
     }
 
     /// The name a folded watch turn gives its one target (`OrbitExchangeFold.orbitTurn`): the watch's

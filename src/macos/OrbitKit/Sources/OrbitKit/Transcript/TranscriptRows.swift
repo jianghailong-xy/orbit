@@ -530,8 +530,8 @@ public enum TranscriptRows {
                              recap: RecapCard? = nil,
                              foldExchanges: Bool = true,
                              watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
-                             createdWorkspace: CreatedWorkspaceLine? = nil,
-                             handoffReceived: SessionCoordinatorHandoffReceived? = nil) -> [TranscriptRow] {
+                             handoffReceived: SessionCoordinatorHandoffReceived? = nil,
+                             createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
         // The note the conversation opened with, by the same rule: first, once the first page is in.

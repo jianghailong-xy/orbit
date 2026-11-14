@@ -2545,7 +2545,7 @@ private struct UsageBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.quaternary)
-                Capsule().fill(spent || critical ? Color.red : (warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
+                Capsule().fill(spent ? Color.red : critical ? Color.red : (warn ?? (percent >= 90)) ? Color.orange : Color.accentColor)
                     .frame(width: geo.size.width * fraction)
             }
         }
