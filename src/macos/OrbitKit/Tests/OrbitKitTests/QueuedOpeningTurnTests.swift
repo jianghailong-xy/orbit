@@ -4,9 +4,8 @@ import XCTest
 
 /// A session no runner has claimed yet opens on its first message, not on an empty pane.
 ///
-/// The server lays the opening prompt down as a turn when the session is created, and
-/// `GET …/turns?view=active` lists it as the accepted head, marked `opening`, until the runner's echo
-/// of it lands (apiserver session-create-attachments-alone.pg.spec.ts). The console draws it from
+/// `GET …/turns?view=active` lists the opening prompt as the accepted head, marked `opening`, under the
+/// id its turn will have, until the runner's echo of it lands (apiserver session-create-attachments-alone.pg.spec.ts). The console draws it from
 /// that row, and the echo takes over that row: the message is on screen once, before and after the
 /// claim. Web parity: WorkspaceView.queuedOpening.test.tsx.
 final class QueuedOpeningTurnTests: XCTestCase {

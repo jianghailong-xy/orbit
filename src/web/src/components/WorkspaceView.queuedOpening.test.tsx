@@ -10,9 +10,8 @@ import type { Runner } from './TasksSidePanel';
 /**
  * A session no runner has claimed yet opens on its first message, not on an empty page.
  *
- * The opening prompt is laid down as a turn when the session is created, and
- * `GET /sessions/:id/turns?view=active` lists it as the accepted head, marked `opening`, until the
- * runner's echo of it lands (apiserver session-create-attachments-alone.pg.spec.ts). The console
+ * `GET /sessions/:id/turns?view=active` lists the opening prompt as the accepted head, marked
+ * `opening`, under the id its turn will have, until the runner's echo of it lands (apiserver session-create-attachments-alone.pg.spec.ts). The console
  * draws it from that row, beside the Queued state, and when the claimed turn's `user` event arrives
  * the transcript holds the one copy.
  */

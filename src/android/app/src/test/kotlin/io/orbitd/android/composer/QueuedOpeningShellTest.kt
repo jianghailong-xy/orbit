@@ -6,9 +6,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * A session no runner has claimed yet opens on its first message, not on an empty page. The server lays the opening prompt down
- * as a turn when the session is created, and `GET …/turns?view=active` lists it as the accepted head, marked `opening`, until the
- * runner's echo of it lands (apiserver session-create-attachments-alone.pg.spec.ts). The conversation draws it from that row while
+ * A session no runner has claimed yet opens on its first message, not on an empty page. `GET …/turns?view=active` lists the opening
+ * prompt as the accepted head, marked `opening`, under the id its turn will have, until the runner's echo of it lands (apiserver session-create-attachments-alone.pg.spec.ts). The conversation draws it from that row while
  * the session is Queued, and when the claimed turn's events arrive the message is there once. Web parity:
  * WorkspaceView.queuedOpening.test.tsx; OrbitKit QueuedOpeningTurnTests.
  */
