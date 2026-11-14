@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:src/apiserver/prisma/migrations/0700_session_settings/migration.sql
 -- 0700: a session's own Settings (docs/mocks/session-settings): its env vars laid over the workspace's,
-========
--- 0640 (first numbered 0611; renumbered past main's 0611_key_gateway_token): a session's own Settings (docs/mocks/session-settings): its env vars laid over the workspace's,
->>>>>>>> orbit/task-d-android-session-settings-page-abs-315ba8:src/apiserver/prisma/migrations/0640_session_settings/migration.sql
 -- when they last changed and when an engine last started with them, and per-session notification
 -- overrides plus a mute. Nullable or defaulted columns and their CHECKs only: every existing row reads
 -- "no session env, follow the account, not muted", and no trigger, fence or preserved function is touched.
