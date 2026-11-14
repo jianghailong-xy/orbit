@@ -1,4 +1,4 @@
-// node render-02.mjs <html> <outPrefix> — one PNG per section.b-part at 2x.
+// node render-02.mjs <html> <outPrefix> — one PNG per section.b-part at 2x (a 1500×1200 viewport: element shots scroll, which keeps memory low).
 // Fonts: FONTCONFIG_FILE=/mnt/data/pe-mock/fonts.conf (Inter + Noto Sans SC + JetBrains Mono).
 import { chromium } from '/mnt/data/tmp/wyo-mock/playwright-core/index.mjs';
 const [html, prefix, selector = 'section.b-part'] = process.argv.slice(2);
@@ -7,11 +7,11 @@ const page = await browser.newPage({ viewport: { width: 1500, height: 1200 }, de
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-await page.goto('file://' + html);
+page.setDefaultTimeout(180000);
+await page.goto('file://' + html, { timeout: 180000 });
 await page.evaluate(() => document.fonts.ready);
 await page.evaluate(() => Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))));
 const size = await page.evaluate(() => ({ w: document.documentElement.scrollWidth, h: document.documentElement.scrollHeight }));
-await page.setViewportSize({ width: Math.max(1500, size.w), height: size.h });
 await page.waitForTimeout(400);
 const broken = await page.evaluate(() => [...document.images].filter((i) => !i.naturalWidth).map((i) => i.src));
 let i = 0;
