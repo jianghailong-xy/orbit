@@ -258,7 +258,7 @@ private fun checkedAgo(checkedAt: String?, now: Long): String? {
 
 /**
  * Board 02 in Compose idiom: the session's diff drawer becomes a bottom sheet. Files to commit (all chosen to begin with), each one's
- * patch on a tap, the commit message, and the three ways out: Commit, Move to a worktree ▾ (worktree sessions), and ⋯ for Save & clean
+ * patch on a tap, and the ways out (no message to type: a commit is named after its files): Commit, Move to a worktree ▾ (worktree sessions), and ⋯ for Save & clean
  * and Ask the agent. A project's branch says the commit skips its landing check, and never blocks.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -280,9 +280,9 @@ internal fun MainCheckoutReview(model: MainCheckoutModel, state: MainCheckoutSta
     val amber = LocalOrbitColors.current.needsYou
     var unchosen by remember(snapshot?.fingerprint) { mutableStateOf(emptySet<String>()) }
     var opened by remember(snapshot?.fingerprint) { mutableStateOf<String?>(null) }
-    var message by rememberSaveable { mutableStateOf("") }
     var moveMenu by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
+    var discarding by remember { mutableStateOf<List<String>?>(null) }
     val now = remember(state.view) { System.currentTimeMillis() }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // The header: what this is, where, on which commit, how much, and how fresh.
@@ -328,13 +328,19 @@ internal fun MainCheckoutReview(model: MainCheckoutModel, state: MainCheckoutSta
         if (snapshot.truncated) Text(MainCheckout.truncatedNote(), color = secondary, style = MaterialTheme.typography.bodySmall)
         Text(MainCheckout.COPY_NOT_SHOWN, color = secondary, style = MaterialTheme.typography.bodySmall)
         if (!actions) return@Column
-        OutlinedTextField(message, { message = it }, Modifier.fillMaxWidth().testTag("main-checkout-message"),
-            placeholder = { Text(MainCheckout.COPY_COMMIT_MESSAGE) }, minLines = 1, maxLines = 4)
+        // The ways out, right under the files they act on: Commit and Discard full width, the rest on one row.
+        Button(enabled = !state.busy && chosen.isNotEmpty() && snapshot.branch != null, modifier = Modifier.fillMaxWidth(), onClick = {
+            val text = MainCheckout.defaultCommitMessage(snapshot.files.filter { it.path !in unchosen })
+            model.request({ MainCheckout.commit(snapshot.root, snapshot.fingerprint, chosen, text, it, model.sessionId) }) { close() }
+        }) { Text(MainCheckout.commitButton(chosen.size, branch)) }
+        // Only on a runner that can: an older one would refuse it.
+        if (view.discardSupported) OutlinedButton(enabled = !state.busy && chosen.isNotEmpty() && snapshot.head != null,
+            onClick = { discarding = chosen }, modifier = Modifier.fillMaxWidth().testTag("main-checkout-discard"),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+            Text(MainCheckout.discardButton(chosen.size))
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
             itemVerticalAlignment = Alignment.CenterVertically) {
-            Button(enabled = !state.busy && chosen.isNotEmpty() && message.isNotBlank() && snapshot.branch != null, onClick = {
-                model.request({ MainCheckout.commit(snapshot.root, snapshot.fingerprint, chosen, message, it, model.sessionId) }) { message = ""; close() }
-            }) { Text(MainCheckout.commitButton(chosen.size, branch)) }
             val targets = state.targets.ifEmpty {
                 if (isolated && model.sessionId != null && sessionBranch != null) listOf(MoveTarget(model.sessionId, sessionTitle ?: "This session", sessionBranch, false))
                 else emptyList()
@@ -376,6 +382,19 @@ internal fun MainCheckoutReview(model: MainCheckoutModel, state: MainCheckoutSta
                 }
             }
         }
+    }
+    discarding?.let { files ->
+        val snap = snapshot ?: return@let
+        AlertDialog(onDismissRequest = { discarding = null }, modifier = Modifier.testTag("main-checkout-discard-dialog"),
+            title = { Text(MainCheckout.discardTitle(files.size)) },
+            text = { Text(MainCheckout.discardBody(files.size, snap.branch ?: "HEAD")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    discarding = null
+                    model.request({ MainCheckout.discard(snap.root, snap.fingerprint, files, it, model.sessionId) }) { close() }
+                }) { Text(MainCheckout.COPY_DISCARD, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { discarding = null }) { Text("Cancel") } })
     }
 }
 

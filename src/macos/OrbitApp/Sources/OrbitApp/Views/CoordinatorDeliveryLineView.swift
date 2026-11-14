@@ -69,7 +69,7 @@ struct CoordinatorDeliveryLineView: View {
             }
             if let onCancelQueued {
                 HStack(spacing: 8) {
-                    Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+                    QueuedWord()
                     Button("Cancel") { onCancelQueued() }
                         .buttonStyle(.plain)
                         .font(.orbitMeta)

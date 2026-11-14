@@ -454,6 +454,16 @@ struct SessionProjectPage: View {
         })
     }
 
+    /// One recency section of the member sessions. The section is the row the page's ForEach draws,
+    /// so that closure holds no second ForEach of its own.
+    @ViewBuilder private func projectTimeSection(_ section: ProjectTimelineSection) -> some View {
+        Section {
+            ForEach(section.sessions) { session in sessionRow(session) }
+        } header: {
+            Text(section.title).textCase(nil)
+        }
+    }
+
     var body: some View {
         List(selection: selection) {
             firstCard
@@ -477,11 +487,7 @@ struct SessionProjectPage: View {
                 Section(SessionLandingsCopy.title) { landingsRow(landingsSummary) }
             }
             ForEach(timeSections) { section in
-                Section {
-                    ForEach(section.sessions) { session in sessionRow(session) }
-                } header: {
-                    Text(section.title).textCase(nil)
-                }
+                projectTimeSection(section)
             }
         }
         .listStyle(.plain)

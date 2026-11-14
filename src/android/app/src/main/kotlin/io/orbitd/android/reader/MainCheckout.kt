@@ -37,7 +37,7 @@ internal object MainCheckout {
     data class ManagedBranch(val projectId: String, val projectTitle: String, val role: String)
 
     data class View(val snapshot: Snapshot, val diffs: List<JsonObject>, val actionsSupported: Boolean, val managedBranch: ManagedBranch?,
-        val inFlight: Pair<String, String>?)
+        val inFlight: Pair<String, String>?, val discardSupported: Boolean = false)
 
     /** One action outcome (§6). */
     data class Result(val requestId: String, val kind: String, val root: String, val status: String, val code: String? = null,
@@ -94,7 +94,7 @@ internal object MainCheckout {
             m.str("projectTitle")?.let { ManagedBranch(m.str("projectId").orEmpty(), it, m.str("role").orEmpty()) }
         }
         val inFlight = (o["inFlight"] as? JsonObject)?.let { f -> f.str("requestId")?.let { it to f.str("kind").orEmpty() } }
-        return View(snapshot, o.objs("diffs"), o.bool("actionsSupported"), managed, inFlight)
+        return View(snapshot, o.objs("diffs"), o.bool("actionsSupported"), managed, inFlight, o.bool("discardSupported"))
     }
 
     // -----------------------------------------------------------------------------------------------------------
@@ -138,13 +138,15 @@ internal object MainCheckout {
         Request("commit", root, fingerprint, requestId, files = files, message = message.trim(), initiatedFromSessionId = from)
     fun push(root: String, fingerprint: String, requestId: String, from: String?) = Request("push", root, fingerprint, requestId, initiatedFromSessionId = from)
     fun rescue(root: String, fingerprint: String, requestId: String, from: String?) = Request("rescue", root, fingerprint, requestId, initiatedFromSessionId = from)
+    fun discard(root: String, fingerprint: String, files: List<String>, requestId: String, from: String?) =
+        Request("discard", root, fingerprint, requestId, files = files, initiatedFromSessionId = from)
 
     /** The body, in the contract's field order; fields a kind does not take are never sent (the server answers them with 400). */
     fun encode(r: Request): JsonObject = buildJsonObject {
         put("kind", r.kind)
         put("root", r.root)
         put("fingerprint", r.fingerprint)
-        if (r.kind == "move" || r.kind == "commit") r.files?.let { files -> putJsonArray("files") { files.forEach { add(it) } } }
+        if (r.kind == "move" || r.kind == "commit" || r.kind == "discard") r.files?.let { files -> putJsonArray("files") { files.forEach { add(it) } } }
         if (r.kind == "commit") r.message?.let { put("message", it) }
         if (r.kind == "move") r.targetSessionId?.let { put("targetSessionId", it) }
         put("requestId", r.requestId)
@@ -166,11 +168,11 @@ internal object MainCheckout {
     const val COPY_REVIEW = "Review"
     const val COPY_REVIEW_AND_COMMIT_SHORT = "Review and commit…"
     const val COPY_REVIEW_MAIN_CHECKOUT = "Review main checkout"
-    const val COPY_COMMIT_MESSAGE = "Commit message"
     const val COPY_NOT_SHOWN = "Not shown: files your .gitignore ignores. Untracked files are included."
     const val COPY_TARGET_OPENED_FROM = "The session you opened this from"
     const val COPY_TARGET_BUSY = "Working now — available when this turn ends"
     const val COPY_CLEAN_UP_CHECKOUT = "Clean up checkout"
+    const val COPY_DISCARD = "Discard"
     /** A handled card's muted line, in place of its Move hint (shared `MAIN_CHECKOUT_CARD_HANDLED_COPY`). */
     const val COPY_CARD_HANDLED_RESULT = "Handled — see the result below"
     const val COPY_CARD_HANDLED_GONE = "These changes are no longer in the main checkout"
@@ -206,6 +208,23 @@ internal object MainCheckout {
     fun commitButton(chosen: Int, branch: String) = "Commit ${filesCount(chosen)} to $branch"
     fun uncommitted(n: Int) = "$n uncommitted"
 
+    /** A commit's message (shared `mainCheckoutDefaultCommitMessage`): the review has no box to type one in, so it is named after
+     *  the chosen files — base names, and Add or Remove when every file was added or deleted. */
+    fun defaultCommitMessage(files: List<File>): String {
+        fun all(status: String) = files.isNotEmpty() && files.all { it.status == status }
+        val verb = if (all("A")) "Add" else if (all("D")) "Remove" else "Update"
+        val names = files.map { it.path.substringAfterLast('/') }
+        if (names.size <= 3) return "$verb ${namePaths(names)}"
+        val more = names.size - 3
+        return "$verb ${names.take(3).joinToString(", ")} and $more more ${if (more == 1) "file" else "files"}"
+    }
+
+    fun discardButton(chosen: Int) = "Discard ${filesCount(chosen)}"
+    fun discardTitle(chosen: Int) = "Discard ${filesCount(chosen)}?"
+    fun discardBody(chosen: Int, branch: String) =
+        "${if (chosen == 1) "It goes" else "They go"} back to the last commit on $branch; new files are deleted. " +
+            "A copy of the main checkout is saved on orbit/rescue-… first."
+
     fun barStatus(fileCount: Int, ahead: Int): String {
         val parts = mutableListOf(if (fileCount > 0) uncommittedFiles(fileCount) else "Clean")
         if (ahead > 0) parts += "${commitsCount(ahead)} not pushed"
@@ -222,10 +241,11 @@ internal object MainCheckout {
     data class Link(val action: String, val label: String)
     data class Line(val tone: Tone, val lead: String, val text: String, val link: Link? = null)
 
-    private val NOTHING = mapOf("move" to "Nothing moved", "commit" to "Nothing committed", "push" to "Nothing pushed", "rescue" to "Nothing saved")
-    private val GIT_VERB = mapOf("move" to "move", "commit" to "commit", "push" to "push", "rescue" to "save")
+    private val NOTHING = mapOf("move" to "Nothing moved", "commit" to "Nothing committed", "push" to "Nothing pushed", "rescue" to "Nothing saved",
+        "discard" to "Nothing discarded")
+    private val GIT_VERB = mapOf("move" to "move", "commit" to "commit", "push" to "push", "rescue" to "save", "discard" to "discard")
     private val CANT = mapOf("move" to "Can't move right now", "commit" to "Can't commit right now", "push" to "Can't push right now",
-        "rescue" to "Can't save right now")
+        "rescue" to "Can't save right now", "discard" to "Can't discard right now")
 
     private fun line(tone: Tone, lead: String, rest: String, link: Link? = null) = Line(tone, lead, lead + rest, link)
 
@@ -266,6 +286,11 @@ internal object MainCheckout {
             }
             "rescue" -> return line(Tone.OK, "Saved $n to ${r.rescueBranch}",
                 " and returned the main checkout to ${shortSha(r.head)}. Ignored files were left alone.", Link("open-in-new-session", "Open in a new session"))
+            "discard" -> {
+                val after = if ((r.remaining ?: 0) > 0) " The main checkout still has ${uncommittedFiles(r.remaining!!, true)}."
+                    else " The main checkout is clean again."
+                return line(Tone.OK, "Discarded $n from the main checkout.", "$after A copy of what it held is on ${r.rescueBranch}.")
+            }
         }
         val reviewAgain = Link("review-again", "Review again")
         val cant = CANT[r.kind] ?: "Can't do that right now"
@@ -300,7 +325,11 @@ internal object MainCheckout {
                 " git couldn't push to ${remoteOf(upstream)}${quoted(r.gitMessage)}. Your commit is still in the main checkout.")
             "RESCUE_FAILED" -> line(Tone.REFUSED, "$nothing:",
                 " Orbit couldn't save the main checkout to a rescue branch first${quoted(r.gitMessage)}. The main checkout was left as it was.")
-            "ACTION_FAILED" -> line(Tone.REFUSED, "$nothing:",
+            // A Discard that failed part way: every chosen file is on its rescue branch.
+            "ACTION_FAILED" -> if (!r.rescueBranch.isNullOrEmpty()) line(Tone.REFUSED, "$nothing:",
+                " git couldn't ${GIT_VERB[r.kind] ?: r.kind}${quoted(r.gitMessage)}. A copy of what the main checkout held is on ${r.rescueBranch}.",
+                reviewAgain)
+            else line(Tone.REFUSED, "$nothing:",
                 " git couldn't ${GIT_VERB[r.kind] ?: r.kind}${quoted(r.gitMessage)}. The main checkout was left as it was.")
             "ACTION_IN_FLIGHT" -> line(Tone.REFUSED, "$nothing:", " another action on this main checkout is still running. Try again when it finishes.")
             "CHECKOUT_NOT_REPORTED" -> line(Tone.REFUSED, "$nothing:",
@@ -328,7 +357,7 @@ internal object MainCheckout {
      *  the card was written: under [CARD_HEALTH_LAG_SECONDS], or null, [current] is not read. */
     fun handled(notice: ChangedNotice, laterResults: List<Result>, current: JsonObject?, cardAgeSeconds: Double?): Handled? {
         val took = laterResults.any { r ->
-            r.root == notice.root && r.status == "done" && (r.kind == "rescue" || (r.kind == "move" && (r.fileCount ?: 0) >= notice.files.size))
+            r.root == notice.root && r.status == "done" && (r.kind == "rescue" || ((r.kind == "move" || r.kind == "discard") && (r.fileCount ?: 0) >= notice.files.size))
         }
         if (took) return Handled.RESULT
         if (cardAgeSeconds == null || cardAgeSeconds < CARD_HEALTH_LAG_SECONDS) return null

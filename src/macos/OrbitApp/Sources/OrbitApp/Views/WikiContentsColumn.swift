@@ -17,13 +17,17 @@ struct WikiContentsColumn: View {
             // A space with a confirmed plan reads by its documents; before one, by its topic articles.
             let docGroups = WikiDocLogic.readsByDocs(wiki.docsDirectory) ? wiki.docsDirectory.map(WikiDocLogic.directoryGroups) ?? [] : []
             List {
-                if let space = wiki.currentSpace {
-                    head(space, wiki)
+                ForEach(WikiContentsListLogic.columnRows(hasSpace: wiki.currentSpace != nil)) { row in
+                    switch row {
+                    case .head:
+                        columnHead(wiki)
+                    case .contents:
+                        WikiContentsRows(groups: docGroups.isEmpty ? wiki.directory.map(WikiArticleLogic.directoryGroups) ?? [] : [],
+                                         at: model.nav.wikiContentsAt, docGroups: docGroups,
+                                         planPending: wiki.plan.map { WikiPlanLogic.pending($0, runnerOnline: model.wikiMaintenanceRunnerOnline) } ?? 0,
+                                         pick: select)
+                    }
                 }
-                WikiContentsRows(groups: docGroups.isEmpty ? wiki.directory.map(WikiArticleLogic.directoryGroups) ?? [] : [],
-                                 at: model.nav.wikiContentsAt, docGroups: docGroups,
-                                 planPending: wiki.plan.map { WikiPlanLogic.pending($0, runnerOnline: model.wikiMaintenanceRunnerOnline) } ?? 0,
-                                 pick: select)
             }
             .listStyle(.plain)
             .softTopEdgeEffect()
@@ -38,6 +42,14 @@ struct WikiContentsColumn: View {
             }
         } else {
             ProgressView()
+        }
+    }
+
+    /// The space's name as the first row, while a space is in view.
+    @ViewBuilder
+    private func columnHead(_ wiki: WikiModel) -> some View {
+        if let space = wiki.currentSpace {
+            head(space, wiki)
         }
     }
 

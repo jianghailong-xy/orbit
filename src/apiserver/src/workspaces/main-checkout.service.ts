@@ -16,6 +16,7 @@ import {
   MAIN_CHECKOUT_ACTION_KINDS,
   MAIN_CHECKOUT_ACTION_TIMEOUT_SECONDS,
   MAIN_CHECKOUT_DIFF_PATHS_MAX,
+  MAIN_CHECKOUT_DISCARD_CAPABILITY,
   MAIN_CHECKOUT_GIT_CAPABILITY,
   MAIN_CHECKOUT_NOTICE_KINDS,
   MAIN_CHECKOUT_REFUSAL_CODES,
@@ -124,7 +125,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
   /** GET /workspaces/:id/main-checkout: a fresh snapshot from the runner, with the patches of `diffPaths`. */
   async read(ownerId: string, workspaceId: string, diffPaths: string[] = []): Promise<MainCheckoutView> {
     const paths = validDiffPaths(diffPaths);
-    const { workspace, health, actionsSupported } = await this.checkout(ownerId, workspaceId);
+    const { workspace, health, actionsSupported, discardSupported } = await this.checkout(ownerId, workspaceId);
     if (!health) throw new NotFoundException(NOT_REPORTED);
     const runner = workspace.runner!;
     const managedBranch = await this.managedBranch(ownerId, workspaceId, health.branch);
@@ -132,7 +133,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     const inFlight = await this.inFlight(runner.id, health.root);
     // A runner without the capability cannot read the checkout on demand; what its heartbeat said is all there is.
     if (!actionsSupported) {
-      return { snapshot: heartbeatSnapshot(health), actionsSupported, managedBranch, inFlight };
+      return { snapshot: heartbeatSnapshot(health), actionsSupported, discardSupported, managedBranch, inFlight };
     }
     if (!runnerIsOnline(runner)) {
       throw new HttpException('The runner is offline. Try again when it is online.', HttpStatus.SERVICE_UNAVAILABLE);
@@ -162,6 +163,7 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
       snapshot: answer.snapshot,
       ...(answer.diffs ? { diffs: answer.diffs } : {}),
       actionsSupported,
+      discardSupported,
       managedBranch: await this.managedBranch(ownerId, workspaceId, answer.snapshot.branch),
       inFlight,
     };
@@ -178,12 +180,18 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
 
     // A checkout the runner has not reported yet is not a 404 here: the card that asked comes from a turn that just
     // ended, so the person gets a refusal line in the conversation (board 03), not a toast.
-    const { workspace, health, actionsSupported } = await this.checkout(ownerId, workspaceId);
+    const { workspace, health, actionsSupported, discardSupported } = await this.checkout(ownerId, workspaceId);
     const runner = workspace.runner!;
     if (!actionsSupported) {
       throw new ConflictException({
         code: MAIN_CHECKOUT_UNSUPPORTED_CODE,
         message: `${runner.displayName ?? runner.name} runs an Orbit runner too old to change the main checkout. Update it, then try again.`,
+      });
+    }
+    if (request.kind === 'discard' && !discardSupported) {
+      throw new ConflictException({
+        code: MAIN_CHECKOUT_UNSUPPORTED_CODE,
+        message: `${runner.displayName ?? runner.name} runs an Orbit runner too old to discard files. Update it, then try again.`,
       });
     }
     if (health && request.root !== health.root) {
@@ -561,7 +569,8 @@ export class MainCheckoutService implements OnModuleInit, OnModuleDestroy {
     if (!workspace.runner) throw new BadRequestException('this workspace is not bound to a runner');
     const health = repoHealthForWorkspace(readRunnerRepoHealth(workspace.runner.repoHealth), workspace.id);
     const actionsSupported = workspace.runner.capabilities.includes(MAIN_CHECKOUT_GIT_CAPABILITY);
-    return { workspace, health, actionsSupported };
+    const discardSupported = actionsSupported && workspace.runner.capabilities.includes(MAIN_CHECKOUT_DISCARD_CAPABILITY);
+    return { workspace, health, actionsSupported, discardSupported };
   }
 
   /** A session of the owner's in this workspace, or a 400 naming the field. */
@@ -714,7 +723,7 @@ function validAction(body: unknown): MainCheckoutActionPost {
   if (typeof b.fingerprint !== 'string' || !b.fingerprint.startsWith('mc1:')) {
     throw new BadRequestException('fingerprint must be the snapshot fingerprint (mc1:…)');
   }
-  const takesFiles = kind === 'move' || kind === 'commit';
+  const takesFiles = kind === 'move' || kind === 'commit' || kind === 'discard';
   if (takesFiles) {
     if (!Array.isArray(b.files) || b.files.length === 0 || !b.files.every(isPathString)) {
       throw new BadRequestException(`${kind} needs files: one or more paths from the snapshot`);

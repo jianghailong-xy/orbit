@@ -97,6 +97,9 @@ final class SessionMessageWiringTests: XCTestCase {
             "}, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {",
             "Task { await console.withdrawSteer(bubble) }",
             "}, putBack: putBack(bubble))",
+            // What holds it, where its runner's update does: its own queued line says so
+            // (docs/mocks/queued-card-runner-updating ②).
+            ".environment(\\.runnerUpdatingQueued, runnerUpdatingQueued(bubble))",
         ], "a queued message from another session is not drawn by the row that draws its card")
         let controls = statements(try section(try source(Self.rowPath),
                                               from: "struct QueuedControls", to: "struct UserTurnRow"))

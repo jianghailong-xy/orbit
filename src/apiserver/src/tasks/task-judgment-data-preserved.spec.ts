@@ -2993,6 +2993,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0670 adds session.opened_by (who opened a conversation), its CHECK and a partial index, and backfills it on
       // conversations with no task and no parent; no preserved table, trigger or DONE fence changes.
       '0670_session_opened_by',
+      // 0700 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
+      '0700_session_settings',
       // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
       // preserved relations, no trigger or DONE fence changes, and no row is written.
       '0705_runner_engine_update_dismissals',
@@ -3008,7 +3010,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0740_session_merge_after_turn',
       // 0760 adds a nullable `runner.attention_fixes` JSONB only, catalog-only; `runner` is none of the preserved
       // relations, no trigger or DONE fence changes, and no row is written.
-      '0760_runner_attention_fixes'],
+      '0760_runner_attention_fixes',
+      // 0770 widens main_checkout_request_action_chk to allow 'discard' only; main_checkout_request is none of the
+      // preserved relations, no trigger or DONE fence changes, and no row is written.
+      '0770_main_checkout_discard'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

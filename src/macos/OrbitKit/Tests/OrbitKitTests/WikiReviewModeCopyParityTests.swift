@@ -924,9 +924,17 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
 
         let native = try self.native("Views/WikiRunView.swift")
         let page = try slice(native, from: "struct WikiRunPage: View {", to: "struct WikiRunView: View {")
-        assertOrder(page, ["Section { head(counted) }", "countsRow(counted)", "group(WikiModeCopy.runAdded, counted.added)",
-                           "group(WikiModeCopy.runAmended, counted.amended)",
-                           "group(WikiModeCopy.runReinforced, counted.reinforced)"], "the native run page")
+        // The page's blocks are one row array, drawn by one ForEach; the Added / Amended / Reinforced
+        // order is the logic's.
+        assertOrder(page, ["ForEach(WikiRunPageListLogic.rows(counted)) { row in",
+                           "case .head:   Section { head(counted) }",
+                           "case .counts: Section { countsRow(counted) }",
+                           "case .group(let title, let rows): group(title, rows)"], "the native run page")
+        let rowsLogic = try String(contentsOf: find("src/macos/OrbitKit/Sources/OrbitKit/App/WikiModeLogic.swift"),
+                                   encoding: .utf8)
+        assertOrder(rowsLogic, ["(WikiModeCopy.runAdded, summary.added)", "(WikiModeCopy.runAmended, summary.amended)",
+                                "(WikiModeCopy.runReinforced, summary.reinforced)"],
+                    "the run page's added, amended and reinforced rows")
         let head = try slice(page, from: "private func head(", to: "private func countsRow(")
         assertOrder(head, ["WikiModeCopy.runKicker(changeset.origin)", "WikiModeCopy.appliedChanges(summary.applied)",
                            "WikiModeLogic.runWhen(at)", "WikiModeCopy.revertRun", "WikiModeCopy.openSession"],
@@ -1015,7 +1023,10 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let home = try slice(view, from: "struct WikiHomePage: View {", to: "struct WikiSpacePicker: View {")
         XCTAssertFalse(home.contains("openTrash: actions.openTrash"), "the home still hands the space menu a way to Trash")
         let first = try slice(view, from: "struct WikiFirstStartPage: View {", to: "struct WikiSpacePicker: View {")
-        assertOrder(first, ["WikiStartSection(card: card, act: act)", "if trashed > 0 {", "Button(WikiModeCopy.trashOpenTrash, action: openTrash)",
+        // The Trash row is data: present in the row array only while Trash holds a wiki.
+        assertOrder(first, ["ForEach(WikiFirstStartListLogic.rows(trashed: trashed))", "case .start:",
+                            "WikiStartSection(card: card, act: act)", "case .trash:",
+                            "Button(WikiModeCopy.trashOpenTrash, action: openTrash)",
                             "Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))"], "the empty Wiki's way to Trash, under its card")
         let screens = try native("Views/WikiScreens.swift")
         for wiring in ["WikiFirstStartPage(card: WikiStartLogic.firstCard(workspaces: workspaces), trashed: wiki.trash.count,",

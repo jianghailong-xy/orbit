@@ -27849,6 +27849,13 @@ button.agent-progress-agent:hover {
 .mck-btn-primary:hover:not(:disabled) {
   background: var(--brand-strong);
 }
+.mck-btn-danger {
+  color: var(--error);
+}
+.mck-btn-danger:hover:not(:disabled) {
+  border-color: var(--error-border);
+  background: var(--error-bg);
+}
 .mck-btn-more {
   border-color: transparent;
   background: none;
@@ -27993,8 +28000,17 @@ button.agent-progress-agent:hover {
 .mck-drawer-error {
   color: var(--error);
 }
+.mck-drawer-side-foot {
+  position: sticky;
+  bottom: -8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: auto -8px -8px;
+  padding: 0 8px 8px;
+  background: var(--orbit-bg-elevated);
+}
 .mck-drawer-note {
-  margin-top: auto;
   padding: 8px;
   border-top: 1px solid var(--border-subtle);
   color: var(--text-3);
@@ -28013,12 +28029,17 @@ button.agent-progress-agent:hover {
 }
 .mck-drawer-actions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
 }
-.mck-commit-msg {
-  flex: 1 1 auto;
-  min-width: 0;
+.mck-drawer-actions > .mck-btn {
+  padding: 6px 12px;
+}
+.mck-drawer-actions-more {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .wt-iso-body p {
   margin: 0 0 10px;

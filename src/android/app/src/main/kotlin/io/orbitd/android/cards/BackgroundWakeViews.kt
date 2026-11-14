@@ -109,11 +109,24 @@ internal fun BackgroundWakeLine(wake: JsonObject, ts: String?, steerState: Strin
     }
 }
 
+/**
+ * Provided on a queued-tail turn its runner's update holds (docs/mocks/queued-card-runner-updating ②⑤): the tag its queue line reads in
+ * place of its word — `Queued · runner updating`, opening to why (reader `RunnerUpdatingFoot`). Null on every other turn.
+ */
+internal val LocalQueuedHeld = staticCompositionLocalOf<(@Composable () -> Unit)?> { null }
+
+/** The word a queued turn's line opens with, or, where its runner's update holds it, the tag that says so ([LocalQueuedHeld]). */
+@Composable
+internal fun QueuedWord(label: String = "Queued", color: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    val held = LocalQueuedHeld.current
+    if (held != null) held() else Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+}
+
 /** The queue's own line under a turn still waiting for a runner: "Queued", and the Cancel a queued message has. */
 @Composable
 internal fun QueuedFoot(modifier: Modifier = Modifier, cancel: () -> Unit) {
     Row(modifier.testTag("queued-foot"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Queued", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        QueuedWord()
         TextButton(onClick = cancel, Modifier.testTag("queued-foot:cancel")) { Text("Cancel", style = MaterialTheme.typography.labelSmall) }
     }
 }

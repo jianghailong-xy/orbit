@@ -2329,7 +2329,8 @@ struct DeliveredDecisionCardView: View {
             case .promotionReceipt(let promotion):
                 PromotionReceiptLine(promotion: promotion)
             case .ownerRequest(let requestID):
-                OwnerRequestView(requestID: requestID)
+                OwnerRequestView(requestID: requestID,
+                                 onChat: { console.startOwnerRequestReply($0) })
             case .crossingBatch(let batchID):
                 CrossingDecisionCard(console: console, batchID: batchID)
             }
