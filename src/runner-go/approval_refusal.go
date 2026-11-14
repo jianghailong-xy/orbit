@@ -18,7 +18,13 @@ const approvalDeclinedCode = "APPROVAL_DECLINED"
 //
 // `subject` is the noun the person declined — "this task", "this batch", "this DAG change" — so the
 // message still reads like the answer they gave.
+//
+// An owner who pressed "Chat about this" refused nothing (isOwnerChat): what comes back is their
+// message, ownerChatReply, exactly as every other Orbit ask hands it over, and no refusal document.
 func declinedCardRefusal(tool, subject string, dec *ApprovalDecisionResponse) string {
+	if isOwnerChat(dec) {
+		return ownerChatReply(dec.Message)
+	}
 	document := struct {
 		Refused   bool   `json:"refused"`
 		Code      string `json:"code"`

@@ -334,7 +334,10 @@ func TestInboxPollerOnTheLinkFetchesOnlyWhenThereIsSomethingToFetch(t *testing.T
 // something to fetch, and never sooner than the answer's retry_after. When the control plane had handed a turn out
 // whose answer the runner never got, the next fetch, naming no running turn, has it handed straight back. No hint, and
 // no HintState, would ever name that turn: it is IN_FLIGHT under this generation's lease, which HintState leaves out,
-// so B6's gate, which waited for one, waited until the lease ran out 300 s later.
+// so B6's gate, which waited for one, waited until the lease ran out 300 s later. Nothing here sends a hint, so a poller
+// that waited for one would never fetch again: that it fetches at all is the promise, however slow the host, and the
+// waits for it are only how long the test gives it. How long the backoff is,
+// TestInboxBackoffIsExponentialWithFullJitterAndHonoursRetryAfter says.
 func TestInboxPollerFetchesAgainAfterAFailureWithoutAHint(t *testing.T) {
 	t.Run("retry_after", func(t *testing.T) {
 		r := newLinkWorkRig(t)
@@ -354,10 +357,9 @@ func TestInboxPollerFetchesAgainAfterAFailureWithoutAHint(t *testing.T) {
 		r.useLink(t)
 		p := newInboxPoller(r.t, "session-a", "gen-1")
 		defer p.close()
-		recvTurn(t, pollInBackground(t, p), 10*time.Second, "m-1")
+		recvTurn(t, pollInBackground(t, p), time.Minute, "m-1")
 		fetches := in.fetched()
-		waited := fetches[0].at.Sub(time.Unix(0, refusedAt.Load()))
-		if waited < 1500*time.Millisecond || waited > 2500*time.Millisecond {
+		if waited := fetches[0].at.Sub(time.Unix(0, refusedAt.Load())); waited < 1500*time.Millisecond {
 			t.Errorf("fetched again %s after a refusal asking for 1.5 s", waited)
 		}
 	})
@@ -378,7 +380,7 @@ func TestInboxPollerFetchesAgainAfterAFailureWithoutAHint(t *testing.T) {
 		r.useLink(t)
 		p := newInboxPoller(r.t, "session-a", "gen-1")
 		defer p.close()
-		recvTurn(t, pollInBackground(t, p), 5*time.Second, "m-1")
+		recvTurn(t, pollInBackground(t, p), time.Minute, "m-1")
 		fetches := in.fetched()
 		if len(fetches) < 2 || fetches[0].handed != "m-1" || fetches[1].handed != "m-1" {
 			t.Fatalf("fetches %+v: want m-1 handed out, lost, and handed out again", fetches)
@@ -388,9 +390,6 @@ func TestInboxPollerFetchesAgainAfterAFailureWithoutAHint(t *testing.T) {
 		}
 		if fetches[0].requestID == fetches[1].requestID {
 			t.Errorf("the second fetch is the first sent again (%s): want a fetch of its own", fetches[1].requestID)
-		}
-		if took := fetches[1].at.Sub(fetches[0].at); took > 5*time.Second {
-			t.Errorf("m-1 was handed back %s after its answer was lost", took)
 		}
 		r.g.mu.Lock()
 		hints := r.g.ackHints

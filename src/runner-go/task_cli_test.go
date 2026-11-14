@@ -524,6 +524,8 @@ func TestTaskCLIDeleteCapabilityIsExactAndMutating(t *testing.T) {
 				"description": "Task id; defaults to the current task (ORBIT_TASK_ID) if omitted",
 			},
 		},
+		// Closed: an argument the schema does not name is refused before the call (tool_schema.go).
+		"additionalProperties": false,
 	}
 	if !reflect.DeepEqual(got.MCPInputSchema, wantSchema) {
 		t.Errorf("task_delete schema = %#v, want %#v", got.MCPInputSchema, wantSchema)

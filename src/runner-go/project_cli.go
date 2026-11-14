@@ -869,7 +869,7 @@ func cliProjectResolveBlocker(args []string, out io.Writer) error {
 		return fmt.Errorf("resolve blocker: %w", err)
 	}
 	if declined != "" {
-		return fmt.Errorf("resolve blocker: the human left this blocker open: %s", declined)
+		return fmt.Errorf("resolve blocker: %s", declinedText("the human left this blocker open", declined))
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -931,8 +931,8 @@ func cliProjectSkipMergeCheck(args []string, out io.Writer) error {
 			return fmt.Errorf("skip merge check: %w", err)
 		}
 		if declined != "" {
-			return fmt.Errorf("skip merge check: the human did not approve skipping this check, and "+
-				"nothing was queued: %s", declined)
+			return fmt.Errorf("skip merge check: %s", declinedText(
+				"the human did not approve skipping this check, and nothing was queued", declined))
 		}
 		raw, err = runner.skipIntegrationMergeCheck(sessionID, id, taskID, strings.TrimSpace(*reason), approvalID)
 		if err != nil {
@@ -1497,9 +1497,10 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 		if declined, err := askBeforeCreate(runner, sessionID, projectCreateApprovalToolName, body); err != nil {
 			return fmt.Errorf("create project: %w", err)
 		} else if declined != "" {
-			return fmt.Errorf("create project: the human rejected this project: %s", declined)
+			return fmt.Errorf("create project: %s", declinedText("the human rejected this project", declined))
 		}
 	}
+	cliRecord().sentBody(body)
 	raw, err := t.createProject(
 		sessionID,
 		strings.TrimSpace(os.Getenv(envOrchestrationToken)),
@@ -1681,6 +1682,7 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	// gated on who is asking, so nothing else needs it.
 	var raw json.RawMessage
 	var declined string
+	cliRecord().sentBody(body)
 	if runner, ok := t.(*Transport); ok {
 		sessionID := ""
 		if mergeCheckCardRequired(body) {
@@ -1696,7 +1698,7 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 		return fmt.Errorf("update project: %w", err)
 	}
 	if declined != "" {
-		return fmt.Errorf("update project: the owner did not approve this merge-check change: %s", declined)
+		return fmt.Errorf("update project: %s", declinedText("the owner did not approve this merge-check change", declined))
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

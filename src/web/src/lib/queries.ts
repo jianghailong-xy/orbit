@@ -252,6 +252,59 @@ export const storageUsageQuery = () =>
     queryFn: () => api<StorageUsage>('/attachments/usage'),
   });
 
+/** Which of the Storage page's rows a file list is opened from: a project's or a task's id, or a week's Monday. */
+export type StorageScope = { kind: 'projects' | 'tasks' | 'weeks'; id: string };
+
+/** One content in that list, counted once however many places keep it, as the Storage page counts it. */
+export interface StoredFile {
+  /** The row it is shown by, which Download and Pin act on. */
+  id: string;
+  fileName: string | null;
+  label: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  /** When the scope first kept it. */
+  createdAt: string;
+  taskId: string | null;
+  taskTitle: string | null;
+  sessionId: string | null;
+  sessionTitle: string | null;
+  /** `upload`: an agent's file_upload; `task-input`: attached to a task; `conversation`: sent in a session. */
+  source: 'upload' | 'task-input' | 'conversation';
+  pinnedAt: string | null;
+  expiresAt: string | null;
+  /** Set when nothing keeps it any more: a week lists what arrived then, expired or not. */
+  expiredAt: string | null;
+  /** What keeps it from being deleted, or null when it can be. */
+  heldBy: 'EVIDENCE' | 'CONVERSATION' | null;
+  /** How many other places keep the same bytes. */
+  alsoIn: number;
+}
+
+export interface StoredFilesPage {
+  /** The project's or task's title; a week's Monday, YYYY-MM-DD. */
+  title: string;
+  totalBytes: number;
+  fileCount: number;
+  files: StoredFile[];
+  nextCursor: string | null;
+}
+
+export type StoredFilesOrder = 'size' | 'newest';
+
+export const storedFilesKey = (scope: StorageScope) => ['attachments', 'usage', scope.kind, scope.id] as const;
+
+export const storedFilesQuery = (scope: StorageScope, order: StoredFilesOrder) =>
+  infiniteQueryOptions({
+    queryKey: [...storedFilesKey(scope), order] as const,
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      api<StoredFilesPage>(
+        `/attachments/usage/${scope.kind}/${encodeURIComponent(scope.id)}/files?order=${order}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`,
+      ),
+    getNextPageParam: (page) => page.nextCursor,
+  });
+
 /** The account's profile photo as a data URL, by the version `me` names — a new photo is a new
  *  key, and nothing is fetched while there is none. */
 export const avatarQuery = (version: string | null | undefined) =>

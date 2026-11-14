@@ -49,6 +49,32 @@ card, and a headless process must act as the account owner with `ORBIT_USER_TOKE
 which writes through the user route and is recorded as the person. Other headless mutations that use only
 a runner credential fall back to the runner owner.
 
+### Receipts, strict input and retries
+
+`--json` prints the entity a command answered with. `--receipt`, accepted by every command in
+`orbit capabilities`, prints instead the receipt the MCP tool of the same operation returns
+([agent contract §6.3](orbit-agent-contract.md)): one JSON document with `ok`, `outcome`, the entity's
+`id` and `status`, the `changedFields`, the `approval` outcome, the `idempotency` used and, when `ok` is
+false, an `error` with its code and a `retry` rule. It is printed on stdout for a failure too, and the
+exit status is 0 exactly when `ok` is true. A card the owner answered with "Chat about this" is
+`outcome: chat`, not a refusal: no `error`, their words in `approval.message`, and the reply in `text`.
+Nothing was written, so the exit status is non-zero, and the reply is also the command's error.
+
+```bash
+orbit task create --title "Rotate the staging key" --completion-criterion EVIDENCE_JUDGMENT \
+  --acceptance-criteria "the old key is revoked" --idempotency-key rotate-staging-key --receipt | jq -r .id
+```
+
+`--idempotency-key` makes a create safe to send again: the same key — after a timeout, or in a later
+turn — answers with the task the first send wrote, and the same key with a different title or
+description is refused. `orbit task create-batch --idempotency-key` keys a whole plan. A create without
+a key is sent once; if its answer is lost, read the tasks back before sending it again.
+
+A `--tasks` document is judged against `task_create_batch`'s schema before anything is asked or sent:
+an unknown field in an item, a wrong type, a missing title or `completionCriterion`, and an item that sets
+both of `startNow`/`runAt`, `parentTaskId`/`parentRef` or `verifiesTaskId`/`verifiesRef` are refused,
+naming the item and the field.
+
 ### Reviewing a confirmation request
 
 When a run of an `OWNER_CONFIRMED` task declares its work finished (`orbit task request-confirmation`), Orbit
