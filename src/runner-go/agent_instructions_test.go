@@ -365,6 +365,40 @@ func TestEveryAdvertisedCapabilityIsPreApproved(t *testing.T) {
 	}
 }
 
+// The allowlist is generated from the catalogue (orbitCLICommands), and this holds it to the other projection of
+// the same catalogue an agent reads: in a session, with the orchestration grant and without, Claude Code pre-approves
+// exactly the commands `capabilities --json` offers it — none missing, so no advertised command meets a prompt, and
+// none extra, so nothing the session is not offered is pre-approved — plus `capabilities --json` itself.
+func TestTheCLIAllowlistIsExactlyWhatCapabilitiesOffersTheSession(t *testing.T) {
+	exe := "/usr/local/bin/orbit"
+	for _, orchestration := range []bool{false, true} {
+		catalogFullestCLIContext(t)
+		if !orchestration {
+			t.Setenv(envMCPOrchestration, "false")
+		}
+		want := map[string]bool{"Bash(" + exe + " capabilities --json)": true}
+		for _, capability := range buildCLICapabilities(exe).Capabilities {
+			want["Bash("+strings.Join(capability.Argv, " ")+" *)"] = true
+		}
+		got := map[string]bool{}
+		for _, rule := range orbitCLIAllowedTools(exe, orchestration) {
+			if !strings.HasPrefix(rule, "Bash('") { // the same commands, in the quoted spelling
+				got[rule] = true
+			}
+		}
+		for rule := range want {
+			if !got[rule] {
+				t.Errorf("orchestration=%v: capabilities offers a command the allowlist does not pre-approve: %s", orchestration, rule)
+			}
+		}
+		for rule := range got {
+			if !want[rule] {
+				t.Errorf("orchestration=%v: the allowlist pre-approves a command capabilities does not offer: %s", orchestration, rule)
+			}
+		}
+	}
+}
+
 // The wiring, not the copy: the form a session gets is decided by whether it was dispatched for a
 // task, and it has to survive the trip through the spawn arguments the engine is actually given.
 func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
