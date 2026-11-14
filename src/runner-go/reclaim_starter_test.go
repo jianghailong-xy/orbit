@@ -46,6 +46,9 @@ func TestReclaimStartsRunningThenPendingThenIdleNewestFirst(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/runner/sessions/reclaim":
 			_ = json.NewEncoder(w).Encode(ReclaimResponse{Sessions: snapshot})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runner/sessions/takeover-leases":
+			// A control plane from before the batch takeover.
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/takeover-leases"):
 			parts := strings.Split(r.URL.Path, "/")
 			id := parts[len(parts)-2]
@@ -196,7 +199,7 @@ func TestAClaimRunsWhileTheReclaimStillStartsOlderSessions(t *testing.T) {
 		takenOver(reclaimOldestIdle, stInterrupted),
 	}
 	orderReclaimedStarts(pending)
-	starter := newReclaimStarter(pool, pending, func(p reclaimedStart) {
+	starter := newReclaimStarter(pool, pending, nil, func(p reclaimedStart) {
 		ledger.mu.Lock()
 		ledger.reclaimStarts[p.job.SessionID]++
 		ledger.mu.Unlock()
@@ -319,7 +322,7 @@ func TestReclaimStarterWithNothingToStartIsFinished(t *testing.T) {
 	}
 	none.settle("x")
 	none.wait()
-	empty := newReclaimStarter(newSessionPool(1), nil, func(reclaimedStart) { t.Fatal("started nothing") })
+	empty := newReclaimStarter(newSessionPool(1), nil, nil, func(reclaimedStart) { t.Fatal("started nothing") })
 	empty.run(reclaimStartWorkers, nil)
 	if !empty.finished() {
 		t.Fatal("an empty reclaim reads as unfinished")
@@ -343,9 +346,11 @@ func TestRunLoopStartsTheStartupReclaimInTheBackground(t *testing.T) {
 	}
 	before, inLoop := body[:loop], body[loop:]
 	for _, want := range []string{
-		"startupStarts = newReclaimStarter(pool, pendingStarts,",
+		"reclaimWaitedOnSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)",
+		"startupStarts = newReclaimStarter(pool, pendingStarts, idleReclaims,",
 		"startupStarts.run(reclaimStartWorkers,",
-		`"startup reclaim finished: %d session(s) in %s (snapshot and takeovers %s)"`,
+		"logln(startupReclaimFinishedLine(time.Since(reclaimBegan), len(pendingStarts), answeredIn, idleHanded, idleTook))",
+		"go func() {\n\t\t\tif err := startupStarts.takeOverIdle(loopCtx,",
 		"armed: reclaimed && !reclaimSkipped && startupStarts.finished()}",
 	} {
 		if !strings.Contains(before, want) {
@@ -356,10 +361,13 @@ func TestRunLoopStartsTheStartupReclaimInTheBackground(t *testing.T) {
 		t.Error("the startup reclaim starts its sessions inline again, holding the claim loop behind all of them")
 	}
 	arm := strings.Index(inLoop, "if armOnceStarted && startupStarts.finished() {")
-	if arm < 0 || !strings.Contains(inLoop[arm:arm+strings.Index(inLoop[arm:], "\n\t\t}\n")], "worktreeGC.armed = true\n\t\t\tpool.endUnclaimedHostlessJobs()") {
+	if arm < 0 || !strings.Contains(inLoop[arm:arm+strings.Index(inLoop[arm:], "\n\t\t}\n")], "} else {\n\t\t\t\tworktreeGC.armed = true\n\t\t\t\tpool.endUnclaimedHostlessJobs()\n\t\t\t\tgcUploads(pool.ids())") {
 		t.Error("the claim loop does not arm the sweep, and end unclaimed jobs, once the startup starts have ended")
 	}
-	settle := strings.Index(inLoop, "startupStarts.settle(job.SessionID)")
+	if arm >= 0 && !strings.Contains(inLoop[arm:arm+strings.Index(inLoop[arm:], "\n\t\t}\n")], "if startupStarts.setAside() {\n\t\t\t\t// The idle phase set sessions aside over takeover conflicts: as when the startup reclaim\n\t\t\t\t// sets one aside, the deferred retry takes them over, and arms the sweep once nothing is left.\n\t\t\t\treclaimRetryAt = time.Now().Add(reclaimRetryInterval)\n\t\t\t} else {") {
+		t.Error("an idle-phase session set aside does not schedule the deferred retry in place of arming the sweep")
+	}
+	settle := strings.Index(inLoop, "if replaced, tookOver := startupStarts.settle(job.SessionID); tookOver && strings.EqualFold(job.LeaseOwner, replaced) {\n\t\t\tjob.LeaseOwner = t.leaseOwner")
 	prepare := strings.Index(inLoop, "endTakeover, prepareErr := prepareTakeover(job)")
 	if settle < 0 || prepare < settle || strings.Index(inLoop, "\t\tif job == nil {") > settle {
 		t.Error("a claimed session is taken over before its reclaim start has settled")
@@ -377,7 +385,7 @@ func TestAHeartbeatMergeOrCommitForAReclaimingSessionWaitsForItsStart(t *testing
 	gate := make(chan struct{})
 	entered := make(chan struct{})
 	_, endTakeover := pool.beginWorktreeTakeover(id)
-	starter := newReclaimStarter(pool, []reclaimedStart{{job: poolJob(id), endTakeover: endTakeover, status: stAwaitingInput}},
+	starter := newReclaimStarter(pool, []reclaimedStart{{job: poolJob(id), endTakeover: endTakeover, status: stAwaitingInput}}, nil,
 		func(p reclaimedStart) {
 			close(entered)
 			<-gate

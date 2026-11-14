@@ -19,13 +19,12 @@ import { newRunRequestToken } from '../lib/runRequestToken';
 import {
   isSessionLive,
   sessionLifecycleStateOf,
-  sessionRunStateOf,
   sessionStateWord,
   type SessionStateSource,
 } from '../lib/sessionState';
 import { NEAR_BOTTOM, sampleTail } from '../lib/tailPinning';
 import { titleFirstLine } from '../lib/title';
-import { followDelay, RUN_TONE, WORKING_POLL_MS } from './SharedSessionPage';
+import { followDelay, sharedStateTone, WORKING_POLL_MS } from './SharedSessionPage';
 
 const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
@@ -271,7 +270,7 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
 
   const owner = data.ownerName;
   const completed = sessionLifecycleStateOf(head) === 'COMPLETED';
-  const tone = completed ? 'done' : RUN_TONE[sessionRunStateOf(head)];
+  const tone = sharedStateTone(head, true);
   const live = isSessionLive(head) && !completed;
   const waiting = live && head.waitingOnOwner === true;
   const hint = !live ? guestCopy.restarts(owner) : waiting ? guestCopy.waitsItsTurn : guestCopy.runsOn(owner);

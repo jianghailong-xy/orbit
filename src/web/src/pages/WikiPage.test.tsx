@@ -300,7 +300,7 @@ describe('the Wiki home', () => {
       '<h1 class="page-title">Wiki</h1>',
       'class="wk-home-state"',
       'class="wk-search"',
-      'class="wk-dir-col"',
+      'class="wk-dir-col autohide-scrollbar"',
       '<b>Principles</b>',
       '<span class="no">1</span><b>产品概览与架构</b>',
       '<span class="no">2</span><b>任务与项目</b>',

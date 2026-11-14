@@ -2053,7 +2053,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("create task: %w", err)
 		} else if declined != "" {
 			fork.release()
-			return fmt.Errorf("create task: the human rejected this task: %s", declined)
+			return fmt.Errorf("create task: %s", declinedText("the human rejected this task", declined))
 		}
 		startAfterCreate = start
 	}
@@ -2296,7 +2296,7 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("%s: %w", verb, err)
 		} else if declined != "" {
 			fork.release()
-			return fmt.Errorf("%s: the human rejected this batch: %s", verb, declined)
+			return fmt.Errorf("%s: %s", verb, declinedText("the human rejected this batch", declined))
 		}
 	}
 	out2, err := t.createTasksBatch(agentID, sessionID, body)

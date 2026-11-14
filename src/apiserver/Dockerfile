@@ -89,4 +89,8 @@ EXPOSE 3000
 # `require.resolve` runs the ordinary Node lookup from that same directory, so the CLI is found in
 # the workspace's node_modules or in the root one, whichever this install produced; no dependency
 # bump can move it somewhere this command refuses to look.
-CMD ["sh", "-c", "cd src/apiserver && node \"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy && cd /app && node src/apiserver/dist/main.js"]
+# `exec` puts node in place of the shell as PID 1, so `docker stop`'s SIGTERM reaches it and the apiserver stops by
+# itself (src/apiserver/src/common/graceful-stop.ts). A shell left as PID 1 ignores SIGTERM, and Docker then SIGKILLed
+# the container at the end of the grace period, cutting whatever was in flight. A stop during the migration still waits
+# for that: the shell is PID 1 until the `exec`.
+CMD ["sh", "-c", "cd src/apiserver && node \"$(node -p 'require.resolve(\"prisma/build/index.js\")')\" migrate deploy && cd /app && exec node src/apiserver/dist/main.js"]

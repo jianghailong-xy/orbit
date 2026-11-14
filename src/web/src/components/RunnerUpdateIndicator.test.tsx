@@ -39,7 +39,25 @@ describe('the indicator’s words', () => {
       title: 'HPC is updating to 0.1.257',
       body: 'It installs once these turns finish. Nothing is lost — waiting work starts right after.',
       waits: '10 sessions and 19 messages of yours wait for it.',
+      stopping: false,
     });
+  });
+  it('says stopping for a runner that drains to stop, not to update (docs/mocks/runner-stopping)', () => {
+    // A release may wait too (phase available); the drain is still the stop's.
+    const stopping = runner({
+      selfUpdate: { state: 'waitingForIdle', phase: 'available', targetVersion: '0.1.258', turnsInFlight: 2 },
+      drainWaiting: { sessions: 0, messages: 1, stopping: true },
+    });
+    expect(runnerUpdateIndicator(stopping, 'HPC')).toEqual({
+      pill: 'HPC stopping · 2 turns left',
+      short: '2',
+      title: 'HPC is stopping',
+      body: 'It stops once these turns finish. Nothing is lost — waiting work starts once it is back.',
+      waits: '1 message of yours waits for it.',
+      stopping: true,
+    });
+    const now = runnerUpdateIndicator(runner({ selfUpdate: { state: 'enabled' }, updateTurns: [], drainWaiting: { sessions: 1, messages: 0, stopping: true } }), 'HPC');
+    expect([now?.pill, now?.short, now?.body]).toEqual(['HPC stopping', '', 'It is stopping now. Waiting work starts once it is back.']);
   });
   it('says restarting once no turn is left, and counts in English', () => {
     const restarting = runnerUpdateIndicator(runner({ selfUpdate: { ...DRAINING, turnsInFlight: 0, targetVersion: undefined } }), 'HPC');
@@ -109,6 +127,16 @@ describe('the pill left of the header’s ⋯', () => {
     expect(pop.querySelector('.runner-update-popover-waits')?.textContent).toBe('10 sessions and 19 messages of yours wait for it.');
     const actions = pop.querySelector('.runner-update-popover-actions')!;
     expect([...actions.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Later', 'Update Now…']);
+    expect(actions.querySelector('a')?.textContent).toBe('Open HPC');
+  });
+
+  it('offers neither Later nor Update Now… on a runner that is stopping, only the runner', async () => {
+    mount(runner({ drainWaiting: { sessions: 10, messages: 19, stopping: true } }));
+    await open();
+    const pop = popover()!;
+    expect(pop.querySelector('.orbit-popover-title')?.textContent).toBe('HPC is stopping');
+    const actions = pop.querySelector('.runner-update-popover-actions')!;
+    expect(actions.querySelectorAll('button')).toHaveLength(0);
     expect(actions.querySelector('a')?.textContent).toBe('Open HPC');
   });
 
