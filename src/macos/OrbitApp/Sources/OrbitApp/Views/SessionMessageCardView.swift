@@ -146,7 +146,7 @@ struct SessionMessageCardView: View {
     /// The queue's own line while the message waits behind a running turn: how it stands, and Cancel.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)

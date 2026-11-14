@@ -115,6 +115,7 @@ class MainCheckoutTest {
             MainCheckout.commit("/root/orbit", fp, listOf("src/api/client.ts"), "  Add retry backoff\n", "req-commit", null),
             MainCheckout.push("/root/orbit", fp, "req-push", null),
             MainCheckout.rescue("/root/orbit", fp, "req-rescue", null),
+            MainCheckout.discard("/root/orbit", fp, listOf("src/api/retry.ts"), "req-discard", null),
         ).map(MainCheckout::encode)
         assertEquals(expected, built)
         // Byte for byte, field order included.
@@ -222,9 +223,9 @@ class MainCheckoutTest {
             "saveAndCleanHint" to MainCheckout.COPY_SAVE_AND_CLEAN_HINT, "askAgent" to MainCheckout.COPY_ASK_AGENT,
             "askAgentHint" to MainCheckout.COPY_ASK_AGENT_HINT, "leaveAsIs" to MainCheckout.COPY_LEAVE_AS_IS, "review" to MainCheckout.COPY_REVIEW,
             "reviewAndCommitShort" to MainCheckout.COPY_REVIEW_AND_COMMIT_SHORT, "reviewMainCheckout" to MainCheckout.COPY_REVIEW_MAIN_CHECKOUT,
-            "commitMessagePlaceholder" to MainCheckout.COPY_COMMIT_MESSAGE, "notShown" to MainCheckout.COPY_NOT_SHOWN,
+            "notShown" to MainCheckout.COPY_NOT_SHOWN,
             "targetOpenedFrom" to MainCheckout.COPY_TARGET_OPENED_FROM, "targetBusy" to MainCheckout.COPY_TARGET_BUSY,
-            "cleanUpCheckout" to MainCheckout.COPY_CLEAN_UP_CHECKOUT), copy)
+            "cleanUpCheckout" to MainCheckout.COPY_CLEAN_UP_CHECKOUT, "discard" to MainCheckout.COPY_DISCARD), copy)
         assertEquals(mapOf("turnOnTitle" to MainCheckout.ISO_TURN_ON_TITLE, "turnOffTitle" to MainCheckout.ISO_TURN_OFF_TITLE,
             "unchanged" to MainCheckout.ISO_UNCHANGED, "unseen" to MainCheckout.ISO_UNSEEN, "reviewFiles" to MainCheckout.ISO_REVIEW_FILES,
             "cancel" to MainCheckout.ISO_CANCEL, "turnOn" to MainCheckout.ISO_TURN_ON, "turnOff" to MainCheckout.ISO_TURN_OFF,
@@ -236,6 +237,24 @@ class MainCheckoutTest {
         assertEquals(fixture["fileLimit"]!!.jsonPrimitive.int, MainCheckout.FILE_LIMIT)
         assertEquals(fixture["noticeKinds"]!!.jsonObject.let { listOf(it["changed"]!!.jsonPrimitive.content, it["result"]!!.jsonPrimitive.content) },
             listOf(MainCheckout.NOTICE_CHANGED, MainCheckout.NOTICE_RESULT))
+    }
+
+    // ---- The commit message, and Discard -----------------------------------------------------------
+
+    @Test fun aCommitIsNamedAfterItsFilesAsTheSharedFixtureSays() {
+        val cases = fixture["defaultCommitMessages"]!!.jsonObject["cases"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(cases.isNotEmpty())
+        cases.forEach { c ->
+            val files = c["files"]!!.jsonArray.mapNotNull { MainCheckout.file(it.jsonObject) }
+            assertEquals(c["message"]!!.jsonPrimitive.content, MainCheckout.defaultCommitMessage(files))
+        }
+    }
+
+    @Test fun discardAsksFirstAndSaysWhereTheCopyGoes() {
+        assertEquals("Discard 2 files", MainCheckout.discardButton(2))
+        assertEquals("Discard 1 file?", MainCheckout.discardTitle(1))
+        assertEquals("They go back to the last commit on main; new files are deleted. A copy of the main checkout is saved on orbit/rescue-… first.",
+            MainCheckout.discardBody(2, "main"))
     }
 
     // ---- A handled card --------------------------------------------------------------------------------------

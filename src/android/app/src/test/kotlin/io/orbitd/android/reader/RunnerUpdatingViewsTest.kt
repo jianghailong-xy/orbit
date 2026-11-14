@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.runtime.CompositionLocalProvider
+import io.orbitd.android.cards.LocalQueuedHeld
+import io.orbitd.android.cards.QueuedFoot
 import io.orbitd.android.directory.QueuedGate
 import io.orbitd.android.directory.QueuedRunnerUpdate
 import io.orbitd.android.ui.OrbitTheme
@@ -79,5 +82,30 @@ class RunnerUpdatingViewsTest {
         compose.onNode(hasText("Runner stopping") and hasAnyAncestor(isDialog())).assertExists()
         assertEquals("HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.\nWaiting 38 min.",
             text("runner-updating-pop:text"))
+    }
+
+    /** docs/mocks/queued-card-runner-updating ②: a queued card's line reads the update's tag in place of `Queued`, Cancel beside it. */
+    @Test fun aQueuedTurnTheUpdateHoldsSaysSoOnItsOwnLineWithCancelBesideIt() {
+        var cancelled = 0
+        compose.setContent { OrbitTheme { Column {
+            CompositionLocalProvider(LocalQueuedHeld provides { RunnerUpdatingFoot(gate, "HPC", now = now) }) { QueuedFoot { cancelled++ } }
+        } } }
+        assertEquals("runner updating", text("runner-updating-foot:reason"))
+        compose.onNodeWithTag("queued-foot:cancel").performClick()
+        assertEquals(1, cancelled)
+    }
+
+    @Test fun aQueuedTurnNothingHoldsStillReadsQueued() {
+        compose.setContent { OrbitTheme { QueuedFoot {} } }
+        assertTrue(compose.onAllNodesWithTag("runner-updating-foot", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Queued").assertExists()
+    }
+
+    @Test fun onlyATurnWaitingForItsOwnTurnIsHeld() {
+        val event = io.orbitd.android.core.realtime.RunEvent("user", 0, kotlinx.serialization.json.buildJsonObject {}, "t1")
+        val turn = QueuedTurn("t1", steer = false, event = event, cards = emptyList(), wake = null)
+        assertTrue(turn.heldByUpdate)
+        assertFalse(turn.copy(steer = true).heldByUpdate)
+        assertFalse(turn.copy(delivery = "failed").heldByUpdate)
     }
 }

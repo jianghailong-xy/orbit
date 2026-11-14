@@ -23,7 +23,8 @@ import { ADMIN_ONLY_PROVIDER_ERROR, PROVIDER_UNAVAILABLE_ERROR } from './runner-
  * or the member of its account pool the claim would choose, recorded as the claim records it. Read by a
  * provider-switch reload (RunnerApiController.reloadProviderEnv) and by a SubAgent run on the parent's own
  * engine and credential (RunnerSubagentsController). Empty when the session is gone; `refusal` when nothing
- * can run its credential, in the claim's words.
+ * can run its credential, in the claim's words. The engine env lays the session's own env over the workspace's
+ * (engineBaseEnv), as on the claim; `envChangedAt` is the session's as read, for a reload to stamp envAppliedAt by.
  *
  * With `target`, the same read for another engine, provider and model on this session's runner: a SubAgent's
  * routed pick, or its next candidate after its account hit a limit (docs/subagent-design.md §4.2, §4.3). A
@@ -43,11 +44,13 @@ export async function sessionProviderExec(
   customRow?: ModelProviderRow | null;
   refusal?: string;
   poolMember?: SubagentPoolMemberChoice;
+  envChangedAt?: Date | null;
 }> {
   const read = await tx.session.findUnique({
     where: { id: sessionId },
     select: {
       id: true,
+      envChangedAt: true,
       ownerId: true,
       model: true,
       provider: true,
@@ -57,6 +60,7 @@ export async function sessionProviderExec(
       poolKeyId: true,
       poolCodexAccountId: true,
       usesRuntimeDefaultModel: true,
+      env: true,
       codexAccount: true,
       claudeAccount: true,
       antigravityAccount: true,
@@ -145,6 +149,7 @@ export async function sessionProviderExec(
       workspaceModel: session.workspace?.model,
       modelCatalog: session.assignedRunner?.modelCatalog,
       workspaceEnv: session.workspace?.env as Record<string, string> | null,
+      sessionEnv: session.env,
       codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
       claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
       antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
@@ -163,7 +168,7 @@ export async function sessionProviderExec(
         : await unavailable(customRow),
     };
   }
-  return { exec, customRow, ...(poolMember ? { poolMember } : {}) };
+  return { exec, customRow, envChangedAt: read.envChangedAt, ...(poolMember ? { poolMember } : {}) };
 }
 
 /** The member of an account pool a SubAgent runs on, recorded on its `subagent_run` attempt. */

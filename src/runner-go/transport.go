@@ -115,6 +115,7 @@ func init() {
 		createWorkDirCapabilityV1,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
+		mainCheckoutDiscardCapabilityV1,
 		selfUpdatePostponeCapabilityV1,
 		selfUpdateNowCapabilityV1,
 		taskForkCapabilityV1,
