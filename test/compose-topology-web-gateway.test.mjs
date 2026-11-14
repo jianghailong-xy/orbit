@@ -24,6 +24,9 @@ const upstreams = read('gateway/several-apiservers/http/upstreams.conf');
 const routes = read('gateway/several-apiservers/server/routes.conf');
 // Where gateway/nginx.conf includes the two files from, and where a deployment mounts their directory.
 const MOUNT = '/etc/nginx/several-apiservers';
+// Where a two-stage deploy writes, inside the running gateway, the container a release hands over to
+// (deploy/two-stage/deploy-stage.sh); nothing is mounted there.
+const HANDOVER = '/etc/nginx/handover';
 
 /** The configuration without its comments: nginx's comments run from # to the end of the line. */
 const uncommented = (conf) => conf.split('\n').map((line) => line.replace(/(^|\s)#.*$/, '').trimEnd()).join('\n');
@@ -63,14 +66,47 @@ test('gateway/nginx.conf includes the routes for several apiservers by globs, wh
   assert.deepEqual(includes, [
     `include ${MOUNT}/http/*.conf;`,
     `include ${MOUNT}/server/*.conf;`,
-    // Inside the /api/events and /api/ locations: the first apiserver with the others behind it.
+    // The run events' stream: a release handing over (the case below).
+    `include ${HANDOVER}/apiserver*.conf;`,
+    // Inside the /api/events and /api/ locations: the first apiserver with the others behind it, then a release
+    // handing over.
     `include ${MOUNT}/first/*.conf;`,
+    `include ${HANDOVER}/apiserver*.conf;`,
     `include ${MOUNT}/first/*.conf;`,
+    `include ${HANDOVER}/apiserver*.conf;`,
+    // The web app.
+    `include ${HANDOVER}/web*.conf;`,
   ]);
   // The http one before the server block, the server one inside it.
   const server = block(main, /^server\s*\{/m);
   assert.ok(server.includes(`include ${MOUNT}/server/*.conf;`));
   assert.ok(!server.includes(`include ${MOUNT}/http/*.conf;`));
+});
+
+test('a release hands each route to the apiserver or web over by the variable it proxies to, set after its own line', () => {
+  // Every location that proxies to the apiserver, and the one that proxies to web.
+  const routes = [
+    [/^\s*location ~ \^\/api\/runs\/\[\^\/\]\+\/events\$ \{/m, 'apiserver', 'apiserver:3000'],
+    [/^\s*location = \/api\/events \{/m, 'apiserver', 'apiserver:3000'],
+    [/^\s*location \/api\/ \{/m, 'apiserver', 'apiserver:3000'],
+    [/^\s*location \/ \{/m, 'web', 'orbit-web:80'],
+  ];
+  for (const [header, variable, own] of routes) {
+    const d = directives(block(main, header));
+    const at = (x) => d.indexOf(x);
+    const include = `include ${HANDOVER}/${variable}*.conf`;
+    assert.ok(at(`set $${variable} ${own}`) >= 0, `${header}: names its own upstream`);
+    assert.ok(at(`set $${variable} ${own}`) < at(include), `${header}: the handover comes after it`);
+    // After the routes for several apiservers too, so that a deployment with several is handed over the same way.
+    if (at(`include ${MOUNT}/first/*.conf`) >= 0) assert.ok(at(`include ${MOUNT}/first/*.conf`) < at(include), `${header}`);
+    assert.ok(at(include) < at(`proxy_pass http://$${variable}$request_uri`), `${header}: and before the pass, of that variable`);
+  }
+  // The deploy stage writes exactly that, `set $<service> <container>:<port>;`, the apiserver's on 3000 and web's on 80.
+  const stage = read('deploy/two-stage/deploy-stage.sh');
+  assert.match(stage, /^HANDOVER=\/etc\/nginx\/handover$/m);
+  assert.ok(stage.includes(`printf 'set $%s %s;\\n' "$service" "$to"`), 'the line the deploy writes');
+  assert.match(stage, /apiserver\) port=3000; aliases=\(--use-aliases\) ;;/);
+  assert.match(stage, /web\) port=80 ;;/);
 });
 
 test('the upstreams reach every apiserver by the alias docker-compose.yml gives the apiserver, re-resolved', () => {

@@ -20,6 +20,9 @@ final class OwnerRequestsModel {
     private(set) var savedSecrets: [AccountSecret] = []
     /// The coordinators' open questions: one inbox and one count with the requests (web `WaitingOnYouPage`).
     private(set) var questions: [OwnerInboxQuestion] = []
+    /// Terminals asking to be approved (docs/terminal-session-design.md): their cards head the Open tab, whole, and
+    /// count with the rest. Each waits ten minutes at most.
+    private(set) var terminalRequests: [TerminalRequest] = []
     /// Answer on a question's row: its card, in the coordinator conversation it was asked in.
     var onAnswerQuestion: (OwnerInboxQuestion) -> Void = { _ in }
     /// The titles of the tasks requests hold up, by id, read once each.
@@ -46,7 +49,9 @@ final class OwnerRequestsModel {
         snoozes = store.all()
     }
 
-    var waitingCount: Int { OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) }
+    var waitingCount: Int {
+        OwnerRequests.waitingCount(open, questions: questions, snoozes: snoozes) + terminalRequests.count
+    }
 
     /// The Open tab: pending requests and open questions, newest first.
     var openEntries: [OwnerInboxEntry] { OwnerRequests.openEntries(open, questions: questions) }
@@ -69,6 +74,7 @@ final class OwnerRequestsModel {
             all = try await api.ownerRequests(state: "all").requests
             if tab != .open { await loadTab(tab) }
             await loadQuestions()
+            await loadTerminalRequests()
         } catch APIError.http(let status, _) where status == 404 {
             unsupported = true
         } catch {
@@ -93,6 +99,28 @@ final class OwnerRequestsModel {
                                             coordinatorWorkspaceID: document?.coordinatorWorkspaceId)
         }
         questions = next
+    }
+
+    /// The terminals waiting for a decision. A server that predates terminals answers 404: no cards.
+    func loadTerminalRequests() async {
+        do {
+            terminalRequests = try await api.terminalRequests()
+        } catch APIError.http(let status, _) where status == 404 {
+            terminalRequests = []
+        } catch {
+            // The next tick reads again; what was drawn stays.
+        }
+    }
+
+    /// Approve or Deny a terminal: the card leaves at once, and the list is read again either way.
+    func decideTerminal(_ request: TerminalRequest, approve: Bool) async throws {
+        defer { Task { await loadTerminalRequests() } }
+        if approve {
+            try await api.approveTerminalRequest(request.id)
+        } else {
+            try await api.denyTerminalRequest(request.id)
+        }
+        terminalRequests.removeAll { $0.id == request.id }
     }
 
     func loadTab(_ tab: OwnerRequests.InboxTab) async {
@@ -191,8 +219,9 @@ final class OwnerRequestsModel {
     /// Probe and preview fixtures: the lists as a read would have answered them.
     func seed(open: [OwnerRequest], all: [OwnerRequest], ended: [OwnerRequests.InboxTab: [OwnerRequest]] = [:],
               saved: [AccountSecret] = [], taskTitles: [String: String] = [:],
-              questions: [OwnerInboxQuestion] = []) {
+              questions: [OwnerInboxQuestion] = [], terminalRequests: [TerminalRequest] = []) {
         self.questions = questions
+        self.terminalRequests = terminalRequests
         self.taskTitles = Dictionary(uniqueKeysWithValues: taskTitles.map { (PublicID.storageKey($0.key), $0.value) })
         self.open = open
         self.all = all

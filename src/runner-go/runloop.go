@@ -46,9 +46,25 @@ const (
 	// updates without draining, and one that never is gets the release within the hour plus the
 	// longest turn it was running when the limit came (docs/runner-link-design.md §15.14).
 	selfUpdateDeferralLimit = time.Hour
+	// A busy runner's automatic update does not drain at selfUpdateDeferralLimit (owner, 2026-11-14):
+	// a drain starting an hour after a release came out landed while the owner was at work, and their
+	// new session waited behind it. It waits for idle for selfUpdateIdleWait instead, then drains at
+	// the first check inside the low hours, selfUpdateLowHoursFrom to selfUpdateLowHoursTo on the
+	// runner's local clock. A window rather than one moment, so a wait that runs out at 03:00 still
+	// drains that night. Worst case: the wait runs out just past the window, and the drain comes the
+	// next night, about 26 hours after the release. A release the owner put off (Later) keeps
+	// selfUpdateDeferralLimit and no window: the owner chose its time.
+	selfUpdateIdleWait     = 6 * time.Hour
+	selfUpdateLowHoursFrom = 2
+	selfUpdateLowHoursTo   = 6
 	// How often a draining runner looks again whether its turns have run out: the drain holds work
 	// back, so it should not outlast them by a whole check interval.
 	selfUpdateDrainCheckInterval = 15 * time.Second
+	// How long a drain waits for the turns in flight before it interrupts them, as the owner's Update
+	// Now does (owner, 2026-11-14: "wait at most 5 minutes"). Holding every new session and follow-up
+	// behind a turn that runs for hours cost more than cutting it: the cut turn is handed back as the
+	// update's continuation and goes on on the updated runner.
+	selfUpdateDrainLimit = 5 * time.Minute
 	// How long the runner must have been quiet — no turn ended, no session or turn claimed — before an
 	// automatic update installs (closeForUpdate). A conversation between two turns has nothing in
 	// flight, and an update taken then makes the owner's next message wait behind the restart and
@@ -129,12 +145,17 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // the pool drains for it (drainForUpdate): this runner claims no new session or turn and the
 // heartbeat says it is draining, so the control plane hands it no merge, commit, landing or
 // repository operation either, and a follow-up the control plane hands a session's permit to as its
-// turn ends does not start (holdFollowUpForUpdate). Nothing running is stopped — the drain waits for the turns and
-// operations in flight to end by themselves, and the first check that finds none takes the update.
+// turn ends does not start (holdFollowUpForUpdate). The drain waits for the turns and operations in
+// flight to end by themselves, and the first check that finds none takes the update — for drainLimit
+// at most (selfUpdateDrainLimit): the first check past it takes the update as the owner's Update Now
+// does, interrupting the turns still in flight.
 // Draining, a check does not read the release again: one that failed would otherwise reopen the
 // pool, and the install that follows the stop reads the assigned release anyway (selfUpdate). The
 // clock is not restarted by a check that finds nothing, a failed one included: the runner has been
 // behind a release since it started.
+//
+// In runLoop the gate waits longer and at night (lowHours, drainIsDue): selfUpdateIdleWait, then the
+// first check in the low hours, so the drain does not land while the owner works.
 //
 // An automatic update also waits for the runner to be quiet (quiet, selfUpdateQuietWindow in
 // runLoop): no turn ended and nothing claimed within it. Neither the drain nor the owner's Update
@@ -153,6 +174,11 @@ type selfUpdateGate struct {
 	pool                   *sessionPool
 	operations             func() int
 	interval, limit, quiet time.Duration
+	// drainLimit: how long a drain waits for its turns before interrupting them (selfUpdateDrainLimit).
+	drainLimit time.Duration
+	// lowHours: an automatic update drains after selfUpdateIdleWait and only in the low hours
+	// (inUpdateLowHours), not at limit. runLoop sets it.
+	lowHours bool
 
 	mu                                           sync.Mutex
 	deferredSince, drainingSince, postponedUntil time.Time
@@ -170,7 +196,7 @@ type selfUpdateGate struct {
 }
 
 func newSelfUpdateGate(check selfUpdateChecker, pool *sessionPool, operations func() int, interval, limit, quiet time.Duration) *selfUpdateGate {
-	return &selfUpdateGate{check: check, pool: pool, operations: operations, interval: interval, limit: limit, quiet: quiet}
+	return &selfUpdateGate{check: check, pool: pool, operations: operations, interval: interval, limit: limit, quiet: quiet, drainLimit: selfUpdateDrainLimit}
 }
 
 // take is updateWhenNoTurnInFlight's check. While the owner's postponement lasts it reports the
@@ -206,9 +232,11 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		}
 	}
 	g.target = remote
-	if g.nowAsked {
-		// The owner's Update Now: the turns in flight are interrupted, not waited for — nor the quiet
-		// window or the heartbeat's operations, which the stop gives their own budget and hands back.
+	if g.nowAsked || (g.draining != "" && now.Sub(g.drainingSince) >= g.drainLimit) {
+		// The owner's Update Now, or a drain past drainLimit: the turns in flight are interrupted, not
+		// waited for — nor the quiet window or the heartbeat's operations, which the stop gives their
+		// own budget and hands back.
+		asked := g.nowAsked
 		g.nowAsked = false
 		turns := g.pool.closeForUpdateNow()
 		g.restarting, g.interrupting = true, true
@@ -219,7 +247,12 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 			availableSince: g.deferredSince, drainingSince: g.drainingSince,
 			interruptedTurns: turns,
 		})
-		logln(fmt.Sprintf("orbit %s update now, as the owner asked; interrupting the %d turn(s) in flight, then updating", remote, turns))
+		if asked {
+			logln(fmt.Sprintf("orbit %s update now, as the owner asked; interrupting the %d turn(s) in flight, then updating", remote, turns))
+		} else {
+			logln(fmt.Sprintf("orbit %s update drained for %s, the limit; interrupting the %d turn(s) in flight, then updating",
+				remote, now.Sub(g.drainingSince).Round(time.Second), turns))
+		}
 		return remote, true
 	}
 	window := g.quiet
@@ -258,7 +291,7 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		logln(fmt.Sprintf("orbit %s update available; deferred — a turn ended or was claimed in the last %s, checking again in %s",
 			remote, g.quiet, g.interval))
 	}
-	if g.draining == "" && now.Sub(g.deferredSince) >= g.limit {
+	if g.draining == "" && g.drainIsDue(now) {
 		g.draining = remote
 		g.drainingSince = now
 		g.turnsAtDrain = turns
@@ -287,6 +320,21 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		turnsInFlight: turns,
 	})
 	return "", false
+}
+
+// drainIsDue is whether a busy runner's wait for idle is over, so the pool drains for the release.
+func (g *selfUpdateGate) drainIsDue(now time.Time) bool {
+	waited := now.Sub(g.deferredSince)
+	if !g.lowHours || g.cameDue {
+		return waited >= g.limit
+	}
+	return waited >= selfUpdateIdleWait && inUpdateLowHours(now)
+}
+
+// inUpdateLowHours is whether t, on its own clock, falls in the hours an automatic update drains in.
+func inUpdateLowHours(t time.Time) bool {
+	h := t.Hour()
+	return h >= selfUpdateLowHoursFrom && h < selfUpdateLowHoursTo
 }
 
 // postpone is the owner's Later (HeartbeatResponse.PostponeSelfUpdateUntil): the drain ends at
@@ -519,7 +567,14 @@ func (c *ModelCatalog) models(engine string) *[]ModelInfo {
 // has said something true rather than failed: it isn't worth a log line on every refresh, and it
 // mustn't be covered over with the list it had while signed in (see mergeModelCatalog). Only the
 // probe's conclusive "no" counts — an engine whose sign-in is unknown, or not probed yet, that can't
-// list its models is a fault, and is logged as one.
+// list its models is a fault, and is logged as one. So is Claude Code or Codex coming back empty
+// signed out: their lists never came from the sign-in, so the empty answer is a failed probe, and
+// treating it as a sign-out left a signed-out Mac mini's picker with no Claude list and no log line —
+// the composer showed the bare `claude-opus-5-5` where it reads "Opus 5.5".
+//
+// A signed-out Claude's fast-lane answer is dropped to unknown: with no account, `/fast` answers
+// "Fast mode has been disabled by your organization" for every model (Claude Code 2.1.325), which
+// says nothing about the model, and a catalog row's "no" outranks the clients' fallback.
 func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut func(engine string) bool, logf func(...interface{})) (*ModelCatalog, map[string]bool) {
 	catalog := &ModelCatalog{}
 	empty := map[string]bool{}
@@ -528,13 +583,19 @@ func readModelCatalog(ctx context.Context, runtimes []catalogRuntime, signedOut 
 			continue
 		}
 		models, err := rt.fetch(ctx)
-		if len(models) == 0 && signedOut(rt.engine) {
+		listsSignedOut := rt.engine == providerClaude || rt.engine == providerCodex
+		if len(models) == 0 && signedOut(rt.engine) && !listsSignedOut {
 			empty[rt.engine] = true
 			continue
 		}
 		if err != nil {
 			logf(rt.engine, "model catalog refresh failed:", err)
 			continue
+		}
+		if rt.engine == providerClaude && signedOut(rt.engine) {
+			for i := range models {
+				models[i].FastMode = nil
+			}
 		}
 		*catalog.models(rt.engine) = models
 	}
@@ -657,6 +718,7 @@ func claimedSessionFromReclaim(r ReclaimSession) *ClaimedSession {
 		CodelessCheckout:   r.CodelessCheckout,
 		CodelessBranch:     r.CodelessBranch,
 		CreateWorkDir:      r.CreateWorkDir,
+		WorkSubdir:         r.WorkSubdir,
 		MergeTarget:        r.MergeTarget,
 		AgentID:            r.AgentID,
 		TaskID:             r.TaskID,
@@ -1579,6 +1641,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	var updateGate *selfUpdateGate
 	if selfUpdateEnabled() {
 		updateGate = newSelfUpdateGate(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, selfUpdateQuietWindow)
+		updateGate.lowHours = true
 		gated := updateGate.take
 		check = func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)
@@ -1836,6 +1899,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// The root this machine reports as where it keeps checkouts. A fact of the account this
 	// process runs as, so it is resolved once rather than on every beat.
 	machineReposRoot := reposRoot()
+	// The CPU reading is a difference between two beats: this one primes it, so the first beat has one.
+	machineResources(nil, "")
 
 	// Before the heartbeat, which is what claims work: a result an earlier process of this image ran
 	// and could not deliver is offered to the control plane first, so a job this machine is holding a
@@ -1922,6 +1987,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				report := sleeper.report(managedWorkload())
 				workload = &report
 			}
+			probes := agentDirs.snapshot()
+			resources := machineResources(probes, machineReposRoot)
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -1930,7 +1997,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				ModelCatalog:         modelCatalog,
 				RuntimeDefaultModels: runtimeDefaultModels,
 				Engines:              withCodexAccountFingerprints(engineHealth.snapshotNow(), codexUsage),
-				AgentDirProbes:       agentDirs.snapshot(),
+				AgentDirProbes:       probes,
+				Resources:            &resources,
 				Repos:                repoHealth.snapshotNow(),
 				RunsAsRoot:           &runsAsRoot,
 				ReposRoot:            machineReposRoot,

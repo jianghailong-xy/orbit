@@ -23,6 +23,7 @@ import {
   BellOutlined,
   BlockOutlined,
   CloudOutlined,
+  CodeOutlined,
   DatabaseOutlined,
   FolderOutlined,
   HddOutlined,
@@ -65,6 +66,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
+  '/settings/terminals': <CodeOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */

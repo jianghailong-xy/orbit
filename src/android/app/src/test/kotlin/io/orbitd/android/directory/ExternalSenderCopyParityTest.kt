@@ -38,7 +38,17 @@ class ExternalSenderCopyParityTest {
         val declared = ExternalSender::class.java.declaredFields.filter { it.type == String::class.java }
             .map { it.isAccessible = true; it.get(null) as String }
         assertEquals(setOf(ExternalSender.fromFeishu, ExternalSender.nameSeparator, ExternalSender.feishuSource,
-            ExternalSender.fromGuest, ExternalSender.guestSource), declared.toSet())
+            ExternalSender.fromGuest, ExternalSender.guestSource, ExternalSender.readerSource, ExternalSender.you), declared.toSet())
+    }
+
+    /** The guest view's own messages (OrbitKit `GuestTranscript.ownMessages`): headed `You`, by the Swift's source and rule. */
+    @Test fun theReadersOwnWordsAreTheSwifts() {
+        assertEquals("ORBIT_READER", ExternalSender.readerSource)
+        assertEquals("You", ExternalSender.you)
+        assertTrue("ExternalSender.swift no longer names the reader source ${ExternalSender.readerSource}",
+            swift.contains("public static let readerSource = \"${ExternalSender.readerSource}\""))
+        assertTrue("ExternalSender.swift no longer says \"${ExternalSender.you}\"", swift.contains("public static let you = \"${ExternalSender.you}\""))
+        assertTrue("ExternalSender.swift no longer labels the reader as you", swift.contains("if from.source == readerSource { return you }"))
     }
 
     /** A guest the owner invited (docs/session-guests-design.md §3): read only with a name, and labelled `From <name>`, by the web's
@@ -88,6 +98,6 @@ class ExternalSenderCopyParityTest {
             read("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/MessageBubbles.swift").contains("Text(ExternalSender.label(from))"))
         assertTrue("TranscriptRowView.kt no longer heads the words with the label",
             read("src/android/app/src/main/kotlin/io/orbitd/android/reader/TranscriptRowView.kt")
-                .contains("?: ExternalSender.parse(event.fields[\"externalSender\"])?.let(ExternalSender::label) ?: \"You\""))
+                .contains("?: ExternalSender.parse(event.fields[\"externalSender\"])?.let(ExternalSender::label) ?: LocalOwnerHeading.current"))
     }
 }

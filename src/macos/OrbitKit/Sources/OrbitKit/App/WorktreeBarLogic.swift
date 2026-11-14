@@ -19,17 +19,25 @@ public enum WorktreeBarLogic {
     /// Mirrors web: no `isolationStatus` → hidden; `shared-nogit` → the nudge; a `worktree` with a
     /// branch and at least one changed file → the full bar. Pending/failed commit and merge states
     /// also keep the bar visible so their outcome text has somewhere to land even if the runner
-    /// reports an empty diff.
+    /// reports an empty diff. So does a landing the work fed: the bar is where it is said.
     public static func mode(isolationStatus: String?, branch: String?, changedFileCount: Int,
                             mergeStatus: String? = nil, commitStatus: String? = nil,
-                            hasMergeRecovery: Bool = false) -> Mode {
+                            hasMergeRecovery: Bool = false, hasSourceLanding: Bool = false) -> Mode {
         guard let iso = isolationStatus else { return .hidden }
         if iso == "shared-nogit" { return .notIsolated }
-        guard iso == "worktree", branch != nil else { return .hidden }
+        guard carriesSourceLanding(isolationStatus: iso, branch: branch) else { return .hidden }
         let actionableStatus =
             mergeStatus == "pending" || mergeStatus == "conflict" || mergeStatus == "error" ||
             commitStatus == "pending" || commitStatus == "error"
-        return changedFileCount > 0 || actionableStatus || hasMergeRecovery ? .worktree : .hidden
+        return changedFileCount > 0 || actionableStatus || hasMergeRecovery || hasSourceLanding
+            ? .worktree : .hidden
+    }
+
+    /// Whether the bar is where this session's landing is said (board
+    /// docs/mocks/session-landing-slot-ios): any worktree on a branch. Without one, the landing keeps
+    /// its own chip above the composer.
+    public static func carriesSourceLanding(isolationStatus: String?, branch: String?) -> Bool {
+        isolationStatus == "worktree" && branch != nil
     }
 
     // MARK: the notice for a session without a worktree

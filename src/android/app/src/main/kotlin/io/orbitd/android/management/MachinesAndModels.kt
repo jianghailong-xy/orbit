@@ -205,7 +205,8 @@ internal object MachinesAndModels {
                     cursor != CursorRuntime.RunnerState.UPDATE_RUNNER && cursor != CursorRuntime.RunnerState.UNSUPPORTED_PLATFORM))
         }
         val shown = reported.filter { it.str("engine") in engines }
-        val stale = shown.count { it.bool("installed") == true && RunnerPage.updateNoteOf(it.obj("update"), nowMs)?.first == "warn" }
+        val stale = shown.count { it.bool("installed") == true && RunnerPage.updateNoteOf(it.obj("update"), nowMs,
+            dismissed = RunnerPage.engineUpdateDismissedFor(runner, it.str("engine")))?.first == "warn" }
         if (stale > 0 && runner.bool("online") == true) return if (stale == 1) "1 engine not updating" else "$stale engines not updating"
         val ready = shown.count(::signedIn)
         return if (ready == engines.size) "All signed in" else "$ready of ${engines.size} signed in"

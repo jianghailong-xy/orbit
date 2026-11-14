@@ -253,7 +253,8 @@ struct UserTurnRow: View {
     /// What the wake card did NOT take, as the entry folded inside it — so a mixed note still shows
     /// its other blocks instead of repeating the wake beneath the card.
     private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
-        wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
+        let kind = wake.rest.isEmpty ? "" : describeNote(wake.rest)
+        return kind.isEmpty ? nil : (kind: kind, text: wake.rest)
     }
 
     /// The block a platform turn was handed with: the note delivery recorded, else its own words
@@ -266,7 +267,8 @@ struct UserTurnRow: View {
     /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
     private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
         let rest = SessionReply.withoutReplyBlocks(bubble.note)
-        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
+        let kind = rest.isEmpty ? "" : describeNote(rest)
+        return kind.isEmpty ? nil : (kind: kind, text: rest)
     }
 
     /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here

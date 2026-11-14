@@ -737,7 +737,7 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     expect(projectRow().classList.contains('active')).toBe(false);
   });
 
-  it('closes the column when the arrow keys step to a session in no project, and opens none stepping back', async () => {
+  it('closes the column when the arrow keys step to a session in no project, and opens it again stepping back onto the project’s row', async () => {
     await mount();
     await click(projectRow(), 'the project row');
     await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
@@ -745,10 +745,10 @@ describe('the project sessions column beside the conversation', { timeout: 60_00
     await press('ArrowDown');
     await until(() => expect(location).toBe(`/sessions/${LOOSE.id}`));
     expect(column()).toBeNull();
-    // With no column open, stepping onto the project's row opens its coordinator alone, as before.
+    // With no column open, stepping onto the project's row opens it beside the coordinator, as a click does.
     await press('ArrowUp');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
-    expect(column()).toBeNull();
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${PROJECT_ID}`));
+    await until(() => expect(columnTitles()).toEqual([COORDINATOR.title, TASK.title]));
   });
 
   it('closes the column on any other navigation to a session in no project, and keeps it for a member', async () => {

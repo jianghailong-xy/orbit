@@ -492,6 +492,21 @@ final class AgentDefaultsTests: XCTestCase {
                                                   configured: [deepseek]), "Sonnet 5")
     }
 
+    /// A signed-out Mac mini's runner reported no Claude list, and the chip read `claude-opus-5-5`: a
+    /// Claude id nothing lists reads as Claude Code names it (web `claudeModelName`).
+    func testFriendlyNameNamesAClaudeIdNothingLists() {
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5-5", engine: "claude", provider: "claude",
+                                                  catalog: nil, configured: nil), "Opus 5.5")
+        XCTAssertEqual(AgentDefaults.claudeModelName("claude-opus-5"), "Opus 5")
+        XCTAssertEqual(AgentDefaults.claudeModelName("claude-haiku-4-5"), "Haiku 4.5")
+        for id in ["opus", "opus[1m]", "claude-sonnet-4-5-20250929", "deepseek-flash", ""] {
+            XCTAssertEqual(AgentDefaults.claudeModelName(id), id)
+        }
+        // Another engine's id is not Claude's to name.
+        XCTAssertEqual(AgentDefaults.friendlyName("claude-opus-5-5", engine: "codex", provider: "codex",
+                                                  catalog: nil, configured: nil), "claude-opus-5-5")
+    }
+
     func testModelsFromRuntimeProviderPrefersHeartbeatDefault() {
         // effectiveDefaultModel precedence: heartbeat default → live catalog first → preset default.
         XCTAssertEqual(AgentDefaults.defaultModel(

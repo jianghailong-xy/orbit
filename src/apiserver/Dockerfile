@@ -31,15 +31,15 @@ RUN npm run build -w @orbit/shared \
 
 # ───────────────────────────────── codex ─────────────────────────────────
 # The official codex CLI: "Sign in with ChatGPT" for a Codex pool of one's own runs
-# `codex login --device-auth` on this server (providers/codex-login.service.ts). Pinned to the
-# version the runners run. npm is only how it is fetched: the package's own `codex` is a Node
+# `codex login --device-auth` on this server (providers/codex-login.service.ts). Pinned independently
+# of runner engine updates. npm is only how it is fetched: the package's own `codex` is a Node
 # wrapper that starts the native binary as a child of its own, and the sign-in ends an attempt with
 # SIGKILL, which the wrapper cannot pass on — the native CLI would outlive it, still waiting on the
 # code. So what ships is the platform package's standalone layout (the one a runner's standalone
 # install unpacks), and `codex` on PATH is its native binary. No match here fails the build: npm
 # only warns when an optional dependency — which is how the platform package arrives — is missing.
 FROM node:26-slim AS codex
-RUN npm install -g @openai/codex@0.158.0 \
+RUN npm install -g @openai/codex@0.169.0 \
  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex
 
 # ──────────────────────────────── runtime ────────────────────────────────

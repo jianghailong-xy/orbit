@@ -39,6 +39,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.reader.LastPageMarks
 import io.orbitd.android.reader.ProjectLandingsWindow
 import io.orbitd.android.reader.SessionDestination
+import io.orbitd.android.reader.GuestSessionPage
 import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastHost
@@ -54,6 +55,7 @@ import io.orbitd.android.watch.WatchDestination
 import io.orbitd.android.cards.OwnerRequestStore
 import io.orbitd.android.cards.WaitingOnYouDestination
 import io.orbitd.android.cards.WaitingOnYouDrawerCount
+import io.orbitd.android.cards.rememberTerminalsChanged
 import io.orbitd.android.watch.WatchStore
 import io.orbitd.android.composer.MachineSetup
 import io.orbitd.android.composer.MachineSetupCopy
@@ -181,6 +183,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
         val revision = if (live.first === signedIn.handle) live.second else 0L
+        // `terminals.changed`: the approve cards' requests and Settings → Terminals are read again, and nothing else (iOS `AppModel`).
+        val terminalsChanged = rememberTerminalsChanged(app, signedIn.handle)
         // The sessions parked on a watch that will resume them, as Following last read them: a project row's line says so (A05-6).
         val watches by remember(signedIn.handle) { WatchStore.of(app.session, signedIn.handle, app.processScope).state }.collectAsState()
         val holder = rememberSaveableStateHolder()
@@ -327,7 +331,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,
                             icon = { Icon(painterResource(R.drawable.ic_bell), null) },
                             onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
-                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision) },
+                            badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision, terminalsChanged) },
                             modifier = Modifier.testTag("drawer:waiting-on-you"))
                         SectionHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
@@ -357,6 +361,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                         // showing, or the first — and the project's page when there is no workspace to open it over (iOS 6f5f883c8).
                         DrawerProjects(projects, ProjectAttention.coordinatorPulses(data.sessions["open"].orEmpty()), drawerLive,
                             navigation.section, root = { id -> projectRoot(id, data, route.workspaceId, Origin.DRAWER) }) { key, root -> select(key, root) }
+                        // Shared with me, the drawer's last group (web `SharedWithMeGroup`): the open row is the guest view showing, by a
+                        // row of its own or by a session link the owner's read answered 404 for.
+                        val sharedWithMe by rememberSharedWithMe(app.session, signedIn.handle)
+                        DrawerSharedWithMe(sharedWithMe, route.id?.takeIf {
+                            (route.destination == Destination.GUEST_SESSION || route.destination == Destination.SESSION) && sharedWithMeContains(sharedWithMe, it)
+                        }) { key, root -> select(key, root) }
                         Spacer(Modifier.height(24.dp))
                         Button(onClick = { scope.launch { drawer.close() }; openNewSession(Origin.DRAWER) }) { Text("New session") }
                         TextButton(onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, origin = Origin.DRAWER)) }) {
@@ -430,11 +440,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     changed = { app.realtime.refreshDirectory() },
                                     workspaceDeleted = { deletedWorkspace = route.workspaceId; land("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
-                                    notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) })
+                                    notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) }, terminalsChanged = terminalsChanged)
                                 Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
                                     land(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }
                                 Destination.BUILD -> BuildInformation { navigation = navigation.back() }
+                                Destination.GUEST_SESSION -> route.id?.let { GuestSessionPage(app, signedIn.handle, route, it) }
                                 Destination.WAITING_ON_YOU -> WaitingOnYouDestination(app, signedIn.handle, route, data, revision, ::open)
                                 else -> ObjectDestination(route, api, data, revision, ::open) { app.realtime.refreshDirectory() }
                             }
@@ -488,6 +499,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.WIKI_PLAN, Destination.WIKI_PLAN_DOC, Destination.WIKI_PLAN_SECTION -> "Wiki plan"
     Destination.WATCH -> if (route.id == null) "Following" else "Watch"
     Destination.WAITING_ON_YOU -> WAITING_ON_YOU
+    Destination.GUEST_SESSION -> io.orbitd.android.core.guests.GuestCopy.SHARED_WITH_ME
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
     Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)

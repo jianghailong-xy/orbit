@@ -576,6 +576,7 @@ export function useSessionStream({
               sessionId: selectedId,
               source: 'activeSnapshot',
               turnId: row.turnId,
+              ...(row.opening ? { opening: true as const } : {}),
               text: row.content,
               acceptedAt: row.createdAt ?? new Date().toISOString(),
               attachments: (row.attachments ?? []).map((attachment) => ({

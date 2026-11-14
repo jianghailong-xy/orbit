@@ -364,6 +364,7 @@ import {
   verifierWriteFromRunRefusalBody,
   verifiersNamedBy,
 } from './verifier-write-authority';
+import { assertSessionTaskWriteHasCard, type SessionTaskWrite } from './task-write-approval';
 import {
   normaliseCodelessReason,
   readTaskCommitEvidence,
@@ -511,7 +512,8 @@ type DependencyCrossings = {
  */
 type IdempotentTaskWrite = {
   operation: IdempotentTaskOperation;
-  sessionId: string;
+  /** Null only for a caller-keyed create made with no session: a person's own, keyed to the account. */
+  sessionId: string | null;
   turnId: string;
   title: string;
   description?: string | null;
@@ -523,9 +525,40 @@ type IdempotentTaskWrite = {
   completionCriterionOverrideReason?: string | null;
   /** Optional concrete fix link; omitted keeps pre-link idempotency rows replayable. */
   fixesOpenItemId?: string | null;
+  /**
+   * The key is the caller's (`callerKeyTurnSlot`), not the turn's. Its preimage is then the session
+   * and the key alone, and the title and description are COMPARED on a replay rather than hashed: the
+   * same key with a changed title must be refused as a different write, not filed as a new task under
+   * a key that happens to hash differently.
+   */
+  callerKeyed?: boolean;
 };
 
 export type IdempotentTaskOperation = 'CREATE_TASK';
+
+/**
+ * The turn slot of a caller-keyed create (docs/orbit-agent-contract.md §5.2, gap G5).
+ *
+ * A caller's `idempotencyKey` takes the place of the turn in the key preimage, which is what makes a
+ * retry in a LATER turn — after a timeout, a dropped answer, a restart — answer from the first send
+ * instead of writing again. The account is in the slot so two tenants' keys can never meet on the
+ * table-wide unique index; the session is already in the preimage beside it, so a key is the calling
+ * session's (the account's, for a person's create with no session). A batch item is keyed by the
+ * batch's key and its position. The prefix cannot collide with a turn id, which is a uuid.
+ */
+export function callerKeyTurnSlot(ownerId: string, key: string, index?: number): string {
+  return index === undefined ? `caller:${ownerId}:${key}` : `caller:${ownerId}:${key}#${index}`;
+}
+
+/** A caller's idempotency key as it is matched: trimmed and NFC-normalised; blank is refused. */
+export function normaliseCallerIdempotencyKey(raw: string | undefined | null): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const key = String(raw).trim().normalize('NFC');
+  if (!key || key.length > 200) {
+    throw new BadRequestException('idempotencyKey must contain 1 to 200 characters');
+  }
+  return key;
+}
 
 /**
  * The operation's byte in the key preimage — FROZEN, and not the same string as the descriptor.
@@ -3466,6 +3499,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The card gate the runner doors call before a task write (`task-write-approval.ts`): the runner's
+   * machine credential is an agent's credential, so the write must name a usable acting session and
+   * one of that session's answered cards must cover exactly it. There is no card-free machine-
+   * credential write; a headless process acts as the account owner with a personal access token
+   * instead. Public because the caller identity arrives at the runner controller, while this
+   * service owns the Prisma read.
+   */
+  async assertSessionTaskWriteApproved(
+    ownerId: string,
+    runnerId: string,
+    sessionId: string | undefined,
+    write: SessionTaskWrite,
+  ): Promise<void> {
+    await assertSessionTaskWriteHasCard(this.prisma, { ownerId, runnerId, sessionId, write });
+  }
+
+  /**
    * §13.6 SU7: make THIS new task the successor of an attempt that already stopped, in the same
    * transaction that created it.
    *
@@ -3912,13 +3962,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Best-effort idempotency: a redelivered turn re-runs and re-creates the same tasks. A key is
     // only formed inside a live turn; without one this stays exactly the old create path. Checking
     // first lets the common (sequential) re-run return the original task without a write attempt.
-    const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
+    // A caller's key stands in for the turn (`callerKeyTurnSlot`): it is deduplicated in any turn,
+    // and without a session as the account's own.
+    const callerKey = normaliseCallerIdempotencyKey(dto.idempotencyKey);
+    const turnId = callerKey
+      ? callerKeyTurnSlot(ownerId, callerKey)
+      : sessionId ? await this.currentTurnId(sessionId) : undefined;
     const idempotentWrite: IdempotentTaskWrite | undefined =
-      sessionId && turnId
+      turnId && (sessionId || callerKey)
         ? {
             operation: 'CREATE_TASK',
-            sessionId,
+            sessionId: sessionId ?? null,
             turnId,
+            callerKeyed: callerKey !== undefined,
             title: dto.title,
             description: dto.description,
             acceptanceCommand: dto.acceptanceCommand,
@@ -4326,9 +4382,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     creatorSessionId?: string,
     credential?: AuthCredential,
   ) {
-    const { verification, ...subject } = dto;
-    // The batch's writer rather than `createMany`: this door has already asked for its own card.
+    const { verification, idempotencyKey, ...subject } = dto;
+    // The batch's writer rather than `createMany`: this door has already asked for its own card. A
+    // caller's key keys the pair, subject and check, as it would a batch of the two.
     const [created, verifier] = await this.writeBatch(ownerId, {
+      idempotencyKey,
       tasks: [
         { ...subject, ref: VERIFICATION_PAIR_SUBJECT_REF },
         {
@@ -5022,8 +5080,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const origin = await this.resolveOwnedSession(ownerId, creatorSessionId);
     const sessionId = origin?.sessionId;
     // One turn for the whole batch (see create): the same key that collapses a re-run of a single
-    // create collapses a re-run of a batch, item by item, without merging distinct items.
-    const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
+    // create collapses a re-run of a batch, item by item, without merging distinct items. A caller's
+    // key for the batch stands in for the turn, each item keyed by its position (`callerKeyTurnSlot`);
+    // a key on an item would be a second answer to "is this the same write", so it is refused.
+    const callerKey = normaliseCallerIdempotencyKey(dto.idempotencyKey);
+    const keyedItem = validated.findIndex((item) => item.idempotencyKey !== undefined && item.idempotencyKey !== null);
+    if (keyedItem >= 0) {
+      throw new BadRequestException(
+        `tasks[${keyedItem}].idempotencyKey: a batch is keyed as a whole — send idempotencyKey beside tasks, not on an item`,
+      );
+    }
+    const turnId = !callerKey && sessionId ? await this.currentTurnId(sessionId) : undefined;
     // WINNER FIRST, exactly as `create` is and for the same reason (§3 SC4): an item this turn
     // already committed is looked up, never re-decided. A batch re-run after a rotation would
     // otherwise be refused on the items it already wrote, leaving a caller that cannot find rows it
@@ -5036,12 +5103,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // was allowed to do has been lost.
     // One descriptor per item, built once and used by every question asked about it: the pre-read
     // below, the find-or-create inside the transaction, and the P2002 reconstruction after it.
-    const batchWriteOf = (item: CreateTaskBatchItemDto): IdempotentTaskWrite | undefined =>
-      sessionId && turnId
+    const batchWriteOf = (item: CreateTaskBatchItemDto, index: number): IdempotentTaskWrite | undefined =>
+      callerKey || (sessionId && turnId)
         ? {
             operation: 'CREATE_TASK',
-            sessionId,
-            turnId,
+            sessionId: sessionId ?? null,
+            turnId: callerKey ? callerKeyTurnSlot(ownerId, callerKey, index) : turnId!,
+            callerKeyed: callerKey !== undefined,
             title: item.title,
             description: item.description,
             acceptanceCommand: item.acceptanceCommand,
@@ -5051,8 +5119,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             fixesOpenItemId: item.fixesOpenItemId,
           }
         : undefined;
-    const replayed = await Promise.all(validated.map(async (item) => {
-      const write = batchWriteOf(item);
+    const replayed = await Promise.all(validated.map(async (item, index) => {
+      const write = batchWriteOf(item, index);
       return write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null;
     }));
     await this.assertOwnedAttachments(
@@ -5316,7 +5384,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // find-or-create by the item's key: a re-run's items already exist (committed by the first
         // run), and a within-batch duplicate resolves to the row this same transaction just wrote.
         // A ref pointing at a collapsed item therefore resolves to the surviving task's id.
-        const itemWrite = batchWriteOf(item);
+        const itemWrite = batchWriteOf(item, index);
         const idempotencyKey = itemWrite ? this.taskIdempotencyKey(itemWrite) : undefined;
         const existing = itemWrite
           ? await this.idempotencyWinner(tx, ownerId, itemWrite)
@@ -5452,12 +5520,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // is all-or-nothing on the way in, and reporting it item by item on the way out would let a
         // half-identified batch answer half-successfully.
         const winners: Array<Task | null> = [];
-        for (const item of items) {
+        for (const [index, item] of items.entries()) {
           // Same validator as everywhere else. This is the batch's own concurrent path, and it read
           // rows back on the index alone — so a forged or foreign row under one item's key was
           // returned to the caller as that item's result. A mismatch throws from in here, which is
           // the typed 409 this whole branch owes the caller.
-          const write = batchWriteOf(item);
+          const write = batchWriteOf(item, index);
           winners.push(write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null);
         }
         // Nothing of this batch is under any of its keys, so the index that fired was not ours —
@@ -5688,6 +5756,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * about the write, and only of a create that names a verifier: every other create pays nothing. Any ALLOWED card counts,
    * a workspace's standing grant included, since that is what the tools act on; the card is not spent, because a retried
    * create is the same create.
+   *
+   * Since the runner doors card EVERY session create by caller (`task-write-approval.ts`), that universal gate answers
+   * first at the HTTP door and this one is the backstop for any other caller that passes a session. Its refusal names
+   * the narrower verifier reason, which is why it stays rather than being folded into the universal one.
    */
   private async assertVerifierCreateHasCard(
     ownerId: string,
@@ -7429,7 +7501,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     };
     if (existing.ownerId !== ownerId) mismatch('different account');
-    if ((existing.creatorSessionId ?? null) !== write.sessionId) mismatch('different session');
+    if ((existing.creatorSessionId ?? null) !== (write.sessionId ?? null)) mismatch('different session');
     if ((existing.acceptanceCommand ?? null) !== (write.acceptanceCommand ?? null)) {
       mismatch('different acceptance command');
     }
@@ -7454,6 +7526,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       write.fixesOpenItemId !== undefined
       && (existing.fixesOpenItemId ?? null) !== (write.fixesOpenItemId ?? null)
     ) mismatch('different fixes open item');
+    // A caller's key does not hash the payload, so the payload is compared: the same key with
+    // another title or description is a different write, refused like any other mismatch.
+    if (write.callerKeyed) {
+      if (existing.title.trim() !== write.title.trim()) mismatch('different title');
+      if ((existing.description ?? '').trim() !== (write.description ?? '').trim()) {
+        mismatch('different description');
+      }
+    }
     // The winner rebuilt from what it actually holds. Same operation, same session, same turn, same
     // normalised payload — or it is not this write's earlier attempt.
     const rebuilt = this.taskIdempotencyKey({
@@ -7462,6 +7542,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       turnId: write.turnId,
       title: existing.title,
       description: existing.description,
+      callerKeyed: write.callerKeyed,
     });
     if (rebuilt !== existing.idempotencyKey) mismatch('different operation or payload');
     return existing;
@@ -7654,15 +7735,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * descriptor is for readers, the byte is for the rows already on disk.
    */
   private taskIdempotencyKey(write: IdempotentTaskWrite): string {
-    return createHash('sha256')
-      .update(JSON.stringify([
+    // A caller-keyed preimage is (operation, session, key slot): the key names the write, and
+    // `idempotencyWinner` compares the payload instead of hashing it.
+    const preimage = write.callerKeyed
+      ? [IDEMPOTENCY_OPERATION_TAG[write.operation], write.sessionId, write.turnId]
+      : [
         IDEMPOTENCY_OPERATION_TAG[write.operation],
         write.sessionId,
         write.turnId,
         write.title.trim(),
         (write.description ?? '').trim(),
-      ]))
-      .digest('hex');
+      ];
+    return createHash('sha256').update(JSON.stringify(preimage)).digest('hex');
   }
 
   /** True for a unique-constraint violation — the idempotency index firing on a concurrent re-run

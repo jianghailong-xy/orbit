@@ -226,7 +226,7 @@ struct WatchWakeCardView: View {
     /// typed these words, so nothing folds back into the composer and nothing sends them again.
     private func queuedFoot(_ withdraw: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text(WatchWakeQueue.status).font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord(label: WatchWakeQueue.status)
             Button(WatchWakeQueue.withdraw) { confirmingWithdraw = true }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)

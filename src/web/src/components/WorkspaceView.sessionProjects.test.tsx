@@ -317,11 +317,17 @@ describe('project entry typography', () => {
     expect(overrides, '项目条目标题与会话行同一字重（owner 10-04）').toHaveLength(0);
   });
 
-  it('draws its keyboard focus ring inside the row, so the list edge cannot clip it', () => {
+  it('shows keyboard focus as the row tint, not a ring the list edge or the kebab fade would cut', () => {
     const css = fromRepo('src/index.css', 'src/web/src/index.css').replace(/\/\*[\s\S]*?\*\//gu, '');
     const rule = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
-      /\.session-project-row:focus-visible\s*$/u.test(selector.trim()));
-    expect(rule?.[2]).toMatch(/outline-offset\s*:\s*-2px/u);
+      /^\.session-project-row:focus-visible\s*$/u.test(selector.trim()));
+    expect(rule?.[2]).toMatch(/outline\s*:\s*none/u);
+    expect(rule?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
+    expect(rule?.[2]).toMatch(/--session-menu-surface\s*:\s*var\(--bg-hover\)/u);
+    const folder = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
+      /^\.session-folder-row:focus-visible\s*$/u.test(selector.trim()));
+    expect(folder?.[2], 'folder rows show focus the same way').toMatch(/outline\s*:\s*none/u);
+    expect(folder?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
   });
 });
 

@@ -103,17 +103,6 @@ export function parseSessionReplies(payload: unknown): SessionReplyCard[] | null
   return cards.length > 0 ? cards : null;
 }
 
-/** What the sticky bar names a turn of replies by: whose, and the first outcome's word. */
-export function sessionReplySticky(cards: readonly SessionReplyCard[]): { label: string; text: string } {
-  const first = cards[0];
-  const who = first.fromTitle.trim() || 'Untitled session';
-  const more = cards.length > 1 ? ` (+${cards.length - 1})` : '';
-  return {
-    label: `${SESSION_REPLY_FROM} ${who}${more}`,
-    text: first.replyText ?? SESSION_REPLY_OUTCOME_LABEL[first.outcome],
-  };
-}
-
 /**
  * A recorded note without the `<orbit-session-reply>` blocks in it: what is left for the folded
  * "Orbit attached" entry once the reply cards have drawn those. Empty when the blocks were all of it.

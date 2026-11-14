@@ -212,6 +212,7 @@ function viewHarness(rows: Array<Record<string, unknown>>) {
           .map(({ ownerId: _ownerId, ...r }) => r),
     },
     session: { groupBy: async () => [] },
+    $queryRaw: async () => [],
   } as unknown as PrismaService;
   return new RunnersService(prisma);
 }

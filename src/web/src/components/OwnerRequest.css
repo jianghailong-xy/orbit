@@ -451,3 +451,8 @@
     margin-left: 0;
   }
 }
+
+/* Terminals asking to be approved (TerminalApproveCard): whole cards over the Open list. */
+.owner-inbox-terminals {
+  margin-bottom: 8px;
+}

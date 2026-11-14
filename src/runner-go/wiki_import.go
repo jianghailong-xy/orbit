@@ -101,37 +101,6 @@ nothing for want of room. A server that does not read the files itself is too ol
 which says so and registers nothing.
 `
 
-// wikiImportCLICapabilities is the import's own family table: `orbit wiki import` has no MCP tool
-// beside it (contract `import.cli.tool`), so its description and schema are its own, and it acts for
-// the session it runs in like every wiki verb.
-var wikiImportCLICapabilities = []cliCapabilitySpec{{
-	Tool:  "wiki_import",
-	Argv:  []string{"orbit", "wiki", "import"},
-	Usage: "orbit wiki import --from <dir|file> --space ID [--max-ops N] [--concurrency N] [--state FILE] [--json]",
-	Arguments: []string{
-		"--from <dir|file> (required; a Markdown file, or a directory of them)",
-		"--space <id> (required; the space to import into)",
-		"--max-ops <n> (1-30; default 30)",
-		"--concurrency <n> (1-8; default 4)",
-		"--state <file> (default under $ORBIT_HOME/wiki-import)",
-		"--json",
-	},
-	Description: wikiImportDescription,
-	InputSchema: map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"from":        map[string]interface{}{"type": "string", "description": "A Markdown file, or a directory whose *.md files are imported."},
-			"space":       map[string]interface{}{"type": "string", "description": "The space to import into."},
-			"max-ops":     map[string]interface{}{"type": "integer", "minimum": 1, "maximum": wikiImportOpsPerRun, "description": "The ops this run proposes at most."},
-			"concurrency": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": wikiImportMaxConcurrency, "description": "The files the server's model reads at once."},
-			"state":       map[string]interface{}{"type": "string", "description": "Where this machine remembers the import."},
-		},
-		"required": []string{"from", "space"},
-	},
-	Mutates:     true,
-	SessionOnly: true,
-}}
-
 // ── The command ─────────────────────────────────────────────────────────────────────────────────
 
 type wikiImportOptions struct {

@@ -259,7 +259,7 @@ struct BackgroundWakeCardView: View {
     /// is withdrawn by an ordinary cancel, so unlike a watch's wake it asks nothing first.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)

@@ -335,11 +335,13 @@ func (u *userTransport) submitTaskEvidence(id, _, sessionID string, body interfa
 // token they used — so the attribution the runner door takes from headers has nothing to carry here.
 
 func (u *userTransport) createTask(_, _ string, body interface{}) (json.RawMessage, error) {
-	return u.do(http.MethodPost, "/tasks", body)
+	return resendKeyedCreate(body, func() (json.RawMessage, error) { return u.do(http.MethodPost, "/tasks", body) })
 }
 
 func (u *userTransport) createTasksBatch(_, _ string, body interface{}) (json.RawMessage, error) {
-	return u.do(http.MethodPost, "/tasks/batch-create", body)
+	return resendKeyedCreate(body, func() (json.RawMessage, error) {
+		return u.do(http.MethodPost, "/tasks/batch-create", body)
+	})
 }
 
 func (u *userTransport) updateTask(_, id string, body interface{}) (json.RawMessage, error) {

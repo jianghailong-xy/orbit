@@ -219,8 +219,6 @@ final class CoordinatorDeliveryCopyParityTests: XCTestCase {
     /// Where the conversation is not the project's coordinator, both ends say this session instead.
     func testTheLineIsTheWebLineWordForWord() throws {
         let reader = try flat(Self.webReader)
-        assertBuilt(reader, "export const COORDINATOR_DELIVERY_STICKY_LABEL = '\(CoordinatorDeliveryCard.stickyLabel)';",
-                    "the sticky bar's label", Self.webReader)
         assertBuilt(reader, "export const COORDINATOR_DELIVERY_ITS_TASK = '\(CoordinatorDeliveryCard.itsTask)';",
                     "the task's link", Self.webReader)
         assertBuilt(reader,
@@ -240,10 +238,8 @@ final class CoordinatorDeliveryCopyParityTests: XCTestCase {
                     "the heading over the words", Self.webLine)
         assertBuilt(line, ">\(CoordinatorDeliveryCard.undelivered)<", "what an unconfirmed turn says", Self.webLine)
         assertBuilt(line, "{COORDINATOR_DELIVERY_ITS_TASK}", "the task's link at the foot", Self.webLine)
-        // The sticky bar's anchor: the label and the sentence, as `StickySummary` names the turn here.
-        assertBuilt(line, "data-sticky-label={COORDINATOR_DELIVERY_STICKY_LABEL}", "the sticky bar's label",
-                    Self.webLine)
-        assertBuilt(line, "data-sticky-text={sentence}", "the sticky bar's text", Self.webLine)
+        // A round Orbit opened, which the sticky bar hides over, as `StickySummary.isOrbits` reads it here.
+        assertBuilt(line, "data-orbit-round", "the round's mark", Self.webLine)
 
         let ownerAnswer = try flat(Self.webOwnerAnswer)
         assertBuilt(ownerAnswer, "export const OWNER_ANSWER_TOLD = '\(CoordinatorDeliveryCard.told)'",

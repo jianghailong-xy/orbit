@@ -260,6 +260,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Each engine CLI's install/sign-in state as of that heartbeat's probe (`orbit doctor`).
     /// Absent from an older server, and from a runner that hasn't reported one.
     public let engines: [RunnerEngineHealth]?
+    /// The engine update warnings dismissed on this runner, by engine: the `update.latest` each was
+    /// dismissed against (POST /runners/:id/engines/:engine/update-warning/dismiss). Nil from an older
+    /// server, which dismisses nothing (`RunnerAttention.updateNoteOf`'s `dismissed`).
+    public var engineUpdateDismissals: [String: String]? = nil
     /// Antigravity support and CLI readiness resolved by the server from the runner's report.
     public var antigravity: RunnerAntigravityState? = nil
     /// Whether this runner's process is root, which costs the machine one permission mode: claude
@@ -294,11 +298,96 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// (docs/claude-region-check-contract.md §6). Nil for a runner that does not check, one no check
     /// has decided yet, or an older server: never gated, drawn as before.
     public var region: RunnerRegionView? = nil
+    /// Where a press of Fix with an agent on this runner starts its session, or why it can't, and the
+    /// warnings an agent is fixing now (@orbit/shared `RunnerAgentFix`). Nil from an older server, which
+    /// draws no button (`RunnerAgentFixLogic`).
+    public var agentFix: RunnerAgentFix? = nil
 
     /// This runner's last probe of one engine, if it reported that engine at all.
     public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {
         engines?.first { $0.engine == engine.rawValue }
     }
+}
+
+/// `agentFix` on GET /runners (@orbit/shared `RunnerAgentFix`): the workspace on the machine used most
+/// recently, the engine its sessions start on, why no agent can start (`blocked`, its `message` the line a
+/// client shows) and the open sessions a press started (`fixing`). Codes and kinds stay raw strings, so a
+/// newer control plane cannot make the runner list undecodable.
+public struct RunnerAgentFix: Codable, Equatable, Sendable {
+    public let workspaceId: String?
+    public let workspaceName: String?
+    /// The engine slug ("claude") and its name ("Claude Code").
+    public let engine: String?
+    public let engineName: String?
+    public let blocked: Blocked?
+    public let fixing: [RunnerAgentFixing]?
+
+    /// `code` is `offline`, `noWorkspace` or `engineSignedOut`.
+    public struct Blocked: Codable, Equatable, Sendable {
+        public let code: String
+        public let message: String
+
+        public init(code: String, message: String) {
+            self.code = code
+            self.message = message
+        }
+    }
+
+    public init(workspaceId: String?, workspaceName: String?, engine: String?, engineName: String?,
+                blocked: Blocked?, fixing: [RunnerAgentFixing]?) {
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+        self.engine = engine
+        self.engineName = engineName
+        self.blocked = blocked
+        self.fixing = fixing
+    }
+}
+
+/// An agent at work on one warning (@orbit/shared `RunnerAgentFixing`): `kind` is a
+/// `RunnerAttentionFixKind`'s raw value; `engine` is nil for `cannotSelfUpdate`.
+public struct RunnerAgentFixing: Codable, Equatable, Sendable {
+    public let kind: String
+    public let engine: String?
+    public let sessionId: String
+    public let workspaceId: String
+    public let workspaceName: String
+
+    public init(kind: String, engine: String?, sessionId: String, workspaceId: String, workspaceName: String) {
+        self.kind = kind
+        self.engine = engine
+        self.sessionId = sessionId
+        self.workspaceId = workspaceId
+        self.workspaceName = workspaceName
+    }
+}
+
+/// The warnings Fix with an agent is offered on (@orbit/shared `RunnerAttentionFixKind`), the `:kind` of
+/// POST /runners/:id/attention/:kind/fix.
+public enum RunnerAttentionFixKind: String, Codable, Equatable, Sendable {
+    case engineNotUpdating
+    case cannotSelfUpdate
+    case installFailed
+}
+
+/// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating` and `installFailed`,
+/// `latest` (the newest runner release the client knows of) for `cannotSelfUpdate`. Nil fields are left out.
+public struct RunnerAttentionFixRequest: Codable, Equatable, Sendable {
+    public let engine: String?
+    public let latest: String?
+
+    public init(engine: String? = nil, latest: String? = nil) {
+        self.engine = engine
+        self.latest = latest
+    }
+}
+
+/// What the fix endpoint answers with: the session it started.
+public struct RunnerAttentionFixResult: Codable, Equatable, Sendable {
+    public let sessionId: String
+    public let workspaceId: String
+    public let workspaceName: String
+    public let title: String
 }
 
 /// `region` on GET /runners (docs/claude-region-check-contract.md §6, the web's `RunnerRegionView`):
@@ -1227,8 +1316,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// predates the field.
     public let coordinatorDelivery: JSONValue?
     public var coordinatorDeliveryCard: CoordinatorDelivery? { CoordinatorDelivery.parseCard(coordinatorDelivery) }
-    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's; a
-    /// run's opening turn is never listed — held raw for `TaskStart.parseCard`, the reader the echo's
+    /// The same for the turn that hands a task's run its brief (`taskStart`) — a resumed run's, or a
+    /// run's opening turn while no runner has taken it — held raw for `TaskStart.parseCard`, the reader the echo's
     /// payload is read by. Nil on every other turn, and from a server that predates the field.
     public let taskStart: JSONValue?
     public var taskStartCard: TaskStart? { TaskStart.parseCard(taskStart) }
@@ -1294,6 +1383,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
     public let authoredByOrbit: Bool?
+    /// The session's opening prompt, listed as the accepted head until the runner echoes it — so a
+    /// session no runner has claimed yet still shows its first message. Nil on every other turn, and
+    /// from a server that predates the field.
+    public let opening: Bool?
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
@@ -1306,7 +1399,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 runQuestion: JSONValue? = nil, runNotice: JSONValue? = nil, sessionOpening: JSONValue? = nil,
                 placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
-                deliveryReason: String? = nil) {
+                deliveryReason: String? = nil, opening: Bool? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.placement = placement
@@ -1334,6 +1427,7 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
         self.runQuestion = runQuestion
         self.runNotice = runNotice
         self.sessionOpening = sessionOpening
+        self.opening = opening
     }
 }
 

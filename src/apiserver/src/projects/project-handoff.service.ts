@@ -129,8 +129,11 @@ export interface HandoffRow {
  */
 export interface HandoffListRow extends HandoffRow {
   fromProject: { title: string; status: string };
-  /** null for a move out of every project. */
-  toProject: { title: string; status: string } | null;
+  /** null for a move out of every project. `coordinatorSessionId` is the conversation that draws
+   *  this row as a decision card, null when the target has none or its coordinator is in Trash:
+   *  a row with one is answered there, and the project pages leave it out
+   *  (docs/mocks/crossings-page-only-uncovered). */
+  toProject: { title: string; status: string; coordinatorSessionId: string | null } | null;
   /** The task a MOVE_TASK moves, or a DEPEND_ON_TASK waits on, as it reads now. Null for a filing,
    *  and for a subject that has since been deleted. */
   subjectTask: { id: string; title: string } | null;
@@ -878,13 +881,38 @@ export class ProjectHandoffService {
       select: {
         ...HANDOFF_SELECT,
         fromProject: { select: { title: true, status: true } },
-        toProject: { select: { title: true, status: true } },
+        toProject: {
+          select: {
+            title: true,
+            status: true,
+            coordinatorSessionId: true,
+            coordinatorSession: { select: { deletedAt: true } },
+          },
+        },
       },
       orderBy: { requestedAt: 'desc' },
       take: Math.min(Math.max(options.limit ?? 100, 1), 200),
     })) as unknown as Array<Omit<HandoffListRow,
-      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion'>>;
-    return this.withRequestDetail(ownerId, rows);
+      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion' | 'toProject'> & {
+      toProject: {
+        title: string;
+        status: string;
+        coordinatorSessionId: string | null;
+        coordinatorSession: { deletedAt: Date | null } | null;
+      } | null;
+    }>;
+    // A coordinator in Trash draws no card (the web skips a trashed conversation's cards), so the
+    // row counts as having no conversation to be answered in.
+    return this.withRequestDetail(ownerId, rows.map(({ toProject, ...row }) => ({
+      ...row,
+      toProject: toProject && {
+        title: toProject.title,
+        status: toProject.status,
+        coordinatorSessionId: toProject.coordinatorSession?.deletedAt
+          ? null
+          : toProject.coordinatorSessionId,
+      },
+    })));
   }
 
   /**

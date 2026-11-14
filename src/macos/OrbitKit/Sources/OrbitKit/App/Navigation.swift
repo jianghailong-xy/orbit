@@ -129,6 +129,11 @@ public enum NavNode: Hashable, Sendable {
     case wikiPlanDoc(slug: String, version: Int?)
     /// One of its sections — what it covers and where its material comes from (mock 22 ④⑤): 0-based.
     case wikiPlanSection(slug: String, index: Int, version: Int?)
+    /// A session someone else owns and invited this account to reply in: the guest view
+    /// (docs/session-guests-design.md §4). Its Shared with me row is its destination, so it leads like
+    /// a list — the drawer's hamburger, not back — and a 404 from the owner's read of a session id
+    /// lands here when the guest door answers for it.
+    case guestSession(sessionID: String)
 }
 
 /// Which section is showing, and every section's stack.
@@ -207,6 +212,7 @@ public struct NavState: Equatable, Sendable {
     /// (`agentID`, the agent its pane shows), and every other section's stack is the section's own.
     public func drawerDestination(agentID: String?) -> DrawerDestination {
         guard section == .agents else { return .section(section) }
+        if let sessionID = guestSessionOnTop { return .guestSession(sessionID: sessionID) }
         if let runnerID = machineDraftOnTop { return .machine(runnerID: runnerID) }
         if let project = projectSessionsColumnDestination { return .project(projectID: project.projectID) }
         return agentID.map { .workspace(agentID: $0) } ?? .section(.agents)
@@ -220,7 +226,14 @@ public struct NavState: Equatable, Sendable {
         guard let top = path.last else { return true }
         if case .sessionProject(_, let asDestination) = top { return asDestination }
         if case .machineDraft = top { return true }
+        if case .guestSession = top { return true }
         return false
+    }
+
+    /// The session whose guest view is showing.
+    public var guestSessionOnTop: String? {
+        if case .guestSession(let sessionID) = path.last { return sessionID }
+        return nil
     }
 
     /// The machine whose new session page is showing.
@@ -566,6 +579,25 @@ public struct NavState: Equatable, Sendable {
         path = [.machineDraft(runnerID: runnerID)]
     }
 
+    /// Put up a shared session's guest view as the Agents stack's whole content: it is the Shared with
+    /// me row's own page, not one pushed over a workspace's list.
+    public mutating func openGuestSession(_ sessionID: String) {
+        section = .agents
+        path = [.guestSession(sessionID: sessionID)]
+    }
+
+    /// The owner's read of `sessionID` found nothing of this account's, and the guest door answered
+    /// for it: the console frame that named it becomes its guest view, where it stood.
+    public mutating func replaceConsoleWithGuest(_ sessionID: String) {
+        let key = PublicID.storageKey(sessionID)
+        for (section, frames) in stacks {
+            stacks[section] = frames.map {
+                if case .console(let id, _) = $0, PublicID.storageKey(id) == key { return .guestSession(sessionID: sessionID) }
+                return $0
+            }
+        }
+    }
+
     /// Select a session's console in a three-column shell: it replaces the page the detail pane
     /// shows — or, with a folder's page showing, is pushed over it, so the folder stays the page
     /// the session list draws beside the console. Every other frame behaves exactly as
@@ -660,6 +692,8 @@ public enum DrawerDestination: Hashable, Sendable {
     case project(projectID: String)
     /// A machine's Set up row, and the new session page it opens.
     case machine(runnerID: String)
+    /// A Shared with me row, and the guest view it opens.
+    case guestSession(sessionID: String)
 
     public static func == (lhs: DrawerDestination, rhs: DrawerDestination) -> Bool {
         switch (lhs, rhs) {
@@ -667,6 +701,7 @@ public enum DrawerDestination: Hashable, Sendable {
         case (.workspace(let a), .workspace(let b)): return a == b
         case (.project(let a), .project(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
         case (.machine(let a), .machine(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
+        case (.guestSession(let a), .guestSession(let b)): return PublicID.storageKey(a) == PublicID.storageKey(b)
         default: return false
         }
     }
@@ -677,6 +712,7 @@ public enum DrawerDestination: Hashable, Sendable {
         case .workspace(let agentID): hasher.combine(1); hasher.combine(agentID)
         case .project(let projectID): hasher.combine(2); hasher.combine(PublicID.storageKey(projectID))
         case .machine(let runnerID): hasher.combine(3); hasher.combine(PublicID.storageKey(runnerID))
+        case .guestSession(let sessionID): hasher.combine(4); hasher.combine(PublicID.storageKey(sessionID))
         }
     }
 }

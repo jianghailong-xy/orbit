@@ -137,7 +137,7 @@ internal object Steps {
  * [highlighted]: a jump landed on a record inside it, so it opens to show that record.
  */
 @Composable
-internal fun StepsRowView(row: TranscriptRow, model: SessionReaderModel, live: Transcript?, open: (String) -> Unit, highlighted: Boolean) {
+internal fun StepsRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean) {
     var expanded by rememberSaveable(row.key) { mutableStateOf(highlighted) }
     LaunchedEffect(highlighted) { if (highlighted) expanded = true }
     val events = live?.events

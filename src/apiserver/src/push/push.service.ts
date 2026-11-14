@@ -236,9 +236,13 @@ export class PushService {
           deletedAt: null,
           cancelRequestedAt: null,
         },
-        select: { title: true, ownerId: true },
+        select: { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true },
       });
       if (!session) return;
+      // The session's own switches (Settings → Notifications): muted silences it, and 'off' turns this alert off. There
+      // is no account preference for it, so inherit keeps it on. Decided before the stretch is claimed, so a silenced
+      // approval leaves `alerted_approval_at` where it was, and the next stretch still rings once the switch is back.
+      if (session.notificationsMuted || session.notifyNeedsYou === 'off') return;
 
       // App-icon badge = the owner's sessions that need a reply (the authoritative count, shared
       // with the in-app "needs you" list and the silent sync below). Record it so a follow-up
@@ -374,6 +378,35 @@ export class PushService {
   }
 
   /**
+   * A terminal asks to be approved (docs/terminal-session-design.md, "The terminal credential"): the owner's devices
+   * ring with the machine and the code the terminal shows, and the tap opens the approve card. Devices only — the
+   * approval is an owner-channel act made signed in to the app, so a Feishu card could not answer it. No badge, and
+   * collapsed per request. Fire-and-forget: the request is the fact, `GET /terminals/requests` its read.
+   */
+  async notifyTerminalLogin(requestId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const request = await this.prisma.terminalLogin.findUnique({
+        where: { id: requestId },
+        select: { ownerId: true, runnerId: true, machineName: true, userCode: true, status: true },
+      });
+      if (!request || request.status !== 'PENDING') return;
+      const tokens = await this.targets(request.ownerId);
+      if (tokens.length === 0) return;
+      const alert = { title: 'Approve a terminal?', body: `Terminal on ${request.machineName} · code ${request.userCode}` };
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `terminal-login-${requestId}` },
+        kind: 'terminal-login',
+        runnerID: request.runnerId,
+        terminalLoginID: requestId,
+      });
+      await this.deliver(tokens, body, 'alert', '10', `terminal-login-${requestId}`);
+    } catch (err) {
+      this.log.warn(`terminal login notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
    * Tell a runner's owner that Claude Code can no longer use Anthropic there: a confirmed flip put the machine's Claude
    * connection to Anthropic in `region`, where Anthropic does not offer Claude (docs/claude-region-check-contract.md
    * §10, board 04 "push (flip)"). Edge-triggered by the check route on the blocked check that takes blockedChecks to 2,
@@ -452,14 +485,18 @@ export class PushService {
           // The rolling recap, when one has been written: `settleAlert` prefers it over the
           // rules line, and falls back to that line when it is null.
           recapText: true,
+          notificationsMuted: true,
+          notifyTurnFinished: true,
           owner: { select: { preferences: true } },
         },
       });
       if (!session) return;
       const alert = settleAlert(session);
       if (!alert) return;
+      // Muted silences the session; its own 'on' or 'off' wins over the account's switch; inherit (null) reads that.
+      if (session.notificationsMuted || session.notifyTurnFinished === 'off') return;
       const prefs = (session.owner?.preferences ?? {}) as { notifySessionFinished?: boolean };
-      if (prefs.notifySessionFinished === false) return;
+      if (session.notifyTurnFinished !== 'on' && prefs.notifySessionFinished === false) return;
       const { tokens, feishu } = await this.channels(session.ownerId);
       if (tokens.length === 0 && !feishu) return;
 
@@ -525,7 +562,7 @@ export class PushService {
    * the outcome back, so it can say "I've pinged you" only when somebody was actually pinged, and
    * knows to keep working rather than wait when nobody was.
    *
-   * Three things can refuse it, and each is reported rather than swallowed:
+   * Four things can refuse it, and each is reported rather than swallowed: the session is muted,
    * the account turned agent notifications off, no device is registered, or this session already
    * rang within `AGENT_NOTIFY_MIN_INTERVAL_MS`. The rate limit exists because the interrupt budget
    * is per-person while the number of agents running is not — the same reason `settleAlert` is as
@@ -555,7 +592,7 @@ export class PushService {
         // reads as absent rather than as a session whose title we would then leak.
         const session = await this.prisma.session.findFirst({
           where: { id: input.sessionId, ownerId: input.ownerId },
-          select: { title: true, agentNotifiedAt: true, task: { select: { id: true, title: true, project: true } } },
+          select: { title: true, agentNotifiedAt: true, notificationsMuted: true, task: { select: { id: true, title: true, project: true } } },
         });
         if (!session) return { delivered: false, reason: 'session not found' };
         const project = session.task?.project;
@@ -611,6 +648,8 @@ export class PushService {
           const result = await this.notifyAgentMessage({ ...input, message: `Not reviewed by the coordinator · ${input.message.trim()}` }, true);
           return { ...result, recipient: 'owner', fallback };
         }
+        // Before the claim, so a muted session spends none of its once-a-minute turn.
+        if (session.notificationsMuted) return { delivered: false, reason: 'notifications are muted for this session' };
         title = session.title || input.fallbackTitle;
         rang = session.agentNotifiedAt ?? null;
       }

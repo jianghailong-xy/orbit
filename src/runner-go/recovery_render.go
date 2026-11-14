@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -708,37 +708,37 @@ func writeCLIFailure(prefix string, err error, mark transportMark, argv []string
 }
 
 // runCLICommand runs one `orbit <command>` and, when it fails, reports the failure (writeCLIFailure) and
-// exits 1. replayStdin is false for a command whose stdin may hold a credential: it is never repeated
-// back, so such a command is not offered again with it.
-func runCLICommand(prefix string, argv []string, replayStdin bool, run func(in io.Reader) error) {
+// returns it as a reportedCLIError, which main does not print a second time. replayStdin is false for a
+// command whose stdin may hold a credential: it is never repeated back, so such a command is not offered
+// again with it.
+func runCLICommand(prefix string, argv []string, replayStdin bool, in io.Reader, out, errW io.Writer, run func(in io.Reader, out io.Writer) error) error {
 	mark := markTransportActivity()
-	stdin := &cliStdinRecorder{r: os.Stdin}
-	stdout := os.Stdout
-	var spool *os.File
-	var err error
+	stdin := &cliStdinRecorder{r: in}
 	// Spool JSON-mode output until the whole command succeeds. This preserves successful
 	// NDJSON/paginated output while discarding partial pages if a later request fails.
+	var spool *bytes.Buffer
+	target := out
 	if cliJSONRequested(argv) {
-		spool, err = os.CreateTemp("", "orbit-cli-output-*")
-		if err == nil {
-			os.Stdout = spool
-		}
+		spool = &bytes.Buffer{}
+		target = spool
+	}
+	err := run(stdin, target)
+	if err == nil && spool != nil {
+		_, err = io.Copy(out, spool)
 	}
 	if err == nil {
-		err = run(stdin)
+		return nil
 	}
-	os.Stdout = stdout
-	if spool != nil {
-		if err == nil {
-			if _, err = spool.Seek(0, io.SeekStart); err == nil {
-				_, err = io.Copy(stdout, spool)
-			}
-		}
-		_ = spool.Close()
-		_ = os.Remove(spool.Name())
-	}
-	if err != nil {
-		writeCLIFailure(prefix, err, mark, argv, stdin, replayStdin, stdout, os.Stderr)
-		os.Exit(1)
-	}
+	writeCLIFailure(prefix, err, mark, argv, stdin, replayStdin, out, errW)
+	return &reportedCLIError{text: prefix + ": " + err.Error(), err: err}
 }
+
+// reportedCLIError is a command failure runCLICommand has already written (to stderr, or as the JSON
+// report on stdout). Its text is the one main would otherwise print.
+type reportedCLIError struct {
+	text string
+	err  error
+}
+
+func (e *reportedCLIError) Error() string { return e.text }
+func (e *reportedCLIError) Unwrap() error { return e.err }

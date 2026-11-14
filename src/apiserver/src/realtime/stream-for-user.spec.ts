@@ -118,6 +118,7 @@ function fakePrisma(
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
     projectOpenItem: { findMany: async () => [] },
+    ownerRequest: { groupBy: async () => [] },
   } as unknown as PrismaService;
 }
 

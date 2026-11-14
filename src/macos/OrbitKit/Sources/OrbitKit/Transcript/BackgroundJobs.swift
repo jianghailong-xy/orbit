@@ -212,23 +212,4 @@ public enum BackgroundJobsNote {
         guard let reason = job.reason else { return job.status }
         return "\(job.status) · \(reason)"
     }
-
-    /// "2 running, 1 failed" — what the block holds, in the accessibility label of the line that
-    /// names it.
-    ///
-    /// "background jobs" alone never said whether opening it was worth it. The count stays off the
-    /// line's words, where what the person typed is what the eye should land on (owner, 2026-10-27).
-    /// A lone job that ended says how, because that one number is what its reader came for.
-    public static func summary(_ jobs: BackgroundJobs) -> String {
-        if jobs.running.isEmpty, jobs.ended.count == 1, let only = jobs.ended.first {
-            if let code = only.exitCode { return "1 ended, exit \(code)" }
-            return "1 \(only.status.isEmpty ? "ended" : only.status)"
-        }
-        let failed = jobs.ended.filter { $0.status == "failed" || $0.status == "killed" }
-        var parts: [String] = []
-        if !jobs.running.isEmpty { parts.append("\(jobs.running.count) running") }
-        if jobs.ended.count > failed.count { parts.append("\(jobs.ended.count - failed.count) ended") }
-        if !failed.isEmpty { parts.append("\(failed.count) failed") }
-        return parts.joined(separator: ", ")
-    }
 }

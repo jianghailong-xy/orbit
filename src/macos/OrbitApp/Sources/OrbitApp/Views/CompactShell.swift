@@ -305,6 +305,14 @@ private struct CompactSections: View {
                             // A machine's own new session page: the page of its Set up row, so it
                             // leads like the session list it stands in for — the drawer's hamburger,
                             // not a back button (board 03).
+                            // A shared session's guest view: its Shared with me row's own page, so it
+                            // leads like the list it stands in for — the drawer's hamburger, not back.
+                            case .guestSession(let sessionID):
+                                GuestSessionView(sessionID: sessionID)
+                                    .id(sessionID)
+                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
+                                    .navigationBarBackButtonHidden()
+                                    .drawerToggle(open: openDrawer)
                             case .machineDraft(let runnerID):
                                 MachineDraftPage(runnerID: runnerID)
                                     .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
@@ -747,23 +755,23 @@ struct NavigationDrawer: View {
                 // from them by a rule; the open projects themselves close it, where the task lists
                 // and Recents used to be. Machines & models lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
-                ForEach(AppSection.workSections) { section in
-                    if section == .projects {
-                        projectsRow
-                    } else if section == .wiki {
-                        // No row at all for an account the server has not switched the wiki on for
-                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
-                        // would be worse than none.
-                        if model.wiki?.shown == true { wikiRow }
-                    } else {
-                        sectionRow(section)
+                // The rows are one array (`DrawerWorkLogic`), drawn by one ForEach: an `if` or a
+                // second ForEach under it is the shape the source list's reload aborted on.
+                ForEach(DrawerWorkLogic.rows(
+                    AppSection.workSections,
+                    wiki: model.wiki?.shown == true,
+                    waitingOnYou: model.ownerRequests.map { !$0.unsupported } ?? false)) { row in
+                    switch row {
+                    case .projects:       projectsRow
+                    case .wiki:           wikiRow
+                    case .section(let section): sectionRow(section)
+                    case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
+                    case .workspacesHeader: workspacesHeader
+                    case .agents:         agentsRows
+                    case .openProjects:   projectRows
+                    case .sharedWithMe:   sharedWithMeRows
                     }
                 }
-                // What agents have asked the owner to do: the inbox, with how many are waiting.
-                if let requests = model.ownerRequests, !requests.unsupported { waitingOnYouRow(requests) }
-                workspacesHeader
-                agentsRows
-                projectRows
             }
             .listStyle(.plain)
             // Let each row's own padding set its height and let the drawer background show through, so
@@ -783,6 +791,8 @@ struct NavigationDrawer: View {
             // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
             // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
+            // Shared with me, the rail's last group: read with the drawer, then every minute.
+            .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
@@ -1033,7 +1043,14 @@ struct NavigationDrawer: View {
     /// it: only answering what waits does. Selected whenever the Wiki is what is showing, since the
     /// drawer has no rows below it for the Wiki's pages.
     /// "Waiting on you": a sheet rather than a page, so a push's action can raise it over anything.
-    private func waitingOnYouRow(_ requests: OwnerRequestsModel) -> some View {
+    @ViewBuilder
+    private func waitingOnYouRow(_ requests: OwnerRequestsModel?) -> some View {
+        if let requests {
+            waitingOnYouButton(requests)
+        }
+    }
+
+    private func waitingOnYouButton(_ requests: OwnerRequestsModel) -> some View {
         let waiting = requests.waitingCount
         return Button {
             requests.tab = .open
@@ -1146,6 +1163,51 @@ struct NavigationDrawer: View {
                     case .idle:
                         EmptyView()
                     }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+    }
+
+    // MARK: Shared with me
+
+    /// The sessions other people invited this account to reply in (docs/session-guests-design.md §4),
+    /// closing the rail. No group while there is none.
+    @ViewBuilder
+    private var sharedWithMeRows: some View {
+        let shared = model.sharedWithMe
+        if SharedWithMe.showsGroup(shared) {
+            drawerGroupLabel(GuestCopy.sharedWithMe, count: shared.count)
+            ForEach(shared) { session in
+                sharedWithMeRow(session)
+            }
+        }
+    }
+
+    /// The session's title, who shared it and how it stands; selected while its guest view is showing.
+    private func sharedWithMeRow(_ session: GuestSessionSummary) -> some View {
+        let selected = model.drawerDestination == .guestSession(sessionID: session.id)
+        return Button {
+            open(.guestSession(sessionID: session.id))
+        } label: {
+            pill(selected: selected) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(SharedWithMe.title(session))
+                            .lineLimit(1)
+                            .fontWeight(selected ? .semibold : .regular)
+                            .foregroundStyle(.primary)
+                        Text(SharedWithMe.subtitle(session))
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    Text(SharedWithMe.ago(session))
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
         }

@@ -15,6 +15,9 @@
 #   ORBIT_DEPLOY_PULL_BASE   1 lets a running postgres whose configuration changed be recreated (upgrade.sh --pull-base)
 #   ORBIT_DEPLOY_PRUNE       1 prunes dangling images once the release runs (upgrade.sh --prune)
 #   ORBIT_DEPLOY_PLAN        1 prints the plan and stops there, having changed nothing (upgrade.sh --plan)
+#   ORBIT_DEPLOY_STOP_THEN_START
+#                            1 stops the running apiserver and web before their replacements start, as every release did
+#                            before releases were handed over without a gap (upgrade.sh --stop-then-start)
 #
 # Nothing is built here. Every image is pulled before anything is recreated, every `up` says --no-build, and a release
 # that names an image anywhere but the registry is refused.
@@ -40,6 +43,7 @@ RELEASE_ENV=(
 PULL_BASE="${ORBIT_DEPLOY_PULL_BASE:-0}"
 PRUNE="${ORBIT_DEPLOY_PRUNE:-0}"
 PLAN="${ORBIT_DEPLOY_PLAN:-0}"
+STOP_THEN_START="${ORBIT_DEPLOY_STOP_THEN_START:-0}"
 # From here on Compose reads the release from release_dc's environment below, and then from .env, as anyone's would.
 unset ORBIT_REGISTRY ORBIT_IMAGE_TAG ORBIT_LINK_GATEWAY_TAG ORBIT_NGINX_IMAGE ORBIT_NATS_IMAGE
 STAGE=".upgrade/release-$COMMIT"
@@ -137,6 +141,165 @@ refuse() {
   echo "       This host's files are as they were, and nothing was changed." >&2
   exit 1
 }
+# Stops the deploy once .env names the release: what runs is as the lines before this one left it, and they say so.
+fail() {
+  for line in "$@"; do echo "$line" >&2; done
+  exit 1
+}
+
+# ── Handing the apiserver and web over without a gap (the plan's "Replacing the apiserver and web", below) ──────────────
+# A container of the release starts beside the running one, under the running one's name with -next, and once it is
+# healthy the web gateway sends to it: gateway/nginx.conf's apiserver and web routes include a file from HANDOVER, which
+# names the container to send to, and nothing is mounted there. The deploy writes the file inside the running gateway,
+# checks the configuration and reloads. nginx reloads by starting new workers, which take every new connection, while
+# the old ones finish what they serve; a stream an old one carries ends when its apiserver stops, and the client opens it
+# again through a new worker. Only then does the running container stop, by itself, and its replacement start.
+HANDOVER=/etc/nginx/handover
+# The running container of a service of this deployment, if one runs.
+running() {
+  docker ps -q --filter "label=com.docker.compose.project=$PROJECT" --filter "label=com.docker.compose.service=$1" \
+    --filter "label=com.docker.compose.oneoff=False"
+}
+# A container's name, which Docker's DNS answers to in the project's network.
+name_of() {
+  local name
+  name="$(docker inspect -f '{{.Name}}' "$1")"
+  printf '%s\n' "${name#/}"
+}
+# A container's state and health, "running healthy" once it runs and has passed its health check.
+health() { docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' "$1" 2>/dev/null || true; }
+# Waits until a container has passed its health check, or has failed it or stopped running, which returns 1.
+healthy() {
+  local now
+  while :; do
+    now="$(health "$1")"
+    case "$now" in
+      "running healthy") return 0 ;;
+      "running starting") sleep 1 ;;
+      *) echo "    $1: ${now:-gone}" >&2; return 1 ;;
+    esac
+  done
+}
+# Stops a container and says how it ended. An apiserver stops by itself within 25 s and exits 0
+# (src/apiserver/src/common/graceful-stop.ts); 137 would be Docker killing it at the end of its grace period.
+stop_and_say() {
+  local began
+  began="$(date +%s%3N)"
+  docker stop "$1" >/dev/null || return 1
+  echo "    $1 stopped in $(($(date +%s%3N) - began)) ms, exit code $(docker inspect -f '{{.State.ExitCode}}' "$1")"
+}
+# The pids of the gateway's workers that take new connections.
+workers() {
+  docker exec "$1" ps -o pid,args </dev/null | awk '$2 == "nginx:" && $3 == "worker" && $4 == "process" && NF == 4 { print $1 }' | sort
+}
+# Points the web gateway's routes to a service at a container, `handover <service> <name>:<port>`, or back at the line
+# gateway/nginx.conf names, `handover <service>`; <service> is apiserver or web, the variable those routes set. Returns
+# once no worker of the configuration before takes a new connection.
+handover() {
+  local service="$1" to="${2:-}" gateway old now try
+  gateway="$(running gateway)"
+  if [ -z "$gateway" ]; then echo "error: the web gateway is not running" >&2; return 1; fi
+  if [ -n "$to" ]; then
+    printf 'set $%s %s;\n' "$service" "$to" | docker exec -i "$gateway" sh -c \
+      "mkdir -p $HANDOVER && cat >$HANDOVER/$service.conf.new && mv -f $HANDOVER/$service.conf.new $HANDOVER/$service.conf" \
+      || return 1
+  else
+    docker exec "$gateway" rm -f "$HANDOVER/$service.conf" </dev/null || return 1
+  fi
+  if ! docker exec "$gateway" nginx -t -q </dev/null; then
+    docker exec "$gateway" rm -f "$HANDOVER/$service.conf" </dev/null || true
+    return 1
+  fi
+  old="$(workers "$gateway")"
+  if [ -z "$old" ]; then echo "error: the web gateway's workers could not be read" >&2; return 1; fi
+  docker exec "$gateway" nginx -s reload </dev/null || return 1
+  for try in $(seq 100); do
+    now="$(workers "$gateway")"
+    if [ -n "$now" ] && [ -z "$(comm -12 <(printf '%s\n' "$old") <(printf '%s\n' "$now"))" ]; then return 0; fi
+    sleep 0.1
+  done
+  echo "error: the web gateway did not reload within 10 s" >&2
+  return 1
+}
+# A deploy that stopped halfway, or a host that went down during one, can leave <name>-next running and the web gateway
+# sending to it. Once <name> is healthy, the gateway goes back to it and <name>-next is removed. A -next that runs and has
+# not passed its health check may be applying the database migrations, which stopping it would cut short: it is left,
+# and the deploy stops.
+retire_leftover() {
+  local service="$1" name="$2" next="$2-next" gateway pointed=0
+  gateway="$(running gateway)"
+  if [ -n "$gateway" ] && docker exec "$gateway" test -e "$HANDOVER/$service.conf" </dev/null; then pointed=1; fi
+  if [ "$pointed" = 0 ] && ! docker container inspect "$next" >/dev/null 2>&1; then return 0; fi
+  if [ "$(health "$name")" != "running healthy" ]; then
+    fail "error: a deploy that did not finish left $next, and the web gateway may send to it alone: $name is not healthy." \
+      "       Deploy with --stop-then-start, which brings $name up first and only then sends the gateway back to it."
+  fi
+  echo "==> $service: $next is left from a deploy that did not finish; the web gateway goes back to $name, and $next goes"
+  if [ "$pointed" = 1 ]; then
+    handover "$service" || fail "error: the web gateway could not be pointed back at $name (above)."
+    sleep 1
+  fi
+  if docker container inspect "$next" >/dev/null 2>&1; then
+    case "$(health "$next")" in
+      "running starting"|"running unhealthy")
+        fail "error: $next runs and has not passed its health check: it may be applying the database migrations, which" \
+          "       stopping it would cut short. The web gateway sends to $name. Deploy again once $next is healthy or has" \
+          "       stopped (docker inspect $next; docker logs $next)." ;;
+    esac
+    { stop_and_say "$next" && docker rm "$next" >/dev/null; } || fail "error: $next could not be removed (above)."
+  fi
+}
+# Recreates the apiserver or web without a gap. <name>-next, a container of this release, starts beside <name>, and the
+# web gateway is pointed at it once it is healthy: an apiserver's applies the database migrations as it starts, while
+# <name> runs on. Then <name> stops, `up` recreates it from this release, the gateway is pointed at it, and <name>-next
+# stops. The apiserver's -next also answers to the apiserver's names in the project's network (`--use-aliases`), so the
+# link gateway reaches it while <name> is away; until it is gone the web gateway names <name> itself, which -next is not.
+# web's answers to its own name only.
+replace_without_a_gap() {
+  local service="$1" name next port aliases=()
+  case "$service" in
+    apiserver) port=3000; aliases=(--use-aliases) ;;
+    web) port=80 ;;
+  esac
+  name="$(name_of "${ID[$service]}")"
+  next="$name-next"
+  retire_leftover "$service" "$name"
+  if [ "$service" = apiserver ]; then
+    echo "==> apiserver: recreate, without a gap: $next starts first, beside $name, and applies the database migrations"
+  else
+    echo "==> $service: recreate, without a gap: $next starts first, beside $name"
+  fi
+  { docker compose run -d --no-deps --name "$next" ${aliases[@]+"${aliases[@]}"} "$service" >/dev/null \
+    && docker update --restart unless-stopped "$next" >/dev/null; } \
+    || fail "error: $next could not be started (above). $name runs as it did, and the web gateway sends to it."
+  healthy "$next" \
+    || fail "error: $next did not pass its health check (docker logs $next). $name runs as it did, and the web gateway" \
+      "       sends to it. $next is left as it is, since it may be applying the database migrations, which stopping it" \
+      "       would cut short. Once it is healthy or has stopped, deploy again or roll back: the deploy removes it."
+  echo "==> $service: the web gateway sends to $next, and $name stops"
+  handover "$service" "$next:$port" \
+    || fail "error: the web gateway could not be pointed at $next (above). $name runs as it did, and $next beside it."
+  # A request an old worker took just before the reload may still be on its way to the container that stops next: a
+  # second lets it get there, where the stop answers it.
+  sleep 1
+  stop_and_say "$name" || fail "error: $name could not be stopped (above). The web gateway sends to $next."
+  echo "==> $service: $name is recreated from this release"
+  up "$service" \
+    || fail "error: $name did not come up (above). The web gateway sends to $next, which runs this release, so the" \
+      "       service goes on. Once the cause is fixed, deploy again: the gateway goes back to $name once it is healthy," \
+      "       and $next goes."
+  echo "==> $service: the web gateway sends to $name, and $next stops"
+  if [ "$service" = apiserver ]; then
+    handover apiserver "$name:$port" || fail "error: the web gateway could not be pointed at $name (above). It sends to $next."
+  else
+    handover web || fail "error: the web gateway could not be pointed back at $name (above). It sends to $next."
+  fi
+  sleep 1
+  { stop_and_say "$next" && docker rm "$next" >/dev/null; } || fail "error: $next could not be removed (above)."
+  if [ "$service" = apiserver ]; then
+    handover apiserver || fail "error: the web gateway could not be pointed back at the apiserver's own name (above)."
+  fi
+}
 
 # This release as Compose renders it here: the files Compose reads in this directory (docker-compose.yml and
 # docker-compose.override.yml, or what COMPOSE_FILE in .env lists) with the release's names, which win over .env's.
@@ -185,16 +348,17 @@ declare -A MOUNTED=(
 
 # The plan: this release's config hash for each service against the hash its container was made with, and for those
 # services, the file the running container has against the release's. STATE says what `up` does with it, RUNNING whether
-# a container of it runs now, and FORCE that only a forced recreate brings it the release's file. Compose lists the
-# services in no set order.
+# a container of it runs now, and FORCE that only a forced recreate brings it the release's file. ID is the container the
+# plan read, which a handover below names. Compose lists the services in no set order.
 HASHES="$(release_dc config --hash '*' | sort)"
-declare -A STATE=() RUNNING=() FORCE=()
+declare -A STATE=() RUNNING=() FORCE=() ID=()
 echo "==> What this release changes, by each service's compose config hash"
 while read -r service hash; do
   ids=()
   while read -r id; do ids+=("$id"); done < <(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" \
     --filter "label=com.docker.compose.service=$service" --filter "label=com.docker.compose.oneoff=False")
   RUNNING[$service]=false
+  ID[$service]="${ids[0]:-}"
   if [ "${#ids[@]}" -eq 0 ]; then
     STATE[$service]=create
   else
@@ -223,6 +387,41 @@ while read -r service hash; do
   fi
   printf '    %-16s %s%s\n' "$service" "${STATE[$service]}" "$note"
 done <<<"$HASHES"
+
+# How the apiserver and web are replaced (SKILL.md, "Two-stage release"): without a gap, unless one of the reasons below
+# says otherwise. Each of the two that this release recreates while it runs is handed over (replace_without_a_gap,
+# below): a container of this release starts beside the running one, the web gateway is pointed at it, and only then does
+# the running one stop. That needs a web gateway that runs this release's gateway/nginx.conf, whose routes include the
+# file a handover writes in it. Otherwise each stops before its replacement starts, as every release did before, and the
+# web gateway answers 502 until the new one is healthy.
+GAPLESS=1
+if [ "$STOP_THEN_START" = 1 ]; then
+  GAPLESS=0
+  WHY="--stop-then-start"
+elif ! grep -qE "^[[:space:]]*include $HANDOVER/apiserver\\*\\.conf;" gateway/nginx.conf \
+  || ! grep -qE "^[[:space:]]*include $HANDOVER/web\\*\\.conf;" gateway/nginx.conf; then
+  GAPLESS=0
+  WHY="this release's gateway/nginx.conf is from before releases were handed over, and has no route a deploy can point"
+elif [ "${RUNNING[gateway]:-false}" != true ]; then
+  GAPLESS=0
+  WHY="no web gateway runs here"
+fi
+if [ "$GAPLESS" = 1 ]; then
+  echo "==> Replacing the apiserver and web: without a gap. Each new one starts beside the running one, the web gateway is"
+  echo "    pointed at it, and only then does the running one stop"
+  if [ "${STATE[gateway]:-}" = recreate ]; then
+    echo "    The web gateway is recreated first, ahead of the apiserver, to run this release's gateway/nginx.conf: a"
+    echo "    moment's break of its own"
+  fi
+else
+  echo "==> Replacing the apiserver and web: stop, then start ($WHY). Each running one stops before its replacement"
+  echo "    starts, and the web gateway answers 502 until the new one is healthy"
+fi
+for service in apiserver web; do
+  if [ -n "${ID[$service]:-}" ] && docker container inspect "$(name_of "${ID[$service]}")-next" >/dev/null 2>&1; then
+    echo "    $(name_of "${ID[$service]}")-next is left from a deploy that did not finish: it goes once $service is healthy"
+  fi
+done
 
 # Every image, before anything changes. Each comes from the registry, or this release is not one this host can run.
 while read -r image; do
@@ -260,9 +459,27 @@ fi
 
 # From here on, plain `docker compose`, as anyone on this host would run it.
 up() { docker compose up -d --wait --no-deps --no-build "$@"; }
+# Without a gap, a web gateway this release recreates goes first, ahead of the apiserver, so that the gateway handing the
+# apiserver and web over runs this release's gateway/nginx.conf.
+if [ "$GAPLESS" = 1 ] && [ "${STATE[gateway]:-}" = recreate ]; then
+  ORDERED=()
+  for service in "${DEPLOYED[@]}"; do
+    case "$service" in
+      gateway) ;;
+      apiserver) ORDERED+=(gateway apiserver) ;;
+      *) ORDERED+=("$service") ;;
+    esac
+  done
+  DEPLOYED=("${ORDERED[@]}")
+fi
 NOTICES=()
 for service in "${DEPLOYED[@]}"; do
   state="${STATE[$service]:-create}"
+  if { [ "$service" = apiserver ] || [ "$service" = web ]; } && [ "$GAPLESS" = 1 ] && [ "$state" = recreate ] \
+    && [ "${RUNNING[$service]}" = true ]; then
+    replace_without_a_gap "$service"
+    continue
+  fi
   case "$service" in
     postgres)
       if [ "$state" = recreate ] && [ "${RUNNING[$service]}" = true ] && [ "$PULL_BASE" != 1 ]; then
@@ -276,6 +493,12 @@ for service in "${DEPLOYED[@]}"; do
     apiserver)
       echo "==> apiserver: $state (it applies database migrations as it starts)"
       up apiserver
+      retire_leftover apiserver "$(name_of "$(running apiserver)")"
+      ;;
+    web)
+      echo "==> web: $state"
+      up web
+      retire_leftover web "$(name_of "$(running web)")"
       ;;
     pgbackup)
       # As on a single host, with one difference: a sidecar this host has never run is created, as the first deploy needs.

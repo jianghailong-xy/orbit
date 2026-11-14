@@ -19,7 +19,8 @@ package main
 // Default, which would ask before an edit, cannot be had (D6), and is refused with any other mode.
 //
 // A call to Orbit's own MCP server is allowed unasked in every mode: the control plane gives every session
-// that rule (ALWAYS_ALLOWED_TOOLS, mcp__orbit__*). A person's "always allow" is the control plane's standing
+// that rule (ALWAYS_ALLOWED_TOOLS, mcp__orbit__*). In Plan a write behind it is still refused, by Orbit's own
+// Plan gate in `orbit mcp` (plan_gate.go), as on every engine. A person's "always allow" is the control plane's standing
 // grant on the workspace, which answers a later card of the same kind itself (permission-rules.ts). Cursor
 // CLI's own allow-always is never chosen: it allowlists the whole program a command starts with — `git
 // status` allowed always lets `git push` run unasked (6136.index.js@58262, persistAllowlistEntry) — which

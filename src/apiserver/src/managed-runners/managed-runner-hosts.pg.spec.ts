@@ -17,6 +17,11 @@
  *       READY runners stay as they were with nothing spent, and its next pass after it is back drives them;
  *   (6) single host, as before: today's one-channel profile drives every Docker mapping, whatever its
  *       recorded location, while a two-host one leaves a mapping of no listed host alone.
+ *   (7) reachability: a new runner skips a host its manager's last pass could not reach, although that
+ *       host's stored pool shows more room; the host is placed on again once a pass finds it answering;
+ *       with every host unreachable a new account is still placed, and its runner starts once its host is back.
+ *   (8) a host marked unreachable with no mapping on it is asked once per pass (its channel's /v1/info) and
+ *       placed on again by the next pass after it comes back; nothing new is asked of a reachable host.
  *
  * Not destructive: every row belongs to a user this run creates, and every pool to a cluster key of its own.
  */
@@ -73,6 +78,10 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
   const channels = new Map<string, FakeDockerChannel>([
     ['orbit-host-a', new FakeDockerChannel('orbit-host-a', IMAGE_A)],
     ['orbit-host-b', new FakeDockerChannel('orbit-host-b', IMAGE_B)],
+    ['orbit-host-c', new FakeDockerChannel('orbit-host-c', IMAGE_A)],
+    ['orbit-host-d', new FakeDockerChannel('orbit-host-d', IMAGE_B)],
+    ['orbit-host-e', new FakeDockerChannel('orbit-host-e', IMAGE_A)],
+    ['orbit-host-f', new FakeDockerChannel('orbit-host-f', IMAGE_B)],
   ]);
   const channelA = channels.get('orbit-host-a')!;
   const channelB = channels.get('orbit-host-b')!;
@@ -250,5 +259,108 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
       assert.ok(!(await host.manager.dueMappings(50)).includes(mapping.id), `${host.instanceId} leaves it alone`);
       assert.equal(await host.manager.reconcile(mapping.id), 'IDLE');
     }
+  });
+
+  await t.test('(7) a host its manager cannot reach takes no new runner while another answers; again once it answers; all unreachable still places', async () => {
+    const channelC = channels.get('orbit-host-c')!;
+    const channelD = channels.get('orbit-host-d')!;
+    const p = structuredClone(testDockerRunnerProfile({ clusterKey: `${clusterKey}-reach` })) as unknown as Record<string, any>;
+    p.docker = {
+      hosts: [
+        { instanceId: 'orbit-host-c', channel: { url: 'http://10.66.0.5:7781' }, tokenFile: '/etc/orbit/c.token', capacity: { compute: { pods: 4 } } },
+        { instanceId: 'orbit-host-d', channel: { url: 'http://10.66.0.6:7781' }, tokenFile: '/etc/orbit/d.token', capacity: { compute: { pods: 2 } } },
+      ],
+    };
+    p.runner.serverUrl = 'https://orbitd.io';
+    p.runner.image = 'channel';
+    const { runtime, service } = start(p);
+    const [hostC, hostD] = runtime.hosts!;
+    const pool2 = async (namespace: string) => (await sql.query('SELECT pods, pods_reserved FROM managed_runner_capacity WHERE cluster_key = $1 AND namespace = $2', [`${clusterKey}-reach`, namespace])).rows[0];
+    await runtime.worker.drain();
+
+    const c1 = await placed(service, 'reach-c1');
+    assert.equal(c1.namespace, 'orbit-host-c', 'both answering: the host with more room');
+    await untilReady(runtime, [c1.ownerId]);
+    assert.equal(hostC.manager.backend.unreachable, false);
+
+    // C goes down; its manager's next pass over its READY runner finds it so.
+    channelC.down = true;
+    await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id);
+    assert.equal((await mappingOf(c1.ownerId)).managementState, 'READY', 'unanswered: the runner stays as it was');
+    assert.equal(hostC.manager.backend.unreachable, true, 'the pass marked C unreachable');
+    const c = await pool2('orbit-host-c');
+    const d = await pool2('orbit-host-d');
+    assert.ok(c.pods - c.pods_reserved > d.pods - d.pods_reserved, `C's stored pool shows more room (${JSON.stringify({ c, d })})`);
+    const d1 = await placed(service, 'reach-d1');
+    assert.equal(d1.namespace, 'orbit-host-d', 'C cannot be reached: the new runner goes to D although C shows more room');
+
+    // C answers again on its manager's next pass.
+    channelC.down = false;
+    await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id);
+    assert.equal(hostC.manager.backend.unreachable, false, 'an answer clears it');
+    const c2 = await placed(service, 'reach-c2');
+    assert.equal(c2.namespace, 'orbit-host-c', 'C is placed on again once it answers');
+
+    // Both down: each manager's pass finds its host unreachable; a new account is still placed.
+    channelC.down = true;
+    channelD.down = true;
+    await runtime.worker.drain();
+    await hostC.manager.reconcile((await mappingOf(c1.ownerId)).id);
+    await hostD.manager.reconcile((await mappingOf(d1.ownerId)).id);
+    assert.deepEqual([hostC.manager.backend.unreachable, hostD.manager.backend.unreachable], [true, true]);
+    const all = await placed(service, 'reach-all');
+    assert.ok(['orbit-host-c', 'orbit-host-d'].includes(all.namespace), 'every host unreachable: still placed on one of them');
+    assert.equal((await mappingOf(all.ownerId)).podUid, null, 'nothing made while its host is down');
+
+    // The hosts come back: every runner, the last one's included, comes up where it was placed.
+    channelC.down = false;
+    channelD.down = false;
+    // Their retry time comes (the outage put the waiting ones on a backoff).
+    await db.managedRunner.updateMany({ where: { ownerId: { in: [c1.ownerId, d1.ownerId, c2.ownerId, all.ownerId] } }, data: { nextAttemptAt: new Date() } });
+    await untilReady(runtime, [c1.ownerId, d1.ownerId, c2.ownerId, all.ownerId]);
+    const last = await mappingOf(all.ownerId);
+    assert.equal(last.namespace, all.namespace, 'it stays on its host');
+    assert.ok(channels.get(all.namespace)!.containers.has(managedPodName(last.runnerId)), 'made on the host it was placed on');
+  });
+
+  await t.test('(8) a host with no mapping on it, marked unreachable, is noticed by the next pass once it is back, and placed on again', async () => {
+    const channelE = channels.get('orbit-host-e')!;
+    const channelF = channels.get('orbit-host-f')!;
+    const p = structuredClone(testDockerRunnerProfile({ clusterKey: `${clusterKey}-recheck` })) as unknown as Record<string, any>;
+    p.docker = {
+      hosts: [
+        { instanceId: 'orbit-host-e', channel: { url: 'http://10.66.0.7:7781' }, tokenFile: '/etc/orbit/e.token', capacity: { compute: { pods: 2 } } },
+        { instanceId: 'orbit-host-f', channel: { url: 'http://10.66.0.8:7781' }, tokenFile: '/etc/orbit/f.token', capacity: { compute: { pods: 4 } } },
+      ],
+    };
+    p.runner.serverUrl = 'https://orbitd.io';
+    p.runner.image = 'channel';
+    p.lifecycle.pollIntervalSeconds = 1;
+    const { runtime, service } = start(p);
+    const hostF = runtime.hosts![1];
+    await runtime.worker.drain();
+    const infoE = channelE.count('info');
+    const infoF = channelF.count('info');
+    await runtime.worker.drain();
+    assert.deepEqual([channelE.count('info'), channelF.count('info')], [infoE, infoF], 'both reachable: a pass asks no /v1/info');
+
+    // F, with no mapping on it, is found unreachable once (its pool read by this process's manager).
+    channelF.down = true;
+    await assert.rejects(hostF.manager.backend.capacityBudget() as Promise<unknown>);
+    assert.equal(hostF.manager.backend.unreachable, true);
+    const e1 = await placed(service, 'recheck-e1');
+    assert.equal(e1.namespace, 'orbit-host-e', 'F has more room but cannot be reached');
+    await runtime.worker.drain();
+    assert.equal(hostF.manager.backend.unreachable, true, 'still down: still marked');
+    assert.equal(channelF.count('info'), infoF + 2, 'the failed pool read, then one recheck in the pass');
+
+    // F comes back. No mapping touches it; the next pass's recheck notices.
+    channelF.down = false;
+    await new Promise((resolve) => setTimeout(resolve, 1_100)); // the poll interval passes
+    await runtime.worker.drain();
+    assert.equal(hostF.manager.backend.unreachable, false, 'the recheck\'s answer clears the mark');
+    const f1 = await placed(service, 'recheck-f1');
+    assert.equal(f1.namespace, 'orbit-host-f', 'F is placed on again');
+    await untilReady(runtime, [e1.ownerId, f1.ownerId]);
   });
 });

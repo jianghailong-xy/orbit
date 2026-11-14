@@ -35,6 +35,7 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
   assert.equal(controlTypeFor(RunEventType.PROJECT_CHANGED), ControlEventType.PROJECT_CHANGED);
   assert.equal(controlTypeFor(RunEventType.WATCH_CHANGED), ControlEventType.WATCH_CHANGED);
   assert.equal(controlTypeFor(RunEventType.WIKI_CHANGED), ControlEventType.WIKI_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.TERMINALS_CHANGED), ControlEventType.TERMINALS_CHANGED);
 });
 
 test('only the owner-library events are user-scoped', () => {
@@ -53,6 +54,8 @@ test('only the owner-library events are user-scoped', () => {
     // A wiki space belongs to the account, not to the session that proposed into it — and the
     // owner's own writes in Review arrive from no session at all — so it rides the owner key too.
     ControlEventType.WIKI_CHANGED,
+    // A terminal sign-in or credential belongs to the account; the request comes from a runner, not a session.
+    ControlEventType.TERMINALS_CHANGED,
   ]) {
     assert.equal(isUserScopedType(t), true, `${t} should be user-scoped`);
   }

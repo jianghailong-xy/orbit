@@ -15,11 +15,12 @@ PULL_BASE=0
 ALLOW_DIRTY=0
 TWO_STAGE_MODE=""
 TWO_STAGE_COMMIT=""
+STOP_THEN_START=0
 
 usage() {
   cat <<'EOF'
 Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
-       ORBIT_REGISTRY=<host:port> ORBIT_DEPLOY_HOST=<ssh destination> upgrade.sh [--build-only | --deploy <commit> | --plan <commit>] [...]
+       ORBIT_REGISTRY=<host:port> ORBIT_DEPLOY_HOST=<ssh destination> upgrade.sh [--build-only | --deploy <commit> | --plan <commit>] [--stop-then-start] [...]
 
   --no-pull    deploy the checkout as it is. By default a checkout on main is
                fast-forwarded first (git pull --ff-only), so origin's main ships
@@ -45,6 +46,11 @@ ssh and recreates what changed, building nothing.
   --plan <commit>
                print what --deploy <commit> would change on the target, and
                change nothing there
+  --stop-then-start
+               stop the running apiserver and web before their replacements
+               start, as releases did before they were handed over without a
+               gap: for a release whose migration the running release's code
+               cannot run against (502 until each new one is healthy)
 EOF
 }
 
@@ -58,6 +64,7 @@ while [ $# -gt 0 ]; do
     --prune)     PRUNE=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --build-only) TWO_STAGE_MODE=build ;;
+    --stop-then-start) STOP_THEN_START=1 ;;
     --deploy|--plan)
       if [ $# -lt 2 ]; then echo "$1 needs the commit of the release to deploy" >&2; usage >&2; exit 2; fi
       TWO_STAGE_MODE="${1#--}"; TWO_STAGE_COMMIT="$2"; shift ;;
@@ -66,8 +73,8 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-if [ -n "$TWO_STAGE_MODE" ] && [ -z "${ORBIT_REGISTRY:-}" ]; then
-  echo "error: --build-only, --deploy and --plan belong to the two-stage release, which ORBIT_REGISTRY turns on" >&2
+if { [ -n "$TWO_STAGE_MODE" ] || [ "$STOP_THEN_START" -eq 1 ]; } && [ -z "${ORBIT_REGISTRY:-}" ]; then
+  echo "error: --build-only, --deploy, --plan and --stop-then-start belong to the two-stage release, which ORBIT_REGISTRY turns on" >&2
   echo "       (SKILL.md, \"Two-stage release\")" >&2
   exit 2
 fi
@@ -682,6 +689,7 @@ if [ -n "${ORBIT_REGISTRY:-}" ]; then
   if [ "$NO_CACHE" -eq 1 ]; then TWO_STAGE_ARGS+=(--no-cache); fi
   if [ "$PULL_BASE" -eq 1 ]; then TWO_STAGE_ARGS+=(--pull-base); fi
   if [ "$PRUNE" -eq 1 ]; then TWO_STAGE_ARGS+=(--prune); fi
+  if [ "$STOP_THEN_START" -eq 1 ]; then TWO_STAGE_ARGS+=(--stop-then-start); fi
   bash "$REPO_ROOT/deploy/two-stage/release.sh" ${TWO_STAGE_ARGS[@]+"${TWO_STAGE_ARGS[@]}"}
   exit 0
 fi

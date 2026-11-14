@@ -13,11 +13,23 @@ public enum OwnerChatReply {
 
     /// The owner's words when `result` is a chat reply to a card, otherwise nil.
     public static func words(_ result: String) -> String? {
-        guard result.hasPrefix(lead), let end = result.range(of: tail, options: .backwards),
-              end.lowerBound >= result.index(result.startIndex, offsetBy: lead.count) else { return nil }
-        let words = result[result.index(result.startIndex, offsetBy: lead.count)..<end.lowerBound]
+        let reply = receiptText(result) ?? result
+        guard reply.hasPrefix(lead), let end = reply.range(of: tail, options: .backwards),
+              end.lowerBound >= reply.index(reply.startIndex, offsetBy: lead.count) else { return nil }
+        let words = reply[reply.index(reply.startIndex, offsetBy: lead.count)..<end.lowerBound]
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return words.isEmpty ? nil : words
+    }
+
+    /// The reply inside a chat's receipt (outcome "chat"), which is what an engine records in place of
+    /// the result's text: Claude Code and Codex pass a result's structuredContent on when it has one,
+    /// and the receipt carries the reply as its `text` (src/runner-go/tool_receipt.go).
+    static func receiptText(_ result: String) -> String? {
+        guard result.hasPrefix("{"),
+              result.range(of: #""outcome"\s*:\s*"chat""#, options: .regularExpression) != nil,
+              let receipt = (try? JSONSerialization.jsonObject(with: Data(result.utf8))) as? [String: Any],
+              (receipt["outcome"] as? String) == "chat" else { return nil }
+        return receipt["text"] as? String
     }
 
     /// The words of `card`'s result when it is one of Orbit's own calls answered this way.
