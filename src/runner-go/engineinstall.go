@@ -174,7 +174,7 @@ var updateEnginesFn = updateEngines
 // pass about a choice Orbit made is how a real warning gets tuned out.
 func updateRunFailed(lines []string) bool {
 	for _, l := range lines {
-		if strings.Contains(l, "update failed") || strings.Contains(l, "timed out") {
+		if strings.Contains(l, "update failed") || strings.Contains(l, "timed out") || strings.Contains(l, "does not run") {
 			return true
 		}
 	}
