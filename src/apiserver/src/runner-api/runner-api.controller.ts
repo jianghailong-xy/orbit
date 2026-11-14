@@ -550,7 +550,7 @@ import {
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
-import { scheduleRunDisallowedTools } from '../schedules/schedule-access';
+import { scheduleRunAllowedTools, scheduleRunDisallowedTools } from '../schedules/schedule-access';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -4014,7 +4014,7 @@ export class RunnerApiController {
         // Same standing "always allow" grants the claim path sends: a reclaimed session must
         // not start re-asking about calls this workspace already approved permanently.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
-        // A scheduled task's run: an OPEN_PR run may not call the tools §6.2 takes from it (schedule-access.ts).
+        // A scheduled task's run: its level decides the tools it may and may not call (§6.2, schedule-access.ts).
         scheduleRun: { select: { schedule: { select: { accessLevel: true } } } },
         task: {
           select: {
@@ -4232,14 +4232,15 @@ export class RunnerApiController {
         model: runnerModel,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
-        allowedTools: dispatchAllowedTools(
+        allowedTools: scheduleRunAllowedTools(
+          dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
+          s.scheduleRun?.schedule.accessLevel,
           provider,
-          ALWAYS_ALLOWED_TOOLS,
-          workspace?.permissionRules ?? [],
         ),
         disallowedTools: scheduleRunDisallowedTools(
           (workspace?.disallowedTools as string[] | null) ?? [],
           s.scheduleRun?.schedule.accessLevel,
+          provider,
         ),
         permissionMode: normalizeBuiltinPermissionMode(
           provider,

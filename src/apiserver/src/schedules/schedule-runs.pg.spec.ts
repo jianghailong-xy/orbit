@@ -509,7 +509,7 @@ for (const check of CHECKS) {
 // =============================================================================================================
 
 test('§6.2 a level each engine can enforce gets the nearest mode that is not wider; none is refused at create', { skip }, async () => {
-  assert.equal(scheduleRunMode('CHECK_ONLY', 'claude'), PermissionMode.PLAN);
+  assert.equal(scheduleRunMode('CHECK_ONLY', 'claude'), PermissionMode.DONT_ASK, 'Claude Code\'s Plan does not check Bash (schedule-access.ts)');
   assert.equal(scheduleRunMode('OPEN_PR', 'claude'), PermissionMode.ACCEPT_EDITS);
   assert.equal(scheduleRunMode('CHECK_ONLY', 'dsh'), PermissionMode.DONT_ASK, 'DeepSeek Harness has no Plan: its read-only sandbox');
   assert.equal(scheduleRunMode('OPEN_PR', 'dsh'), PermissionMode.DEFAULT, 'and no Accept Edits: Default asks before each write');
@@ -518,8 +518,8 @@ test('§6.2 a level each engine can enforce gets the nearest mode that is not wi
   assert.equal(scheduleRunMode('CHECK_ONLY', 'codex'), PermissionMode.PLAN);
   assert.equal(scheduleRunMode('CHECK_ONLY', 'kimi'), PermissionMode.PLAN);
   assert.equal(scheduleRunMode('OPEN_PR', 'cursor'), PermissionMode.ACCEPT_EDITS);
-  assert.deepEqual(scheduleRunDisallowedTools(['X'], 'CHECK_ONLY'), ['X']);
-  assert.deepEqual(scheduleRunDisallowedTools(['X'], 'OPEN_PR'), ['X', ...OPEN_PR_DISALLOWED_TOOLS]);
+  assert.deepEqual(scheduleRunDisallowedTools(['X'], 'CHECK_ONLY', 'codex'), ['X']);
+  assert.deepEqual(scheduleRunDisallowedTools(['X'], 'OPEN_PR', 'claude'), ['X', ...OPEN_PR_DISALLOWED_TOOLS]);
   assert.ok(OPEN_PR_DISALLOWED_TOOLS.includes('mcp__orbit__session_merge'));
 
   reset();
@@ -564,7 +564,7 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
   assert.equal(session.runSource, SessionRunSource.SCHEDULE);
   assert.equal(session.scheduleRunId, run.id);
   assert.equal(session.workspaceId, w.workspaceId);
-  assert.equal(session.permissionMode, PermissionMode.PLAN, 'CHECK_ONLY runs in Plan');
+  assert.equal(session.permissionMode, PermissionMode.DONT_ASK, 'CHECK_ONLY on Claude Code runs in Don\'t Ask (schedule-access.ts)');
   assert.equal(session.branch, null, 'with no worktree');
   assert.equal(session.promptByOrbit, true, 'the control plane wrote its first turn');
   assert.equal(session.openedBy, 'SCHEDULE', 'not a person\'s conversation, so never the workspace default');
@@ -604,7 +604,7 @@ test('§6.2 an OPEN_PR run runs in Accept Edits, in a worktree when its workspac
   assert.equal(session.permissionMode, PermissionMode.ACCEPT_EDITS);
   assert.notEqual(session.branch, null, 'its own worktree');
   assert.deepEqual(
-    scheduleRunDisallowedTools([], session.scheduleRun?.schedule.accessLevel),
+    scheduleRunDisallowedTools([], session.scheduleRun?.schedule.accessLevel, session.provider),
     [...OPEN_PR_DISALLOWED_TOOLS],
     'what the claim hands the runner as disallowedTools for this session',
   );

@@ -271,14 +271,14 @@ The agent picks the level from what the intent needs: a check, a report or a sum
 
 | Level | Card says | Session | May not |
 | --- | --- | --- | --- |
-| `CHECK_ONLY` | "reads and reports, edits nothing" | `plan` mode, no worktree | edit files, create tasks |
+| `CHECK_ONLY` | "reads and reports, edits nothing" | `plan` mode (`dontAsk` on Claude Code, below), no worktree | edit files, create tasks |
 | `OPEN_PR` | "edits in its own worktree and opens a PR; can't merge or deploy" | `acceptEdits` mode, own worktree when the workspace has worktrees | `session_merge`, release and deploy tools |
 
 The mode each engine gets (`schedules/schedule-access.ts`; measured on the real CLIs, §12):
 
 | Engine | `CHECK_ONLY` | `OPEN_PR` | Measured |
 | --- | --- | --- | --- |
-| Claude Code | `plan` | `acceptEdits` | 2.1.325 |
+| Claude Code | `dontAsk`, with its own allow and deny lists (below) | `acceptEdits` | 2.1.325 |
 | Codex | `plan` | `acceptEdits` | 0.169.0 |
 | Kimi | `plan` | `acceptEdits` | 2.5.3 |
 | OpenCode | `plan` (denies everything but reads) | refused: `SCHEDULE_ACCESS_NOT_ENFORCEABLE` | 1.19.5 |
@@ -293,6 +293,24 @@ as asked, because denying is not wider. The `OPEN_PR` run's `disallowedTools` ar
 `mcp__orbit__integration_request_promotion`, `mcp__orbit__integration_skip_merge_check`, `Bash(gh pr merge:*)`,
 `Bash(gh release:*)`, `Bash(npm publish:*)`, `Bash(docker push:*)`, `Skill(release)` and `Skill(upgrade)`, added to
 the workspace's own at claim.
+
+A `CHECK_ONLY` run on Claude Code runs in `dontAsk`, not `plan`: Claude Code's headless Plan never permission-checks
+Bash, so a writing shell command ran there with no ask (§12). In `dontAsk` Claude Code's own read-only check still
+runs `git log`, `ls`, `cat`, `grep`, `git status` and `git diff`, and refuses every shell command that writes. The claim
+hands the runner, for that run only:
+
+- `allowedTools`: `mcp__orbit__*`, `WebFetch` and `WebSearch`, and none of the workspace's "Always allow" rules (in
+  `dontAsk` an allow rule is all that runs a call Claude Code does not judge read-only, and a workspace rule could
+  cover `npm install` or `Edit`). There is no shell allow rule, so a fetch is `WebFetch`: `curl` is refused.
+- `disallowedTools`, added to the workspace's own: `Edit`, `Write`, `NotebookEdit`; Orbit's create doors as MCP tools
+  (`mcp__orbit__task_create`, `mcp__orbit__task_create_batch`, `mcp__orbit__project_create`,
+  `mcp__orbit__session_create`) and as the Orbit CLI (`Bash(* task create *)`, `Bash(* task create-batch *)`,
+  `Bash(* project create *)`, `Bash(* session create *)`, which win over the runner's own allow rule for the CLI).
+  Plan's gate in the runner (`plan_gate.go`) refused those writes; it does not run in `dontAsk`, so these hold the
+  *May not* column instead.
+
+Nothing asks in `dontAsk`, so such a run never stops on a card. This is server-side only (the claim payload); it needs
+no runner release.
 
 - A level is a claim to the person, so it is enforced, not prompted: the mode above, plus `disallowedTools` on the
   run's session for the *May not* column.
@@ -546,7 +564,12 @@ table in §6.2 is the result. What the measurement found:
   `git log --oneline -1` and `ls` ran with no ask; `Write` was refused ("Cannot write to …/probe.txt while in plan
   mode."). **But a writing shell command also ran with no ask**: `date > probe3.txt; ls` and `touch probe2.txt`
   created both files (`DENIALS []`), where `--permission-mode default` asked ("Output redirection to … needs
-  approval"). So on Claude, `CHECK_ONLY` blocks file tools but leaves "edits nothing" for the shell to the model.
+  approval"). So on Claude, Plan blocks file tools but leaves "edits nothing" for the shell to the model. **Settled
+  the same day** (record §7): `CHECK_ONLY` on Claude Code runs in `dontAsk` with the lists in §6.2. With the
+  runner's flags, `WebFetch`, `git log`, `ls`, `cat`, `grep`, `git status` and `git diff` ran with no ask, and
+  `date > probe3.txt`, `touch`, `rm`, `echo >>`, `sed -i`, `find -delete`, `cp`, `tee`, `git commit`, a `python3`
+  write, `curl -o` and `orbit task create` were all refused, with no file changed and the permission prompt tool
+  never called.
   `acceptEdits`: `Write` ran; `git add`/`git commit` and `curl` asked, so an `OPEN_PR` run stops on a card at its
   commit unless a workspace rule (Always allow) covers it.
 - *Codex 0.169.0* (app-server, `approvalPolicy: untrusted`, runner answers as for Plan): the built-in web search
@@ -565,8 +588,12 @@ table in §6.2 is the result. What the measurement found:
 
 So `plan` lets a `CHECK_ONLY` run fetch a URL **and** run read-only commands without a card only on Claude Code;
 on Kimi each command is a card (answered "Always allow" once, the workspace rule carries it to later runs, §6.4),
-and on Codex and OpenCode a `CHECK_ONLY` run can fetch or read but not both. Two follow-ups are filed: closing
-Claude's shell-write gap in `plan`, and letting Codex Plan run read-only commands.
+and on Codex and OpenCode a `CHECK_ONLY` run can fetch or read but not both. Claude's shell-write gap is closed
+by running its `CHECK_ONLY` in `dontAsk` (§6.2); letting Codex Plan run read-only commands is the open follow-up.
+What `dontAsk` gives up on Claude, against Plan: `curl` (use `WebFetch`); the Orbit writes Plan's runner gate refused
+other than the create doors (a comment, a task update) now run; and an account whose default mode is Plan holds a
+Claude `CHECK_ONLY` run as `MODE_WIDER_THAN_ACCOUNT_DEFAULT` (`dontAsk` is wider than Plan by name), as it already
+did on DeepSeek Harness.
 
 **3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes, then hourly inside the
 catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without
