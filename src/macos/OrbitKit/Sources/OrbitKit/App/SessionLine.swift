@@ -92,6 +92,11 @@ public struct SessionLine: Equatable, Sendable {
         if live, let watching, s.effectiveRunState == .awaitingInput {
             return SessionLine(text: watching.rowLine, tone: .watching)
         }
+        // The same place for a wait the server reports and this caller holds no watch for — a
+        // scheduled wake-up, an armed auto-retry (web `resumeWords`).
+        if live, s.resumesOnItsOwn {
+            return SessionLine(text: SessionHeader.waitingToResume, tone: .watching)
+        }
         // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
         // not the agent working either (see the glyph): muted, not the working blue.
         if live, let bg = s.runningBgCount, bg > 0 {

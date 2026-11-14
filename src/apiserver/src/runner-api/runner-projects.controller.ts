@@ -45,6 +45,7 @@ import { SessionAttemptService } from '../projects/session-attempt.service';
 import { ProjectsService } from '../projects/projects.service';
 import { readRequestAsk } from '../sessions/session-request';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
+import { CreateRequestReceipts, readRequestId, REQUEST_ID_HEADER } from './create-request-receipts';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -111,6 +112,11 @@ export class RunnerProjectsController {
      */
     @Optional() private readonly integrationJobs?: IntegrationJobRelay,
     @Optional() private readonly promotions?: ProjectPromotionService,
+    /**
+     * The create door's receipts (create-request-receipts.ts). `@Optional()` for the hand-built specs
+     * that exercise other routes here; absent, a create is answered as one with no request id.
+     */
+    @Optional() private readonly receipts?: CreateRequestReceipts,
   ) {}
 
   /**
@@ -147,9 +153,29 @@ export class RunnerProjectsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Body() dto: CreateProjectDto,
+    @Headers(REQUEST_ID_HEADER) requestIdHeader?: string,
   ) {
     RunnerProjectsController.refuseGovernance(dto);
     const inSession = sessionId?.trim();
+    // A named request is created at most once (create-request-receipts.ts): a repeat under the same
+    // X-Orbit-Request-Id — the answer to the first was lost, or both are in flight — is answered with
+    // the Project the first created, never a second one, so one session still coordinates one Project.
+    const requestId = readRequestId(requestIdHeader);
+    if (!requestId || !this.receipts) {
+      return this.createProjectOnce(runner, inSession, orchestrationToken, dto);
+    }
+    return this.receipts.run(runner.ownerId, 'PROJECT_CREATE', requestId, { sessionId: inSession ?? null, dto }, () =>
+      this.createProjectOnce(runner, inSession, orchestrationToken, dto),
+    );
+  }
+
+  // An instance property, not a method: the prototype is the route surface its spec pins.
+  private readonly createProjectOnce = async (
+    runner: Runner,
+    inSession: string | undefined,
+    orchestrationToken: string | undefined,
+    dto: CreateProjectDto,
+  ) => {
     if (dto.workspaceId) {
       if (!inSession) {
         // Nothing to check the choice against. A headless caller IS the owner operating this
@@ -180,7 +206,7 @@ export class RunnerProjectsController {
           undefined,
           { type: 'RUNNER', id: runner.id },
         );
-  }
+  };
 
   /**
    * Open a coordinator for a project whose own conversation cannot take a message — the agent

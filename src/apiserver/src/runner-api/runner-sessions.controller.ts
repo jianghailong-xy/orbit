@@ -33,6 +33,7 @@ import { SessionRequestService } from '../sessions/session-request.service';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import { SessionLifecycleActor } from '../projects/attempt-budget';
+import { CreateRequestReceipts, readRequestId, REQUEST_ID_HEADER } from './create-request-receipts';
 import { CurrentRunner } from './current-runner.decorator';
 import { CurrentServiceGrant, RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -97,6 +98,11 @@ export class RunnerSessionsController {
      * goes exactly as it did before without it.
      */
     @Optional() private readonly requests?: SessionRequestService,
+    /**
+     * The create door's receipts (create-request-receipts.ts). `@Optional()` for the reason `fuse` is:
+     * absent, a create is answered as one with no request id.
+     */
+    @Optional() private readonly receipts?: CreateRequestReceipts,
   ) {}
 
   /**
@@ -163,6 +169,37 @@ export class RunnerSessionsController {
       provider?: string;
       permissionMode?: string;
       /** `false`: no worktree for this child (SessionsService.spawnFromSession). */
+      worktree?: boolean;
+    },
+    @Headers(REQUEST_ID_HEADER) requestIdHeader?: string,
+  ) {
+    // A named request is created at most once (create-request-receipts.ts): a repeat under the same
+    // X-Orbit-Request-Id is answered with the Session the first delivery created, never a second one.
+    const requestId = readRequestId(requestIdHeader);
+    if (!requestId || !this.receipts) {
+      return this.createSessionOnce(runner, grant, parentSessionId, orchestrationToken, dto);
+    }
+    const caller = isHeadlessCaller(parentSessionId) ? { tokenId: grant?.tokenId ?? null } : { sessionId: parentSessionId!.trim() };
+    return this.receipts.run(runner.ownerId, 'SESSION_CREATE', requestId, { caller, dto }, () =>
+      this.createSessionOnce(runner, grant, parentSessionId, orchestrationToken, dto),
+    );
+  }
+
+  private async createSessionOnce(
+    runner: Runner,
+    grant: ServiceTokenGrant | undefined,
+    parentSessionId: string | undefined,
+    orchestrationToken: string | undefined,
+    dto: {
+      prompt: string;
+      workspaceId?: string;
+      agentId?: string;
+      workspaceName?: string;
+      title?: string;
+      model?: string;
+      engine?: string;
+      provider?: string;
+      permissionMode?: string;
       worktree?: boolean;
     },
   ) {
