@@ -335,6 +335,18 @@
 .settings-row-control {
   flex-shrink: 0;
 }
+/* A row that opens something from a press anywhere on it: lit across the card's width on hover, its
+   control level with the title's line however many lines the description takes. */
+.settings-row--link {
+  align-items: flex-start;
+  cursor: pointer;
+}
+.settings-row--link:hover {
+  background: var(--bg-hover);
+  box-shadow:
+    -16px 0 0 var(--bg-hover),
+    16px 0 0 var(--bg-hover);
+}
 /* The row a search result opened, lit for a moment across the card's width (useFoundRowFlash). */
 .settings-row--found {
   animation: settings-row-found 2s ease-out;
@@ -427,7 +439,7 @@
 .sp-chip.on {
   background: var(--text-1);
   border-color: var(--text-1);
-  color: var(--bg);
+  color: var(--bg-base);
 }
 .sp-chip-count {
   opacity: 0.6;

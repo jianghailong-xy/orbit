@@ -316,6 +316,13 @@ describe('project entry typography', () => {
       /\.session-project-row\s+\.session-title\b/u.test(selector) && /\bfont-weight\s*:/u.test(body));
     expect(overrides, '项目条目标题与会话行同一字重（owner 10-04）').toHaveLength(0);
   });
+
+  it('draws its keyboard focus ring inside the row, so the list edge cannot clip it', () => {
+    const css = fromRepo('src/index.css', 'src/web/src/index.css').replace(/\/\*[\s\S]*?\*\//gu, '');
+    const rule = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
+      /\.session-project-row:focus-visible\s*$/u.test(selector.trim()));
+    expect(rule?.[2]).toMatch(/outline-offset\s*:\s*-2px/u);
+  });
 });
 
 describe('project entries in the session list', { timeout: 60_000 }, () => {
