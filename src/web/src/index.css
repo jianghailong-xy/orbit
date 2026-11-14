@@ -21912,6 +21912,12 @@ div.landing-jobs-open {
   color: var(--text-3);
   font-size: 12px;
 }
+.signin-method-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
 
 /* The admin area's Sign-in settings (AdminSignInPage), whose label, hint and row classes other pages reuse. */
 .admin-signin-row {

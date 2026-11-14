@@ -223,11 +223,11 @@ public struct EnginePick: Equatable, Sendable {
 public enum SessionProviderChoices {
     /// The runner's accounts of an engine (`health`) as picker rows, each with its own quota — nil
     /// unless it has signed in more than one (web `accountChoices`). `usage` is the engine's snapshot
-    /// (`CodexAccounts.usage`).
+    /// (`CodexAccounts.usage`). An account signed out on this runner is not one it can run: no row.
     public static func accountChoices(_ health: RunnerEngineHealth?, usage: PlanUsageSnapshot?,
                                       now: Date = Date()) -> [AccountChoice]? {
         guard let health, let accounts = health.accounts, accounts.count >= 2 else { return nil }
-        return accounts.map { account in
+        return accounts.filter { $0.auth != "no" || RunnerPageFormat.runsOnEnvKey(health, account: $0.id, auth: $0.auth) }.map { account in
             // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its
             // own to show (`RunnerPageFormat.runsOnEnvKey`): not an account that is signed out.
             if RunnerPageFormat.runsOnEnvKey(health, account: account.id, auth: account.auth) {
@@ -258,8 +258,7 @@ public enum SessionProviderChoices {
                 id: account.id,
                 label: CodexAccounts.label(account.id, accounts: accounts),
                 quota: row.map(quotaText),
-                nearLimit: (row?.window.utilization ?? 0) >= 90,
-                unavailable: account.auth == "no" ? "Not signed in" : nil)
+                nearLimit: (row?.window.utilization ?? 0) >= 90)
         }
     }
 
