@@ -15,7 +15,13 @@
  * before every edit instead of allowing those in the worktree. The table this gives, and what was measured on the
  * real CLIs, is §6.2's and §12's in the design.
  */
-import { AgentProvider, PermissionMode, derivePermissionSemantics } from '@orbit/shared';
+import {
+  AgentProvider,
+  CURSOR_PERMISSION_MODES,
+  DSH_PERMISSION_MODES,
+  PermissionMode,
+  derivePermissionSemantics,
+} from '@orbit/shared';
 
 import type { AccessLevel } from './schedule-envelope';
 
@@ -34,6 +40,9 @@ export const ACCESS_LEVEL_MODES: Readonly<Record<AccessLevel, readonly Permissio
 export function scheduleRunMode(level: AccessLevel, engine: string | null | undefined): PermissionMode | null {
   const provider = engine ?? AgentProvider.CLAUDE;
   for (const mode of ACCESS_LEVEL_MODES[level]) {
+    // A mode the engine refuses at session admission is no mode at all there.
+    if (provider === AgentProvider.DSH && !DSH_PERMISSION_MODES.includes(mode)) continue;
+    if (provider === AgentProvider.CURSOR && !CURSOR_PERMISSION_MODES.includes(mode)) continue;
     const semantics = derivePermissionSemantics(provider, mode);
     // Never "allow" for an action nobody pre-approved: an allow-everything mode is wider than both levels, whatever
     // its name.
