@@ -34,41 +34,44 @@ public enum ReviewRecords {
     public static let runningPlan = "The agent is running the plan"
     public static let goesOnPlanning = "The agent goes on planning"
 
-    /// "Approved by you · 14:06" — a time this client cannot say is left out rather than drawn as a
+    /// "Approved by you · 2:06 PM" — a time this client cannot say is left out rather than drawn as a
     /// dangling separator.
-    static func byYou(_ verb: String, at: Date, now: Date) -> String {
-        guard let time = time(at, now: now) else { return "\(verb) by you" }
+    static func byYou(_ verb: String, at: Date, now: Date, locale: Locale = .current) -> String {
+        guard let time = time(at, now: now, locale: locale) else { return "\(verb) by you" }
         return "\(verb) by you · \(time)"
     }
 
     /// The clock on the day it happened, the date as well after — the receipts' own rule
-    /// (`OwnerConfirmations.receiptTime`).
+    /// (`OwnerConfirmations.receiptTime`), in the reader's locale.
     public static func time(_ at: Date, now: Date = Date(), calendar: Calendar = .current,
-                            timeZone: TimeZone = .current) -> String? {
+                            timeZone: TimeZone = .current, locale: Locale = .current) -> String? {
         OwnerConfirmations.receiptTime(ISO8601DateFormatter().string(from: at), now: now,
-                                       calendar: calendar, timeZone: timeZone)
+                                       calendar: calendar, timeZone: timeZone, locale: locale)
     }
 
     // MARK: the approvals
 
     /// An AskUserQuestion answered: the labels it sent.
-    public static func question(at: Date, now: Date = Date()) -> ReviewRecordFooter {
-        ReviewRecordFooter(mark: .done, line: byYou("Answered", at: at, now: now), detail: sentToAgent)
+    public static func question(at: Date, now: Date = Date(), locale: Locale = .current) -> ReviewRecordFooter {
+        ReviewRecordFooter(mark: .done, line: byYou("Answered", at: at, now: now, locale: locale), detail: sentToAgent)
     }
 
     /// A plan approved, or kept in planning.
-    public static func plan(approved: Bool, at: Date, now: Date = Date()) -> ReviewRecordFooter {
+    public static func plan(approved: Bool, at: Date, now: Date = Date(),
+                            locale: Locale = .current) -> ReviewRecordFooter {
         guard approved else {
-            let line = time(at, now: now).map { "Kept planning · by you · \($0)" } ?? "Kept planning · by you"
+            let line = time(at, now: now, locale: locale).map { "Kept planning · by you · \($0)" }
+                ?? "Kept planning · by you"
             return ReviewRecordFooter(mark: .keptOpen, line: line, detail: goesOnPlanning)
         }
-        return ReviewRecordFooter(mark: .done, line: byYou("Approved", at: at, now: now), detail: runningPlan)
+        return ReviewRecordFooter(mark: .done, line: byYou("Approved", at: at, now: now, locale: locale),
+                                  detail: runningPlan)
     }
 
     /// One of Orbit's own asks — a batch, a restructure, a blocker — approved. Its no goes to the
     /// composer and never leaves a record here.
-    public static func toolAsk(at: Date, now: Date = Date()) -> ReviewRecordFooter {
-        ReviewRecordFooter(mark: .done, line: byYou("Approved", at: at, now: now), detail: sentToAgent)
+    public static func toolAsk(at: Date, now: Date = Date(), locale: Locale = .current) -> ReviewRecordFooter {
+        ReviewRecordFooter(mark: .done, line: byYou("Approved", at: at, now: now, locale: locale), detail: sentToAgent)
     }
 
     /// What one AskUserQuestion question was answered with, split the way the record draws it: the
@@ -84,45 +87,49 @@ public enum ReviewRecords {
 
     // MARK: the decision cards
 
-    public static func evidence(revision: String, at: Date, now: Date = Date()) -> ReviewRecordFooter {
-        ReviewRecordFooter(mark: .done, line: byYou(OwnerConfirmations.confirmedHeading, at: at, now: now),
+    public static func evidence(revision: String, at: Date, now: Date = Date(),
+                                locale: Locale = .current) -> ReviewRecordFooter {
+        ReviewRecordFooter(mark: .done,
+                           line: byYou(OwnerConfirmations.confirmedHeading, at: at, now: now, locale: locale),
                            detail: "Recorded on rev \(revision)")
     }
 
-    /// "Recorded on the 13:58 report" — the report the press confirmed, when it said when.
+    /// "Recorded on the 1:58 PM report" — the report the press confirmed, when it said when.
     public static func ownerConfirmed(at: Date, reportedAt: String?,
-                                      now: Date = Date()) -> ReviewRecordFooter {
-        let report = reportedAt.flatMap { OwnerConfirmations.receiptTime($0, now: now) }
+                                      now: Date = Date(), locale: Locale = .current) -> ReviewRecordFooter {
+        let report = reportedAt.flatMap { OwnerConfirmations.receiptTime($0, now: now, locale: locale) }
         return ReviewRecordFooter(mark: .done,
-                                  line: byYou(OwnerConfirmations.confirmedHeading, at: at, now: now),
+                                  line: byYou(OwnerConfirmations.confirmedHeading, at: at, now: now, locale: locale),
                                   detail: report.map { "Recorded on the \($0) report" })
     }
 
-    public static func started(criteria: Int, seal: String, at: Date,
-                               now: Date = Date()) -> ReviewRecordFooter {
-        ReviewRecordFooter(mark: .done, line: byYou("Started", at: at, now: now),
+    public static func started(criteria: Int, seal: String, at: Date, now: Date = Date(),
+                               locale: Locale = .current) -> ReviewRecordFooter {
+        ReviewRecordFooter(mark: .done, line: byYou("Started", at: at, now: now, locale: locale),
                            detail: "On \(criteriaCount(criteria)) at seal \(CriteriaDecisions.shortSeal(seal))")
     }
 
     /// A confirmation of the criteria as they stand, and what the version changed when this window
     /// knows (`CriteriaChanges.counts`).
     public static func confirmed(criteria: Int, seal: String, changes: String?, at: Date,
-                                 now: Date = Date()) -> ReviewRecordFooter {
+                                 now: Date = Date(), locale: Locale = .current) -> ReviewRecordFooter {
         var detail = "\(criteriaCount(criteria)) at seal \(CriteriaDecisions.shortSeal(seal))"
         if let changes, !changes.isEmpty { detail += " — \(changes)" }
-        return ReviewRecordFooter(mark: .done, line: byYou("Confirmed", at: at, now: now), detail: detail)
+        return ReviewRecordFooter(mark: .done, line: byYou("Confirmed", at: at, now: now, locale: locale),
+                                  detail: detail)
     }
 
     /// A held weakening approved, and the seal it moved the ruler to — or refused, and the seal the
     /// ruler stays at.
     public static func criteriaDecision(approved: Bool, baseSeal: String, resultingSeal: String?,
-                                        at: Date, now: Date = Date()) -> ReviewRecordFooter {
+                                        at: Date, now: Date = Date(),
+                                        locale: Locale = .current) -> ReviewRecordFooter {
         let base = CriteriaDecisions.shortSeal(baseSeal)
         guard approved else {
-            return ReviewRecordFooter(mark: .refused, line: byYou("Refused", at: at, now: now),
+            return ReviewRecordFooter(mark: .refused, line: byYou("Refused", at: at, now: now, locale: locale),
                                       detail: "The criteria stay at seal \(base)")
         }
-        return ReviewRecordFooter(mark: .done, line: byYou("Approved", at: at, now: now),
+        return ReviewRecordFooter(mark: .done, line: byYou("Approved", at: at, now: now, locale: locale),
                                   detail: resultingSeal.map { "Re-sealed: \(base) → \(CriteriaDecisions.shortSeal($0))" })
     }
 

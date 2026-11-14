@@ -410,6 +410,9 @@ struct WikiMaintenanceForm: View {
     /// The workspace the form stands on: the one picked, else the one it opens on.
     private var chosen: String? { choice.workspaceID ?? opensOn }
 
+    /// What may be picked: a repository that has a wiki is listed, greyed, and not offered (design §3.4).
+    private var offeredIDs: Set<String> { Set(groups.filter { !$0.hasWiki }.flatMap(\.choices).map(\.id)) }
+
     private var chosenChoice: WikiStartLogic.WorkspaceChoice? {
         groups.flatMap(\.choices).first { $0.id == chosen }
     }
@@ -421,14 +424,30 @@ struct WikiMaintenanceForm: View {
         }
     }
 
+    /// A repository that has a wiki in use: its workspaces greyed under the repository and `Has a wiki`, none of
+    /// them pickable.
+    private func greyed(_ choices: [WikiStartLogic.WorkspaceChoice]) -> some View {
+        ForEach(choices) { workspace in
+            Text(WikiStartLogic.optionLabel(workspace))
+                .foregroundStyle(.secondary)
+                .tag(Optional(workspace.id))
+                .selectionDisabled()
+                .disabled(true)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Picker(WikiModeCopy.repoFrom, selection: Binding(get: { chosen }, set: { choice.workspaceID = $0 })) {
+                    Picker(WikiModeCopy.repoFrom, selection: Binding(get: { chosen }, set: { id in
+                        if let id, offeredIDs.contains(id) { choice.workspaceID = id }
+                    })) {
                         if chosen == nil { Text(WikiModeCopy.noWorkspace).tag(String?.none) }
                         ForEach(groups) { group in
-                            if let repository = group.repository {
+                            if let repository = group.repository, group.hasWiki {
+                                Section("\(repository) · \(WikiStartCopy.hasAWiki)") { greyed(group.choices) }
+                            } else if let repository = group.repository {
                                 Section(repository) { options(group.choices) }
                             } else {
                                 options(group.choices)
@@ -582,23 +601,54 @@ struct WikiSetUpSheet: View {
 /// repository, so there is no second field; a workspace on no repository has nothing to describe and is not offered.
 /// The server makes the space, turns maintenance on and asks for the plan's first draft in the one request, which is
 /// what the home then shows.
+///
+/// A REPOSITORY HAS ONE WIKI (docs/wiki-explicit-creation-design.md §3.4, board 46 part 5): one with a wiki in use stays
+/// in the list, greyed as a group under `Has a wiki`, and cannot be picked; a wiki made meanwhile elsewhere is the
+/// server's 409 WIKI_SPACE_EXISTS, whose message the form shows. `workspaceID` opens it on that workspace (a
+/// WIKI_CREATE card's Change settings…) when it can be picked.
 struct WikiCreateSheet: View {
     @Environment(AppModel.self) private var model
     let wiki: WikiModel
+    var workspaceID: String? = nil
+    /// After a wiki is made: a WIKI_CREATE card reads its requests again, which the server now answers DONE.
+    var created: () async -> Void = {}
 
     var body: some View {
-        let groups = WikiStartLogic.repositoryGroups(model.wikiWorkspaceChoices)
-        let offered = groups.flatMap(\.choices)
+        let groups = WikiStartLogic.repositoryGroups(model.wikiWorkspaceChoices, wikis: wiki.spaces.map(\.repoUrlNorm))
+        let offered = WikiStartLogic.createOffered(groups)
         WikiMaintenanceForm(title: WikiStartCopy.create, note: WikiStartCopy.createNote, submitLabel: WikiStartCopy.createAnswer,
-                            groups: groups, opensOn: WikiStartLogic.opensOn(offered, current: nil, from: wiki.fromWorkspaceID),
+                            groups: groups,
+                            opensOn: WikiStartLogic.opensOn(offered, current: WikiStartLogic.asked(offered, workspaceId: workspaceID),
+                                                            from: wiki.fromWorkspaceID),
                             initial: WikiMaintenanceChoice(.default), server: wiki.serverModel,
                             workspaceNote: WikiStartLogic.createWorkspaceNote) { choice in
             let picked = offered.first { $0.id == choice.workspaceID }
             guard let request = picked.flatMap({ WikiStartLogic.createRequest($0, maintenance: choice.maintenance) }) else { return nil }
-            return await wiki.createSpace(request)
+            let refusal = await wiki.createSpace(request)
+            if refusal == nil { await created() }
+            return refusal
         }
-        .task { await wiki.loadSystemModel() }
+        // The spaces are read again so a repository whose wiki was made elsewhere is greyed.
+        .task {
+            await wiki.loadSystemModel()
+            await wiki.loadSpaces()
+        }
     }
+}
+
+/// New wiki…'s form over whichever shell is showing, raised by the drawer's row and the head picker's item.
+struct WikiCreateHost: ViewModifier {
+    let model: AppModel
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: Binding(get: { model.wiki?.creating ?? false },
+                                           set: { model.wiki?.creating = $0 })) {
+            if let wiki = model.wiki { WikiCreateSheet(wiki: wiki) }
+        }
+    }
+}
+
+extension View {
+    func wikiCreateHost(_ model: AppModel) -> some View { modifier(WikiCreateHost(model: model)) }
 }
 
 /// The screen: the space on the Wiki home, its settings page, and the Set up sheet.

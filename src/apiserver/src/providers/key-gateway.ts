@@ -92,7 +92,8 @@ export async function gatewayBooksSpend(
   // Claude Code on its owner's own Codex login pool (codex-login-claude.ts): the gateway books it the same way,
   // off the usage the Codex backend reports. A Claude session holds such a token only while the switch was on.
   const login = await db.poolLoginToken.findFirst({
-    where: { sessionId: session.id, pool: { slug: session.provider, engine: AgentProvider.CODEX, shared: false } },
+    // A SubAgent's token (accountId or keyId set) is its child's, not the session's own engine's.
+    where: { sessionId: session.id, accountId: null, keyId: null, pool: { slug: session.provider, engine: AgentProvider.CODEX, shared: false } },
     select: { id: true },
   });
   return login !== null;

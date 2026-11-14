@@ -14,7 +14,7 @@
  * RULES OVER THE READS, not over a page, because OrbitKit and Android draw the same card: the three
  * clients are held to the cases of `src/shared/src/wiki-start.fixture.json`.
  */
-import type { WikiDocsDirectory, WikiPlanState } from '@orbit/shared';
+import { WIKI_DEFAULT_MAINTENANCE_SETTINGS, type WikiDocsDirectory, type WikiPlanState } from '@orbit/shared';
 import { wikiCount } from './wikiArticles';
 import { wikiAgo } from './wikiHealth';
 import {
@@ -34,7 +34,7 @@ import {
   wikiPlanLook,
   wikiPlanOpenJob,
 } from './wikiPlan';
-import { WIKI_SET_UP, wikiMonthDay } from './wikiReviewMode';
+import { WIKI_SET_UP, wikiMonthDay, wikiRunsADay } from './wikiReviewMode';
 
 // ── The words ───────────────────────────────────────────────────────────────────────────────────
 
@@ -61,6 +61,10 @@ export const WIKI_CREATE_OPEN = 'Create wiki…';
 export const WIKI_CREATE_NOTE =
   `A wiki describes one repository and stays up to date from its sessions, tasks and receipts. Runs on the server with this deployment’s ${WIKI_PLAN_DRAFTER_SERVER}.`;
 export const WIKI_WORKSPACE_OFFLINE = 'offline';
+/** The way to another wiki (docs/wiki-explicit-creation-design.md §3.4): the Wiki group's last row and the head picker's last item. */
+export const WIKI_NEW = 'New wiki…';
+/** On a repository in the Create wiki form that already has a wiki in use: one repository, one wiki. */
+export const WIKI_HAS_A_WIKI = 'Has a wiki';
 
 /** A done first step: where maintenance reads the repository from. */
 export const wikiStartReadsFrom = (workspace: string | null): string => (workspace ? `Reads from ${workspace}` : WIKI_START_CONNECTED);
@@ -244,16 +248,35 @@ export function wikiWorkspaceChoicesInOrder(choices: readonly WikiWorkspaceChoic
   return [...choices].sort((a, b) => Number(b.online) - Number(a.online) || (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
 }
 
-/** The repositories the form that makes a wiki groups its workspaces under, by name. A workspace with none is left out. */
-export function wikiRepositoryGroups(choices: readonly WikiWorkspaceChoice[]): Array<{ repository: string; choices: WikiWorkspaceChoice[] }> {
+/** A repository the form that makes a wiki offers, with its workspaces; one that has a wiki already is greyed, not offered. */
+export interface WikiRepositoryGroup {
+  repository: string;
+  choices: WikiWorkspaceChoice[];
+  hasWiki: boolean;
+}
+
+/**
+ * The repositories the form that makes a wiki groups its workspaces under, by name. A workspace with none is left out.
+ * `wikis` are the repositories of the wikis in use (`repoUrlNorm`, not Trash's): their groups are `hasWiki`, since a
+ * repository has one wiki (design §3.4) and the server refuses a second with 409 WIKI_SPACE_EXISTS.
+ */
+export function wikiRepositoryGroups(
+  choices: readonly WikiWorkspaceChoice[],
+  wikis: readonly (string | null | undefined)[] = [],
+): WikiRepositoryGroup[] {
   const groups = new Map<string, WikiWorkspaceChoice[]>();
   for (const choice of wikiWorkspaceChoicesInOrder(choices)) {
     if (choice.repository) groups.set(choice.repository, [...(groups.get(choice.repository) ?? []), choice]);
   }
+  const made = new Set(wikis.filter((repository): repository is string => Boolean(repository)));
   return [...groups.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([repository, rows]) => ({ repository, choices: rows }));
+    .map(([repository, rows]) => ({ repository, choices: rows, hasWiki: made.has(repository) }));
 }
+
+/** The workspaces the form that makes a wiki lets one pick: those of the repositories with no wiki yet. */
+export const wikiCreateOffered = (groups: readonly WikiRepositoryGroup[]): WikiWorkspaceChoice[] =>
+  groups.filter((group) => !group.hasWiki).flatMap((group) => group.choices);
 
 /**
  * The workspace a form opens on: the one maintenance already reads from; else the one the reader came
@@ -268,4 +291,37 @@ export function wikiWorkspaceDefault(
   const offered = wikiWorkspaceChoicesInOrder(choices);
   const from = offered.find((choice) => choice.id === context.from && choice.online);
   return from?.id ?? offered.find((choice) => choice.online)?.id ?? offered[0]?.id ?? null;
+}
+
+// ── The card an agent files for a wiki (WIKI_CREATE, design §3.6) ───────────────────────────────
+
+export const WIKI_CREATE_REPOSITORY = 'Repository';
+export const WIKI_CREATE_READS_FROM = 'Reads from';
+export const WIKI_CREATE_MAINTENANCE = 'Maintenance';
+export const WIKI_CREATE_CHANGE_SETTINGS = 'Change settings…';
+export const WIKI_CREATE_NOT_HERE = 'Not for this repository';
+/** The maintenance a wiki made from the card starts with: the Create wiki form's defaults, on. */
+export const WIKI_CREATE_MAINTENANCE_TEXT =
+  `On · ${wikiRunsADay(WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyRunLimit)} · last ${WIKI_DEFAULT_MAINTENANCE_SETTINGS.lookbackDays} days`;
+
+/** What a WIKI_CREATE card says it will make: the repository, the workspace it reads it from, and the maintenance. */
+export interface WikiCreateCardFacts {
+  repository: string | null;
+  /** The filing session's workspace as the forms name it; null when it is not among the workspaces read. */
+  readsFrom: string | null;
+  offline: boolean;
+  maintenance: string;
+}
+
+export function wikiCreateCardFacts(
+  request: { repoUrlNorm?: string | null; workspaceId?: string | null },
+  choices: readonly WikiWorkspaceChoice[],
+): WikiCreateCardFacts {
+  const workspace = request.workspaceId ? choices.find((choice) => choice.id === request.workspaceId) : undefined;
+  return {
+    repository: request.repoUrlNorm ?? null,
+    readsFrom: workspace?.label ?? null,
+    offline: workspace ? !workspace.online : false,
+    maintenance: WIKI_CREATE_MAINTENANCE_TEXT,
+  };
 }

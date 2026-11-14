@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
+import { actingSession } from '../wiki/wiki.controller';
 import { CompleteOwnerRequestDto, DeclineOwnerRequestDto, SubmitOwnerSecretDto } from './dto';
 import { OwnerRequestsService, ownerRequestClient } from './owner-requests.service';
 import { OwnerSecretsService, refuseActingSession } from './owner-secrets.service';
@@ -51,6 +52,23 @@ export class OwnerRequestsController {
     @Headers('x-orbit-client') client?: string,
   ) {
     return this.requests.decline(user.userId, id, dto.reason, ownerRequestClient(client));
+  }
+
+  /**
+   * The owner's Create wiki on a WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): makes the wiki with
+   * maintenance on and its plan's first draft asked for, and settles the card DONE. Answers with the card. Refused
+   * WIKI_OWNER_CHANNEL_ONLY to a request carrying an acting session.
+   */
+  @Post(':id/create-wiki')
+  @PatForbidden('OWNER_INTERACTIVE')
+  @HttpCode(HttpStatus.OK)
+  createWiki(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+    @Headers('x-orbit-client') client?: string,
+  ) {
+    return this.requests.createWiki(user.userId, id, actingSession(request.headers), ownerRequestClient(client), user.credential);
   }
 
   /**

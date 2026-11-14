@@ -112,6 +112,53 @@ class SubagentBlockTest {
         assertNull(SubagentBlock.describe(call, null, false).why)
     }
 
+    // The server's one-line Why (`SubagentRunView.why`), case for case with OrbitKit's `SubagentBlockTests`.
+    private val routed = listOf("Tier S, set by the caller", "Optimize For: Cost",
+        "Cheapest of 29 candidates: gpt-6.1-sol · low on codex, subscription with 84% quota left")
+    private val oneLine = "Tier S, set by the caller · Cost: gpt-6.1-sol · low on codex, subscription with 84% quota left · 28 others removed"
+
+    @Test fun theServersWhyIsDecodedAndIsTheWhyLine() {
+        val run = SubagentRun.from(json("""{"toolUseId":"toolu_sa","type":"explore","background":false,"status":"DONE","level":"S",
+            "model":"gpt-6.1-sol","modelLabel":null,"effort":"low",
+            "reasons":["Tier S, set by the caller","Optimize For: Cost","Cheapest of 29 candidates: gpt-6.1-sol · low on codex, subscription with 84% quota left"],
+            "why":"$oneLine",
+            "removed":[{"provider":"claude","engine":"claude","model":"claude-opus-5-5","effort":"high","reason":"Tier S excludes it"},
+                       {"provider":"team-codex","engine":"codex","model":null,"effort":null,"reason":"No quota left"}],
+            "costUsd":0.03,"resultSummary":null,"workspaceName":null,
+            "createdAt":"2026-11-11T08:00:00.000Z","endedAt":"2026-11-11T08:00:41.000Z"}""").jsonObject)!!
+        assertEquals(oneLine, run.why)
+        assertEquals(2, run.removed.size)
+        val block = SubagentBlock.describe(call, run, false)
+        assertEquals(oneLine, block.why)
+        assertEquals(routed + listOf("Removed · claude, claude-opus-5-5 · high: Tier S excludes it", "Removed · team-codex (codex): No quota left"),
+            block.details)
+    }
+
+    @Test fun anOlderServerWithoutWhyStillDecodesAndFallsBackToTheReasons() {
+        val run = SubagentRun.from(json("""{"toolUseId":"toolu_sa","type":"explore","background":false,"status":"DONE","level":"S",
+            "model":"deepseek-chat","modelLabel":"DeepSeek Chat","effort":null,"reasons":["Tier S, set by the built-in explore default","Optimize For: Cost"],
+            "costUsd":0.03,"resultSummary":null,"createdAt":"2026-11-11T08:00:00.000Z","endedAt":null}""").jsonObject)!!
+        assertNull(run.why)
+        assertTrue(run.removed.isEmpty())
+        assertNull(run.workspaceName)
+        val block = SubagentBlock.describe(call, run, false)
+        assertEquals("Tier S, set by the built-in explore default · Optimize For: Cost", block.why)
+        assertEquals("the reasons are already the Why line: Details has nothing more", emptyList<String>(), block.details)
+    }
+
+    @Test fun aNullWhyFallsBackToTheReasons() {
+        val block = SubagentBlock.describe(call, run(reasons = routed), false)
+        assertEquals(routed.joinToString(" · "), block.why)
+        assertEquals(emptyList<String>(), block.details)
+    }
+
+    @Test fun aRunOnAnotherWorkspaceLeadsWithHowItWasChosen() {
+        val chosen = "Workspace orbit-macos, named by the caller"
+        val block = SubagentBlock.describe(call, run(reasons = listOf(chosen) + routed).copy(why = oneLine, workspaceName = "orbit-macos"), false)
+        assertEquals("$chosen · $oneLine", block.why)
+        assertEquals(listOf(chosen) + routed, block.details)
+    }
+
     @Test fun theRunIsReadFromTheSubagentsList() {
         val rows = (json("""[{"toolUseId":"toolu_sa_fg","type":"explore","background":false,"status":"DONE","level":"S","model":"deepseek-chat",
             "modelLabel":"DeepSeek Chat","effort":null,"reasons":["Optimize For: Cost"],"costUsd":0.03,"resultSummary":"Three callers, all in quota/.",

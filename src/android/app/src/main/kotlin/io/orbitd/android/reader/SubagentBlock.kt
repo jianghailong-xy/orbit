@@ -15,9 +15,19 @@ import kotlinx.serialization.json.*
  */
 internal data class SubagentRun(val toolUseId: String, val type: String, val background: Boolean, val status: String,
     val level: String? = null, val model: String? = null, val modelLabel: String? = null, val reasons: List<String> = emptyList(),
-    val costUsd: Double = 0.0, val resultSummary: String? = null, val createdAt: String, val endedAt: String? = null) {
+    val costUsd: Double = 0.0, val resultSummary: String? = null, val createdAt: String, val endedAt: String? = null,
+    /** The server's one-line Why: the tier, the pick with its provider once and why, any move, how many candidates were removed.
+     * Null from a server before it kept one, and on rows from before then, whose Why is their reasons. */
+    val why: String? = null,
+    /** Every candidate the router removed, with its reason: the rest of what the Why line's Details open to. */
+    val removed: List<Removed> = emptyList(),
+    /** The workspace a remote SubAgent ran on; null on the parent's machine. */
+    val workspaceName: String? = null) {
     /** A background call answers at once, so its card's own status cannot say whether the work still goes on. */
     val isRunning: Boolean get() = status == "RUNNING"
+
+    data class Removed(val provider: String, val engine: String? = null, val model: String? = null, val effort: String? = null,
+        val reason: String)
 
     companion object {
         fun from(row: JsonObject): SubagentRun? {
@@ -26,7 +36,12 @@ internal data class SubagentRun(val toolUseId: String, val type: String, val bac
                 row.string("status").orEmpty(), row.string("level"), row.string("model"), row.string("modelLabel"),
                 (row["reasons"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
                 (row["costUsd"] as? JsonPrimitive)?.doubleOrNull ?: 0.0, row.string("resultSummary"), row.string("createdAt").orEmpty(),
-                row.string("endedAt"))
+                row.string("endedAt"), row.string("why"),
+                (row["removed"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { c ->
+                    val provider = c.string("provider") ?: return@mapNotNull null
+                    Removed(provider, c.string("engine"), c.string("model"), c.string("effort"), c.string("reason").orEmpty())
+                },
+                row.string("workspaceName"))
         }
 
         /** The list by `delegate` call; the later row wins a repeated id, as on iOS. */
@@ -40,7 +55,10 @@ internal data class SubagentRun(val toolUseId: String, val type: String, val bac
  * for web's trailing meta, so the second line carries the type, tier and model and, once the run has ended, how long it took and
  * what it cost. A background run puts `Background` in the type's place.
  */
-internal data class SubagentBlock(val type: String, val background: Boolean, val detailLine: String, val why: String?, val running: Boolean) {
+internal data class SubagentBlock(val type: String, val background: Boolean, val detailLine: String, val why: String?, val running: Boolean,
+    /** What the Why line's Details open to (web `subagentWhyDetails` and its list): every reason the router gave — none when the Why
+     * line already is those reasons — then every removed candidate as `Removed · <provider>: <reason>`. */
+    val details: List<String> = emptyList()) {
     companion object {
         const val TOOL_NAME = "mcp__orbit__delegate"
 
@@ -56,9 +74,26 @@ internal data class SubagentBlock(val type: String, val background: Boolean, val
                 duration(run)?.let(::add)
                 cost(run)?.let(::add)
             }
-            val reasons = run?.reasons.orEmpty().filter { it.isNotEmpty() }
-            return SubagentBlock(type, background, parts.joinToString(" · "), reasons.ifEmpty { null }?.joinToString(" · "),
-                run?.isRunning ?: callRunning)
+            return SubagentBlock(type, background, parts.joinToString(" · "), why(run), run?.isRunning ?: callRunning, details(run))
+        }
+
+        /** The Why line (web `subagentWhy`): the server's one-line Why, or the router's reasons joined when it sent none. A run on
+         * another workspace leads with how that workspace was chosen, its first reason. */
+        private fun why(run: SubagentRun?): String? {
+            if (run == null) return null
+            val why = run.why?.ifEmpty { null } ?: run.reasons.filter { it.isNotEmpty() }.ifEmpty { null }?.joinToString(" · ") ?: return null
+            val chosen = if (run.workspaceName.isNullOrEmpty()) null else run.reasons.firstOrNull()?.ifEmpty { null }
+            return if (chosen != null && !why.startsWith(chosen)) "$chosen · $why" else why
+        }
+
+        private fun details(run: SubagentRun?): List<String> {
+            if (run == null) return emptyList()
+            val reasons = if (run.why.isNullOrEmpty()) emptyList() else run.reasons.filter { it.isNotEmpty() }
+            return reasons + run.removed.map { c ->
+                val engine = c.engine?.ifEmpty { null }?.takeIf { it != c.provider }?.let { " ($it)" }.orEmpty()
+                val model = c.model?.ifEmpty { null }?.let { m -> ", $m" + c.effort?.ifEmpty { null }?.let { " · $it" }.orEmpty() }.orEmpty()
+                "Removed · ${c.provider}$engine$model: ${c.reason}"
+            }
         }
 
         /** How long the run took, once it has ended: `41s`, `1m 12s` (web and iOS `wikiDuration`). */
