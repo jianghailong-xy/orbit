@@ -659,11 +659,11 @@ struct RunnerResourceTile: View {
             } else {
                 HStack(alignment: .firstTextBaseline, spacing: 1) {
                     Text(verbatim: tile.value)
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.orbitFigure)
                         .foregroundStyle(valueInk)
                     if tile.percent != nil {
                         Text(verbatim: "%")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.orbitFigureUnit)
                             .foregroundStyle(Color.secondary)
                     }
                 }
