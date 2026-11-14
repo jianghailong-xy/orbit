@@ -116,9 +116,8 @@ final class SessionMessageWiringTests: XCTestCase {
         let anchor = try section(console, from: "private func namesAQuestion", to: "private var stuckBubble")
         XCTAssertTrue(anchor.contains("sessionMessage: b.sessionMessage"),
                       "the bar's anchor test no longer knows a turn came from another session")
-        let bar = try section(console, from: "let summary = StickySummary.of(", to: "CoastingButton")
-        XCTAssertTrue(bar.contains("sessionMessage: bubble.sessionMessage"),
-                      "the bar would call another session's message \"Your question\"")
+        XCTAssertTrue(console.contains("StickyQuestions($0.state.items, isQuestion: namesAQuestion)"),
+                      "the bar no longer reads which turns Orbit opened (`StickySummary.isOrbits`)")
     }
 
     func testTheTitleOpensTheSendingSession() throws {

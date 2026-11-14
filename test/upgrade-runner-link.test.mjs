@@ -593,7 +593,12 @@ test('the lines an upgrade writes render a gateway behind the web gateway: plain
   const rendered = JSON.parse(compose(dir, ['config', '--format', 'json', 'link-gateway']));
   const gateway = rendered.services['link-gateway'];
   assert.equal(gateway.environment.LINK_TLS_MODE, 'off');
-  assert.equal(gateway.environment.LINK_IP_RATE, '200');
-  assert.equal(gateway.environment.LINK_IP_BURST, '400');
+  // The per-address limit is what the env file ships: since 015f98107 (2026-11-11) it is 100000/100000, because behind
+  // the web gateway every runner arrives from one address and the per-address limit steps aside for the handshake limit.
+  const shipped = Object.fromEntries(readFileSync(path.join(repo, 'deploy/runner-link/behind-web-gateway.env'), 'utf8')
+    .split('\n').map((line) => line.match(/^(LINK_IP_(?:RATE|BURST))=(.*)$/)).filter(Boolean).map(([, key, value]) => [key, value]));
+  assert.ok(shipped.LINK_IP_RATE && shipped.LINK_IP_BURST, 'behind-web-gateway.env names LINK_IP_RATE and LINK_IP_BURST');
+  assert.equal(gateway.environment.LINK_IP_RATE, shipped.LINK_IP_RATE);
+  assert.equal(gateway.environment.LINK_IP_BURST, shipped.LINK_IP_BURST);
   assert.deepEqual(gateway.ports.map(({ host_ip, target, published }) => [host_ip, target, published]), [['127.0.0.1', 8443, '0'], ['127.0.0.1', 9464, '0']]);
 });

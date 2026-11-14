@@ -39,10 +39,14 @@ public struct ProjectCrossing: Decodable, Equatable, Sendable, Identifiable {
         public let title: String
         /// `OPEN`, `DONE` or `CANCELLED`.
         public let status: String?
+        /// The end's live (not trashed) coordinator conversation, which draws the crossing's
+        /// decision card; nil when it has none, or from a server that does not send it.
+        public let coordinatorSessionId: String?
 
-        public init(title: String, status: String? = nil) {
+        public init(title: String, status: String? = nil, coordinatorSessionId: String? = nil) {
             self.title = title
             self.status = status
+            self.coordinatorSessionId = coordinatorSessionId
         }
     }
 
@@ -289,6 +293,18 @@ public enum ProjectCrossings {
         let pending = rows.filter { isAnswerable($0.state) }.sorted { $0.requestedAt < $1.requestedAt }
         let answered = rows.filter { !isAnswerable($0.state) }.sorted { $0.requestedAt > $1.requestedAt }
         return pending + answered
+    }
+
+    /// A crossing the target project's coordinator conversation answers as a decision card is not
+    /// listed on either end's project page; only what no conversation can answer is — a move out to
+    /// no project, a target with no coordinator, or a row from a server that does not say.
+    public static func isShownOnProjectPage(_ row: ProjectCrossing) -> Bool {
+        row.toProject?.coordinatorSessionId == nil
+    }
+
+    /// The rows the project page lists.
+    public static func shownOnProjectPage(_ rows: [ProjectCrossing]) -> [ProjectCrossing] {
+        rows.filter(isShownOnProjectPage)
     }
 
     /// How many of these a person can still answer.

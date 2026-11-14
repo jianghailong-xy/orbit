@@ -2,6 +2,7 @@ package io.orbitd.android.directory
 
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.projects.ProjectDone
 import io.orbitd.android.projects.ProjectTime
@@ -195,6 +196,7 @@ internal object SessionHeader {
         "START_REQUEST" -> StartProjectCopy.readyToStart
         "DONE_REQUEST" -> ProjectDone.readyToClose
         "RECORD_AS_DONE" -> ProjectDone.recordAsDoneRow
+        "OWNER_REQUEST" -> OwnerRequests.waitingOnYou
         else -> SessionLineCopy.unnamedWord
     }
 }

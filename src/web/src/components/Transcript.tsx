@@ -158,8 +158,8 @@ import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, Session
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
-import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
-import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
+import { parseBackgroundJobs } from '../lib/backgroundJobs';
+import { parseReferencedTasks } from '../lib/referencedTask';
 import { parseWikiContext } from '../lib/wikiContext';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
@@ -2313,7 +2313,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
       // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
       if (isRunnerUpdateResume(node.text)) {
-        // What delivery appended — the background jobs that ended while the runner was away — rides under it.
+        // What delivery appended rides under it — but not the background jobs that ended while the runner
+        // was away, which name nothing (describeNote) and so draw no line.
         return (
           <>
             <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>
@@ -4129,10 +4130,10 @@ function useThrottled(value: string, ms: number): string {
 // click rather than carried in a tooltip, which a touch screen cannot reach.
 //
 // The line is in the voice of the time under a message and says what is attached, nothing more:
-// "⊕ Orbit attached: background jobs", ⊖ once it is open. What the person typed is what the eye
-// should land on (owner, 2026-10-27; docs/mocks/attached-context-note), so how the block stands —
-// "1 running, 1 failed" — is the line's tooltip and accessible name, and the opened rows say it
-// job by job.
+// "⊕ Orbit attached: list conditions", ⊖ once it is open. What the person typed is what the eye
+// should land on (owner, 2026-10-27; docs/mocks/attached-context-note). A coordinator's role, the
+// background-jobs inventory and a `#`-reference draw no line of their own (owner, 2026-11-14):
+// describeNote leaves them unnamed, though the fold still opens to them beside a named block.
 //
 // The line and what it opens to come back apart because a person's bubble places them apart: the
 // line ends the meta row under the bubble and the rows go under that row (UserBubble). Everywhere
@@ -4149,11 +4150,11 @@ function useControlPlaneNote(note: { kind: string; text: string } | null): { lin
   const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
-  if (!note) return null;
+  // A note that names nothing (describeNote) draws no line.
+  if (!note?.kind) return null;
   const { kind } = note;
   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
-  const baseLabel = `⊕ Orbit attached: ${kind}`;
-  const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
+  const label = `⊕ Orbit attached: ${kind}`;
   return {
     line: (
       <button
@@ -4181,10 +4182,11 @@ function useControlPlaneNote(note: { kind: string; text: string } | null): { lin
 /** The note where it stands on its own — at the foot of a card that is Orbit's, not under a bubble. */
 function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const note = useControlPlaneNote({ kind, text });
+  if (!note) return null;
   return (
     <div className="chat-injected">
-      {note?.line}
-      {note?.opened}
+      {note.line}
+      {note.opened}
     </div>
   );
 }

@@ -170,6 +170,6 @@ func TestOrbitResumeHelperProcess(t *testing.T) {
 	if sessionID == "" {
 		t.Skip("child process of TestOrbitResumeOfADshSessionStartsNoCLI")
 	}
-	cmdResume([]string{sessionID})
+	cmdResume([]string{"--engine-cli", sessionID})
 	os.Exit(0)
 }

@@ -49,8 +49,9 @@ struct WorkspaceFolderIcon: View {
 /// descriptive metadata, never a disclosure parent; the trailing slot carries at most one live
 /// state, with user attention taking precedence over background work. On the Mac a row with no
 /// state shows its faint ⌘1…⌘9 shortcut there while ⌘ is held (`shortcut`, 0-based; nil otherwise).
-/// An empty `runnerLabel` leaves the runner off the row (the Mac names it only where two workspaces
-/// share a name).
+/// An empty `runnerLabel` leaves the runner off the row. With `runnerOnHover` it shows only while
+/// the pointer is on the row, and whole, the name giving way (the Mac's sidebar, board
+/// docs/mocks/workspace-runner-label E1); off the Mac nothing hovers, so such a row never names it.
 struct WorkspaceNavigationRow: View {
     let agent: Agent
     let runnerLabel: String
@@ -62,6 +63,8 @@ struct WorkspaceNavigationRow: View {
     var jobs: Bool = false
     let waiting: Int
     var shortcut: Int? = nil
+    var runnerOnHover: Bool = false
+    @State private var hovering = false
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
@@ -71,10 +74,11 @@ struct WorkspaceNavigationRow: View {
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
-                if !runnerLabel.isEmpty {
+                if !runnerLabel.isEmpty && (!runnerOnHover || hovering) {
                     Text(" · \(runnerLabel)")
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
+                        .layoutPriority(runnerOnHover ? 3 : 0)
                 }
             }
             Spacer(minLength: 6)
@@ -97,6 +101,10 @@ struct WorkspaceNavigationRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
+        #if os(macOS)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        #endif
     }
 
     private var workspaceName: some View {
@@ -1157,15 +1165,40 @@ struct AgentPanes: View {
     /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
     /// disappears behind it instead of reading through it.
     ///
+    /// On iOS 26 the list meets its top on the soft edge (the needs-you bar's `SoftEdgeLayer`), and
+    /// an opaque band pinned under it read as a solid strip cutting that edge off (the owner,
+    /// 2026-11-14: "Pinned has no glass"). There the band is glass of the same make — a material blur
+    /// under a wash of the page's colour — solid under the title, so a row still can't read through
+    /// it, and fading out over the 9pt below it, so rows blur into the header rather than end at a line.
+    /// Glass shows its own edges, so it is grown by the 20pt side insets as well and runs edge to edge
+    /// (measured on the iOS 26 simulator, probe run 43601744335: without them, a slab with hard sides).
+    ///
     /// The Mac's list draws its own section headers' backing, so there the band is the title alone.
     @ViewBuilder private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         #if os(iOS)
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
-                Color(uiColor: .systemBackground)
+                if #available(iOS 26.0, *) {
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial)
+                        Color(uiColor: .systemBackground).opacity(0.85)
+                    }
+                    .mask {
+                        VStack(spacing: 0) {
+                            Color.black
+                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 9)
+                        }
+                    }
                     .padding(.top, -33)
                     .padding(.bottom, -9)
+                    .padding(.horizontal, -20)
+                } else {
+                    Color(uiColor: .systemBackground)
+                        .padding(.top, -33)
+                        .padding(.bottom, -9)
+                }
             }
         #else
         content()

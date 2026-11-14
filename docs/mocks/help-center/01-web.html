@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>Help center · 01 · Web</title>
+<link rel="stylesheet" href="kit.css"></head>
+<body><div class="board">
+<h1>帮助中心 · 01 · Web：入口、帮助抽屉、/help</h1>
+<p class="lede">今天 Orbit 里没有帮助：没有 <code>/help</code>，账户菜单里也没有，用户卡住时只能去 GitHub 翻 <code>docs/</code>。<br>
+方案：<b>两层</b>。① 任何页面按 <b>?</b> 打开右侧的<b>帮助抽屉</b>，先给“这一页”的文章，可搜索，可切到 <b>Ask</b> 直接问（Ask 见 02 板）；② 抽屉底部进入完整的 <b>/help 帮助中心</b>，用来浏览、搜索、读长文。<br>
+文章是一份英文 Markdown 文章库，随服务端版本发布，Web / macOS / iOS / Android 读同一份（内容模型见 03 板）。</p>
+<div class="legend"><span><i style="background:var(--new)"></i>新增</span><span><i style="background:var(--mark)"></i>改动点</span><span><span class="tag dec">已定</span>owner 11-14 定了</span></div>
+
+<!-- ============ 0 entry ============ -->
+<div class="part"><div class="part-h"><span class="no">0</span><h2>入口：侧栏底部一个 ? 按钮，账户菜单一行，键盘 ?</h2><small>不进顶部导航：帮助不是“去处”，是随时可开的工具</small></div>
+<div class="split"><div class="frames">
+<div class="win short">
+  <div class="nav">
+    <div class="ws"><span class="logo"></span>Orbit</div>
+    <div class="ni"><span class="ic">▤</span>Projects</div><div class="ni"><span class="ic">☑</span>Tasks</div>
+    <div class="ni"><span class="ic">◔</span>Waiting on you<span class="cnt">2</span></div><div class="ni"><span class="ic">▣</span>Wiki</div>
+    <div class="grp">Workspaces</div>
+    <div class="ni"><span class="ic">#</span>orbit</div><div class="ni"><span class="ic">#</span>site</div>
+    <div class="grow"></div>
+    <div class="menu" style="left:14px;bottom:56px;width:210px">
+      <div>Profile</div><hr><div>Appearance<span class="k">System</span></div><div>Settings</div>
+      <div class="hl m"><span class="mk g" style="right:-10px;top:4px">2</span><span class="qm" style="width:13px;height:13px;font-size:8px">?</span>Help center<span class="k">?</span></div>
+      <div>Admin</div><hr><div class="danger">Log out</div>
+    </div>
+    <div class="foot"><div class="user" style="background:var(--bg-hover)"><span class="av">MC</span>Mia Chen</div>
+      <span class="ib hover m ring g"><span class="qm">?</span><span class="mk g" style="left:30px;top:-12px">1</span>
+        <span class="tip" style="left:-14px;bottom:36px">Help<span class="kbd">?</span></span></span></div>
+  </div>
+  <div class="main dim">
+    <div class="ph"><h3>Projects</h3><span class="btn primary">+ New project</span></div>
+    <p class="sub">Work an agent coordinates across sessions until it merges.</p>
+    <div class="card"><div class="row"><div class="b"><div class="t">Help center</div><div class="s">3 of 7 tasks done · coordinator running</div></div></div>
+      <div class="row"><div class="b"><div class="t">Settings add button</div><div class="s">Merged 2h ago</div></div></div>
+      <div class="row"><div class="b"><div class="t">Wiki chat</div><div class="s">Waiting on you · 1 confirmation</div></div></div></div>
+  </div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n g">1</span><div><span class="tag new">新增</span><b>侧栏底部、头像右边的 ? 图标按钮</b>（28px，灰色，和头像同一行）。停留提示 <code>Help ?</code>。折叠成图标栏时，它在头像上方单独一格。<br>不放右下角浮动按钮：Wiki 页右下角已经是聊天按钮，两个圆按钮会打架。</div></div>
+<div class="it"><span class="n g">2</span><div><span class="tag new">新增</span><b>账户菜单加一行 “Help center”</b>，在 Settings 下面、Admin 上面，打开完整的 <code>/help</code>（不是抽屉）。给习惯从头像找东西的人。</div></div>
+<div class="it"><span class="n g">3</span><div><span class="tag new">新增</span><b>键盘 <code>?</code></b>（Shift + /）开关抽屉；光标在输入框里时不响应。今天 Web 没有占用 <code>?</code>。抽屉开着时 <code>Esc</code> 关闭。</div></div>
+<div class="it"><span class="n">!</span><div><b>错误卡片上的 “Learn more”</b>：机器离线、账号额度用尽、合并失败这类卡片，今天只有一句话。加一个 “Learn more” 链接，直接在抽屉里打开对应文章（见 ① 的横幅）。</div></div>
+</div></div></div>
+
+<!-- ============ 1 drawer contextual ============ -->
+<div class="part"><div class="part-h"><span class="no">1</span><h2>帮助抽屉：先给“这一页”的文章</h2><small>例：Settings → Machines，一台机器离线</small></div>
+<div class="split"><div class="frames">
+<div class="win">
+  <div class="nav">
+    <div class="ws"><span class="logo"></span>Settings</div>
+    <div class="ni">General</div><div class="ni">Notifications</div><div class="ni">Appearance</div><div class="ni">Profile</div>
+    <div class="grp">Agents</div><div class="ni on">Machines</div><div class="ni">Models &amp; keys</div><div class="ni">Account pools</div>
+    <div class="grp">Sharing</div><div class="ni">Shared links</div><div class="ni">Access tokens</div>
+    <div class="grow"></div>
+    <div class="foot"><div class="user"><span class="av">MC</span>Mia Chen</div><span class="ib on"><span class="qm">?</span></span></div>
+  </div>
+  <div class="main">
+    <div class="ph"><h3>Machines</h3><span class="btn">+ Add machine</span></div>
+    <p class="sub">Computers that run your agents. Each one runs the engines installed on it.</p>
+    <div class="banner m"><span>⚠</span><div><b>build-box</b> has been offline for 2 hours. Sessions on it are paused until it comes back.<br><span class="lm">Learn more →</span></div><span class="mk g" style="left:-12px;top:-10px">5</span></div>
+    <div class="card">
+      <div class="row"><div class="b"><div class="t">mia-macbook</div><div class="s">Claude Code · Codex · Cursor</div></div><span class="dot">Online</span></div>
+      <div class="row"><div class="b"><div class="t">build-box</div><div class="s">Claude Code · DeepSeek Harness</div></div><span class="dot off">Offline 2h</span></div>
+      <div class="row"><div class="b"><div class="t">gpu-01</div><div class="s">Claude Code · OpenCode</div></div><span class="dot">Online</span></div>
+    </div>
+  </div>
+  <div class="drawer m ring g">
+    <div class="dh"><span class="ttl">Help</span><span class="seg m"><span class="on">Articles</span><span>Ask</span><span class="mk g" style="left:30px;top:-14px">1</span></span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="db">
+      <div class="search m"><span>⌕</span>Search help<span class="kbd l k">/</span></div>
+      <div class="lh m">FOR THIS PAGE <span class="ctx" style="margin-left:6px">Settings → Machines</span><span class="mk g" style="left:-26px;top:-3px">2</span></div>
+      <div class="art hover m"><span class="ai warn">!</span><div><div class="t">A machine shows Offline</div><div class="s">Why it happens, and how to bring it back in under a minute.</div></div><span class="mk g" style="right:-8px;top:8px">3</span></div>
+      <div class="art"><span class="ai">＋</span><div><div class="t">Add a machine</div><div class="s">Install the runner on a Mac, Linux box or server and enroll it.</div></div></div>
+      <div class="art"><span class="ai">⚙</span><div><div class="t">Install or update an engine</div><div class="s">Claude Code, Codex, Cursor, Kimi Code, OpenCode and more.</div></div></div>
+      <div class="art"><span class="ai">⇄</span><div><div class="t">Move a workspace to another machine</div><div class="s">What moves with it and what stays.</div></div></div>
+      <div class="lh">GET STARTED</div>
+      <div class="art"><span class="ai">1</span><div><div class="t">Orbit in five minutes</div><div class="s">Machines, workspaces, sessions and tasks, and how they fit.</div></div></div>
+      <div class="art"><span class="ai">2</span><div><div class="t">Your first task, start to merge</div></div></div>
+    </div>
+    <div class="df m"><span class="lnk">Open help center</span><span>What&#39;s new in 0.1.257</span><span class="mk g" style="left:-12px;top:-10px">4</span></div>
+  </div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n g">1</span><div><b>抽屉停靠在右侧</b>，宽 380px，压缩主区、不盖住它——用户要边看文章边照着操作。和 Wiki 聊天用<b>同一个停靠位</b>：打开一个，另一个收起。顶部两个标签：<b>Articles</b> / <b>Ask</b>。<code>↗</code> 把当前文章在 <code>/help</code> 里打开。</div></div>
+<div class="it"><span class="n g">2</span><div><b>“For this page”</b>：按当前路由取文章。每篇文章在头信息里写自己适用的路由（如 <code>/settings/machines/*</code>），抽屉按路由匹配，最多 4 篇。没有匹配时这一组不出现，直接显示 Get started。</div></div>
+<div class="it"><span class="n g">3</span><div><b>页面上有错误时，对应文章排第一</b>，用警告色图标。规则：页面上可见的错误卡片带一个文章 slug，抽屉把它置顶。</div></div>
+<div class="it"><span class="n g">4</span><div>底部：进完整帮助中心；“What's new” 读这台服务器版本的 changelog。</div></div>
+<div class="it"><span class="n g">5</span><div><b>“Learn more →”</b> 直接打开抽屉并定位到这篇文章（② 的样子），不离开页面。</div></div>
+</div></div></div>
+
+<!-- ============ 2 drawer article + search ============ -->
+<div class="part"><div class="part-h"><span class="no">2</span><h2>在抽屉里读文章、搜索</h2><small>文章里的按钮直接带你去要改的地方</small></div>
+<div class="split"><div class="frames">
+<div class="win" style="width:400px;height:640px">
+  <div class="drawer" style="width:100%;border-left:0">
+    <div class="dh"><span class="ib">‹</span><span class="ttl">Help</span><span class="seg"><span class="on">Articles</span><span>Ask</span></span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="db doc">
+      <div class="crumb">Machines &amp; engines</div>
+      <h4>A machine shows Offline</h4>
+      <div class="meta">2 min read · Updated Nov 2, 2026</div>
+      <p>Orbit marks a machine Offline when its runner has not checked in for 90 seconds. Sessions on it pause and pick up where they stopped once it is back.</p>
+      <ol>
+        <li class="m"><b>Is the computer awake?</b> A sleeping laptop is the most common cause. Wake it and wait a few seconds.</li>
+        <li><b>Is the runner running?</b> On the machine, run:
+          <div class="code">orbit status</div></li>
+        <li><b>Let it check itself</b> if it says stopped:
+          <div class="code">orbit doctor</div></li>
+        <li class="m">Still offline? Check the runner log.<br><span class="go m">Open build-box ›<span class="mk g" style="left:112px;top:-2px">1</span></span></li>
+      </ol>
+      <div class="callout">A machine that is stopping for an update shows <b>Draining</b>, not Offline. It finishes its turns, then restarts on its own.</div>
+      <div class="helpful m">Did this help? <span class="btn sm">Yes</span><span class="btn sm">No</span><span class="mk g" style="left:186px;top:6px">2</span><span style="margin-left:auto" class="lnk">Ask instead</span></div>
+    </div>
+  </div>
+</div>
+<div class="win" style="width:400px;height:640px">
+  <div class="drawer" style="width:100%;border-left:0">
+    <div class="dh"><span class="ttl">Help</span><span class="seg"><span class="on">Articles</span><span>Ask</span></span><span class="ib">↗</span><span class="ib">✕</span></div>
+    <div class="db">
+      <div class="search focus">⌕ <span>offline</span><span class="k" style="color:var(--text-3)">✕</span></div>
+      <div class="lh">5 ARTICLES</div>
+      <div class="res"><div class="t">A machine shows <mark>Offline</mark></div><div class="p">Machines &amp; engines</div><div class="s">Orbit marks a machine <mark>Offline</mark> when its runner has not checked in for 90 seconds…</div></div>
+      <div class="res"><div class="t">Use Orbit on your phone <mark>offline</mark></div><div class="p">Phone &amp; desktop apps</div><div class="s">The iPhone app keeps the last lists it loaded and says how fresh they are…</div></div>
+      <div class="res"><div class="t">Sessions that pause and resume</div><div class="p">Workspaces &amp; sessions</div><div class="s">…a session on a machine that goes <mark>offline</mark> waits instead of failing…</div></div>
+      <div class="res"><div class="t">Runner troubleshooting</div><div class="p">Admin &amp; self-hosting</div><div class="s">Enrollment, heartbeat and <mark>offline</mark> runners, with the log lines to look for.</div></div>
+      <div class="art hover m" style="margin-top:12px;border:1px dashed #c9d8ff"><span class="ai" style="background:var(--brand-tint);color:var(--brand)">✦</span><div><div class="t">Ask “offline”</div><div class="s">Get an answer from an agent that reads these articles.</div></div><span class="mk g" style="right:-8px;top:8px">3</span></div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n g">1</span><div><b>文章里可以放“去那里”的按钮</b>（<code>Open build-box ›</code>）。写法是 Markdown 里的一个应用内链接（<code>orbit:/settings/machines/:id</code>），客户端按当前账户把它换成真的目标；目标不存在时不显示。</div></div>
+<div class="it"><span class="n g">2</span><div><b>Did this help?</b> 只记一次计数（文章 + 是否有帮助），不收集文字。选 No 时下面出现 “Ask instead”，带着这篇文章进 Ask。管理员在 Admin → Help feedback 里看到每篇的 Yes / No，用来决定哪篇要改。<span class="tag dec">已定 3</span></div></div>
+<div class="it"><span class="n g">3</span><div><b>搜索</b>：输入即搜，搜标题、摘要、正文，命中词高亮，按标题命中优先。结果最后一行永远是 <b>Ask “…”</b>：搜不到时把问题直接交给 Ask，不让人停在“无结果”。</div></div>
+<div class="it"><span class="n">!</span><div>文章里的命令、路径、按钮名都和产品里一致；文章随服务端版本发布，所以自托管的用户看到的就是他那个版本的说明。</div></div>
+</div></div></div>
+
+<!-- ============ 3 /help home ============ -->
+<div class="part"><div class="part-h"><span class="no">3</span><h2>/help 首页：搜索、上手清单、分类</h2><small>和 Settings 一样是独立布局，左栏是分类</small></div>
+<div class="split"><div class="frames">
+<div class="win" style="height:760px">
+  <div class="hnav">
+    <div class="back">‹ Back to Orbit</div>
+    <div class="ni on">Home</div>
+    <div class="grp">Categories</div>
+    <div class="ni">Get started</div><div class="ni">Workspaces &amp; sessions</div><div class="ni">Projects &amp; tasks</div><div class="ni">Wiki</div>
+    <div class="ni">Machines &amp; engines</div><div class="ni">Models, keys &amp; accounts</div><div class="ni">Phone &amp; desktop apps</div>
+    <div class="ni">Integrations &amp; API</div><div class="ni">Admin &amp; self-hosting</div>
+    <div class="grp">More</div><div class="ni">What's new</div><div class="ni">Your questions</div>
+  </div>
+  <div class="hhome">
+    <div class="hero"><h3>How can we help?</h3><p>Search the guides, or ask an agent that has read them.</p>
+      <div style="display:flex;gap:10px;align-items:center"><div class="search">⌕ Search help<span class="kbd l k">/</span></div><span class="btn">✦ Ask</span></div></div>
+    <div class="hbody">
+      <div class="gs m"><span class="mk g" style="left:-12px;top:-10px">1</span>
+        <div class="gs-h"><b>Get started · 2 of 4 done</b><span class="btn text sm">Hide</span></div>
+        <div class="steps">
+          <div class="step"><div class="st"><span class="chk ok">✓</span>Add a machine</div><div class="s">mia-macbook is online</div></div>
+          <div class="step"><div class="st"><span class="chk ok">✓</span>Connect a model</div><div class="s">Claude subscription</div></div>
+          <div class="step" style="border-color:#c9d8ff;background:#f7f9ff"><div class="st"><span class="chk"></span>Open a workspace</div><div class="s">Point Orbit at a repository. <span class="lnk">Start ›</span></div></div>
+          <div class="step"><div class="st"><span class="chk"></span>Finish a first task</div><div class="s">From request to merged change.</div></div>
+        </div></div>
+      <div class="sh">Browse by topic</div>
+      <div class="cats m"><span class="mk g" style="left:-12px;top:-10px">2</span>
+        <div class="cat"><div class="t">▸ Get started</div><div class="s">What Orbit is, and the first hour with it.</div><div class="c">5 articles</div></div>
+        <div class="cat"><div class="t"># Workspaces &amp; sessions</div><div class="s">Run agents on a repository; approvals, modes, background jobs.</div><div class="c">7 articles</div></div>
+        <div class="cat"><div class="t">▤ Projects &amp; tasks</div><div class="s">Plans, task lists, evidence, confirmations, merging.</div><div class="c">8 articles</div></div>
+        <div class="cat"><div class="t">▣ Wiki</div><div class="s">What your agents learned, and how to change it.</div><div class="c">4 articles</div></div>
+        <div class="cat"><div class="t">⌂ Machines &amp; engines</div><div class="s">Add machines, install engines, fix offline ones.</div><div class="c">6 articles</div></div>
+        <div class="cat"><div class="t">⚿ Models, keys &amp; accounts</div><div class="s">API keys, subscriptions, account pools, quotas.</div><div class="c">6 articles</div></div>
+      </div>
+      <div class="sh" style="margin-top:18px">Common problems</div>
+      <div class="card m"><span class="mk g" style="left:-12px;top:-10px">3</span>
+        <div class="row"><div class="b t">A machine shows Offline</div><span class="chev" style="color:var(--text-3)">›</span></div>
+        <div class="row"><div class="b t">A session stopped: account out of quota</div><span style="color:var(--text-3)">›</span></div>
+        <div class="row"><div class="b t">A task can't merge to main</div><span style="color:var(--text-3)">›</span></div></div>
+    </div>
+  </div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n g">1</span><div><b>Get started 清单</b>按账户的真实状态打勾（有在线机器、有模型、有 workspace、有一个合并过的任务），不是让用户自己勾。4 步都完成后整块收起成一行 “You're set up”，可以 Hide。新账户进 <code>/help</code> 最先看到它。</div></div>
+<div class="it"><span class="n g">2</span><div><b>9 个分类</b>，按用户在产品里遇到的东西分，不按代码模块分。前 6 个在首页，后 3 个（Phone &amp; desktop apps、Integrations &amp; API、Admin &amp; self-hosting）往下滚。<b>Admin &amp; self-hosting</b> 只对管理员显示。</div></div>
+<div class="it"><span class="n g">3</span><div><b>Common problems</b>：管理员可以在文章头信息里标 <code>common: true</code>；首版手选 5 篇。</div></div>
+<div class="it"><span class="n">!</span><div><b>“Your questions”</b>：你在 Ask 里问过的问题列表，点开回到那次对话（见 02 板）。</div></div>
+<div class="it"><span class="n">!</span><div>窄屏（&lt; 900px）：左栏收进标题左侧的菜单按钮，和 Settings 一样。</div></div>
+</div></div></div>
+
+<!-- ============ 4 /help article ============ -->
+<div class="part"><div class="part-h"><span class="no">4</span><h2>/help 文章页</h2><small>长文用的：左分类，中正文，右目录</small></div>
+<div class="split"><div class="frames">
+<div class="win" style="height:560px">
+  <div class="hnav">
+    <div class="back">‹ Back to Orbit</div><div class="ni">Home</div>
+    <div class="grp">Projects &amp; tasks</div>
+    <div class="ni">What a project is</div><div class="ni">Task lists</div><div class="ni">Waiting on you</div>
+    <div class="ni on">Evidence and confirmation</div><div class="ni">Merging to main</div><div class="ni">When a merge fails</div>
+  </div>
+  <div class="articlepage doc">
+    <div class="crumb">Help › Projects &amp; tasks</div>
+    <h4>Evidence and confirmation</h4>
+    <div class="meta">4 min read · Updated Nov 10, 2026 · Web, macOS, iPhone, Android</div>
+    <p>When an agent says a task is done, it attaches <b>evidence</b>: the commands it ran, test output, screenshots. Some tasks also need <b>your confirmation</b> before they count as done.</p>
+    <h5 id="see">Where you see it</h5>
+    <p>Tasks waiting for you appear in <b>Waiting on you</b> with an amber count. Open one to see each criterion and the evidence for it. <span class="go">Open Waiting on you ›</span></p>
+    <h5>Confirm or send it back</h5>
+    <ol><li><b>Confirm</b> when the evidence shows what the criterion asks for.</li>
+      <li><b>Return</b> with a sentence saying what is missing. The agent gets it as its next message.</li></ol>
+    <div class="helpful">Did this help? <span class="btn sm">Yes</span><span class="btn sm">No</span></div>
+  </div>
+  <div class="toc"><div style="border:0;padding-left:0;font-weight:600;color:var(--text-1);margin-bottom:6px">On this page</div><div class="on">Where you see it</div><div>Confirm or send it back</div><div>Who can confirm</div><div>Related</div></div>
+</div>
+</div>
+<div class="side">
+<div class="it"><span class="n">!</span><div><b>每篇文章一个固定地址</b> <code>/help/:category/:slug</code>，可以复制分享；<b>没登录也能看</b>（登录页的 “Can't sign in?” 直接链过来），Ask 仍要登录。<span class="tag dec">已定 4</span></div></div>
+<div class="it"><span class="n">!</span><div><b>头信息里写适用平台</b>（Web、macOS、iPhone、Android）。在某个平台打开时，只讲该平台的段落用 <code>::: platform ios</code> 包住，其他平台看不到这段。</div></div>
+<div class="it"><span class="n">!</span><div>正文宽度上限 720px；代码块可一键复制；图片用产品截图，放在文章库里，和文章一起发版。</div></div>
+</div></div></div>
+
+</div></body></html>

@@ -13,7 +13,8 @@ import (
 // A runner that is busy at every check never updated: updateWhenNoTurnInFlight deferred a release
 // for as long as any turn was in flight, with no deadline, and workstation-gpu stayed on 0.1.246 for
 // days without the link heartbeat fix in 0.1.248. These tests hold the wait to its limit
-// (selfUpdateDeferralLimit) and show that the drain that follows stops no turn. All the time here is
+// (selfUpdateDeferralLimit) and the drain that follows to its own (selfUpdateDrainLimit), past which
+// the turns still in flight are interrupted. All the time here is
 // the pool's fake clock: what is asserted is the order of events and the simulated minutes between
 // them, never how fast this host runs.
 
@@ -28,6 +29,7 @@ type busyRunner struct {
 	t        *testing.T
 	clock    *fakePoolClock
 	pool     *sessionPool
+	gate     *selfUpdateGate
 	check    selfUpdateChecker
 	sessions []*busySession
 
@@ -51,9 +53,10 @@ const busyStep = selfUpdateDrainCheckInterval
 func newBusyRunner(t *testing.T, limit time.Duration, chained time.Duration, lengths ...time.Duration) *busyRunner {
 	clock := newFakePoolClock()
 	r := &busyRunner{t: t, clock: clock, pool: newSessionPoolWithClock(len(lengths)+1, clock)}
-	r.check = updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
+	r.gate = newSelfUpdateGate(func(context.Context, string) (string, bool) {
 		return "0.1.252", true
 	}, r.pool, noOperations, selfUpdateCheckInterval, limit, 0)
+	r.check = r.gate.take
 	for i, length := range lengths {
 		s := registerPoolSession(t, r.pool, fmt.Sprintf("s%d", i), true)
 		parkPoolSession(r.pool, s)
@@ -136,11 +139,11 @@ func (r *busyRunner) inFlight() int {
 }
 
 // The criterion end to end: a release is published, the runner has a turn in flight at every check,
-// and it still updates — within the limit plus the longest turn it was running when the limit came —
-// with every turn that began running its full length and none beginning once the drain did.
+// and it still updates — within the deferral limit plus the drain limit — with no turn beginning once
+// the drain did, and the turns still in flight then interrupted (the stop Update Now makes).
+// Every turn here outlasts the drain limit.
 func TestABusyRunnerUpdatesWithinTheDeferralLimit(t *testing.T) {
 	lengths := []time.Duration{7 * time.Minute, 11 * time.Minute, 23 * time.Minute}
-	longest := 23 * time.Minute
 	r := newBusyRunner(t, selfUpdateDeferralLimit, 9*time.Minute, lengths...)
 
 	var firstDeferred, drainBegan time.Time
@@ -167,14 +170,13 @@ func TestABusyRunnerUpdatesWithinTheDeferralLimit(t *testing.T) {
 		if remote != "0.1.252" {
 			t.Fatalf("update to %q, want 0.1.252", remote)
 		}
-		if n := r.inFlight(); n != 0 {
-			t.Fatalf("the update was taken with %d turn(s) in flight: they would have been cut", n)
+		cut := r.inFlight()
+		if cut == 0 || !r.gate.stopsForUpdateNow() {
+			t.Fatalf("the update was taken with %d turn(s) in flight, interrupting=%v; want the turns past the drain limit interrupted",
+				cut, r.gate.stopsForUpdateNow())
 		}
-		if r.started != r.finished {
-			t.Fatalf("%d turns began and %d ended: a turn was cut by the update", r.started, r.finished)
-		}
-		if r.heldFollowUps != 1 {
-			t.Fatalf("%d follow-ups were held back, want the chained session's one", r.heldFollowUps)
+		if r.started-r.finished != cut {
+			t.Fatalf("%d turns began, %d ended and %d are in flight", r.started, r.finished, cut)
 		}
 		if r.startedAfterDrain != 0 {
 			t.Fatalf("%d turn(s) began after the drain did", r.startedAfterDrain)
@@ -185,15 +187,15 @@ func TestABusyRunnerUpdatesWithinTheDeferralLimit(t *testing.T) {
 		if got := drainBegan.Sub(firstDeferred); got < selfUpdateDeferralLimit || got > selfUpdateDeferralLimit+selfUpdateCheckInterval {
 			t.Fatalf("the drain began %s after the first deferral, want the limit (%s) to the next check", got, selfUpdateDeferralLimit)
 		}
-		bound := selfUpdateDeferralLimit + selfUpdateCheckInterval + longest + selfUpdateDrainCheckInterval
+		bound := selfUpdateDeferralLimit + selfUpdateCheckInterval + selfUpdateDrainLimit + selfUpdateDrainCheckInterval
 		if got := now.Sub(firstDeferred); got > bound {
 			t.Fatalf("updated %s after the first deferral, past the bound %s", got, bound)
 		}
 		if r.started < 10 {
 			t.Fatalf("only %d turns ran: this runner was not busy", r.started)
 		}
-		t.Logf("first deferral +%s, drain +%s, update +%s; %d turns, all ran their length; %d follow-up held for the updated runner",
-			firstDeferred.Sub(start), drainBegan.Sub(start), now.Sub(start), r.started, r.heldFollowUps)
+		t.Logf("first deferral +%s, drain +%s, update +%s; %d turns, %d interrupted; %d follow-up held for the updated runner",
+			firstDeferred.Sub(start), drainBegan.Sub(start), now.Sub(start), r.started, cut, r.heldFollowUps)
 		return
 	}
 	t.Fatal("a busy runner did not update in 24 simulated hours")
@@ -245,6 +247,104 @@ func TestTheDrainWaitsForTheTurnInFlight(t *testing.T) {
 	parkPoolSession(p, s)
 	if remote, ok := check(context.Background(), ""); !ok || remote != "0.1.252" {
 		t.Fatalf("after the turn ended = %q, %v; want the update", remote, ok)
+	}
+}
+
+// The drain waits for its turns for selfUpdateDrainLimit at most: the first check past it takes the
+// update as the owner's Update Now does, interrupting the turn still in flight.
+func TestTheDrainInterruptsTheTurnsPastItsLimit(t *testing.T) {
+	resetSelfUpdateStatus(t)
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	t.Cleanup(func() { updateNowTarget.Store(nil) })
+
+	clock := newFakePoolClock()
+	p := newSessionPoolWithClock(2, clock)
+	registerPoolSession(t, p, "a", true)
+	gate := newSelfUpdateGate(func(context.Context, string) (string, bool) { return "0.1.260", true },
+		p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
+
+	gate.take(context.Background(), "")
+	clock.Advance(selfUpdateDeferralLimit)
+	if _, ok := gate.take(context.Background(), ""); ok || !p.isDrainingForUpdate() {
+		t.Fatalf("at the deferral limit: ok=%v draining=%v; want the drain", ok, p.isDrainingForUpdate())
+	}
+	clock.Advance(selfUpdateDrainLimit - time.Second)
+	if _, ok := gate.take(context.Background(), ""); ok || gate.stopsForUpdateNow() {
+		t.Fatalf("inside the drain limit: ok=%v interrupting=%v; want still waiting", ok, gate.stopsForUpdateNow())
+	}
+	clock.Advance(time.Second)
+	remote, ok := gate.take(context.Background(), "")
+	if !ok || remote != "0.1.260" || !gate.stopsForUpdateNow() {
+		t.Fatalf("past the drain limit = %q, %v, interrupting=%v; want 0.1.260 with the interrupting stop",
+			remote, ok, gate.stopsForUpdateNow())
+	}
+	if report := selfUpdateReport(); report == nil || report.Phase != selfUpdatePhaseRestarting || report.InterruptedTurns != 1 {
+		t.Fatalf("report = %+v; want restarting with 1 interrupted turn", report)
+	}
+}
+
+// runLoop's gate (lowHours) gives a busy runner selfUpdateIdleWait to go idle, then drains at the first
+// check in the low hours, on the runner's local clock: a release out at 08:00 is not drained for at
+// 14:00 when the wait runs out, nor at 01:59, but at 02:00; one out at 21:00 drains at 03:00, inside
+// the window, not the next night.
+func TestAnAutomaticUpdateDrainsInTheLowHours(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		release, notBefore time.Time
+		drainsAt           time.Time
+	}{
+		{"out in the morning", time.Date(2026, 11, 14, 8, 0, 0, 0, time.Local), time.Date(2026, 11, 15, 1, 59, 0, 0, time.Local), time.Date(2026, 11, 15, 2, 0, 0, 0, time.Local)},
+		{"out in the evening", time.Date(2026, 11, 14, 21, 0, 0, 0, time.Local), time.Date(2026, 11, 15, 2, 59, 0, 0, time.Local), time.Date(2026, 11, 15, 3, 0, 0, 0, time.Local)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetSelfUpdateStatus(t)
+			clock := newFakePoolClock()
+			clock.now = tc.release
+			p := newSessionPoolWithClock(2, clock)
+			registerPoolSession(t, p, "a", true)
+			gate := newSelfUpdateGate(func(context.Context, string) (string, bool) { return "0.1.260", true },
+				p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
+			gate.lowHours = true
+
+			gate.take(context.Background(), "")
+			for clock.Now().Before(tc.notBefore) {
+				clock.Advance(selfUpdateCheckInterval)
+				if clock.Now().After(tc.notBefore) {
+					clock.Advance(tc.notBefore.Sub(clock.Now()))
+				}
+				if _, ok := gate.take(context.Background(), ""); ok || p.isDrainingForUpdate() {
+					t.Fatalf("at %s: ok=%v draining=%v; want still waiting for idle", clock.Now().Format("01-02 15:04"), ok, p.isDrainingForUpdate())
+				}
+			}
+			clock.Advance(tc.drainsAt.Sub(clock.Now()))
+			if _, ok := gate.take(context.Background(), ""); ok || !p.isDrainingForUpdate() {
+				t.Fatalf("at %s: ok=%v draining=%v; want the drain", clock.Now().Format("01-02 15:04"), ok, p.isDrainingForUpdate())
+			}
+		})
+	}
+}
+
+// A release the owner put off (Later) keeps the plain limit once its time comes, low hours or not:
+// the owner chose that time.
+func TestAPostponedUpdateIgnoresTheLowHours(t *testing.T) {
+	resetSelfUpdateStatus(t)
+	clock := newFakePoolClock()
+	clock.now = time.Date(2026, 11, 14, 10, 0, 0, 0, time.Local)
+	p := newSessionPoolWithClock(2, clock)
+	registerPoolSession(t, p, "a", true)
+	gate := newSelfUpdateGate(func(context.Context, string) (string, bool) { return "0.1.260", true },
+		p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
+	gate.lowHours = true
+
+	gate.take(context.Background(), "")
+	if !gate.postpone(clock.Now().Add(time.Hour)) {
+		t.Fatal("Later refused with a release waiting")
+	}
+	clock.Advance(time.Hour)
+	gate.take(context.Background(), "")
+	clock.Advance(selfUpdateDeferralLimit)
+	if _, ok := gate.take(context.Background(), ""); ok || !p.isDrainingForUpdate() {
+		t.Fatalf("at 12:00, the limit after Later ran out: ok=%v draining=%v; want the drain", ok, p.isDrainingForUpdate())
 	}
 }
 

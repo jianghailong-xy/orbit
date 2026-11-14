@@ -103,6 +103,9 @@ type HeartbeatRequest struct {
 	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
 	// NULL means "not reported", and a non-root runner has to be able to say so.
 	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
+	// Resources is the machine's CPU, memory and disk now (machine_resources.go), sent on every beat
+	// by a runner that declares machine-resources/v1.
+	Resources *MachineResources `json:"resources,omitempty"`
 	// SelfUpdate is where this runner's updates of itself stand (selfUpdateReport). Sent on every
 	// beat once the startup update has looked, so the control plane can tell a runner too old to
 	// report it — which omits it — from one that reports.
@@ -1437,6 +1440,10 @@ type ClaimedSession struct {
 	// CreateWorkDir: Orbit made this workspace in a new folder, which the runner makes before the
 	// engine starts — only inside its own repos root (create_workdir.go). Absent otherwise.
 	CreateWorkDir bool `json:"createWorkDir,omitempty"`
+	// WorkSubdir is the folder below WorkDir a session with no branch runs in (POST /sessions workSubdir, what
+	// `orbit` in a subfolder sends): relative and normalized. The engine starts in WorkDir/WorkSubdir, and not at
+	// all when that folder is missing or, symlinks followed, lies outside WorkDir (work_subdir.go). Empty: WorkDir.
+	WorkSubdir string `json:"workSubdir,omitempty"`
 	// MergeTarget is the branch this session's work merges INTO (its recorded target, else its
 	// agent's default) — the same branch the UI's Merge button names. Seeds branchMergedInto so
 	// the "already merged" chip judges that branch instead of main. Empty → auto-detect.
@@ -1672,6 +1679,8 @@ type ReclaimSession struct {
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
 	// CreateWorkDir, cf. ClaimedSession.CreateWorkDir.
 	CreateWorkDir bool `json:"createWorkDir,omitempty"`
+	// WorkSubdir, cf. ClaimedSession.WorkSubdir.
+	WorkSubdir string `json:"workSubdir,omitempty"`
 	// MergeTarget, cf. ClaimedSession.MergeTarget.
 	MergeTarget string `json:"mergeTarget,omitempty"`
 	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session
