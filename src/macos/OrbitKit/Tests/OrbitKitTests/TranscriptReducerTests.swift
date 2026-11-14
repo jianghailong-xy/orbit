@@ -907,11 +907,11 @@ final class TranscriptReducerTests: XCTestCase {
         }
     }
 
-    /// A promoted coordinator's standing role reaches the bubble as the one entry any other recorded
-    /// note does: the person's own words, and what delivery appended named and opening to its text.
+    /// A promoted coordinator's standing role is kept off the bubble, as any recorded note is, but
+    /// draws no entry: Orbit appends it to every coordinator turn, so nobody attached it.
     /// An event with no note is shown as it was echoed instead — a pasted coordinator block stays in
     /// the bubble it was typed into (`testWithoutANoteAPastedReferenceOrCoordinatorBlockIsShownAsTyped`).
-    func testCoordinatorContextIsOneEntry() {
+    func testCoordinatorContextDrawsNoEntry() {
         let typed = "把这个项目协调起来"
         var r = TranscriptReducer()
         r.apply(userEvent(seq: 1, "\(typed)\n\n\(coordinatorBlock)", note: "\n\n\(coordinatorBlock)"))
@@ -919,8 +919,7 @@ final class TranscriptReducerTests: XCTestCase {
         let bubble = r.state.items[0].asUser
         XCTAssertEqual(bubble?.note, coordinatorBlock)
         XCTAssertEqual(bubble?.text, typed)
-        XCTAssertEqual(bubble?.attached?.kind, "project coordinator context")
-        XCTAssertEqual(bubble?.attached?.text, coordinatorBlock)
+        XCTAssertNil(bubble?.attached)
     }
 
     /// A wiki chat's first message (board 42 ①, C15): the entry under the owner's words is named for the page and the

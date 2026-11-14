@@ -155,7 +155,6 @@ export function lastTypedUserMessageText(
 const TAG_LABEL: Record<string, string> = {
   'referenced-list': 'referenced list',
   'referenced-task': 'referenced task',
-  orbit_project_coordinator_context: 'project coordinator context',
   'list-conditions': 'list conditions',
   'background-jobs': 'background jobs',
   'orbit-session-message': 'session message',
@@ -163,6 +162,10 @@ const TAG_LABEL: Record<string, string> = {
   'orbit-external-sender': 'sender note',
   'orbit-session-reply': 'session reply',
 };
+
+/** A coordinator's standing role, appended to each of its turns: Orbit's own routine, not something
+ *  anyone attached, so describeNote leaves it unnamed and a note holding only it draws no line. */
+const COORDINATOR_CONTEXT_TAG = 'orbit_project_coordinator_context';
 
 /** The wiki context block, whose line says how much it holds rather than only what it is. Exported
  *  because the entries inside it are read by a second parser (`lib/wikiContext`), and two spellings
@@ -212,7 +215,7 @@ export function describeNote(note: string): string {
     if (tag === WIKI_CONTEXT_TAG) {
       const count = /^<orbit_wiki_context\s+entries="(\d+)"/.exec(rest)?.[1];
       names.push(count ? `Wiki context · ${count} entries` : 'Wiki context');
-    } else if (tag === WIKI_CHAT_NOTE_TAGS.chat) {
+    } else if (tag === WIKI_CHAT_NOTE_TAGS.chat || tag === COORDINATOR_CONTEXT_TAG) {
       // Skipped past below, unnamed.
     } else if (tag && WIKI_CHAT_TAGS.has(tag)) {
       const chatNote = parseWikiChatNoteTag(rest);

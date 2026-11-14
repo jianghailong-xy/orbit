@@ -195,7 +195,6 @@ async function expectFoldedEntry({ typed, block, kind, count, marker, card }: {
 describe.each([
   { tag: '<background-jobs>', typed: '已经部署，请帮我测试', block: BACKGROUND_JOBS, kind: 'background jobs', count: ' · 1 ended, exit 0', marker: 'bgj_3a1af2b50428' },
   { tag: '<list-conditions>', typed: '这个列表现在什么情况？', block: LIST_CONDITIONS, kind: 'list conditions', count: '', marker: '累计 47 次' },
-  { tag: '<orbit_project_coordinator_context>', typed: '把这个项目协调起来', block: COORDINATOR, kind: 'project coordinator context', count: '', marker: '的协调会话' },
   {
     tag: '<referenced-task>', typed: '这个任务现在什么状态？', block: REFERENCED_TASK,
     kind: 'referenced task', count: ' · OPEN', marker: '回填历史 user 事件的 controlPlaneNote',
@@ -218,6 +217,17 @@ describe.each([
     expect(attachedToggle()).toBeNull();
     expect(container.textContent).not.toContain('Orbit attached');
   });
+});
+
+it("draws no line for a coordinator's standing role: Orbit appends it to every turn, nobody attached it", async () => {
+  const typed = '把这个项目协调起来';
+  const appended = `\n\n${COORDINATOR}`;
+  await mount([userEvent(`${typed}${appended}`, appended)]);
+
+  expect(bubble().textContent?.trim()).toBe(typed);
+  expect(attachedToggle()).toBeNull();
+  expect(container.textContent).not.toContain('Orbit attached');
+  expect(container.textContent).not.toContain('的协调会话');
 });
 
 it('is one line after the hidden copy and time, the counts in its name and tooltip, and nothing else to press', async () => {

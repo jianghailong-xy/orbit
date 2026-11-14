@@ -85,7 +85,7 @@ final class DeliveredMessageTests: XCTestCase {
     func testNamesARecordedNoteByTheBlockItOpensWith() {
         XCTAssertEqual(describeNote("\n\n\(backgroundJobs)"), "background jobs")
         XCTAssertEqual(describeNote(conditions), "list conditions")
-        XCTAssertEqual(describeNote(coordinator), "project coordinator context")
+        XCTAssertEqual(describeNote(coordinator), "")  // Orbit's routine on every coordinator turn: unnamed
         XCTAssertEqual(describeNote(refList), "referenced list")
         XCTAssertEqual(describeNote(refTask), "referenced task")
         XCTAssertEqual(describeNote("\n\n\(sessionMessage)"), "session message")
@@ -96,9 +96,8 @@ final class DeliveredMessageTests: XCTestCase {
         // coordinator's role: a coordinator with a build still running gets two blocks in one note.
         let appended = "\n\n\(refTask)\n\n\(refTask)\n\n\(backgroundJobs)\n\n\(coordinator)"
 
-        XCTAssertEqual(describeNote(appended), "referenced task ×2, background jobs, project coordinator context")
-        XCTAssertEqual(describeNote("\n\n\(refList)\n\n\(coordinator)"),
-                       "referenced list, project coordinator context")
+        XCTAssertEqual(describeNote(appended), "referenced task ×2, background jobs")
+        XCTAssertEqual(describeNote("\n\n\(refList)\n\n\(coordinator)"), "referenced list")
         XCTAssertEqual(describeNote("\n\n\(sessionMessage)\n\n\(backgroundJobs)"),
                        "session message, background jobs")
     }

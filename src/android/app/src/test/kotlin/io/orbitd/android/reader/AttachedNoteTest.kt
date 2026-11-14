@@ -56,13 +56,13 @@ class AttachedNoteTest {
     @Test fun namesEveryBlockOneDeliveryAppended() {
         assertEquals("background jobs", describeNote("\n\n$backgroundJobs"))
         assertEquals("list conditions", describeNote(conditions))
-        assertEquals("project coordinator context", describeNote(coordinator))
+        assertEquals("", describeNote(coordinator))  // Orbit's routine on every coordinator turn: unnamed
         assertEquals("referenced list", describeNote(refList))
         assertEquals("referenced task", describeNote(refTask))
         assertEquals("session message", describeNote("\n\n$sessionMessage"))
-        assertEquals("referenced task ×2, background jobs, project coordinator context",
+        assertEquals("referenced task ×2, background jobs",
             describeNote("\n\n$refTask\n\n$refTask\n\n$backgroundJobs\n\n$coordinator"))
-        assertEquals("referenced list, project coordinator context", describeNote("\n\n$refList\n\n$coordinator"))
+        assertEquals("referenced list", describeNote("\n\n$refList\n\n$coordinator"))
         assertEquals("context", describeNote("<orbit_something_new>\n  x\n</orbit_something_new>"))
         assertEquals("context", describeNote("<background-jobs-v2>\n  x\n</background-jobs-v2>"))
         assertEquals("context", describeNote("[Image #1]"))

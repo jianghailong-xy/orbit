@@ -4149,7 +4149,8 @@ function useControlPlaneNote(note: { kind: string; text: string } | null): { lin
   const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
-  if (!note) return null;
+  // A note that names nothing (describeNote) draws no line.
+  if (!note?.kind) return null;
   const { kind } = note;
   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
   const baseLabel = `⊕ Orbit attached: ${kind}`;
@@ -4181,10 +4182,11 @@ function useControlPlaneNote(note: { kind: string; text: string } | null): { lin
 /** The note where it stands on its own — at the foot of a card that is Orbit's, not under a bubble. */
 function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const note = useControlPlaneNote({ kind, text });
+  if (!note) return null;
   return (
     <div className="chat-injected">
-      {note?.line}
-      {note?.opened}
+      {note.line}
+      {note.opened}
     </div>
   );
 }

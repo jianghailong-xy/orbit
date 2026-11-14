@@ -43,7 +43,6 @@ public func splitRecordedNote(_ text: String?, note: String?) -> (text: String, 
 let injectedTagLabels: [String: String] = [
     "referenced-list": "referenced list",
     "referenced-task": "referenced task",
-    "orbit_project_coordinator_context": "project coordinator context",
     "list-conditions": "list conditions",
     "background-jobs": "background jobs",
     "orbit-session-message": "session message",
@@ -99,7 +98,9 @@ public func describeNote(_ note: String) -> String {
     var rest = note.trimmingCharacters(in: .whitespacesAndNewlines)
     while !rest.isEmpty {
         let tag = openingTag(rest)
-        if let tag, tag == WikiChatLogic.noteTags["chat"] {
+        // A coordinator's standing role rides on each of its turns: Orbit's routine, not an attachment
+        // (web parity: `describeNote`), so it is skipped unnamed like the chat's own words.
+        if let tag, tag == WikiChatLogic.noteTags["chat"] || tag == "orbit_project_coordinator_context" {
             // Skipped past below, unnamed.
         } else if let tag, WikiChatLogic.noteTags.values.contains(tag) {
             names.append(WikiChatLogic.parseNoteTag(rest).map(WikiChatLogic.noteLabel) ?? "context")

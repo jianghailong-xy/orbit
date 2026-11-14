@@ -24,7 +24,6 @@ internal fun RunEvent.personWords(): String =
 private val injectedTagLabels = mapOf(
     "referenced-list" to "referenced list",
     "referenced-task" to "referenced task",
-    "orbit_project_coordinator_context" to "project coordinator context",
     "list-conditions" to "list conditions",
     "background-jobs" to "background jobs",
     "orbit-session-message" to "session message",
@@ -49,7 +48,9 @@ internal fun describeNote(note: String): String {
     var rest = note.trim()
     while (rest.isNotEmpty()) {
         val tag = openingTag(rest)
-        names += tag?.let { injectedTagLabels[it] } ?: "context"
+        // A coordinator's standing role rides on each of its turns: Orbit's routine, not an
+        // attachment (web parity), so it is skipped unnamed and a note holding only it draws no line.
+        if (tag != "orbit_project_coordinator_context") names += tag?.let { injectedTagLabels[it] } ?: "context"
         val close = tag?.let { rest.indexOf("\n</$it>") }?.takeIf { it >= 0 } ?: break
         rest = rest.substring(close + "\n</$tag>".length).trim()
     }

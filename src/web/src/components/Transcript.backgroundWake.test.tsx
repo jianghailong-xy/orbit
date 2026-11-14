@@ -305,7 +305,7 @@ describe('a wake turn in the transcript', () => {
     ]);
   });
 
-  it('takes only the wake out of a note that carried more, and keeps the rest its own entry in the fold', async () => {
+  it('takes only the wake out of a note that carried more, and draws no entry for the coordinator role left over', async () => {
     await mount([wakeEvent(ZH_WAKE_WITH_COORDINATOR_CONTEXT)]);
 
     // The line is the wake alone — the coordinator's standing role is not part of what woke anybody.
@@ -314,23 +314,10 @@ describe('a wake turn in the transcript', () => {
     expect(raw.textContent?.startsWith('<background-job-wake>')).toBe(true);
     expect(raw.textContent).not.toContain('orbit_project_coordinator_context');
 
-    // The rest is still an entry of its own, named for what it is — in the line's fold, since it is
-    // the control plane's too and this turn has no words of anybody's to sit under.
-    const toggle = [...container.querySelectorAll('button')].find((b) =>
-      b.textContent?.startsWith('⊕ Orbit attached:'),
-    );
-    expect(toggle, `no entry for the rest of the note:\n${container.innerHTML}`).toBeTruthy();
-    expect(toggle!.textContent).toBe('⊕ Orbit attached: project coordinator context');
-    expect(fold().contains(toggle!), 'the entry was left outside the fold').toBe(true);
+    // What is left is the coordinator's routine block, which nobody attached: no entry for it.
+    expect(container.textContent).not.toContain('Orbit attached');
     // And no bubble: an empty one here reads as a message the person sent without words.
     expect(container.querySelector('.chat-user')).toBeNull();
-
-    await act(async () => {
-      toggle!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    const opened = toggle!.parentElement!.querySelector('pre')!;
-    expect(opened.textContent?.startsWith('<orbit_project_coordinator_context>')).toBe(true);
-    expect(opened.textContent).not.toContain('bgj_');
   });
 
   // The shape that raised this: 16 of this deployment's `<background-jobs>` notes ride a turn whose
