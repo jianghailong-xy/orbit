@@ -100,6 +100,7 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("model.needsYouEntries(excluding: excluding)"))
         XCTAssertTrue(view.contains("if banner.count > 1 { setUnfolded(true) } else { open(banner) }"))
         XCTAssertTrue(view.contains("if unfolds { Image(systemName: \"chevron.down\")"))
+        XCTAssertTrue(view.contains("} else if unfolds {"), "no \"+N\" to carry it: the ⌄ stands bare, not in a squashed pill")
         XCTAssertTrue(view.contains("fold: index == 0 ? { setUnfolded(false) } : nil"))
         XCTAssertTrue(view.contains("Image(systemName: \"chevron.up\")"))
         XCTAssertTrue(view.contains("entries.prefix(NeedsYouLogic.unfoldedLimit)"), "at most five")
