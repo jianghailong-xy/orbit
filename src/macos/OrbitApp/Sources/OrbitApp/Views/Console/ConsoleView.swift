@@ -1112,6 +1112,22 @@ struct TranscriptView: View {
             #endif
             DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
         }
+        // A conversation opened from a project row that says it is waiting on you (owner
+        // 2026-11-14): the top of its waiting card, header and title, rather than the transcript's
+        // end. Off the live tail first, as above; set on the next turn of the run loop with the
+        // scroll, after the session switch's own re-pin (`console.sessionID` above) has run. `initial`
+        // because the request is made before this transcript appears; consumed once followed.
+        .onChange(of: console.cardRequest, initial: true) { _, request in
+            guard let request else { return }
+            console.cardRequestFollowed()
+            #if os(iOS)
+            transcriptScroll.halt()
+            #endif
+            DispatchQueue.main.async {
+                atBottom = false
+                holdScroll(to: request.rowID, anchor: .top, animated: false)
+            }
+        }
         // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
         // its rows, so the index path SwiftUI picks for the row is one UIKit has.
         .onChange(of: heldScroll) { _, held in

@@ -418,9 +418,11 @@ struct SessionFolderPage: View {
         }
         // A phone opens the coordinator's conversation, not the project's sessions page, which is
         // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page.
+        // column keeps the page. A row whose line says a member is waiting on you opens that member
+        // instead, at its card, on both (owner 2026-11-14).
         let onTap = {
-            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            switch SessionProjectSheet.rowTap(row, held: app.sessions + (app.agents?.allSessions ?? []), push: rowNavigation == .push) {
+            case .waitingMember(let member): app.openWaitingMember(member, project: projectAddress, push: rowNavigation == .push)
             case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
             case .sessions: app.openProjectSessions(projectAddress)
             }

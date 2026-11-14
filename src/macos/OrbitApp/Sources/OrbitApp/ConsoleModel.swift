@@ -1698,6 +1698,7 @@ final class ConsoleModel {
         state = reducer.state
         clearAwaitingReplyIfSatisfied()
         reconcileReplyContext()
+        followPendingWaitingCard()
     }
 
     /// End the send→first-token bridge (`awaitingReply`) once the stream reports the turn `RUNNING`
@@ -4704,6 +4705,7 @@ final class ConsoleModel {
         }
         // A press that arrived before this read now has its row to land on.
         scrollToPendingOwnerItem()
+        followPendingWaitingCard()
         lastRulerRead = Date()
     }
 
@@ -5421,6 +5423,7 @@ final class ConsoleModel {
                 evidenceDecisions = queue
                 adoptEvidenceQueue(queue)
                 lastEvidenceRead = Date()
+                followPendingWaitingCard()
             }
         } while evidenceReadOwed && !Task.isCancelled
     }
@@ -5677,6 +5680,42 @@ final class ConsoleModel {
     func focusStartCard() {
         pendingStartCard = true
         Task { await refreshRulerQuestions(force: true) }
+    }
+
+    /// Until when this conversation, opened from a project row whose line says it is waiting on you,
+    /// still lands on its waiting card (`focusWaitingCard`). A card read later than that no longer
+    /// moves a reader who has started reading.
+    private var pendingWaitingCardUntil: Date?
+    /// The waiting card's row, for the transcript to open at its top. Its own request, apart from
+    /// `scrollRequest` (the bar's, which centres the card and opens its review) and `recordRequest`
+    /// (a link's, which marks the row): this one only places the reader at the card's header.
+    private(set) var cardRequest: ScrollRequest?
+
+    /// Open this conversation at the top of the card it is waiting on you with (owner 2026-11-14: a
+    /// project row's tap on "Waiting on you · <member>"), not at the transcript's end — a card taller
+    /// than the screen would otherwise show its buttons with its title above the fold. Spent by the
+    /// first publish or read that has the card; the reads run as the console opens.
+    func focusWaitingCard() {
+        pendingWaitingCardUntil = Date().addingTimeInterval(15)
+        followPendingWaitingCard()
+        Task { await refreshRulerQuestions(force: true) }
+    }
+
+    private func followPendingWaitingCard() {
+        guard let until = pendingWaitingCardUntil else { return }
+        guard Date() < until else { pendingWaitingCardUntil = nil; return }
+        guard let rowID = SessionProjectSheet.waitingCardRowID(openCards: openBelowRows,
+                                                               pendingApprovals: reducer.state.pendingApprovals)
+        else { return }
+        pendingWaitingCardUntil = nil
+        scrollTick += 1
+        cardRequest = ScrollRequest(rowID: rowID, tick: scrollTick)
+    }
+
+    /// The transcript placed the reader at the card: consume the request, so a transcript appearing
+    /// again later does not jump back to it.
+    func cardRequestFollowed() {
+        cardRequest = nil
     }
 
     /// Spend the pending press, if the card it names is on screen now.

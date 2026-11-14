@@ -19,13 +19,17 @@ final class SessionProjectSheetTests: XCTestCase {
                 sessionKind: kind)
     }
 
-    private func row(coordinator: Session?, target: SessionProjectRow.Target) -> SessionProjectRow {
-        SessionProjectRow(projectId: "p1", title: "Search index", status: .open, members: [],
+    private func row(coordinator: Session?, target: SessionProjectRow.Target,
+                     line: SessionLine = SessionLine(text: "", tone: .preview),
+                     members: [Session] = []) -> SessionProjectRow {
+        SessionProjectRow(projectId: "p1", title: "Search index", status: .open, members: members,
                           sessionCount: 11, coordinator: coordinator, folderId: nil, pinnedAt: nil,
                           lastTurnAt: nil, createdAt: nil, needsYou: false, running: false, jobs: false,
-                          indicator: nil, line: SessionLine(text: "", tone: .preview), target: target,
+                          indicator: nil, line: line, target: target,
                           taskCounts: nil, runningCount: 0)
     }
+
+    private let waitingLine = SessionLine(text: "Waiting on you · GitHub workspaces P0", tone: .approval)
 
     // MARK: the row's tap
 
@@ -35,11 +39,121 @@ final class SessionProjectSheetTests: XCTestCase {
                        .coordinator(coordinator))
     }
 
-    /// The row's lead (a member waiting on the reader) is the menu's Open Session, not the tap's.
-    func testARowTapOpensTheCoordinatorEvenWhenAMemberLeadsTheRow() {
+    /// A member leading the row with anything but the approval tone (its preview) is the menu's
+    /// Open Session, not the tap's.
+    func testARowTapOpensTheCoordinatorWhenAMemberLeadsTheRowWithoutWaiting() {
         let coordinator = session("C1", role: .coordinator)
-        XCTAssertEqual(SessionProjectSheet.rowTap(row(coordinator: coordinator, target: .session("T7"))),
+        let member = session("T7")
+        XCTAssertEqual(SessionProjectSheet.rowTap(row(coordinator: coordinator, target: .session("T7"),
+                                                      members: [coordinator, member])),
                        .coordinator(coordinator))
+    }
+
+    // MARK: the row's tap when a member is waiting on you (owner 2026-11-14)
+
+    /// "Waiting on you · <member>": the tap opens that member, where the card is.
+    func testARowWhoseLineSaysAMemberIsWaitingOpensThatMember() {
+        let coordinator = session("C1", role: .coordinator)
+        let member = session("T7")
+        let waiting = row(coordinator: coordinator, target: .session("T7"), line: waitingLine,
+                          members: [coordinator, member])
+        XCTAssertEqual(SessionProjectSheet.rowTap(waiting), .waitingMember(member))
+        XCTAssertEqual(SessionProjectSheet.rowTap(waiting, push: false), .waitingMember(member),
+                       "a column shell opens the waiting member too")
+    }
+
+    /// The waiting member may be one the row's line was read from without being listed here (the
+    /// project page's members, `contentSessions`): it is found among the sessions the app holds.
+    func testAWaitingMemberNotListedUnderTheRowIsFoundAmongTheHeldSessions() {
+        let coordinator = session("C1", role: .coordinator)
+        let remote = session("T9")
+        let waiting = row(coordinator: coordinator, target: .session("T9"), line: waitingLine,
+                          members: [coordinator])
+        XCTAssertEqual(SessionProjectSheet.rowTap(waiting, held: [session("other"), remote]), .waitingMember(remote))
+        XCTAssertEqual(SessionProjectSheet.rowTap(waiting, held: []), .coordinator(coordinator),
+                       "a member the app does not hold leaves the tap with the coordinator")
+        XCTAssertEqual(SessionProjectSheet.rowTap(waiting, held: [], push: false), .sessions)
+    }
+
+    /// The coordinator itself waiting on you: its conversation, as before.
+    func testARowWhoseCoordinatorIsWaitingOpensTheCoordinator() {
+        let coordinator = session("C1", role: .coordinator)
+        let waiting = row(coordinator: coordinator, target: .session("C1"), line: waitingLine,
+                          members: [coordinator])
+        XCTAssertEqual(SessionProjectSheet.rowTap(waiting), .coordinator(coordinator))
+        XCTAssertEqual(SessionProjectSheet.rowTap(waiting, push: false), .sessions,
+                       "a column shell keeps the project's page for the coordinator's own wait")
+    }
+
+    /// Running, landing, the coordinator handling something, idle: the coordinator on a phone, the
+    /// project's page in a column, whichever session the row's line was read from.
+    func testEveryOtherLineOpensTheCoordinator() {
+        let coordinator = session("C1", role: .coordinator)
+        let member = session("T7")
+        let lines: [(SessionLine, SessionProjectRow.Target)] = [
+            (SessionLine(text: "Running Bash…", tone: .running), .session("C1")),
+            (SessionLine(text: "Running Read…", tone: .running), .session("T7")),
+            (SessionLine(text: "Landing · 2 jobs", tone: .queued), .session("C1")),
+            (SessionLine(text: "Landing · timed out", tone: .warning), .project("p1")),
+            (SessionLine(text: "Handling a question · 3m", tone: .running), .session("C1")),
+            (SessionLine(text: "Last reply", tone: .preview), .session("C1")),
+            (SessionLine(text: "With its reviewer", tone: .review), .session("T7")),
+        ]
+        for (line, target) in lines {
+            let other = row(coordinator: coordinator, target: target, line: line, members: [coordinator, member])
+            XCTAssertEqual(SessionProjectSheet.rowTap(other, held: [member]), .coordinator(coordinator), line.text)
+            XCTAssertEqual(SessionProjectSheet.rowTap(other, held: [member], push: false), .sessions, line.text)
+        }
+    }
+
+    /// Pushed the way the coordinator is: Back returns to the list, and the member's own navigation
+    /// bar carries the project button that brings the coordinator back.
+    func testTheWaitingMemberIsPushedOverTheListAndCarriesTheProjectButton() {
+        var nav = NavState(section: .agents)
+        let member = session("T7")
+        guard case .waitingMember(let opened) = SessionProjectSheet.rowTap(
+            row(coordinator: session("C1", role: .coordinator), target: .session("T7"), line: waitingLine,
+                members: [member])) else {
+            return XCTFail("the row opens its waiting member")
+        }
+
+        nav.push(.console(sessionID: opened.id, origin: .list))
+
+        XCTAssertEqual(nav.path, [.console(sessionID: "T7", origin: .list)])
+        XCTAssertEqual(SessionProjectSheet.projectID(of: opened), "p1")
+        nav.pop()
+        XCTAssertTrue(nav.sectionAtRoot, "Back returns to the session list")
+    }
+
+    /// A column shell (`AppModel.openWaitingMember(push: false)`): the project's page in the session
+    /// column, and the member's conversation selected beside it — over a conversation the detail
+    /// pane was already showing, or onto an empty one.
+    func testAColumnShellSelectsTheWaitingMemberBesideTheProjectsPage() {
+        let address = SessionProjectAddress(projectID: "p1", agentID: "w1", view: .open)
+        for start in [[NavNode](), [.console(sessionID: "other", origin: .list)]] {
+            var nav = NavState(section: .agents)
+            nav.path = start
+            nav.enterProjectSessions(address)
+            nav.selectConsole(.console(sessionID: "T7", origin: .list))
+            XCTAssertEqual(nav.path, [.sessionProject(address, asDestination: false),
+                                      .console(sessionID: "T7", origin: .list)], "\(start)")
+            XCTAssertEqual(nav.projectSessionsColumn, address)
+            XCTAssertEqual(nav.focusedConsoleSessionID, "T7")
+        }
+    }
+
+    // MARK: where the waiting member's conversation opens
+
+    func testTheConversationOpensAtTheFirstOpenCardAboveThePendingApprovals() {
+        let approval = PendingApproval(id: "a1", kind: .question, toolName: "AskUserQuestion", input: nil)
+        XCTAssertEqual(SessionProjectSheet.waitingCardRowID(
+            openCards: [BelowRow(rowID: "card-older", isQuestion: true), BelowRow(rowID: "card-newer", isQuestion: false)],
+            pendingApprovals: [approval]), "card-older")
+        XCTAssertEqual(SessionProjectSheet.waitingCardRowID(openCards: [], pendingApprovals: [approval]),
+                       TranscriptRow.approval(approval).id)
+        XCTAssertEqual(TranscriptRow.approval(approval).id, "approval-a1", "the row the transcript draws it as")
+        XCTAssertNil(SessionProjectSheet.waitingCardRowID(openCards: [], pendingApprovals: []),
+                     "nothing read yet: the request waits for the read")
     }
 
     func testARowWhoseCoordinatorIsNotHeldOpensTheSessionsPage() {

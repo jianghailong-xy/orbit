@@ -3330,6 +3330,17 @@ final class AppModel {
         }
     }
 
+    /// A project row whose line says a member is waiting on you (owner 2026-11-14,
+    /// `SessionProjectSheet.RowTap.waitingMember`): that member's conversation, opened at the top of
+    /// its waiting card rather than at the transcript's end. A phone pushes it over the list, as it
+    /// pushes the coordinator; a column shell opens the project's page in its session column and
+    /// selects the member beside it, as the web desktop does.
+    func openWaitingMember(_ session: Session, project: SessionProjectAddress, push: Bool) {
+        consoleRegistry?.model(for: session.id, agentID: session.agent?.id ?? session.agentId).focusWaitingCard()
+        if !push { openProjectSessions(project) }
+        openProjectMember(session, push: push)
+    }
+
     // MARK: session folders (docs/session-folders-move-design.md §3–4)
 
     /// The project's session count, read by both the project sessions button and the page's
