@@ -51,10 +51,19 @@ type backendPool struct {
 func newBackendPool(cfg config, m *gatewayMetrics, log *slog.Logger) *backendPool {
 	transport := &http.Transport{
 		// The backends are on the internal network: no proxy stands between them and the gateway.
-		Proxy:               nil,
-		DialContext:         (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
-		MaxIdleConns:        1024,
-		MaxIdleConnsPerHost: 256,
+		Proxy:       nil,
+		DialContext: (&net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		// At most BackendMaxConns connections to each backend (LINK_BACKEND_MAX_CONNS). A call that finds them all busy
+		// waits for one to come free, first come first served, rather than dialing another: during a stall of the
+		// backends or of the gateway itself (a long GC mark), every call in flight would otherwise dial its own
+		// connection, and at a few hundred thousand runners that ran out of source ports and memory together and the
+		// kernel killed the gateway (task 34paLvEDFObkoBxYLAJSN). A waiting call is bound by its own deadline
+		// (LINK_RPC_TIMEOUT), and ends BACKEND_TIMEOUT when no connection comes free within it, or CANCELLED when its
+		// runner's connection closes first. Nothing was written, so the runner sends it again.
+		MaxConnsPerHost: cfg.BackendMaxConns,
+		// Every connection the cap allows stays open while idle, so a burst does not close and dial them again.
+		MaxIdleConns:        cfg.BackendMaxConns * max(len(cfg.InternalAPIURLs), 1),
+		MaxIdleConnsPerHost: cfg.BackendMaxConns,
 		// Shorter than the apiserver holds an idle connection (src/apiserver/src/common/idle-connections.ts, whose
 		// test reads this value), so the gateway always lets go first. If the apiserver closed first, a call sent on a
 		// connection it was closing would be reset: sent again and counted `lost` if idempotent, cut off if not.

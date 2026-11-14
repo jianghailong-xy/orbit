@@ -698,6 +698,10 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
 export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
   api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
 
+/** Delete a file everywhere this account keeps it, from Settings → Storage. 409 while evidence or a session holds it. */
+export const deleteAttachmentEverywhere = (id: string): Promise<void> =>
+  api<void>(`/attachments/${encodeURIComponent(id)}/everywhere`, { method: 'DELETE' });
+
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
     `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,

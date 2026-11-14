@@ -199,6 +199,34 @@ func TestHeartbeatsAreRecordedAndAnswered(t *testing.T) {
 	}
 }
 
+// A connection past the handshake rate across all clients is refused as it is accepted, before TLS: the gateway reads
+// no ClientHello for it and does no handshake.
+func TestARefusedHandshakeDoesNoTLS(t *testing.T) {
+	h := newHarness(t, func(c *config) { c.HandshakeRate, c.HandshakeBurst = 0.001, 1 })
+	h.connect(runnerA, processA)
+	if n := h.tlsHandshakes.Load(); n != 1 {
+		t.Fatalf("%d TLS handshakes for one connection", n)
+	}
+	addr := h.srv.Listener.Addr().String()
+	for range 20 {
+		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", addr, &tls.Config{InsecureSkipVerify: true})
+		if err == nil {
+			conn.Close()
+			t.Fatal("a connection past the handshake rate completed TLS")
+		}
+	}
+	_, resp, err := h.dial(h.token(runnerA, processB))
+	if err == nil || resp != nil {
+		t.Fatalf("a runner past the handshake rate: %v, %v", resp, err)
+	}
+	if n := h.tlsHandshakes.Load(); n != 1 {
+		t.Fatalf("the gateway began %d TLS handshakes; only the first connection was within the rate", n)
+	}
+	if got := h.g.metrics.handshakes.get("rate_limited"); got != 21 {
+		t.Fatalf("%v refusals counted, want 21", got)
+	}
+}
+
 func TestNewConnectionsPerAddressAreLimited(t *testing.T) {
 	h := newHarness(t, func(c *config) { c.IPRate, c.IPBurst = 0.001, 2 })
 	for i := 0; i < 2; i++ {

@@ -339,14 +339,15 @@ const signInLabel = (health?: RunnerEngineHealth): string =>
   health?.accounts?.length === 1 ? accountNameOf(health.accounts[0]) : 'Default';
 
 /** The runner's accounts of an engine, when it has signed in more than one: each with its own
- *  quota's tightest window, as the composer's quota pill reads it. */
+ *  quota's tightest window, as the composer's quota pill reads it. An account signed out on this
+ *  runner is not one it can run, so it gets no row. */
 function accountChoices(
   engine: AgentProvider,
   health: RunnerEngineHealth | undefined,
   usage: PlanUsage | null | undefined,
 ): AccountChoice[] | undefined {
   if (!isAccountEngine(engine) || (health?.accounts?.length ?? 0) < 2) return undefined;
-  return health!.accounts!.map((account): AccountChoice => {
+  return health!.accounts!.filter((account) => account.auth !== 'no' || runsOnEnvKey(health, account)).map((account): AccountChoice => {
     // Antigravity's Default on the runner's Gemini key: it runs, on the key, with no quota.
     if (runsOnEnvKey(health, account)) return { id: account.id, label: accountNameOf(account), quota: 'env key' };
     const snapshot = accountPlanUsage(usage, engine, account.id);
@@ -369,7 +370,6 @@ function accountChoices(
             ...(quota.nearLimit ? { nearLimit: true } : {}),
           }
         : {}),
-      ...(account.auth === 'no' ? { unavailable: 'Not signed in' } : {}),
     };
   });
 }
