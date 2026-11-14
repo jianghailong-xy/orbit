@@ -146,7 +146,8 @@
 // downloadable runner from the newest release tag") added two build args to web: ORBIT_RUNNER_SOURCE, the release tag's
 // tree the runner binaries are built from, `.` (the context) unless set, and ORBIT_RUNNER_SOURCE_SHA, its commit, empty
 // unless set. The upgrade skill sets both. No service, mount, port or environment is added. It reached main without a
-// pin here, which left this file red there; the block below pins its two lines.
+// pin here, which left this file red there. The owner approved these two lines on 2026-11-14 (22:40Z, Orbit item
+// 34xf9Nns4Dnab9eXTNyCa, project 34w2hTuJ3qOR1aQWnyGbS), and the block below pins them.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
