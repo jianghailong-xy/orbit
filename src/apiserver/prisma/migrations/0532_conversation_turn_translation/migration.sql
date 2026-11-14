@@ -1,5 +1,5 @@
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
--- 0531: session translation, the owner's messages (project 34vcDOhN0OCStfnVuTyPq, task A1).
+-- 0532: session translation, the owner's messages (project 34vcDOhN0OCStfnVuTyPq, task A1).
 -- Wire shapes: @orbit/shared translation.ts. Server flow: src/apiserver/src/sessions/turn-translation.ts.
 --
 -- WHY
@@ -32,7 +32,9 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0531: main, every origin/project/* and pushed origin/orbit/* branch stand at or below 0530 (scanned 2026-11-11).
+-- Written as 0531: main, every origin/project/* and pushed origin/orbit/* branch stand at or below 0530 (scanned 2026-11-11).
+-- Renumbered 0532 on 2026-11-15: main added its own 0531_owner_request_wiki_create; no branch on origin used 0532.
+-- A database that already applied it as 0531 runs it once more as 0532, which changes nothing (see below).
 -- Can run twice: ADD COLUMN IF NOT EXISTS, DROP CONSTRAINT IF EXISTS.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

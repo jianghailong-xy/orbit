@@ -19,7 +19,7 @@
 --
 -- LOCKS
 -- -----
--- As 0531: ADD COLUMN without a default is a catalogue change, no rewrite; the lock is asked for 2 s at a
+-- As 0532: ADD COLUMN without a default is a catalogue change, no rewrite; the lock is asked for 2 s at a
 -- time, 1 s apart, up to 60 tries, in one DO statement. No constraint, function, trigger or type. No INSERT,
 -- UPDATE or DELETE.
 --

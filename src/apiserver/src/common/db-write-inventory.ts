@@ -1593,7 +1593,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'sessions/sessions.service.ts#releaseHeldTurn',
     shape: 'TX_RETRIED',
-    locks: "session FOR UPDATE (rank 30), then a read of the HELD conversation_turn (Settings › Translation, migration 0531) and, for one with no send intent, of the live engine turn and the assigned runner's capabilities (steerTargetIfLive); one UPDATE of that conversation_turn row (rank 60) — its English or original content, PENDING, its translation state and, when it joins the running turn, the CURRENT_WORK steer shape — then, when the status moves, one UPDATE of the session row it already holds.",
+    locks: "session FOR UPDATE (rank 30), then a read of the HELD conversation_turn (Settings › Translation, migration 0532) and, for one with no send intent, of the live engine turn and the assigned runner's capabilities (steerTargetIfLive); one UPDATE of that conversation_turn row (rank 60) — its English or original content, PENDING, its translation state and, when it joins the running turn, the CURRENT_WORK steer shape — then, when the status moves, one UPDATE of the session row it already holds.",
     identity: 'The held turn id, and the translation states it may be released from.',
     isolation: '',
     attempts: 4,

@@ -6328,7 +6328,7 @@ export class SessionsService {
       senderClientDetail?: string | null;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
-      /** A held message under Settings › Translation (heldTurnColumns, migration 0531). */
+      /** A held message under Settings › Translation (heldTurnColumns, migration 0532). */
       status?: string;
       displayPrompt?: string;
       translationState?: string;

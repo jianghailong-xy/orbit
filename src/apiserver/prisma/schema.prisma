@@ -2904,7 +2904,7 @@ model ConversationTurn {
   /// platform's own deliveries, and every turn written before 0662.
   senderClient       String? @map("sender_client")
   senderClientDetail String? @map("sender_client_detail")
-  /// Session translation (migration 0531, @orbit/shared translation.ts): what the owner wrote, when the turn was
+  /// Session translation (migration 0532, @orbit/shared translation.ts): what the owner wrote, when the turn was
   /// translated for the engine — `content` is then the English delivered. Null on every turn translation was not
   /// involved in, and so are the two below.
   displayPrompt    String?  @map("display_prompt")

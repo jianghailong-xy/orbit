@@ -14,7 +14,7 @@ import { SessionsService } from './sessions.service';
 import '../test-support/dequeue-under-lease';
 
 /**
- * Settings › Translation against the real schema (migration 0531) and the real delivery SQL: a HELD
+ * Settings › Translation against the real schema (migration 0532) and the real delivery SQL: a HELD
  * message is never leased by the inbox and never lets the claim hand out a session whose only work it
  * is; released, the runner is handed the English; its `user` event is stored with the owner's
  * original beside it, and the session list previews the original. DeepSeek is stubbed.

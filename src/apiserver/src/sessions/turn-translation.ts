@@ -9,7 +9,7 @@ import { AsyncWorkQueue } from '../common/async-work-queue';
 import { translationAvailable } from './translation';
 
 /**
- * The owner's messages under Settings › Translation (@orbit/shared translation.ts, migration 0531).
+ * The owner's messages under Settings › Translation (@orbit/shared translation.ts, migration 0532).
  *
  * A message sent while the owner has translation on is written HELD: `content` and `display_prompt`
  * both hold what they typed, `translation_state` is TRANSLATING, and status 'HELD' keeps it out of
