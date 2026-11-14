@@ -109,6 +109,17 @@ func noteTransportAttempt() {
 }
 
 func noteTransportResult(method string, err error, bodies ...interface{}) {
+	noteTransportResultHeaders(method, err, nil, bodies...)
+}
+
+// createRequestIDArg is the request id a create carries in X-Orbit-Request-Id rather than in its body
+// (create_request.go), as the MCP tools and the CLI flags spell it. It is read from that header only:
+// other bodies use a requestId field for something else.
+var createRequestIDArg = [2]string{"requestId", "--request-id"}
+
+// noteTransportResultHeaders is noteTransportResult for a call that also sent headers, so a create's
+// request id counts as sent.
+func noteTransportResultHeaders(method string, err error, headers map[string]string, bodies ...interface{}) {
 	transportActivity.mu.Lock()
 	defer transportActivity.mu.Unlock()
 	if err == nil {
@@ -118,7 +129,11 @@ func noteTransportResult(method string, err error, bodies ...interface{}) {
 		return
 	}
 	transportActivity.seq++
-	transportActivity.failures = append(transportActivity.failures, transportFailure{seq: transportActivity.seq, err: err, requestIDs: outboundRecoveryIDs(bodies)})
+	ids := outboundRecoveryIDs(bodies)
+	if id := strings.TrimSpace(headers[requestIDHeader]); id != "" {
+		ids[createRequestIDArg[0]] = id
+	}
+	transportActivity.failures = append(transportActivity.failures, transportFailure{seq: transportActivity.seq, err: err, requestIDs: ids})
 	if n := len(transportActivity.failures); n > maxRecordedTransportFailures {
 		transportActivity.failures = transportActivity.failures[n-maxRecordedTransportFailures:]
 	}
@@ -637,7 +652,7 @@ func cliFailureReport(err error, text string, mark transportMark, argv []string,
 	// A generated outbound ID still protects the write, but rerunning an argv that
 	// does not carry that same ID would generate another one. Leave that replay manual.
 	parsed := recoveryCLIValues(argv)
-	for _, pair := range recoveryRequestIDArgs {
+	for _, pair := range append(append([][2]string{}, recoveryRequestIDArgs...), createRequestIDArg) {
 		if id := ids[pair[0]]; id != "" && parsed[strings.TrimPrefix(pair[1], "--")] != id {
 			replayStdin = false
 		}

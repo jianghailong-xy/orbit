@@ -130,7 +130,11 @@ Options:
                            that watch under "watch" instead of losing it. If no watch could be
                            recorded, a session that has not settled carries why under "watch"
                            instead and stderr says so in one line, and a watch the server
-                           refuses ends the wait at once
+                           refuses ends the wait at once. Once the session exists the command
+                           never fails: a read of it that fails, or a wait that runs out, is
+                           under "wait" with the session id and "orbit session get" as the next step
+  --request-id ID          Only to repeat a create whose answer you never saw: the id its failure
+                           named. The same id answers with the session it created, or creates it once
   --json
 
 --engine and --provider together must be a pair that runs: a provider names the engines it
@@ -279,7 +283,7 @@ workspace.
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
-	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--no-worktree (run in the agent's own checkout with no branch or worktree; for work that changes no code)", "--wait[=true|false]", "--json"}, Mutates: true},
+	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", engineArgument(), "--provider <slug> (the credential: an engine's own sign-in, opencode, an account pool or an API key; orbit provider list names each with the engines it runs)", permissionModeFlagSpec(), "--no-worktree (run in the agent's own checkout with no branch or worktree; for work that changes no code)", "--wait[=true|false]", "--request-id <id> (only to repeat a create whose answer you never saw: the id its failure named)", "--json"}, Mutates: true},
 	// No MCP tool stands behind this one, so its description is its own: the transcript it imports
 	// is on this machine's disk, which the CLI here reads, and an agent asked to bring a terminal's
 	// conversation into Orbit runs it as itself. The headless door below describes it for the
@@ -599,6 +603,7 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	permissionMode := fs.String("permission-mode", "", "session permission mode")
 	noWorktree := fs.Bool("no-worktree", false, "run in the agent's own checkout, with no branch and no worktree")
 	wait := fs.Bool("wait", false, "wait until the first turn settles")
+	requestIDFlag := fs.String("request-id", "", "repeat a create whose answer you never saw: the request id its failure named")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -679,16 +684,23 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	if err != nil {
 		return err
 	}
-	raw, err := t.createSession(ctx.sessionID, ctx.token, body)
+	requestID, err := createRequestID(*requestIDFlag)
 	if err != nil {
-		return fmt.Errorf("create session: %w", err)
+		return err
+	}
+	raw, err := t.createSession(ctx.sessionID, ctx.token, requestID, body)
+	if err != nil {
+		return describeCreateFailure("session", "`orbit session create` (--request-id)", "`orbit session list`", requestID, err)
 	}
 	if *wait {
-		result, err := waitForSessionDurably(t, ctx, raw)
-		if err != nil {
-			return fmt.Errorf("wait for session: %w", err)
-		}
+		// Never an error once the session exists (session_wait.go): a failed read or a wait that ran out
+		// is the answer's "wait", which names the session and `orbit session get` as the next step.
+		result := waitForSessionDurably(t, ctx, raw)
 		raw = result.json()
+		if result.outcome == waitOutcomeGetFailed && result.watch == nil {
+			fmt.Fprintln(os.Stderr, "orbit session create: session "+result.sessionID+" was created, but reading it while "+
+				"waiting failed ("+result.getError+"); it exists, so do not create it again: `orbit session get "+result.sessionID+"`")
+		}
 		if result.unbacked() {
 			// Said on stderr as well as under "watch", and still exit 0 as session_create(wait) answers without
 			// isError: the session exists, and a failed exit reads as a create to try again.

@@ -413,7 +413,7 @@ type projectTransport interface {
 	getProjectHandoffs(id, state string) (json.RawMessage, error)
 	resolveProjectBlocker(projectID, blockerID string, body map[string]interface{}) (json.RawMessage, error)
 	recordProjectMergeEvidence(id string, body map[string]interface{}) (json.RawMessage, error)
-	createProject(sessionID, orchestrationToken string, body map[string]interface{}) (json.RawMessage, error)
+	createProject(sessionID, orchestrationToken, requestID string, body map[string]interface{}) (json.RawMessage, error)
 	updateProject(sessionID, id string, body map[string]interface{}) (json.RawMessage, error)
 	deleteProject(id string) (json.RawMessage, error)
 	// skipIntegrationMergeCheck queues one landing with its merge check not run (§2.4 J-S5). The two
@@ -497,8 +497,8 @@ func (u *userTransport) skipIntegrationMergeCheck(_, id, taskID, reason, _ strin
 }
 
 // createProject is the owner's own door, where naming a workspace needs no acting session: it is theirs
-// to name.
-func (u *userTransport) createProject(_, _ string, body map[string]interface{}) (json.RawMessage, error) {
+// to name. The user API keeps no create receipts, so a request id is not sent (cliProjectCreate says so).
+func (u *userTransport) createProject(_, _, _ string, body map[string]interface{}) (json.RawMessage, error) {
 	return u.do(http.MethodPost, "/projects", body)
 }
 

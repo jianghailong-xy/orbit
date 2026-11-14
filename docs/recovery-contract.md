@@ -289,6 +289,9 @@ follow-up), and a different payload under the same key writes nothing.
   becomes `UNKNOWN`, so the call is verified before anything is sent again.
 - **A request id** counts as sent when the call carried `idempotencyKey`, `clientTurnId` or
   `triggerId`, or the matching CLI flags `--idempotency-key`, `--client-turn-id` or `--trigger-id`.
+  A `project_create` or `session_create` sends its id in `X-Orbit-Request-Id` (§8), so it counts as
+  `requestId` / `--request-id`. It is read from that header only, because other bodies use a
+  `requestId` field for something else.
 - **`next`** is the one step this surface can take now. `type` is one of the following:
   - `invoke`: over MCP it carries `tool` and `input`. At the CLI it carries `argv`, an array whose
     first element is the absolute path of this executable, and `stdin`, the exact bytes to write to
@@ -348,3 +351,41 @@ and Go boolean forms, including the last repeated value. String flag values such
 `--client-turn-id=x` remain literal user text. A source-based test checks the boundary grammar against
 typed flag registrations; real subprocess tests cover literal values, boolean forms, empty IDs,
 explicit IDs and generated triggers while retaining the revision 2 regression suite.
+
+## 8. `project_create` and `session_create`: request ids and receipts
+
+**Identity.** Every create invocation is sent under a request id in `X-Orbit-Request-Id`
+(`src/runner-go/create_request.go`). The runner draws one per MCP tool call or CLI invocation, and keeps
+it for that invocation. A caller repeating a create whose answer it never saw passes the id back as
+`requestId` (MCP) or `--request-id` (CLI). Ids are 1 to 200 characters of letters, digits, `.`, `_`, `:`
+or `-`.
+
+**Receipt.** The control plane keeps one row per (owner, kind, request id) in `create_request_receipt`
+(migration 0645, `src/apiserver/src/runner-api/create-request-receipts.ts`). The first delivery claims
+the row before it creates anything, then stores the answer on it. The answer carries
+`requestReceipt: {requestId, kind, resourceId, receivedAt, replayed}`.
+
+| A delivery under an id that... | Answer |
+| --- | --- |
+| is the first | Creates, keeps the answer, `replayed: false`. |
+| repeats a COMPLETED request (same payload and calling session) | The kept answer, the same `resourceId` and `receivedAt`, `replayed: true`. Nothing is created. |
+| arrives while the first is still creating | Waits up to 10 s for the first answer and returns it; otherwise `409 CREATE_REQUEST_IN_PROGRESS` (effect `UNKNOWN`, `SAME_REQUEST_ID`). |
+| carries a different payload or calling session | `409 REQUEST_ID_REUSED` (effect `NONE`, `NEVER`, `USE_NEW_REQUEST_ID`). |
+| follows a first delivery that failed with a 4xx | The id is free again: a 4xx wrote nothing. |
+| follows a first delivery that failed otherwise, or died holding the row (lease 120 s) | `409 CREATE_REQUEST_OUTCOME_UNKNOWN` (effect `UNKNOWN`, `VERIFY_THEN_RETRY`): look first, and create again only under a new id. |
+
+A different request id is a different request. A second project created from the same session still
+gets its own coordinator conversation (one session coordinates one project). A request with no id writes
+no receipt and behaves as before.
+
+**Unknown outcomes.** No answer, a body cut off after the status line, an unparsable body and an uncoded
+5xx are effect `UNKNOWN`. The runner never resends a create on its own. It fails with a partial receipt
+`{outcome, requestId, recovery, next}`: with a request id the next step is the same call under that id
+(`RETRY_SAME_REQUEST`), and without one (the user API, which keeps no receipts) it is to look first
+(`VERIFY_STATE`).
+
+**`session_create` with `wait`.** Once the child exists the call never fails. A read of the child that
+fails, or a wait that runs out, is an outcome of the wait. The answer keeps the child's id and adds
+`wait: {outcome: GET_FAILED | TIMEOUT, sessionId, created: true, error?, next: {tool: "session_get",
+command: "orbit session get <id>", arguments: {sessionId}}}`. The next step reads the child. It never
+creates it again.

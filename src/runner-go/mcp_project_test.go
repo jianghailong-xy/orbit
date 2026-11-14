@@ -271,9 +271,10 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	if _, exposed := createProps["acceptanceCriteria"]; exposed {
 		t.Fatal("project_create exposes legacy acceptanceCriteria as an agent authoring fallback")
 	}
-	// title, goal, instructions, acceptanceCriteriaItems, workspaceId — the fifth is where the
-	// coordinator opens, and it is counted here so a sixth cannot appear unremarked.
-	if len(createProps) != 5 {
+	// title, goal, instructions, acceptanceCriteriaItems, workspaceId, requestId — the fifth is where
+	// the coordinator opens, the sixth names a repeat of a create whose answer was lost
+	// (create_request.go), and they are counted here so a seventh cannot appear unremarked.
+	if len(createProps) != 6 {
 		t.Fatalf("project_create properties = %#v", createProps)
 	}
 	if got := mcpToolRequired(t, tools, "project_create"); len(got) != 1 || got[0] != "title" {
