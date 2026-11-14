@@ -287,6 +287,11 @@ class Handler(BaseHTTPRequestHandler):
                 other = json.dumps({"type": "project.changed", "sessionId": "", "agentId": None,
                                     "ts": stamp(0)})
                 self.wfile.write(("data: " + other + "\n\n").encode())
+                # And the Wiki's own nudge: the app re-reads the spaces, so the WIKI_FLICKER answer
+                # above really removes the Wiki row and brings it back under the clicks.
+                wiki = json.dumps({"type": "wiki.changed", "sessionId": "", "agentId": None,
+                                   "ts": stamp(0)})
+                self.wfile.write(("data: " + wiki + "\n\n").encode())
                 self.wfile.flush()
                 time.sleep(0.30)
         except (BrokenPipeError, ConnectionResetError, OSError):
