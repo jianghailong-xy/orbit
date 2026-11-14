@@ -30,7 +30,8 @@
             "type": "PROJECT",
             "id": "P2"
           }
-        ]
+        ],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: PROJECT_SCOPE_MISMATCH\n  what:    this write names project P2, and this session belongs to P1\n  owner:   COORDINATOR\n  do:      FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF\n"
     },
@@ -62,7 +63,8 @@
             "type": "REQUEST",
             "id": "trg_1"
           }
-        ]
+        ],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: TASK_RUN_REQUEST_IN_PROGRESS\n  what:    this run request is being answered right now\n  owner:   USER\n  do:      retry the same request in a moment\n"
     },
@@ -94,7 +96,8 @@
             "type": "REQUEST",
             "id": "trg_2"
           }
-        ]
+        ],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: TASK_RUN_REQUEST_MISMATCH\n  what:    retry the same request, it will work\n  do:      just retry the same request\n"
     },
@@ -130,7 +133,8 @@
             "type": "SESSION",
             "id": "S3"
           }
-        ]
+        ],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: PROJECT_CREATED_COORDINATOR_FAILED\n  what:    the project exists; its coordinator session did not start\n  owner:   USER\n"
     },
@@ -162,7 +166,8 @@
             "type": "TASK",
             "id": "T1"
           }
-        ]
+        ],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: TASK_NOT_FOUND\n  what:    no such task\n"
     },
@@ -198,7 +203,8 @@
             "type": "CROSSING",
             "id": "X1"
           }
-        ]
+        ],
+        "disposition": "CONFIRM_THEN_RUN"
       },
       "legacyText": "  refused: CROSS_PROJECT_APPROVAL_REQUIRED\n  what:    this crossing has to be approved by the account owner\n"
     },
@@ -225,7 +231,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: TURN_COMPLETE_INVALID_DATA\n  what:    the payload cannot be stored\n"
     },
@@ -255,7 +262,8 @@
         "actionCode": "RETRY",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: TRANSIENT_DB_CONFLICT\n  what:    the database rolled this request back\n"
     },
@@ -282,7 +290,8 @@
         "actionCode": "RETRY",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: DATABASE_UNAVAILABLE\n  what:    the database could not serve this request\n"
     },
@@ -309,7 +318,8 @@
         "actionCode": "ANSWER_ADVICE",
         "requiredAction": "choose the suggested criterion or give an override reason",
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  advice: TASK_CRITERION_SHAPE_ADVICE\n  what:    this criterion reads like a check\n  do:      choose the suggested criterion or give an override reason\n"
     },
@@ -341,7 +351,8 @@
             "type": "TASK",
             "id": "T7"
           }
-        ]
+        ],
+        "disposition": "STOP"
       },
       "legacyText": "  advice: TASK_CREATED_OUTSIDE_PROJECT\n  what:    the task was filed outside any project\n"
     },
@@ -378,7 +389,8 @@
         "actionCode": "FIX_REQUEST",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -405,7 +417,8 @@
         "actionCode": "FIX_REQUEST",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -432,7 +445,8 @@
         "actionCode": "FIX_REQUEST",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -459,7 +473,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -487,7 +502,8 @@
         "actionCode": "RETRY_SAME_REQUEST",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -517,7 +533,8 @@
         "actionCode": "RETRY",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -548,7 +565,8 @@
         "actionCode": "RETRY",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -575,7 +593,8 @@
         "actionCode": null,
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "WAIT"
       },
       "legacyText": ""
     },
@@ -601,7 +620,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -628,7 +648,8 @@
         "actionCode": "RETRY_SAME_REQUEST",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -654,7 +675,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": ""
     },
@@ -681,7 +703,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: X_UNKNOWN_SAFE\n  what:    the write may or may not have happened\n"
     },
@@ -709,7 +732,8 @@
         "actionCode": "RETRY_SAME_REQUEST",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: X_UNKNOWN_REPLAY\n  what:    ask again under the same id\n"
     },
@@ -736,7 +760,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: X_UNKNOWN_REPLAY\n  what:    ask again under the same id\n"
     },
@@ -763,7 +788,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: X_UNKNOWN_NEVER\n  what:    do not send this again\n"
     },
@@ -790,7 +816,8 @@
         "actionCode": null,
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: X_COMMITTED_SAFE\n  what:    it was saved; send it again\n"
     },
@@ -817,7 +844,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: X_REPLAY_NO_ID\n  what:    ask again with the same id\n"
     },
@@ -844,7 +872,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": "retry the same request; a replica that understands it will answer",
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: TASK_RUN_REQUEST_UNREADABLE\n  what:    planned by a different version\n  owner:   SYSTEM\n  do:      retry the same request; a replica that understands it will answer\n"
     },
@@ -871,7 +900,8 @@
         "actionCode": "AWAIT_OWNER_DECISION",
         "requiredAction": null,
         "userConfirmation": "REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "CONFIRM_THEN_RUN"
       },
       "legacyText": "  refused: X_CONFIRM_THEN_RETRY\n  what:    the owner has to confirm this\n"
     },
@@ -903,7 +933,8 @@
             "type": "REQUEST",
             "id": "trg_9"
           }
-        ]
+        ],
+        "disposition": "CONFIRM_THEN_RUN"
       },
       "legacyText": "  refused: X_CONFIRM_THEN_REPLAY\n  what:    the owner has to confirm this run\n"
     },
@@ -930,7 +961,8 @@
         "actionCode": "VERIFY_STATE",
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "AUTOMATIC"
       },
       "legacyText": "  refused: X_RETRYABLE_BUT_UNKNOWN\n  what:    safe to send again\n"
     },
@@ -957,7 +989,8 @@
         "actionCode": null,
         "requiredAction": null,
         "userConfirmation": "REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: X_COMMITTED_CONFIRM\n  what:    saved; confirm and send it again\n"
     },
@@ -984,7 +1017,8 @@
         "actionCode": null,
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: X_COMMITTED_AWAIT\n  what:    saved; wait for the owner, then send it again\n"
     },
@@ -1016,7 +1050,8 @@
             "type": "CROSSING",
             "id": "X5"
           }
-        ]
+        ],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: CROSS_PROJECT_APPROVAL_REQUIRED\n  what:    the task was filed; the crossing still needs approval\n"
     },
@@ -1048,7 +1083,8 @@
             "type": "TASK",
             "id": "T9"
           }
-        ]
+        ],
+        "disposition": "STOP"
       },
       "legacyText": "  advice: TASK_CRITERION_SHAPE_ADVICE\n  what:    filed; the criterion reads like a check\n"
     },
@@ -1080,7 +1116,8 @@
             "type": "REQUEST",
             "id": "trg_c"
           }
-        ]
+        ],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: X_COMMITTED_NEW_ID\n  what:    saved; send it under a new id\n"
     },
@@ -1107,7 +1144,8 @@
         "actionCode": null,
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: X_COMMITTED_FIX\n  what:    saved; fix it and send it again\n"
     },
@@ -1134,7 +1172,8 @@
         "actionCode": null,
         "requiredAction": "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: PROJECT_SCOPE_MISMATCH\n  what:    filed at home; the crossing was not asked\n  owner:   COORDINATOR\n  do:      FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF\n"
     },
@@ -1161,9 +1200,300 @@
         "actionCode": null,
         "requiredAction": null,
         "userConfirmation": "NOT_REQUIRED",
-        "resources": []
+        "resources": [],
+        "disposition": "STOP"
       },
       "legacyText": "  refused: X_COMMITTED_FUTURE\n  what:    saved\n"
+    },
+    {
+      "name": "disposition: a stale revision is re-read and decided again by the caller",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"STALE_CONFIG_REVISION\",\"message\":\"this project is at configRevision 4, not 3\",\"owner\":\"USER\",\"requiredAction\":\"re-read this project, decide against the current settings, and write again\",\"projectId\":\"P1\",\"expectedConfigRevision\":\"3\",\"configRevision\":\"4\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"REREAD_AND_DECIDE\",\"actor\":\"CALLER\",\"userConfirmation\":\"NOT_REQUIRED\",\"resources\":[{\"type\":\"PROJECT\",\"id\":\"P1\"}],\"disposition\":\"AUTOMATIC\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "STALE_CONFIG_REVISION",
+        "message": "this project is at configRevision 4, not 3",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": "USER",
+        "actionCode": "REREAD_AND_DECIDE",
+        "requiredAction": "re-read this project, decide against the current settings, and write again",
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "PROJECT",
+            "id": "P1"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: STALE_CONFIG_REVISION\n  what:    this project is at configRevision 4, not 3\n  owner:   USER\n  do:      re-read this project, decide against the current settings, and write again\n"
+    },
+    {
+      "name": "disposition: a cycle is answered by reading the graph and planning again",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"statusCode\":409,\"error\":\"Conflict\",\"code\":\"DEPENDENCY_CYCLE\",\"message\":\"This dependency would create a cycle\",\"taskId\":\"T1\",\"dependsOnTaskId\":\"T2\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"READ_GRAPH_AND_REPLAN\",\"actor\":\"CALLER\",\"resources\":[{\"type\":\"TASK\",\"id\":\"T1\"},{\"type\":\"TASK\",\"id\":\"T2\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "DEPENDENCY_CYCLE",
+        "message": "This dependency would create a cycle",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "READ_GRAPH_AND_REPLAN",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T1"
+          },
+          {
+            "type": "TASK",
+            "id": "T2"
+          }
+        ],
+        "disposition": "AUTOMATIC"
+      },
+      "legacyText": "  refused: DEPENDENCY_CYCLE\n  what:    This dependency would create a cycle\n"
+    },
+    {
+      "name": "disposition: a prerequisite that has not finished is a wait for the system",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_PREREQUISITES_INCOMPLETE\",\"message\":\"Prerequisites are not all complete yet, cannot run\",\"taskId\":\"T1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actor\":\"SYSTEM\",\"resources\":[{\"type\":\"TASK\",\"id\":\"T1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_PREREQUISITES_INCOMPLETE",
+        "message": "Prerequisites are not all complete yet, cannot run",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "SYSTEM",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T1"
+          }
+        ],
+        "disposition": "WAIT"
+      },
+      "legacyText": "  refused: TASK_PREREQUISITES_INCOMPLETE\n  what:    Prerequisites are not all complete yet, cannot run\n"
+    },
+    {
+      "name": "disposition: a paused list is a person's to resume",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_LIST_PAUSED\",\"message\":\"This task list is paused\",\"taskId\":\"T1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actor\":\"USER\",\"resources\":[{\"type\":\"TASK\",\"id\":\"T1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_LIST_PAUSED",
+        "message": "This task list is paused",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T1"
+          }
+        ],
+        "disposition": "HUMAN"
+      },
+      "legacyText": "  refused: TASK_LIST_PAUSED\n  what:    This task list is paused\n"
+    },
+    {
+      "name": "disposition: deleting a project that holds tasks needs the owner to confirm",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"PROJECT_NOT_EMPTY\",\"message\":\"This project still holds 3 task(s)\",\"projectId\":\"P1\",\"taskCount\":3,\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actionCode\":\"AWAIT_OWNER_DECISION\",\"actor\":\"USER\",\"userConfirmation\":\"REQUIRED\",\"resources\":[{\"type\":\"PROJECT\",\"id\":\"P1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "PROJECT_NOT_EMPTY",
+        "message": "This project still holds 3 task(s)",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "USER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [
+          {
+            "type": "PROJECT",
+            "id": "P1"
+          }
+        ],
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "legacyText": "  refused: PROJECT_NOT_EMPTY\n  what:    This project still holds 3 task(s)\n"
+    },
+    {
+      "name": "disposition: a retired task stands down and names its successor",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"TASK_RETIRED\",\"message\":\"task T1 was superseded by T2\",\"taskId\":\"T1\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"NEVER\",\"actionCode\":\"STAND_DOWN\",\"actor\":\"CALLER\",\"resources\":[{\"type\":\"TASK\",\"id\":\"T2\"},{\"type\":\"TASK\",\"id\":\"T1\"}]}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "TASK_RETIRED",
+        "message": "task T1 was superseded by T2",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "STAND_DOWN",
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [
+          {
+            "type": "TASK",
+            "id": "T2"
+          },
+          {
+            "type": "TASK",
+            "id": "T1"
+          }
+        ],
+        "disposition": "STOP"
+      },
+      "legacyText": "  refused: TASK_RETIRED\n  what:    task T1 was superseded by T2\n"
+    },
+    {
+      "name": "disposition: a stated value is kept below a required confirmation, never above it",
+      "input": {
+        "source": "HTTP",
+        "status": 403,
+        "body": "{\"code\":\"X_STATED_AUTOMATIC\",\"message\":\"x\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"userConfirmation\":\"REQUIRED\",\"disposition\":\"AUTOMATIC\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_STATED_AUTOMATIC",
+        "message": "x",
+        "kind": "REFUSAL",
+        "status": 403,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": "AWAIT_OWNER_DECISION",
+        "requiredAction": null,
+        "userConfirmation": "REQUIRED",
+        "resources": [],
+        "disposition": "CONFIRM_THEN_RUN"
+      },
+      "legacyText": "  refused: X_STATED_AUTOMATIC\n  what:    x\n"
+    },
+    {
+      "name": "disposition: a committed write stops whatever was stated",
+      "input": {
+        "source": "HTTP",
+        "status": 200,
+        "body": "{\"ok\":true,\"recovery\":{\"effect\":\"COMMITTED\",\"disposition\":\"AUTOMATIC\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "HTTP_200",
+        "message": "HTTP 200",
+        "kind": "ADVISORY",
+        "status": 200,
+        "effect": "COMMITTED",
+        "retry": {
+          "policy": "NEVER",
+          "afterSeconds": null
+        },
+        "actor": "CALLER",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "STOP"
+      },
+      "legacyText": ""
+    },
+    {
+      "name": "disposition: a value outside the enum is ignored",
+      "input": {
+        "source": "HTTP",
+        "status": 409,
+        "body": "{\"code\":\"X_BAD_DISPOSITION\",\"message\":\"x\",\"recovery\":{\"effect\":\"NONE\",\"retryPolicy\":\"AFTER_STATE_CHANGE\",\"actor\":\"SYSTEM\",\"disposition\":\"MAYBE\"}}"
+      },
+      "expect": {
+        "contractVersion": 1,
+        "code": "X_BAD_DISPOSITION",
+        "message": "x",
+        "kind": "REFUSAL",
+        "status": 409,
+        "effect": "NONE",
+        "retry": {
+          "policy": "AFTER_STATE_CHANGE",
+          "afterSeconds": null
+        },
+        "actor": "SYSTEM",
+        "owner": null,
+        "actionCode": null,
+        "requiredAction": null,
+        "userConfirmation": "NOT_REQUIRED",
+        "resources": [],
+        "disposition": "WAIT"
+      },
+      "legacyText": "  refused: X_BAD_DISPOSITION\n  what:    x\n"
     }
   ]
 }

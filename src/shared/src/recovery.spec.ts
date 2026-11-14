@@ -20,6 +20,7 @@ import {
   RECOVERY_STATUS_AFTER_STATE_CHANGE,
   RECOVERY_STATUS_SAFE,
   RECOVERY_USER_CONFIRMATIONS,
+  RECOVERY_DISPOSITIONS,
   legacyRefusalText,
   parseRecovery,
   type RecoveryEnvelope,
@@ -69,7 +70,9 @@ describe('recovery contract', () => {
       retryPolicy: [...RECOVERY_RETRY_POLICIES],
       actor: [...RECOVERY_ACTORS],
       userConfirmation: [...RECOVERY_USER_CONFIRMATIONS],
+      disposition: [...RECOVERY_DISPOSITIONS],
     });
+    expect(CONTRACT.disposition.rules.map((r: { id: string }) => r.id)).toEqual(DISPOSITION_RULE_IDS);
     expect(Object.keys(CONTRACT.actionCodes)).toEqual([...RECOVERY_ACTION_CODES]);
     expect(CONTRACT.defaultActionByPolicy).toEqual(RECOVERY_DEFAULT_ACTION_BY_POLICY);
     expect(CONTRACT.legacyCodes).toEqual(RECOVERY_LEGACY_CODES);
@@ -143,7 +146,7 @@ describe('recovery contract', () => {
       checked++;
     }
     expect(checked).toBe(SERVER_BLOCK_COMBINATIONS);
-    expect(SERVER_BLOCK_COMBINATIONS).toBe(5400);
+    expect(SERVER_BLOCK_COMBINATIONS).toBe(7560);
   });
 
   it('decides the branch from stable fields only: rewording the prose changes nothing', () => {
@@ -162,6 +165,18 @@ const INVARIANT_RULE_IDS = [
   'AUTOMATIC_RETRY_MATCHES_POLICY',
   'NEVER_HAS_NO_WAIT',
   'COMMITTED_IS_FINAL',
+];
+
+const DISPOSITION_RULE_IDS = [
+  'COMMITTED_STOPS',
+  'CONFIRMATION_FIRST',
+  'STATED',
+  'STAND_DOWN_STOPS',
+  'RESEND_OR_VERIFY_IS_AUTOMATIC',
+  'A_PERSON_DECIDES',
+  'THE_SYSTEM_MOVES',
+  'STATE_CHANGE_WITH_NO_ACTION',
+  'OTHERWISE',
 ];
 
 /**
@@ -189,6 +204,11 @@ function invariantViolations(e: RecoveryEnvelope, requestIdSent: boolean): strin
   if (e.actionCode === 'RETRY' && e.retry.policy !== 'SAFE') out.push('RETRY off SAFE');
   if (e.actionCode === 'RETRY_SAME_REQUEST' && e.retry.policy !== 'SAME_REQUEST_ID') out.push('RETRY_SAME_REQUEST off SAME_REQUEST_ID');
   if (e.retry.policy === 'NEVER' && e.retry.afterSeconds !== null) out.push('NEVER with a wait');
+  if (e.effect === 'COMMITTED' && e.disposition !== 'STOP') out.push('COMMITTED not STOP');
+  if (e.effect !== 'COMMITTED' && e.userConfirmation === 'REQUIRED' && e.disposition !== 'CONFIRM_THEN_RUN') {
+    out.push('confirmation not CONFIRM_THEN_RUN');
+  }
+  if (!(CONTRACT.enums.disposition as string[]).includes(e.disposition)) out.push('disposition outside its enum');
   return out;
 }
 

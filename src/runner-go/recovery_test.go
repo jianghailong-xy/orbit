@@ -95,7 +95,7 @@ func TestRecoveryContractTablesMatchTheContract(t *testing.T) {
 	}
 	wantEnums := map[string][]string{
 		"kind": recoveryKinds, "effect": recoveryEffects, "retryPolicy": recoveryRetryPolicies,
-		"actor": recoveryActors, "userConfirmation": recoveryUserConfirmations,
+		"actor": recoveryActors, "userConfirmation": recoveryUserConfirmations, "disposition": recoveryDispositions,
 	}
 	if !reflect.DeepEqual(contract.Enums, wantEnums) {
 		t.Errorf("enums: contract %v, Go %v", contract.Enums, wantEnums)
@@ -450,7 +450,7 @@ func TestRecoveryInvariantsHoldOnEveryServerBlockCombination(t *testing.T) {
 			}
 		}
 	}
-	if want := 3 * 2 * len(recoveryEffects) * len(recoveryRetryPolicies) * len(actions) * len(recoveryUserConfirmations) * 3; checked != want || want != 5400 {
-		t.Errorf("checked %d combinations, want %d (5400)", checked, want)
+	if want := 3 * 2 * len(recoveryEffects) * len(recoveryRetryPolicies) * len(actions) * len(recoveryUserConfirmations) * 3; checked != want || want != 7560 {
+		t.Errorf("checked %d combinations, want %d (7560)", checked, want)
 	}
 }

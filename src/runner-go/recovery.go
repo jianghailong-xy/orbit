@@ -49,6 +49,7 @@ type recoveryEnvelope struct {
 	RequiredAction   *string            `json:"requiredAction"`
 	UserConfirmation string             `json:"userConfirmation"`
 	Resources        []recoveryResource `json:"resources"`
+	Disposition      string             `json:"disposition"`
 }
 
 // recoveryObservation is one failure as this client met it, before it is read. Source is HTTP,
@@ -70,10 +71,12 @@ var (
 	recoveryRetryPolicies     = []string{"SAFE", "SAME_REQUEST_ID", "VERIFY_THEN_RETRY", "AFTER_STATE_CHANGE", "NEVER"}
 	recoveryActors            = []string{"CALLER", "COORDINATOR", "USER", "SYSTEM"}
 	recoveryUserConfirmations = []string{"REQUIRED", "NOT_REQUIRED"}
+	recoveryDispositions      = []string{"AUTOMATIC", "WAIT", "CONFIRM_THEN_RUN", "HUMAN", "STOP"}
 	recoveryActionCodePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 	recoveryActionCodes       = []string{
 		"RETRY", "RETRY_SAME_REQUEST", "VERIFY_STATE", "FIX_REQUEST", "USE_NEW_REQUEST_ID",
 		"ANSWER_ADVICE", "AWAIT_OWNER_DECISION", "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+		"REREAD_AND_DECIDE", "READ_GRAPH_AND_REPLAN", "ASSIGN_AGENT", "STAND_DOWN",
 	}
 	// "" stands for no default action.
 	recoveryDefaultActionByPolicy = map[string]string{
@@ -222,13 +225,17 @@ var recoveryActionSemantics = map[string]struct{ AutomaticRetry, MayWrite bool }
 	"ANSWER_ADVICE":                          {AutomaticRetry: false, MayWrite: true},
 	"AWAIT_OWNER_DECISION":                   {AutomaticRetry: false, MayWrite: true},
 	"FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF": {AutomaticRetry: false, MayWrite: true},
+	"REREAD_AND_DECIDE":                      {AutomaticRetry: false, MayWrite: true},
+	"READ_GRAPH_AND_REPLAN":                  {AutomaticRetry: false, MayWrite: true},
+	"ASSIGN_AGENT":                           {AutomaticRetry: false, MayWrite: true},
+	"STAND_DOWN":                             {AutomaticRetry: false, MayWrite: false},
 }
 
 // The actions that resend the identical request with nobody in between.
 var recoveryAutomaticRetryActionCodes = []string{"RETRY", "RETRY_SAME_REQUEST"}
 
 // The only actions a COMMITTED envelope may carry: they read, and never lead to another write.
-var recoveryReadOnlyActionCodes = []string{"VERIFY_STATE"}
+var recoveryReadOnlyActionCodes = []string{"VERIFY_STATE", "STAND_DOWN"}
 
 // The resource type that names a request id the server can read an earlier answer back by.
 const recoveryRequestIDResourceType = "REQUEST"
@@ -305,9 +312,39 @@ func normalizeRecovery(c recoveryCandidate) (policy, action string, afterSeconds
 	return policy, action, afterSeconds
 }
 
+// recoveryDispositionOf is the disposition of a normalized envelope (contract `disposition.rules`), the
+// same rules in the same order as src/shared/src/recovery.ts dispositionOf. stated is the server's own
+// value ("" when it stated none or one outside the enum).
+func recoveryDispositionOf(env recoveryEnvelope, stated string) string {
+	action := ""
+	if env.ActionCode != nil {
+		action = *env.ActionCode
+	}
+	policy := env.Retry.Policy
+	switch {
+	case env.Effect == "COMMITTED":
+		return "STOP"
+	case env.UserConfirmation == "REQUIRED":
+		return "CONFIRM_THEN_RUN"
+	case stated != "":
+		return stated
+	case action == "STAND_DOWN":
+		return "STOP"
+	case policy == "SAFE" || policy == "SAME_REQUEST_ID" || policy == "VERIFY_THEN_RETRY":
+		return "AUTOMATIC"
+	case action == "AWAIT_OWNER_DECISION" || env.Actor == "USER":
+		return "HUMAN"
+	case env.Actor == "SYSTEM":
+		return "WAIT"
+	case policy == "AFTER_STATE_CHANGE" && action == "":
+		return "WAIT"
+	}
+	return "AUTOMATIC"
+}
+
 // finishRecovery holds env to the invariants: its effect, userConfirmation and resources are final, its
 // Retry.Policy is the resolved one, and statedAction/afterSeconds are what the fields said.
-func finishRecovery(env *recoveryEnvelope, statedAction string, afterSeconds *int, requestIDSent, success bool) {
+func finishRecovery(env *recoveryEnvelope, statedAction string, afterSeconds *int, requestIDSent, success bool, statedDisposition ...string) {
 	hasRequestID := requestIDSent
 	for _, r := range env.Resources {
 		if r.Type == recoveryRequestIDResourceType {
@@ -320,6 +357,11 @@ func finishRecovery(env *recoveryEnvelope, statedAction string, afterSeconds *in
 	})
 	env.Retry = recoveryRetry{Policy: policy, AfterSeconds: after}
 	env.ActionCode = optionalString(action)
+	stated := ""
+	if len(statedDisposition) > 0 {
+		stated = statedDisposition[0]
+	}
+	env.Disposition = recoveryDispositionOf(*env, stated)
 }
 
 // parseRecovery reads one failure into the envelope. It answers false only for a successful HTTP
@@ -503,7 +545,7 @@ func parseHTTPRecovery(obs recoveryObservation) (recoveryEnvelope, bool) {
 			}
 		}
 	}
-	finishRecovery(&env, action, afterSeconds, obs.RequestIDSent, success)
+	finishRecovery(&env, action, afterSeconds, obs.RequestIDSent, success, recoveryOneOf(recoveryDispositions, stated["disposition"]))
 	return env, true
 }
 

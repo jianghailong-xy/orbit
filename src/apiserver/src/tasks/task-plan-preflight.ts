@@ -46,6 +46,8 @@ import {
   type TaskCompletionCriterionValue,
 } from './task-completion-criterion';
 import type { TaskCompletionPolicyValue } from '../projects/task-aggregation';
+import type { RecoveryDisposition } from '@orbit/shared';
+import { DISPOSITION_SEVERITY, planFindingRecovery, type RefusalRecoveryStated } from '../common/refusal-recovery';
 
 export const PLAN_PREFLIGHT_DIMENSIONS = [
   'PROJECT',
@@ -585,15 +587,41 @@ export interface PlanPreflightRefusalBody {
   message: string;
   /** Nothing of the plan was written. Stated in the body because it is the caller first question. */
   written: 0;
-  findings: PlanPreflightFinding[];
+  /** Every refusing finding, each with its own `recovery` block. */
+  findings: Array<PlanPreflightFinding & { recovery: RefusalRecoveryStated }>;
+  /** Every warning too, so one answer says everything the next attempt will meet. */
+  warnings: Array<PlanPreflightFinding & { recovery: RefusalRecoveryStated }>;
+  /** The top-level count: how many refuse, how many warn, and how many of the refusals fall under
+   *  each disposition and code. */
+  summary: {
+    refusing: number;
+    warnings: number;
+    byDisposition: Partial<Record<RecoveryDisposition, number>>;
+    byCode: Record<string, number>;
+  };
+  /** The plan's own answer: changed and sent again as a whole, and only as soon as its most stuck
+   *  finding allows (`DISPOSITION_SEVERITY`). */
+  recovery: RefusalRecoveryStated & { resources: [] };
   plan: PlanItemLanding[];
+}
+
+function withRecovery(finding: PlanPreflightFinding): PlanPreflightFinding & { recovery: RefusalRecoveryStated } {
+  return { ...finding, recovery: planFindingRecovery(finding.code, finding.requiredAction) };
 }
 
 export function planPreflightRefusalBody(
   findings: readonly PlanPreflightFinding[],
   facts: PlanFacts,
 ): PlanPreflightRefusalBody {
-  const refusals = planPreflightRefusals(findings);
+  const refusals = planPreflightRefusals(findings).map(withRecovery);
+  const warnings = findings.filter((finding) => finding.severity !== 'REFUSE').map(withRecovery);
+  const byDisposition: Partial<Record<RecoveryDisposition, number>> = {};
+  const byCode: Record<string, number> = {};
+  for (const finding of refusals) {
+    byDisposition[finding.recovery.disposition] = (byDisposition[finding.recovery.disposition] ?? 0) + 1;
+    byCode[finding.code] = (byCode[finding.code] ?? 0) + 1;
+  }
+  const disposition = DISPOSITION_SEVERITY.find((d) => byDisposition[d]) ?? 'AUTOMATIC';
   return {
     code: 'PLAN_PREFLIGHT_FAILED',
     message:
@@ -601,6 +629,21 @@ export function planPreflightRefusalBody(
       + `${refusals.length === 1 ? '' : 's'}; nothing was written`,
     written: 0,
     findings: refusals,
+    warnings,
+    summary: { refusing: refusals.length, warnings: warnings.length, byDisposition, byCode },
+    recovery: {
+      effect: 'NONE',
+      retryPolicy: 'NEVER',
+      // A plan is always answered by changing it; which findings block that change, and on whom, is
+      // what the disposition and each finding's own block say.
+      actionCode: 'FIX_REQUEST',
+      actor: disposition === 'HUMAN' || disposition === 'CONFIRM_THEN_RUN' ? 'USER' : 'CALLER',
+      // Only when a confirmation is what the plan waits on: a client reads a required confirmation
+      // as CONFIRM_THEN_RUN whatever else is stated, and a STOP or HUMAN finding outranks it.
+      userConfirmation: disposition === 'CONFIRM_THEN_RUN' ? 'REQUIRED' : 'NOT_REQUIRED',
+      disposition,
+      resources: [],
+    },
     plan: planItemLandings(facts),
   };
 }

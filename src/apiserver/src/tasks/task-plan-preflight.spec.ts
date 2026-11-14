@@ -306,6 +306,19 @@ test('every finding comes back, in a fixed order, and the body says nothing was 
   // thing most often actually wrong with a refused plan is the items that were not refused.
   assert.equal(body.plan.length, 3);
   assert.deepEqual(body.plan.map((row) => row.projectTitle), ['a project', 'a project', 'a project']);
+  // One answer says everything the next attempt meets: the warning rides along, each finding names its
+  // own recovery, and the top level is as stuck as its stuckest finding — here, the owner's yes.
+  assert.deepEqual(body.warnings.map((f) => f.code), ['PLAN_ASSIGNEE_NOT_ON_PROJECT_TEAM']);
+  assert.deepEqual(body.findings.map((f) => f.recovery.disposition), ['AUTOMATIC', 'CONFIRM_THEN_RUN']);
+  assert.deepEqual(body.summary, {
+    refusing: 2,
+    warnings: 1,
+    byDisposition: { AUTOMATIC: 1, CONFIRM_THEN_RUN: 1 },
+    byCode: { PLAN_PARENT_CROSSES_PROJECT: 1, CROSS_PROJECT_APPROVAL_REQUIRED: 1 },
+  });
+  assert.equal(body.recovery.disposition, 'CONFIRM_THEN_RUN');
+  assert.equal(body.recovery.userConfirmation, 'REQUIRED');
+  assert.equal(body.recovery.actionCode, 'FIX_REQUEST');
 });
 
 test('L7: a dry run reports what a refusal throws, plus the warnings a refusal leaves out', () => {

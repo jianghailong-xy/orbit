@@ -36,6 +36,7 @@ import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { isSessionGenerating } from '../common/session-generating';
+import { codedRefusal } from '../common/refusal-recovery';
 import { SingleFlight } from '../common/single-flight';
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { PrismaService } from '../prisma/prisma.service';
@@ -3863,7 +3864,7 @@ export class ProjectsService {
         // Under the lock, so the comparison and the write cannot be separated by another writer.
         // Throwing here rolls the transaction back, which is the whole guarantee a stale write
         // needs: refused AND nothing written, including the team row below.
-        ProjectsService.assertConfigRevision(dto.expectedConfigRevision, locked.config_revision);
+        ProjectsService.assertConfigRevision(dto.expectedConfigRevision, locked.config_revision, id);
 
         // The integration line, under its binding's own lock: rank 55, after the project row above
         // and before any criterion row below.
@@ -4423,7 +4424,7 @@ export class ProjectsService {
    * this against revision N". If the project has moved on, the edit is refused with both numbers
    * in the body, so the client can re-read, re-decide and retry rather than guess what changed.
    */
-  private static assertConfigRevision(expected: string | undefined, actual: bigint): void {
+  private static assertConfigRevision(expected: string | undefined, actual: bigint, projectId: string): void {
     if (expected === undefined) return;
     if (expected === String(actual)) return;
     throw new ConflictException({
@@ -4437,6 +4438,8 @@ export class ProjectsService {
       requiredAction: 're-read this project, decide against the current settings, and write again',
       expectedConfigRevision: expected,
       configRevision: String(actual),
+      // The project to re-read before deciding again (refusal-recovery.ts, REREAD_AND_DECIDE).
+      projectId,
     });
   }
 
@@ -4606,14 +4609,14 @@ export class ProjectsService {
         if (locked.length === 0) throw new NotFoundException('project not found');
         releasedCoordinatorSessionId = locked[0].coordinator_session_id;
         const tasks = await tx.task.count({ where: { projectId: id } });
-        if (tasks > 0) throw new ConflictException(this.notEmptyMessage(tasks));
+        if (tasks > 0) throw new ConflictException(this.notEmptyRefusal(id, tasks));
         await tx.project.delete({ where: { id } });
       }, loggedRetry(this.logger, 'projects.remove'));
     } catch (e) {
       // The database's own refusal, phrased as the endpoint's. Reached only by a writer that beat
       // the lock — but a 500 there would say "we broke" about a rule working exactly as intended.
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
-        throw new ConflictException(this.notEmptyMessage());
+        throw new ConflictException(this.notEmptyRefusal(id));
       }
       throw e;
     }
@@ -4635,11 +4638,15 @@ export class ProjectsService {
     return { ok: true };
   }
 
-  /** One wording for both paths, so the answer does not depend on who noticed. */
-  private notEmptyMessage(tasks?: number): string {
-    return (
+  /** One answer for both paths, so it does not depend on who noticed. Moving or deleting the tasks is
+   *  the owner's decision (refusal-recovery.ts, PROJECT_NOT_EMPTY), never a side effect of the delete. */
+  private notEmptyRefusal(projectId: string, tasks?: number): Record<string, unknown> {
+    return codedRefusal(
+      409,
+      'PROJECT_NOT_EMPTY',
       `This project still holds ${tasks ?? 'one or more'} task(s) and cannot be deleted — ` +
-      'move them to another project or delete them first'
+        'move them to another project or delete them first',
+      { projectId, taskCount: tasks },
     );
   }
 
