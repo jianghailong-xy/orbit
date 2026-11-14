@@ -26,14 +26,17 @@
  * `schedule_run_report` ends a run, once, from the session serving it. Without one, what the session does decides:
  * an engine that ended or went idle is NO_REPORT; a run past its limit is interrupted, RUN_LIMIT; a card nobody
  * answered for two hours interrupts it, APPROVAL_TIMEOUT. Whether the run reached its engine is read from its first
- * turn's `delivered_at`: a run that never did (RUNNER_UNAVAILABLE, QUOTA, ENGINE_CRASHED_BEFORE_START) is retried
- * after 1, 5 and 15 minutes inside its catch-up window; one that did is never retried. `consecutiveFailures` counts
+ * turn's `delivered_at`: a run that never did (RUNNER_UNAVAILABLE, QUOTA, ENGINE_CRASHED_BEFORE_START) has its
+ * session retired and is retried after 1, 5 and 15 minutes, then hourly, inside its catch-up window, and is MISSED
+ * past it (§5.2: a slot not run, not a failure); one that did is never retried. A runner that is offline at the
+ * start leaves the run waiting without an attempt. One run never has two live sessions (`start`, `fail`). `consecutiveFailures` counts
  * and nothing pauses. A NO_CHANGE run's session is completed; CHANGED and FAILED ones stay open.
  */
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Inject,
   Injectable,
   Logger,
@@ -66,6 +69,15 @@ export const SCHEDULE_UNDELIVERED_LIMIT_MS = 10 * MINUTE;
 export const SCHEDULE_LATE_GRACE_MS = 10 * MINUTE;
 /** Catch-up reaches back one period; a ONCE rule's is a day (§5.2). */
 export const SCHEDULE_ONCE_CATCH_UP_MS = 24 * HOUR;
+/**
+ * Once a run that never reached its engine has used its three retries, it waits this long between attempts for as
+ * long as its catch-up window lasts (§5.2: the runner, the dispatch or the quota is expected back), then is MISSED.
+ */
+export const SCHEDULE_RECOVERY_WAIT_MS = HOUR;
+/** A run met an offline runner at its start: it looks again this soon, without spending an attempt. */
+export const SCHEDULE_RUNNER_WAIT_MS = MINUTE;
+/** A run, or a schedule, whose pass threw is left out of the passes for this long, so the rest go ahead. */
+export const SCHEDULE_ERROR_COOLDOWN_MS = 5 * MINUTE;
 /** Slots one firing reads at most: a year of daily slots, so an outage of any length ends in one pass. */
 const MAX_SLOTS_PER_FIRING = 400;
 
@@ -119,20 +131,39 @@ export interface ScheduleRunSessionPort {
   open(input: OpenRunSession): Promise<void>;
   interrupt(ownerId: string, sessionId: string): Promise<void>;
   complete(ownerId: string, sessionId: string): Promise<void>;
+  /** Retire the session: no auto-retry, ended; one already ended or never written counts as retired. */
   end(ownerId: string, sessionId: string): Promise<void>;
 }
 
 export const SCHEDULE_RUN_SESSIONS = Symbol('SCHEDULE_RUN_SESSIONS');
 
 export type FireOutcome = 'FIRED' | 'MISSED' | 'SETTLED_ELSEWHERE';
-export type StartOutcome = 'STARTED' | 'HELD' | 'WAITING' | 'SETTLED_ELSEWHERE' | 'RETRY' | 'FAILED' | 'CANCELLED';
+/** How a failure was settled: retried, waiting, MISSED, CANCELLED (its schedule paused), SKIPPED or FAILED. */
+export type FailOutcome = 'RETRY' | 'FAILED' | 'MISSED' | 'CANCELLED' | 'SKIPPED';
+export type StartOutcome = 'STARTED' | 'HELD' | 'WAITING' | 'SETTLED_ELSEWHERE' | FailOutcome;
 export type ReconcileOutcome =
   | 'UNCHANGED'
   | 'AWAITING_APPROVAL'
   | 'RUNNING'
-  | 'RETRY'
-  | 'FAILED'
-  | 'SETTLED_ELSEWHERE';
+  | 'SETTLED_ELSEWHERE'
+  /** The run's session could not be retired yet: the run is left as it was for the next pass. */
+  | 'DEFERRED'
+  | FailOutcome;
+
+/**
+ * A session that may still run: not ended, not filed away, and not FAILED with an auto-retry that would bring it
+ * back. Ended means a terminal status or an end requested (SessionsService.transitionEnd).
+ */
+const LIVE_SESSION: Prisma.SessionWhereInput = {
+  deletedAt: null,
+  completedAt: null,
+  archivedAt: null,
+  cancelRequestedAt: null,
+  OR: [
+    { status: { notIn: [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.CANCELLED] } },
+    { status: RunStatus.FAILED, retryAt: { not: null } },
+  ],
+};
 
 type Tx = Prisma.TransactionClient;
 
@@ -174,6 +205,8 @@ export function catchUpWindowMs(rule: ScheduleRule, timezone: string, slot: Date
 export class ScheduleRunsService {
   private readonly logger = new Logger(ScheduleRunsService.name);
   private readonly clock: () => Date;
+  /** Schedules and runs whose last pass threw, until when they are left out (SCHEDULE_ERROR_COOLDOWN_MS). */
+  private readonly cooling = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -190,7 +223,7 @@ export class ScheduleRunsService {
   /** Fire up to `batch` due schedules, the longest-due first. */
   async fireDue(batch = 25): Promise<Array<{ scheduleId: string; outcome: FireOutcome }>> {
     const due = await this.prisma.schedule.findMany({
-      where: { state: 'ACTIVE', nextDueAt: { lte: this.clock() } },
+      where: { state: 'ACTIVE', nextDueAt: { lte: this.clock() }, id: { notIn: this.cooled() } },
       orderBy: [{ nextDueAt: 'asc' }, { id: 'asc' }],
       take: batch,
       select: { id: true },
@@ -200,6 +233,7 @@ export class ScheduleRunsService {
       try {
         outcomes.push({ scheduleId: id, outcome: await this.fire(id) });
       } catch (error) {
+        this.coolDown(id);
         this.logger.error(`schedule ${id} did not fire: ${messageOf(error)}`);
       }
     }
@@ -283,16 +317,24 @@ export class ScheduleRunsService {
         outcomes.push({ runId: id, outcome: await this.start(id) });
       } catch (error) {
         this.logger.error(`schedule run ${id} did not start: ${messageOf(error)}`);
+        await this.deferAfterError(id);
       }
     }
     return outcomes;
   }
 
-  /** Start one QUEUED run: the checks, then RUNNING and its session. */
-  async start(runId: string): Promise<StartOutcome> {
+  /**
+   * Start one QUEUED run: the checks, then RUNNING and its session.
+   *
+   * One run never has two live sessions. A session an earlier attempt left alive (a process that died between
+   * re-queueing a run and retiring its session, or a create that committed after its caller gave up) is found by
+   * `scheduleRunId` under the schedule lock and retired before a new one is opened; one that cannot be retired
+   * holds the start back. A create that fails after its INSERT committed keeps that session as the run's.
+   */
+  async start(runId: string, retiredStrays = false): Promise<StartOutcome> {
     const step = await withTransactionRetry(
       this.prisma,
-      async (tx): Promise<{ outcome: StartOutcome; open?: OpenRunSession }> => {
+      async (tx): Promise<{ outcome: StartOutcome; open?: OpenRunSession; strays?: Array<{ id: string; ownerId: string }> }> => {
         const head = await tx.scheduleRun.findUnique({ where: { id: runId }, select: { scheduleId: true } });
         if (!head) return { outcome: 'SETTLED_ELSEWHERE' };
         const schedule = await this.lock(tx, head.scheduleId);
@@ -302,14 +344,24 @@ export class ScheduleRunsService {
         if (run.notBeforeAt && run.notBeforeAt > now) return { outcome: 'WAITING' };
         const busy = await tx.scheduleRun.count({ where: { scheduleId: schedule.id, state: { in: [...IN_PROGRESS] } } });
         if (busy > 0) return { outcome: 'WAITING' };
-        if (schedule.state === 'ENDED' && schedule.endedReason === 'DELETED') {
-          await tx.scheduleRun.update({ where: { id: runId }, data: { state: 'CANCELLED', endedAt: now } });
+        if (
+          (schedule.state === 'ENDED' && schedule.endedReason === 'DELETED')
+          || (schedule.state === 'PAUSED' && run.trigger !== 'MANUAL')
+        ) {
+          // §8.4: pausing or deleting cancels the run waiting; a retry put back after the pause is that run too.
+          await tx.scheduleRun.update({ where: { id: runId }, data: { state: 'CANCELLED', endedAt: now, notBeforeAt: null } });
           return { outcome: 'CANCELLED' };
         }
         if (schedule.state === 'HELD') {
           await this.holdRun(tx, run, schedule.heldReason ?? 'HELD', now);
           return { outcome: 'HELD' };
         }
+        // Computed under the lock, so a session another replica opens for this run after this commits is never one.
+        const strays = await tx.session.findMany({
+          where: { scheduleRunId: runId, ...LIVE_SESSION },
+          select: { id: true, ownerId: true },
+        });
+        if (strays.length > 0) return { outcome: 'WAITING', strays };
         const check = await scheduleStartCheck(tx, schedule);
         if (!check.ok) {
           await this.holdRun(tx, run, check.reason, now);
@@ -321,12 +373,27 @@ export class ScheduleRunsService {
           }
           return { outcome: 'HELD' };
         }
-        const runner = await tx.workspace.findUnique({
+        const workspace = await tx.workspace.findUnique({
           where: { id: schedule.workspaceId },
-          select: { runner: { select: { status: true, ...RUNNER_BEATS } } },
+          select: { runner: { select: { status: true, ...RUNNER_BEATS, managedRunner: { select: { id: true } } } } },
         });
-        if (!runnerIsOnline(runner?.runner, now.getTime())) {
-          return { outcome: await this.failLocked(tx, schedule, run, 'RUNNER_UNAVAILABLE', now) };
+        // §5.2: a runner that is not there is a slot missed, not a failure. The run waits, without spending an
+        // attempt, and starts once the runner is back inside its catch-up window; past it, it is MISSED. A managed
+        // runner asleep is not absent: opening the session wakes it (SessionsService.create).
+        const runner = workspace?.runner;
+        if (!runner?.managedRunner && !runnerIsOnline(runner, now.getTime())) {
+          if (now.getTime() > this.deadline(schedule, run)) {
+            await tx.scheduleRun.update({
+              where: { id: runId },
+              data: { state: 'MISSED', failureReason: 'RUNNER_UNAVAILABLE', endedAt: now, notBeforeAt: null },
+            });
+            return { outcome: 'MISSED' };
+          }
+          await tx.scheduleRun.update({
+            where: { id: runId },
+            data: { notBeforeAt: new Date(now.getTime() + SCHEDULE_RUNNER_WAIT_MS), failureReason: 'RUNNER_UNAVAILABLE' },
+          });
+          return { outcome: 'WAITING' };
         }
         const sessionId = randomUUID();
         const prompt = await this.firstTurn(tx, schedule, run, now);
@@ -338,14 +405,57 @@ export class ScheduleRunsService {
       },
       loggedRetry(this.logger, 'scheduleRuns.start'),
     );
+    if (step.strays) {
+      for (const stray of step.strays) {
+        try {
+          await this.sessions.end(stray.ownerId, stray.id);
+        } catch (error) {
+          this.logger.warn(`run ${runId} waits: its earlier session ${stray.id} could not be retired: ${messageOf(error)}`);
+          return 'WAITING';
+        }
+      }
+      return retiredStrays ? 'WAITING' : this.start(runId, true);
+    }
     if (!step.open) return step.outcome;
     try {
       await this.sessions.open(step.open);
       return 'STARTED';
     } catch (error) {
       this.logger.warn(`run ${runId} could not open its session: ${messageOf(error)}`);
-      return this.fail(runId, 'RUNNER_UNAVAILABLE', { sessionId: step.open.sessionId });
+      // A create that threw after its INSERT committed (it wakes a managed runner afterwards) did open the
+      // session: it is the run's, and the watch pass reads it like any other.
+      const opened = await this.prisma.session.findUnique({ where: { id: step.open.sessionId }, select: { id: true } });
+      if (opened) return 'STARTED';
+      // Refused before anything was written: the request itself cannot be served, which a retry will not change.
+      if (error instanceof HttpException && error.getStatus() < 500) {
+        return this.holdRefused(runId, step.open.sessionId);
+      }
+      const failed = await this.fail(runId, 'RUNNER_UNAVAILABLE', { sessionId: step.open.sessionId });
+      return failed === 'DEFERRED' ? 'WAITING' : failed;
     }
+  }
+
+  /** A create door refused the run's session: the run and its schedule are HELD (SESSION_REFUSED) for the owner. */
+  private async holdRefused(runId: string, sessionId: string): Promise<StartOutcome> {
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const head = await tx.scheduleRun.findUnique({ where: { id: runId }, select: { scheduleId: true } });
+        const schedule = head ? await this.lock(tx, head.scheduleId) : null;
+        const run = await tx.scheduleRun.findUnique({ where: { id: runId } });
+        if (!schedule || !run || run.state !== 'RUNNING' || run.sessionId !== sessionId) return 'SETTLED_ELSEWHERE' as const;
+        const now = this.clock();
+        await this.holdRun(tx, run, 'SESSION_REFUSED', now);
+        if (schedule.state !== 'ENDED') {
+          await tx.schedule.update({
+            where: { id: schedule.id },
+            data: { state: 'HELD', heldReason: 'SESSION_REFUSED', nextDueAt: null },
+          });
+        }
+        return 'HELD' as const;
+      },
+      loggedRetry(this.logger, 'scheduleRuns.holdRefused'),
+    );
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -355,7 +465,7 @@ export class ScheduleRunsService {
   /** Read every run in progress against its session, and end the ones whose session says they are over. */
   async reconcile(batch = 100): Promise<Array<{ runId: string; outcome: ReconcileOutcome }>> {
     const runs = await this.prisma.scheduleRun.findMany({
-      where: { state: { in: [...IN_PROGRESS] } },
+      where: { state: { in: [...IN_PROGRESS] }, id: { notIn: this.cooled() } },
       orderBy: { startedAt: 'asc' },
       take: batch,
       select: { id: true },
@@ -365,6 +475,7 @@ export class ScheduleRunsService {
       try {
         outcomes.push({ runId: id, outcome: await this.reconcileRun(id) });
       } catch (error) {
+        this.coolDown(id);
         this.logger.error(`schedule run ${id} was not reconciled: ${messageOf(error)}`);
       }
     }
@@ -383,7 +494,7 @@ export class ScheduleRunsService {
     const session = sessionId
       ? await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { status: true, completedAt: true, archivedAt: true, deletedAt: true, error: true },
+          select: { status: true, completedAt: true, archivedAt: true, deletedAt: true, cancelRequestedAt: true, error: true },
         })
       : null;
     if (!session || !sessionId) {
@@ -405,12 +516,15 @@ export class ScheduleRunsService {
       return this.fail(runId, isUsageLimitErrorText(session.error) ? 'QUOTA' : 'ENGINE_CRASHED_BEFORE_START', { sessionId });
     }
     const ended = session.deletedAt !== null || session.completedAt !== null || session.archivedAt !== null
+      || session.cancelRequestedAt !== null
       || session.status === RunStatus.SUCCEEDED || session.status === RunStatus.CANCELLED;
-    if (ended) return this.fail(runId, 'NO_REPORT', { sessionId });
+    // Ended before its first turn reached the engine: the run never started (a retire that committed before its
+    // re-queue did, among others), so it is retried like one that met no runner.
+    if (ended) return this.fail(runId, delivered ? 'NO_REPORT' : 'RUNNER_UNAVAILABLE', { sessionId });
 
     if (!delivered) {
       if (now.getTime() - startedAt.getTime() >= SCHEDULE_UNDELIVERED_LIMIT_MS) {
-        return this.fail(runId, 'RUNNER_UNAVAILABLE', { sessionId, endSession: true });
+        return this.fail(runId, 'RUNNER_UNAVAILABLE', { sessionId });
       }
       return 'UNCHANGED';
     }
@@ -617,14 +731,31 @@ export class ScheduleRunsService {
   // -------------------------------------------------------------------------------------------------------------
 
   /**
-   * End an in-progress (or starting) run with a failure: retried when it never reached its engine and a retry is
-   * left, FAILED otherwise. Then the session is interrupted or ended as asked, and a queued run may start.
+   * End an in-progress run with a failure. A run that never reached its engine (RETRIED_FAILURES) has its session
+   * retired FIRST — auto-retry cancelled and the session ended — and only then is the run put back, so a process
+   * that dies between the two leaves an ended session and a run still RUNNING, which the next pass settles the same
+   * way, never two live sessions. A session that cannot be retired leaves the run as it was (DEFERRED). Then the
+   * session is interrupted when asked, and a queued run may start.
    */
   async fail(
     runId: string,
     reason: ScheduleFailureReason,
-    opts: { sessionId: string | null; interrupt?: boolean; endSession?: boolean },
-  ): Promise<'RETRY' | 'FAILED' | 'SETTLED_ELSEWHERE'> {
+    opts: { sessionId: string | null; interrupt?: boolean },
+  ): Promise<FailOutcome | 'SETTLED_ELSEWHERE' | 'DEFERRED'> {
+    if (RETRIED_FAILURES.has(reason) && opts.sessionId) {
+      const owner = await this.prisma.scheduleRun.findUnique({
+        where: { id: runId },
+        select: { schedule: { select: { ownerId: true } } },
+      });
+      if (owner) {
+        try {
+          await this.sessions.end(owner.schedule.ownerId, opts.sessionId);
+        } catch (error) {
+          this.logger.warn(`run ${runId} stays as it is: session ${opts.sessionId} could not be retired: ${messageOf(error)}`);
+          return 'DEFERRED';
+        }
+      }
+    }
     const result = await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -639,50 +770,106 @@ export class ScheduleRunsService {
       },
       loggedRetry(this.logger, 'scheduleRuns.fail'),
     );
-    if (result.outcome !== 'SETTLED_ELSEWHERE' && result.ownerId && opts.sessionId) {
+    if (result.outcome !== 'SETTLED_ELSEWHERE' && result.ownerId && opts.sessionId && opts.interrupt) {
       const ownerId = result.ownerId;
       const sessionId = opts.sessionId;
-      if (opts.interrupt) await this.quietly(() => this.sessions.interrupt(ownerId, sessionId), 'interrupt');
-      if (opts.endSession) await this.quietly(() => this.sessions.end(ownerId, sessionId), 'end');
+      await this.quietly(() => this.sessions.interrupt(ownerId, sessionId), 'interrupt');
     }
     if (result.scheduleId) await this.startNext(result.scheduleId);
     return result.outcome;
   }
 
+  /**
+   * Settle a failed attempt (§5.2, §7.2). A run that started is FAILED, counted, never retried. One that never
+   * reached its engine is a slot not yet run: retried after 1, 5 and 15 minutes, then once an hour, for as long as
+   * its catch-up window lasts; past it, MISSED, which is not a failure. It is CANCELLED instead when its schedule is
+   * paused (a MANUAL run aside), held or deleted, and SKIPPED when a newer run already waits in its place.
+   */
   private async failLocked(
     tx: Tx,
     schedule: Schedule,
     run: ScheduleRun,
     reason: ScheduleFailureReason,
     now: Date,
-  ): Promise<'RETRY' | 'FAILED'> {
-    if (RETRIED_FAILURES.has(reason) && run.attempt <= SCHEDULE_RETRY_DELAYS_MINUTES.length) {
-      const retryAt = new Date(now.getTime() + SCHEDULE_RETRY_DELAYS_MINUTES[run.attempt - 1] * MINUTE);
-      const window = catchUpWindowMs(parseRule(schedule.rule), schedule.timezone, run.plannedAt);
-      const waiting = await tx.scheduleRun.count({ where: { scheduleId: schedule.id, state: 'QUEUED', id: { not: run.id } } });
-      // A newer run already waiting takes the retry's place, as a newer slot takes an older queued one's.
-      if (retryAt.getTime() - run.plannedAt.getTime() <= window && waiting === 0 && schedule.state !== 'HELD') {
-        await tx.scheduleRun.update({
-          where: { id: run.id },
-          data: {
-            state: 'QUEUED',
-            attempt: run.attempt + 1,
-            notBeforeAt: retryAt,
-            sessionId: null,
-            startedAt: null,
-            failureReason: reason,
-          },
-        });
-        return 'RETRY';
-      }
+  ): Promise<FailOutcome> {
+    const end = (state: 'FAILED' | 'MISSED' | 'CANCELLED' | 'SKIPPED') =>
+      tx.scheduleRun.update({
+        where: { id: run.id },
+        data: { state, failureReason: reason, endedAt: now, notBeforeAt: null },
+      });
+    if (!RETRIED_FAILURES.has(reason)) {
+      await end('FAILED');
+      // Counted, never acted on: a schedule is not paused by its failures (§7.2, owner decision).
+      await tx.schedule.update({ where: { id: schedule.id }, data: { consecutiveFailures: { increment: 1 } } });
+      return 'FAILED';
+    }
+    const stopped = schedule.state === 'HELD'
+      || (schedule.state === 'ENDED' && schedule.endedReason === 'DELETED')
+      || (schedule.state === 'PAUSED' && run.trigger !== 'MANUAL');
+    if (stopped) {
+      await end('CANCELLED');
+      return 'CANCELLED';
+    }
+    const waiting = await tx.scheduleRun.count({ where: { scheduleId: schedule.id, state: 'QUEUED', id: { not: run.id } } });
+    if (waiting > 0) {
+      await end('SKIPPED');
+      return 'SKIPPED';
+    }
+    const wait = run.attempt <= SCHEDULE_RETRY_DELAYS_MINUTES.length
+      ? SCHEDULE_RETRY_DELAYS_MINUTES[run.attempt - 1] * MINUTE
+      : SCHEDULE_RECOVERY_WAIT_MS;
+    const retryAt = new Date(now.getTime() + wait);
+    if (retryAt.getTime() > this.deadline(schedule, run)) {
+      await end('MISSED');
+      return 'MISSED';
     }
     await tx.scheduleRun.update({
       where: { id: run.id },
-      data: { state: 'FAILED', failureReason: reason, endedAt: now, notBeforeAt: null },
+      data: { state: 'QUEUED', attempt: run.attempt + 1, notBeforeAt: retryAt, sessionId: null, startedAt: null, failureReason: reason },
     });
-    // Counted, never acted on: a schedule is not paused by its failures (§7.2, owner decision).
-    await tx.schedule.update({ where: { id: schedule.id }, data: { consecutiveFailures: { increment: 1 } } });
-    return 'FAILED';
+    return 'RETRY';
+  }
+
+  /** The last instant a run's slot may still start: its plannedAt plus one period of its rule (§5.2). */
+  private deadline(schedule: Schedule, run: ScheduleRun): number {
+    try {
+      return run.plannedAt.getTime() + catchUpWindowMs(parseRule(schedule.rule), schedule.timezone, run.plannedAt);
+    } catch {
+      // A rule that no longer reads is what can make a start throw on every pass: a day, as for ONCE.
+      return run.plannedAt.getTime() + SCHEDULE_ONCE_CATCH_UP_MS;
+    }
+  }
+
+  /**
+   * A QUEUED run whose start threw: moved out of the due set for a while, so the runs behind it go ahead, and MISSED
+   * once its catch-up window has passed, so no run waits for ever.
+   */
+  private async deferAfterError(runId: string): Promise<void> {
+    try {
+      const run = await this.prisma.scheduleRun.findUnique({ where: { id: runId }, include: { schedule: true } });
+      if (!run || run.state !== 'QUEUED') return;
+      const now = this.clock();
+      const missed = now.getTime() > this.deadline(run.schedule, run);
+      await this.prisma.scheduleRun.updateMany({
+        where: { id: runId, state: 'QUEUED' },
+        data: missed
+          ? { state: 'MISSED', endedAt: now, notBeforeAt: null }
+          : { notBeforeAt: new Date(now.getTime() + SCHEDULE_ERROR_COOLDOWN_MS) },
+      });
+    } catch (error) {
+      this.coolDown(runId);
+      this.logger.error(`schedule run ${runId} could not be put aside: ${messageOf(error)}`);
+    }
+  }
+
+  private cooled(): string[] {
+    const now = this.clock().getTime();
+    for (const [id, until] of this.cooling) if (until <= now) this.cooling.delete(id);
+    return [...this.cooling.keys()];
+  }
+
+  private coolDown(id: string): void {
+    this.cooling.set(id, this.clock().getTime() + SCHEDULE_ERROR_COOLDOWN_MS);
   }
 
   // -------------------------------------------------------------------------------------------------------------

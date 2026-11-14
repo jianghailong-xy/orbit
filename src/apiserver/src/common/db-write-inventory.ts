@@ -1385,6 +1385,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the picker re-sends its selection.',
   },
   {
+    at: 'schedules/schedule-runs.service.ts#holdRefused',
+    shape: 'TX_RETRIED',
+    locks: "pg_advisory_xact_lock(4000750, hashtext(owner id)) — the per-account schedule serializer SchedulesService takes, a key rather than a row — then the schedule row FOR UPDATE (ScheduleRunsService#lock), then one UPDATE of the run to HELD (SESSION_REFUSED) and, unless the schedule has ended, one UPDATE of the schedule to HELD. Ranks only rise: the advisory key is no relation of LOCK_ORDER, and every row lock below it is a schedule row or one of its children, which no other path holds while it waits for the account's key.",
+    identity: "The run's state and session id, read under the schedule row lock: only the RUNNING run of the session whose create was refused is held, so a second call writes nothing.",
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the schedule, the run and its state. A rolled-back attempt takes every row it wrote with it.',
+    effects: 'None: the refusal it records happened before, and nothing outside the database is told.',
+    answer: 'The worker logs it and the next pass reads the run again.',
+  },
+  {
     at: 'schedules/schedule-runs.service.ts#fire',
     shape: 'TX_RETRIED',
     locks: "pg_advisory_xact_lock(4000750, hashtext(owner id)) — the per-account schedule serializer SchedulesService takes, a key rather than a row — then the schedule row FOR UPDATE (ScheduleRunsService#lock), then the schedule_run INSERTs of the slots (MISSED ones and the one that runs, each ON CONFLICT on the slot's partial unique index DO NOTHING), an UPDATE of its QUEUED run to SKIPPED, and the schedule UPDATE of next_due_at (or to ENDED, END_REACHED). Ranks only rise: the advisory key is no relation of LOCK_ORDER, and every row lock below it is a schedule row or one of its children, which no other path holds while it waits for the account's key.",
@@ -3312,6 +3323,7 @@ export interface StatementUnit {
  * whose writes are not atomic with each other.
  */
 export const STATEMENT_UNITS: readonly StatementUnit[] = [
+  { at: 'schedules/schedule-runs.service.ts#deferAfterError', class: 'ONE_ROW_CAS', statements: 1, note: 'A QUEUED run whose start threw: one UPDATE of the run by id predicated on QUEUED, setting not_before_at five minutes on, or MISSED once its catch-up window has passed, so it neither blocks the runs behind it nor waits for ever. schedule_run has no trigger and no foreign key moves; a failure is logged and the run left out of this replica\'s passes for a while.' },
   { at: 'schedules/schedule-runs.service.ts#moveInProgress', class: 'ONE_ROW_CAS', statements: 1, note: 'The reconcile pass moving a run between RUNNING and AWAITING_APPROVAL as its session gains or loses a pending card: one UPDATE of the run by id predicated on the state it was read in, so a run a report or a failure ended meanwhile is not written. schedule_run has no trigger and no foreign key moves.' },
   { at: 'sessions/session-request.worker.ts#drain', class: 'MANY_ROWS', statements: 1, note: 'R11: one bounded UPDATE of OPEN RUN_QUESTION rows (rank 60), with plain approval reads, to OWNER_ANSWERED or UNDELIVERED. Conditional on OPEN so a committed reply wins. No external effect; a failed statement leaves rows for the next existing pass.' },
   { at: 'sessions/session-request.worker.ts#ringFallbacks', class: 'MANY_ROWS', statements: 2, note: 'R10/M6: a bounded UPDATE claims terminal request rows (rank 60) only while owner_alerted_at is null and the approval is PENDING; competing replicas recheck the predicate on the row lock. Then a separate conditional approval UPDATE records fallback copy. No locks span statements. External frames and push follow the committed claim, never precede it or retry it; a crash after claim can lose an alert but cannot duplicate it. A claim conflict aborts the pass; unclaimed rows remain for the next pass.' },

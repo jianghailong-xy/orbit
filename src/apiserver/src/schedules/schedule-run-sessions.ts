@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { SessionRunSource } from '@prisma/client';
 
-import { SessionsService } from '../sessions/sessions.service';
+import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import type { OpenRunSession, ScheduleRunSessionPort } from './schedule-runs.service';
 
 /**
@@ -42,7 +42,17 @@ export class SessionsScheduleRunPort implements ScheduleRunSessionPort {
     await this.sessions.complete(ownerId, sessionId);
   }
 
+  /**
+   * Retire a run's session so it can never run again: its auto-retry cancelled (a FAILED session would otherwise be
+   * brought back beside the retry's new one), then ended. A session already ended, or never written, is retired.
+   */
   async end(ownerId: string, sessionId: string): Promise<void> {
-    await this.sessions.end(ownerId, sessionId);
+    try {
+      await this.sessions.cancelAutoRetry(ownerId, sessionId);
+      await this.sessions.end(ownerId, sessionId);
+    } catch (error) {
+      if (error instanceof SessionNotSendable || error instanceof NotFoundException) return;
+      throw error;
+    }
   }
 }

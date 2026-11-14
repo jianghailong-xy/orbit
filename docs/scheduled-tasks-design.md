@@ -235,6 +235,12 @@ dispatch was paused, the account's quota was exhausted.
 - Catch-up reaches back one period (24 hours for `ONCE`). An older slot is recorded MISSED and the schedule waits
   for its next slot. A missed `ONCE` notifies, because nothing else will run.
 - A run shows both `plannedAt` and `startedAt`, so a late run says it was late.
+- The same holds for a run already written whose start meets the outage. A runner that is offline (a managed runner
+  asleep is not: opening the session wakes it) leaves the run QUEUED, without spending an attempt, looking again
+  every minute and starting when the runner is back. A run whose first turn never reaches its engine (dispatch
+  paused, quota spent, the engine dying before its first turn) is retried as §7.2 says. Either way, once the
+  catch-up window has passed the run is MISSED, with the reason in `failureReason`: a slot not run, never a
+  failure, and not counted in `consecutiveFailures`.
 
 ## 6. Starting a run
 
@@ -251,9 +257,11 @@ When a check fails the run is HELD with the reason, the schedule moves to HELD, 
 
 The reasons (`heldReason`, on the run and the schedule): `WORKSPACE_NOT_OWNED`, `WORKSPACE_DELETED`,
 `WORKSPACE_DISABLED`, `AGENT_MISSING`, `AGENT_DISABLED` (only when the schedule names an agent),
-`OUTSIDE_ENVELOPE`, `ACCESS_NOT_ENFORCEABLE` (§6.2, on the engine the run would use), `MODE_WIDER_THAN_ACCOUNT_DEFAULT`
-and `NO_REPOSITORY`. A run uses the engine and credential of the session that created the schedule while that
-session exists in the schedule's workspace, else what the workspace last ran. Resuming a HELD schedule runs the
+`OUTSIDE_ENVELOPE`, `ACCESS_NOT_ENFORCEABLE` (§6.2, on the engine the run would use), `MODE_WIDER_THAN_ACCOUNT_DEFAULT`,
+`NO_REPOSITORY`, and `SESSION_REFUSED` when the session door refuses the run's session before writing it (a 4xx: the
+request cannot be served as it stands, and retrying would not change that). A run uses the engine and credential of
+the session that created the schedule while that session exists in the schedule's workspace and is not in Trash,
+else what the workspace last ran. Resuming a HELD schedule runs the
 same checks and is refused `SCHEDULE_START_CHECK_FAILED` while one still fails.
 
 ### 6.2 Access levels
@@ -342,17 +350,26 @@ findings and the note.
 
 | `failureReason` | Retried | Meaning |
 | --- | --- | --- |
-| `RUNNER_UNAVAILABLE`, `QUOTA`, `ENGINE_CRASHED_BEFORE_START` | yes | the run never reached the engine (no `delivered_at` on its first turn) |
+| `RUNNER_UNAVAILABLE`, `QUOTA`, `ENGINE_CRASHED_BEFORE_START` | yes, then MISSED (§5.2) | the run never reached the engine (no `delivered_at` on its first turn) |
 | `REPORTED_FAILED`, `NO_REPORT`, `ENGINE_CRASHED`, `APPROVAL_TIMEOUT`, `RUN_LIMIT` | no | the work started and may have had effects |
 | `CANCELLED_BY_OWNER` | no | the owner stopped this run |
 
-- Retry: up to 3 attempts (after 1, 5 and 15 minutes), inside the catch-up window.
+- Retry: after 1, 5 and 15 minutes, then once an hour, for as long as the catch-up window lasts; a retry that would
+  start past it makes the run MISSED instead (§5.2). A retry on a schedule paused, held or deleted meanwhile is
+  CANCELLED (a MANUAL run on a paused schedule still retries), and one with a newer run already waiting is SKIPPED.
+- One run never has two live sessions. Before a run that never reached its engine is put back, its session is
+  retired: auto-retry cancelled, then ended; if that fails the run is left as it is for the next pass. Before a
+  QUEUED run opens a session, any live session still naming it (`scheduleRunId`) is retired first. A create that
+  fails after its INSERT committed keeps that session as the run's. A report from a session that no longer serves
+  its run is refused (`SCHEDULE_RUN_REPORT_NOT_A_RUN`).
+- A QUEUED run whose start throws is put aside for 5 minutes, so the runs behind it start, and is MISSED once its
+  window has passed; a schedule or run whose pass throws is left out of that replica's passes for 5 minutes.
 - `consecutiveFailures` counts FAILED runs in a row and resets on NO_CHANGE or CHANGED. At 3 the notification says
   "failed 3 runs in a row". The schedule is **not** paused.
 - Whether a run reached its engine is its first turn's `delivered_at`. A run whose first turn is not delivered 10
   minutes after it started is `RUNNER_UNAVAILABLE` (its session is ended); a session that FAILED before delivery is
   `QUOTA` when its error is a usage-limit message, else `ENGINE_CRASHED_BEFORE_START`; after delivery it is
-  `ENGINE_CRASHED`. A retry is the same run row back in QUEUED with `attempt + 1` and `notBeforeAt`, and a new
+  `ENGINE_CRASHED`. A session that ended before delivery is `RUNNER_UNAVAILABLE`, after it `NO_REPORT`. A retry is the same run row back in QUEUED with `attempt + 1` and `notBeforeAt`, and a new
   session; a newer run already waiting takes its place instead.
 - The run limit counts the engine's working time from `delivered_at`: time a card kept the run waiting is left out,
   so the 2-hour approval timeout can be reached under a run limit of at most 2 hours.
@@ -550,8 +567,8 @@ on Kimi each command is a card (answered "Always allow" once, the workspace rule
 and on Codex and OpenCode a `CHECK_ONLY` run can fetch or read but not both. Two follow-ups are filed: closing
 Claude's shell-write gap in `plan`, and letting Codex Plan run read-only commands.
 
-**3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes (three retries, inside the
-catch-up window); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without
+**3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes, then hourly inside the
+catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without
 the time a card waited (§7.2), or the approval timeout could never fire. A first turn not delivered within 10
 minutes is `RUNNER_UNAVAILABLE`; a slot fired within 10 minutes of its time is SCHEDULED, later it is CATCH_UP.
 

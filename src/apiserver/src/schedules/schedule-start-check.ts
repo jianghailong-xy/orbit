@@ -51,9 +51,10 @@ async function engineOf(db: Db, schedule: Schedule): Promise<{ engine: string | 
   if (schedule.createdFromSessionId) {
     const origin = await db.session.findUnique({
       where: { id: schedule.createdFromSessionId },
-      select: { engine: true, provider: true, workspaceId: true },
+      select: { engine: true, provider: true, workspaceId: true, deletedAt: true },
     });
-    if (origin?.engine && origin.workspaceId === schedule.workspaceId) {
+    // "While that session exists" (§6.1): one moved to Trash no longer decides where the run runs.
+    if (origin?.engine && origin.workspaceId === schedule.workspaceId && origin.deletedAt === null) {
       return { engine: origin.engine, provider: origin.provider, judged: origin.engine };
     }
   }
