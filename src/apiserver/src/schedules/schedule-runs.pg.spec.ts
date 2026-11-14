@@ -33,7 +33,12 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { SessionsService } from '../sessions/sessions.service';
-import { OPEN_PR_DISALLOWED_TOOLS, scheduleRunDisallowedTools, scheduleRunMode } from './schedule-access';
+import {
+  OPEN_PR_DISALLOWED_TOOLS,
+  scheduleRunAgentFields,
+  scheduleRunDisallowedTools,
+  scheduleRunMode,
+} from './schedule-access';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import {
   SCHEDULE_APPROVAL_TIMEOUT_MS,
@@ -608,6 +613,35 @@ test('§6.2 an OPEN_PR run runs in Accept Edits, in a worktree when its workspac
     [...OPEN_PR_DISALLOWED_TOOLS],
     'what the claim hands the runner as disallowedTools for this session',
   );
+});
+
+test('§6.2 only a CHECK_ONLY run\'s session is claimed with scheduledCheckOnly; an OPEN_PR run and an ordinary session are not', { skip }, async () => {
+  reset();
+  at('2026-11-14T00:00:00Z');
+  const w = await world('check-only-flag');
+  const claimFields = async (sessionId: string) => {
+    const session = await db.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      // The select both claim paths make (QueueService.buildSession, RunnerApiController reclaim).
+      include: { scheduleRun: { select: { schedule: { select: { accessLevel: true } } } } },
+    });
+    return scheduleRunAgentFields(session.scheduleRun?.schedule.accessLevel);
+  };
+  const check = await created(w, { accessLevel: 'CHECK_ONLY' });
+  const pr = await created(w, { accessLevel: 'OPEN_PR' });
+  at('2026-11-14T02:00:00Z');
+  const checkRun = await runOf((await fireAndStart(check.id)).started[0].runId);
+  const prRun = await runOf((await fireAndStart(pr.id)).started[0].runId);
+  assert.deepEqual(await claimFields(checkRun.sessionId!), { scheduledCheckOnly: true }, 'the CHECK_ONLY run: Codex runs it in its read-only sandbox');
+  assert.deepEqual(await claimFields(prRun.sessionId!), {}, 'an OPEN_PR run carries no flag');
+  const ordinary = await db.session.create({
+    data: {
+      id: randomUUID(), ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: 'ordinary plan session',
+      prompt: 'p', provider: 'codex', engine: 'codex', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER,
+      permissionMode: PermissionMode.PLAN,
+    },
+  });
+  assert.deepEqual(await claimFields(ordinary.id), {}, 'an ordinary Plan session carries no flag: Codex Plan declines every command');
 });
 
 // =============================================================================================================
