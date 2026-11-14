@@ -434,7 +434,8 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     }
                 }
             }
-            RunnerCapacity(runner, workspaces, now, model, notice, api)
+            RunnerResourcesSection(api, runner, workspaces, now, online = !offline, resumed = resumed)
+            RunnerCapacity(runner, now, model, notice, api)
             // Cursor CLI's row on every machine once one of the account's knows it (RunnerPage.engines), and the footer says it is the one
             // CLI kept on a pinned build (iOS 2 ②).
             val engineRows = RunnerPage.engines(runner, model.runners)
@@ -574,9 +575,10 @@ private fun AttentionButton(label: String, enabled: Boolean = true, onClick: () 
     FilledTonalButton(onClick = onClick, enabled = enabled, modifier = Modifier.padding(top = 4.dp), shape = RoundedCornerShape(50)) { Text(label) }
 }
 
-/** Max Concurrent and Disk as meters (`3 of 16 running` over a bar; the limit changed from Edit, in a dialog), and Keep Free. */
+/** Max Concurrent as a meter (`3 of 16 running` over a bar; the limit changed from Edit, in a dialog), and Keep Free. The disk is a
+ * reading, shown under Resources (RunnerResourcesSection). */
 @Composable
-private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, now: Long, model: RunnersModel, notice: Notice, api: ManagementApi) {
+private fun RunnerCapacity(runner: JsonObject, now: Long, model: RunnersModel, notice: Notice, api: ManagementApi) {
     val id = runner.text("id")
     val serverMax = runner.int("maxConcurrent") ?: 1
     // Max Concurrent's dialog, and the number it holds while open.
@@ -625,13 +627,6 @@ private fun RunnerCapacity(runner: JsonObject, workspaces: List<JsonObject>, now
             }
             slots?.let { (active, max) ->
                 Gauge((active.toFloat() / max).coerceAtMost(1f), if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, height = 7.dp)
-            }
-        }
-        RunnerPage.runnerDisk(workspaces)?.let { disk ->
-            HorizontalDivider()
-            Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row { Text(RunnerCopy.DISK, Modifier.weight(1f)); Text(RunnerPage.diskUsedLine(disk), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
-                Gauge(disk.usedPercent / 100f, if (RunnerPage.diskIsTight(disk, runner.int("minFreeDiskMb"))) Ink.amber else MaterialTheme.colorScheme.primary, height = 7.dp)
             }
         }
         HorizontalDivider()
