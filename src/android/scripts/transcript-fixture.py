@@ -35,7 +35,7 @@ RICH = ('# Reading fixture\n\nSelect these words and copy a portion of this para
 # A06C: the reader's increments over one short session — the sticky question, engine stderr and notices, a
 # transient provider error, a workflow's progress, the Orbit context card, an image file link and the worktree bar.
 SHOT = '/root/.orbit/worktrees/' + SESSION + '/shots/runner.png'
-NOTE = '\n\n<referenced-task id="' + TASK + '">\n  标题   Related reading task\n</referenced-task>'
+NOTE = '\n\n<list-conditions list="' + TASK + '" title="Reading list">\n  Quota held dispatch｜2 ready tasks held\n</list-conditions>'
 PROGRESS = {'toolUseId': 'wf-1', 'taskType': 'local_workflow', 'usage': {'totalTokens': 0, 'toolUses': 12, 'durationMs': 1020000},
             'phases': [{'index': 0, 'title': 'Design'}, {'index': 1, 'title': 'Judge'}],
             'agents': [{'index': 0, 'label': 'design:sticky-header', 'phaseIndex': 0, 'state': 'done', 'toolCalls': 7,

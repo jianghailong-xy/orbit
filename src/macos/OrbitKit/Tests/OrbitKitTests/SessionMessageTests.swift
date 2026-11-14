@@ -170,13 +170,16 @@ final class SessionMessageTests: XCTestCase {
     }
 
     func testTheCardFoldsOnlyWhatElseDeliveryAppended() {
+        // The inventory names nothing and draws no entry (owner, 2026-11-14); a condition board does.
         let jobs = "<background-jobs>\n  x\n</background-jobs>"
-        let split = SessionMessageCard.splitNote("\(Self.block())\n\n\(jobs)")
-        XCTAssertEqual(split.attached?.kind, "background jobs")
-        XCTAssertEqual(split.attached?.text, jobs)
+        XCTAssertNil(SessionMessageCard.splitNote("\(Self.block())\n\n\(jobs)").attached)
+        let board = "<list-conditions list=\"l\" title=\"FineWeb\">\n  x\n</list-conditions>"
+        let split = SessionMessageCard.splitNote("\(Self.block())\n\n\(board)")
+        XCTAssertEqual(split.attached?.kind, "list conditions")
+        XCTAssertEqual(split.attached?.text, board)
         XCTAssertNil(split.narrower)
         XCTAssertNil(SessionMessageCard.splitNote(nil).attached)
-        XCTAssertEqual(SessionMessageCard.splitNote(jobs).attached?.text, jobs, "a note with no block is left as it was")
+        XCTAssertEqual(SessionMessageCard.splitNote(board).attached?.text, board, "a note with no block is left as it was")
     }
 
     func testANarrowerSenderIsTheCardsOwnLine() {

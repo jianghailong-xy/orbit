@@ -132,8 +132,9 @@ describe('the owner’s answer handed to the coordinator', () => {
   });
 
   it('keeps what delivery appended inside the line’s fold, as Orbit’s — never in a bubble', async () => {
-    const role = '<orbit_project_coordinator_context>\nYou coordinate this project.\n</orbit_project_coordinator_context>';
-    await mount([told(CARD, { text: `${TOLD}\n\n${role}`, controlPlaneNote: `\n\n${role}` })]);
+    // A block that names itself: a coordinator's role or the jobs inventory draw no entry (owner, 2026-11-14).
+    const board = '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>';
+    await mount([told(CARD, { text: `${TOLD}\n\n${board}`, controlPlaneNote: `\n\n${board}` })]);
     await act(async () => line()!.click());
 
     expect(container.querySelector('.owner-answer-told pre')?.textContent).toBe(TOLD);

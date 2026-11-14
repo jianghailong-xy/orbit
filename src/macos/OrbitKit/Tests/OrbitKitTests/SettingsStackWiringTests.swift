@@ -213,7 +213,7 @@ final class SettingsStackWiringTests: XCTestCase {
         for control in ["$permMode", "$orchestration", "$modelRouting", "$promptSuggestions", "$recaps"] {
             XCTAssertFalse(list.contains(control), "the list still draws \(control)")
         }
-        XCTAssertTrue(rows.contains("case .sessions, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:"))
+        XCTAssertTrue(rows.contains("case .sessions, .notifications, .sharedLinks, .accessTokens, .terminals, .changePassword, .admin:"))
         // Signing out asks first, in the shape the width calls for — `ConfirmationStyle` asks a phone
         // for an alert and a tablet for the anchored panel, and every confirmation in the app goes
         // through it rather than naming one of the two itself.

@@ -797,6 +797,9 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		return setupCodelessCheckout(job, baseDir)
 	}
 	if job.Branch == "" {
+		if job.WorkSubdir != "" {
+			return workSubdirExecDir(job, baseDir)
+		}
 		job.IsolationStatus = isoShared
 		return baseDir
 	}

@@ -181,12 +181,12 @@ class TranscriptDeviceTest {
         measureCapsule("first-question")
         // A06-9: what delivery appended is one line under the person's words, not part of them — ⊕ shut, ⊖ open
         // (owner, 2026-10-27).
-        list.performScrollToNode(hasText("⊕ Orbit attached: referenced task"))
-        compose.onNodeWithText("⊕ Orbit attached: referenced task").assertIsDisplayed()
+        list.performScrollToNode(hasText("⊕ Orbit attached: list conditions"))
+        compose.onNodeWithText("⊕ Orbit attached: list conditions").assertIsDisplayed()
         capture("a06c-context-card")
-        tap(hasText("⊕ Orbit attached: referenced task"))
-        awaitText("<referenced-task", substring = true)
-        compose.onNodeWithText("⊖ Orbit attached: referenced task").assertIsDisplayed()
+        tap(hasText("⊕ Orbit attached: list conditions"))
+        awaitText("<list-conditions", substring = true)
+        compose.onNodeWithText("⊖ Orbit attached: list conditions").assertIsDisplayed()
         capture("a06c-context-opened")
         // Engine stderr, a recoverable diagnostic and a notice, and Codex's exhausted 429 as a transient row (A06-1, A06-2).
         list.performScrollToNode(hasText("--dangerously-skip-permissions cannot be used with root/sudo privileges"))

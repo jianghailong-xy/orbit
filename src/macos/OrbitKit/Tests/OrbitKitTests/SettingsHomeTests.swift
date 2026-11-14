@@ -23,7 +23,7 @@ final class SettingsHomeTests: XCTestCase {
         // The five session settings are one row's page now (`SessionSettings`), first in Preferences.
         XCTAssertEqual(SettingsHome.rows(.preferences, isAdmin: false), [.sessions, .notifications, .appearance])
         XCTAssertEqual(SettingsHome.rows(.account, isAdmin: false),
-                       [.email, .instance, .sharedLinks, .accessTokens, .changePassword])
+                       [.email, .instance, .sharedLinks, .accessTokens, .terminals, .changePassword])
     }
 
     /// Admin is role-gated here as everywhere else, and comes last in Account.

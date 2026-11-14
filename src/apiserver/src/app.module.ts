@@ -44,6 +44,7 @@ import { ManagedRunnerModule } from './managed-runners/managed-runner.module';
 import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
 import { EmailModule } from './email/email.module';
+import { TerminalsModule } from './terminals/terminals.module';
 
 @Module({
   imports: [
@@ -96,6 +97,8 @@ import { EmailModule } from './email/email.module';
     FeishuActionsModule,
     // Outgoing email: Admin → Email and the welcome-email outbox worker (docs/welcome-email-design.md).
     EmailModule,
+    // `orbit` in a terminal: the TERMINAL credential's sign-in, approval and revoke (docs/terminal-session-design.md).
+    TerminalsModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

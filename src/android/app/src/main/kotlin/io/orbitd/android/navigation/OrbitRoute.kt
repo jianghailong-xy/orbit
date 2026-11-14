@@ -173,9 +173,10 @@ object OrbitLinks {
         "project" to Destination.PROJECT, "wiki" to Destination.WIKI_ENTRY, "list" to Destination.LIST)
     // `orbit://project/<id>` is a merge push's (A11-9): the project's sessions page. Like `orbit://wiki/<space>`, no iOS DeepLink host.
     // `orbit://owner-request/<id>` is an owner request push's action: the inbox, that request's card open on its input.
+    // `orbit://terminal-login/<id>` is a terminal asking to be approved: the inbox, whose Open tab heads with its card.
     private val deepLinks = references.filterKeys { it !in setOf("project", "wiki") } +
         mapOf("watch" to Destination.WATCH, "runner" to Destination.RUNNER, "wiki" to Destination.WIKI, "project" to Destination.PROJECT_SESSIONS,
-            "owner-request" to Destination.WAITING_ON_YOU)
+            "owner-request" to Destination.WAITING_ON_YOU, "terminal-login" to Destination.WAITING_ON_YOU)
     /** iOS DeepLink's `case "active", ""` (A05h, DL-1): an `orbit:` link with no host, an empty one or `active` (percent-decoded,
      * in any case) opens the workspaces home, whatever path, query or fragment follows — iOS's URL percent-encodes a blank there
      * and DeepLink never reads it — while a blank in the host is no URL there, so nothing opens. Read off the link itself:

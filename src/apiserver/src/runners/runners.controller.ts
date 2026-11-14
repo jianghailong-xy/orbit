@@ -19,6 +19,7 @@ import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { visitorAddress } from '../shared/public-surface.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
+import { TerminalRoute, terminalRunnerOf } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
   CreateEnrollmentTokenDto,
@@ -37,9 +38,11 @@ export class RunnersController {
   constructor(private readonly runners: RunnersService) {}
 
   @PatScope('runners:read', { workspaceConfinable: false })
+  // A terminal reads its own machine alone: the engines installed there, for its picker.
+  @TerminalRoute('RUNNER_LIST')
   @Get()
   list(@CurrentUser() user: AuthUser) {
-    return this.runners.listRunners(user.userId);
+    return this.runners.listRunners(user.userId, terminalRunnerOf(user));
   }
 
   // Keep this static route before every `:id` route so Nest never interprets
