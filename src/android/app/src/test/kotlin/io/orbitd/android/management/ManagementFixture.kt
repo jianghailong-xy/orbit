@@ -91,6 +91,10 @@ object ManagementFixture {
     @Volatile var defaultRemoveRefusal: String? = null
     @Volatile var restoreFails = false
     @Volatile var onAccountWrite: (String) -> Unit = {}
+    /** POST runners/:id/engines/:engine/update-warning/dismiss runs this with the engine, then answers `{engine, latest}` with [dismissLatest],
+     * as the server records the engine's current update.latest — so GET runners can serve the dismissal from then on. */
+    @Volatile var onEngineDismiss: (String) -> Unit = {}
+    @Volatile var dismissLatest = "0.169.0"
     /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
     val installBodies = CopyOnWriteArrayList<JsonObject>()
     /** Check again (POST runners/:id/region-check, docs/claude-region-check-contract.md §7): answered with when it was asked, after
@@ -119,7 +123,7 @@ object ManagementFixture {
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear(); onRegionCheck = {}
-        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}
+        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}; onEngineDismiss = {}; dismissLatest = "0.169.0"
         deviceStatus = "PENDING"; deviceConflict = false; deviceLastSeen = null; deviceGate = null
         drop = CompletableDeferred(); opened = 0
         queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
@@ -257,6 +261,8 @@ object ManagementFixture {
             "providers/shared-pools" -> ok("[]")
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
             else -> when {
+                path.startsWith("runners/$RUNNER/engines/") && path.endsWith("/update-warning/dismiss") && api.method == HttpMethod.POST ->
+                    path.split('/')[3].let { engine -> onEngineDismiss(engine); ok("""{"engine":"$engine","latest":"$dismissLatest"}""") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
                     if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }

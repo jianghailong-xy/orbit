@@ -127,6 +127,14 @@ internal object RunnerCopy {
     fun enginesReported(whenText: String) = "Reported $whenText"
     fun accountsSignedIn(count: Int) = "$count accounts signed in"
     fun updateFailed(version: String, whenText: String) = "Update to $version failed $whenText"
+    /** The Needs Attention card's second action, beside Update Engines Now; [engine] is the CLI's own name (web
+     * attentionDismissUntilNextRelease). */
+    fun dismissUntilNextRelease(engine: String) = "Dismiss until next $engine release"
+    /** The engine row's warning: the same dismissal (web RUNNER_ENGINE_UPDATE_DISMISS). */
+    const val UPDATE_DISMISS = "Dismiss"
+    /** What the version line adds after the drift once its warning is dismissed (web ENGINE_UPDATE_WARNING_DISMISSED). */
+    const val UPDATE_WARNING_DISMISSED = " · warning dismissed"
+    const val UPDATE_DISMISS_FAILED = "Couldn’t dismiss the warning"
     const val WORKTREES = "Worktrees"
     fun workspaceRunning(count: Int) = "$count running"
     const val ABOUT_NAME = "Name"
@@ -611,7 +619,35 @@ internal object RunnerPage {
     /** What an engine row says about being kept current; warn means only a person can say why. [pinned]: an engine Orbit keeps on one
      * build rather than the newest (Cursor CLI, whose version a runner release moves) — its routine note says so, since "checked" alone
      * would read as "and it is the latest" (web `updateNoteOf`'s `pinned`). */
-    fun updateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean = false): Pair<String, String>? {
+    fun updateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean = false, dismissed: String? = null): Pair<String, String>? {
+        val note = undismissedUpdateNoteOf(update, nowMs, pinned)
+        // Dismissed until the next release (engineUpdateDismissedFor): while the release it was dismissed against is still the latest, the
+        // warning goes quiet — no card, no warning, out of Needs Attention — but the drift stays on the version line. A newer latest no
+        // longer matches, and warns again.
+        if (note?.first == "warn" && !dismissed.isNullOrEmpty() && update?.str("latest") == dismissed) {
+            return "quiet" to "${note.second}${RunnerCopy.UPDATE_WARNING_DISMISSED}"
+        }
+        return note
+    }
+
+    /** The release this [engine]'s update warning was dismissed against on this [runner] (runner.engineUpdateDismissals, POST
+     * runners/:id/engines/:engine/update-warning/dismiss), or null — an older server sends none. */
+    fun engineUpdateDismissedFor(runner: JsonObject, engine: String?): String? =
+        engine?.let { runner.obj("engineUpdateDismissals")?.str(it) }?.takeIf { it.isNotEmpty() }
+
+    /** Whether this engine's update warning offers Dismiss until its next release: a warning against a known latest, on a runner online. */
+    fun offersUpdateDismiss(runner: JsonObject, engine: String, nowMs: Long): Boolean {
+        val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return false
+        if (isOffline(runner, nowMs)) return false
+        val update = health.obj("update") ?: return false
+        if (update.str("latest").isNullOrEmpty()) return false
+        return updateNoteOf(update, nowMs, dismissed = engineUpdateDismissedFor(runner, engine))?.first == "warn"
+    }
+
+    /** POST, no body: the server records the engine's current update.latest as dismissed and answers `{engine, latest}`. */
+    fun updateDismissPath(runner: String, engine: String) = "runners/$runner/engines/$engine/update-warning/dismiss"
+
+    private fun undismissedUpdateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean): Pair<String, String>? {
         update ?: return null
         if (update.str("status") == "skipped") return "quiet" to "not auto-updated"
         val latest = update.str("latest")?.takeIf { it.isNotEmpty() }
@@ -871,7 +907,8 @@ internal object RunnerPage {
 
     private fun engineUpdateItems(runner: JsonObject, nowMs: Long) = (engineOrder + ProviderEngines.CURSOR).mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return@mapNotNull null
-        val note = updateNoteOf(health.obj("update"), nowMs)?.takeIf { it.first == "warn" } ?: return@mapNotNull null
+        val note = updateNoteOf(health.obj("update"), nowMs, dismissed = engineUpdateDismissedFor(runner, engine))?.takeIf { it.first == "warn" }
+            ?: return@mapNotNull null
         val summary = "${engineName(engine)} update failed"
         AttentionItem("engineNotUpdating", "warn", summary, summary,
             "${note.second.replaceFirstChar { it.uppercase() }}. Orbit retries every 30 min — Update Engines Now tries again right away.",
@@ -1077,11 +1114,12 @@ internal object RunnerPage {
         !(health.text("engine") == ProviderEngines.CURSOR && runner != null && CursorRuntime.state(runner).blocksRow) &&
         (health.str("auth") == "no" || health.list("accounts").any { it.str("auth") == "no" && !runsOnEnvKey(health, it.text("id"), it.str("auth")) })
 
-    fun updateFailedLine(health: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
+    /** [dismissed]: the release this engine's warning was dismissed against (engineUpdateDismissedFor) — while it is the latest, no line. */
+    fun updateFailedLine(health: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault(), dismissed: String? = null): String? {
         if (health.bool("installed") != true) return null
         val update = health.obj("update")?.takeIf { it.str("status") == "failed" } ?: return null
         val latest = update.str("latest")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        if (updateNoteOf(update, nowMs)?.first != "warn") return null
+        if (updateNoteOf(update, nowMs, dismissed = dismissed)?.first != "warn") return null
         val whenText = update.str("at")?.let { day(it, nowMs, zone) } ?: return null
         return RunnerCopy.updateFailed(latest, whenText)
     }

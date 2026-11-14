@@ -931,8 +931,22 @@ struct RunnerDetailContent: View {
 
     @ViewBuilder private func attentionAction(_ item: RunnerAttentionItem) -> some View {
         if let action = item.action {
-            attentionButton(action)
-                .buttonStyle(RunnerCapsuleButtonStyle())
+            // An engine not updating against a known latest can be dismissed until its next release,
+            // beside Update Engines Now.
+            if let engine = RunnerPageFormat.updateWarningDismissEngine(item) {
+                HStack(spacing: 12) {
+                    attentionButton(action)
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                    Button(RunnerPageCopy.attentionDismissUntilNextRelease(
+                        engine: RunnerPageFormat.engineName(engine))) { dismissUpdateWarning(engine) }
+                        .linkButtonStyle()
+                        .font(.orbitListSubtitle)
+                        .padding(.top, 7)
+                }
+            } else {
+                attentionButton(action)
+                    .buttonStyle(RunnerCapsuleButtonStyle())
+            }
         }
     }
 
@@ -1058,6 +1072,13 @@ struct RunnerDetailContent: View {
         let id = runner.id
         Task {
             if let failure = await runners.updateEngines(id) { show(failure) }
+        }
+    }
+
+    private func dismissUpdateWarning(_ engine: String) {
+        let id = runner.id
+        Task {
+            if let failure = await runners.dismissEngineUpdateWarning(id, engine: engine) { show(failure) }
         }
     }
 

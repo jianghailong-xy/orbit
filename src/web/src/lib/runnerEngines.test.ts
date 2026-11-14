@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentProvider, ALL_ENGINES, type RunnerEngineHealth, type RunnerEngineUpdate } from '@orbit/shared';
-import { ENGINE_CLI_NAME, updateNoteOf, webShowsEngine } from './runnerEngines';
+import { ENGINE_CLI_NAME, engineUpdateDismissedFor, updateNoteOf, webShowsEngine } from './runnerEngines';
 
 const { CLAUDE, CODEX, KIMI, ANTIGRAVITY, OPENCODE, DSH, CURSOR } = AgentProvider;
 
@@ -58,5 +58,38 @@ describe('what a pinned engine says about being kept current', () => {
   it('says “pinned” before its check, as Cursor CLI’s row writes it, and leaves every other engine’s note alone', () => {
     expect(updateNoteOf(checked, now, true)).toEqual({ tone: 'quiet', text: 'pinned · checked 6m ago' });
     expect(updateNoteOf(checked, now)).toEqual({ tone: 'quiet', text: 'checked 6m ago' });
+  });
+});
+
+describe('an engine update warning dismissed until the next release', () => {
+  // orbit@austin's Codex: 13 days behind 0.169.0, its update failing.
+  const now = Date.parse('2026-11-14T00:00:00Z');
+  const behind = (latest: string): RunnerEngineUpdate => ({
+    status: 'failed',
+    at: '2026-11-13T23:30:00Z',
+    okAt: '2026-10-31T00:00:00Z',
+    latest,
+    behindSince: '2026-10-31T20:00:00Z',
+  });
+
+  it('goes quiet while the dismissed release is still the latest, and keeps the drift in the version line', () => {
+    expect(updateNoteOf(behind('0.169.0'), now)).toEqual({ tone: 'warn', text: '13d behind 0.169.0' });
+    expect(updateNoteOf(behind('0.169.0'), now, false, '0.169.0')).toEqual({
+      tone: 'quiet',
+      text: '13d behind 0.169.0 · warning dismissed',
+    });
+  });
+
+  it('warns again once a newer release is out, the behind clock never reset', () => {
+    expect(updateNoteOf(behind('0.170.0'), now, false, '0.169.0')).toEqual({ tone: 'warn', text: '13d behind 0.170.0' });
+  });
+
+  it('leaves a note that is not a warning alone, and reads the dismissal off the runner by engine', () => {
+    const current: RunnerEngineUpdate = { status: 'checked', at: '2026-11-13T23:54:00Z', okAt: '2026-11-13T23:54:00Z', latest: '0.169.0' };
+    expect(updateNoteOf(current, now, false, '0.169.0')).toEqual({ tone: 'quiet', text: 'checked 6m ago' });
+    const runner = { engineUpdateDismissals: { codex: '0.169.0' } };
+    expect(engineUpdateDismissedFor(runner, 'codex')).toBe('0.169.0');
+    expect(engineUpdateDismissedFor(runner, 'claude')).toBeNull();
+    expect(engineUpdateDismissedFor({}, 'codex')).toBeNull();
   });
 });

@@ -215,6 +215,13 @@ final class RunnersModel {
         await press { try await self.api.restoreRunnerDefault(id, engine: engine) }
     }
 
+    /// Dismiss an engine's update warning until its next release. Orbit's own record, so it works with
+    /// the runner offline; the list read after it carries the dismissal, which quiets the warning.
+    @discardableResult
+    func dismissEngineUpdateWarning(_ id: String, engine: String) async -> String? {
+        await press { try await self.api.dismissEngineUpdateWarning(id, engine: engine) }
+    }
+
     /// The list in a new order: the rows move at once, and the server's answer — every runner, in the
     /// order it keeps — settles it.
     func reorder(_ ids: [String]) async {

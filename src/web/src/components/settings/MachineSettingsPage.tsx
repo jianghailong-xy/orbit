@@ -26,7 +26,14 @@ import { machineDraftPath } from '../../lib/machineSetup';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
 import { AbandonedCheckouts } from '../AbandonedCheckouts';
-import { MachineEngines, accountsGroup, ownSignInPanel, tildePath, useOpenAccounts } from '../RunnerEngines';
+import {
+  MachineEngines,
+  accountsGroup,
+  ownSignInPanel,
+  tildePath,
+  useDismissEngineUpdateWarning,
+  useOpenAccounts,
+} from '../RunnerEngines';
 import { useRunnerTokenRotation } from '../RunnerTokenRotation';
 import type { Runner } from '../TasksSidePanel';
 import { Badge } from '../ui/Badge';
@@ -92,6 +99,7 @@ import {
   runnerVersionInstallsWhenQuiet,
   RUNNER_VERSION_LATEST,
   RUNNER_VERSION_NOT_ROLLED_OUT,
+  attentionDismissUntilNextRelease,
   attentionQuotaResets,
   runnerOfflineLastSeen,
   runnerRunningOf,
@@ -106,7 +114,7 @@ import { RunnerUpdateNowButton } from '../RunnerUpdateNow';
 import { runnerTakesUpdateNow } from '../../lib/runnerUpdateNow';
 import { useClaudeRegionCheckAgain } from '../../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../../lib/claudeRegionCopy';
-import { ago } from '../../lib/runnerEngines';
+import { ago, ENGINE_CLI_NAME } from '../../lib/runnerEngines';
 import { useToast } from '../../lib/toast';
 import { MachineResources } from './MachineResources';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
@@ -319,6 +327,8 @@ export function MachineSettingsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
     onError: (e: Error) => message.error("Couldn't start the engine update", e.message),
   });
+  // Dismiss until next <Engine> release: hides this card and that engine's row panel until a newer release.
+  const dismissUpdateWarning = useDismissEngineUpdateWarning(runnerId ?? '');
   const dismissEngineUpdate = useMutation({
     mutationFn: () => api(`/runners/${runnerId}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
@@ -543,12 +553,27 @@ export function MachineSettingsPage() {
           </Button>
         ) : null;
       }
-      case 'updateEngines':
+      case 'updateEngines': {
+        const engine = action.engine;
         return (
-          <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
-            {RUNNER_UPDATE_ENGINES_NOW}
-          </Button>
+          <>
+            <Button size="small" disabled={engineUpdate.isPending} onClick={() => engineUpdate.mutate()}>
+              {RUNNER_UPDATE_ENGINES_NOW}
+            </Button>
+            {/* Until the next release: only a warning against a known latest has one to wait for. */}
+            {engine && item.params.latest && (
+              <button
+                className="re-link"
+                type="button"
+                disabled={dismissUpdateWarning.isPending}
+                onClick={() => dismissUpdateWarning.mutate(engine)}
+              >
+                {attentionDismissUntilNextRelease(ENGINE_CLI_NAME[engine])}
+              </button>
+            )}
+          </>
         );
+      }
       case 'updateRunner':
         return (
           <Button size="small" disabled={runnerUpdate.isPending} onClick={() => runnerUpdate.mutate()}>

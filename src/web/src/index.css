@@ -2192,6 +2192,14 @@ button.toast--pill:focus-visible {
 }
 .rd-attention-action {
   margin-top: 9px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+/* Dismiss until next <Engine> release, beside Update Engines Now: a link, not a second button. */
+.rd-attention-action .re-link {
+  font-size: 12.5px;
 }
 /* The Update card (board 4): a release this runner is behind, across both columns. Amber while it
    holds work back or restarts, plain while work goes on as usual. */
@@ -17500,6 +17508,11 @@ button.chat-jump-start:hover {
 }
 .re-grp.folded .re-upd {
   display: block;
+}
+/* A dismissed warning keeps its drift on the version line, in grey (`13d behind 0.169.0 · warning
+   dismissed`): longer than the line was sized for, so it wraps rather than lose its end. */
+.re-meta:has(.re-upd.dismissed) {
+  white-space: normal;
 }
 /* "Next: …" over the window it names. */
 .re-quota-next {

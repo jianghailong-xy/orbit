@@ -521,6 +521,14 @@ export function attentionEngineUpdateDetail(note: string): string {
   return `${note}. Orbit retries every 30 min — Update Engines Now tries again right away.`;
 }
 
+/** The card's second action, beside Update Engines Now; `engine` is the CLI's own name. */
+export function attentionDismissUntilNextRelease(engine: string): string {
+  return `Dismiss until next ${engine} release`;
+}
+
+/** The engine row's warning panel: the same dismissal, after its retry hint. */
+export const RUNNER_ENGINE_UPDATE_DISMISS = 'Dismiss';
+
 // MARK: the Update card (docs/runner-update-drain-design.md, board 4)
 
 export const RUNNER_UPDATE_TAG_AVAILABLE = 'Available';

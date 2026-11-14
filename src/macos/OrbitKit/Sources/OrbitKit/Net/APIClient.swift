@@ -1952,6 +1952,13 @@ public final class APIClient: @unchecked Sendable {
         try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/default/restore", body: Optional<Empty>.none)
     }
 
+    /// Dismiss this runner's update warning for `engine` until its next release: the server records the
+    /// engine's current `update.latest` (`Runner.engineUpdateDismissals`), and the warning stays quiet
+    /// while that is still the latest.
+    public func dismissEngineUpdateWarning(_ id: String, engine: String) async throws {
+        try await postRaw("runners/\(id)/engines/\(engine)/update-warning/dismiss", body: Optional<Empty>.none)
+    }
+
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
                                    durationMinutes: Int?) async throws {
         try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/\(account)/pause",

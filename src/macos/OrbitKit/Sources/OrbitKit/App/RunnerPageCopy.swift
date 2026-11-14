@@ -410,4 +410,10 @@ public enum RunnerPageCopy {
     public static func attentionEngineUpdateDetail(note: String) -> String {
         "\(note). Orbit retries every 30 min — Update Engines Now tries again right away."
     }
+    /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.
+    public static func attentionDismissUntilNextRelease(engine: String) -> String {
+        "Dismiss until next \(engine) release"
+    }
+    /// The engine page's warning: the same dismissal, after its failed-update line.
+    public static let RUNNER_ENGINE_UPDATE_DISMISS = "Dismiss"
 }

@@ -260,6 +260,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Each engine CLI's install/sign-in state as of that heartbeat's probe (`orbit doctor`).
     /// Absent from an older server, and from a runner that hasn't reported one.
     public let engines: [RunnerEngineHealth]?
+    /// The engine update warnings dismissed on this runner, by engine: the `update.latest` each was
+    /// dismissed against (POST /runners/:id/engines/:engine/update-warning/dismiss). Nil from an older
+    /// server, which dismisses nothing (`RunnerAttention.updateNoteOf`'s `dismissed`).
+    public var engineUpdateDismissals: [String: String]? = nil
     /// Antigravity support and CLI readiness resolved by the server from the runner's report.
     public var antigravity: RunnerAntigravityState? = nil
     /// Whether this runner's process is root, which costs the machine one permission mode: claude

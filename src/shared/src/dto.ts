@@ -2079,6 +2079,12 @@ export interface RunnerEngineAccount {
  * but "is this machine still being kept current" — which the runner answers by asking each
  * engine's release feed what is published and comparing it against the binary on disk.
  */
+/** The engine update warnings dismissed on a runner, by engine: the `update.latest` each was
+ *  dismissed against (POST /runners/:id/engines/:engine/update-warning/dismiss). Every client hides
+ *  that engine's update warning while this equals the engine's current `update.latest`; a newer
+ *  release brings it back. Stored on the runner, so it holds for everyone on the account. */
+export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string>>;
+
 export interface RunnerEngineUpdate {
   /** `updated` — a newer version actually landed on this machine.
    *  `checked` — Orbit asked and there was nothing to fetch.

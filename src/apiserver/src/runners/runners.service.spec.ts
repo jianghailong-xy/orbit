@@ -142,6 +142,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       accountPauses: true,
       // The Defaults removed from Orbit, left out of the report (usedRunnerEngines).
       defaultRemoved: true,
+      engineUpdateDismissals: true,
       installStatus: true,
       installEngine: true,
       installCommand: true,

@@ -281,6 +281,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runners/:id/dir-probe` | path `id`; query `path` | `RunnersController.dirProbe` |
 | `POST` | `/api/runners/:id/dir-probe` | body `Object`; path `id` | `RunnersController.askDirProbe` |
 | `POST` | `/api/runners/:id/engine-update` | path `id` | `RunnersController.startEngineUpdate` |
+| `POST` | `/api/runners/:id/engines/:engine/update-warning/dismiss` | path `engine`, `id` | `RunnersController.dismissEngineUpdateWarning` |
 | `DELETE` | `/api/runners/:id/install` | path `id` | `RunnersController.cancelInstall` |
 | `GET` | `/api/runners/:id/install` | path `id` | `RunnersController.installState` |
 | `POST` | `/api/runners/:id/install` | body `StartInstallDto`; path `id` | `RunnersController.startInstall` |
