@@ -140,6 +140,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'GET /runners/:id/dir-probe',
   'GET /runners/:id/install',
   'GET /runners/:id/login',
+  'GET /runners/:id/resources',
   'GET /runners/device/:userCode',
   'GET /runners/enrollment-tokens',
   'GET /session-folders',
