@@ -231,10 +231,15 @@ final class CodexSignInCopyParityTests: XCTestCase {
         assertSays(row, "<div className=\"pool-why\"> {signInAgain ? '\(CodexLoginPool.signedOutReason)' : `\(CodexLoginPool.signedOutReasonNotYours("${contributor ? contributor.name : 'the person who signed it in'}"))`} </div>",
                    in: Self.accountPools)
         assertSays(row, "> \(CodexLoginPool.signInAgain) </Button>", in: Self.accountPools)
+        // Signing it out is the last item of the row's ⋯ (settings-buttons board 02), and the question it
+        // asks names the account.
         let signingOut = account(email: "${member.label}")
-        assertSays(row, "title={`\(CodexLoginPool.signOutTitle(signingOut))`}", in: Self.accountPools)
-        assertSays(row, "aria-label={`\(CodexLoginPool.signOutLabel(signingOut))`}", in: Self.accountPools)
-        assertSays(row, "confirmText=\"\(CodexLoginPool.signOut)\"", in: Self.accountPools)
+        assertSays(row, "key: 'signout', label: '\(CodexLoginPool.signOut)', danger: true,", in: Self.accountPools)
+        assertSays(row, "title: `\(CodexLoginPool.signOutTitle(signingOut))`,", in: Self.accountPools)
+        assertSays(row, "confirmText: '\(CodexLoginPool.signOut)',", in: Self.accountPools)
+        // The web row has no sign-out mark of its own any more — its ⋯ is named "More for …" — so this
+        // client's mark keeps its screen-reader name here: the account it signs out.
+        XCTAssertEqual(CodexLoginPool.signOutLabel(signingOut), "Sign out ${member.label}")
         // Signing one out: the only account, and nothing runs on the pool; one of several, and it keeps
         // running on the others — "account" for one left, "accounts" for more.
         let one = CodexLoginPool.signOutNote(pool("${pool.label}", accounts: 1))

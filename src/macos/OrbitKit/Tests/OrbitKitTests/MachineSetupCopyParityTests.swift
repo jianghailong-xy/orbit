@@ -14,8 +14,13 @@ final class MachineSetupCopyParityTests: XCTestCase {
     private static let webCopy = "src/web/src/lib/machineSetupCopy.ts"
     private static let swiftCopy = "src/macos/OrbitKit/Sources/OrbitKit/App/MachineSetupCopy.swift"
 
-    /// Sentences of pages these clients don't have: the web's approval page.
-    private static let webOnly: Set<String> = ["ENROLL_NEXT_TITLE", "ENROLL_NEXT_BODY", "ENROLL_OPEN_MACHINE", "machineEmpty"]
+    /// Sentences of pages these clients don't have: the web's approval page, and its guide registering a
+    /// machine inside Settings' right-hand column, with Machines in the nav on its left. These clients
+    /// register one in `AddRunnerSheet`, from the welcome card or the Machines & models page, and the
+    /// machine then shows on that page, so their guide ends on `REGISTER_NEXT`, which names it.
+    private static let webOnly: Set<String> = [
+        "ENROLL_NEXT_TITLE", "ENROLL_NEXT_BODY", "ENROLL_OPEN_MACHINE", "machineEmpty", "REGISTER_NEXT_IN_SETTINGS",
+    ]
 
     /// Sentences these clients say and the web doesn't, each checked on its own terms below.
     private static let thisClientsOwn: Set<String> = [

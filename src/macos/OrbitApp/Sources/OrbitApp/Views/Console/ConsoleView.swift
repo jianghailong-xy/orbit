@@ -2146,11 +2146,12 @@ struct TranscriptItemView: View {
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):
             // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
-            // theirs under the call rather than left inside its result (`OwnerChatReply`).
+            // theirs under the call rather than left inside its result (`OwnerChatReply`), by the file
+            // that draws every bubble of the owner's (`OwnerChatReplyBubble`, beside `UserTurnRow`).
             if let words = OwnerChatReply.words(of: c) {
                 VStack(alignment: .leading, spacing: 12) {
                     ToolCardView(card: c, fullPayload: fullPayload)
-                    UserBubbleView(bubble: UserBubble(id: "owner-chat-\(c.id)", text: words, pending: false))
+                    OwnerChatReplyBubble(id: "owner-chat-\(c.id)", words: words)
                 }
             } else {
                 ToolCardView(card: c, fullPayload: fullPayload)

@@ -88,9 +88,11 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(row, "`\(try XCTUnwrap(SharedPoolPage.invalidReason(theirs, in: asMember)))`", in: Self.accountPools)
         assertSays(row, "> \(SharedPoolPage.replaceKey) </Button>", in: Self.accountPools)
         assertSays(row, "key.enabled ? '\(SharedPoolPage.disableKey)' : '\(SharedPoolPage.enableKey)'", in: Self.accountPools)
-        assertSays(row, "title={`\(SharedPoolPage.removeKeyTitle(key(label: "${key.label}")))`}", in: Self.accountPools)
-        assertSays(row, "description=\"\(SharedPoolPage.removeKeyNote)\"", in: Self.accountPools)
-        assertSays(row, "confirmText=\"\(SharedPoolPage.remove)\"", in: Self.accountPools)
+        // Removing it is the last item of the row's ⋯ (settings-buttons board 02), and asks first.
+        assertSays(row, "key: 'remove', label: '\(SharedPoolPage.removeFromPool)', danger: true,", in: Self.accountPools)
+        assertSays(row, "title: `\(SharedPoolPage.removeKeyTitle(key(label: "${key.label}")))`,", in: Self.accountPools)
+        assertSays(row, "description: '\(SharedPoolPage.removeKeyNote)',", in: Self.accountPools)
+        assertSays(row, "confirmText: '\(SharedPoolPage.remove)',", in: Self.accountPools)
         // "No keys yet — …", in the web's one sentence for both kinds of pool.
         assertSays(row, "No {shared ? 'keys' : 'accounts'}\(SharedPoolPage.noKeys.dropFirst("No keys".count))",
                    in: Self.accountPools)

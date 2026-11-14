@@ -290,3 +290,17 @@ struct UserTurnRow: View {
         return inputs
     }
 }
+
+/// The owner's "Chat about this" reply to one of Orbit's own cards (`OwnerChatReply`), drawn under the
+/// call as their own bubble. It is no turn of its own — the words ride in the call's result — but it is
+/// the owner's bubble, and the owner's bubble is drawn from this file alone: the console hands it here
+/// rather than building one itself (`UserTurnRowWiringTests`).
+struct OwnerChatReplyBubble: View {
+    /// The bubble's identity, from the call it answers.
+    let id: String
+    let words: String
+
+    var body: some View {
+        UserBubbleView(bubble: UserBubble(id: id, text: words, pending: false))
+    }
+}
