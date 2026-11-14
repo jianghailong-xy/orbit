@@ -49,8 +49,9 @@ struct WorkspaceFolderIcon: View {
 /// descriptive metadata, never a disclosure parent; the trailing slot carries at most one live
 /// state, with user attention taking precedence over background work. On the Mac a row with no
 /// state shows its faint ⌘1…⌘9 shortcut there while ⌘ is held (`shortcut`, 0-based; nil otherwise).
-/// An empty `runnerLabel` leaves the runner off the row (the Mac names it only where two workspaces
-/// share a name).
+/// An empty `runnerLabel` leaves the runner off the row. With `runnerOnHover` it shows only while
+/// the pointer is on the row, and whole, the name giving way (the Mac's sidebar, board
+/// docs/mocks/workspace-runner-label E1); off the Mac nothing hovers, so such a row never names it.
 struct WorkspaceNavigationRow: View {
     let agent: Agent
     let runnerLabel: String
@@ -62,6 +63,8 @@ struct WorkspaceNavigationRow: View {
     var jobs: Bool = false
     let waiting: Int
     var shortcut: Int? = nil
+    var runnerOnHover: Bool = false
+    @State private var hovering = false
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
@@ -71,10 +74,11 @@ struct WorkspaceNavigationRow: View {
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
-                if !runnerLabel.isEmpty {
+                if !runnerLabel.isEmpty && (!runnerOnHover || hovering) {
                     Text(" · \(runnerLabel)")
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
+                        .layoutPriority(runnerOnHover ? 3 : 0)
                 }
             }
             Spacer(minLength: 6)
@@ -97,6 +101,10 @@ struct WorkspaceNavigationRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
+        #if os(macOS)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        #endif
     }
 
     private var workspaceName: some View {

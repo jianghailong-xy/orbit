@@ -48,6 +48,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { WAITING_ON_YOU } from '../lib/ownerRequests';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -189,6 +190,7 @@ import {
   sessionEngineOf,
   sessionPick,
   supportsAuto,
+  claudeModelName,
 } from '../lib/workspaceDefaults';
 import {
   LOCAL_SLASH_ITEMS,
@@ -451,7 +453,7 @@ import { Menu, type MenuItem } from './ui/Menu';
 import { Popover } from './ui/Popover';
 import { RunnerUpdateIndicator } from './RunnerUpdateIndicator';
 import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
-import { RunnerUpdateNowButton } from './RunnerUpdateNow';
+import { RunnerUpdateNowButton, RunnerUpdateNowPress, useRunnerUpdateNow } from './RunnerUpdateNow';
 import { runnerTakesUpdateNow } from '../lib/runnerUpdateNow';
 import { Select } from './ui/Select';
 import { Spinner } from './ui/Spinner';
@@ -973,10 +975,9 @@ const JUMP_TO_START_PAGES = 30;
 // same). The follow a content update triggers lands just after the rows grew, and the gap read in
 // between — the normal state while a reply streams — must not flash the button.
 const STRANDED_AFTER_MS = 400;
-// What the sticky bar calls a turn the person typed. A card the control plane draws for a turn nobody
-// typed carries its own label instead (`data-sticky-label`), since saying this above a card reading
-// "not typed by you" is the screen contradicting itself — which is what the account owner
-// photographed on 2026-09-17, over a watch's wake.
+// What the sticky bar calls a turn the person typed — the only turn it ever names. A turn the control
+// plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
+// 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
 const STICKY_LABEL = 'Your question';
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
@@ -1212,6 +1213,8 @@ const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   if (s.waitingKind === 'DONE_REQUEST') return PROJECT_DONE_COPY.readyToClose;
   if (s.waitingKind === 'RECORD_AS_DONE') return PROJECT_DONE_COPY.recordAsDoneRow;
+  // An owner request this session filed (a step, a decision, a key, a confirmation): its card's words.
+  if (s.waitingKind === 'OWNER_REQUEST') return WAITING_ON_YOU;
   return 'Waiting for approval';
 };
 
@@ -2001,23 +2004,32 @@ export function RunnerUpdatingTag({
   gate,
   machine,
   actions,
+  updateNow,
 }: {
   gate: QueuedGate;
   machine?: string | null;
+  /** Later ▾. */
   actions?: ReactNode;
+  /** The runner, when it takes Update Now…: the press closes the popover and its confirmation opens outside it. */
+  updateNow?: Runner;
 }) {
   const now = useMinuteNow();
+  const [open, setOpen] = useState(false);
+  const reason = useRef<HTMLButtonElement>(null);
+  const updateRunnerNow = useRunnerUpdateNow(updateNow, machine ?? '');
   const waited = runnerUpdatingWaited(gate, now);
   return (
     <span className="chat-runner-updating">
       Queued
       <span className="chat-meta-sep">·</span>
       <Popover
+        open={open}
+        onOpenChange={setOpen}
         title={runnerUpdatingTitle(gate)}
         side="bottom"
         align="end"
         trigger={
-          <button type="button" className="chat-runner-updating-reason">
+          <button ref={reason} type="button" className="chat-runner-updating-reason">
             {runnerUpdatingTag(gate)}
           </button>
         }
@@ -2032,9 +2044,17 @@ export function RunnerUpdatingTag({
               </>
             )}
           </p>
-          {actions}
+          {(actions || updateNow) && (
+            <div className="runner-update-actions">
+              {actions}
+              {updateNow && (
+                <RunnerUpdateNowPress pending={updateRunnerNow.pending} onClick={() => { setOpen(false); updateRunnerNow.open(reason); }} />
+              )}
+            </div>
+          )}
         </div>
       </Popover>
+      {updateRunnerNow.confirmation}
     </span>
   );
 }
@@ -2643,10 +2663,10 @@ export function WorkspaceView({
     setSwipeDrag(null);
   };
   // The turn the answer currently in view belongs to, surfaced as a sticky bar when a long answer
-  // has pushed it off the top — so what is being answered stays findable. null hides it. `label`
-  // says whose turn it was: the person's, or the wake's own title where nobody typed it.
+  // has pushed it off the top — so what is being answered stays findable. null hides it. Only a turn
+  // the person typed is ever named (STICKY_LABEL).
   const [stuck, setStuck] = useState<
-    { seq: string | null; label: string; text: string; loading?: boolean } | null
+    { seq: string | null; text: string; loading?: boolean } | null
   >(null);
   // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
   // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
@@ -3372,10 +3392,13 @@ export function WorkspaceView({
     entry.kind === 'project'
       ? entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : []
       : entry.projectMark ? [[entry.id, entry.projectMark.projectId] as const] : [])), [folderListing]);
+  // The project each project row of the list stands for, by its coordinator alone.
+  const listedCoordinatorProjects = useMemo(() => new Map(folderListing.entries.flatMap((entry) =>
+    entry.kind === 'project' && entry.coordinator ? [[entry.coordinator.id, entry.projectId] as const] : [])), [folderListing]);
   // Wider than a phone an open column follows the selection (owner 2026-11-11, board 3; 2026-11-13): a
   // member of its project keeps it, a project row's coordinator or another project's member switches it
-  // to that project, and a session in no project closes it. With no column open, only a project row's
-  // own click opens one.
+  // to that project, and a session in no project closes it. With no column open, a project row's own
+  // click or the arrow keys onto it (`stepSession`) open one.
   const searchFor = useCallback((id: string): string => {
     if (isMobile || !openProjectId) return listSearch;
     if (allProjectMembers.some((s) => s.id === id)) return projectSearch;
@@ -3638,10 +3661,16 @@ export function WorkspaceView({
         next = cur + dir;
         if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(sessionItemPath(orderedSessions[next]));
+      const target = orderedSessions[next];
+      // Wider than a phone, stepping onto a project row opens its column beside the coordinator, as
+      // the row's click does, even with none open (owner 2026-11-14).
+      const rowProjectId = isMobile ? undefined : listedCoordinatorProjects.get(target.id);
+      navigate(rowProjectId
+        ? sessionItemPath(target, `?project=${encodeId(rowProjectId)}${folderParam ? `&folder=${encodeURIComponent(folderParam)}` : ''}`)
+        : sessionItemPath(target));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate, sessionItemPath],
+    [orderedSessions, selectedId, view, navigate, sessionItemPath, isMobile, listedCoordinatorProjects, folderParam],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -4435,38 +4464,36 @@ export function WorkspaceView({
         .map((card) => card.getAttribute('data-open-item'))
         .join(' '),
     );
-    // A turn the control plane queued is one of these too — it is where the answer under it starts,
-    // so it is where the bar has to point — but it is no bubble and nobody typed it, so its card
-    // hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued twin in the
-    // tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a background
-    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is still
-    // giving (WatchWakeCard, BackgroundWakeCard), so it carries no label and the bar keeps the question.
+    // A turn the control plane queued is scanned too — it is where the answer under it starts, so the
+    // question above it no longer heads what is on screen — but nobody typed it, so the bar is hidden
+    // over it rather than naming a machine's message (`data-orbit-round` marks its card). Its queued
+    // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A watch's wake, a
+    // background job's news or a wakeup coming due is not one: it is a line inside the answer the
+    // agent is still giving (WatchWakeCard, BackgroundWakeCard), so the bar keeps the question.
     const bubbles = Array.from(
-      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
+      el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
     let cur: HTMLElement | null = null;
     for (const b of bubbles) {
       if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
       else break;
     }
-    if (cur) {
-      const label = cur.getAttribute('data-sticky-label');
+    if (cur?.hasAttribute('data-orbit-round')) {
+      setStuck(null);
+    } else if (cur) {
       // Only the bubble's rendered markdown — the bubble also holds attachment thumbnails whose
       // hover mask ("Preview") and file chips are in the DOM regardless of visibility, and a raw
       // textContent would splice those labels in front of the question.
       setStuck({
         seq: cur.getAttribute('data-seq'),
-        label: label ?? STICKY_LABEL,
-        text: label === null
-          ? cur.querySelector('.md')?.textContent || ''
-          : cur.getAttribute('data-sticky-text') || '',
+        text: cur.querySelector('.md')?.textContent || '',
       });
     } else if (hasOlderNow()) {
       // No loaded user prompt sits above the viewport, but older pages remain: the prompt for
       // the content now in view is in an unloaded page. Don't blank the bar — show a loading
       // state and pull the earlier page in (no-op if one is already in flight), so measure
       // re-runs after the prepend and resolves the real question.
-      setStuck({ seq: null, label: STICKY_LABEL, text: '', loading: true });
+      setStuck({ seq: null, text: '', loading: true });
       loadOlder();
     } else {
       setStuck(null);
@@ -4504,7 +4531,8 @@ export function WorkspaceView({
           <RunnerUpdatingTag
             gate={runnerUpdatingGate}
             machine={machineName(runner)}
-            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+            actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
+            updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
           />
         ),
       };
@@ -7319,7 +7347,11 @@ export function WorkspaceView({
         {
           value: shownModelName,
           label:
-            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModelName,
+            !shownProviderCapabilitiesResolved && !selected
+              ? 'Runtime default'
+              : shownEngine === AgentProvider.CLAUDE
+                ? claudeModelName(shownModelName)
+                : shownModelName,
         },
         ...catalogModelOptions,
       ];
@@ -10170,14 +10202,12 @@ export function WorkspaceView({
             onClick={() => {
               const seq = stuck?.seq;
               if (!seq) return;
-              const card = scrollRef.current?.querySelector<HTMLElement>(
-                `.chat-user[data-seq="${seq}"], [data-sticky-label][data-seq="${seq}"]`,
-              );
+              const card = scrollRef.current?.querySelector<HTMLElement>(`.chat-user[data-seq="${seq}"]`);
               revealCard(card, 'start', false);
             }}
           >
-            {/* The arrow points up at the turn the bar names, whoever's turn it was. */}
-            <span className="chat-sticky-label">↑ {stuck.label}</span>
+            {/* The arrow points up at the question the bar names. */}
+            <span className="chat-sticky-label">↑ {STICKY_LABEL}</span>
             <span className="chat-sticky-text">
               {stuck.loading ? 'Loading earlier messages…' : stuck.text}
             </span>

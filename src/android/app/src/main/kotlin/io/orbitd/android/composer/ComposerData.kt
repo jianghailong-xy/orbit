@@ -395,11 +395,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         return rows.firstOrNull { it.text("value") == name }
     }
 
-    /** A model as its row names it, or the id itself; an empty one is the runtime's own pick. */
+    /** A model as its row names it, else a Claude id as Claude Code names it, else the id itself; an empty one is the runtime's
+     *  own pick. */
     fun modelLabel(engine: String, provider: String, model: String): String =
         modelRow(engine, provider, model)?.let { it.text("label") ?: model }
             // Cursor CLI's Auto, which its catalogue names `default` and no model named runs too.
             ?: if (CursorRuntime.onAuto(engine, model)) CursorRuntime.AUTO
+            else if (engine == ProviderEngines.CLAUDE && model.isNotEmpty()) ProviderEngines.claudeModelName(model)
             else model.ifEmpty { if (engine == ProviderEngines.OPENCODE) "Managed by OpenCode" else "Runtime default" }
 
     /** Whether this runner can start a Cursor CLI session, as the server admits one (web `cursorRunnerState`): null when it can, else why

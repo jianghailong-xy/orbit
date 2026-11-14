@@ -166,6 +166,9 @@ public enum SessionWaitingKind: String, Codable, Sendable {
     /// A project that looks finished and that its coordinator did not ask about within the
     /// project's escalation window: the row says "Record as done…".
     case recordAsDone = "RECORD_AS_DONE"
+    /// An owner request this conversation filed and the owner has not ended (a step, a decision, a
+    /// key, a confirmation): the row says "Waiting on you", over the request's card.
+    case ownerRequest = "OWNER_REQUEST"
     /// Forward-compatibility floor: no named kind, which is also what an older control plane sends.
     case unknown = "UNKNOWN"
 

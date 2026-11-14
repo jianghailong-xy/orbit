@@ -15,34 +15,37 @@ import Foundation
 // of the answer — a watch's wake drew "↑ Watch triggered" over the reply to the person's question —
 // and a run of them kept the question off the screen altogether.
 //
+// A round Orbit opened — evidence to review, a task's start, another session's message, a fact told
+// to the coordinator — does head the answer under it, but it is nobody's question, and the owner ruled
+// on 2026-11-14 that a machine's message never appears on the bar: over one the bar is hidden
+// (`isOrbits`). So the bar only ever names the person's own words, labelled `yourQuestion`.
+//
 // This is the whole rule, and it is here rather than in the view so both clients can share it and
-// Linux can test it: `ConsoleView.stickyQuestion` draws what it returns and `recomputeStuck` skips
-// what `isAnchor` refuses, and the browser stamps the same pair onto a card's root
-// (`data-sticky-label` / `data-sticky-text`) for `WorkspaceView`'s scanner to read — and stamps none
-// on a wake's line. `WatchWakeCopyParityTests` / `BackgroundWakeCopyParityTests` hold the two ends to
-// the same rule.
+// Linux can test it: `recomputeStuck` skips what `isAnchor` refuses and `StickyQuestions` clears the
+// bar after what `isOrbits` claims. The browser marks such a round's card with `data-orbit-round`
+// for `WorkspaceView`'s scanner, and marks no wake's line. `WatchWakeCopyParityTests` /
+// `BackgroundWakeCopyParityTests` hold the two ends to the same rule.
 
-/// The two words the sticky bar draws for one turn: what kind of turn it was, and what it said.
+/// Which turns the sticky bar points at, and what it calls the one it names.
 public enum StickySummary {
     /// The arrow every label opens with — the bar points up at the turn it names.
     public static let arrow = "↑ "
 
-    /// The label over a turn the person actually typed. The one label that is not a card's title,
-    /// and the only wording on this bar that predates the wakes.
+    /// The label over the person's question — the only turn the bar names.
     public static let yourQuestion = "\(arrow)Your question"
 
     /// Whether the bar may point back at this turn at all — every turn may but a watch's wake, a
     /// background job's news, a wakeup coming due or the owner's answer handed to the coordinator,
     /// each a line inside the answer rather than the head of one (web: the line carries no
-    /// `data-sticky-label`). Where somebody also typed words on a background wake's turn, those are a bubble
+    /// `data-orbit-round`). Where somebody also typed words on a background wake's turn, those are a bubble
     /// under the line, and the bar names them the way it names any question; a watch's wake is the
     /// whole of its turn's words, so nobody's are there.
     ///
     /// A fact told to this session (`coordinatorDelivery`) is a line too, but it IS the head of a round:
-    /// the reply under it answers it, so the bar points back at it, as the browser's line carries its
-    /// `data-sticky-label`.
+    /// the reply under it answers it, as the browser's line carries `data-orbit-round` — so it ends
+    /// the question's reach, and the bar is hidden over it (`isOrbits`).
     ///
-    /// Read in `of`'s order, so a turn a card earlier in it claims is never taken for a wake here.
+    /// Read card by card first, so a turn a card claims is never taken for a wake here.
     public static func isAnchor(text: String, note: String? = nil,
                                 itemCard: OpenItemDelivery? = nil,
                                 taskStart: TaskStart? = nil,
@@ -58,60 +61,19 @@ public enum StickySummary {
         return BackgroundWakeCard.drawsBubble(text: text)
     }
 
-    /// What the bar says about one user turn, read off the same fields the transcript reads a card
-    /// out of: who sent another session's message, an exception item's delivery, a task run's opening
-    /// and a project's start, in the payload recorded beside it (`sessionMessage`, `itemCard`,
-    /// `taskStart`, `startedCard`). A turn that is none of them is the person's, unchanged — which,
-    /// for a turn the bar may name at all (`isAnchor`), includes the words somebody typed on a
-    /// background wake's turn. A wake itself is never handed here: `isAnchor` refuses it. `note` is
-    /// taken so a caller hands both functions the same turn; only `isAnchor` reads it.
-    ///
-    /// The order is the transcript's (`TranscriptItemView`, web's `NodeView`): another session's
-    /// message first, then the item card, then a task run's opening, then a project's start, then the
-    /// person's words — so the bar can never name a turn something other than what the card under it
-    /// is.
-    public static func of(text: String, note: String? = nil,
-                          itemCard: OpenItemDelivery? = nil,
-                          taskStart: TaskStart? = nil,
-                          startedCard: ProjectStarted? = nil,
-                          sessionMessage: SessionMessage? = nil,
-                          coordinatorDelivery: CoordinatorDelivery? = nil) -> (label: String, text: String) {
-        // Another Orbit session's message: somebody's question, but not the reader's, and the card
-        // under the bar names who asked it (`SessionMessageCard`).
-        if let card = sessionMessage {
-            let summary = SessionMessageCard.sticky(card, text: text)
-            return (arrow + summary.label, summary.text)
-        }
-        if let card = itemCard {
-            let summary = OpenItemDeliveryCard.sticky(card)
-            return (arrow + summary.label, summary.text)
-        }
-        // A fact told to this session: nobody's question, and the line under the bar says what it was
-        // (`CoordinatorDeliveryCard`) — `↑ From Orbit`, never `Your question` over words nobody typed.
-        if let card = coordinatorDelivery {
-            let summary = CoordinatorDeliveryCard.sticky(card)
-            return (arrow + summary.label, summary.text)
-        }
-        // A task run's opening turn: the brief is nobody's question, and the card under the bar
-        // names the task (`TaskStartCard`).
-        if let card = taskStart {
-            let summary = TaskStartCard.sticky(card)
-            return (arrow + summary.label, summary.text)
-        }
-        // The message telling the coordinator its project was started: the card names the project.
-        if let card = startedCard {
-            let summary = ProjectStartedCard.sticky(card)
-            return (arrow + summary.label, summary.text)
-        }
-        return (yourQuestion, text)
-    }
-
-    /// The label as the iPhone draws it, in a capsule between the nav bar's back and menu buttons
-    /// (`ConsoleView.stickyQuestion`): the arrow alone over the person's own words — the capsule has
-    /// no room to say whose they are, and needs none — and a card's title as it stands over anything
-    /// else, so the capsule can't pass a card off as something the reader typed.
-    public static func compactLabel(_ label: String) -> String {
-        label == yourQuestion ? arrow.trimmingCharacters(in: .whitespaces) : label
+    /// Whether Orbit, not a person, opened this turn: one of the control plane's cards stands in for
+    /// the bubble. Such a turn still heads the round under it (`isAnchor`), so the question above it no
+    /// longer names what is on screen — but the bar never names a machine's message either (the owner,
+    /// 2026-11-14: "↑ Evidence to review" over a coordinator's reply), so over it the bar is hidden
+    /// (`StickyQuestions`). Web: a card carrying `data-orbit-round` hides `WorkspaceView`'s bar.
+    /// A watch's wake, a job's news and the owner's answer are lines inside an answer, not rounds, and
+    /// are left to `isAnchor`.
+    public static func isOrbits(_ b: UserBubble) -> Bool {
+        b.itemCard != nil || b.coordinatorDelivery != nil || b.taskStart != nil || b.startedCard != nil
+            || b.sessionMessage != nil || !(b.sessionReplies ?? []).isEmpty
+            || b.reviewRequest != nil || b.reviewReturn != nil || b.reviewAnswers != nil
+            || b.evidenceReview != nil || b.evidenceSendBack != nil || b.runQuestion != nil
+            || b.runNotice != nil || b.sessionOpening != nil
     }
 }
 
@@ -125,7 +87,8 @@ public enum StickySummary {
 public struct StickyQuestions {
     /// Each item's position, by id — the first one, as the walk stopped at the first.
     private let position: [String: Int]
-    /// `above[i]`: the last question before item `i`; `above[items.count]`, the last of them all.
+    /// `above[i]`: the last question before item `i` — nil where a round Orbit opened came after it;
+    /// `above[items.count]`, the last of them all.
     private let above: [String?]
 
     /// `isQuestion` is the console's own test of one user turn (`namesAQuestion`).
@@ -137,7 +100,8 @@ public struct StickyQuestions {
         for (index, item) in items.enumerated() {
             if position[item.id] == nil { position[item.id] = index }
             above.append(last)
-            if case .user(let b) = item, isQuestion(b) { last = b.id }
+            // A round Orbit opened ends the question's reach without taking the bar (`isOrbits`).
+            if case .user(let b) = item, isQuestion(b) { last = StickySummary.isOrbits(b) ? nil : b.id }
         }
         above.append(last)
         self.position = position

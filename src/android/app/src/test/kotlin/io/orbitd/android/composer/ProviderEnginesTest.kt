@@ -241,4 +241,13 @@ class ProviderEnginesTest {
             "BYPASS" to "bypassPermissions")
         assertEquals(Regex("PermissionMode\\.(\\w+)").findAll(modes).map { values.getValue(it.groupValues[1]) }.toList(), ProviderEngines.DSH_PERMISSION_MODES)
     }
+
+    /** A signed-out Mac mini's runner reported no Claude list, and the chip read `claude-opus-5-5`: a Claude id the catalogue has no
+     *  row for reads as Claude Code names it (web `claudeModelName`). */
+    @Test fun aClaudeIdReadsAsClaudeCodeNamesIt() {
+        assertEquals("Opus 5.5", ProviderEngines.claudeModelName("claude-opus-5-5"))
+        assertEquals("Opus 5", ProviderEngines.claudeModelName("claude-opus-5"))
+        assertEquals("Haiku 4.5", ProviderEngines.claudeModelName("claude-haiku-4-5"))
+        for (id in listOf("opus", "opus[1m]", "claude-sonnet-4-5-20250929", "deepseek-flash", "")) assertEquals(id, ProviderEngines.claudeModelName(id))
+    }
 }

@@ -103,6 +103,9 @@ type HeartbeatRequest struct {
 	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
 	// NULL means "not reported", and a non-root runner has to be able to say so.
 	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
+	// Resources is the machine's CPU, memory and disk now (machine_resources.go), sent on every beat
+	// by a runner that declares machine-resources/v1.
+	Resources *MachineResources `json:"resources,omitempty"`
 	// SelfUpdate is where this runner's updates of itself stand (selfUpdateReport). Sent on every
 	// beat once the startup update has looked, so the control plane can tell a runner too old to
 	// report it — which omits it — from one that reports.

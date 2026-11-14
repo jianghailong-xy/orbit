@@ -899,6 +899,40 @@ func TestUpdateEngineSkipsTheCommandWhenAlreadyCurrent(t *testing.T) {
 	}
 }
 
+// An npm-installed Codex with no npm on the service PATH: `codex update` says only "os error 2".
+// The record must say what to install instead, and stay quiet when npm is there after all.
+func TestUpdateEngineNamesTheMissingPackageManager(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerCodex)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho 'codex-cli 0.159.2'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"version":"0.169.0"}`))
+	}))
+	defer feed.Close()
+	spec := engineSpec{
+		name: "Codex", bin: providerCodex, latestURL: feed.URL, latestField: "version",
+		updateCmd: "echo 'Updating Codex via `npm install -g @openai/codex`...'; echo 'Error: No such file or directory (os error 2)' >&2; exit 1",
+	}
+
+	rec, _ := updateEngine(context.Background(), spec, dir, nil)
+	want := "0.159.2 → 0.169.0: Codex updates itself with npm, and npm isn't on this runner's PATH. " +
+		"Install npm on this machine (on Debian or Ubuntu: `sudo apt install npm`), then press Update Engines Now."
+	if rec.Status != updateFailed || rec.Message != want {
+		t.Fatalf("record = %+v, want message %q", rec, want)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "npm"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = updateEngine(context.Background(), spec, dir, nil)
+	if !strings.HasSuffix(rec.Message, "Error: No such file or directory (os error 2)") {
+		t.Fatalf("with npm on PATH the message = %q, want codex's own words", rec.Message)
+	}
+}
+
 // The counterpart: a machine that is behind still runs its updater, and what it reports names the
 // version it was reaching for. "Update timed out" is unactionable; "2.1.226 → 2.1.228" is not.
 func TestUpdateEngineNamesTheVersionItWasFetching(t *testing.T) {

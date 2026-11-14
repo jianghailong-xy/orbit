@@ -455,7 +455,23 @@ public enum AgentDefaults {
         if id.isEmpty, engine == "dsh" {
             return "Picked by DeepSeek Harness"
         }
-        return friendlyName(id, catalog: catalog, configured: configured)
+        let name = friendlyName(id, catalog: catalog, configured: configured)
+        // A Claude id nothing lists — a signed-out runner whose probe failed showed the bare
+        // `claude-opus-5-5` — reads as Claude Code names it.
+        return name == id && engine == "claude" ? claudeModelName(id) : name
+    }
+
+    /// The name Claude Code gives a Claude api id: `claude-opus-5-5` is "Opus 5.5", `claude-haiku-4-5`
+    /// "Haiku 4.5" (web `claudeModelName`, the runner's claudeModelID in reverse). Anything else stays as it is.
+    public static func claudeModelName(_ id: String) -> String {
+        let digits = { (s: String) in !s.isEmpty && s.allSatisfy { $0.isASCII && $0.isNumber } }
+        let parts = id.split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+        guard (3...4).contains(parts.count), parts[0] == "claude", !parts[1].isEmpty,
+              parts[1].allSatisfy({ $0.isASCII && $0.isLowercase }), digits(parts[2])
+        else { return id }
+        guard parts.count == 4 else { return parts[1].capitalized + " " + parts[2] }
+        guard digits(parts[3]), parts[3].count <= 2 else { return id }
+        return parts[1].capitalized + " " + parts[2] + "." + parts[3]
     }
 
     /// Reasoning-effort levels an engine accepts. Codex, Kimi, OpenCode and Antigravity report

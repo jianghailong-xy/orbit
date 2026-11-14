@@ -1,0 +1,127 @@
+<!-- DESIGN MOCK (2026-11-14), revision 4. Scheduled tasks on web, from docs/scheduled-tasks-design.md and the iOS board
+     (../01-board.html). Every frame is the real web console (src/web built, ui-migration fixtures) at 1440×900, with
+     the proposal injected by capture/capture.mjs using the console's own classes and colour variables. Names, times,
+     versions and PRs are demo data. Two boards from one file: ?b=1 and ?b=2.
+     Render: node ../render.mjs "$PWD/board.html?b=1" $PWD/01-board.png   (same for b=2 → 02-board.png) -->
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<title>定时任务（Web）第 3 版</title>
+<style>
+  @font-face { font-family:"MockInter"; src:url("file:///mnt/data/tmp/mockfonts/Inter.ttf"); font-weight:100 900; }
+  @font-face { font-family:"MockSC"; src:url("file:///mnt/data/tmp/mockfonts/NotoSansSC.ttf"); font-weight:100 900; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 44px; width:1500px; background:#ececef; color:#111114;
+         font:14px/1.55 -apple-system,"MockInter","MockSC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; margin:0 0 6px; } .lede { color:#55555e; margin:0 0 22px; }
+  .fr { display:grid; grid-template-columns:1040px 1fr; gap:24px; margin-bottom:30px; align-items:start; }
+  .fr img { width:1040px; display:block; border-radius:10px; box-shadow:0 1px 0 #d5d5da, 0 6px 24px rgba(0,0,0,.08); }
+  .fh { font-weight:700; font-size:16px; margin:0 0 8px; }
+  .fh .tag { font:600 11.5px/1 sans-serif; padding:4px 7px; border-radius:5px; background:#dcf3e5; color:#17683b; margin-right:6px; vertical-align:2px; }
+  ol { margin:0; padding-left:20px; font-size:13px; color:#3d3d45; line-height:1.7; } ol b { color:#111114; }
+  li { margin-bottom:6px; }
+  code { font:12px "DejaVu Sans Mono",monospace; background:#f3f3f6; padding:0 3px; border-radius:3px; }
+  .sheet { background:#fff; border-radius:12px; padding:18px 22px; margin-top:6px; }
+  .sheet h2 { font-size:16px; margin:0 0 10px; }
+  table { border-collapse:collapse; width:100%; font-size:12.5px; } td, th { border-top:1px solid #eee; padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:#6b6b75; font-weight:600; background:#fafafb; }
+  .two { display:grid; grid-template-columns:1.1fr 1fr; gap:28px; }
+  .q { background:#fff7e6; border:1px solid #f1d9a8; border-radius:10px; padding:12px 16px; margin-top:16px; font-size:13px; line-height:1.75; }
+  .q b { color:#7a4a00; }
+  .b2, body.show2 .b1 { display:none; } body.show2 .b2 { display:block; } body.show2 .fr.b2 { display:grid; } body.show2 .sheet.b2 { display:grid; }
+</style>
+<script>if (new URLSearchParams(location.search).get('b') === '2') addEventListener('DOMContentLoaded', () => document.body.classList.add('show2'));</script>
+
+<div class="b1">
+<h1>定时任务（Web）第 4 版 1/2：Scheduled 页</h1>
+<p class="lede">页面布局是第 3 版定的，没有变；这一版按 <code>docs/scheduled-tasks-design.md</code> 第 4 版（D1–D4 已定）更新了详情面板和创建卡，并加了一次性的定时。Scheduled 只在左侧导航里，<b>不进任何工作区的会话列表</b>。页面参考 macOS 提醒事项（Reminders）的「计划」列表：按日期排列每个定时任务的下一次执行，点一行在右侧打开详情面板（相当于 ⓘ），列表末尾一行直接输入一句话。每一帧都是真实的 Web 控制台，新增部分按控制台自己的样式注入。界面文案英文，注释中文；名称、时间、版本号都是演示数据。</p>
+</div>
+<div class="b2">
+<h1>定时任务（Web）第 4 版 2/2：在会话里创建和修改、Waiting on you、执行会话</h1>
+<p class="lede">接 1/2。人只对目标、风险、预算和授权负责：创建卡上各一行，只在<b>创建</b>和<b>信封变大</b>时按一下。信封 = 工作区、权限、每周次数、单次时长。信封内的修改直接生效，可以 Undo。需要人处理的事项都进 Waiting on you。</p>
+</div>
+<div class="fr b1">
+  <img src="timeline.png">
+  <div><div class="fh"><span class="tag">新增</span>① 时间线</div><ol><li>左侧导航的 <b>Scheduled</b>，橙色数字只数失败和挂起的。</li><li><b>Needs you</b> 放在最上面，红色，相当于 Reminders 里的“已过期”：失败、挂起、等审批。</li><li>下面按日期分组：Today、Tomorrow、本周各天、Later，最后是 Paused。每个定时任务出现在它<b>下一次执行</b>的那一天；第二行是 ↻ 规则、工作区和权限，时间靠右。圆圈表示状态：空心是待执行，转圈是正在跑。</li><li><b>Show past runs</b> 相当于 Reminders 的“显示已完成”，默认关闭。</li><li>列表末尾一行输入框，相当于“新提醒事项”：输入一句话，右边是会用哪个工作区。</li><li><b>第 4 版</b>：一次性的定时（D3）和周期性的排在同一条时间线上，第二行写 Once，没有 ↻；执行完就结束。</li></ol><p style="font-size:12.5px;color:#6b6b75;margin:10px 0 0">标题和数字的样式照搬 Reminders：大号彩色标题，右边是总数。顶部按工作区筛选。</p></div>
+</div>
+<div class="fr b1">
+  <img src="inspector.png">
+  <div><div class="fh"><span class="tag">改</span>② 显示过去的执行 + 详情面板</div><ol><li>打开 Show past runs 后，今天已经跑过的执行显示在 Today 里，变灰并打勾：灰色勾是没变化或已报过，绿色勾是有新发现，红色是失败。</li><li>选中一行（蓝底），右侧打开<b>详情面板</b>，不跳到新页面。</li><li>按钮：Run now、Pause、Change…，⋯ 里是删除。</li><li><b>第 4 版</b>：What it does 是 Agent 读回的一句话；<b>What was asked</b> 是你的原话，原样保留。Agent 可以改写执行内容，原话不动。</li><li><b>Notes for the next run</b>：每次执行都是新会话，上一次留给下一次的备注。</li><li><b>This month</b>：本月用量对照批准的上限，按次数和分钟计。</li><li>历史里每条修改都标明是谁改的：某个会话、你按卡允许的、还是某次执行自己（Run）。直接生效的修改带 Undo。</li></ol></div>
+</div>
+<div class="fr b1">
+  <img src="typing.png">
+  <div><div class="fh"><span class="tag">新增</span>③ 在列表里直接说一句</div><ol><li>在末尾那一行输入，回车后会在右侧显示的那个工作区里开一个会话（默认是上次用的工作区，可以切换），由 Agent 生成这个定时任务。</li></ol><p style="font-size:12.5px;color:#6b6b75;margin:10px 0 0">这一行接收的是一句话，不是表单。</p></div>
+</div>
+<div class="fr b1">
+  <img src="quickadd.png">
+  <div><div class="fh"><span class="tag">改</span>④ 草稿 + 创建确认</div><ol><li>Agent 生成好之后，列表里在对应日期出现一条<b>草稿</b>：虚线圆圈、斜体。</li><li>右侧面板就是创建确认卡，和会话里的那张一样（见 2/2 ①）：先读回一句目标，再是时间、执行位置、权限。按 Create 即可，不用跳去聊天。</li><li><b>Costs</b>：每周最多几次、每次最长多久（D1）。</li><li><b>Today</b>：Agent 先做了一遍，今天的结果是起点，首次执行不把现状当新发现（D2）。</li><li>想再商量就点 <b>Open conversation</b>。这个会话是你自己开的，所以留在该工作区的会话列表里。</li></ol></div>
+</div>
+<div class="fr b1">
+  <img src="empty.png">
+  <div><div class="fh"><span class="tag">新增</span>⑤ 空状态</div><ol><li>列表为空时，只有输入行，下面是三个例句，点一下就填进输入行。第三句是一次性的。</li><li>没有表单，也没有新建按钮。</li></ol></div>
+</div>
+<div class="fr b2">
+  <img src="create.png">
+  <div><div class="fh"><span class="tag">改</span>① 在会话里创建</div><ol><li>Agent 先在当前会话里把这件事<b>真做一遍</b>，用今天的结果回答（D2）。</li><li><b>目标</b>：Agent 把它理解的目标读回一句；你的原话原样存在任务上。</li><li><b>风险</b>：May 一行。</li><li><b>预算</b>：Costs 一行，每周最多几次、每次最长多久（D1）。</li><li><b>Today</b>：今天的结果记为起点，明天第一次执行不会把现状当成新发现通知你。</li></ol><p style="font-size:12.5px;color:#6b6b75;margin:10px 0 0">卡上没有可编辑的字段，只有 Create 和 Not now；不对的地方直接接着说。</p></div>
+</div>
+<div class="fr b2">
+  <img src="budget.png">
+  <div><div class="fh"><span class="tag">新增</span>② 超出信封才弹卡</div><ol><li>往小改（更少次数、更窄权限、改时间、改内容）<b>直接生效</b>，留一行记录，带 Undo。因为是<b>你</b>说的收紧，信封跟着缩小到每周 1 次。</li><li>再改回每天就超出了信封，出一张黄色的卡，写明现在和要求的，按 <b>Allow</b> 才生效。</li></ol><p style="font-size:12.5px;color:#6b6b75;margin:10px 0 0">如果是任务自己在某次执行里降频，信封不缩，之后恢复不用再问：授过的权不问第二遍，收回的权要重新问。</p></div>
+</div>
+<div class="fr b2">
+  <img src="change.png">
+  <div><div class="fh">③ 扩大权限</div><ol><li>改时间在信封内，直接生效。</li><li>扩大权限（Check only → Open a PR）和换工作区，是同一条规则的另外两种情况：同样一张黄色的卡，写明下一次执行前还会再复查一遍。</li></ol><p style="font-size:12.5px;color:#6b6b75;margin:10px 0 0">在任意会话里都能改，不一定要回到创建它的那个会话。这一帧和第 3 版相同。</p></div>
+</div>
+<div class="fr b2">
+  <img src="waiting.png">
+  <div><div class="fh"><span class="tag">改</span>④ Waiting on you</div><ol><li>连续失败、挂起、无人值守时碰到的审批，都作为这里的卡片出现，用现有的卡片组件。连续失败只提醒，不自动暂停。</li><li><b>第 4 版</b>：审批卡上有 <b>Always allow</b>，写的是现有的工作区级允许规则；每次执行都是该工作区的新会话，所以明晚不会停在同一张卡上。卡上写明这一点。2 小时没人答，这次执行算失败。</li><li><b>第 4 版</b>：某次执行自己提出的扩权，和会话里的是同一张卡，因为没人在会话里，所以送到这里。这次执行仍按现有权限做完。</li></ol></div>
+</div>
+<div class="fr b2">
+  <img src="selfend.png">
+  <div><div class="fh"><span class="tag">新增</span>⑤ 执行调整自己的任务</div><ol><li>执行自己的会话可以对它所服务的任务做三件事，都在信封内（D4）：改写执行内容、降低频率、目标达成后结束任务。这里是结束：会话里留一行记录，带 Undo（Undo 就是恢复），并通知你一次。</li></ol><p style="font-size:12.5px;color:#6b6b75;margin:10px 0 0">它不能给自己扩权，见 ④ 的第 3 条。</p></div>
+</div>
+<div class="fr b2">
+  <img src="run.png">
+  <div><div class="fh">⑥ 一次执行的会话</div><ol><li>从详情面板进入时，顶部是面包屑 Scheduled › 任务名 › 哪一次；会话栏收起，因为这类会话不进会话列表。</li><li>执行结果由 Agent 结构化上报，并写明这次有没有通知你。“有变化”和“失败”的会话保持打开，可以接着追问。</li></ol><p style="font-size:12.5px;color:#6b6b75;margin:10px 0 0">这一帧和第 3 版相同。</p></div>
+</div>
+<div class="sheet two b2">
+  <div>
+    <h2>谁负责什么</h2>
+    <table>
+      <tr><th>人负责</th><th>怎么体现</th><th>按几下</th></tr>
+      <tr><td><b>目标</b></td><td>说一遍，原话原样保存；卡上读回一句</td><td>0</td></tr>
+      <tr><td><b>风险</b></td><td>卡上 May 一行</td><td rowspan="3">创建 1 次；信封变大时 1 次</td></tr>
+      <tr><td><b>预算</b></td><td>卡上 Costs 一行</td></tr>
+      <tr><td><b>授权</b></td><td>Create / Allow，只能本人按</td></tr>
+      <tr><th>Agent 负责</th><th colspan="2">怎么体现</th></tr>
+      <tr><td>名称、执行内容、判重的 key</td><td colspan="2">详情面板里可读，改了记历史</td></tr>
+      <tr><td>时间、时区、首次执行</td><td colspan="2">卡上 When；时区用你说的，没说用按 Create 的那台设备的</td></tr>
+      <tr><td>起点</td><td colspan="2">创建前先做一遍，卡上 Today</td></tr>
+      <tr><td>记忆</td><td colspan="2">每次执行留给下一次的备注</td></tr>
+      <tr><td>调整</td><td colspan="2">信封内自己改、降频、收工，可 Undo</td></tr>
+      <tr><td>要不要告诉你</td><td colspan="2">只有新发现或需要你时才通知</td></tr>
+      <tr><td>暂停、立即执行、终止、删除</td><td colspan="2">页面上直接按，或在会话里说</td></tr>
+    </table>
+  </div>
+  <div>
+    <h2>和前几版比</h2>
+    <table>
+      <tr><td>会话栏里的入口行</td><td>改成左侧导航的 Scheduled</td></tr>
+      <tr><td>新建按钮、编辑对话框</td><td>改成在会话里说；页面上只有 Change…</td></tr>
+      <tr><td>通知方式三选一</td><td>改成固定规则</td></tr>
+      <tr><td>详情页的失败、挂起横幅</td><td>改进 Waiting on you</td></tr>
+      <tr><td>单独的详情页</td><td>改成右侧详情面板（第 3 版）</td></tr>
+      <tr><td>按状态分组的表格</td><td>改成按日期排列的时间线（第 3 版）</td></tr>
+      <tr><td>“扩大权限要卡”</td><td>改成一条规则：超出信封才要卡，预算也在信封里（第 4 版）</td></tr>
+      <tr><td>创建卡的 Name / Access 字段行</td><td>改成读回一句目标 + May、Costs、Today（第 4 版）</td></tr>
+      <tr><td>只有周期性的</td><td>加一次性的 Once（第 4 版）</td></tr>
+    </table>
+    <h2 style="margin-top:16px">会改到的文件（确认后）</h2>
+    <table>
+      <tr><td>左侧导航</td><td>加 Scheduled 一项和计数</td></tr>
+      <tr><td>新增 <code>src/web/src/components/Scheduled*.tsx</code></td><td>时间线、详情面板、输入行、草稿</td></tr>
+      <tr><td>会话 transcript 卡片</td><td>创建卡、信封卡、修改记录行、执行会话顶栏、上报卡</td></tr>
+      <tr><td><code>OwnerRequestCard.tsx</code></td><td>Scheduled / Scheduled run 两类卡片</td></tr>
+      <tr><td><code>src/web/src/api.ts</code></td><td>schedules / runs 接口</td></tr>
+    </table>
+  </div>
+</div>
+</html>
