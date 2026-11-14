@@ -1,0 +1,62 @@
+#!/bin/sh
+# Forward 10.66.0.1:5432 on wg1, for 10.66.0.4 only, to the orbit-postgres container: the streaming
+# standby on 10.66.0.4 (vmi3753066) replicates through it. Task 34wyYvEa8eSNTYoO3aGuk, 2026-11-13.
+#
+# The production postgres container publishes no port, and publishing one means recreating it. This
+# does what Docker's own port publishing would: a DNAT in nat/PREROUTING and an accept in DOCKER-USER
+# (which Docker never flushes). The connection keeps 10.66.0.4 as its source address, so pg_hba can
+# name that address. The container's address changes when it is recreated, so
+# orbit-pg-standby-forward.timer runs this every minute; it rewrites the rules only when they differ.
+#
+# Remove when the replication direction reverses at the cutover:
+#   systemctl disable --now orbit-pg-standby-forward.timer && /usr/local/sbin/orbit-pg-standby-forward --remove
+set -eu
+CHAIN=ORBIT-PG-STANDBY
+WG_IF=wg1
+WG_ADDR=10.66.0.1
+STANDBY=10.66.0.4
+PORT=5432
+CONTAINER=orbit-postgres
+NETWORK=orbit_default
+
+remove() {
+  while iptables -t nat -D PREROUTING -j "$CHAIN" 2>/dev/null; do :; done
+  iptables -t nat -F "$CHAIN" 2>/dev/null || true
+  iptables -t nat -X "$CHAIN" 2>/dev/null || true
+  while iptables -D DOCKER-USER -j "$CHAIN" 2>/dev/null; do :; done
+  iptables -F "$CHAIN" 2>/dev/null || true
+  iptables -X "$CHAIN" 2>/dev/null || true
+}
+
+if [ "${1:-}" = "--remove" ]; then
+  remove
+  echo "orbit-pg-standby-forward: removed"
+  exit 0
+fi
+
+ip="$(docker inspect -f "{{with index .NetworkSettings.Networks \"$NETWORK\"}}{{.IPAddress}}{{end}}" "$CONTAINER" 2>/dev/null || true)"
+if [ -z "$ip" ]; then
+  echo "orbit-pg-standby-forward: $CONTAINER has no address on $NETWORK; rules left as they are" >&2
+  exit 1
+fi
+
+nat_rule="-i $WG_IF -s $STANDBY/32 -d $WG_ADDR/32 -p tcp -m tcp --dport $PORT -j DNAT --to-destination $ip:$PORT"
+fwd_rule="-i $WG_IF -s $STANDBY/32 -d $ip/32 -p tcp -m tcp --dport $PORT -m conntrack --ctstate DNAT -j ACCEPT"
+
+iptables -t nat -N "$CHAIN" 2>/dev/null || true
+iptables -N "$CHAIN" 2>/dev/null || true
+# Each chain holds exactly its one rule: rewritten only when it is not that rule alone.
+# shellcheck disable=SC2086
+if [ "$(iptables -t nat -S "$CHAIN" | grep -c -- '^-A ')" != 1 ] || ! iptables -t nat -C "$CHAIN" $nat_rule 2>/dev/null; then
+  iptables -t nat -F "$CHAIN"
+  iptables -t nat -A "$CHAIN" $nat_rule
+  echo "orbit-pg-standby-forward: nat now sends $WG_ADDR:$PORT from $STANDBY to $ip:$PORT"
+fi
+# shellcheck disable=SC2086
+if [ "$(iptables -S "$CHAIN" | grep -c -- '^-A ')" != 1 ] || ! iptables -C "$CHAIN" $fwd_rule 2>/dev/null; then
+  iptables -F "$CHAIN"
+  iptables -A "$CHAIN" $fwd_rule
+  echo "orbit-pg-standby-forward: filter now accepts $STANDBY to $ip:$PORT"
+fi
+iptables -t nat -C PREROUTING -j "$CHAIN" 2>/dev/null || iptables -t nat -I PREROUTING 1 -j "$CHAIN"
+iptables -C DOCKER-USER -j "$CHAIN" 2>/dev/null || iptables -I DOCKER-USER 1 -j "$CHAIN"

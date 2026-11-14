@@ -13,6 +13,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const COMPOSE_FILES = [
   'docker-compose.yml',
   'deploy/macos-runner-signing.yml',
+  'deploy/postgres-pinned.yml',
+  'deploy/db-proxy.yml',
   'deploy/managed-runner/remote-host/compose.yml',
 ];
 

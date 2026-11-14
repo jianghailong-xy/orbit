@@ -123,6 +123,14 @@
 // requests in flight when it stops, long polls included, are answered rather than cut at Docker's default 10 s. It adds
 // one line to the apiserver, `stop_grace_period: 30s`, and nothing else: no service, mount, port or environment. A
 // second apiserver defined with `extends` takes it with the rest of the definition. The block below pins it.
+//
+// On 2026-11-13 the two-stage release (project 34wyV15NQg1Aa6H3cr6SH, whose instructions the account owner wrote: images
+// built on one host, pulled on another; task 34wyYuIZzkg1g7DfIqdSR) named every image this file runs through variables
+// which, unset, name it exactly as before, and gave web an image line that is empty unless they are set. postgres and
+// pgbackup keep their line: deploy/postgres-pinned.yml pins them, on a host that lists it. No service, mount, port or
+// environment is added. Each such line is read below as the line it replaced, web's is dropped with its comment, and so
+// is the comment that introduces the variables; test/upgrade-two-stage.test.mjs renders the file both ways and finds it
+// unchanged with the variables unset.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -193,7 +201,31 @@ function git(...args) {
   return execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
 }
 
-const current = readFileSync(path.join(repo, COMPOSE), 'utf8');
+// The two-stage release's lines (the top of this file), each exactly as the file has it, and the line it replaced.
+const TWO_STAGE_IMAGES = new Map([
+  ['    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-apiserver:${ORBIT_IMAGE_TAG:-local}', '    image: orbit-apiserver:local'],
+  ['    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NGINX_IMAGE:-nginx:alpine}', '    image: nginx:alpine'],
+  ['    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-link-gateway:${ORBIT_LINK_GATEWAY_TAG:-local}', '    image: orbit-link-gateway:local'],
+  ['    image: ${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}${ORBIT_NATS_IMAGE:-nats:2.15-alpine}', '    image: nats:2.15-alpine'],
+]);
+const TWO_STAGE_WEB_IMAGE = [
+  '    # Empty unless ORBIT_IMAGE_TAG is set, and an empty image is none: Compose names the image it builds after the',
+  '    # project, as it always has.',
+  '    image: ${ORBIT_IMAGE_TAG:+${ORBIT_REGISTRY:+${ORBIT_REGISTRY}/}orbit-web:${ORBIT_IMAGE_TAG}}',
+].join('\n');
+const TWO_STAGE_COMMENT = /\n# Where each image comes from\.[^\n]*\n(?:#[^\n]*\n)*\n/;
+
+/**
+ * The file as it read before the two-stage release. Only those exact lines are read back: one that differs stays as it
+ * is, so the pin of its service sees it, and (s) says which line is missing.
+ */
+function beforeTwoStage(source) {
+  return source.replace(TWO_STAGE_COMMENT, '\n').replace(`  web:\n${TWO_STAGE_WEB_IMAGE}\n`, '  web:\n')
+    .split('\n').map((line) => TWO_STAGE_IMAGES.get(line) ?? line).join('\n');
+}
+
+const asWritten = readFileSync(path.join(repo, COMPOSE), 'utf8');
+const current = beforeTwoStage(asWritten);
 const baseline = git('show', `${BASELINE_SHA}:${COMPOSE}`);
 const configuration = git('show', `${CONFIGURATION_SHA}:${COMPOSE}`);
 const survivingConfiguration = git('show', `${SURVIVING_CONFIGURATION_SHA}:${COMPOSE}`);
@@ -308,6 +340,23 @@ test('(j) the gateway service definition is unchanged and still mounts ./gateway
   assert.equal(currentServices.get('gateway'), baselineServices.get('gateway'));
   assert.match(currentServices.get('gateway'),
     /- \.\/gateway\/nginx\.conf:\/etc\/nginx\/conf\.d\/default\.conf:ro/);
+});
+
+test('(s) the two-stage release names each image through variables, and changes nothing else in the file', () => {
+  assert.match(asWritten, TWO_STAGE_COMMENT, 'docker-compose.yml no longer introduces the image variables');
+  assert.ok(asWritten.includes(`  web:\n${TWO_STAGE_WEB_IMAGE}\n`), 'web\'s image line is not the two-stage release\'s');
+  const lines = asWritten.split('\n');
+  // The apiserver and the wiki worker run one image.
+  const uses = { 'orbit-apiserver': 2, nginx: 1, 'orbit-link-gateway': 1, nats: 1 };
+  for (const [line, before] of TWO_STAGE_IMAGES) {
+    const name = before.match(/image: ([a-z-]+)/)[1];
+    assert.equal(lines.filter((each) => each === line).length, uses[name], `docker-compose.yml no longer has ${line.trim()}`);
+  }
+  // postgres and pgbackup as before, which deploy/postgres-pinned.yml pins where it is listed, and the two images no
+  // two-stage release deploys, still built where they run and named as before.
+  assert.deepEqual(lines.filter((line) => /^\s+image:/.test(line) && !TWO_STAGE_IMAGES.has(line) && !TWO_STAGE_WEB_IMAGE.endsWith(line)),
+    ['    image: postgres:16-alpine', '    image: postgres:16-alpine', '    image: orbit-docker-channel:local',
+      '    image: orbit-managed-runner-firewall:local']);
 });
 
 /** What Compose acts on: comments and blank lines document a block, they cannot run a process. */
