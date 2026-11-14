@@ -142,6 +142,8 @@ test('workspace counts separate queued activity from Session-list spinner work',
     // which these fixtures have none of either.
     projectOpenItem: { findMany: async () => [] },
     ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
