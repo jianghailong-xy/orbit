@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>已有账号开通托管 runner 的入口 · 设计板</title>
+<style>
+  body { margin: 0; background: #f4f4f6; font: 15px/1.55 "Inter", "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif; color: #1d1d1f; }
+  .b-part { width: 1400px; margin: 0 auto; padding: 36px 44px 40px; box-sizing: border-box; background: #fff; border-bottom: 1px solid #e3e3e8; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 0 0 14px; }
+  h3 { font-size: 16px; margin: 0 0 10px; }
+  .b-sub { color: #6e6e73; margin: 0 0 22px; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .b-cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }
+  .b-n { display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 11px; background: #ff3b30; color: #fff; font-size: 13px; font-weight: 700; margin-right: 6px; }
+  .b-note { font-size: 13.5px; color: #3a3a3c; margin: 8px 0 0; }
+  .b-note p { margin: 4px 0; }
+  .b-warn { border-left: 4px solid #ff9f0a; background: #fff8ec; padding: 10px 14px; border-radius: 6px; margin-top: 16px; font-size: 14px; }
+  .b-ok { border-left: 4px solid #34a853; background: #f1fbf3; padding: 10px 14px; border-radius: 6px; margin-top: 16px; font-size: 14px; }
+  .b-mono { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { border: 1px solid #e0e0e5; padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: #f6f6f8; }
+  td.rec { background: #f1fbf3; }
+  .b-tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 8px; background: #34a853; color: #fff; margin-left: 6px; }
+  .b-label { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #e8e8ed; color: #3a3a3c; margin-bottom: 8px; }
+  .b-label.new { background: #34a853; color: #fff; }
+  .b-label.today { background: #8e8e93; color: #fff; }
+
+  /* --- product mock pieces (English copy) --- */
+  .ui { font-family: "Inter", "DejaVu Sans", sans-serif; }
+  .frame { border: 1px solid #d1d1d6; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.05); }
+  .web { display: grid; grid-template-columns: 250px 1fr; min-height: 430px; }
+  .nav { background: #f7f7f9; border-right: 1px solid #e5e5ea; padding: 14px 10px; font-size: 13.5px; }
+  .nav .back { color: #6e6e73; font-size: 12.5px; margin: 0 6px 12px; }
+  .nav .grp { display: flex; justify-content: space-between; color: #8e8e93; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; margin: 14px 6px 4px; }
+  .nav .row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; }
+  .nav .row.sel { background: #e5eefc; }
+  .nav .row.new { outline: 2px dashed #34a853; outline-offset: 1px; background: #f1fbf3; }
+  .nav .row .meta { margin-left: auto; color: #8e8e93; font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 4px; background: #34c759; flex: none; }
+  .dot.off { background: #c7c7cc; }
+  .dot.warn { background: #ff9f0a; }
+  .dot.spin { background: #fff; border: 2px solid #0a84ff; border-right-color: #d6e4ff; width: 6px; height: 6px; border-radius: 5px; }
+  .plus { color: #0a84ff; font-weight: 700; width: 8px; text-align: center; }
+  .page { padding: 22px 26px; font-size: 14px; }
+  .page h4 { margin: 0 0 4px; font-size: 19px; }
+  .page .muted { color: #6e6e73; font-size: 13px; }
+  .notice { display: flex; gap: 10px; align-items: flex-start; border: 1px solid #d6e4ff; background: #f3f7ff; border-radius: 10px; padding: 12px 14px; margin: 14px 0; }
+  .notice.attn { border-color: #ffd8a8; background: #fff8ec; }
+  .notice .dot { margin-top: 6px; background: #0a84ff; }
+  .notice.attn .dot { background: #ff9f0a; }
+  .notice .t { font-weight: 600; }
+  .notice .d { color: #3a3a3c; font-size: 13px; }
+  .notice .acts { margin-left: auto; display: flex; gap: 8px; align-items: center; white-space: nowrap; }
+  .btn { display: inline-block; border: 1px solid #c7c7cc; border-radius: 7px; padding: 4px 12px; font-size: 13px; background: #fff; }
+  .btn.pri { background: #0a84ff; border-color: #0a84ff; color: #fff; }
+  .lnk { color: #0a84ff; font-size: 13px; }
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; font-size: 13px; margin-top: 10px; }
+  .kv div:nth-child(odd) { color: #6e6e73; }
+  .modal { border: 1px solid #c7c7cc; border-radius: 12px; padding: 16px 18px; width: 380px; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.15); font-size: 13.5px; margin: 10px auto; }
+  .modal .t { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  .modal .acts { text-align: right; margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; }
+
+  .phone { width: 300px; margin: 0 auto; border: 9px solid #1d1d1f; border-radius: 34px; background: #f2f2f7; min-height: 520px; padding: 34px 0 16px; box-sizing: border-box; font-size: 13.5px; }
+  .phone .bar { text-align: center; font-weight: 600; margin-bottom: 10px; }
+  .phone .sec { color: #6e6e73; font-size: 11.5px; text-transform: uppercase; margin: 12px 18px 4px; }
+  .phone .grp2 { background: #fff; border-radius: 10px; margin: 0 12px; }
+  .phone .cell { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-bottom: 1px solid #ececf0; }
+  .phone .cell:last-child { border-bottom: 0; }
+  .phone .cell .meta { margin-left: auto; white-space: nowrap; color: #8e8e93; font-size: 12px; }
+  .phone .cell.new { outline: 2px dashed #34a853; outline-offset: -2px; background: #f1fbf3; border-radius: 10px; }
+  .phone .foot { color: #6e6e73; font-size: 11.5px; margin: 4px 18px 0; }
+  .android { border-radius: 22px; border-color: #3a3a3c; }
+  .android .sec { text-transform: none; font-weight: 600; color: #3a3a3c; font-size: 13px; }
+  .android .grp2 { border-radius: 14px; }
+  .mac { display: grid; grid-template-columns: 130px 1fr; min-height: 360px; font-size: 13px; }
+  .mac .side { background: #ececf0; padding: 30px 10px 10px; border-right: 1px solid #d1d1d6; }
+  .mac .side div { padding: 4px 8px; border-radius: 6px; }
+  .mac .side .sel { background: #d6d6dc; }
+  .mac .main { padding: 14px 16px; }
+  .mac .tbl { border: 1px solid #e0e0e5; border-radius: 8px; }
+  .mac .tbl div { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border-bottom: 1px solid #ececf0; }
+  .mac .tbl div:last-child { border-bottom: 0; }
+  .mac .tbl .meta { margin-left: auto; color: #8e8e93; }
+  .strike { text-decoration: line-through; color: #8e8e93; }
+</style>
+</head>
+<body>
+
+<!-- ============================ 1 ============================ -->
+<section class="b-part" id="part-1">
+  <h1>已有账号开通托管 runner 的入口</h1>
+  <p class="b-sub">背景：生产上线时（任务 34w2jFjODmvhRLHEaXgjA，2026-11-14）发现，只有「没有 runner、也没有 workspace」的账号能在界面上看到「Set up a managed runner」。已有账号（包括 owner 自己的）只能在浏览器控制台里调 <span class="b-mono">POST /api/managed-runner/ensure</span>。服务端本来就允许任何符合资格的账号开通（<span class="b-mono">canEnsure = 开关开 &amp; 环境可用 &amp; 账号未停用 &amp; 符合资格</span>，不看有没有 runner），缺的只是客户端的入口。本板只是设计，不改产品代码。</p>
+
+  <h2>① 今天：入口只给「一台机器都没有」的账号</h2>
+  <table>
+    <tr><th style="width:160px">端</th><th>今天在哪里显示托管 runner</th><th>条件（代码）</th><th>已有账号看到什么</th></tr>
+    <tr><td>Web</td><td>默认落地页 <span class="b-mono">ManagedRunnerLanding</span>；托管 workspace 的输入框上方 <span class="b-mono">ManagedRunnerNotice</span></td><td><span class="b-mono">App.tsx DefaultLanding</span>：<span class="b-mono">useManagedRunner(listed &amp;&amp; !first &amp;&amp; runnerList.length === 0)</span> —— 有 runner 或有 workspace 就根本不读托管状态</td><td>什么都没有。Settings → Machines 只有自己的机器和「Register a machine」</td></tr>
+    <tr><td>iPhone / Mac</td><td>Machines &amp; models 列表上方的 <span class="b-mono">ManagedRunnerBanner</span></td><td><span class="b-mono">ManagedRunnerLogic.onboarding(display, runnerCount:)</span>：<span class="b-mono">runnerCount == 0 ? display : nil</span></td><td>什么都没有</td></tr>
+    <tr><td>Android</td><td>新会话的欢迎卡片 <span class="b-mono">WelcomeCard.kt</span></td><td>新账号的首个草稿</td><td>什么都没有；Machines &amp; models 页没有托管内容</td></tr>
+  </table>
+  <div class="b-warn">共同点：判断「要不要显示」用的是<b>本地的 runner 数量</b>，而不是服务端给的 <span class="b-mono">actions.canEnsure</span>。结果：服务端说「可以开通」，界面却不让按。</div>
+
+  <h2 style="margin-top:26px">② 建议：入口跟着服务端的 <span class="b-mono">display.ensure</span> 走，放在「机器列表」里，三端同一条规则</h2>
+  <div class="b-cols">
+    <div>
+      <ol style="margin:0;padding-left:20px">
+        <li><b>没有托管映射、服务端允许开通</b>（<span class="b-mono">kind = setup</span>，<span class="b-mono">ensure = true</span>）：机器列表最上方多一行 <b>Managed runner · Set up</b>，不论账号有几台机器。</li>
+        <li><b>按 Set up</b>：确认框说清楚会多出一台 runner 和一个 workspace → <span class="b-mono">POST /managed-runner/ensure</span>。应答（REQUESTED）已经带 <span class="b-mono">runnerId</span> 和 <span class="b-mono">workspaceId</span>。</li>
+        <li><b>有映射之后</b>：这一行消失，托管 runner 就是机器列表里的一台普通机器，只是它的状态用共享显示的标题（Preparing / Asleep / Failed…），机器页顶部放 <span class="b-mono">ManagedRunnerNotice</span>（Retry、Open Machines &amp; models 都在这里）。</li>
+        <li><b>服务端不给</b>（不符合资格、环境不可用、账号已停用）或<b>功能关闭</b>：已有账号<b>不显示任何托管内容</b>，和今天一样。</li>
+      </ol>
+    </div>
+    <div>
+      <table>
+        <tr><th>候选位置</th><th>结论</th></tr>
+        <tr><td class="rec">Settings → Machines（机器列表）<span class="b-tag">建议</span></td><td class="rec">托管 runner 开通后本来就是一台机器，入口和它的状态在同一个地方；任何时候都能找到</td></tr>
+        <tr><td>Register a machine 页</td><td>作为第二个入口：页首一句「Or let Orbit run one for you」链接到同一行（见 D1 的 B）</td></tr>
+        <tr><td>runner 选择器 / 新建 workspace</td><td>不建议：开通会自己带一个默认 workspace，放在「新建 workspace」里反而多出一个空 workspace 的歧义；选择器只在新建时出现，找不到</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 2 ============================ -->
+<section class="b-part" id="part-2">
+  <h2>③ Web：Settings → Machines</h2>
+  <div class="b-cols">
+    <div>
+      <span class="b-label today">今天 · 有两台机器的账号</span>
+      <div class="frame ui web">
+        <div class="nav">
+          <div class="back">‹ Back to Orbit</div>
+          <div class="grp"><span>Personal</span></div>
+          <div class="row">General</div>
+          <div class="grp"><span>Machines</span><span>+</span></div>
+          <div class="row sel"><span class="dot"></span>workstation<span class="meta">Online</span></div>
+          <div class="row"><span class="dot off"></span>laptop<span class="meta">Offline</span></div>
+          <div class="grp"><span>Providers</span><span>+</span></div>
+          <div class="row">Anthropic</div>
+          <div class="grp"><span>Workspaces</span><span>+</span></div>
+          <div class="row">orbit</div>
+        </div>
+        <div class="page">
+          <h4>workstation</h4>
+          <div class="muted">Online · runner 1.42.0</div>
+          <div class="kv"><div>Engines</div><div>Claude Code, Codex</div><div>Workspaces</div><div>orbit</div></div>
+        </div>
+      </div>
+      <div class="b-note"><p>没有任何托管入口。owner 只能在控制台调接口。</p></div>
+    </div>
+    <div>
+      <span class="b-label new">建议 · 同一账号，服务端允许开通</span>
+      <div class="frame ui web">
+        <div class="nav">
+          <div class="back">‹ Back to Orbit</div>
+          <div class="grp"><span>Personal</span></div>
+          <div class="row">General</div>
+          <div class="grp"><span>Machines</span><span>+</span></div>
+          <div class="row sel new"><span class="plus">+</span>Managed runner<span class="meta">Set up</span></div>
+          <div class="row"><span class="dot"></span>workstation<span class="meta">Online</span></div>
+          <div class="row"><span class="dot off"></span>laptop<span class="meta">Offline</span></div>
+          <div class="grp"><span>Providers</span><span>+</span></div>
+          <div class="row">Anthropic</div>
+          <div class="grp"><span>Workspaces</span><span>+</span></div>
+          <div class="row">orbit</div>
+        </div>
+        <div class="page">
+          <h4>Managed runner</h4>
+          <div class="muted">/settings/machines/managed</div>
+          <div class="notice"><span class="dot"></span><div><div class="t">Set up a managed runner</div><div class="d">This Orbit server can run a runner for you, so you can start sessions without setting up a machine of your own.</div></div><div class="acts"><span class="btn pri">Set up</span></div></div>
+          <div class="muted">Your own machines are not changed. Setting it up adds one machine and its workspace to this list.</div>
+        </div>
+      </div>
+      <div class="b-note">
+        <p><span class="b-n">1</span>新行在 Machines 组第一位，绿色虚线 = 新增。右侧小字就是共享按钮文案 <span class="b-mono">MANAGED_RUNNER_COPY.ensure</span>。</p>
+        <p><span class="b-n">2</span>页面就是现有的 <span class="b-mono">ManagedRunnerNotice</span>，没有新文案组件；下面一句说明是新文案（英文）。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="b-cols" style="margin-top:26px">
+    <div>
+      <span class="b-label new">建议 · 按 Set up 之后（D3 = A：先确认）</span>
+      <div class="modal ui">
+        <div class="t">Set up a managed runner?</div>
+        <div>Orbit will start a runner for you on this server and add a workspace for it. Your own machines and workspaces stay as they are.</div>
+        <div class="acts"><span class="btn">Cancel</span><span class="btn pri">Set up</span></div>
+      </div>
+      <div class="b-note"><p><span class="b-n">3</span>已有账号多出一个 workspace 会出现在侧栏，而托管 runner 没有界面上的删除（<span class="b-mono">canDelete</span> 一直是 false），所以先说清楚再开通。新账号的落地页<b>不加</b>这一步，保持今天的样子。</p></div>
+    </div>
+    <div>
+      <span class="b-label new">建议 · 应答回来（REQUESTED，带 runnerId）</span>
+      <div class="frame ui web" style="min-height:300px">
+        <div class="nav">
+          <div class="grp"><span>Machines</span><span>+</span></div>
+          <div class="row sel new"><span class="dot spin"></span>Managed runner<span class="meta">Preparing</span></div>
+          <div class="row"><span class="dot"></span>workstation<span class="meta">Online</span></div>
+          <div class="row"><span class="dot off"></span>laptop<span class="meta">Offline</span></div>
+          <div class="grp"><span>Workspaces</span><span>+</span></div>
+          <div class="row">orbit</div>
+          <div class="row new">managed</div>
+        </div>
+        <div class="page">
+          <h4>Managed runner</h4>
+          <div class="muted">/settings/machines/&lt;runnerId&gt;</div>
+          <div class="notice"><span class="dot"></span><div><div class="t">Preparing your managed runner</div><div class="d">Orbit is setting up a runner for you. Sessions can start here once it is ready.</div></div></div>
+          <div class="kv"><div>Workspace</div><div class="lnk">Open its workspace →</div></div>
+        </div>
+      </div>
+      <div class="b-note"><p><span class="b-n">4</span>页面换到这台 runner 自己的机器页（替换路由，后退不回到 Set up）。行的状态用共享显示的<b>短标签</b>（见 ⑤ 表），不再按心跳写「Offline」。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 3 ============================ -->
+<section class="b-part" id="part-3">
+  <h2>④ iPhone · Mac · Android：Machines &amp; models，同一条规则</h2>
+  <div class="b-cols3">
+    <div>
+      <span class="b-label new">iPhone · 建议</span>
+      <div class="phone ui">
+        <div class="bar">Machines &amp; models</div>
+        <div class="sec">Managed runner</div>
+        <div class="grp2"><div class="cell new"><span class="plus">+</span><div><div>Set up a managed runner</div><div style="color:#6e6e73;font-size:12px">Orbit runs a runner for you on this server.</div></div><span class="meta" style="color:#0a84ff">Set up</span></div></div>
+        <div class="sec">Machines</div>
+        <div class="grp2">
+          <div class="cell"><span class="dot"></span>workstation<span class="meta">Online ›</span></div>
+          <div class="cell"><span class="dot off"></span>laptop<span class="meta">Offline ›</span></div>
+        </div>
+        <div class="grp2" style="margin-top:12px"><div class="cell" style="color:#0a84ff">Add Runner</div></div>
+        <div class="sec">API keys</div>
+        <div class="grp2"><div class="cell">Anthropic<span class="meta">›</span></div></div>
+      </div>
+    </div>
+    <div>
+      <span class="b-label new">Mac · 建议</span>
+      <div class="frame ui mac">
+        <div class="side"><div>Sessions</div><div>Tasks</div><div class="sel">Machines &amp; models</div></div>
+        <div class="main">
+          <div class="notice" style="margin-top:0"><span class="dot"></span><div><div class="t">Set up a managed runner</div><div class="d">This Orbit server can run a runner for you, so you can start sessions without setting up a machine of your own.</div></div><div class="acts"><span class="btn pri">Set up</span></div></div>
+          <div class="tbl">
+            <div><span class="dot"></span>workstation<span class="meta">Online</span></div>
+            <div><span class="dot off"></span>laptop<span class="meta">Offline</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="b-note">
+        <p>iPhone 和 Mac 已经有这块（<span class="b-mono">ManagedRunnerBanner</span>、<span class="b-mono">ManagedRunnerAboveList</span>），今天只给 0 台机器的账号。改动只是把 <span class="b-mono">onboarding(display, runnerCount:)</span> 的条件换成「<span class="b-mono">runnerCount == 0 || display.ensure</span>」。</p>
+        <p>有映射后，横幅不再显示，托管 runner 作为列表里的一行，状态用短标签；点进去的机器页顶部是 Banner。</p>
+      </div>
+    </div>
+    <div>
+      <span class="b-label new">Android · 建议（跟 iPhone）</span>
+      <div class="phone ui android">
+        <div class="bar">Machines &amp; models</div>
+        <div class="sec">Managed runner</div>
+        <div class="grp2"><div class="cell new"><span class="plus">+</span><div><div>Set up a managed runner</div><div style="color:#6e6e73;font-size:12px">Orbit runs a runner for you on this server.</div></div><span class="meta" style="color:#0a84ff">Set up</span></div></div>
+        <div class="sec">Machines</div>
+        <div class="grp2">
+          <div class="cell"><span class="dot"></span>workstation<span class="meta">Online ›</span></div>
+          <div class="cell"><span class="dot off"></span>laptop<span class="meta">Offline ›</span></div>
+        </div>
+        <div class="grp2" style="margin-top:12px"><div class="cell" style="color:#0a84ff">Add Runner</div></div>
+      </div>
+      <div class="b-note"><p>Android 今天 Machines &amp; models 页没有托管内容：新增一个 <span class="b-mono">FormSection</span>，放在 Needs you 之后、Machines 之前，用已有的 <span class="b-mono">ManagedRunner.display()</span>（已被同一份样例测试约束）。</p></div>
+    </div>
+  </div>
+  <div class="b-ok">确认框（D3）三端一致：iOS/Android 用系统 alert，Mac 用 sheet，文字和 Web 相同。功能关闭时三端都不读 <span class="b-mono">GET /managed-runner</span>，Machines &amp; models 与今天逐像素相同。</div>
+</section>
+
+<!-- ============================ 4 ============================ -->
+<section class="b-part" id="part-4">
+  <h2>⑤ 每个状态显示什么（已有账号，机器列表里）</h2>
+  <p class="b-sub">标题和说明都来自 <span class="b-mono">src/shared/src/managedRunnerDisplay.ts</span> 的 <span class="b-mono">managedRunnerDisplay()</span>，状态取自 <span class="b-mono">managed-runner-states.fixture.json</span>。唯一的新文案是列表行的<b>短标签</b>（列表宽度放不下完整标题），建议加进 <span class="b-mono">MANAGED_RUNNER_COPY.short</span> 并写进样例，让三端测试一起约束。</p>
+  <table>
+    <tr><th style="width:190px">状态（样例里的名字）</th><th style="width:130px">display.kind</th><th style="width:210px">列表行</th><th>行点进去 / 横幅</th><th style="width:210px">能做什么</th></tr>
+    <tr><td>功能关闭：能力缺失（旧服务端 404）、<span class="b-mono">enabled:false</span>、未知 contract、格式不对；或 <span class="b-mono">MANAGED_RUNNER_DISABLED</span>（开关关了但还留着映射）</td><td>null</td><td><b>没有行</b></td><td>不读托管状态；遗留的托管 runner 按今天的心跳显示</td><td>与今天一样</td></tr>
+    <tr><td>none：no mapping, offered</td><td>setup</td><td>+ Managed runner · <b>Set up</b></td><td>Set up a managed runner + 说明 + Set up</td><td>Set up → 确认 → ensure</td></tr>
+    <tr><td>no mapping, account not eligible</td><td>notOffered</td><td><b>没有行</b>（D2 = A）</td><td>—</td><td>— （自己的机器不受影响）</td></tr>
+    <tr><td>no mapping, environment unavailable（<span class="b-mono">MANAGED_RUNNER_UNAVAILABLE</span>）</td><td>notOffered</td><td><b>没有行</b></td><td>—</td><td>—</td></tr>
+    <tr><td>disabled account，没有映射（<span class="b-mono">ACCOUNT_DISABLED</span>）</td><td>notOffered</td><td><b>没有行</b></td><td>—</td><td>— （服务端对停用账号的 ensure 也返回 403）</td></tr>
+    <tr><td>provisioning：requested / provisioning / starting</td><td>preparing</td><td>◌ Managed runner · Preparing</td><td>Preparing your managed runner</td><td>等，5 秒刷新</td></tr>
+    <tr><td>waiting for capacity</td><td>waitingCapacity</td><td>◌ · Waiting for capacity</td><td>Waiting for capacity + 服务端原因句</td><td>等</td></tr>
+    <tr><td>model unavailable</td><td>modelUnavailable</td><td>● 橙 · Needs a model</td><td>Your managed runner needs a model + Open Machines &amp; models</td><td>登录运行时 / 加 key</td></tr>
+    <tr><td>READY：available</td><td>available</td><td>● 绿 · Ready</td><td>不显示横幅，机器页照常</td><td>照常使用</td></tr>
+    <tr><td>READY：unresponsive</td><td>unresponsive</td><td>◌ · Not responding</td><td>Managed runner not responding</td><td>消息排队</td></tr>
+    <tr><td>stopping（DRAINING）</td><td>stopping</td><td>◌ · Going to sleep</td><td>Managed runner going to sleep</td><td>发消息即唤醒</td></tr>
+    <tr><td>sleeping</td><td>sleeping</td><td>● 灰 · Asleep</td><td>Managed runner asleep</td><td>发消息即唤醒</td></tr>
+    <tr><td>waking</td><td>waking</td><td>◌ · Waking</td><td>Waking your managed runner</td><td>消息排队</td></tr>
+    <tr><td>asleep, its account disabled（<span class="b-mono">ACCOUNT_DISABLED</span>，<span class="b-mono">canWake:false</span>）</td><td>sleeping</td><td>● 灰 · Asleep</td><td>Asleep + 服务端句子「This Orbit account is disabled…」</td><td>不接收消息（<span class="b-mono">acceptsWork = false</span>）</td></tr>
+    <tr><td>failed：retryable</td><td>failed</td><td>● 橙 · Failed</td><td>Managed runner failed + 原因句 + Retry</td><td>Retry（带 revision）</td></tr>
+    <tr><td>failed：needs an operator / unknown reason</td><td>failed</td><td>● 橙 · Failed</td><td>Managed runner failed + 原因句，无按钮</td><td>等管理员</td></tr>
+    <tr><td>waiting for an operator（FENCING）</td><td>waitingOperator</td><td>● 橙 · Waiting for an operator</td><td>Waiting for an operator</td><td>等管理员</td></tr>
+    <tr><td>removing / removed</td><td>removing / removed</td><td>◌ · Removing / ● 灰 · Removed</td><td>Removing managed runner / Managed runner removed</td><td>— （removed 不重新给 Set up：服务端不提供 ensure）</td></tr>
+  </table>
+</section>
+
+<!-- ============================ 5 ============================ -->
+<section class="b-part" id="part-5">
+  <h2>⑥ 需要拍板的问题</h2>
+  <table>
+    <tr><th style="width:110px">问题</th><th>A</th><th>B</th><th style="width:220px">建议</th></tr>
+    <tr><td><b>D1</b> 入口位置</td><td class="rec">机器列表（Web Settings → Machines、iPhone/Mac/Android 的 Machines &amp; models）里的一行 / 一块，条件是 <span class="b-mono">display.ensure</span>；Register a machine 页首加一句链接</td><td>只放在 Register a machine 页（「Or let Orbit run one for you」），列表不变</td><td class="rec"><b>A</b>。开通后它就是列表里的一台机器，入口和状态在同一处；B 要先想到「注册机器」才找得到</td></tr>
+    <tr><td><b>D2</b> 服务端不给时（not eligible / 环境不可用 / 账号停用）</td><td class="rec">已有账号不显示任何托管内容</td><td>显示灰色一行「No managed runner」和原因</td><td class="rec"><b>A</b>。没有可做的事；已有账号已经有自己的机器。0 台机器的账号仍按今天显示原因（落地页 / 横幅不变）</td></tr>
+    <tr><td><b>D3</b> 已有账号按 Set up</td><td class="rec">先弹确认：说明会多一台 runner 和一个 workspace</td><td>直接开通，和新账号落地页一样</td><td class="rec"><b>A</b>。已有账号会在侧栏多出 workspace，且界面上不能删除托管 runner（<span class="b-mono">canDelete</span> 为 false）</td></tr>
+    <tr><td><b>D4</b> 开通后列表里怎么显示</td><td class="rec">托管 runner 作为普通机器行，状态用共享显示的短标签（新增 <span class="b-mono">MANAGED_RUNNER_COPY.short</span> 并入样例）；横幅只在它的机器页</td><td>机器行按心跳照旧（Offline），另外一直保留一行「Managed runner」显示状态</td><td class="rec"><b>A</b>。同一台 runner 只出现一次；顺带修掉「休眠显示成 Offline」（managed-runner-status README 里记的遗留）</td></tr>
+    <tr><td><b>D5</b> Android</td><td class="rec">跟 iPhone：Machines &amp; models 新增 Managed runner 一节</td><td>只放在新会话欢迎卡片</td><td class="rec"><b>A</b>（默认规则：Android 跟 iOS）</td></tr>
+  </table>
+  <div class="b-warn"><b>不在本设计里：</b>删除托管 runner 的界面（服务端未提供 <span class="b-mono">canDelete</span>）；PAT/CLI 开通（<span class="b-mono">ensure</span> 仍是 session-only，<span class="b-mono">@PatForbidden RUNNER_CONTROL</span>，不变）；服务端逻辑不改。</div>
+</section>
+
+</body>
+</html>
