@@ -65,6 +65,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 if (!ObjectId.same(row.text("id"), payload.ownerRequestId) || row.text("state") == null) throw ProtocolException()
                 if (row.text("state") == "PENDING") PushCheck.ACTIVE else PushCheck.STALE
             }
+            // A terminal's request stands while it is still waiting: approved, denied or expired anywhere, it takes its
+            // notification with it.
+            payload.isTerminalLogin -> {
+                val rows = array(objectRead(listOf("terminals", "requests"))["requests"])
+                if (rows.any { ObjectId.same(canonical(it.text("id")), payload.terminalLoginId) }) PushCheck.ACTIVE else PushCheck.STALE
+            }
             payload.sessionId != null -> {
                 val row = sessionRead(payload.sessionId)
                 if (row.present("deletedAt")) PushCheck.MISSING

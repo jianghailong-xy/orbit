@@ -28,8 +28,10 @@ import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope, workspaceConfinement } from '../auth/pat-scope.decorator';
+import { TerminalRoute } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { untilStopping } from '../common/graceful-stop';
+import { senderClientOfRequest } from './turn-sender-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SetSessionTagsDto } from '../session-tags/dto';
@@ -289,6 +291,7 @@ export class SessionsController {
       requires: ['workspaceId'],
     },
   })
+  @TerminalRoute('CREATE_SESSION')
   @Post()
   create(
     @CurrentUser() user: AuthUser,
@@ -496,6 +499,7 @@ export class SessionsController {
   }
 
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.get(user.userId, id);
@@ -596,14 +600,20 @@ export class SessionsController {
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Post(':id/turns')
   turn(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
-    return this.sessions.createTurn(user.userId, id, dto);
+    // Which client sent it, from the credential and the app's own headers (turn-sender-client.ts), never the body.
+    return this.sessions.createTurn(user.userId, id, dto, {
+      senderClient: senderClientOfRequest(user.credential, client, device),
+    });
   }
 
   /** Versioned mutation door for Web. An N-1 API returns 404 before touching a turn, so a new
@@ -614,9 +624,14 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
-    return this.sessions.createTurn(user.userId, id, dto);
+    // Which client sent it, from the credential and the app's own headers (turn-sender-client.ts), never the body.
+    return this.sessions.createTurn(user.userId, id, dto, {
+      senderClient: senderClientOfRequest(user.credential, client, device),
+    });
   }
 
   // Default stays the installed native client's queue-only contract. Web opts into `active` to
@@ -662,12 +677,18 @@ export class SessionsController {
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
     @Body(PublicIdPipe.forFields('attachmentIds', 'stopSessionId')) dto: SessionResumeDto,
+    @Headers('x-orbit-client') client?: string,
+    @Headers('x-orbit-device') device?: string,
   ) {
     assertClientTurnIdNotReserved(dto.clientTurnId);
     // The person's door, and the only one that routes a message onto the run that holds this
     // session's task — see SessionsService.resume's `routeToCurrentRun` for why the sweeps and the
     // dispatchers keep the refusal instead.
-    return this.sessions.resume(user.userId, id, dto, { routeToCurrentRun: true, credential: user.credential });
+    return this.sessions.resume(user.userId, id, dto, {
+      routeToCurrentRun: true,
+      credential: user.credential,
+      senderClient: senderClientOfRequest(user.credential, client, device),
+    });
   }
 
   /** A personal access token reaches this with `sessions:write`, but never changes the permission
@@ -730,6 +751,7 @@ export class SessionsController {
    *  the same transaction — see SessionsService.interrupt for why the two cannot be two
    *  requests. A bodyless POST stays exactly what it was. */
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Post(':id/interrupt')
   interrupt(
     @CurrentUser() user: AuthUser,
@@ -952,6 +974,7 @@ export class SessionsController {
 
   /** Tool-permission approvals for this session (optionally filtered by status). */
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Get(':id/approvals')
   approvals(
     @CurrentUser() user: AuthUser,
@@ -963,6 +986,7 @@ export class SessionsController {
 
   /** Allow or deny a pending tool-permission approval. */
   @PatForbidden('OWNER_INTERACTIVE')
+  @TerminalRoute('SESSION')
   @Post(':id/approvals/:approvalId/decision')
   decideApproval(
     @CurrentUser() user: AuthUser,
@@ -1000,6 +1024,7 @@ export class SessionsController {
    * events just newer than a seq, paging from there back down to the tail.
    */
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @TerminalRoute('SESSION')
   @Get(':id/events/page')
   eventPage(
     @CurrentUser() user: AuthUser,
@@ -1077,6 +1102,7 @@ export class SessionsController {
   @AllowQueryToken()
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @UseGuards(SessionOwnerGuard)
+  @TerminalRoute('SESSION')
   @Sse(':id/events')
   events(
     @CurrentUser() user: AuthUser,

@@ -37,6 +37,8 @@ import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.text.rememberReaderLinkHandler
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /** The Waiting on you inbox's tabs: the list each reads, and what it says when that is empty. */
 internal enum class WaitingTab(val label: String, val filter: String, val empty: String) {
@@ -58,6 +60,9 @@ fun WaitingOnYouDestination(app: OrbitApplication, handle: SessionHandle, route:
     open: (OrbitRoute) -> Unit) {
     val store = remember(handle) { OwnerRequestStore.of(app.session, handle, app.processScope) }
     val links = rememberReaderLinkHandler(LocalReaderResources.current ?: return, open)
+    // A terminal asked to be approved, or one was decided elsewhere: its cards are read again, and nothing else.
+    val terminalsChanged = rememberTerminalsChanged(app, handle)
+    LaunchedEffect(store, terminalsChanged) { if (terminalsChanged > 0) store.loadTerminalRequests() }
     WaitingOnYouScreen(store, data.runners, route.id, revision, links) { question ->
         val coordinator = data.sessions["open"].orEmpty().firstOrNull {
             it.projectMembership?.isCoordinator == true && ObjectId.same(it.projectMembership?.projectId, question.projectId)
@@ -86,12 +91,15 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
     val expanded = rememberSaveable(saver = openCards) { mutableStateMapOf<String, Boolean>() }
     LaunchedEffect(focused) { focused?.let { tab = WaitingTab.OPEN; expanded[OwnerRequests.key(it)] = true } }
     LaunchedEffect(tab, revision) { store.load(*setOf(OwnerRequestStore.OPEN, tab.filter).toTypedArray()) }
-    LaunchedEffect(revision) { store.loadQuestions(items = true) }
+    LaunchedEffect(revision) { store.loadQuestions(items = true); store.loadTerminalRequests() }
     val runner = remember(runners) { runnerNames(runners) }
     val now = Instant.now()
-    val count = OwnerRequests.waitingCount(state.open, state.projects, snoozes, now)
+    val count = state.waitingCount(state.projects, snoozes, now)
     val ended = state.list(tab.filter)
     val rows = if (tab == WaitingTab.OPEN) OwnerRequests.openRows(state.open, state.questions) else ended.map { OwnerRequests.OpenRow.Request(it) }
+    // A terminal asking to be approved waits ten minutes at most: its card is whole, at the top of the Open tab.
+    val terminals = if (tab == WaitingTab.OPEN) state.terminalRequests else emptyList()
+    val empty = rows.isEmpty() && terminals.isEmpty()
     Column(Modifier.fillMaxSize().testTag("waiting-on-you")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -105,11 +113,12 @@ fun WaitingOnYouScreen(store: OwnerRequestStore, runners: List<DirectoryRunner>,
                 Tab(tab == entry, { tab = entry }, Modifier.testTag("waiting-on-you:tab:${entry.name}"), text = { Text(entry.label) })
             }
         }
-        if (tab.filter in state.failed && rows.isEmpty()) Text("Couldn't read what is waiting on you. Check your connection and try again.",
+        if (tab.filter in state.failed && empty) Text("Couldn't read what is waiting on you. Check your connection and try again.",
             Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
-        else if (tab.filter in state.lists && rows.isEmpty()) Text(tab.empty, Modifier.padding(16.dp).testTag("waiting-on-you:empty"),
+        else if (tab.filter in state.lists && empty) Text(tab.empty, Modifier.padding(16.dp).testTag("waiting-on-you:empty"),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(terminals, key = { "terminal:${it.id}" }) { request -> TerminalApproveCard(request, store, now) }
             items(rows, key = { row -> when (row) { is OwnerRequests.OpenRow.Request -> row.request.id; is OwnerRequests.OpenRow.Question -> "question:${row.question.itemId}" } }) { row ->
                 when {
                     row is OwnerRequests.OpenRow.Question -> row.question.let { question ->
@@ -173,11 +182,26 @@ private fun InboxRow(tag: String, icon: Int, title: String, detail: String, age:
  * questions are counted off [projects], the drawer's own open-projects read ([io.orbitd.android.navigation.rememberDrawerProjects]),
  * so the count adds no read of its own to the ones that poll keeps to. */
 @Composable
-fun WaitingOnYouDrawerCount(store: OwnerRequestStore, projects: List<JsonObject>, revision: Long) {
+fun WaitingOnYouDrawerCount(store: OwnerRequestStore, projects: List<JsonObject>, revision: Long, terminalsChanged: Long = 0L) {
     val state by store.state.collectAsState()
     val snoozes by OwnerRequestSnoozes.of(LocalContext.current).state.collectAsState()
     LaunchedEffect(revision) { store.load(OwnerRequestStore.OPEN) }
-    val count = OwnerRequests.waitingCount(state.open, projects, snoozes, Instant.now())
+    LaunchedEffect(revision, terminalsChanged) { store.loadTerminalRequests() }
+    val count = state.waitingCount(projects, snoozes, Instant.now())
     if (count > 0) Text("$count", Modifier.testTag("waiting-on-you-drawer-count").semantics { contentDescription = "$count waiting on you" },
         color = LocalOrbitColors.current.needsYou, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold))
+}
+
+/** The account event that says the owner's terminals changed (contract `realtime.event`): a terminal asked to be approved, a request
+ * was decided, or a terminal was revoked. */
+internal const val TERMINALS_CHANGED = "terminals.changed"
+
+/** How many [TERMINALS_CHANGED] this account's stream has brought: each one reads the approve cards' requests and Settings → Terminals
+ * again (iOS `ControlEventRoute.terminals`), and nothing else. */
+@Composable
+fun rememberTerminalsChanged(app: OrbitApplication, handle: SessionHandle): Long {
+    val changed by remember(app, handle) {
+        app.realtime.state.map { if (it.handle === handle) it.accountEvents[TERMINALS_CHANGED] ?: 0L else 0L }.distinctUntilChanged()
+    }.collectAsState(0L)
+    return changed
 }

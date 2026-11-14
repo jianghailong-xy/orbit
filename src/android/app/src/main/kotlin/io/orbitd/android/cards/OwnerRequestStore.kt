@@ -8,6 +8,8 @@ import io.orbitd.android.core.cards.AccountSecret
 import io.orbitd.android.core.cards.OwnerRequest
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.core.cards.OwnerRequestsApi
+import io.orbitd.android.core.cards.TerminalRequest
+import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
@@ -29,7 +31,7 @@ import kotlinx.serialization.json.JsonObject
  * per signed-in handle; another account's requests are never drawn.
  */
 class OwnerRequestStore internal constructor(private val auth: AuthSession, val handle: SessionHandle, private val scope: CoroutineScope,
-    private val api: OwnerRequestsApi = OwnerRequestsApi(auth, handle)) {
+    private val api: OwnerRequestsApi = OwnerRequestsApi(auth, handle), private val terminals: TerminalsApi = TerminalsApi(auth, handle)) {
 
     data class State(
         val lists: Map<String, List<OwnerRequest>> = emptyMap(),
@@ -42,9 +44,15 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
         val projects: List<JsonObject> = emptyList(),
         /** The coordinators' open questions, off the open items of each project that has one (web `WaitingOnYouPage`). */
         val questions: List<OwnerRequests.CoordinatorQuestionRow> = emptyList(),
+        /** Terminals asking to be approved (docs/terminal-session-design.md): their cards head the Open tab, whole, and count with the
+         * rest. Each waits ten minutes at most. */
+        val terminalRequests: List<TerminalRequest> = emptyList(),
     ) {
         fun list(filter: String) = lists[filter].orEmpty()
         val open get() = list(OPEN)
+        /** The inbox's one count: [OwnerRequests.waitingCount] and the terminals waiting for a decision. */
+        fun waitingCount(projects: List<JsonObject>, snoozes: Map<String, Long>, now: java.time.Instant) =
+            OwnerRequests.waitingCount(open, projects, snoozes, now) + terminalRequests.size
         /** A request by either spelling of its id, from any list. */
         fun find(id: String): OwnerRequest? = lists.values.flatten().firstOrNull { OwnerRequests.key(it.id) == OwnerRequests.key(id) }
     }
@@ -99,6 +107,23 @@ class OwnerRequestStore internal constructor(private val auth: AuthSession, val 
             catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* No saved secrets to offer. */ }
         }
     }
+
+    /** The terminals waiting for a decision. A server that predates terminals answers none; a failed read keeps what was drawn. */
+    fun loadTerminalRequests() {
+        scope.launch {
+            try { terminals.requests().let { requests -> if (live()) mutable.update { it.copy(terminalRequests = requests) } } }
+            catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The next read tries again. */ }
+        }
+    }
+
+    /** Approve or Deny a terminal: null when it was recorded — its card leaves at once — else what to say. The list is read again
+     * either way. */
+    suspend fun decideTerminal(request: TerminalRequest, approve: Boolean): String? = try {
+        if (approve) terminals.approve(request.id) else terminals.deny(request.id)
+        mutable.update { state -> state.copy(terminalRequests = state.terminalRequests.filterNot { it.id == request.id }) }
+        null
+    } catch (cancel: CancellationException) { throw cancel } catch (error: Exception) { message(error) }
+    finally { loadTerminalRequests() }
 
     private suspend fun titles(ids: List<String>) {
         ids.distinct().filterNot { it in mutable.value.taskTitles }.forEach { id ->

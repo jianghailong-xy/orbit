@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 425 |
+| `user` | 430 |
 | `admin` | 28 |
-| `runner` | 176 |
+| `runner` | 178 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **664** |
+| **Total** | **671** |
 
 ## Public routes
 
@@ -354,12 +354,10 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/pin` | path `id` | `SessionsController.pin` |
 | `DELETE` | `/api/sessions/:id/purge` | path `id` | `SessionsController.purge` |
 | `POST` | `/api/sessions/:id/recap` | path `id` | `SessionsController.refreshRecap` |
-| `POST` | `/api/sessions/:id/restart` | path `id` | `SessionsController.restart` |
 | `POST` | `/api/sessions/:id/restore` | path `id` | `SessionsController.restore` |
 | `POST` | `/api/sessions/:id/resume` | body `Object`; path `id` | `SessionsController.resume` |
 | `GET` | `/api/sessions/:id/retry-message` | path `id` | `SessionsController.retryMessage` |
 | `POST` | `/api/sessions/:id/retry-message` | body `Object`; path `id` | `SessionsController.resendRetryMessage` |
-| `PATCH` | `/api/sessions/:id/settings` | body `Object`; path `id` | `SessionsController.updateSettings` |
 | `DELETE` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.turnOffSessionLink` |
 | `GET` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.sessionLink` |
 | `POST` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.enableSessionLink` |
@@ -428,6 +426,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/tasks/labels` | query `assigneeId`, `listId`, `projectId` | `TasksController.labelSummary` |
 | `GET` | `/api/tasks/model-routing/report` | query `agentId`, `since` | `TaskModelRoutingReportController.read` |
 | `GET` | `/api/tasks/page` | query `assigneeId`, `counts`, `creatorSessionId`, `cursor`, `labels`, `limit`, `listId`, `minPriority`, `projectId`, `q`, `status` | `TasksController.listPage` |
+| `GET` | `/api/terminals` | — | `TerminalsController.list` |
+| `DELETE` | `/api/terminals/:id` | path `id` | `TerminalsController.revoke` |
+| `GET` | `/api/terminals/requests` | — | `TerminalsController.pending` |
+| `POST` | `/api/terminals/requests/:id/approve` | path `id` | `TerminalsController.approve` |
+| `POST` | `/api/terminals/requests/:id/deny` | path `id` | `TerminalsController.deny` |
+| `DELETE` | `/api/terminals/self` | — | `TerminalsController.revokeSelf` |
+| `GET` | `/api/terminals/self` | — | `TerminalsController.self` |
 | `GET` | `/api/users/me` | — | `UsersController.me` |
 | `PATCH` | `/api/users/me` | body `UpdateProfileDto` | `UsersController.updateProfile` |
 | `DELETE` | `/api/users/me/avatar` | — | `UsersController.removeAvatar` |
@@ -705,6 +710,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/tasks/batch-preview` | body `CreateTasksBatchDto` | `RunnerTasksController.previewBatch` |
 | `GET` | `/api/runner/tasks/labels` | query `listId` | `RunnerTasksController.labelSummary` |
 | `GET` | `/api/runner/tasks/page` | query `cursor`, `labels`, `limit`, `listId`, `minPriority`, `projectId`, `status` | `RunnerTasksController.listTaskPage` |
+| `POST` | `/api/runner/terminal-login/poll` | body `PollTerminalLoginDto` | `RunnerTerminalLoginController.poll` |
+| `POST` | `/api/runner/terminal-login/start` | — | `RunnerTerminalLoginController.start` |
 | `GET` | `/api/runner/watches` | query `state` | `RunnerWatchesController.list` |
 | `POST` | `/api/runner/watches` | body `RunnerCreateWatchDto` | `RunnerWatchesController.create` |
 | `GET` | `/api/runner/watches/:id` | path `id` | `RunnerWatchesController.get` |
