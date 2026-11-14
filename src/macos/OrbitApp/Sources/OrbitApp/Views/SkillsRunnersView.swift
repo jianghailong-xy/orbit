@@ -477,12 +477,9 @@ struct RunnerDetailContent: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
 
-    /// Max Concurrent as the stepper shows it, saved when the press lets go.
-    @State private var maxConc = 1
-    /// A press on the stepper is under way — hold the save until it ends.
-    @State private var stepping = false
-    /// The limit last sent, so a release and the settle after it save it once.
-    @State private var committedMax: Int?
+    /// Max Concurrent's sheet, and the limit its stepper holds while open — saved on Save.
+    @State private var editingMax = false
+    @State private var maxDraft = 1
     /// Keep Free as the picker shows it; nil is Off. Saved as it changes.
     @State private var keepFree: Int?
     @State private var seeded = false
@@ -510,7 +507,7 @@ struct RunnerDetailContent: View {
             if !items.isEmpty {
                 attentionSection(items, now: now)
             }
-            capacitySection(workspaces)
+            capacitySection(workspaces, now: now)
             enginesSection(offline: offline, now: now)
             workspacesSection(workspaces)
             aboutSection(now: now)
@@ -525,24 +522,12 @@ struct RunnerDetailContent: View {
         #endif
         .runnerNotice(notice)
         .onAppear(perform: seed)
-        .onChange(of: runner.maxConcurrent) { _, value in
-            guard !stepping else { return }
-            maxConc = value ?? 1
-            committedMax = nil
-        }
         .onChange(of: runner.minFreeDiskMb) { _, value in
             keepFree = RunnerPageFormat.keepFreeValue(value)
         }
         .onChange(of: keepFree) { _, value in
             guard seeded, value != RunnerPageFormat.keepFreeValue(runner.minFreeDiskMb) else { return }
             saveKeepFree(value)
-        }
-        // The stepper's release saves; this catches a change that ended without one (a keyboard's
-        // arrow on a Mac), once it has settled.
-        .task(id: maxConc) {
-            try? await Task.sleep(for: .milliseconds(900))
-            guard !Task.isCancelled, seeded, !stepping else { return }
-            saveMaxConcurrent(maxConc)
         }
         .task {
             await runners.loadReleaseVersion()
@@ -696,17 +681,34 @@ struct RunnerDetailContent: View {
 
     /// How much it is given: slots, saved when the stepper lets go; the disk it fills; and the reserve
     /// under which task runs stop being sent here.
-    @ViewBuilder private func capacitySection(_ workspaces: [Agent]) -> some View {
+    @ViewBuilder private func capacitySection(_ workspaces: [Agent], now: Date) -> some View {
         Section {
-            Stepper(value: $maxConc, in: 1...64, onEditingChanged: steppingChanged) {
-                HStack {
+            // A meter, as Disk is: the name, `3 of 16 running` and Edit on a line, a bar of the slots
+            // taken across the row under them (online only), amber once all are. Edit opens the sheet
+            // that changes the limit.
+            let slots = RunnerPageFormat.slots(runner, now: now)
+            let limit = runner.maxConcurrent ?? 1
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .firstTextBaseline) {
                     Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
                     Spacer(minLength: 8)
-                    Text(verbatim: "\(maxConc)")
+                    Text(verbatim: slots.map { RunnerPageCopy.runnerRunningOf(active: $0.active, max: $0.max) } ?? "\(limit)")
+                        .font(.orbitListSubtitle)
                         .foregroundStyle(Color.secondary)
                         .monospacedDigit()
+                    Button(RunnerPageCopy.RUNNER_EDIT) {
+                        maxDraft = limit
+                        editingMax = true
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("\(RunnerPageCopy.RUNNER_EDIT) \(RunnerPageCopy.RUNNER_MAX_CONCURRENT)")
+                }
+                if let slots {
+                    RunnerGauge(fraction: slots.fraction, tint: slots.full ? RunnerInk.full : Color.accentColor, height: 7)
                 }
             }
+            .padding(.vertical, slots == nil ? 0 : 4)
+            .sheet(isPresented: $editingMax) { maxConcurrentSheet }
             if let disk = RunnerAttention.runnerDisk(workspaces) {
                 diskRow(disk)
             }
@@ -721,6 +723,45 @@ struct RunnerDetailContent: View {
         } footer: {
             Text(RunnerPageCopy.RUNNER_CAPACITY_FOOTER)
         }
+    }
+
+    /// Max Concurrent's sheet: the limit on a stepper, what it means, and Cancel or Save.
+    private var maxConcurrentSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper(value: $maxDraft, in: 1...64) {
+                        HStack {
+                            Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
+                            Spacer(minLength: 8)
+                            Text(verbatim: "\(maxDraft)")
+                                .foregroundStyle(Color.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                } footer: {
+                    Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { editingMax = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        editingMax = false
+                        saveMaxConcurrent(maxDraft)
+                    }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 380, minHeight: 180)
+        #else
+        .presentationDetents([.medium])
+        #endif
     }
 
     /// What it runs: each engine — a row that opens the engine's page — and the two presses that act
@@ -991,24 +1032,15 @@ struct RunnerDetailContent: View {
 
     private func seed() {
         guard !seeded else { return }
-        maxConc = runner.maxConcurrent ?? 1
         keepFree = RunnerPageFormat.keepFreeValue(runner.minFreeDiskMb)
         seeded = true
     }
 
-    private func steppingChanged(_ editing: Bool) {
-        stepping = editing
-        if !editing { saveMaxConcurrent(maxConc) }
-    }
-
     private func saveMaxConcurrent(_ value: Int) {
-        guard value != (committedMax ?? runner.maxConcurrent ?? 1) else { return }
-        committedMax = value
+        guard value != (runner.maxConcurrent ?? 1) else { return }
         let id = runner.id
         Task {
             guard let failure = await runners.setMaxConcurrent(id, value) else { return }
-            committedMax = nil
-            maxConc = runners.runner(id)?.maxConcurrent ?? maxConc
             show(failure)
         }
     }

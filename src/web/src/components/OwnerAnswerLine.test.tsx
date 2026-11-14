@@ -96,7 +96,7 @@ describe('the owner’s answer handed to the coordinator', () => {
     expect(container.querySelector('.owner-answer-chev')?.textContent).toBe('›');
     expect(container.querySelector('.chat-user'), 'drawn as the owner’s bubble').toBeNull();
     // A line in the conversation, not the head of a round: the sticky bar keeps the question above it.
-    expect(container.querySelector('[data-sticky-label]')).toBeNull();
+    expect(container.querySelector('[data-orbit-round]')).toBeNull();
     expect(container.querySelector('.owner-answer')?.getAttribute('data-seq')).toBe('7');
   });
 

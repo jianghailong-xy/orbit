@@ -7660,6 +7660,9 @@ export class SessionsService {
       previewId?: string;
       /** Who pressed (§10.6 O-R3): the owner's credential, or a session. Recorded with the operation. */
       requestedBy?: MergeRequester;
+      /** The session asked to merge ITSELF, which it can only do from inside one of its own turns: a
+       *  turn that is running is waited out (`mergeAfterTurnAt`) rather than refused, see queueMerge. */
+      selfRequest?: boolean;
     } = {},
   ) {
     await this.assertEngineSession(ownerId, id);
@@ -7685,6 +7688,24 @@ export class SessionsService {
     // Have that runner heartbeat now instead of at its next 30s tick: whoever pressed Merge is
     // watching a spinner. Only a nudge; a lost wake leaves the merge to that tick.
     if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
+    if (workspaceId && typeof workspaceId === 'object' && 'afterTurn' in workspaceId) {
+      // Nothing is queued yet, so there is nothing to wait for either: the turn this request came from
+      // is the one being waited out, and holding its tool call open would hold that turn open with it.
+      this.realtime.publishSessionUpdated(id);
+      const nextStep = 'this session is running a turn, so the merge is queued when that turn ends; read its outcome '
+        + 'then with merge_receipts';
+      if (wait !== null) {
+        return {
+          outcome: 'AFTER_TURN' as const,
+          operationId: null,
+          mergeStatus: null,
+          receipt: null,
+          receiptAbsentReason: 'MERGE_AFTER_TURN' as const,
+          nextStep,
+        };
+      }
+      return { ok: true as const, mergeAfterTurn: true as const, nextStep };
+    }
     if (workspaceId && typeof workspaceId === 'object' && 'alreadyLanded' in workspaceId) {
       // Nothing was queued and nothing will be executed: the receipt that already says this landed
       // IS the answer. Handing it back rather than re-running the merge is the whole of CP4's
@@ -7740,7 +7761,9 @@ export class SessionsService {
     ownerId: string,
     id: string,
     target: string | null,
-    options: { recoveryAction?: MergeRecoveryAction; previewId?: string; requestedBy?: MergeRequester },
+    options: {
+      recoveryAction?: MergeRecoveryAction; previewId?: string; requestedBy?: MergeRequester; selfRequest?: boolean;
+    },
     also: Pick<Prisma.SessionUncheckedUpdateInput, 'mergeRepairTurnEndedAt'> = {},
   ) {
     // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
@@ -7776,6 +7799,16 @@ export class SessionsService {
       throw new ConflictException('wait for the pending worktree commit to finish');
     }
     if (SessionsService.mergeWaitsForTurn(session)) {
+      // A session merging itself asks from inside its own turn, so "wait for the turn" can never be
+      // answered by asking again. The request is kept instead, and mergeAfterOwnTurn queues it when the
+      // turn ends. Anyone else can wait for the turn and ask then.
+      if (options.selfRequest && !options.recoveryAction) {
+        await tx.session.update({
+          where: { id },
+          data: { mergeAfterTurnAt: new Date(), mergeAfterTurnTarget: target },
+        });
+        return { outcome: { afterTurn: true as const }, operationId: null, queuedOn: null };
+      }
       throw new ConflictException('wait for the current turn to finish before merging');
     }
     const recovery = readMergeRecovery(session.mergeRecovery);
@@ -7847,7 +7880,8 @@ export class SessionsService {
         mergeStatus: 'pending',
         mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
         mergeRecoveryAction: options.recoveryAction ?? null,
-        ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
+        // A merge being queued answers one a session asked for after its turn as well.
+        ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull, mergeAfterTurnAt: null, mergeAfterTurnTarget: null } : {}),
         mergeRequestedAt: new Date(),
         // §10.6 O-R3: who pressed, for the receipt the result writes. Null for an operation the server
         // queued itself (a check after a repair turn), which lands nothing.
@@ -7951,6 +7985,77 @@ export class SessionsService {
   private static mergeWaitsForTurn(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
     return !SessionsService.TERMINAL.includes(session.status) &&
       (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt);
+  }
+
+  /**
+   * Queue the merge a session asked for of itself during its own turn (`mergeAfterTurnAt`, kept by
+   * {@link queueMerge}), now that a turn of it has ended. Called after the settle or finalize that ended
+   * the turn has committed (RunnerApiController#checkRecoveryAfterTurn), with the row re-read under the
+   * lock {@link queueMerge} takes:
+   *
+   * - nothing owed → nothing is written;
+   * - the turn that ended did not succeed (`turnSucceeded` false: it failed or was stopped), or the
+   *   session ended FAILED or CANCELLED → the request is dropped: the turn that asked did not finish, so
+   *   its work is not merged on its word;
+   * - another turn already running (a queued follow-up started) → nothing is written, and that turn's
+   *   end asks again;
+   * - a merge already in flight, or the work already in the target → the request is answered by it, and
+   *   cleared;
+   * - otherwise queued through {@link queueMerge} as the session's own (`AGENT`) merge, whose write clears
+   *   the request. A refusal there is recorded on the session as a failed merge (`mergeStatus` 'error'),
+   *   because nobody is waiting on a response to read it from.
+   */
+  async mergeAfterOwnTurn(id: string, turnSucceeded = true): Promise<'QUEUED' | 'DEFERRED' | 'NOTHING_OWED' | 'DROPPED' | 'ANSWERED' | 'REFUSED'> {
+    let queuedOn: string | null = null;
+    let wrote = false;
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
+      queuedOn = null;
+      wrote = false;
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      if (locked.length === 0) return 'NOTHING_OWED' as const;
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        select: {
+          ownerId: true, status: true, cancelRequestedAt: true, mergeStatus: true,
+          mergeAfterTurnAt: true, mergeAfterTurnTarget: true,
+        },
+      });
+      if (!session.mergeAfterTurnAt) return 'NOTHING_OWED' as const;
+      const settle = { mergeAfterTurnAt: null, mergeAfterTurnTarget: null };
+      const clear = async (data: Prisma.SessionUncheckedUpdateInput = settle) => {
+        await tx.session.update({ where: { id }, data });
+        wrote = true;
+      };
+      if (!turnSucceeded || session.status === RunStatus.FAILED || session.status === RunStatus.CANCELLED) {
+        await clear();
+        return 'DROPPED' as const;
+      }
+      if (SessionsService.mergeWaitsForTurn(session)) return 'DEFERRED' as const;
+      if (session.mergeStatus === 'pending') {
+        await clear();
+        return 'ANSWERED' as const;
+      }
+      try {
+        const queued = await this.queueMerge(tx, session.ownerId, id, session.mergeAfterTurnTarget,
+          { requestedBy: 'AGENT' });
+        if (!queued.operationId) {
+          await clear();
+          return 'ANSWERED' as const;
+        }
+        queuedOn = queued.queuedOn;
+        wrote = true;
+        return 'QUEUED' as const;
+      } catch (error) {
+        // queueMerge refuses before it writes anything, so this transaction is still good to write in.
+        if (!(error instanceof HttpException)) throw error;
+        await clear({ ...settle, mergeStatus: 'error', mergeError: error.message });
+        return 'REFUSED' as const;
+      }
+    }, loggedRetry(this.logger, 'sessions.mergeAfterOwnTurn'));
+    if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
+    if (wrote) this.realtime.publishSessionUpdated(id);
+    return outcome;
   }
 
   /** Recoveries a preview may not replace: each is a landing being finished, by its own retry or sync. */

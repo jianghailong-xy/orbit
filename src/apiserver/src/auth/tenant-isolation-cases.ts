@@ -508,6 +508,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /runners/:id': { request: (of) => ({ params: { id: of.runnerId } }) },
   'PATCH /runners/:id': { request: (of) => ({ params: { id: of.runnerId }, body: { displayName: 'renamed by the census' } }) },
   'DELETE /runners/:id': { request: (of) => ({ params: { id: of.spare.runnerId } }) },
+  // A machine's CPU, memory and disk: A's runner is not B's to read.
+  'GET /runners/:id/resources': { request: (of) => ({ params: { id: of.runnerId } }) },
   // What a machine's finished sessions left behind holding uncommitted work. A's runner is not
   // B's to read, and one of A's sessions is not a checkout B may ask the diff of.
   'GET /runners/:id/abandoned-checkouts': { request: (of) => ({ params: { id: of.runnerId } }) },

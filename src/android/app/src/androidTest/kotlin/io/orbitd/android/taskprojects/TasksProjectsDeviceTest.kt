@@ -931,7 +931,7 @@ class TasksProjectsDeviceTest {
             "reasons":["Touches the dispatch path across two modules"]}}""".replace("\n", ""))
         open("orbit-session:$sessionId"); awaitTag("composer-input")
         compose.waitUntil(20_000) { compose.onAllNodesWithTag("composer-model-smart", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithTag("composer-model").assertContentDescriptionEquals("Model claude-opus-5-5, effort High, picked by smart selection")
+        compose.onNodeWithTag("composer-model").assertContentDescriptionEquals("Model Opus 5.5, effort High, picked by smart selection")
         capture("a11c-composer-chip")
         tap("composer-model"); awaitText("✦ Picked by smart selection · tier L")
         compose.onNodeWithText("Touches the dispatch path across two modules").assertExists()
@@ -947,7 +947,7 @@ class TasksProjectsDeviceTest {
         scenario.recreate(); awaitTag("composer-input")
         compose.waitUntil(20_000) { journal().drop(reads).any { it.text("path") == "/api/users/me" } }
         // The recreated reader reads its session again: the chip is the bare "Model" until then.
-        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("composer-model") and hasContentDescription("Model claude-opus-5-5, effort High")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("composer-model") and hasContentDescription("Model Opus 5.5, effort High")).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithTag("composer-model-smart", useUnmergedTree = true).assertCountEquals(0)
         capture("a11c-composer-chip-switch-off")
     }

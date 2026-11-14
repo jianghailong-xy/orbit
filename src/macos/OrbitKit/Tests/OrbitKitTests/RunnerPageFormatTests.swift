@@ -136,6 +136,7 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.statusWord(mini, now: now), "Offline")
         XCTAssertEqual(RunnerPageFormat.statusLine(mini, now: now, timeZone: shanghai),
                        "Offline · last seen Sep 14, 10:25 PM")
+        XCTAssertNil(RunnerPageFormat.slots(mini, now: now), "offline, the count is stale: Max Concurrent shows no use")
         XCTAssertEqual(RunnerPageFormat.hostLine(mini), "v0.1.155",
                        "a hostname that is the name shown is left out")
         XCTAssertNil(RunnerPageFormat.slots(mini, now: now), "an offline machine draws no count and no bar")

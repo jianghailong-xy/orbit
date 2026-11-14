@@ -23,6 +23,9 @@ public enum RunnerPageCopy {
     public static let RUNNER_ABOUT = "About This Runner"
 
     public static let RUNNER_MAX_CONCURRENT = "Max Concurrent"
+    public static let RUNNER_MAX_CONCURRENT_HINT =
+        "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    public static let RUNNER_EDIT = "Edit"
     public static let RUNNER_DISK = "Disk"
     public static let RUNNER_KEEP_FREE = "Keep Free"
     public static let RUNNER_KEEP_FREE_OFF = "Off"

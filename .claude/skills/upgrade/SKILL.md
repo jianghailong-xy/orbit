@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing; a rollback deploys an earlier commit (--deploy). Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
+description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing, handing the apiserver and web over without a gap; a rollback deploys an earlier commit (--deploy). Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
 ---
 
 # Upgrade the Orbit stack
@@ -194,6 +194,8 @@ ORBIT_REGISTRY=10.66.0.1:5000 .claude/skills/upgrade/upgrade.sh --build-only
 ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .claude/skills/upgrade/upgrade.sh --deploy <40-character commit>
 # What that deploy would change on the target, changing nothing there.
 ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .claude/skills/upgrade/upgrade.sh --plan <40-character commit>
+# A release whose migration the running release's code cannot run against: stop, then start (below).
+ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .claude/skills/upgrade/upgrade.sh --deploy <40-character commit> --stop-then-start
 ```
 
 `ORBIT_DEPLOY_DIR` is the deployment's directory on the target, `/root/orbit` unless it is set. The script
@@ -237,7 +239,9 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    container was made with, as `create`, `unchanged`, `start` or `recreate`. `db-proxy`, `gateway` and
    `pgbackup` each bind-mount one file on its own (`deploy/db-proxy/haproxy.cfg`, `gateway/nginx.conf`,
    `scripts/pg-backup.sh`), which a running container keeps from its start whatever Compose sees, so one that
-   runs another than the release's is `recreate` too, and says which file;
+   runs another than the release's is `recreate` too, and says which file. Under the table it says how the
+   apiserver and web are replaced: `Replacing the apiserver and web: without a gap`, or `stop, then start` with
+   the reason ([Without a gap](#without-a-gap), below);
 5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
    `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
    list it is refused. `--plan` stops here in any case, with every file put back;
@@ -250,7 +254,9 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    reconnects on its own), `nats`, `apiserver`, which applies the database migrations as it starts,
    `apiserver-2` and on, `wiki-worker`, `web`, `link-gateway`, `gateway`, and `pgbackup`, as on a single host,
    but created where the target has never run one. `up` recreates only what changed, and `--force-recreate`
-   what the plan found running another file;
+   what the plan found running another file. The `apiserver` and `web` it recreates are handed over without a
+   gap, and a `gateway` it recreates then goes first, ahead of the `apiserver` ([Without a gap](#without-a-gap));
+   `wiki-worker`, which serves no HTTP, is simply recreated;
 9. prints `docker compose ps`, and adds the release to `.upgrade/history`. Its whole output is in
    `.upgrade/deploy.log`.
 
@@ -296,9 +302,79 @@ is listed in each host's `/etc/docker/daemon.json` under `insecure-registries`, 
 `systemctl reload docker` applies without stopping a container; the build stage checks this host's before it
 builds. This host reaches the target as root over `ssh` with a key, and has `git`, `curl` and
 `docker manifest`; the target has Docker with Compose v2, and GNU `tar` and `tee`. `--no-cache` applies to
-the build, `--prune` to both hosts, and `--pull-base` to the deploy, as above. To confirm that the target
-built nothing, `docker buildx du` there reports no build cache, and `docker image ls` lists only the
-registry's images.
+the build, `--prune` to both hosts, and `--pull-base` and `--stop-then-start` to the deploy, as above. To
+confirm that the target built nothing, `docker buildx du` there reports no build cache, and `docker image ls`
+lists only the registry's images.
+
+### Without a gap
+
+A two-stage deploy replaces the `apiserver` and `web` it recreates without a gap: the web gateway always has
+one that answers. For each, `<name>` being the running container (`orbit-apiserver`, `orbit-web`):
+
+1. `<name>-next`, a container of the release, starts beside `<name>`: `docker compose run --no-deps`, so with
+   the service's whole configuration from the release. The deploy waits until it passes its health check. The
+   apiserver's applies the database migrations as it starts, while `<name>` runs on, and answers to the
+   apiserver's names in the project's network too (`apiserver`, `orbit-apiservers`), so that the link gateway
+   reaches it. web's answers to its own name only.
+2. The web gateway is pointed at it. `gateway/nginx.conf`'s routes to the apiserver and to web include a file
+   from `/etc/nginx/handover/` after the line that names their upstream. The deploy writes
+   `set $apiserver <name>-next:3000;` there (or `set $web <name>-next:80;`), inside the running gateway, checks
+   the configuration (`nginx -t`) and reloads. nginx starts new workers, which take every new connection, and
+   lets the old ones finish what they are serving. Nothing is mounted there, so a gateway always starts on its
+   own file's routes.
+3. `<name>` stops by itself. An apiserver ends its streams, answers what is in flight and exits 0, within 25 s
+   (`src/apiserver/src/common/graceful-stop.ts`); the log says how long each stop took and its exit code. `up`
+   recreates it from the release and waits for its health check.
+4. The gateway is pointed at the new `<name>`, the apiserver by its container's name until `-next` is gone, and
+   `<name>-next` stops and is removed. The file goes, and the gateway runs on its own file's routes again.
+
+`wiki-worker` serves no HTTP and is simply recreated, after the apiserver. A `gateway` the release recreates,
+for a new `gateway/nginx.conf` or nginx image, goes first, ahead of the apiserver, so that the gateway doing the
+handover runs the release's `gateway/nginx.conf`. Recreating the gateway, like `db-proxy`, `nats` or
+`link-gateway`, is a moment's break of its own, which a release that changes none of them does not have.
+
+**Streams.** The session and control-plane streams an apiserver carries end when it stops, cleanly. Each client
+opens its stream again through the gateway, on the apiserver that answers now, from the last stored event it had:
+the web app does so after 2 to 2.5 s. In a release they end twice, once as `<name>` stops and once as
+`<name>-next` does. A reload closes the gateway's idle keep-alive connections, as every nginx reload does, and a
+client sends its next request on a new one. One it sends at the very moment its connection closes is reset, as
+on any keep-alive connection a server closes (on 10.66.0.4, 2 of 7,852 requests at 200 a second over 160
+reloads; a release reloads the gateway five times).
+
+**Which way the plan says.** The plan's line under its table is `Replacing the apiserver and web: without a
+gap`, or `stop, then start` with the reason, one of these:
+
+- `--stop-then-start`, given for a release whose migration the running release's code cannot run against (below);
+- a release whose `gateway/nginx.conf` is from before handovers, with no route a deploy can point, as a rollback
+  to one is;
+- no web gateway running on the target, as before its first deploy.
+
+Stop, then start is how every release replaced them before: each running one stops before its replacement
+starts, and the web gateway answers 502 until the new one is healthy, 20 to 40 s for the apiserver.
+
+**Migrations: the exception.** While a release is handed over, the running release's code runs against the
+database as the new release's migrations leave it: the apiserver from the moment `<name>-next` has applied them
+until `<name>` stops, and `wiki-worker` until it is recreated. A release with a migration that code cannot run
+against is deployed with `--stop-then-start`, which stops that code before the migration runs: one that drops or
+renames a table or a column the running release reads or writes, adds a `NOT NULL` column without a default
+where it inserts rows, or adds a constraint or a trigger that its writes break. An additive migration, such as a
+new table, a column with a default or an index, needs nothing. To see what a release adds, compare it with the
+commit the target runs, the last line of `.upgrade/history` there:
+
+```bash
+git diff --stat <the commit the target runs> <the release's commit> -- src/apiserver/prisma/migrations/
+```
+
+A rollback is the same in reverse, under the rule in **Rollback** above: the code rolled back to runs against the
+database as the later release left it, during the handover and after.
+
+**A deploy that does not finish.** One that stops after it started `<name>-next`, or a host that goes down during
+one, can leave `<name>-next` running and the gateway sending to it. The plan names one it finds, and the next
+deploy points the gateway back at `<name>` and removes `<name>-next` once `<name>` is healthy. If `<name>` is
+not healthy, `<name>-next` may be all that serves: the deploy stops and says to deploy with `--stop-then-start`,
+which brings `<name>` up first. A `<name>-next` that has not passed its health check is never stopped, since it
+may be applying the migrations, which stopping it would cut short: the deploy stops before the gateway is pointed
+at it, and `<name>` runs on.
 
 ## Requirements
 
