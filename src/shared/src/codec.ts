@@ -154,9 +154,6 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The workspaces a personal access token is confined to (migration 0383): addresses its owner
   // picks when issuing it and reads back in the token list — never a fence.
   'workspaceIds',
-  // The sessions a runner's background jobs hold slots for, as its last beat named them (migration 0780,
-  // runner_presence): addresses of sessions, compared with nothing — never a fence.
-  'backgroundJobSessionIds',
   // The personal access token an activity row was written through (migration 0384): the same id
   // the token list hands out and its revoke takes back — an address, never a fence.
   'credentialId',
@@ -681,6 +678,10 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // tell an identity the database worked out from one somebody chose. It appears in no request and
   // no response, and decoding it on the way in is the one way to make that comparison lie.
   'coordinatorIdentityLandingId',
+  // The sessions a runner's background jobs hold slots for (runner_presence, migration 0780): the machine protocol's raw
+  // UUIDs, kept only where they equal the id of a session assigned to that runner and counted by that equality. It
+  // appears in no response, and a decode on the way in could only refuse a heartbeat over one id it cannot read.
+  'backgroundJobSessionIds',
   'generation',
   'leaseGeneration',
   'leaseOwner',
