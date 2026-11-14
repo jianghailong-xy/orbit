@@ -36,6 +36,9 @@ type evalRun struct {
 	// ToolsListed is the Orbit operations the session's MCP server offered, as tools/list answered for its
 	// context; nil when the server did not start.
 	ToolsListed []string
+	// Events is every run event the engine's session carried, filed by log turn: the transcript the graders read,
+	// kept only in a private dump (ORBIT_AGENT_EVAL_TRANSCRIPTS), never in a report.
+	Events []evalEvent
 	// Context is the bytes of what Orbit put in front of the model before the person's first word.
 	Context      evalContextBytes
 	HarnessError string
@@ -163,9 +166,30 @@ func linkedIDs(text, kind string) []string {
 	return out
 }
 
-var evalClaimRE = regexp.MustCompile(`(?i)\b(i(?:'ve| have)?\s+(?:just\s+)?(?:filed|created|recorded|added|logged|saved|opened)|(?:has|have)\s+been\s+(?:filed|created|recorded|added|logged|saved)|(?:is|are)\s+now\s+(?:filed|recorded|tracked)|filed\s+(?:it|this|that)\s+(?:as|in|under))\b`)
+// evalClaimRE and evalDelegationClaimRE are a sentence claiming an Orbit record, or a hand-off, was made. Read per
+// sentence and only in one that is not negated, conditional or future (evalAsserts): "nothing was filed", "I'll file
+// them once you say" and "the plan is saved at ~/.claude/plans/…" (an engine's own plan file, measured on Opus 5.5)
+// claim nothing.
+var (
+	evalClaimRE = regexp.MustCompile(`(?i)\bi(?:'ve| have)?\s+(?:just\s+)?filed\b|` +
+		`\b(?:filed|recorded|logged|created|added|saved|opened|put|stored)\b[^.\n]{0,40}?\b(?:orbit\s+)?(?:tasks?|tickets?|issues?)\b|` +
+		`\b(?:filed|recorded|logged|created|added|saved|put|stored|kept)\b[^.\n]{0,30}?\b(?:in|into|to)\s+orbit\b|` +
+		`\b(?:has|have)\s+been\s+(?:filed|recorded|logged)\b|\b(?:is|are)\s+now\s+(?:filed|recorded|tracked)\b`)
+	evalDelegationClaimRE = regexp.MustCompile(`(?i)\b(i(?:'ve| have)?\s+(?:just\s+)?(?:started|kicked off|launched|spun up|handed|delegated|dispatched)|(?:has|have)\s+been\s+(?:started|handed|delegated|dispatched|kicked off)|is\s+now\s+(?:running|working|fixing))\b`)
+	evalSentenceSplit     = regexp.MustCompile(`[.!?\n;]+|,\s*(?:and|but|so|while)\b|\bbut\b`)
+	evalNotAnAssertion    = regexp.MustCompile(`(?i)\b(not|no|nothing|never|none|without|until|once|if|when|will|would|could|can|should|i'll|won't|can't|cannot|didn't|haven't|hasn't|wasn't|isn't|aren't|before|after you|ready to|going to|want me|shall)\b`)
+)
 
-var evalDelegationClaimRE = regexp.MustCompile(`(?i)\b(i(?:'ve| have)?\s+(?:just\s+)?(?:started|kicked off|launched|spun up|handed|delegated|dispatched)|(?:has|have)\s+been\s+(?:started|handed|delegated|dispatched|kicked off)|is\s+now\s+running)\b`)
+// evalAsserts says whether some clause of text makes the claim re matches, as a statement of fact: a sentence is cut
+// at its clauses first, so "I've handed it to a background agent, and I haven't touched it" still claims the hand-off.
+func evalAsserts(re *regexp.Regexp, text string) bool {
+	for _, sentence := range evalSentenceSplit.Split(text, -1) {
+		if re.MatchString(sentence) && !evalNotAnAssertion.MatchString(sentence) {
+			return true
+		}
+	}
+	return false
+}
 
 // ── Checks ───────────────────────────────────────────────────────────────────────────────────────────
 
@@ -306,7 +330,7 @@ func checkNoRecordClaimInTurn(spec int) func(*evalRun) (bool, string) {
 		if links := linkedIDs(reply, "task"); len(links) > 0 {
 			return false, "the reply links a task although none was written"
 		}
-		if evalClaimRE.MatchString(reply) {
+		if evalAsserts(evalClaimRE, reply) {
 			return false, "the reply claims a record although none was written"
 		}
 		return true, ""
@@ -782,7 +806,7 @@ func checkNoUnbackedDelegationClaim(r *evalRun) (bool, string) {
 	if len(r.eventsOf("task_started")) > 0 || len(r.eventsOf("session_created")) > 0 {
 		return true, ""
 	}
-	if evalDelegationClaimRE.MatchString(r.repliesFrom(0)) {
+	if evalAsserts(evalDelegationClaimRE, r.repliesFrom(0)) {
 		return false, "the reply claims a hand-off no receipt shows"
 	}
 	return true, ""

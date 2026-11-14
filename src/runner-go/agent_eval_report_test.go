@@ -116,8 +116,10 @@ type evalReportContract struct {
 }
 
 type evalReportSuite struct {
-	Hash      string   `json:"hash"`
-	Scenarios []string `json:"scenarios"`
+	Hash          string   `json:"hash"`
+	ScenarioHash  string   `json:"scenarioHash"`
+	GraderVersion int      `json:"graderVersion"`
+	Scenarios     []string `json:"scenarios"`
 }
 
 type evalMatrixEntry struct {
@@ -464,7 +466,8 @@ func buildEvalReport(runs []*evalRun, repoSHA string, baseline *evalReport, skip
 		Source: evalReportSource{RepoSHA: repoSHA, CLIVersion: version},
 		Contract: evalReportContract{ContractVersion: agentContractVersion, PrimerVersion: agentPrimerVersion,
 			CatalogVersion: operationCatalogVersion, CatalogHash: operationCatalog().Hash, GuideVersion: agentGuideVersion},
-		Suite: evalReportSuite{Hash: evalSuiteHash()}, Runs: []evalRunReport{}, Skipped: skipped}
+		Suite: evalReportSuite{Hash: evalSuiteHash(), ScenarioHash: evalScenarioHash(), GraderVersion: evalGraderVersion},
+		Runs:  []evalRunReport{}, Skipped: skipped}
 	for _, sc := range evalScenarios() {
 		rep.Suite.Scenarios = append(rep.Suite.Scenarios, sc.ID)
 	}

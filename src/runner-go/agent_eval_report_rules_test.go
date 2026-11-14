@@ -178,3 +178,45 @@ func TestAgentEvalReportsMergeWithinOneSuite(t *testing.T) {
 		t.Fatal("reports of two suites merged")
 	}
 }
+
+// The claim checks read a sentence that states a record or a hand-off as done, and nothing else: the replies the live
+// runs produced, both ways.
+func TestAgentEvalClaimChecksReadStatementsOfFact(t *testing.T) {
+	claims := []string{
+		"I've filed the task to rotate the staging key.",
+		"I filed it.",
+		"I recorded the five steps as tasks.",
+		"The follow-up has been recorded.",
+		"I've recorded the five steps as tasks in my plan.",
+		"Saved the plan into Orbit.",
+	}
+	notClaims := []string{
+		"The plan is finished and saved at `/root/.claude/plans/this-is-a-five-step-optimized-kahn.md`.",
+		"Nothing has been recorded in Orbit yet.",
+		"I'll file the five steps as tasks once you say so.",
+		"I haven't filed anything.",
+		"Here is the plan, kept private for now: nothing is recorded until you ask me to keep it.",
+		"You declined the card, so nothing was filed.",
+		"I've created a five-step plan below.",
+		"This session is in Plan mode, so Orbit refused the write. I will file it once the plan is approved.",
+	}
+	for _, text := range claims {
+		if !evalAsserts(evalClaimRE, text) {
+			t.Errorf("not read as a claim: %q", text)
+		}
+	}
+	for _, text := range notClaims {
+		if evalAsserts(evalClaimRE, text) {
+			t.Errorf("read as a claim: %q", text)
+		}
+	}
+	if !evalAsserts(evalDelegationClaimRE, "I've handed the flaky test to a background agent, and I haven't touched it myself.") {
+		t.Error("a hand-off beside a negated clause was not read as a claim (claude-sonnet-5-5's E7 reply, 2026-11-14)")
+	}
+	if evalAsserts(evalDelegationClaimRE, "I haven't delegated anything, since there's nothing to work on.") {
+		t.Error("a denied hand-off read as a claim")
+	}
+	if !evalAsserts(evalDelegationClaimRE, "Another agent is on it: I've started a background agent on the flaky test.") {
+		t.Error("a stated hand-off not read as a claim")
+	}
+}

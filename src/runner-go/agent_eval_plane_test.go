@@ -136,7 +136,9 @@ type evalPlane struct {
 	// dropCreateAnswers drops the answer of that many task creates, after writing the task.
 	dropCreateAnswers int
 
-	project  *evalProjectRow
+	project *evalProjectRow
+	// created is every project the agent created during the run, the world's own one included when it had none.
+	created  []*evalProjectRow
 	tasks    []*evalTaskRow
 	sessions []*evalSessionRow
 	cards    []*evalCard
@@ -235,8 +237,8 @@ func (p *evalPlane) taskDoc(task *evalTaskRow) map[string]interface{} {
 		deps = append(deps, row)
 	}
 	doc["dependsOn"] = deps
-	if task.ProjectID != "" && p.project != nil && p.project.ID == task.ProjectID {
-		doc["project"] = map[string]interface{}{"id": p.project.ID, "title": p.project.Title, "status": p.project.Status}
+	if project := p.projectByIDLocked(task.ProjectID); project != nil {
+		doc["project"] = map[string]interface{}{"id": project.ID, "title": project.Title, "status": project.Status}
 	}
 	var sessions []map[string]interface{}
 	for _, s := range p.sessions {
@@ -256,23 +258,36 @@ func nullable(s string) interface{} {
 	return s
 }
 
-func (p *evalPlane) projectDoc() map[string]interface{} {
+// projectByIDLocked is the world's project or one the agent created, by id.
+func (p *evalPlane) projectByIDLocked(id string) *evalProjectRow {
+	if p.project != nil && p.project.ID == id {
+		return p.project
+	}
+	for _, project := range p.created {
+		if project.ID == id {
+			return project
+		}
+	}
+	return nil
+}
+
+func (p *evalPlane) projectDoc(project *evalProjectRow) map[string]interface{} {
 	byStatus := map[string]int{}
 	count := 0
 	for _, task := range p.tasks {
-		if task.ProjectID == p.project.ID {
+		if task.ProjectID == project.ID {
 			byStatus[task.Status]++
 			count++
 		}
 	}
 	var criteria []map[string]interface{}
-	for i, text := range p.project.Criteria {
+	for i, text := range project.Criteria {
 		criteria = append(criteria, map[string]interface{}{"id": fmt.Sprintf("crit-%d", i+1), "key": fmt.Sprintf("crit-%d", i+1),
 			"ordinal": i + 1, "text": text, "satisfied": false})
 	}
 	return map[string]interface{}{
-		"id": p.project.ID, "publicId": p.project.ID, "title": p.project.Title, "goal": p.project.Goal,
-		"instructions": p.project.Instructions, "status": p.project.Status, "acceptanceCriteriaItems": criteria,
+		"id": project.ID, "publicId": project.ID, "title": project.Title, "goal": project.Goal,
+		"instructions": project.Instructions, "status": project.Status, "acceptanceCriteriaItems": criteria,
 		"_count": map[string]interface{}{"tasks": count}, "tasksByStatus": byStatus,
 	}
 }
@@ -338,19 +353,34 @@ func (p *evalPlane) route(w http.ResponseWriter, r *http.Request, body map[strin
 	case len(parts) >= 3 && parts[1] == "tasks":
 		return p.taskRoute(w, r, parts[2:], body, session)
 	case r.Method == http.MethodGet && len(parts) == 3 && parts[1] == "projects":
-		if p.project == nil || parts[2] != p.project.ID {
+		project := p.projectByIDLocked(parts[2])
+		if project == nil {
 			return p.refuse(w, 404, "PROJECT_NOT_FOUND", "project not found", "")
 		}
-		writeEvalJSON(w, 200, p.projectDoc())
+		writeEvalJSON(w, 200, p.projectDoc(project))
 		return 200, ""
 	case r.Method == http.MethodPost && path == "/runner/projects":
 		// A project create only arrives after its card was answered yes.
 		if p.consumeCard(projectCreateApprovalToolName, body, session) == nil {
 			return p.refuse(w, 403, "PROJECT_WRITE_NEEDS_OWNER_CARD", "no answered card covers this project", "")
 		}
-		id := evalPublicID()
-		p.record("project_created", id, asString(body["title"]))
-		writeEvalJSON(w, 201, map[string]interface{}{"id": id, "status": "OPEN", "title": body["title"]})
+		project := &evalProjectRow{ID: evalPublicID(), Title: asString(body["title"]), Goal: asString(body["goal"]),
+			Instructions: asString(body["instructions"]), Status: "OPEN"}
+		if items, ok := body["acceptanceCriteriaItems"].([]interface{}); ok {
+			for _, item := range items {
+				if text := asString(mapValue(item)["text"]); text != "" {
+					project.Criteria = append(project.Criteria, text)
+				} else if text := asString(item); text != "" {
+					project.Criteria = append(project.Criteria, text)
+				}
+			}
+		}
+		p.created = append(p.created, project)
+		if p.project == nil {
+			p.project = project
+		}
+		p.record("project_created", project.ID, project.Title)
+		writeEvalJSON(w, 201, p.projectDoc(project))
 		return 201, ""
 	case strings.HasPrefix(path, "/runner/sessions") || strings.HasPrefix(path, "/runner/agents") || strings.HasPrefix(path, "/runner/runners"):
 		return p.orchestrationRoute(w, r, parts, body, session)
@@ -515,7 +545,7 @@ func (p *evalPlane) createTask(w http.ResponseWriter, body map[string]interface{
 			"a task write on the runner's machine credential needs the acting session and the owner's answered card", "USE_A_PERSONAL_ACCESS_TOKEN")
 	}
 	task := p.newTaskFromBody(body, agent)
-	if task.ProjectID != "" && (p.project == nil || p.project.ID != task.ProjectID) {
+	if task.ProjectID != "" && p.projectByIDLocked(task.ProjectID) == nil {
 		return p.refuse(w, 404, "PROJECT_NOT_FOUND", "project not found", "")
 	}
 	card := p.consumeCard(taskCreateApprovalToolName, body, session)
@@ -549,9 +579,9 @@ func (p *evalPlane) previewBatch(w http.ResponseWriter, body map[string]interfac
 	for i, raw := range items {
 		item, _ := raw.(map[string]interface{})
 		row := map[string]interface{}{"index": i, "ref": nullable(asString(item["ref"])), "projectId": nullable(asString(item["projectId"]))}
-		if p.project != nil && asString(item["projectId"]) == p.project.ID {
-			row["projectTitle"] = p.project.Title
-			row["projectStatus"] = p.project.Status
+		if project := p.projectByIDLocked(asString(item["projectId"])); project != nil {
+			row["projectTitle"] = project.Title
+			row["projectStatus"] = project.Status
 		}
 		if item["startNow"] == true {
 			starting++
@@ -692,7 +722,7 @@ func (p *evalPlane) taskRoute(w http.ResponseWriter, r *http.Request, rest []str
 			case "runAt":
 				task.RunAt = asString(v)
 			case "projectId":
-				if id := asString(v); id == "" || (p.project != nil && id == p.project.ID) {
+				if id := asString(v); id == "" || p.projectByIDLocked(id) != nil {
 					task.ProjectID = id
 				}
 			}
@@ -811,6 +841,8 @@ type evalLedger struct {
 	Requests []evalRequest
 	Events   []evalLedgerEvent
 	Project  *evalProjectRow
+	// Created is the projects the agent created during the run.
+	Created []evalProjectRow
 }
 
 func (p *evalPlane) snapshot() evalLedger {
@@ -833,6 +865,9 @@ func (p *evalPlane) snapshot() evalLedger {
 	if p.project != nil {
 		project := *p.project
 		out.Project = &project
+	}
+	for _, project := range p.created {
+		out.Created = append(out.Created, *project)
 	}
 	return out
 }
@@ -881,6 +916,11 @@ func (l evalLedger) count(kind string) int {
 func (l evalLedger) knownID(id string) bool {
 	if l.Project != nil && l.Project.ID == id {
 		return true
+	}
+	for _, project := range l.Created {
+		if project.ID == id {
+			return true
+		}
 	}
 	for _, task := range l.Tasks {
 		if task.ID == id {

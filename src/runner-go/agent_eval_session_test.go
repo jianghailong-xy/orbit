@@ -283,25 +283,9 @@ func (s *evalSession) play(engine evalEngine, repeat int, turnTimeout time.Durat
 		run.ToolsListed = s.tools
 		run.Context = s.context
 		run.DurationMs = int(time.Since(started).Milliseconds())
-		events := s.rec.snapshot()
-		for i := range s.logs {
-			var mine []evalEvent
-			for _, ev := range events {
-				if ev.Turn == i {
-					mine = append(mine, ev)
-				}
-			}
-			steps, reply, compacted := evalTurnSteps(mine, s.exe)
-			s.logs[i].Steps, s.logs[i].Reply = steps, reply
-			s.logs[i].Compacted = s.logs[i].Compacted || compacted
-			s.logs[i].Telemetry = evalTelemetryOf(mine, run.Engine, s.exe, s.logs[i].Mode, s.job.AllowOrchestration, s.context.EngineInstructions)
-			for _, step := range steps {
-				if step.Kind == evalStepOrbit && (step.Operation == "guide" || step.Operation == "capabilities" || step.Operation == "help") {
-					run.Context.DiscoveryOutput += len(step.Result)
-				}
-			}
-		}
+		run.Events = s.rec.snapshot()
 		run.Turns = s.logs
+		run.rebuildTurns(s.job.AllowOrchestration)
 	}()
 	if err := engine.start(s); err != nil {
 		run.HarnessError = "start: " + err.Error()
@@ -339,6 +323,29 @@ func (s *evalSession) play(engine evalEngine, repeat int, turnTimeout time.Durat
 		}
 	}
 	return run
+}
+
+// rebuildTurns reads every log turn's steps, reply and telemetry out of the run's events, and the discovery read into
+// the context bytes: what a run is graded from, at the end of play and again by TestAgentEvalRegrade.
+func (run *evalRun) rebuildTurns(orchestration bool) {
+	run.Context.DiscoveryOutput = 0
+	for i := range run.Turns {
+		var mine []evalEvent
+		for _, ev := range run.Events {
+			if ev.Turn == i {
+				mine = append(mine, ev)
+			}
+		}
+		steps, reply, compacted := evalTurnSteps(mine, run.Exe)
+		run.Turns[i].Steps, run.Turns[i].Reply = steps, reply
+		run.Turns[i].Compacted = run.Turns[i].Compacted || compacted
+		run.Turns[i].Telemetry = evalTelemetryOf(mine, run.Engine, run.Exe, run.Turns[i].Mode, orchestration, run.Context.EngineInstructions)
+		for _, step := range steps {
+			if step.Kind == evalStepOrbit && (step.Operation == "guide" || step.Operation == "capabilities" || step.Operation == "help") {
+				run.Context.DiscoveryOutput += len(step.Result)
+			}
+		}
+	}
 }
 
 func (s *evalSession) runTurn(engine evalEngine, log *evalTurnLog, timeout time.Duration, run *evalRun) bool {

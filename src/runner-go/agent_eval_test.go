@@ -316,3 +316,57 @@ func TestAgentEvalCLIBatchCannotSkipTheCard(t *testing.T) {
 		})
 	}
 }
+
+// A kept transcript graded again reads exactly as the run was graded: the regrade path a grader fix takes
+// (TestAgentEvalRegrade) re-reads what the engine did, it does not make it up.
+func TestAgentEvalTranscriptsRegradeToTheSameVerdict(t *testing.T) {
+	evalUseScratchHome(t)
+	cases := []struct {
+		scenario string
+		agents   map[int]evalAgent
+	}{}
+	for _, id := range []string{"E1-record-task", "E4-batch-plan", "X1-mcp-missing-cli-fallback"} {
+		agents, follow := goldenAgents(evalScenarioByID(id))
+		_ = follow
+		cases = append(cases, struct {
+			scenario string
+			agents   map[int]evalAgent
+		}{id, agents})
+	}
+	for _, m := range evalMistakes() {
+		if m.Scenario == "X2-approval-declined" || m.Scenario == "E3-create-no-start" {
+			cases = append(cases, struct {
+				scenario string
+				agents   map[int]evalAgent
+			}{m.Scenario, m.Agents})
+		}
+	}
+	for _, c := range cases {
+		sc := evalScenarioByID(c.scenario)
+		_, follow := goldenAgents(sc)
+		run, verdict, clauses := playScripted(t, sc, c.agents, follow)
+		raw, err := json.Marshal(evalTranscript{ScenarioHash: evalScenarioHash(), Scenario: sc.ID, Engine: run.Engine, Backend: run.Backend,
+			Repeat: run.Repeat, Exe: run.Exe, World: run.World, Turns: run.Turns, Events: run.Events, Ledger: run.Ledger,
+			ToolsListed: run.ToolsListed, Context: run.Context, HarnessError: run.HarnessError, DurationMs: run.DurationMs})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tr evalTranscript
+		if err := json.Unmarshal(raw, &tr); err != nil {
+			t.Fatal(err)
+		}
+		again := &evalRun{Scenario: sc, Engine: tr.Engine, Backend: tr.Backend, Repeat: tr.Repeat, Exe: tr.Exe, World: tr.World,
+			Turns: tr.Turns, Events: tr.Events, Ledger: tr.Ledger, ToolsListed: tr.ToolsListed, Context: tr.Context,
+			HarnessError: tr.HarnessError, DurationMs: tr.DurationMs}
+		again.rebuildTurns(sc.Setup.Orchestration)
+		verdict2, clauses2 := again.grade()
+		if verdict2 != verdict || len(clauses2) != len(clauses) {
+			t.Fatalf("%s: regraded %s with %d clauses, graded %s with %d", sc.ID, verdict2, len(clauses2), verdict, len(clauses))
+		}
+		for i := range clauses {
+			if clauses[i].ID != clauses2[i].ID || clauses[i].Passed != clauses2[i].Passed {
+				t.Errorf("%s: clause %s regraded %v, graded %v", sc.ID, clauses[i].ID, clauses2[i].Passed, clauses[i].Passed)
+			}
+		}
+	}
+}

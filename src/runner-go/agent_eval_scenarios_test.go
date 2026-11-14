@@ -579,7 +579,13 @@ func evalScenarioByID(id string) *evalScenario {
 }
 
 // evalSuiteHash names the suite a report was graded with: the scenarios, their words and their clauses.
-func evalSuiteHash() string {
+// evalGraderVersion names how the clauses are checked: a change to a check is a new suite, even when no clause's
+// words change, so a report graded by the old checks never compares as the same suite.
+const evalGraderVersion = 2
+
+// evalScenarioHash names what the agent is put through: the checkout, how the owner answers, and every scenario's
+// setup and words. A run's transcript can be graded again by newer checks only under the same one (TestAgentEvalRegrade).
+func evalScenarioHash() string {
 	var b strings.Builder
 	files := make([]string, 0, len(evalBaseRepo))
 	for path, content := range evalBaseRepo {
@@ -604,10 +610,20 @@ func evalSuiteHash() string {
 		for _, turn := range s.Turns {
 			fmt.Fprintf(&b, "  turn %s %s %q %q\n", turn.Mode, turn.Before, turn.Prompt, turn.FollowUp)
 		}
+	}
+	return sha256Hex([]byte(b.String()))
+}
+
+// evalSuiteHash names the suite a report was graded with: the scenarios (evalScenarioHash), the graders' version and
+// every clause.
+func evalSuiteHash() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "scenarios %s\ngrader %d\n", evalScenarioHash(), evalGraderVersion)
+	for _, s := range evalScenarios() {
 		clauses := s.clauses()
 		sort.SliceStable(clauses, func(i, j int) bool { return clauses[i].ID < clauses[j].ID })
 		for _, c := range clauses {
-			fmt.Fprintf(&b, "  %s %s gate=%v safety=%v %s %q\n", c.ID, c.Kind, c.Gate, c.Safety, c.Failure, c.Says)
+			fmt.Fprintf(&b, "%s %s %s gate=%v safety=%v %s %q\n", s.ID, c.ID, c.Kind, c.Gate, c.Safety, c.Failure, c.Says)
 		}
 	}
 	return sha256Hex([]byte(b.String()))

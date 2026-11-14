@@ -28,6 +28,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,7 +52,45 @@ const (
 	evalRunnerHomeEnv  = "ORBIT_AGENT_EVAL_RUNNER_HOME"
 	evalClaudeBinEnv   = "ORBIT_AGENT_EVAL_CLAUDE_BIN"
 	evalCodexBinEnv    = "ORBIT_AGENT_EVAL_CODEX_BIN"
+	// evalTranscriptsEnv names a directory each live run's transcript is kept in, for TestAgentEvalRegrade. A
+	// transcript holds the engine's words and the tools' answers: it is a local diagnostic, never part of a report,
+	// never uploaded or committed.
+	evalTranscriptsEnv = "ORBIT_AGENT_EVAL_TRANSCRIPTS"
 )
+
+// evalTranscript is one live run as it was played, everything a newer grader needs to judge it again.
+type evalTranscript struct {
+	ScenarioHash  string           `json:"scenarioHash"`
+	Scenario      string           `json:"scenario"`
+	Engine        string           `json:"engine"`
+	Backend       string           `json:"backend"`
+	EngineVersion string           `json:"engineVersion"`
+	Model         string           `json:"model"`
+	Repeat        int              `json:"repeat"`
+	Exe           string           `json:"exe"`
+	Orchestration bool             `json:"orchestration"`
+	World         evalWorldIDs     `json:"world"`
+	Turns         []evalTurnLog    `json:"turns"`
+	Events        []evalEvent      `json:"events"`
+	Ledger        evalLedger       `json:"ledger"`
+	ToolsListed   []string         `json:"toolsListed"`
+	Context       evalContextBytes `json:"context"`
+	HarnessError  string           `json:"harnessError,omitempty"`
+	DurationMs    int              `json:"durationMs"`
+	Skip          *evalSkip        `json:"skip,omitempty"`
+}
+
+func writeEvalTranscript(dir string, tr evalTranscript) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	name := strings.NewReplacer("/", "_", "@", "_").Replace(fmt.Sprintf("%s-%s-%s-%s-%d", tr.Engine, tr.EngineVersion, tr.Model, tr.Scenario, tr.Repeat))
+	raw, err := json.Marshal(tr)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, name+".json"), raw, 0o600)
+}
 
 // evalPinEngine puts bin first on the eval process's PATH as name, for the run: the spawn sites resolve their engine
 // off PATH (spawnClaude, startCodexAppServer), which is how one machine measures two versions of one engine. It
@@ -655,7 +694,14 @@ func TestAgentEvalLive(t *testing.T) {
 		for _, sc := range evalSelectedScenarios() {
 			if reason := evalNotApplicable(sc, engine); reason != "" {
 				t.Logf("%s %s: not applicable: %s", engine, sc.ID, reason)
-				skipped = append(skipped, evalSkip{Scenario: sc.ID, Engine: engine, Reason: reason})
+				skip := evalSkip{Scenario: sc.ID, Engine: engine, Reason: reason}
+				skipped = append(skipped, skip)
+				if dir := os.Getenv(evalTranscriptsEnv); dir != "" {
+					if err := writeEvalTranscript(dir, evalTranscript{ScenarioHash: evalScenarioHash(), Scenario: sc.ID, Engine: engine,
+						Model: "skip", Skip: &skip}); err != nil {
+						t.Errorf("transcript: %v", err)
+					}
+				}
 				continue
 			}
 			for repeat := 1; repeat <= repeats; repeat++ {
@@ -673,7 +719,16 @@ func TestAgentEvalLive(t *testing.T) {
 					t.Fatalf("%s: %v", sc.ID, err)
 				}
 				run := s.play(eng, repeat, turnTimeout)
+				orchestration := s.job.AllowOrchestration
 				s.close()
+				if dir := os.Getenv(evalTranscriptsEnv); dir != "" {
+					if err := writeEvalTranscript(dir, evalTranscript{ScenarioHash: evalScenarioHash(), Scenario: sc.ID, Engine: run.Engine,
+						Backend: run.Backend, EngineVersion: run.EngineVersion, Model: run.Model, Repeat: repeat, Exe: run.Exe,
+						Orchestration: orchestration, World: run.World, Turns: run.Turns, Events: run.Events, Ledger: run.Ledger,
+						ToolsListed: run.ToolsListed, Context: run.Context, HarnessError: run.HarnessError, DurationMs: run.DurationMs}); err != nil {
+						t.Errorf("transcript: %v", err)
+					}
+				}
 				verdict, clauses := run.grade()
 				t.Logf("%s %s %s run %d: %s (%d ms)%s", engine, run.EngineVersion, sc.ID, repeat, verdict, run.DurationMs, evalHarnessNote(run))
 				for _, c := range clauses {
@@ -769,6 +824,77 @@ func TestAgentEvalMergeReports(t *testing.T) {
 	}
 	t.Logf("merged %d reports into %s: %d runs, gate %s", len(reports), paths[0], len(merged.Runs), merged.Gate.Verdict)
 	for _, reason := range merged.Gate.Reasons {
+		t.Logf("  %s", reason)
+	}
+}
+
+// TestAgentEvalRegrade grades kept transcripts again with this code's graders and writes the report
+// (scripts/agent-eval.sh regrade): a grader fix re-reads what the engines did instead of paying for them to do it
+// again. Only a transcript played under this code's scenarios (evalScenarioHash) is read.
+func TestAgentEvalRegrade(t *testing.T) {
+	spec := os.Getenv("ORBIT_AGENT_EVAL_REGRADE")
+	if spec == "" {
+		t.Skip("set ORBIT_AGENT_EVAL_REGRADE=OUT.json,TRANSCRIPT_DIR (scripts/agent-eval.sh regrade)")
+	}
+	parts := strings.SplitN(spec, ",", 2)
+	if len(parts) != 2 {
+		t.Fatalf("ORBIT_AGENT_EVAL_REGRADE=%q names no transcript directory", spec)
+	}
+	entries, err := os.ReadDir(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runs []*evalRun
+	var skipped []evalSkip
+	seenSkips := map[string]bool{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(parts[1], entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var tr evalTranscript
+		if err := json.Unmarshal(raw, &tr); err != nil {
+			t.Fatalf("%s: %v", entry.Name(), err)
+		}
+		if tr.ScenarioHash != evalScenarioHash() {
+			t.Fatalf("%s was played under scenarios %.12s, this code's are %.12s", entry.Name(), tr.ScenarioHash, evalScenarioHash())
+		}
+		if tr.Skip != nil {
+			if key := tr.Skip.Scenario + "|" + tr.Skip.Engine; !seenSkips[key] {
+				seenSkips[key] = true
+				skipped = append(skipped, *tr.Skip)
+			}
+			continue
+		}
+		sc := evalScenarioByID(tr.Scenario)
+		if sc == nil {
+			t.Fatalf("%s names no scenario of this suite", entry.Name())
+		}
+		run := &evalRun{Scenario: sc, Engine: tr.Engine, Backend: tr.Backend, EngineVersion: tr.EngineVersion, Model: tr.Model,
+			Repeat: tr.Repeat, Exe: tr.Exe, World: tr.World, Turns: tr.Turns, Events: tr.Events, Ledger: tr.Ledger,
+			ToolsListed: tr.ToolsListed, Context: tr.Context, HarnessError: tr.HarnessError, DurationMs: tr.DurationMs}
+		run.rebuildTurns(tr.Orchestration)
+		runs = append(runs, run)
+	}
+	sort.SliceStable(runs, func(i, j int) bool {
+		a, b := runs[i], runs[j]
+		if a.Engine+a.Model != b.Engine+b.Model {
+			return a.Engine+a.Model < b.Engine+b.Model
+		}
+		if a.Scenario.ID != b.Scenario.ID {
+			return a.Scenario.ID < b.Scenario.ID
+		}
+		return a.Repeat < b.Repeat
+	})
+	rep := buildEvalReport(runs, evalRepoSHA(), nil, skipped...)
+	if err := writeEvalReport(rep, parts[0]); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("regraded %d runs into %s: gate %s", len(runs), parts[0], rep.Gate.Verdict)
+	for _, reason := range rep.Gate.Reasons {
 		t.Logf("  %s", reason)
 	}
 }
