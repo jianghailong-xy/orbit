@@ -88,6 +88,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         awaitTag("managed-runner-notice")
         awaitText("Preparing your managed runner")
         verify("one ensure", calls.count { it.startsWith("POST managed-runner/ensure") } == 1)
+        verify("its page says no Offline", !exists(hasText("Offline"), unmerged = true))
         capture("03-runner-page")
 
         back()
@@ -100,11 +101,18 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         verify("asleep says when it wakes", exists(hasText(ManagedRunner.Asleep.ROW), unmerged = true))
         verify("the managed runner is no Needs you line", !exists(hasText("managed-runner is offline", substring = true), unmerged = true))
         capture("05-asleep-row")
+    }
 
+    /** The drawer reads its workspaces at sign-in (a real server's event brings a new one in later; this fixture sends none), so this
+     * journey starts with the managed runner already mapped and asleep: its workspace row says Asleep, never Offline. */
+    @Test fun theDrawersManagedWorkspaceSaysAsleep() = journey {
+        state = "SLEEPING"
+        signIn()
         compose.onAllNodesWithContentDescription("Open navigation").onFirst().performClick()
         await("the drawer's managed workspace row says Asleep", timeoutMs = 60_000) {
             exists(hasText("managed-runner · Asleep", substring = true), unmerged = true)
         }
+        verify("no workspace row says Offline", !exists(hasText("Offline", substring = true), unmerged = true))
         capture("06-drawer-asleep")
     }
 

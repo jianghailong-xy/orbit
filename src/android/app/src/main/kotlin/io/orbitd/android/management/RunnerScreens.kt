@@ -510,7 +510,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     }
                 }
             }
-            RunnerResourcesSection(api, runner, workspaces, now, online = !offline, resumed = resumed)
+            RunnerResourcesSection(api, runner, workspaces, now, online = !offline, resumed = resumed, awayLabel = managedRow?.label)
             RunnerCapacity(runner, now, model, notice, api)
             // Cursor CLI's row on every machine once one of the account's knows it (RunnerPage.engines), and the footer says it is the one
             // CLI kept on a pinned build (iOS 2 ②).

@@ -226,6 +226,9 @@ class ManagedRunnerEntryTest {
         await("Managed runner asleep")
         compose.onNode(hasText("Managed runner asleep") and hasAnyAncestor(hasTestTag("managed-runner-notice")), useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Asleep · ${ManagedRunner.Asleep.ROW}", useUnmergedTree = true).assertExists()
+        // Its Resources section says Asleep too, not the Offline another machine says there.
+        compose.onAllNodesWithText(RunnerCopy.RESOURCES_OFFLINE, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText(RunnerCopy.RESOURCES, useUnmergedTree = true).assertCountEquals(1)
         none("is offline")
     }
 
