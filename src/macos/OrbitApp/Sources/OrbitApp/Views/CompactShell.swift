@@ -87,6 +87,9 @@ struct CompactShell: View {
                 // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
                 // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
+                    // The needs-you bar over a page with none of its own, inside the sliding card
+                    // so it travels with the page it covers (see `needsYouOverPage`).
+                    .needsYouOverPage(wide: false)
                     // An opaque backing *inside* the sliding content so its translucent bars — the
                     // transcript is a `.scrollContentBackground(.hidden)` (see-through) list, with `.bar`
                     // material on the status line / worktree bar / composer — sample a surface that
