@@ -542,6 +542,7 @@ import {
   recordRunnerBeat,
   runnerLastBeatAt,
 } from '../runners/runner-presence';
+import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -1953,6 +1954,7 @@ export class RunnerApiController {
         namedSessionIds: named,
         supervisedSessionIds: supervised,
         planUsageDigest: digests.facts.planUsage ?? null,
+        resources: sanitizeRunnerResources(dto?.resources),
       });
     } catch (error) {
       // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
@@ -2207,6 +2209,13 @@ export class RunnerApiController {
         linkState: link ? 'LINK' : 'HTTP',
         at: beatAt,
       }).catch(beatLost);
+      // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
+      const resources = sanitizeRunnerResources(dto?.resources);
+      if (resources) {
+        await recordRunnerResources(this.prisma, runner.id, resources).catch((error) =>
+          this.logger.warn(`runner ${runner.id}: resources not recorded this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`),
+        );
+      }
     }
     // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
     // like the relays below: a read that fails hands out this beat's work as usual, and the instance,

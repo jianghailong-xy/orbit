@@ -11,6 +11,7 @@ import OrbitKit
 /// live in `WorktreeBarLogic`; this view just renders them.
 struct WorktreeBar: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openURL) private var openURL
     let console: ConsoleModel
     /// The bar opens one sheet at a time — the session's diff, or the merge recovery's review — so
     /// they share one `.sheet(item:)` host rather than stacking two `.sheet`s on the container.
@@ -57,7 +58,8 @@ struct WorktreeBar: View {
                                          changedFileCount: files.count,
                                          mergeStatus: d?.mergeStatus,
                                          commitStatus: d?.commitStatus,
-                                         hasMergeRecovery: d?.mergeRecovery != nil) {
+                                         hasMergeRecovery: d?.mergeRecovery != nil,
+                                         hasSourceLanding: d?.sourceLanding != nil) {
             case .hidden:
                 EmptyView()
             case .notIsolated:
@@ -175,6 +177,10 @@ struct WorktreeBar: View {
         let manualMergeCmd = failure != nil && d.commitStatus != "error"
             ? WorktreeBarLogic.manualMergeCommand(mergeTarget: d.mergeTarget, branch: branch)
             : nil
+        // Work handed to the platform to land (board docs/mocks/session-landing-slot-ios): the landing
+        // is the one state the card says, so the merge control gives way to it — its second row while
+        // it is on its way, a chip at the end of this row once it settled.
+        let landing = SessionProjectLandings.sourceSlot(d.sourceLanding, membership: d.projectMembership)
 
         return VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
@@ -190,7 +196,12 @@ struct WorktreeBar: View {
                     // under narrow width.
                     switch primary {
                     case .commit: WorktreeCommitControl(console: console, detail: d, turnActive: turnActive).layoutPriority(2)
-                    case .merge:  WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
+                    case .merge:
+                        if let landing {
+                            if !landing.isRow { landingChip(landing, sessionID: d.sourceLanding?.landingSessionId) }
+                        } else {
+                            WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
+                        }
                     case .none:   EmptyView()
                     }
                 }
@@ -215,6 +226,9 @@ struct WorktreeBar: View {
             if commitFailure == nil, let recovery = d.mergeRecovery {
                 Divider()
                 MergeRecoveryRow(recovery: recovery, working: d.mergeStatus == "pending") { sheet = .recovery }
+            } else if let landing, landing.isRow {
+                SourceLandingRow(slot: landing) { openLanding(d.sourceLanding?.landingSessionId) }
+                    .padding(.horizontal, 6).padding(.bottom, 6).padding(.top, 2)
             }
         }
         // The same subtle tint the tray uses, NOT `.bar`: the two are peers in the stack and have to
@@ -223,6 +237,26 @@ struct WorktreeBar: View {
         // carries no surface of its own.
         .composerBandCard()
         .padding(.bottom, .composerBandGap)
+    }
+
+    /// A settled landing at the end of the branch row, where "✓ Merged" stands for a merge by hand;
+    /// it opens the landing session, as the open row does.
+    private func landingChip(_ slot: SourceLandingSlot, sessionID: String?) -> some View {
+        Button { openLanding(sessionID) } label: {
+            Text("\(slot.text) ›")
+                .font(.orbitLabel.weight(.semibold))
+                .foregroundStyle(slot.kind == .landed ? Color.green : Color.secondary)
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+        .layoutPriority(2)
+    }
+
+    private func openLanding(_ sessionID: String?) {
+        guard let sessionID, !sessionID.isEmpty,
+              let url = URL(string: "orbit-session:\(PublicID.toPublic(sessionID))") else { return }
+        PlatformHaptics.tap()
+        openURL(url)
     }
 
     @ViewBuilder
@@ -289,7 +323,8 @@ struct WorktreeBar: View {
                 .foregroundStyle(.secondary))
             .font(.orbitMono)
             .lineLimit(1)
-            .truncationMode(.tail)
+            // The count is the row's reading: it keeps its width and the branch name gives way first.
+            .fixedSize()
     }
 
     private func failureView(message: String, manualMergeCommand: String?) -> some View {
@@ -394,16 +429,22 @@ private struct WorktreeMergeControl: View {
                 }
             } else {
                 let target = picked ?? detail.mergeTarget ?? defaultTarget
-                mergeSplit(title: "Retry merge to \(target ?? "main")",
+                mergeSplit(title: "Retry merge to \(targetName(target))",
                            tint: .red, busy: busy, primaryTarget: target,
                            targets: targets, currentTarget: target)
             }
         } else {
             let target = picked ?? defaultTarget
-            mergeSplit(title: "Merge to \(target ?? "main")",
+            mergeSplit(title: "Merge to \(targetName(target))",
                        tint: .accentColor, busy: busy, primaryTarget: target,
                        targets: targets, currentTarget: target)
         }
+    }
+
+    /// The target as the button says it: the project's title for the project's own line, never
+    /// `project/<id>`; the caret's list still names every branch in full.
+    private func targetName(_ target: String?) -> String {
+        SessionProjectLandings.targetName(target ?? "main", membership: detail.projectMembership)
     }
 
     /// Divergence flag + Adopt action, shown in the merge slot when the worktree's real HEAD has

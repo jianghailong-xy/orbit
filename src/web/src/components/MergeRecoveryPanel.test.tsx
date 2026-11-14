@@ -426,3 +426,24 @@ it('a pending operation is one line: what, since when, where — and says so onc
   expect(container.textContent).toBe('Still checking main against origin/main· started 12m ago on mac-mini· mac-mini last reported 11m ago');
   expect(container.querySelector('button')).toBeNull();
 });
+
+it('a failed merge on a ready check says it failed and why, above the same Merge', async () => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  container = document.createElement('div'); document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => root!.render(<MergeRecoveryPanel recovery={fastForward} message={'push rejected: fetch first\nhint: run git pull'}
+    busy={false} supported failed onAction={vi.fn()} onRepair={vi.fn()} />));
+  expect(container.querySelector('strong')?.textContent).toBe('The merge into develop didn’t go through');
+  expect(container.querySelector('.wt-recovery-failure')?.textContent).toBe('push rejected: fetch first');
+  expect(container.querySelector('.wt-recovery-more pre')?.textContent).toBe('push rejected: fetch first\nhint: run git pull');
+  expect(primaryOf(container).textContent).toBe('Merge into develop');
+});
+
+it('a conflict counts its files in the title, and resolving them is the one primary step', async () => {
+  const replay = await mount(conflicted);
+  expect(replay.element.querySelector('strong')?.textContent).toBe('2 files conflict with origin/develop');
+  expect(primaryOf(replay.element).textContent).toBe('Resolve in repair session');
+  await act(async () => root!.unmount()); root = null; container?.remove();
+  const sync = await mount({ ...conflicted, phase: 'TARGET_SYNC', conflicts: [AGENTS] });
+  expect(sync.element.querySelector('strong')?.textContent).toBe('Local develop and origin/develop conflict in 1 file');
+});

@@ -26,6 +26,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.guests.GuestSession
+import io.orbitd.android.core.guests.guestSession
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.cards.number
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
@@ -77,7 +80,13 @@ fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: Orbi
         if (kind != null) return@LaunchedEffect
         kind = try { SessionKind.of(api.objectRead(listOf("sessions", id))) }
         catch (cancel: CancellationException) { throw cancel }
-        catch (_: Exception) { app.landingJobs.snapshot(handle, id)?.let { SessionKind.Landing(it.projectId, null) } ?: SessionKind.Conversation }
+        catch (failure: Exception) {
+            app.landingJobs.snapshot(handle, id)?.let { SessionKind.Landing(it.projectId, null) }
+                // No session of yours: one someone invited you to reply in opens its guest view here (web `WorkspaceConsole`'s
+                // `asGuest`, board docs/mocks/share-links/11-guest-one-link). Asked only once the owner's read is refused.
+                ?: (if (failure is ApiError && failure.status in setOf(403, 404)) guestKind(app, handle, id) else null)
+                ?: SessionKind.Conversation
+        }
     }
     when (val shown = kind) {
         null -> Box(Modifier.fillMaxSize().testTag("session-opening"), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -88,13 +97,22 @@ fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: Orbi
             }
         } else ProjectLandingsWindow(app, handle, route, api, shown.projectId, id, open, shown.detail)
         SessionKind.Conversation -> SessionReader(app, handle, route, api, data, open, leave, swap)
+        is SessionKind.Guest -> GuestSessionPage(app, handle, route, id, shown.root)
     }
 }
+
+/** The guest door's answer for [id], when it has one: the root the guest view opens on. */
+private suspend fun guestKind(app: OrbitApplication, handle: SessionHandle, id: String): SessionKind? =
+    try { SessionKind.Guest(app.session.guestSession(handle, id)) }
+    catch (cancel: CancellationException) { throw cancel }
+    catch (_: Exception) { null }
 
 /** What a session id turned out to be: a conversation, or a landing of a project (with the detail that said so, when it was read). */
 internal sealed interface SessionKind {
     data object Conversation : SessionKind
     data class Landing(val projectId: String, val detail: JsonObject?) : SessionKind
+    /** Not the reader's: a session shared with them, as the guest door first answered it. */
+    data class Guest(val root: GuestSession) : SessionKind
 
     companion object {
         fun of(detail: JsonObject): SessionKind = if (!LandingSessionModel.isLanding(detail)) Conversation

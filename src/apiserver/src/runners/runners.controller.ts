@@ -91,6 +91,14 @@ export class RunnersController {
     return this.runners.getRunner(user.userId, id);
   }
 
+  /** The machine's CPU, memory and disk: its latest reading and its last hour (runner-resources.ts). Polled by the
+   *  machine page's Resources section. Owner-scoped: anyone else's is a 404. */
+  @PatScope('runners:read', { workspaceConfinable: false })
+  @Get(':id/resources')
+  resources(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.runners.getResources(user.userId, id);
+  }
+
   @PatForbidden('RUNNER_CONTROL')
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateRunnerDto) {

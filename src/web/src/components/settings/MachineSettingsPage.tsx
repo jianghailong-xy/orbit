@@ -43,7 +43,6 @@ import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../../lib/repoCleanup';
 import {
   KEEP_FREE_TIERS,
   compareRunnerVersions,
-  formatDiskGb,
   keepFreeLabel,
   latestRunnerVersion,
   runnerAttention,
@@ -65,7 +64,6 @@ import {
   RUNNER_CAPACITY,
   RUNNER_CAPACITY_FOOTER,
   RUNNER_COPY_COMMAND,
-  RUNNER_DISK,
   RUNNER_ENGINES,
   RUNNER_ENGINES_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
@@ -93,7 +91,6 @@ import {
   RUNNER_VERSION_LATEST,
   RUNNER_VERSION_NOT_ROLLED_OUT,
   attentionQuotaResets,
-  runnerDiskUsed,
   runnerOfflineLastSeen,
   runnerRunningOf,
   runnerUpdatedFromTo,
@@ -109,6 +106,7 @@ import { useClaudeRegionCheckAgain } from '../../lib/claudeRegion';
 import { CLAUDE_REGION_CHECK_AGAIN } from '../../lib/claudeRegionCopy';
 import { ago } from '../../lib/runnerEngines';
 import { useToast } from '../../lib/toast';
+import { MachineResources } from './MachineResources';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsBlocks';
 import './Settings.css';
 
@@ -163,8 +161,6 @@ const fmtReset = (iso: string): string =>
     minute: '2-digit',
   });
 
-const MIB = 1024 * 1024;
-
 /** Each Needs Attention card's mark, by what it is about. */
 const ATTENTION_ICON: Record<AttentionKind, ReactNode> = {
   offline: <DisconnectOutlined />,
@@ -205,6 +201,24 @@ export function machinePagePollMs(runners: Runner[] | undefined, runnerId: strin
         !!r.engines?.some((e) => e.engine === r.accountRemove?.engine &&
           e.accounts?.some((a) => a.id === r.accountRemove?.account))));
   return inFlight ? 4_000 : 15_000;
+}
+
+/** Whether one line of an engine-update report is a failure: the runner's own rule for failing the
+ *  whole run (`updateRunFailed`, src/runner-go/engineinstall.go), read per line. */
+function engineUpdateLineFailed(line: string): boolean {
+  return line.includes('update failed') || line.includes('timed out') || line.includes('does not run');
+}
+
+/** The lines of an update run that need the person reading it: the failures, and an install Orbit
+ *  is not allowed to replace (only its owner can update it). Everything else — current, updated,
+ *  pinned, waiting for sessions to finish, retried on the next pass — sorts itself out, and listing
+ *  it buried the one line that mattered. Phrases are the runner's, src/runner-go/engineupdate.go. */
+function engineUpdateReportLines(message: string | null | undefined): string[] {
+  if (!message) return ['Nothing to update.'];
+  const lines = message
+    .split('\n')
+    .filter((line) => engineUpdateLineFailed(line) || line.includes('owned by another user'));
+  return lines.length > 0 ? lines : ['Nothing here needs your attention.'];
 }
 
 export function MachineSettingsPage() {
@@ -365,10 +379,10 @@ export function MachineSettingsPage() {
   const nowMs = Date.now();
   const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion });
 
-  // Capacity's readings: the tightest disk its workspaces sit on, and the floor it keeps free.
+  // The tightest disk its workspaces sit on (Resources' Disk, for a runner that reads none itself), and the floor
+  // it keeps free.
   const disk = runnerDisk(workspaces);
   const reserveMb = runner.minFreeDiskMb != null && runner.minFreeDiskMb > 0 ? runner.minFreeDiskMb : null;
-  const diskWarn = !!disk && (disk.usedPercent >= 90 || (reserveMb !== null && disk.freeBytes < reserveMb * MIB));
   // Keep Free's picks, as minFreeDiskMb with 0 standing for Off (a Select value can't be null). A
   // floor set to something other than a tier is shown as it is, in order, rather than as "Off".
   const keepFreeOptions = [
@@ -722,6 +736,16 @@ export function MachineSettingsPage() {
         </section>
       )}
 
+      {/* The machine's CPU, memory and disk, and their last hour (MachineResources.tsx). */}
+      <MachineResources
+        runnerId={runner.id}
+        online={!!runner.online}
+        capabilities={runner.capabilities}
+        workspaceDisk={disk}
+        reserveMb={reserveMb}
+        nowMs={nowMs}
+      />
+
       {/* A row per engine, each with what can be done there now — Sign in, Sign out, Install, Update —
           and its accounts under it: the rows of this machine's card in Infrastructure. */}
       <SettingsSection
@@ -732,14 +756,22 @@ export function MachineSettingsPage() {
         {/* The run's report. Unlike an install it is not retired by the next probe: the summary —
             what moved, what was skipped and why — exists nowhere else once it's gone. */}
         {updating && relay?.status && (
-          <div className={`rd-engine-relay${relay.status === 'failed' ? ' bad' : ''}`}>
-            <div className="rd-engine-relay-row">
-              {relay.status === 'pending'
-                ? 'Queued — the runner picks this up on its next check-in.'
-                : relay.status === 'installing'
-                  ? 'Updating this machine’s engine CLIs…'
-                  : relay.message || 'Nothing to update.'}
-            </div>
+          <div className="rd-engine-relay">
+            {relay.status === 'pending' || relay.status === 'installing' ? (
+              <div className="rd-engine-relay-row">
+                {relay.status === 'pending'
+                  ? 'Queued — the runner picks this up on its next check-in.'
+                  : 'Updating this machine’s engine CLIs…'}
+              </div>
+            ) : (
+              // Only the engines that need someone, and the failed ones in red: a whole red card
+              // made six engines that were fine read as broken beside the one that wasn't.
+              engineUpdateReportLines(relay.message).map((line, index) => (
+                <div key={index} className={`rd-engine-relay-row${engineUpdateLineFailed(line) ? ' bad' : ''}`}>
+                  {line}
+                </div>
+              ))
+            )}
             {relay.status !== 'pending' && relay.command && (
               <div className="rd-engine-relay-hint">
                 Orbit ran <code className="re-cmd">{relay.command}</code>
@@ -794,19 +826,6 @@ export function MachineSettingsPage() {
                     onPressEnter={commitMaxConcurrent}
                   />
                 </span>
-              }
-            />
-            <SettingsRow
-              title={RUNNER_DISK}
-              description={
-                disk ? runnerDiskUsed(formatDiskGb(disk.totalBytes - disk.freeBytes), formatDiskGb(disk.totalBytes)) : '—'
-              }
-              control={
-                disk ? (
-                  <div className={`rd-disk-bar machine-disk-bar${diskWarn ? ' warn' : ''}`}>
-                    <span style={{ width: `${disk.usedPercent}%` }} />
-                  </div>
-                ) : undefined
               }
             />
             <SettingsRow

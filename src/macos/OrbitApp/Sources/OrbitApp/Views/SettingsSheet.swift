@@ -1123,6 +1123,7 @@ private struct SharedLinksSettingsPage: View {
 
     @State private var tab: SharedLinksList.Tab = .active
     @State private var pendingTurnOff: OrbitKit.ShareLink?
+    @State private var sharing: OrbitKit.ShareLink?
     @State private var notice: String?
 
     var body: some View {
@@ -1166,6 +1167,13 @@ private struct SharedLinksSettingsPage: View {
         .navigationTitle(SharedLinksList.title)
         .task { await model.sharedLinks?.load() }
         .refreshable { await model.sharedLinks?.load() }
+        // A row's press and its ⋯ → Settings… open the link's own Share panel; what changed there is
+        // read back when it closes.
+        .sheet(item: $sharing, onDismiss: { Task { await model.sharedLinks?.load() } }) { link in
+            if let base = model.baseURL {
+                ShareSheet(kind: link.kind, rootID: link.root.id, baseURL: base, tokenStore: model.tokenStore)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -1184,7 +1192,58 @@ private struct SharedLinksSettingsPage: View {
         Binding(get: { pendingTurnOff != nil }, set: { if !$0 { pendingTurnOff = nil } })
     }
 
+    /// One link (docs/mocks/share-links/13-row-buttons, web's row): a press opens an active link's
+    /// Share panel; a borderless copy button stays out; the rest is in its ⋯ and its long-press menu,
+    /// Turn off… last. A swipe still turns it off.
     private func row(_ link: OrbitKit.ShareLink) -> some View {
+        let url = link.state == .active ? model.baseURL.map { SharedLinksList.publicURL(link, base: $0) } : nil
+        return HStack(spacing: 12) {
+            if SharedLinksList.opens(link) {
+                Button { sharing = link } label: { words(link) }
+                    .buttonStyle(.plain)
+            } else {
+                words(link)
+            }
+            if let url {
+                Button { copy(url) } label: {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(SharePanelCopy.copyLink)
+            }
+            if SharedLinksList.canTurnOff(link) {
+                Menu { menuItems(link, url: url) } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(SharedLinksList.moreLabel(link))
+            }
+        }
+        .padding(.vertical, 2)
+        .swipeActions(edge: .trailing) {
+            if SharedLinksList.canTurnOff(link) {
+                Button(SharePanelCopy.turnOff, role: .destructive) { pendingTurnOff = link }
+            }
+        }
+        .contextMenu { menuItems(link, url: url) }
+        // On the link's own row — the swipe, the ⋯ and the long-press menu all raise it — so the panel opens
+        // against that row rather than at the top of the page.
+        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
+                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
+            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharePanelCopy.turnOffDetail)
+        }
+    }
+
+    private func words(_ link: OrbitKit.ShareLink) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(link.root.title ?? SharedLinksList.kindWord(link.kind))
                 .lineLimit(2)
@@ -1195,40 +1254,36 @@ private struct SharedLinksSettingsPage: View {
                 .font(.orbitListSubtitle)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
-        .swipeActions(edge: .trailing) {
-            if SharedLinksList.canTurnOff(link) {
-                Button(SharePanelCopy.turnOff, role: .destructive) { pendingTurnOff = link }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    /// The ⋯ and the long-press menu alike: an active link's Copy Link, Share Link… and Settings…,
+    /// then Turn off… for any link that can still be ended.
+    @ViewBuilder
+    private func menuItems(_ link: OrbitKit.ShareLink, url: URL?) -> some View {
+        if let url {
+            Button { copy(url) } label: {
+                Label(SharePanelCopy.copyLink, systemImage: "doc.on.doc")
+            }
+            SwiftUI.ShareLink(item: url) {
+                Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
+            }
+            Button { sharing = link } label: {
+                Label(SharedLinksList.settings, systemImage: "slider.horizontal.3")
             }
         }
-        .contextMenu {
-            if link.state == .active, let base = model.baseURL {
-                let url = SharedLinksList.publicURL(link, base: base)
-                Button {
-                    UIPasteboard.general.url = url
-                    show(SharePanelCopy.linkCopied)
-                } label: {
-                    Label(SharePanelCopy.copyLink, systemImage: "doc.on.doc")
-                }
-                SwiftUI.ShareLink(item: url) {
-                    Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
-                }
-            }
-            if SharedLinksList.canTurnOff(link) {
-                Button(role: .destructive) { pendingTurnOff = link } label: {
-                    Label(SharePanelCopy.turnOff, systemImage: "xmark.circle")
-                }
+        if SharedLinksList.canTurnOff(link) {
+            if url != nil { Divider() }
+            Button(role: .destructive) { pendingTurnOff = link } label: {
+                Label(SharedLinksList.turnOffMenu, systemImage: "xmark.circle")
             }
         }
-        // On the link's own row — the swipe and the long-press menu both raise it — so the panel opens
-        // against that row rather than at the top of the page.
-        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
-                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
-            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharePanelCopy.turnOffDetail)
-        }
+    }
+
+    private func copy(_ url: URL) {
+        UIPasteboard.general.url = url
+        show(SharePanelCopy.linkCopied)
     }
 
     private func turnOff(_ link: OrbitKit.ShareLink) async {

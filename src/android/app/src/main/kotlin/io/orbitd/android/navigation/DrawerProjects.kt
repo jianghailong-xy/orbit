@@ -116,7 +116,7 @@ fun ProjectsDrawerCount(state: DrawerProjectsState) {
 /** A drawer group's label and how many rows it heads (iOS `CompactShell.drawerGroupLabel`): the title as the drawer's other heading
  * writes it ([io.orbitd.android.directory.SectionHeading]), the count beside it in the meta size. */
 @Composable
-private fun DrawerGroupLabel(title: String, count: Int) {
+internal fun DrawerGroupLabel(title: String, count: Int) {
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).semantics(mergeDescendants = true) { heading() }.testTag("drawer-group:$title"),
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

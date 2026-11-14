@@ -1111,6 +1111,10 @@ model RunnerPresence {
   /// gateway opened a new connection for it, or when a link beat came after it missed one. Null until either has
   /// (migration 0450). What the reaper reads a mass disconnection off once the runner is back.
   lostAt        DateTime? @map("lost_at")
+  /// The machine's CPU, memory and disk as its beats report them, and its last hour of them (migration 0720):
+  /// {at, latest, samples: [[ms, cpu %, memory %, disk %], …]}. Null until the runner reports one; a beat without
+  /// one leaves it as it is (runners/runner-presence.ts).
+  resources     Json?     @map("resources")
 
   @@map("runner_presence")
 }

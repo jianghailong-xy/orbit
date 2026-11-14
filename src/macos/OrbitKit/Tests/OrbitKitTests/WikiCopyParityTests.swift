@@ -376,8 +376,9 @@ final class WikiCopyParityTests: XCTestCase {
         let page = try source(Self.page)
         let head = try slice(page, from: "function WikiHeadSpace(", to: "/** The status row")
         assertOrder(head, ["const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);", "if (spaces.length < 2) {",
-                           "<span className=\"wk-space-tag\"", "{wikiSpaceOption(names.get(row.id) ?? row.title, row)}"],
-                    "the head's space")
+                           "<span className=\"wk-space-tag\"", "textValue: wikiSpaceOption(names.get(row.id) ?? row.title, row),",
+                           "{ key: 'manage', label: WIKI_MANAGE_SPACES,"],
+                    "the head's space: a label alone, a menu among several ending at Manage spaces (board docs/mocks/wiki-space-menu)")
         assertSays(page, "wikiDefaultSpace(spaces.data ?? [], { workspaceId: readWikiFromWorkspace(), lastSlug: readWikiLastSpace() })",
                    in: Self.page)
         let rules = try source(Self.spaceLib)
