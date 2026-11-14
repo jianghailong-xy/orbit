@@ -274,6 +274,8 @@ func TestWriteKimiHomeMCPConfigWritesTheRecordShape(t *testing.T) {
 				"command": "/opt/orbit",
 				"args":    []interface{}{"mcp"},
 				"env":     map[string]interface{}{},
+				// Past the longest wait `orbit mcp` holds, instead of Kimi's 60-second default.
+				"toolTimeoutMs": float64(kimiOrbitMCPToolTimeout / time.Millisecond),
 			},
 		},
 	}

@@ -211,6 +211,8 @@ export interface UserPreferences {
   translationEnabled?: boolean;
   /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
   translationLanguage?: TranslationLanguage;
+  /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
+  subagentBlockedProviders?: string[];
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */

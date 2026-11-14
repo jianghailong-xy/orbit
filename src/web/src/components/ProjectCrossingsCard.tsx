@@ -364,6 +364,8 @@ export function CrossingRow({
  * server does not say this about — an older server — stays: a duplicate beats an unanswerable one.
  */
 export function answeredInConversation(row: ProjectCrossingRow): boolean {
+  // A move out of every project has no target: the source's coordinator draws it instead.
+  if (row.toProjectId == null) return row.fromProject?.coordinatorSessionId != null;
   return row.toProject?.coordinatorSessionId != null;
 }
 

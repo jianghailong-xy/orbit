@@ -51,6 +51,7 @@ import {
   MAX_API_ERROR_RETRIES,
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
+  delegateLaunchReceipt,
   progressBadge,
   QUESTION_RECORD_COPY,
   questionAnswerLine,
@@ -62,8 +63,10 @@ import {
   workflowTitle,
   type AskedQuestion,
   type QuestionOutcome,
+  type SubagentRunView,
   type TaskProgress,
 } from '@orbit/shared';
+import { DELEGATE_TOOL, delegateResultText, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import {
@@ -1703,6 +1706,14 @@ export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TA
 type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
 const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
 
+/** The session's SubAgent runs by `delegate` call (lib/subagentRuns.ts). Empty where nothing reads them: a
+ *  share page, an export. */
+export const SubagentRunsCtx = createContext<ReadonlyMap<string, SubagentRunView>>(new Map());
+
+/** What each SubAgent is waiting for a person to approve, by its `delegate` call: the action of the card it asked
+ *  in the parent's approval area (docs/subagent-design.md §5.3). Empty where no card can be answered. */
+export const SubagentWaitingCtx = createContext<ReadonlyMap<string, string>>(new Map());
+
 function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
   const translating = useContext(TranslationCtx)?.on === true;
@@ -1861,12 +1872,14 @@ export const Transcript = memo(function Transcript({
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
   const ended = useMemo(() => endedTaskProgress(events), [events]);
+  // A SubAgent runs for as long as its run says so: a background one's call answered at once.
+  const subagentRuns = useContext(SubagentRunsCtx);
   const taskLookup = useMemo<TaskLookup>(
     () => ({
       progress: (id) => activity.live.get(id) ?? ended.get(id) ?? null,
-      running: (id) => activity.running.has(id),
+      running: (id) => activity.running.has(id) || subagentRuns.get(id)?.status === 'RUNNING',
     }),
-    [activity, ended],
+    [activity, ended, subagentRuns],
   );
   // Where each insert goes: after the last top-level card at or before its seq, keyed by that
   // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
@@ -4359,9 +4372,10 @@ function resultRepeatsBody(node: ToolNode): boolean {
   return !!batchTasks(node);
 }
 
-/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow. */
+/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow — and
+ *  Orbit's own SubAgent (`delegate`). */
 function isBackgroundTaskCall(name: string): boolean {
-  return name === 'Agent' || name === 'Task' || name === 'Workflow';
+  return name === 'Agent' || name === 'Task' || name === 'Workflow' || name === DELEGATE_TOOL;
 }
 
 /**
@@ -4374,6 +4388,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
   const content = node.result?.content;
   if (!content || node.result?.isError) return false;
   if (node.name === 'Workflow') return !!workflowLaunchReceipt(content);
+  if (node.name === DELEGATE_TOOL) return !!delegateLaunchReceipt(content);
   return (node.name === 'Agent' || node.name === 'Task') && isAsyncAgentLaunchAck(content);
 }
 
@@ -4453,11 +4468,20 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // events are appended, and a refetched payload is held in state), so this holds the computed
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
-  const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
+  const { label, summary, summaryMono, body, icon, tone, path, meta: toolMeta, tag } = useMemo(
     () => describeTool(node.name, input, isShell, outcome),
     [node.name, input, isShell, outcome],
   );
-  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
+  // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
+  const isDelegate = node.name === DELEGATE_TOOL;
+  const run = useContext(SubagentRunsCtx).get(node.id);
+  const meta = isDelegate ? subagentMeta(run) ?? undefined : toolMeta;
+  const why = isDelegate ? subagentWhy(run) : null;
+  const waitingFor = useContext(SubagentWaitingCtx).get(node.id);
+  const waitingLine = isDelegate && waitingFor ? (
+    <div className="chat-subagent-waiting">Waiting for approval · {waitingFor}</div>
+  ) : null;
+  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent' || isDelegate;
   const isBackgroundTask = isBackgroundTaskCall(node.name);
   const launchReceipt = isLaunchReceipt(node);
   // A workflow is named by its launch receipt once that lands — see describeTool.
@@ -4511,6 +4535,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
           ) : (
             title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
           )}
+          {tag && <span className="chat-tool-tag">{tag}</span>}
           {isBackgroundTask ? (
             <TaskBadgeAndStatus node={node} live={live} meta={meta} />
           ) : outcome?.kind === 'replied' ? (
@@ -4523,7 +4548,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             </>
           )}
         </div>
-        {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
+        {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
         {questions.length > 0 && !(hasDetail && open) && (
           <QuestionFolded
             questions={questions}
@@ -4533,6 +4558,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
         )}
         {hasDetail && open && (
           <div className="chat-tool-detail">
+            {why && <SubagentWhy why={why} run={run} />}
             {/* A failed call is opened to find out why, and the input is rarely the answer — a
                 heredoc alone clamps to sixteen lines, which is enough to push the reason off the
                 bottom of the card. Put the error first when there is one; everywhere else the
@@ -4559,17 +4585,22 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
                 <div className="chat-tool-body">{body}</div>
               </details>
             ) : <div className="chat-tool-body">{body}</div>)}
-            {node.name !== 'Workflow' && node.children.length > 0 && (
+            {node.name !== 'Workflow' && (node.children.length > 0 || waitingLine) && (
               <div className="chat-subagent">
                 <NodeList nodes={node.children} live={live} />
+                {waitingLine}
               </div>
             )}
             {/* A sub-agent's totals close its transcript rather than open it. */}
             {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
             {/* A question's result, once read, is only the replay above said again. */}
-            {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
-              <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
-            )}
+            {isDelegate
+              ? node.result && !node.result.isError && (
+                  <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
+                )
+              : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
+                  <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
+                )}
             {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
           </div>
         )}
@@ -4752,6 +4783,51 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
 
 /** A running background task's folded card: what its sub-agent is on right now — the last thing
     its relayed transcript did. Native parity: ToolCards.swift's `liveActivity`. */
+/**
+ * A SubAgent's grey Why: one line of clauses, at most two at a 900 px transcript. The router's full reasons and
+ * every candidate it removed are behind it — in its tooltip, and in the list `Details` opens.
+ */
+function SubagentWhy({ why, run }: { why: string; run: SubagentRunView | undefined }) {
+  const [open, setOpen] = useState(false);
+  const { reasons, removed } = subagentWhyDetails(run);
+  const more = reasons.length > 0 || removed.length > 0;
+  const tooltip = more
+    ? [...reasons, ...(removed.length ? ['Removed:', ...removed.map((line) => `- ${line}`)] : [])].join('\n')
+    : undefined;
+  return (
+    <>
+      <div className="chat-subagent-why" title={tooltip}>
+        <b>Why</b> · {why}
+        {more && (
+          <button
+            type="button"
+            className="chat-subagent-why-more"
+            aria-expanded={open}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+          >
+            {open ? 'Hide' : 'Details'}
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="chat-subagent-why-list">
+          {reasons.map((line, i) => (
+            <li key={`r${i}`}>{line}</li>
+          ))}
+          {removed.map((line, i) => (
+            <li key={`x${i}`} className="chat-subagent-why-removed">
+              Removed · {line}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
   const lookup = useContext(TaskLookupCtx);
   if (!lookup.running(node.id) && !(live && !node.result)) return null;
@@ -4769,6 +4845,15 @@ function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
     if (text) return <div className="chat-tool-live">{text}</div>;
   }
   return null;
+}
+
+/** What a SubAgent handed back, as Markdown: its call's result, or a background run's once it ended — unless
+ *  the child's own last message, drawn just above it, already says it word for word. */
+function DelegateResult({ content, run, seq, steps }: { content: unknown; run?: SubagentRunView; seq: number; steps: Node[] }) {
+  const text = delegateResultText(content, run);
+  const last = steps[steps.length - 1];
+  if (!text || (last?.kind === 'assistant' && last.text.trim() === text.trim())) return null;
+  return <ToolResult seq={seq} content={text} compact markdown />;
 }
 
 /** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */
@@ -4838,6 +4923,7 @@ type ToolDesc = {
   tone?: Tone; // colour family for the icon chip + card left rail
   path?: string; // a file path → rendered as bold filename + dimmed parent dir
   meta?: string; // small trailing badge (line range, edit count)
+  tag?: string; // a word set apart after the summary (a SubAgent's `Background`)
 };
 
 // Codex's shell calls carry no `description`, and it wraps every one of them as
@@ -4974,6 +5060,16 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
             <MD>{String(i.prompt)}</MD>
           </div>
         ) : undefined,
+      };
+    // Orbit's SubAgent (docs/subagent-design.md §6.4): the same purple card as Agent. Its tier, model, time
+    // and cost come from its run (ToolView); opened, it is the child's steps and the result — no prompt.
+    case DELEGATE_TOOL:
+      return {
+        label: 'SubAgent',
+        icon: <span className="chat-subagent-icon">✦</span>,
+        tone: 'agent',
+        summary: [i.type || 'general', i.description].filter(Boolean).join(' · '),
+        tag: i.background === true ? 'Background' : undefined,
       };
     case 'Workflow':
       // A team of agents the runtime runs in the background. Named by the script's own meta

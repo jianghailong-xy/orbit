@@ -1,3 +1,4 @@
+import { runningSubagentCards } from '../sessions/abandoned-approvals';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
@@ -20,6 +21,8 @@ import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
 import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
 import { settleAlert } from './settle-alert';
+import { crossingRequestAlert } from './crossing-request-alert';
+import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
 import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
@@ -94,6 +97,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
+  'crossing-request': 'Cross-project request',
   'watch-matched': 'Watch matched',
   'loop-missed': 'Wakeup loop missed',
   'wakeup-dropped': 'Scheduled wakeup dropped',
@@ -230,7 +234,9 @@ export class PushService {
       const session = await this.prisma.session.findFirst({
         where: {
           id: sessionId,
-          status: RunStatus.RUNNING,
+          // A running turn asks, and so does a SubAgent still running after its parent's turn ended
+          // (docs/subagent-design.md §5.3); the "needs you" set below decides whether this card is one.
+          OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
           completedAt: null,
           archivedAt: null,
           deletedAt: null,
@@ -910,6 +916,51 @@ export class PushService {
     }
   }
 
+  /**
+   * A cross-project request an agent just filed, waiting on the account owner (`ProjectHandoffService
+   * .declare`, once, after the commit). The tap opens the conversation that draws its decision card
+   * (`crossingCardSessionId`) — the target's coordinator, or the source's for a task asked to be
+   * taken out of every project — else the project page that lists it. Every word is Orbit's: the
+   * projects' titles and the request's own title, never the agent's reason.
+   */
+  async notifyCrossingRequest(handoffId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const row = await this.prisma.projectHandoffApproval.findUnique({
+        where: { id: handoffId },
+        select: {
+          ...CARD_SESSION_SELECT,
+          ownerId: true,
+          state: true,
+          kind: true,
+          title: true,
+          fromProjectId: true,
+          fromProject: { select: { title: true, coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+          toProject: { select: { title: true, coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+        },
+      });
+      if (!row || row.state !== 'PENDING') return;
+      const { tokens, feishu } = await this.channels(row.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = crossingRequestAlert(row);
+      const sessionId = crossingCardSessionId(row);
+      const projectId = row.toProjectId ?? row.fromProjectId;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `crossing-request-${sessionId ?? projectId}` },
+        kind: 'crossing-request',
+        ...(sessionId ? { sessionID: sessionId } : {}),
+        projectID: projectId,
+        handoffID: handoffId,
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: 'crossing-request', ...alert, collapseId: `crossing-request-${handoffId}`, sessionId, projectId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', `crossing-request-${handoffId}`);
+    } catch (err) {
+      this.log.warn(`crossing request notify failed: ${(err as Error).message}`);
+    }
+  }
+
   /** The candidate a merge approval is about: which branches, and how many tasks it carries.
    *  Read only for that one kind — every other item names no promotion. */
   private async promotionFor(
@@ -1321,7 +1372,7 @@ export class PushService {
    *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
    *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner] = await Promise.all([
+    const [rows, blockedOnOwner, withSubagents] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
@@ -1337,9 +1388,35 @@ export class PushService {
         select: { id: true, taskId: true, approvals: { where: { status: 'PENDING' }, select: { id: true, toolName: true } } },
       }),
       readOwnerItemSessionIds(this.prisma, ownerId),
+      // The conversations, at any status, whose running SubAgent asked a card (docs/subagent-design.md §5.3).
+      this.prisma.session.findMany({
+        where: {
+          ownerId,
+          sessionKind: 'CONVERSATION',
+          completedAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          cancelRequestedAt: null,
+          runningSubagents: { isEmpty: false },
+          approvals: { some: { status: 'PENDING', subagentRunId: { not: null } } },
+        },
+        select: {
+          id: true,
+          approvals: { where: { status: 'PENDING', subagentRunId: { not: null } }, select: { id: true, toolName: true, subagentRunId: true } },
+        },
+      }),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
-    return [...new Set([...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id), ...blockedOnOwner])];
+    // A running SubAgent's card is a question whatever its parent is doing (docs/subagent-design.md §5.3): a
+    // background SubAgent waiting on a person while its parent sits idle needs them as much as a blocked turn.
+    const subagentCards = await visibleQuestions(this.prisma, await runningSubagentCards(this.prisma, withSubagents.flatMap(
+      (r) => (r.approvals ?? []).map((card: { id: string; toolName: string; subagentRunId?: string | null }) => ({ ...card, sessionId: r.id })),
+    )));
+    return [...new Set([
+      ...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id),
+      ...subagentCards.map(card => card.sessionId),
+      ...blockedOnOwner,
+    ])];
   }
 
   /** Debounced: something that could lower `ownerId`'s "needs you" count happened (an approval

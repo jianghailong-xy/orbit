@@ -1,4 +1,6 @@
-import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateBy } from 'class-validator';
+import {
+  ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateBy,
+} from 'class-validator';
 import { PermissionMode, TRANSLATION_LANGUAGES, type TranslationLanguage } from '@orbit/shared';
 
 export class CreateUserDto {
@@ -157,6 +159,17 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsIn([...TRANSLATION_LANGUAGES])
   translationLanguage?: TranslationLanguage;
+
+  /**
+   * The provider slugs this account's SubAgents are never routed onto (docs/subagent-design.md §4.2, §6.2).
+   * Absent = none blocked; the whole list is replaced on each write, so [] unblocks everything.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  subagentBlockedProviders?: string[];
 }
 
 /** Set a user's access role (admin area). */
