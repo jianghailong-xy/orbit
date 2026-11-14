@@ -50,6 +50,10 @@ on:
         description: "Also run the iOS http://ip ATS probe (simulator, A/B against no ATS keys)"
         type: boolean
         default: false
+      ccx_probe:
+        description: "Also run the coordinator context actions probe (Mac + iPhone shots)"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -288,3 +292,45 @@ jobs:
           git commit -q -m "source-refused probe results for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
             results:refs/heads/probe/source-refused-mac-shots-results
+
+  # TEMPORARY (task 34whYH8Crj3dQDvWRyVo9, probe branch only — never merged): the context panel,
+  # the confirm and the handoff states photographed on a Mac runner and an iPhone simulator, from
+  # the real shared sources (docs/evidence/coordinator-context-actions/probe-harness/run.sh).
+  ccx-shots:
+    name: Coordinator context actions probe (Mac + iPhone)
+    if: github.event_name == 'workflow_dispatch' && inputs.ccx_probe
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .ccx-probe
+          cp -R docs/evidence/coordinator-context-actions/probe-harness/. .ccx-probe/
+      - name: Build and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .ccx-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .ccx-probe/shots
+          cp run-output.log .ccx-probe/shots/ 2>/dev/null || true
+          echo "capture=${{ steps.capture.outcome }} sha=${{ github.sha }} run=${{ github.run_id }}" > .ccx-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: ccx-shots
+          path: .ccx-probe/shots
+          include-hidden-files: true
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
