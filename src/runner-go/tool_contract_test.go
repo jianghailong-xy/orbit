@@ -846,7 +846,8 @@ func TestEveryAdvertisedObjectSchemaIsClosed(t *testing.T) {
 }
 
 // The creates and updates of the five objects, and the start, advertise the receipt's schema; no
-// other tool's own outputSchema is replaced.
+// other tool's own outputSchema is replaced. The tools that answer with a document of their own — the
+// wiki's, and the guide's (OrbitGuideV1) — keep it.
 func TestReceiptOutputSchemaIsAdvertisedOnTheFiveObjectsWrites(t *testing.T) {
 	advertised := map[string]bool{}
 	for _, descriptor := range toolDescriptors(true, true) {
@@ -857,7 +858,7 @@ func TestReceiptOutputSchemaIsAdvertisedOnTheFiveObjectsWrites(t *testing.T) {
 		}
 		if isReceiptSchema(schema) {
 			advertised[name] = true
-		} else if !strings.HasPrefix(name, "wiki_") {
+		} else if !strings.HasPrefix(name, "wiki_") && name != "guide" {
 			t.Errorf("%s advertises an outputSchema that is neither the receipt's nor a wiki answer's", name)
 		}
 	}

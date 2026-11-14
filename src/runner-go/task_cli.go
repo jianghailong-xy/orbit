@@ -3565,6 +3565,8 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	// Ungated too: keeping and reading back your own files is no power over anybody else's session. Upload and fetch
 	// are SessionOnly, because a file stays with the session that uploads it.
 	specs = append(specs, fileCLICapabilities...)
+	// The guide reads the catalogue and asks the server nothing, so every process is offered it.
+	specs = append(specs, guideCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:
@@ -3669,18 +3671,73 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	}
 }
 
+// writeCapabilityView prints one graded view of the catalogue (operation_discovery.go).
+func writeCapabilityView(d *cliDiscovery, summary bool, family, id string, jsonOut bool, out io.Writer) error {
+	var doc interface{}
+	var text string
+	switch {
+	case summary:
+		view := d.summary()
+		doc, text = view, writeCapabilitySummaryText(view)
+	case id != "":
+		view, err := d.id(id)
+		if err != nil {
+			return err
+		}
+		doc, text = view, writeCapabilityViewText(view.Capability)
+	default:
+		if family == "" {
+			return fmt.Errorf("--family needs a family name; the families are %s", strings.Join(d.families(), ", "))
+		}
+		view, err := d.family(family)
+		if err != nil {
+			return err
+		}
+		var b strings.Builder
+		for _, capability := range view.Capabilities {
+			b.WriteString(writeCapabilityViewText(capability))
+		}
+		for _, unavailable := range view.Unavailable {
+			fmt.Fprintf(&b, "\nNot available here (%s): %s\n", unavailable.Reason, strings.Join(unavailable.IDs, ", "))
+		}
+		doc, text = view, b.String()
+	}
+	if jsonOut {
+		enc := json.NewEncoder(out)
+		enc.SetEscapeHTML(false)
+		return enc.Encode(doc)
+	}
+	_, err := io.WriteString(out, text)
+	return err
+}
+
 func cmdCapabilitiesCLI(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit capabilities")
 	jsonOut := fs.Bool("json", false, "emit JSON")
+	summary := fs.Bool("summary", false, "one row per command")
+	family := fs.String("family", "", "the commands of one family")
+	id := fs.String("id", "", "one operation in full")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if err := rejectTrailing(fs); err != nil {
 		return err
 	}
+	views := 0
+	for _, asked := range []bool{*summary, flagWasSet(fs, "family"), flagWasSet(fs, "id")} {
+		if asked {
+			views++
+		}
+	}
+	if views > 1 {
+		return fmt.Errorf("--summary, --family and --id each ask for one view; pass one of them")
+	}
 	executable := orbitCLIExecutable()
 	if executable == "" {
 		return fmt.Errorf("cannot resolve a safe absolute path to the Orbit executable")
+	}
+	if views == 1 {
+		return writeCapabilityView(newCLIDiscovery(executable), *summary, strings.TrimSpace(*family), strings.TrimSpace(*id), *jsonOut, out)
 	}
 	doc := buildCLICapabilities(executable)
 	if *jsonOut {

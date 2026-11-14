@@ -32,7 +32,7 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.4.0"
+const operationCatalogVersion = "1.5.0"
 
 // operationObject is the Orbit object an operation acts on (docs/orbit-agent-contract.md §1.1),
 // plus the auxiliary resources (watch, wiki, file) and the two doors that are not writes at all
@@ -55,6 +55,8 @@ const (
 	objectBackgroundJob operationObject = "background_job"
 	objectPermission    operationObject = "permission"
 	objectMergeReceipt  operationObject = "merge_receipt"
+	// The catalogue itself: what the guide reads to say which operation answers a request.
+	objectCatalog operationObject = "catalog"
 )
 
 // operationRisk classes the consequence of getting the call wrong. low is a read with no side
@@ -143,6 +145,13 @@ type operation struct {
 	// (tool_schema.go exclusiveViolations): "field" for a top-level argument, "list[].field" for a
 	// field of every element of an array argument.
 	Exclusive [][]string
+	// Example is the MCP arguments a minimal call fills in where a placeholder would not do: an enum
+	// whose first member needs more fields, a value the call is not complete without. The graded views
+	// build both surfaces' examples from it (operation_discovery.go).
+	Example map[string]interface{}
+	// CLIExample is the words after the argv of a minimal command line, for the few commands whose
+	// flags are not the tool's arguments spelled as flags (watch create's --target KIND:ID).
+	CLIExample []string
 
 	Gate operationGate
 	MCP  *operationMCP
@@ -176,6 +185,8 @@ type operationMeta struct {
 	NextStep        string
 	Returns         string
 	Exclusive       [][]string
+	Example         map[string]interface{}
+	CLIExample      []string
 }
 
 // catalogMCPExemptions records the CLI commands that deliberately have no MCP tool, with the
@@ -2196,7 +2207,7 @@ func buildOperationCatalog() []*operation {
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Creating is not starting, but `autoRunWhenReady` defaults to true: a task with an assignee starts by itself once it is ready — every prerequisite DONE and, in a project, the project started — so if the person said it must not run until they say so, pass `autoRunWhenReady: false`; leaving it out is not \"do not start\". Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. When the person wants the work run now, pass `startNow: true`: one approval then covers the create and the start, so do not ask them a second time and do not call task_start after. Without it nothing runs in this call; call task_start when it should run, or pass runAt to have the server start it at a set time. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Ask what would settle THIS task before you write it, and pass the answer as `acceptanceCriteria` — the observable result a reader who did not watch the work can verify, as opposed to `description`, which says what work to perform. If the person you are working with has not told you, do NOT call this tool yet: ask them in the conversation — offer what you would propose, if that helps them answer — and end your turn with the question. The criteria are theirs to state, and the confirmation card this call raises is not where they become theirs: it is a yes/no on a task whose criteria were already agreed by the time it appears. Filing criteria you wrote alone is the one way this goes wrong, because every later reader takes them for the person's own standard. Where a single command decides it — a test suite, a build, a lint — pass `acceptanceCommand` with `acceptanceExpectedExitCode` as well: the task's own session runs it, and the server derives DONE or FAILED from the exit code, so the task settles itself and no person is asked to read anything. That is what the question buys. A task filed with neither leaves the session that did the work no legal way to finish it, and the attempt ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH — a human is handed the evidence to judge by hand, which is the outcome this field exists to make unnecessary. When the person genuinely cannot say yet what would prove the work done, file the task without one and record the criteria with task_update once the work says what they are — an unproven task is an ordinary task — but never write criteria they did not state. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. A row declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — so declare MANUAL on a row that has work of its own. The server never files the verifier for you either: pass `verification: {title, assigneeId}` in this same call to write the check beside its subject. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. Declaring OWNER_CONFIRMED on a task in no project, or in a project whose Automatic is off, also takes ownerConfirmationReason (DEPLOY, IRREVERSIBLE, OWNER_DEVICE_OR_ACCOUNT or OWNER_TRADE_OFF) — without one the call is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED. Work a test or a reviewer can settle is EVIDENCE_JUDGMENT instead, and outside a project it is yours to settle: each evidence revision its run submits is handed to this session as an <orbit-evidence-review> message to decide with task_evidence_decide, and the owner is asked only if you have not decided within 30 minutes or have ended. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES. Pass `codeless: true` for work that produces no code — a rollout, a walkthrough, a verification, research — so the acceptance criterion it serves does not wait for a commit that will never exist.",
+			"description": "Create ONE task (attributed to this agent). Creating is not starting, but `autoRunWhenReady` defaults to true: a task with an assignee starts by itself once it is ready — every prerequisite DONE and, in a project, the project started — so if the person said it must not run until they say so, pass `autoRunWhenReady: false`; leaving it out is not \"do not start\". When the person wants the work run now, pass `startNow: true`: one approval then covers the create and the start, so do not ask them a second time and do not call task_start after; `runAt` has the server start it once at a set time instead. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write. A row declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier, so pass `verification: {title, assigneeId}` in this same call. Write `description` as a self-contained prompt an agent can act on without prior context. Ask the person what would settle THIS task before you call, and pass their answer as `acceptanceCriteria`: the criteria are theirs to state, so if they have not said, ask and end your turn with the question. Where one command decides it, pass `acceptanceCommand` with `acceptanceExpectedExitCode` and the exit code settles the task; filed with neither, its run ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH and a person judges it by hand. assigneeId defaults to this agent (null leaves it unassigned); assigneeId, listId, projectId and parentTaskId must be owned by the caller. Whether the work is one task, a batch or a project, how its evidence is judged, and how to order and nest it: call guide with topic task-create.",
 			"inputSchema": func() map[string]interface{} {
 				props := taskCreateProps()
 				// On the single door only: see verificationProp.
@@ -2213,7 +2224,7 @@ func buildOperationCatalog() []*operation {
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Creating is not starting, but each item's `autoRunWhenReady` defaults to true, as on task_create: give an item the person wants held `autoRunWhenReady: false`. Every item declares completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred from omission, and a verifier relation (including verifiesRef), executable pair, or completion policy does not replace that declaration. An item declaring OWNER_CONFIRMED in no project, or in a project whose Automatic is off, carries ownerConfirmationReason (DEPLOY, IRREVERSIBLE, OWNER_DEVICE_OR_ACCOUNT or OWNER_TRADE_OFF), or the whole batch is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED with that item's itemIndex; work a test or a reviewer can settle is EVIDENCE_JUDGMENT, which outside a project this session decides on each evidence revision it is handed. An item declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier for you, so `verifiesRef` from a later item of this same call is what pairs it; unpaired, that row can never complete. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Ask, per item, what would settle it — of the person you are working with, in the conversation, before writing the batch — and put their answer in that item's `acceptanceCriteria`. If they have not said it for every item, do NOT write the batch yet: ask, and end your turn with the question. An item's criteria are theirs to state, not yours to guess, and the card this call raises is a yes/no on the plan rather than where they are agreed — a plan filed with criteria of your own makes every later reader treat your guess as their standard. Where a single command decides it — a test suite, a build, a lint — give the item `acceptanceCommand` with `acceptanceExpectedExitCode` too, and the item settles itself from the exit code instead of waiting on a person to read its evidence. An item filed with neither leaves its session no legal way to finish, and it ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH — so a plan that skips this question is a plan that comes back to a human one task at a time. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, parentRef is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded, except an item carrying `startNow: true` — pass it for the items the person wants run now, and the server's once-a-minute scan starts each within the minute without asking them again; for the rest, call task_start for one that should run now, or give an item runAt to have the server start it at a set time. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan already worked out produces more than one task. Nothing is written unless every item is valid, and each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included. Ask the person, per item, what would settle it before you write the batch, and put their answer in that item's `acceptanceCriteria`: the criteria are theirs to state, so if they have not said it for every item, ask and end your turn. An item a single command decides takes `acceptanceCommand` with `acceptanceExpectedExitCode`, and the exit code settles it; one filed with neither ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH. Creating is not starting, but each item's `autoRunWhenReady` defaults to true, as on task_create: give an item the person wants held `autoRunWhenReady: false`. Every item declares completionCriterion explicitly. An item declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — and the server never files its verifier for you, so `verifiesRef` from a later item of this same call is what pairs it; unpaired, that row can never complete. A later item depends on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs`; `parentRef` names an earlier item as its PARENT, and `dependsOnTaskIds` / `parentTaskId` still name tasks that already exist. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded, except an item carrying `startNow: true`, which the server's once-a-minute scan starts within the minute without asking again. This BLOCKS until a human approves the batch on one card, which shows how much of it starts running: send the batch you actually mean — a rejected one costs the whole call, not one item. How to judge a plan with dryRun first, and nest and order it: call guide with topic task-batch.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":     "array",
@@ -2238,7 +2249,7 @@ func buildOperationCatalog() []*operation {
 		},
 		{
 			"name":        "task_batch_pin",
-			"description": "Re-pin many tasks at once: set `engine`, `provider` and/or `model` on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\" — task_update can only spell that as one call per task, which is a hundred thousand round trips and as many non-HOT rewrites of rows whose model did not change: the project this exists for re-pinned 109,875 tasks one PATCH at a time, 81,219 of them inside one pg_stat_statements window, at 91.4 shared buffers and 7.4 kB of WAL each. Measured on a throwaway fixture carrying this table's real 29 indexes, walking a hundred thousand rows that way takes 218.6 s against a single project-scoped UPDATE's 31.0 s, for the same rows written. A row already carrying the target value is not written at all, so its `updated_at` is not bumped: that column's one reader is the project list's lastActivityAt, and skipping no-ops makes it more accurate, not less. `taskIds` and the filter NARROW each other — a caller naming both gets the intersection — and at least one of `taskIds`, `projectId`, `listId` or `labels` is required: a request naming none is refused (PIN_BATCH_NO_SELECTOR) rather than read as \"every task this owner has\". `engine`/`provider`/`model` are three-state exactly as on task_update — omitted leaves the current pin alone, null returns the task to inheriting its assignee workspace's, a string pins it — and naming none of them is refused (PIN_BATCH_NOTHING_TO_WRITE). A provider is checked once against the engine it is written with (named alone, it pins the engine it runs on by default); an engine named alone keeps each task's provider pin, so it is checked against every provider pin the selection holds, and the whole batch is refused, naming those that cannot run on it. Tasks with a run in flight are re-pinned like any other: this writes the task row only, a run already holding the task keeps the model it started on, and the disagreement is reported when the NEXT run starts, as TASK_RUN_PIN_CONFLICT. Returns `{changed}`: how many rows were actually written.",
+			"description": "Re-pin many tasks at once: set `engine`, `provider` and/or `model` on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\", which task_update can only spell as one call per task. A row already carrying the target value is not written, so its `updated_at` is not bumped. `taskIds` and the filter NARROW each other — a caller naming both gets the intersection — and at least one of `taskIds`, `projectId`, `listId` or `labels` is required: a request naming none is refused (PIN_BATCH_NO_SELECTOR) rather than read as \"every task this owner has\". `engine`/`provider`/`model` are three-state exactly as on task_update — omitted leaves the current pin alone, null returns the task to inheriting its assignee workspace's, a string pins it — and naming none of them is refused (PIN_BATCH_NOTHING_TO_WRITE). A provider is checked once against the engine it is written with (named alone, it pins the engine it runs on by default); an engine named alone keeps each task's provider pin, so it is checked against every provider pin the selection holds, and the whole batch is refused, naming those that cannot run on it. Tasks with a run in flight are re-pinned like any other: this writes the task row only, a run already holding the task keeps the model it started on, and the disagreement is reported when the NEXT run starts, as TASK_RUN_PIN_CONFLICT. Returns `{changed}`: how many rows were actually written.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskIds": map[string]interface{}{
 					"type":        "array",
@@ -2930,6 +2941,9 @@ func buildOperationCatalog() []*operation {
 	// Bash(run_in_background), and a session without the runner socket gets a
 	// refusal that says why rather than a silently engine-owned process.
 	add(gateAlways, bgToolDescriptors(obj)...)
+	// The map of all of the above, always listed and read-only: which operation answers a request, and
+	// the shortest way to call it here (agent_guide.go).
+	add(gateAlways, guideToolDescriptor(obj))
 	add(gatePermissionPrompt, map[string]interface{}{
 		// Claude Code's --permission-prompt-tool target. Claude calls it (not the
 		// agent) when a tool needs permission; it blocks on a human allow/deny.
@@ -4195,8 +4209,8 @@ var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_confirmation_return", Argv: []string{"orbit", "task", "confirmation-return"}, Usage: "orbit task confirmation-return [task-id] (--input JSON | --input-file -) [--json]", Arguments: []string{"[task-id] (or the input's taskId: the review block's task=\"…\"; no ORBIT_TASK_ID default)", "--input <JSON object> | --input-file - (required): {taskId, requestId, reviewedSha, reason, problems}", "--json"}, Description: "Send an OWNER_CONFIRMED task's confirmation request back to its run, when something must change before the owner looks: the reason is the run's next message and the owner is not asked. Once per request and at most 3 times between two decisions of the owner's; refused while the project's Automatic is off or its coordinator is paused, once the run has ended, or after the owner sent it back. After the owner has confirmed, the problems are recorded under their receipt and they are told instead. Only the session the request was handed to for review may call it, from inside a turn.", Mutates: true},
 	{Tool: "task_progress_report", Argv: []string{"orbit", "task", "progress"}, Usage: "orbit task progress [task-id] [--phase TEXT | --clear-phase] [--current N | --clear-current] [--total N | --clear-total] [--message TEXT | --clear-message] [--expected-revision N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--phase <text> | --clear-phase", "--current <n> | --clear-current", "--total <n> | --clear-total (needs a current it bounds)", "--message <text> | --clear-message (never progress on its own)", "--expected-revision <n> (expectedRevision: report only if the progress is still at this revision)", "--json"}, Mutates: true},
 	{Tool: "task_dependency_graph", Argv: []string{"orbit", "task", "dependency-graph"}, Usage: "orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--max-depth <n> (server default when unset)", "--max-nodes <n> (server default when unset)", "--json"}},
-	{Tool: "task_dependency_add", Argv: []string{"orbit", "task", "dependency-add"}, Usage: "orbit task dependency-add [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Description: "Add one dependency edge: taskId waits for --depends-on. Point it at the SUBJECT rather than at that subject's verification task: once anything checks that task, the server holds the edge until its latest check has PASSED. An edge naming the check resolves to the same gate, so older plans keep working.", Mutates: true},
-	{Tool: "task_dependency_remove", Argv: []string{"orbit", "task", "dependency-remove"}, Usage: "orbit task dependency-remove [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Mutates: true},
+	{Tool: "task_dependency_add", Argv: []string{"orbit", "task", "dependency-add"}, Usage: "orbit task dependency-add [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (dependsOnTaskId; required)", "--json"}, Description: "Add one dependency edge: taskId waits for --depends-on. Point it at the SUBJECT rather than at that subject's verification task: once anything checks that task, the server holds the edge until its latest check has PASSED. An edge naming the check resolves to the same gate, so older plans keep working.", Mutates: true},
+	{Tool: "task_dependency_remove", Argv: []string{"orbit", "task", "dependency-remove"}, Usage: "orbit task dependency-remove [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (dependsOnTaskId; required)", "--json"}, Mutates: true},
 	{Tool: "tasklist_list", Argv: []string{"orbit", "task-list", "list"}, Usage: "orbit task-list list [--json]", Arguments: []string{"--json"}},
 	{Tool: "tasklist_create", Argv: []string{"orbit", "task-list", "create"}, Usage: "orbit task-list create --title TITLE [--json]", Arguments: []string{"--title <text> (required)", "--json"}, Mutates: true},
 	{Tool: "tasklist_get", Argv: []string{"orbit", "task-list", "get"}, Usage: "orbit task-list get LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}},
@@ -4282,6 +4296,7 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		{"wiki", wikiImportCLICapabilities},
 		{"file", fileCLICapabilities},
 		{"account", userCLICapabilities},
+		{"guide", guideCLICapabilities},
 	}
 	for _, family := range families {
 		for i := range family.list {
@@ -4325,6 +4340,8 @@ func finishOperationCatalog(ops []*operation) []*operation {
 		op.NextStep = meta.NextStep
 		op.Returns = meta.Returns
 		op.Exclusive = meta.Exclusive
+		op.Example = meta.Example
+		op.CLIExample = meta.CLIExample
 	}
 
 	for _, op := range ops {
@@ -4469,6 +4486,11 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:          "Submit a structured completion-evidence revision for a task.",
 		SuccessEvidence: "The appended evidence revision and the identity the server recorded with it.",
 		NextStep:        "task_evidence_list to read the revision back.",
+		Example: map[string]interface{}{"evidence": map[string]interface{}{
+			"claim":  "<what you completed>",
+			"checks": []interface{}{map[string]interface{}{"kind": "TOOL_CALL", "ref": "<the bg_run job id of a check you ran>"}},
+			"gaps":   []interface{}{},
+		}},
 	},
 	"task_evidence_decide": {
 		Object: objectTask,
@@ -4502,6 +4524,13 @@ var catalogMetadata = map[string]operationMeta{
 		Retry:           "Send idempotencyKey and a retry with the same key is safe in any turn: the server answers with the first task instead of writing twice. Without a key only a redelivered turn's create is deduplicated — re-read before sending it again.",
 		NextStep:        "task_start when it should run; task_get to read it back.",
 		Exclusive:       [][]string{{"startNow", "runAt"}, {"verification", "verifiesTaskId"}},
+		Example: map[string]interface{}{
+			"title":               "<title>",
+			"description":         "<a self-contained prompt: background, files, steps>",
+			"completionCriterion": "EVIDENCE_JUDGMENT",
+			"acceptanceCriteria":  "<what the person said would settle it>",
+			"idempotencyKey":      "<a slug of the work>",
+		},
 	},
 	"task_create_batch": {
 		Object:          objectTask,
@@ -4513,6 +4542,16 @@ var catalogMetadata = map[string]operationMeta{
 		Retry:           "Send idempotencyKey and a retry with the same key is safe in any turn: the server answers with the tasks the first send wrote. Without a key only a redelivered turn's batch is deduplicated — re-read before sending it again.",
 		NextStep:        "task_list --project-id to see the filed plan.",
 		Exclusive:       [][]string{{"tasks[].startNow", "tasks[].runAt"}, {"tasks[].parentTaskId", "tasks[].parentRef"}, {"tasks[].verifiesTaskId", "tasks[].verifiesRef"}},
+		Example: map[string]interface{}{
+			"tasks": []interface{}{
+				map[string]interface{}{"ref": "s1", "title": "<first step>", "description": "<its prompt>",
+					"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "<what settles it>"},
+				map[string]interface{}{"ref": "s2", "title": "<second step>", "description": "<its prompt>",
+					"completionCriterion": "EVIDENCE_JUDGMENT", "acceptanceCriteria": "<what settles it>",
+					"dependsOnRefs": []interface{}{"s1"}},
+			},
+			"idempotencyKey": "<a slug of the plan>",
+		},
 	},
 	"task_batch_pin": {
 		Object: objectTask,
@@ -4583,6 +4622,7 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:      "Preview or apply a batch of dependency changes to a list.",
 		Approval:    approvalKindCard,
 		ApprovalKey: "orbit_dag_change",
+		CLIExample:  []string{"<listId>", "--add", "<taskId>:<dependsOnTaskId>"},
 	},
 	"tasklist_delete": {
 		Object:      objectTaskList,
@@ -4880,6 +4920,11 @@ var catalogMetadata = map[string]operationMeta{
 		Intent:          "Ask Orbit to wake this session when a condition holds.",
 		SuccessEvidence: "The watch id, its state and when it will next be evaluated.",
 		NextStep:        "End the turn; the watch wakes this session.",
+		Example: map[string]interface{}{
+			"targets":   []interface{}{map[string]interface{}{"kind": "TASK", "id": "<taskId>"}},
+			"predicate": map[string]interface{}{"kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL"},
+		},
+		CLIExample: []string{"--target", "TASK:<taskId>", "--predicate", `{"kind":"ALL","over":"ALL_TARGETS","leaf":"TASK_TERMINAL"}`},
 	},
 	"watch_get": {
 		Object: objectWatch,
@@ -4996,6 +5041,15 @@ var catalogMetadata = map[string]operationMeta{
 		Object: objectAccount,
 		Intent: "Call any user REST route with the person's own token.",
 		Risk:   riskHigh,
+	},
+
+	// ── the guide ──
+	"guide": {
+		Object:          objectCatalog,
+		Intent:          "Find which operation answers a request, and the shortest way to call it here.",
+		SuccessEvidence: "The guide document: the objects and routes, or one topic's steps, each with its availability here.",
+		NextStep:        "Run the step it names, or capabilities --id for one command in full.",
+		Returns:         "The guide document (JSON): the index without a topic, one topic's recipe with one.",
 	},
 }
 
@@ -5209,6 +5263,8 @@ func operationCatalogHash(ops []*operation) string {
 		SuccessEvidence string                 `json:"successEvidence"`
 		NextStep        string                 `json:"nextStep,omitempty"`
 		Returns         string                 `json:"returns"`
+		Example         map[string]interface{} `json:"example,omitempty"`
+		CLIExample      []string               `json:"cliExample,omitempty"`
 		Gate            operationGate          `json:"gate"`
 		MCPDescription  string                 `json:"mcpDescription,omitempty"`
 		MCPInputSchema  map[string]interface{} `json:"mcpInputSchema,omitempty"`
@@ -5237,6 +5293,8 @@ func operationCatalogHash(ops []*operation) string {
 			SuccessEvidence: op.SuccessEvidence,
 			NextStep:        op.NextStep,
 			Returns:         op.Returns,
+			Example:         op.Example,
+			CLIExample:      op.CLIExample,
 			Gate:            op.Gate,
 			CLIExempt:       op.CLIExempt,
 			MCPExempt:       op.MCPExempt,

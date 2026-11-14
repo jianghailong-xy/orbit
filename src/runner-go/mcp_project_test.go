@@ -1121,16 +1121,34 @@ func TestMCPProjectCreateDescriptionProposesDurableCoordination(t *testing.T) {
 	}
 }
 
+// Which object a request belongs to is a question across tools, so since guide 1.0.0 it is answered by
+// the guide's task-create topic rather than repeated in task_create's description: the description keeps
+// what the call itself does and sends the choice to the guide, and the primer's lead (which every agent
+// reads first) still says the smaller object wins. The topic has to say the default and the narrow case
+// as the description used to.
 func TestMCPTaskCreateIsTheDefaultAndNamesTheNarrowProjectCase(t *testing.T) {
 	description := mcpToolDescription(toolDescriptors(false, false), "task_create")
+	if !strings.Contains(description, "call guide with topic task-create") {
+		t.Fatalf("task_create description does not send the choice of object to the guide: %q", description)
+	}
+	topic := guideTopicByID("task-create")
+	if topic == nil {
+		t.Fatal("the guide has no task-create topic")
+	}
+	rules := strings.Join(topic.Rules, " ")
 	for _, want := range []string{
-		"belongs here by default",
+		"belongs in one task by default",
 		"4+ dependent steps",
 		"does not block this call",
+		"task-batch",
+		"project-create",
 	} {
-		if !strings.Contains(description, want) {
-			t.Fatalf("task_create description does not mention %q: %q", want, description)
+		if !strings.Contains(rules, want) {
+			t.Fatalf("the guide's task-create topic does not say %q: %q", want, rules)
 		}
+	}
+	if !strings.Contains(agentPrimerLead, "the smaller wins") {
+		t.Fatalf("the primer's lead no longer says the smaller object wins: %q", agentPrimerLead)
 	}
 }
 

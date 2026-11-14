@@ -31,6 +31,7 @@ var mcpHelpObjects = []struct {
 	{objectBackgroundJob, "background jobs"},
 	{objectPermission, "engine permission prompts"},
 	{objectMergeReceipt, "merge receipts"},
+	{objectCatalog, "the operation catalogue itself (the guide)"},
 }
 
 // mcpHelpRuntimes is every engine the runner runs a session on, in `orbit doctor`'s order.
@@ -98,7 +99,9 @@ func mcpHelp() string {
 			"writes the same primer into each engine's own instructions too, for an engine that does not show a "+
 			"server's instructions.", agentPrimerVersion, agentContractVersion, agentPrimerMaxBytes, agentPrimerLeadMaxChars),
 		"tools/list is the operation catalogue's MCP side, for " + englishList(served) + "; `orbit capabilities " +
-			"--json` is its CLI side. The tools " + englishList(orchestrated) + " are listed only while the account's " +
+			"--json` is its CLI side, which --summary, --family and --id answer a view at a time, and the guide " +
+			"tool (`orbit guide`) answers it by what a person asks for. The tools " + englishList(orchestrated) +
+			" are listed only while the account's " +
 			"Session orchestration is on, the watch and wiki tools follow their own switches, and " +
 			"permission_prompt is served to Claude Code alone.",
 		"It reads the runner credential from config.json under ORBIT_HOME, and the session from the environment " +

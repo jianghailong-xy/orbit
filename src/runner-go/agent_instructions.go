@@ -94,11 +94,11 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
 		orbitWikiPathInstructions +
-		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
-		"they need no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes " +
-		"the work to you; it needs `" + command + " capabilities --json` first to discover its commands, then run the " +
-		"returned argv with that exact absolute path. Pass `--receipt` to read the receipt its MCP tool answers with; " +
-		"`--json` prints the entity alone. Do not run `" + command + " mcp` directly."
+		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: they are schema-checked and need " +
+		"no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes the work " +
+		"to you: find a command with `" + command + " guide [topic] --json` or `" + command + " capabilities --id <id> " +
+		"--json`, then run the argv it returns with that exact absolute path. Pass `--receipt` to read the receipt its " +
+		"MCP tool answers with; `--json` prints the entity alone. Do not run `" + command + " mcp` directly."
 }
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
@@ -259,6 +259,11 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 	rules := []string{}
 	for _, command := range commandForms {
 		rules = append(rules, "Bash("+command+" capabilities --json)")
+		// The graded views of the same document (--summary, --family, --id) and the guide: reads of the
+		// catalogue that ask the server nothing, and the commands the instructions send an agent to
+		// instead of the whole document.
+		rules = append(rules, "Bash("+command+" capabilities *)")
+		rules = append(rules, "Bash("+command+" guide *)")
 		// Every task verb the CLI has. An action missing here is pre-approved for nobody: the agent
 		// hits a permission prompt for a command `capabilities --json` just told it to run — which is
 		// what happened to the twelve this list was short of. Still enumerated rather than `task *`,

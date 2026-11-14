@@ -364,6 +364,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	if result, handled := s.callFileTool(name, args); handled {
 		return result
 	}
+	// The guide reads the catalogue and this session's switches, and asks the control plane nothing
+	// (agent_guide.go); `orbit guide` answers the same document.
+	if name == "guide" {
+		return s.callGuide(args)
+	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
 		return s.handOffOwnerWait(name, args)
 	}

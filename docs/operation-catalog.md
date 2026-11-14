@@ -1,9 +1,29 @@
-# Orbit operation catalogue v1.4.0
+# Orbit operation catalogue v1.5.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `fa27c1a1f808dda9d075e00e82fe61790ea37e53a7505c9b5620bd9461a8d50c`.
+> Content hash: `2073b4fcf075f0ec7da74eca4e586e64e40323894f938721851b5780f3ad1da0`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying).
+
+## Reading it a piece at a time
+
+`orbit capabilities --json` is the whole catalogue as one process is offered it, which is larger than any engine shows a model at once. An agent that wants one operation asks for less: `--summary` (one row per command, and the commands not offered here grouped under why), `--family NAME` (one family, each command with its absolute argv, approval, success evidence and a minimal example) or `--id ID` (one operation in full, both surfaces' examples included). The `guide` MCP tool and `orbit guide [TOPIC] --json` arrange the same rows by what a person asks for: without a topic they answer the objects and the intent routes, and with one its recipe. Guide 1.0.0 has these topics (a `?` marks an optional step):
+
+| Topic | Routes | Steps | Intent |
+| --- | --- | --- | --- |
+| `task-create` | R1.1 | `task_list`? → `task_create` → `task_get`? | Record one piece of work the user wants kept, followed up or done later. |
+| `task-batch` | R1.2 | `task_create_batch`? → `task_create_batch` → `task_list`? | Keep a plan that is already worked out: several tasks with their order and parts, in one call. |
+| `project-create` | R1.3 | `project_create` → `task_create_batch`? | Record a whole body of work with its own goal and acceptance, coordinated from this conversation. |
+| `task-start` | R1.4, R1.5 | `task_start` → `task_create`? → `task_await`? | Run work now: recorded work on its assignee, or new work created and started on one card. |
+| `task-schedule` | R1.6 | `task_create` → `task_update`? | Have the server start work once, at a set time. |
+| `delegate` | R1.7 | `session_create` → `session_await`? | Hand work that should run now to another agent as its own conversation. |
+| `inspect` | R1.8 | `project_get`? → `task_get` → `task_list`? → `session_get`? | Read the state of a project, a task or a session before deciding anything. |
+| `wait` | R1.9 | `task_await` → `session_await`? → `watch_create`? | Wait for Orbit work to finish without holding the turn open. |
+| `wiki` | R1.10 | `wiki_search` → `wiki_get`? → `wiki_propose`? → `wiki_note`? | Find what is already known about a file or a pattern, and keep what you learned. |
+| `files` | R1.11 | `file_upload` → `file_list`? → `file_fetch`? | Keep a screenshot, report or log in Orbit instead of the repository, or read one back. |
+| `task-list` | R1.12 | `tasklist_list`? → `tasklist_create` → `tasklist_update`? | Give a class of work its own dispatch policy: a concurrency cap, a pause, standing instructions. |
+| `agent` | R1.13 | `agent_list` → `agent_update`? → `agent_create`? | Choose where work runs and under which identity, or change an agent's defaults. |
+| `finish-task` | — | `task_get` → `task_progress_report` → `bg_run`? → `task_evidence_submit` → `task_comment`? | Carry the task this session runs to its end: progress, checks and the evidence its criterion decides by. |
 
 | Operation | Object | Risk | Writes | Approval | Destructive | Idempotency | MCP | CLI | Intent |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -25,6 +45,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `file_list` | file | low | no | none | no | read | always | always — `orbit file list` | See the files this session keeps. |
 | `file_pin` | file | medium | yes | none | no | none | always | session — `orbit file pin` | Keep a file so it survives the turn. |
 | `file_upload` | file | medium | yes | none | no | none | always | session — `orbit file upload` | Upload a file as an attachment this session's reply can carry. |
+| `guide` | catalog | low | no | none | no | read | always | always — `orbit guide` | Find which operation answers a request, and the shortest way to call it here. |
 | `integration_abandon` | project | high | yes | none | yes | none | always | absent | Abandon a running landing job. |
 | `integration_observe` | project | medium | yes | none | no | none | always | absent | Ask for the project's integration line to be observed again. |
 | `integration_request_promotion` | project | high | yes | owner | no | none | always | session — `orbit project request-promotion` | Ask the account owner to promote an integration branch. |

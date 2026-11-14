@@ -28,6 +28,9 @@ import (
 // commands; every other command acts as the machine, and runs as nobody else (userModeUnported).
 var userModeActions = map[string]string{
 	"login": "", "logout": "", "whoami": "", "api": "",
+	// Reads the catalogue this binary carries and asks no server anything, so it is the person's as much
+	// as anybody's.
+	"guide": "",
 
 	"task list":              "",
 	"task labels":            "",
@@ -149,6 +152,10 @@ func capabilityAvailability(identity cliIdentity, argv []string) (bool, string) 
 	switch command {
 	case "login", "logout", "whoami":
 		// They look after the login itself, whoever the CLI acts as.
+		return true, ""
+	case "guide":
+		// It reads the catalogue this binary carries and asks the server nothing, so no credential is
+		// needed to run it — and it is how a process with a broken one learns what it cannot do.
 		return true, ""
 	case "api":
 		if err := actingUser(identity); err != nil {

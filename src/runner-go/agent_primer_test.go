@@ -21,6 +21,9 @@ import (
 // word under an old version fails here, and recording a new one is a reviewed line in this map.
 var agentPrimerHashes = map[string]string{
 	"1.0.0": "41db1d1fd823c5c1d5f640aafdf153736db36a1913a0ae0687fcea4c6e34dbd8",
+	// Agent Contract 1.6.0: the objects paragraph ends by sending an agent to the guide tool, and the two
+	// parentheticals the guide's topics now carry (a list's settings, what "ready" means) give it the room.
+	"1.1.0": "931d3567fc8ce3838a02993069fee24af436e4f623d52e9936849806c4d0bbf7",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions

@@ -20,6 +20,24 @@ any `approvalDetail`), `destructive`, `idempotency` and `retry` (how a retry is 
 versioned operation catalogue, identified by `catalogVersion` and `catalogHash`; the same catalogue
 rendered for a person is the [operation catalogue](operation-catalog.md).
 
+The whole document is large — about 300 KB inside a session with orchestration on, far more than an
+engine shows a model of one command's output — so ask for the part you need:
+
+```bash
+orbit guide --json                         # the objects, the intent routes and the topics
+orbit guide task-create --json             # one topic's recipe: each step's argv, availability, approval, example, proof
+orbit capabilities --summary --json        # one row per command; the ones not offered here, grouped under why
+orbit capabilities --family task --json    # one family, each command with argv, approval, success evidence, example
+orbit capabilities --id task_create --json # one operation in full: description, leaf parameters, both examples
+```
+
+Every one of these answers the same `context` (actor, session, agent, task) and absolute argv as the
+whole document, and says whether each command runs here and, if not, why — a switch that is off, a
+credential this process lacks, or a command that exists only as an MCP tool. Their examples are
+generated from the catalogue: the MCP tool's required fields and the command's required flags, each
+filled with a placeholder in angle brackets where the catalogue declares no value. The `guide` MCP tool
+answers the same documents as `orbit guide`. See docs/orbit-agent-contract.md §2.5.
+
 ## Tasks and task lists
 
 ```bash

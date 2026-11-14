@@ -84,7 +84,8 @@ Usage:
   orbit logout [--keep-token]       Revoke that token and forget it
   orbit whoami [--json]             Show who the CLI acts as, and why
   orbit api [-X METHOD] PATH        Call the Orbit REST API as yourself
-  orbit capabilities [--json]       Show the CLI capabilities available to agents
+  orbit guide [topic] [--json]      Which Orbit operation answers a request, and the recipe for it
+  orbit capabilities [--json]       Show the CLI capabilities available to agents (--summary, --family, --id)
   orbit host setup --server URL     Set this machine up for runners (root, once per host)
   orbit hostd [--foreground]        Serve the machine broker (systemd starts this, not you)
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
@@ -238,10 +239,45 @@ running it when the machine is idle. Disable the periodic check with ORBIT_NO_EN
 
 Usage:
   orbit capabilities [--json]
+  orbit capabilities --summary [--json]
+  orbit capabilities --family FAMILY [--json]
+  orbit capabilities --id ID [--json]
 
 Shows the commands available through this binary. --json emits a stable,
 machine-readable document including argument schemas from the built-in Orbit MCP
 server. Session commands appear only inside an orchestration-enabled agent session.
+
+The whole document is large (about 300 KB in a session with orchestration on), so
+ask for the part you need instead:
+
+  --summary        One row per command: its id, intent, whether it writes, who must
+                   approve, whether it runs here; and the commands this process is
+                   not offered, grouped under why.
+  --family FAMILY  The commands of one family (task, task-list, project, session, ...)
+                   with the absolute argv, usage, approval, success evidence and a
+                   minimal example of each.
+  --id ID          One operation in full: its description, every leaf parameter, the
+                   retry rule and the example on both surfaces. Any catalogued
+                   operation, an MCP-only one included.
+
+Each answers the same context (actor, session, agent, task) the whole document does.
+'orbit guide' arranges the same catalogue by what a person asks for.
+`,
+	"guide": `orbit guide — which Orbit operation answers a request, and how to call it here
+
+Usage:
+  orbit guide [--json]
+  orbit guide TOPIC [--json]
+
+Without a topic: the five objects and the question each answers, the intent routes
+(what the person says, the object, the operations and the topic that covers it),
+the routing rules and the topics. With a topic: its shortest recipe, each step a
+catalogued operation with its MCP tool and absolute CLI argv, whether it is
+available here and why not, whether it writes and who must approve, a minimal
+example and what proves it succeeded, plus the rules that span the tools.
+
+The MCP tool guide answers the same document. Nothing is written and nothing is
+asked of the server.
 `,
 	"hostd": `orbit hostd — serve the machine broker on /run/orbit/host.sock
 
@@ -441,6 +477,10 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 	case "capabilities":
 		if err := cmdCapabilitiesCLI(args[1:], out); err != nil {
 			return fmt.Errorf("orbit capabilities: %w", err)
+		}
+	case "guide":
+		if err := cmdGuideCLI(args[1:], out); err != nil {
+			return fmt.Errorf("orbit guide: %w", err)
 		}
 	case "host":
 		if err := cmdHostCLI(args[1:], out); err != nil {

@@ -31,11 +31,11 @@ package main
 // a change to a word is a new agentPrimerVersion, reviewed as a diff.
 
 // agentPrimerVersion is the version of the primer's text. Any change to it is a new version.
-const agentPrimerVersion = "1.0.0"
+const agentPrimerVersion = "1.1.0"
 
 // agentContractVersion is the Agent Contract version the primer was written from: the header of
 // docs/orbit-agent-contract.md and contractVersion in contracts/orbit-agent.contract.json.
-const agentContractVersion = "1.5.0"
+const agentContractVersion = "1.6.0"
 
 // agentPrimerLeadMaxChars is the most the first paragraph may take. It is read on its own: by a
 // client that shows only the beginning of a server's instructions, and by a model skimming them.
@@ -59,14 +59,15 @@ const (
 		"task. No returned id, no claim."
 
 	agentPrimerObjects = "Pick the object by the question it answers. Project: the whole goal and what settles it. " +
-		"Task: one durable piece of work. Task list: how a class of work is dispatched (a concurrency cap, a pause, " +
-		"standing instructions), not a plan or a folder. Session: one execution running now. Agent: where work runs " +
-		"and under which identity. Never file what this session is already doing as another task or session."
+		"Task: one durable piece of work. Task list: how a class of work is dispatched, " +
+		"not a plan or a folder. Session: one execution running now. Agent: where work runs and under which identity. " +
+		"Never file what this session is already doing as another task or session. Unsure which fits, or how to call " +
+		"it? Call guide: no arguments for the routes, a topic for the recipe."
 
 	agentPrimerStart = "Start is its own decision: task_start runs recorded work, task_create with startNow: true " +
 		"records and starts it on one card, and runAt schedules one start. If the person said nothing should run " +
 		"until they say so, pass autoRunWhenReady: false and do not call task_start; left out, an assigned task can " +
-		"start by itself once it is ready (prerequisites DONE, project started)."
+		"start by itself once it is ready."
 
 	agentPrimerCards = "A create, a batch, a project, a provider change or an agent change puts a confirmation card " +
 		"in front of the user and writes nothing until they confirm it, so first say in a sentence or two what you " +

@@ -1,11 +1,12 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.5.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0 to 1.5.0 changes
+> **Status:** frozen at v1.6.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0 to 1.6.0 changes
 > are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
 > card-free task-write door on the runner's machine credential; v1.3.0 makes tool input strict and every
 > write's answer a structured receipt (§5.3, §6.3); v1.4.0 gives the owner's "Chat about this" on a card
 > its own receipt outcome, `chat`, which is not a refusal (§6.2); v1.5.0 publishes §0 as the always-on
-> agent primer (§2.6) and changes no rule. This file is the authority for how an
+> agent primer (§2.6) and changes no rule; v1.6.0 adds graded discovery and the `guide` tool (§2.5), so
+> calling one operation no longer means reading the whole catalogue. This file is the authority for how an
 > in-session Claude or Codex agent uses Orbit: which object an intent belongs to, whether it travels
 > over MCP or the CLI, what a person must approve, how failures and retries are handled, and what
 > counts as a success receipt. The implementation tasks P0-02 … P2-01 work from this file. If the code
@@ -193,31 +194,82 @@ deliberate and is stated in §4.5.
 
 ### 2.5 Discovery
 
-- MCP: the tool list is the catalogue. Read a tool's description before choosing it; descriptions
-  state the defaults, the required declarations and the dangerous combinations.
-- CLI: `orbit capabilities --json` is the catalogue (`id`, `argv`, `helpArgv`, `usage`, `arguments`,
-  `description`, `mcpInputSchema`, `mutates`, `available`, plus `cliVersion`, `sourceSha`, `context`,
-  `identity`). Run the returned `argv` with the absolute path, never a hand-written guess. Since
-  v1.1.0 every entry also states `object`, `intent`, `risk`, `approval` (with `approvalKey` and
-  `approvalDetail`), `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns`
-  and `availability`, and the document carries `catalogVersion` and `catalogHash` naming the
-  operation catalogue it was projected from (`src/runner-go/operation_catalog.go`, rendered for a
-  person as [`operation-catalog.md`](./operation-catalog.md)). The same catalogue produces the MCP
-  `tools/list` payload and records why an operation is deliberately absent from one surface; a
-  mandatory test executes every advertised `argv` and `helpArgv` through the CLI's own router. Since
-  v1.3.0 every `mcpInputSchema` is closed (`additionalProperties: false` on each object that names
-  its properties, §5.3), an entry with exclusive arguments carries `mutuallyExclusive`, and the
-  document carries `receiptFlag` (`--receipt`, §6.3). There
-  is still no graded discovery — the document remains one ~300 KB blob in the fullest context
-  (§8.2), which is why P1-01 exists.
+Since v1.6.0 an agent finds an operation a piece at a time; it never has to read the whole catalogue
+to call one operation.
+
+- **The guide** (`guide` on MCP, `orbit guide [TOPIC] --json` at the CLI; `src/runner-go/agent_guide.go`,
+  guide `1.0.0`) is the catalogue arranged by what a person asks for. It is always listed — orchestration,
+  Watch and the wiki off included — read-only (`readOnlyHint`), and asks the server nothing. Without a
+  topic it answers the five objects and the question each answers (§1.1), the intent routes R1.1–R1.14
+  (§1.3: what the person says, the object, the operations, the topic, and whether the route is
+  available here and why not) and the routing rules R2–R5. With a topic it answers that topic's
+  shortest recipe: each step is a catalogued operation with its MCP tool and absolute CLI argv, whether
+  each surface can take it here and why not, `mutates`, `approval` (with its `approvalKey`), a minimal
+  example on both surfaces and `successEvidence`, followed by the rules that span the tools and what
+  proves the topic done. Both doors answer the same document (`view: guide` / `guide-topic`, a
+  `context` naming the `surface`, the actor, the session, agent and task, and the orchestration, Watch
+  and wiki switches). The routes and objects are held to `contracts/orbit-agent.contract.json`.
+- **Graded CLI discovery** (`src/runner-go/operation_discovery.go`) answers the capabilities document a
+  view at a time, each opening with `view`, `viewVersion` 1, `catalogVersion`, `catalogHash`,
+  `cliVersion`, `context` (the full document's: `actor`, `sessionId`, `agentId`, `taskId`) and
+  `receiptFlag`:
+  - `orbit capabilities --summary --json`: one row per command offered here (`id`, `intent`, and
+    `mutates`/`approval` when they are not false/none), grouped by family; the offered commands this
+    credential cannot run under `unavailable`, and the catalogued commands not offered at all under
+    `withheld`, each group with its reason.
+  - `orbit capabilities --family NAME --json`: one family (the command group: `task`, `task-list`,
+    `project`, `session`, …), each command with its absolute `argv`, `usage`, `available`, `mutates`,
+    `risk`, `approval`, `successEvidence`, `nextStep` and a minimal CLI example; the reasons a command
+    cannot run are given once under `unavailable`.
+  - `orbit capabilities --id ID --json`: one operation in full — any catalogued one, an MCP-only one
+    included (answered as a command it does not have, with why) — adding `description`, the leaf
+    `parameters` (each flag's spelling and whether it is required), `mutuallyExclusive`, `idempotency`,
+    `retry`, `returns`, `availability`, `helpArgv` and the MCP example. The JSON schema stays with the
+    MCP tool and the full document.
+- **Examples are generated from the catalogue**: an MCP example is the tool's required fields and a CLI
+  example the command's required arguments (`--receipt` for a write, `--json` for a read), each filled
+  from the row's declared `Example` or with a placeholder in angle brackets. A test passes every MCP
+  example through the tool's own schema and runs every CLI example through the command's own flag
+  parser, and a recipe's steps are held to the same.
+- **Budget**: one graded answer is at most 16 KiB in any context (under Claude Code's 30,000-character
+  shell-output cut, and under Codex's 10,000-token tool-output cut at a pessimistic two bytes a token),
+  and the ordinary task-create discovery — the guide's index, its `task-create` topic and
+  `capabilities --id task_create` — at most 24 KiB in all, with an executable path longer than any
+  runner's (`TestTaskCreateDiscoveryFlowStaysBounded`, `TestEveryGradedAnswerIsBounded`).
+- **The full document is unchanged**: `orbit capabilities --json` is still the catalogue (`id`, `argv`,
+  `helpArgv`, `usage`, `arguments`, `description`, `mcpInputSchema`, `mutates`, `available`, plus
+  `cliVersion`, `sourceSha`, `context`, `identity`), `schemaVersion` 2. Run the returned `argv` with the
+  absolute path, never a hand-written guess. Since v1.1.0 every entry also states `object`, `intent`,
+  `risk`, `approval` (with `approvalKey` and `approvalDetail`), `destructive`, `idempotency`, `retry`,
+  `successEvidence`, `nextStep`, `returns` and `availability`, and the document carries `catalogVersion`
+  and `catalogHash` naming the operation catalogue it was projected from
+  (`src/runner-go/operation_catalog.go`, rendered for a person as
+  [`operation-catalog.md`](./operation-catalog.md)). The same catalogue produces the MCP `tools/list`
+  payload and records why an operation is deliberately absent from one surface; a mandatory test
+  executes every advertised `argv` and `helpArgv` through the CLI's own router. Since v1.3.0 every
+  `mcpInputSchema` is closed (`additionalProperties: false` on each object that names its properties,
+  §5.3), an entry with exclusive arguments carries `mutuallyExclusive`, and the document carries
+  `receiptFlag` (`--receipt`, §6.3).
+- MCP: the tool list is still the catalogue's other surface. Read a tool's description before choosing
+  it; descriptions state the defaults, the required declarations and the dangerous combinations. What
+  spans several tools — which object a request belongs to, how a run's evidence is judged, how a plan's
+  refs and parents fit together — is the guide's, and since v1.6.0 the longest descriptions
+  (`task_create`, `task_create_batch`) carry their own call's facts — the start defaults, the card, the
+  criterion declaration and the pure gate, and asking the person what settles the work before the call
+  — and send the rest to it.
+- The engine instructions (§2.6) send the CLI to `orbit guide [topic] --json` and
+  `orbit capabilities --id <id> --json`, and the primer sends every agent to the guide when it is
+  unsure which operation fits. The Claude Code allowlist pre-approves `capabilities *` and `guide *`.
 
 ### 2.6 The always-on primer
 
 §0 is also the first thing every agent Orbit runs reads, as one short text: the **agent primer**
-(`src/runner-go/agent_primer.go`; primer `1.0.0`, written from contract `1.5.0`). Its first line names
+(`src/runner-go/agent_primer.go`; primer `1.1.0`, written from contract `1.6.0`). Its first line names
 both versions. It says the ten rules in eight paragraphs, names tools by their MCP names, and carries
-no engine's spelling of them and no path, so the same words are true in every client. The same text
-travels by two kinds of carrier:
+no engine's spelling of them and no path, so the same words are true in every client. Since primer
+`1.1.0` its objects paragraph ends by sending an agent unsure which operation fits, or how to call it,
+to the guide (§2.5); the two parentheticals the guide's topics now carry (a list's settings, what
+"ready" means) gave it the room. The same text travels by two kinds of carrier:
 
 | Carrier | Engine | When it is there |
 | --- | --- | --- |
@@ -801,7 +853,7 @@ exact byte count moves by a few dozen with them; the counts are stable.
 | --- | --- |
 | Per-capability fields | legacy: `id`, `argv`, `helpArgv`, `usage`, `arguments`, `description`, `mcpInputSchema`, `mutates`, `available`; since v1.1.0 also `object`, `intent`, `risk`, `approval`/`approvalKey`/`approvalDetail`, `destructive`, `idempotency`, `retry`, `successEvidence`, `nextStep`, `returns`, `availability` |
 | Document identity | `schemaVersion` 2 (unchanged: the new fields are additive), plus `catalogVersion` and a 64-hex `catalogHash` over the whole operation catalogue |
-| Fields the catalogue now supplies (P0-02) | `risk`, `approval`, `successEvidence`, `nextStep`, `object`, `intent`, `idempotency`, `retry`; graded discovery (`--summary` / `--family` / `--id` / guide) remains P1-01 |
+| Fields the catalogue now supplies (P0-02) | `risk`, `approval`, `successEvidence`, `nextStep`, `object`, `intent`, `idempotency`, `retry`; graded discovery (`--summary` / `--family` / `--id` / guide) since v1.6.0 (P1-01, §2.5) |
 | Every advertised command | `<argv> --help` prints that command's leaf help, and `<argv>` reaches its own flag parser; `operation_catalog_test.go` executes each one (it found four commands advertised in capabilities with no reachable leaf help, now fixed) |
 | MCP-only tools, orchestration-on context (no CLI capability) | 18 on the current `main` (the v1.0.0 baseline measured 14 before the four `criterion_*` tools landed): `ask_owner`, `bg_kill`, `bg_list`, `bg_output`, `bg_run`, `criterion_check_report`, `criterion_check_start`, `criterion_confirm`, `criterion_confirmation_withdraw`, `integration_abandon`, `integration_observe`, `integration_retry`, `open_item_hand_over`, `open_item_resolve`, `permission_prompt`, `request_owner_action`, `schedule_wakeup`, `withdraw_owner_request`. Each is declared with its reason in the operation catalogue |
 | CLI-only capabilities, same context (no MCP tool) | 3 agent-facing (`session_import`, `wiki_import`, `wiki_verify`), plus the person's four HeadlessOnly account commands (`login`, `logout`, `whoami`, `api`); all seven are declared with their reason |
@@ -813,7 +865,9 @@ Other measured facts:
   project list. Project ids come from a task row (`projectId`), a session/project page, or the REST
   `GET /projects` route — which the in-session CLI does not expose as a command. P0-02 records this
   as a deliberate absence in the operation catalogue rather than adding a tool one surface would
-  have and the other would not; graded discovery, projects included, belongs to P1-01.
+  have and the other would not. *Since 1.6.0* the guide's `inspect` topic says where a project id
+  comes from, and the `project` family is one `--family project` away; the list itself is still
+  deliberately absent.
 - **MCP results are a single text content block**; a successful read or write puts the entity JSON in
   it, while a refusal puts the refusal prose there. There is no `structuredContent` and no envelope
   version (`mcp.go` `toolResult`). The result is parseable but not machine-typed. *Since 1.3.0:* every
@@ -864,8 +918,8 @@ Other measured facts:
 | G3 | **Satisfied by P0-04 (1.3.0).** Every catalogued write answers with the versioned receipt (§6.3) as `structuredContent` and as its text, a read answered with a document carries it beside its text, the five objects' creates/updates and `task_start` advertise its schema as `outputSchema`, and the start is a field of it; `orbit … --receipt` prints the same document. | P0-04 |
 | G4 | ~~A declined card is a non-error MCP result and a non-zero CLI error — the same refusal, two shapes.~~ **Closed by P0-03 (v1.1.0):** both surfaces return the same `APPROVAL_DECLINED` document; the transport difference stays, the outcome does not differ. Since v1.3.0 the receipt carries that outcome (`outcome: declined`, `error.code: APPROVAL_DECLINED`, the decision and who made it) on MCP and at `--receipt` (P0-04). | P0-03 (closed); P0-04 owns the remaining receipt format |
 | G5 | **Satisfied by P0-04 (1.3.0).** `task_create` and `task_create_batch` take `idempotencyKey`: the same key answers with the first write in any turn, a changed payload under it is refused 409, and the runner resends a keyed create whose answer was lost. | P0-04 |
-| G6 | No project list surface on either agent surface. | P0-02 / P1-01 (P0-02 records it as deliberately absent; graded discovery belongs to P1-01) |
-| G7 | The catalogue is one 255 KB document in the fullest context (214 KB with orchestration off, 177 KB headless); there is no graded discovery (`summary`/`family`/`id`/guide). | P1-01 |
+| G6 | No project list surface on either agent surface. | P0-02 / P1-01 (P0-02 records it as deliberately absent; since 1.6.0 the guide's `inspect` topic says where a project id comes from, and the list stays absent) |
+| G7 | ~~The catalogue is one 255 KB document in the fullest context (214 KB with orchestration off, 177 KB headless); there is no graded discovery (`summary`/`family`/`id`/guide).~~ **Satisfied by P1-01 (1.6.0):** the always-listed, read-only `guide` tool and `orbit guide [topic]` answer the intent routes and one topic's recipe, and `orbit capabilities --summary` / `--family` / `--id` answer the catalogue a view at a time, each with the context, absolute argv, availability and its reason, mutates/approval, a minimal example generated from the catalogue and the success evidence. Every graded answer is at most 16 KiB and the task-create discovery 24 KiB in all (measured 2026-11-14: 6.0 + 5.8 + 6.8 KB, 18.6 KB in all, with a 60-character executable path, against 319 KB for the whole document in the fullest context); the whole document is unchanged (§2.5). | P1-01 (closed) |
 | G8 | **Satisfied by P0-02.** `src/runner-go/operation_catalog.go` is the single versioned catalogue: one row per operation with object, intent, input schema, availability, mutates, approval, destructive, idempotency, retry, success evidence and next step. MCP `tools/list`, `orbit capabilities` (with `catalogVersion` and `catalogHash`) and the public catalogue document are projected from it, every deliberate one-surface absence carries its reason in the row, and a mandatory test executes every advertised `argv`/`helpArgv`. | P0-02 |
 | G9 | Permission-mode behaviour for Orbit calls is not uniform: the runner adds no gate of its own; Codex `plan` refuses every MCP call (reads included), Codex `default`/`acceptEdits` cards every MCP call, and Claude's own plan policy is unmeasured. | P1-02 |
 | G10 | No black-box evaluation exists for the eight scenarios on either engine. | P2-01 |
@@ -893,6 +947,7 @@ Other measured facts:
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.6.0 | 2026-11-14 | P1-01: graded discovery (§2.5, G7 closed). A new catalogued operation, `guide` (MCP tool, always listed and `readOnlyHint`; `orbit guide [TOPIC] --json`), answers the objects, the intent routes R1.1–R1.14 with their topics and availability, and the routing rules, or one topic's shortest recipe: each step's MCP tool and absolute argv, availability on each surface with the reason, mutates/approval, a minimal example and the success evidence, then the rules that span the tools. `orbit capabilities` gains `--summary`, `--family NAME` and `--id ID`, which answer the same offer a view at a time with the same `context`; a command this process is not offered is explained (a switch, a credential, an MCP-only door) rather than missing. The examples and leaf parameters are generated from the catalogue and held to both surfaces by tests, and a budget test bounds every graded answer (16 KiB) and the task-create discovery (24 KiB). The engine instructions send the CLI to the guide and `--id` instead of the whole document, the primer (1.1.0) sends an agent to the guide when unsure, and the Claude allowlist pre-approves `capabilities *` and `guide *`. `task_create`'s and `task_create_batch`'s descriptions keep their own call's facts (the start defaults, the card, the criterion declaration, the pure gate, and asking the person what settles the work before the call) and send the cross-tool rules (which object, how evidence is judged, ordering and nesting) to the guide's `task-create` and `task-batch` topics; `task_batch_pin`'s loses its benchmark history. The catalogue moves to 1.5.0. `orbit capabilities --json` is unchanged (`schemaVersion` 2). No routing rule changes. |
 | 1.5.0 | 2026-11-14 | P0-05. §0 is published as the always-on agent primer (`agent_primer.go`, primer 1.0.0, new §2.6): MCP `initialize` answers with it as versioned `instructions`, and every engine's injected instructions open with the same text (Claude `--append-system-prompt`; Codex application context, now sent as whole paragraphs in values of at most 900 bytes, its developer message or its turn input; Kimi, Cursor, Antigravity, DeepSeek Harness, OpenCode). The first paragraph stands alone in at most 512 characters, the primer is at most 3,200 bytes and the engine-side text at most 6,400, each snapshotted, and nothing is read from the checkout. The primer says what to do when the orchestration family is absent (S7), and it and the create tools' descriptions lead with `autoRunWhenReady` defaulting to true (G11). It reads a receipt as §6.2–§6.3 define it: a write is `ok: true` and `outcome: written`, every other outcome is `ok: false`, `error.retry` is followed except on a `chat` (answer the owner, then ask again), and the creates are keyed with `idempotencyKey`; a test holds those words to `receipt` in `contracts/orbit-agent.contract.json`, and the CLI paragraph points at `--receipt`. `orbit mcp help` names the runtimes and objects from the runner's own tables. The propose-dag CLI copy no longer says a session-less `--apply` applies directly: since 1.2.0 it is refused. No routing rule changes. §2.6 added; §8.2, §8.3 (S2, S3, S7, S8) and §8.4 (G2, G11 closed) updated. |
 | 1.4.0 | 2026-11-14 | P0-04, merged with main's "Chat about this" change (8334e6e6a). When a card's answer carries the owner's own words (`decidedById` set), the owner pressed "Chat about this". That answer is now the receipt's own outcome, `chat`, and not `declined`: `ok: false`, `approval.outcome: chat`, `approval.message` (their words), `text` (the reply every Orbit ask hands over, "Not done yet, and not a no: …"), and no `error`. Nothing is written, and the proposal stays open to ask again after the talk. A bare no and an abandoned card stay `declined` / `APPROVAL_DECLINED`. The MCP text of a chat is that reply rather than the receipt, and the web, OrbitKit and Android readers also read a chat receipt that an engine shows in its place. `owner-chat-reply.fixture.json` pins both forms. §0 rule 5, §2.4, §5.1, §5.2 rule 7, §6.1–6.3 updated. The catalogue moves to 1.3.0, because the receipt `outputSchema` gains the value. |
 | 1.3.0 | 2026-11-13 | P0-04: strict input and the receipt. Every catalogued tool call is judged against its advertised schema before any request (closed objects advertised as `additionalProperties: false`, types, bounds, required fields, the catalogue's mutually exclusive groups) and refused with `INVALID_ARGUMENTS`; the CLI judges `--tasks` the same way. Every write answers with the versioned receipt (§6.3) as `structuredContent` and as its text, and a read answered with a document carries it as `structuredContent` — with `ok`, `outcome`, `id`, `status`, `changedFields`, `approval`, `idempotency` and a retry-ruled `error`; the five objects' creates/updates and `task_start` advertise it as `outputSchema`; `--receipt` prints it at the CLI. `task_create`/`task_create_batch` take `idempotencyKey` (G5). G1, G3 and G5 are satisfied, and the receipt carries G4's APPROVAL_DECLINED outcome. The catalogue moves to 1.2.0 (`task_create`/`task_create_batch` idempotency `caller_key`, `Exclusive` groups, closed input schemas). |

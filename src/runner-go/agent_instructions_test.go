@@ -19,7 +19,10 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		t.Fatalf("merged instructions = %q, want %q", got, want)
 	}
 	for _, phrase := range []string{
-		"'/opt/orbit runner/bin/orbit' capabilities --json",
+		// Graded discovery: a command is found a topic or an id at a time, never by reading the whole
+		// catalogue, which no engine shows a model whole (operation_discovery.go).
+		"'/opt/orbit runner/bin/orbit' guide [topic] --json",
+		"'/opt/orbit runner/bin/orbit' capabilities --id <id> --json",
 		"mcp__orbit__*",
 		"Pass `--receipt` to read the receipt its MCP tool answers with",
 		"`--json` prints the entity alone",
@@ -169,7 +172,7 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
-	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-session:<id>", "capabilities --json", "mcp__orbit__*"} {
+	for _, shared := range []string{"durable record", "No returned id, no claim.", "orbit-session:<id>", "capabilities --id <id> --json", "guide [topic] --json", "mcp__orbit__*"} {
 		if !strings.Contains(open, shared) || !strings.Contains(inside, shared) {
 			t.Errorf("both forms must keep %q", shared)
 		}
@@ -296,6 +299,8 @@ var advertisedCapabilityFamilies = []struct {
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
 	// Ungated, for the same reason: keeping and reading back your own files.
 	{"fileCLICapabilities", fileCLICapabilities, false},
+	// Ungated and offered everywhere: the guide reads the catalogue and asks the server nothing.
+	{"guideCLICapabilities", guideCLICapabilities, false},
 	// The person's own commands: every one HeadlessOnly, so no running agent is offered any of them.
 	{"userCLICapabilities", userCLICapabilities, false},
 	{"sessionCLICapabilities", sessionCLICapabilities, true},
