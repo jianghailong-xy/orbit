@@ -34,6 +34,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Learn how agents use Orbit — MCP first, your record vs their plan, which object, create vs start, the CLI, troubleshooting, examples to ask | [How agents use Orbit](agent-tools-guide.md) |
 | Look up every operation an agent can call, with its risk, approval and receipt | [Operation catalogue](operation-catalog.md) |
 | See what each permission mode does with Orbit's own calls on Claude Code and Codex | [Permission matrix](permission-matrix.md) |
+| Check that agents still use Orbit correctly on the supported Claude Code and Codex versions, read an eval report, or ship an agent-facing change | [Agent-contract eval, telemetry and release gate](agent-contract-eval.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
 | Back up, restore or recover managed runners on Docker | [Managed runners on Docker: operations](managed-runner-docker-operations.md) |
 | Deploy, back up, restore, roll back or fail over managed runners on Kubernetes (test environments) | [Managed runners on Kubernetes: operations](managed-runner-kubernetes-operations.md) |
@@ -105,6 +106,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   Codex agent uses Orbit: the five objects and their routing, MCP-first and the CLI boundary,
   create-vs-start, permissions and approvals, errors and retries, success receipts, the eight black-box
   scenarios, and the measured baseline with its confirmed gaps.
+- [Agent-contract eval, telemetry and release gate](agent-contract-eval.md) — the contract's scenarios played on
+  the real Claude Code and Codex with real models and by a scripted agent in CI, the comparable report and its
+  metrics, the counts-only per-turn telemetry, version drift, and the release gate with its rollback conditions.
 - [Session search](session-search-design.md) — server-side multilingual search.
 - [Rate-limit retry](quota-limit-retry-design.md) — usage-limit detection and automatic retry.
 - [Cross-platform badge sync](cross-platform-badge-sync.md) — attention state across clients.

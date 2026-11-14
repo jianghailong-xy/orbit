@@ -2202,6 +2202,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			firstSpawn = true
 		}
 	}
+	// Set while the conversation this process continues was compacted or resumed and no message has carried
+	// the note that says so yet (context_reset_note.go): from the start for a resume, and on each compaction.
+	var contextReset atomic.Bool
+	contextReset.Store(!firstSpawn)
 	args := claudeCommandArgs(job, scratchDir, firstSpawn)
 	// What this process's running totals start from, read from the transcript --resume is about to
 	// read, before it reads it: every completion it sends carries it (claude_running_totals.go).
@@ -2526,6 +2530,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					// NOT cleared here: a message the runtime refuses below is never fed, and
 					// the shell output it was carrying still belongs to whatever is fed next.
 				}
+				// A conversation compacted or resumed since the last message: this one says so first. Like the
+				// shell output, the flag is cleared only once the message is accepted below.
+				carriesReset := !steer && contextReset.Load()
+				feedText = withContextResetNote(feedText, carriesReset)
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
 				// content it never received.
@@ -2591,6 +2599,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				// answered.
 				deliveries.accept(delivery, slot.receipt)
 				pendingShellCtx = nil // this message carries it now
+				if carriesReset {
+					contextReset.Store(false)
+				}
 				userEv["delivery"] = string(deliveryEnqueued)
 				if steer {
 					// Which kind this message was filed as, on the one event that survives a
@@ -3017,6 +3028,9 @@ scanLoop:
 		}
 		handleMessage(msg, emit, bg)
 		claudeNoteEngineMode(job, msg)
+		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" && msg["parent_tool_use_id"] == nil {
+			contextReset.Store(true)
+		}
 		// The init handshake is where the CLI names its own version, and it is the only place
 		// it does. One control frame has to know it — apply_flag_settings answers `success`
 		// whether or not it acted, so the version is all there is to gate on (claude_setconfig.go)

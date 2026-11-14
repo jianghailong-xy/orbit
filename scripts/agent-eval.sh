@@ -3,7 +3,9 @@
 #
 #   scripts/agent-eval.sh deterministic
 #       The CI layer: the scenario catalogue, the golden and mistake agents through the real `orbit mcp` and CLI,
-#       the graders, the report and the telemetry. No engine, no model, about a minute.
+#       the graders, the report and the telemetry, and the contract tests the release gate names (every advertised
+#       argv and helpArgv runs, strict input, the receipts, the Plan gate, the primer and its carriers after a
+#       compaction, the CLI batch's card). No engine, no model, a few minutes.
 #
 #   scripts/agent-eval.sh live [--engines claude,codex] [--scenarios all|ID,ID|E1*] [--repeats N]
 #                              [--claude-model M] [--codex-model M] [--claude-bin PATH] [--codex-bin PATH]
@@ -34,6 +36,10 @@ clean_env=(env
   -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_EXECPATH -u CLAUDE_CODE_SESSION_ATTENDED -u CLAUDE_PID -u CLAUDE_EFFORT
   NO_COLOR=1)
 
+# The deterministic layer: the eval's own tests, and the contract tests the release gate names
+# (docs/agent-contract-eval.md#release-gate).
+deterministic_tests='^(TestAgentEval|TestAgentContractTelemetry|TestOrbitCLIInvocationReadsInsideAShell|TestATurnThatTouchedOrbitFilesItsTelemetryBeforeItsTurnEnd|TestTheMessageAfterACompactionCarriesTheContextResetNote|TestCodexTurnAfterACompactionOrAResumeCarriesTheContextResetNote|TestEveryAdvertisedArgvAndHelpArgvRuns|TestContract|TestCLIReceipt|TestCLIRefusesAnInvalidBatchDocumentBeforeAnyRequest|TestEveryAdvertisedObjectSchemaIsClosed|TestCatalogSchemasUseOnlyTheValidatedSubset|TestPlanGate|TestOrbitMCPRefusesAWriteInPlanBeforeItReachesTheControlPlane|TestTheInSessionCLIRefusesAWriteInPlan|TestCLIPlanGateRefusesTheSameWrites|TestAgentPrimer|TestMCPInitializeAnswersWithTheVersionedPrimer|TestEveryEngineIsGivenTheSamePrimer|TestCodexPutsThePrimerBackAfterCompaction|TestMCPToolListIsProjectedFromCatalog)'
+
 usage() {
   sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
@@ -46,8 +52,7 @@ shift
 case "$cmd" in
   deterministic)
     cd "$runner"
-    exec "${clean_env[@]}" go test -count=1 -timeout 20m \
-      -run '^(TestAgentEval|TestAgentContractTelemetry)' .
+    exec "${clean_env[@]}" go test -count=1 -timeout 20m -run "$deterministic_tests" .
     ;;
   live)
     engines="claude,codex" scenarios="all" repeats=1 out="${PWD}/agent-eval-reports" baseline=""

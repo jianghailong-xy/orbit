@@ -80,6 +80,13 @@ func evalGate() evalGateRules {
 
 // ── The report ───────────────────────────────────────────────────────────────────────────────────────
 
+// evalSkip is a scenario not played on an engine of this machine, and why (evalNotApplicable).
+type evalSkip struct {
+	Scenario string `json:"scenario"`
+	Engine   string `json:"engine"`
+	Reason   string `json:"reason"`
+}
+
 type evalReport struct {
 	ReportVersion int                `json:"reportVersion"`
 	Kind          string             `json:"kind"`
@@ -89,6 +96,7 @@ type evalReport struct {
 	Suite         evalReportSuite    `json:"suite"`
 	Matrix        []evalMatrixEntry  `json:"matrix"`
 	Runs          []evalRunReport    `json:"runs"`
+	Skipped       []evalSkip         `json:"skipped,omitempty"`
 	Summary       evalSummary        `json:"summary"`
 	Gate          evalGateResult     `json:"gate"`
 	Comparison    *evalComparison    `json:"comparison,omitempty"`
@@ -454,12 +462,12 @@ func medianInt(values []int) int {
 }
 
 // buildEvalReport grades every run and adds them up.
-func buildEvalReport(runs []*evalRun, repoSHA string, baseline *evalReport) *evalReport {
+func buildEvalReport(runs []*evalRun, repoSHA string, baseline *evalReport, skipped ...evalSkip) *evalReport {
 	rep := &evalReport{ReportVersion: evalReportVersion, Kind: evalReportKind, GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		Source: evalReportSource{RepoSHA: repoSHA, CLIVersion: version},
 		Contract: evalReportContract{ContractVersion: agentContractVersion, PrimerVersion: agentPrimerVersion,
 			CatalogVersion: operationCatalogVersion, CatalogHash: operationCatalog().Hash, GuideVersion: agentGuideVersion},
-		Suite: evalReportSuite{Hash: evalSuiteHash()}, Runs: []evalRunReport{}}
+		Suite: evalReportSuite{Hash: evalSuiteHash()}, Runs: []evalRunReport{}, Skipped: skipped}
 	for _, sc := range evalScenarios() {
 		rep.Suite.Scenarios = append(rep.Suite.Scenarios, sc.ID)
 	}
@@ -614,9 +622,14 @@ func gateOf(rep *evalReport, rules evalGateRules) evalGateResult {
 				cell.Passed+cell.Failed, rules.PassNumerator, rules.PassDenominator))
 		}
 	}
+	skipped := map[string]bool{}
+	for _, skip := range rep.Skipped {
+		skipped[skip.Scenario+" | "+skip.Engine] = true
+		g.Notices = append(g.Notices, fmt.Sprintf("not applicable: %s on %s, because %s", skip.Scenario, skip.Engine, skip.Reason))
+	}
 	for _, m := range rep.Matrix {
 		for _, sc := range rep.Suite.Scenarios {
-			if !ran[sc+" | "+m.key()] {
+			if !ran[sc+" | "+m.key()] && !skipped[sc+" | "+m.Engine] {
 				if g.Verdict == evalVerdictPass {
 					g.Verdict = "INCOMPLETE"
 				}
@@ -740,7 +753,13 @@ func (rep *evalReport) markdown() string {
 		var cols []string
 		for _, m := range rep.Matrix {
 			cell, ok := rep.Summary.Cells[sc+" | "+m.Engine+"/"+m.Model+"/"+m.Backend]
+			na := false
+			for _, skip := range rep.Skipped {
+				na = na || (skip.Scenario == sc && skip.Engine == m.Engine)
+			}
 			switch {
+			case !ok && na:
+				cols = append(cols, "n/a")
 			case !ok:
 				cols = append(cols, "—")
 			case cell.Passed+cell.Failed == 0:

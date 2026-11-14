@@ -325,6 +325,9 @@ type codexEvalEngine struct {
 }
 
 func (e *codexEvalEngine) identity() (string, string, string, string) {
+	if e.model == "" {
+		return providerCodex, "live", e.version, "engine-default"
+	}
 	return providerCodex, "live", e.version, e.model
 }
 
@@ -608,14 +611,18 @@ func TestAgentEvalLive(t *testing.T) {
 	if claudeModel == "" {
 		claudeModel = "claude-sonnet-5-5"
 	}
+	// Unset, Codex runs its own configured default, as a session with no model of its own does.
 	codexModel := os.Getenv(evalCodexModelEnv)
-	if codexModel == "" {
-		codexModel = "gpt-6.1-sol"
-	}
 	effort := os.Getenv(evalEffortEnv)
 	var runs []*evalRun
+	var skipped []evalSkip
 	for _, engine := range evalEnvList(evalEnginesEnv, "claude,codex") {
 		for _, sc := range evalSelectedScenarios() {
+			if reason := evalNotApplicable(sc, engine); reason != "" {
+				t.Logf("%s %s: not applicable: %s", engine, sc.ID, reason)
+				skipped = append(skipped, evalSkip{Scenario: sc.ID, Engine: engine, Reason: reason})
+				continue
+			}
 			for repeat := 1; repeat <= repeats; repeat++ {
 				var eng evalEngine
 				switch engine {
@@ -646,7 +653,7 @@ func TestAgentEvalLive(t *testing.T) {
 			}
 		}
 	}
-	rep := buildEvalReport(runs, evalRepoSHA(), baseline)
+	rep := buildEvalReport(runs, evalRepoSHA(), baseline, skipped...)
 	if err := writeEvalReport(rep, report); err != nil {
 		t.Fatal(err)
 	}

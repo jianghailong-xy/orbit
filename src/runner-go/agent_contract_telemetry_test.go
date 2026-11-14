@@ -160,3 +160,31 @@ func TestAgentContractTelemetryCarriesNoCredentialsOrText(t *testing.T) {
 	_ = json.Unmarshal(raw, &doc)
 	walk(doc)
 }
+
+// A command handed to a shell is read inside: Codex reports its commands as `/bin/bash -lc '…'`.
+func TestOrbitCLIInvocationReadsInsideAShell(t *testing.T) {
+	exe := "/opt/orbit/bin/orbit"
+	cases := []struct {
+		command string
+		want    string
+		bare    bool
+	}{
+		{exe + " task create --title x", "task create --title x", false},
+		{"/bin/bash -lc '" + exe + " task list --json'", "task list --json", false},
+		{`bash -c "cd /tmp && ` + exe + ` project get P1 --receipt"`, "project get P1 --receipt", false},
+		{"ORBIT_X=1 env " + exe + " guide --json", "guide --json", false},
+		{"sh -lc 'orbit task get T1'", "task get T1", true},
+		{"ls -la && " + exe + " capabilities --summary --json", "capabilities --summary --json", false},
+	}
+	for _, c := range cases {
+		args, bare, ok := orbitCLIInvocation(c.command, exe)
+		if !ok || strings.Join(args, " ") != c.want || bare != c.bare {
+			t.Errorf("%q: %v bare=%v ok=%v, want %q bare=%v", c.command, args, bare, ok, c.want, c.bare)
+		}
+	}
+	for _, none := range []string{"ls -la", "bash -lc 'git status'", "echo orbit-task:abc", "cat orbit.txt"} {
+		if args, _, ok := orbitCLIInvocation(none, exe); ok {
+			t.Errorf("%q read as an Orbit command: %v", none, args)
+		}
+	}
+}

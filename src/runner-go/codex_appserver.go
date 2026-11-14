@@ -93,7 +93,10 @@ type codexAppServer struct {
 	// consentScope tells this process's JSON-RPC ids from another's (mcpConsentToolUseID).
 	consentScope string
 
-	orbitExecutable     string
+	orbitExecutable string
+	// resetNotePending says the conversation was compacted or resumed since the last turn/start: the next one leads
+	// with orbitContextResetNote (context_reset_note.go).
+	resetNotePending    atomic.Bool
 	instructionMode     codexInstructionMode
 	instructionMu       sync.Mutex
 	contextGeneration   uint64
@@ -1345,6 +1348,9 @@ func (a *codexAppServer) startOrResumeThread(ctx context.Context, job *ClaimedSe
 	if err != nil {
 		return "", err
 	}
+	if method == "thread/resume" {
+		a.resetNotePending.Store(true)
+	}
 	if id := threadIDFromResult(result); id != "" {
 		return id, nil
 	}
@@ -1358,6 +1364,7 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 	mode, generation := a.prepareInstructionContext(func() error {
 		return a.injectAgentContext(ctx, threadID, job.instructionAgent(), job.insideRecordedWork(), job.watchesOn())
 	})
+	prompt = a.turnPrompt(prompt)
 	result, err := a.request(ctx, "turn/start", codexTurnParams(
 		threadID, job, execDir, upDir, orbitTurnID, prompt, imagePaths,
 		codexTurnContextOptions{
@@ -1370,6 +1377,12 @@ func (a *codexAppServer) startTurn(ctx context.Context, threadID string, job *Cl
 		return "", err
 	}
 	return turnIDFromResult(result), nil
+}
+
+// turnPrompt is the person's words as the next turn/start sends them: led by orbitContextResetNote, once, after a
+// compaction or a resume (context_reset_note.go).
+func (a *codexAppServer) turnPrompt(prompt string) string {
+	return withContextResetNote(prompt, a.resetNotePending.Swap(false))
 }
 
 func (a *codexAppServer) injectAgentContext(
@@ -1431,6 +1444,7 @@ func (a *codexAppServer) currentInstructionMode() codexInstructionMode {
 }
 
 func (a *codexAppServer) markInstructionContextForRefresh() bool {
+	a.resetNotePending.Store(true)
 	a.instructionMu.Lock()
 	newlyInvalidated := !a.contextNeedsRefresh
 	a.contextNeedsRefresh = true

@@ -8,6 +8,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -117,6 +118,21 @@ func TestAgentEvalScenarioCatalogCoversTheContract(t *testing.T) {
 		if !covered[c] {
 			t.Errorf("nothing covers %s", c)
 		}
+	}
+	// The contract's index lists the suite by id, in the order a report lists it.
+	idx, err := readEvalContractIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []string
+	for _, sc := range evalScenarios() {
+		want = append(want, sc.ID)
+	}
+	if strings.Join(idx.Eval.Scenarios, ",") != strings.Join(want, ",") {
+		t.Errorf("contracts/orbit-agent.contract.json eval.scenarios = %v, the suite is %v", idx.Eval.Scenarios, want)
+	}
+	if idx.ContractVersion != agentContractVersion {
+		t.Errorf("the contract's index is at %s, the eval grades under %s", idx.ContractVersion, agentContractVersion)
 	}
 }
 
@@ -237,4 +253,66 @@ func evalDebugRun(run *evalRun) string {
 		b.WriteString("  ledger: " + e.Kind + " " + e.ID + " " + e.Detail + "\n")
 	}
 	return b.String()
+}
+
+// The CLI's batch has no door the MCP tool lacks (contract §2.4, §4.5): inside a session it puts the same card in front
+// of the owner, writes nothing on a no and everything on a yes; and a process that drops the session header, as an
+// agent's shell can, is refused by the control plane's card rule (the server's own half is
+// src/apiserver/src/tasks/task-write-approval.pg.spec.ts) instead of writing card-free.
+func TestAgentEvalCLIBatchCannotSkipTheCard(t *testing.T) {
+	evalUseScratchHome(t)
+	batch := `{"tasks":[{"ref":"a","title":"One","completionCriterion":"EVIDENCE_JUDGMENT","autoRunWhenReady":false},` +
+		`{"ref":"b","title":"Two","completionCriterion":"EVIDENCE_JUDGMENT","autoRunWhenReady":false,"dependsOnRefs":["a"]}]}`
+	for _, c := range []struct {
+		name    string
+		answer  evalCardAnswer
+		session bool
+		written int
+		outcome string
+	}{
+		{"a no writes nothing", evalCardDecline, true, 0, outcomeDeclined},
+		{"a yes writes every item", evalCardApprove, true, 2, outcomeWritten},
+		{"no session is refused", evalCardApprove, false, 0, outcomeRefused},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			sc := &evalScenario{ID: "cli-batch", Turns: []evalTurnSpec{{Mode: "default"}},
+				Setup: evalSetup{Owner: evalOwnerAnswers(map[string][]evalCardAnswer{batchApprovalToolName: {c.answer}}, nil)}}
+			s, err := newEvalSession(sc, providerClaude)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.close()
+			env := s.env(true)
+			if !c.session {
+				var kept []string
+				for _, kv := range env {
+					if !strings.HasPrefix(kv, "ORBIT_SESSION_ID=") {
+						kept = append(kept, kv)
+					}
+				}
+				env = kept
+			}
+			cmd := exec.Command(s.exe, "task", "create-batch", "--tasks-file", "-", "--receipt")
+			cmd.Env, cmd.Dir, cmd.Stdin = env, s.work, strings.NewReader(batch)
+			out, _ := cmd.Output()
+			receipt, ok := evalFindReceipt(string(out))
+			if !ok || receipt.Outcome != c.outcome {
+				t.Fatalf("receipt = %+v (%v) from %s", receipt, ok, out)
+			}
+			ledger := s.plane.snapshot()
+			if got := len(ledger.agentCreated()); got != c.written {
+				t.Fatalf("%d tasks written, want %d", got, c.written)
+			}
+			cards := ledger.cardsOf(batchApprovalToolName)
+			if c.session && len(cards) != 1 {
+				t.Fatalf("%d batch cards, want the one", len(cards))
+			}
+			if !c.session && len(cards) != 0 {
+				t.Fatalf("a session-less process filed %d cards", len(cards))
+			}
+			if !c.session && receipt.Code != "TASK_WRITE_NEEDS_OWNER_CARD" {
+				t.Fatalf("a session-less batch was refused %q, want TASK_WRITE_NEEDS_OWNER_CARD", receipt.Code)
+			}
+		})
+	}
 }

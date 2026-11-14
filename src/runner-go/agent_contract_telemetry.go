@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -100,8 +101,15 @@ func quotedShellWords(s string) []string {
 }
 
 // orbitCLIInvocation finds the first Orbit CLI invocation in a shell command line: the words after the executable,
-// and whether that executable was a PATH-resolved `orbit` rather than exe, the absolute path the runner gave.
+// and whether that executable was a PATH-resolved `orbit` rather than exe, the absolute path the runner gave. A
+// command handed to a shell (`bash -lc '…'`, `sh -c "…"`, the form Codex reports its commands in) is read inside.
 func orbitCLIInvocation(command, exe string) (args []string, bare, found bool) {
+	return orbitCLIInvocationDepth(command, exe, 0)
+}
+
+var shellNames = map[string]bool{"bash": true, "sh": true, "zsh": true, "dash": true}
+
+func orbitCLIInvocationDepth(command, exe string, depth int) (args []string, bare, found bool) {
 	for _, segment := range shellSegmentSplit.Split(command, -1) {
 		words := quotedShellWords(strings.TrimSpace(segment))
 		for i, w := range words {
@@ -112,7 +120,28 @@ func orbitCLIInvocation(command, exe string) (args []string, bare, found bool) {
 			if (exe != "" && w == exe) || w == "orbit" {
 				return words[i+1:], w == "orbit" && w != exe, true
 			}
+			if shellNames[filepath.Base(w)] && depth < 2 {
+				for j := i + 1; j+1 < len(words); j++ {
+					if flag := words[j]; strings.HasPrefix(flag, "-") && strings.Contains(flag, "c") {
+						if args, bare, ok := orbitCLIInvocationDepth(words[j+1], exe, depth+1); ok {
+							return args, bare, true
+						}
+						break
+					}
+				}
+			}
 			break
+		}
+	}
+	// A shell's own text is split at its operators before it is read, so a wrapped command line is searched whole
+	// too: `bash -lc 'cd x && orbit task list'` names Orbit after the `&&` inside the quotes.
+	if depth == 0 {
+		for _, w := range quotedShellWords(command) {
+			if strings.ContainsAny(w, " \t") {
+				if args, bare, ok := orbitCLIInvocationDepth(w, exe, depth+1); ok {
+					return args, bare, true
+				}
+			}
 		}
 	}
 	return nil, false, false

@@ -237,7 +237,10 @@
       {"engine": "claude", "versions": ["2.1.325"], "models": [], "modes": ["plan", "default", "acceptEdits", "dontAsk", "auto", "bypassPermissions"]},
       {"engine": "codex", "versions": ["0.167.2"], "models": [], "modes": ["plan", "default", "acceptEdits", "dontAsk", "auto", "bypassPermissions"]}
     ],
-    "gate": {"passNumerator": 2, "passDenominator": 3, "metricWarnFraction": 0.5}
+    "gate": {"passNumerator": 2, "passDenominator": 3, "metricWarnFraction": 0.5},
+    "scenarios": ["E1-record-task", "E1-record-task/auto", "E1-record-task/bypassPermissions", "E2-private-plan", "E3-create-no-start", "E3-create-no-start/owner-starts", "E4-batch-plan", "E5-read-only-project", "E5-read-only-project/plan", "E6-immediate-delegation", "E7-no-orchestration", "E8-compaction-recovery", "E8-compaction-recovery/resume", "X1-mcp-missing-cli-fallback", "X2-approval-declined", "X3-approval-chat", "X4-lost-answer-retry", "X5-plan-mode-write"],
+    "layers": {"deterministic": {"ci": "Agent contract eval", "command": "scripts/agent-eval.sh deterministic"}, "blackBox": {"workflow": ".github/workflows/agent-eval.yml", "command": "scripts/agent-eval.sh live"}},
+    "telemetry": {"subtype": "agent_contract_telemetry", "source": "src/runner-go/agent_contract_telemetry.go", "version": 1, "off": "ORBIT_AGENT_CONTRACT_TELEMETRY=off", "never": ["argument values", "tool answers", "replies", "the person's words", "ids", "paths", "credentials"]}
   },
   "review": {
     "reviewedAt": "2026-11-13",
