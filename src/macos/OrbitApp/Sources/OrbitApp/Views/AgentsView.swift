@@ -454,9 +454,17 @@ struct AgentPanes: View {
                 }
                 #endif
             } else if agents.agentSessions.isEmpty {
-                ContentUnavailableView(
-                    agents.sessionsLoading ? "Loading…" : "No \(view.title.lowercased()) sessions",
-                    systemImage: "bubble.left.and.bubble.right")
+                #if os(iOS)
+                // No list saved yet (a fresh install, a new account): grey rows where the sessions
+                // will be, while the title's line says "Loading sessions…" (board 02 ④).
+                if agents.sessionsLoading && view == .open {
+                    SessionListPlaceholder()
+                } else {
+                    emptyList
+                }
+                #else
+                emptyList
+                #endif
             }
         }
         #if os(iOS)
@@ -576,12 +584,12 @@ struct AgentPanes: View {
             // fallback branch is the same item with nothing to hide.
             if #available(iOS 26.0, *) {
                 ToolbarItem(placement: .topBarLeading) {
-                    WorkspaceTitle(name: agent.name)
+                    listTitle
                 }
                 .sharedBackgroundVisibility(.hidden)
             } else {
                 ToolbarItem(placement: .topBarLeading) {
-                    WorkspaceTitle(name: agent.name)
+                    listTitle
                 }
             }
             #else
@@ -727,6 +735,24 @@ struct AgentPanes: View {
             }
         }
     }
+
+    private var emptyList: some View {
+        ContentUnavailableView(
+            agents.sessionsLoading ? "Loading…" : "No \(view.title.lowercased()) sessions",
+            systemImage: "bubble.left.and.bubble.right")
+    }
+
+    #if os(iOS)
+    /// The workspace name over the list, with the Open list's freshness line under it while the rows
+    /// may still be the previous run's (docs/mocks/ios-launch-updating). Completed / Trash read for
+    /// themselves, so they draw the name alone.
+    private var listTitle: some View {
+        WorkspaceTitle(name: agent.name,
+                       status: view == .open ? app.openListStatus : nil,
+                       empty: agents.agentSessions.isEmpty,
+                       retry: { app.retryOpenList() })
+    }
+    #endif
 
     /// Open / Completed / Trash, over the list on the Mac and on regular iPad. This is deliberately
     /// content-width, not fixed-width, so it continues to fit the middle column at larger Dynamic
@@ -1213,7 +1239,12 @@ struct AgentConsoleDetail: View {
     }
 
     var body: some View {
-        if let runnerID = app.machineDraftRunnerID {
+        if let guestID = app.guestSessionID {
+            // A session somebody shared with this account: its guest view (Shared with me, or a
+            // session id the owner's read found nothing of yours at).
+            GuestSessionView(sessionID: guestID)
+                .id(guestID)
+        } else if let runnerID = app.machineDraftRunnerID {
             // A machine's own new session page, whose Set up row put it here (board rule 1).
             MachineDraftPage(runnerID: runnerID)
                 .id(runnerID)
@@ -2195,3 +2226,32 @@ struct AgentFormContent: View {
         Task { await agents.save(agent.id, req) }
     }
 }
+
+#if os(iOS)
+/// Grey rows standing in for a session list that has never been read on this phone (board 02 ④ of
+/// docs/mocks/ios-launch-updating), in place of a blank page with a centred "Loading…".
+private struct SessionListPlaceholder: View {
+    private static let widths: [(CGFloat, CGFloat)] = [
+        (0.72, 0.46), (0.60, 0.52), (0.80, 0.38), (0.55, 0.60), (0.68, 0.42), (0.76, 0.50),
+    ]
+
+    var body: some View {
+        GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Self.widths.indices, id: \.self) { i in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Capsule().frame(width: geo.size.width * Self.widths[i].0, height: 12)
+                        Capsule().frame(width: geo.size.width * Self.widths[i].1, height: 10)
+                    }
+                    .padding(.vertical, 14)
+                    Divider()
+                }
+            }
+            .foregroundStyle(.quaternary)
+            .padding(.horizontal, 16)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+}
+#endif

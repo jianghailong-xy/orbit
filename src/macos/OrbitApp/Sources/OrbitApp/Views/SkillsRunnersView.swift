@@ -741,10 +741,15 @@ struct RunnerDetailContent: View {
             if !offline {
                 Button(RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW) { updateEngines() }
                     .disabled(RunnerPageFormat.engineUpdateInFlight(runner.install))
-                if let relay = RunnerPageFormat.updateRelayLine(runner.install) {
-                    Text(relay)
-                        .font(.orbitLabel)
-                        .foregroundStyle(Color.secondary)
+                let relay = RunnerPageFormat.updateRelayLines(runner.install)
+                if !relay.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(relay.enumerated()), id: \.offset) { _, line in
+                            Text(line.text)
+                                .font(.orbitLabel)
+                                .foregroundStyle(line.failed ? RunnerInk.red : Color.secondary)
+                        }
+                    }
                 }
                 Button(RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS) { refreshModels() }
             }

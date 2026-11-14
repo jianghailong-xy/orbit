@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 419 |
+| `user` | 423 |
 | `admin` | 28 |
 | `runner` | 184 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **666** |
+| **Total** | **670** |
 
 ## Public routes
 
@@ -114,9 +114,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/attachments` | query `sessionId`, `taskId` | `AttachmentsController.upload` |
 | `DELETE` | `/api/attachments/:id` | path `id` | `AttachmentsController.removeTaskInput` |
 | `GET` | `/api/attachments/:id` | path `id` | `AttachmentsController.download` |
+| `DELETE` | `/api/attachments/:id/everywhere` | path `id` | `AttachmentsController.deleteEverywhere` |
 | `DELETE` | `/api/attachments/:id/pin` | path `id` | `AttachmentsController.unpin` |
 | `PUT` | `/api/attachments/:id/pin` | path `id` | `AttachmentsController.pin` |
 | `GET` | `/api/attachments/usage` | — | `AttachmentsController.usage` |
+| `GET` | `/api/attachments/usage/projects/:id/files` | path `id`; query `cursor`, `order` | `AttachmentsController.projectFiles` |
+| `GET` | `/api/attachments/usage/tasks/:id/files` | path `id`; query `cursor`, `order` | `AttachmentsController.taskFiles` |
+| `GET` | `/api/attachments/usage/weeks/:week/files` | path `week`; query `cursor`, `order` | `AttachmentsController.weekFiles` |
 | `GET` | `/api/auth/capabilities` | — | `AuthController.capabilities` |
 | `POST` | `/api/auth/change-password` | body `ChangePasswordDto` | `AuthController.changePassword` |
 | `DELETE` | `/api/auth/google/link` | — | `GoogleAuthController.unlink` |

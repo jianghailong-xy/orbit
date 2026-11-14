@@ -49,6 +49,11 @@ public enum ExternalSender {
     public static let nameSeparator = " · "
     /// `EXTERNAL_SENDER_FROM_GUEST`: a guest is named after it, `From <name>`.
     public static let fromGuest = "From"
+    /// Never sent by a server: the guest view marks the guest's OWN messages with it
+    /// (`GuestTranscript.ownMessages`), so they are headed `You` on a page where the conversation is
+    /// somebody else's — the web's `sentByReader` (Transcript.tsx).
+    public static let readerSource = "ORBIT_READER"
+    public static let you = "You"
 
     /// The sender a payload or a row carries, or nil. Anything that is not one — absent, from an older
     /// server, or of a source this build does not know — reads as nil, so the turn keeps the reading it
@@ -64,6 +69,7 @@ public enum ExternalSender {
         switch source {
         case feishuSource: return ExternalMessageFrom(source: feishuSource, name: name)
         case guestSource: return name.map { ExternalMessageFrom(source: guestSource, name: $0) }
+        case readerSource: return ExternalMessageFrom(source: readerSource, name: nil)
         default: return nil
         }
     }
@@ -71,6 +77,7 @@ public enum ExternalSender {
     /// `From <name>` for a guest; `From Feishu · <name>`, or `From Feishu` when Feishu would not say
     /// the name (web `externalSenderLabel`).
     public static func label(_ from: ExternalMessageFrom) -> String {
+        if from.source == readerSource { return you }
         if from.source == guestSource, let name = from.name { return "\(fromGuest) \(name)" }
         guard let name = from.name else { return fromFeishu }
         return "\(fromFeishu)\(nameSeparator)\(name)"

@@ -2154,7 +2154,17 @@ struct TranscriptItemView: View {
             UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
-        case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
+        case .toolCall(let c):
+            // The owner's "Chat about this" reply to one of Orbit's own cards: their message, drawn as
+            // theirs under the call rather than left inside its result (`OwnerChatReply`).
+            if let words = OwnerChatReply.words(of: c) {
+                VStack(alignment: .leading, spacing: 12) {
+                    ToolCardView(card: c, fullPayload: fullPayload)
+                    UserBubbleView(bubble: UserBubble(id: "owner-chat-\(c.id)", text: words, pending: false))
+                }
+            } else {
+                ToolCardView(card: c, fullPayload: fullPayload)
+            }
         case .interrupt(_, _, let runnerRestart, let runnerUpdate):
             if let runnerUpdate {
                 // The owner's Update Now cut it: the web's line, its ⊘ included (D4).

@@ -703,6 +703,10 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
 export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
   api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
 
+/** Delete a file everywhere this account keeps it, from Settings → Storage. 409 while evidence or a session holds it. */
+export const deleteAttachmentEverywhere = (id: string): Promise<void> =>
+  api<void>(`/attachments/${encodeURIComponent(id)}/everywhere`, { method: 'DELETE' });
+
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
     `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
@@ -2016,6 +2020,10 @@ export interface SessionDetail {
   /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
   mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
+  /** When the merge operation now pending was requested. */
+  mergeRequestedAt?: string | null;
+  /** The runner this session runs on, as far as the merge slot names it. */
+  assignedRunner?: { name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the
   // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.

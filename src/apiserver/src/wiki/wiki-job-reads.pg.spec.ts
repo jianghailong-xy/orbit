@@ -297,10 +297,12 @@ async function clean(h: Harness, ...who: Account[]): Promise<void> {
 
 // ── 1 and 2: the runs read ──────────────────────────────────────────────────────────────────────────
 
-test('the runs read: the newest runs newest first, their calls counted and the newest listed, each queue\'s place, and metadata alone', { skip }, async () => {
+test('the runs read: the newest runs newest first, their calls counted and the newest listed, each queue\'s place, and metadata alone', { skip }, async (t) => {
   const h = await boot();
   const a = await account(h, 'P9 jobs owner');
   const b = await account(h, 'P9 jobs stranger');
+  // Even when a check below fails: queued calls left behind would sit ahead of every later case's queue.
+  t.after(() => clean(h, a, b));
 
   // Twelve runs of the space, oldest first: the read answers the newest ten.
   const jobs: string[] = [];
@@ -391,15 +393,15 @@ test('the runs read: the newest runs newest first, their calls counted and the n
   for (const id of [b.id, b.spaceId, strangers]) {
     assert.equal(answer.text.includes(id) || answer.text.includes(uuidToBase62(id)), false, `the read names ${id}`);
   }
-  await clean(h, a, b);
 });
 
 // ── 3: whose it is ──────────────────────────────────────────────────────────────────────────────────
 
-test('another account\'s space is the plain 404, and every account is told the server runs its wiki', { skip }, async () => {
+test('another account\'s space is the plain 404, and every account is told the server runs its wiki', { skip }, async (t) => {
   const h = await boot();
   const a = await account(h, 'P9 owner');
   const b = await account(h, 'P9 other owner');
+  t.after(() => clean(h, a, b));
   await job(h, a, { kind: 'verify', createdAt: at(1) });
 
   expectStatus(await get(h, b.bearer, `/wiki/spaces/${a.spaceId}/jobs`), 404, 'a stranger reads nothing of another account\'s runs');
@@ -425,14 +427,14 @@ test('another account\'s space is the plain 404, and every account is told the s
   assert.deepEqual(other.body.executor, { mode: 'server', serverExecutes: true });
   assert.ok(other.body.systemModel, 'every account\'s health carries the model\'s state');
   expectStatus(await get(h, b.bearer, `/wiki/spaces/${a.spaceId}/health`), 404, 'nor another account\'s health');
-  await clean(h, a, b);
 });
 
 // ── 4: neither the address nor the key ──────────────────────────────────────────────────────────────
 
-test('with the System model\'s address and key in the environment and the worker\'s rows written against them, no read names either', { skip, timeout: 60_000 }, async () => {
+test('with the System model\'s address and key in the environment and the worker\'s rows written against them, no read names either', { skip, timeout: 60_000 }, async (t) => {
   const h = await boot();
   const a = await account(h, 'P9 no-secrets owner');
+  t.after(() => clean(h, a));
   const config: WikiSystemModelConfig = readWikiSystemModel({
     ORBIT_WIKI_MODEL_BASE_URL: process.env.ORBIT_WIKI_MODEL_BASE_URL,
     ORBIT_WIKI_MODEL_API_KEY: process.env.ORBIT_WIKI_MODEL_API_KEY,
@@ -492,5 +494,4 @@ test('with the System model\'s address and key in the environment and the worker
   assert.deepEqual([listed.requests[1].httpStatus, listed.requests[1].errorKind], [400, 'other']);
   assert.equal(listed.requests[2].errorKind, 'unauthorized');
   assert.equal(listed.requests[2].ahead, 0, 'the refused call waits at the head of the queue');
-  await clean(h, a);
 });

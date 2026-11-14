@@ -357,7 +357,7 @@ func cliProviderCreate(args []string, in io.Reader, out io.Writer) error {
 	if declined, err := askBeforeCreate(t, sessionID, providerCreateApprovalToolName, providerCard("", body)); err != nil {
 		return fmt.Errorf("create provider: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("create provider: the human rejected this provider: %s", declined)
+		return fmt.Errorf("create provider: %s", declinedText("the human rejected this provider", declined))
 	}
 	raw, err := t.createProvider(body)
 	if err != nil {
@@ -395,7 +395,7 @@ func cliProviderUpdate(args []string, in io.Reader, out io.Writer) error {
 	if declined, err := askBeforeCreate(t, sessionID, providerUpdateApprovalToolName, providerCard(slug, body)); err != nil {
 		return fmt.Errorf("update provider: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("update provider: the human rejected this change: %s", declined)
+		return fmt.Errorf("update provider: %s", declinedText("the human rejected this change", declined))
 	}
 	raw, err := t.updateProvider(slug, body)
 	if err != nil {
@@ -425,7 +425,7 @@ func cliProviderDelete(args []string, out io.Writer) error {
 	if declined, err := askBeforeCreate(t, sessionID, providerDeleteApprovalToolName, providerCard(slug, nil)); err != nil {
 		return fmt.Errorf("delete provider: %w", err)
 	} else if declined != "" {
-		return fmt.Errorf("delete provider: the human rejected this deletion: %s", declined)
+		return fmt.Errorf("delete provider: %s", declinedText("the human rejected this deletion", declined))
 	}
 	raw, err := t.deleteProvider(slug)
 	if err != nil {
