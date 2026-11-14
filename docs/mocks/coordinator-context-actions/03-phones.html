@@ -1,0 +1,106 @@
+<!doctype html>
+<!-- Design mock: the same two actions on iOS (ComposerView.swift's context sheet) and Android
+     (ComposerUsage.kt's "Context and plan usage" dialog), and each platform's confirm. Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Context actions · iOS and Android</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="boards.css">
+</head>
+<body class="m">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-compact" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16M4 15h16"/><path d="M9 4l3 3 3-3M9 20l3-3 3 3"/></symbol>
+  <symbol id="i-handoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M3 12h11M10 8l4 4-4 4"/></symbol>
+</svg>
+
+<div class="m-sheet">
+  <h1 class="m-h1 zh">03 · 手机端：iOS 底部弹出面板 / Android 对话框</h1>
+  <p class="m-sub zh">两个操作的顺序、文案和显示条件都和桌面端（01）一样，只换成各平台自己的控件。确认文案和 02-1 是同一套，手机上去掉了等待的名称，只保留数量。</p>
+
+  <div class="m-grid4">
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">iOS 1</span><span class="zh">点上下文圆环 → 底部弹出面板</span></div>
+      <div class="phone"><div class="screen">
+        <div class="chat">…Fix login redirect is in review.</div>
+        <div class="dim"></div>
+        <div class="ios-sheet m-mark" style="outline-offset:-3px">
+          <span class="m-n" style="top:6px;right:8px">1</span>
+          <div class="ios-grab"></div>
+          <div class="ios-title">Context</div>
+          <div class="ios-group">
+            <div class="ios-row">Context window<span class="v">82%</span></div>
+            <div class="ios-row"><span class="bar"><i style="width:82%"></i></span></div>
+            <div class="ios-row" style="font-size:13px;color:#8e8e93">820k / 1M tokens</div>
+          </div>
+          <div class="ios-group">
+            <div class="ios-act"><svg><use href="#i-compact"/></svg><span><b>Compact</b><span>Summarize earlier turns and keep going here.</span></span></div>
+            <div class="ios-act"><svg><use href="#i-handoff"/></svg><span><b>Start a new coordinator</b><span>This one writes a handoff note, then the project continues in a fresh conversation.</span></span></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">iOS 2</span><span class="zh">确认（系统 Alert）</span></div>
+      <div class="phone"><div class="screen">
+        <div class="chat">…Fix login redirect is in review.</div>
+        <div class="dim"></div>
+        <div class="ios-alert m-mark">
+          <span class="m-n">2</span>
+          <div class="t">Hand over to a new coordinator?</div>
+          <div class="b">This coordinator writes a handoff note, then the project continues in a new conversation. 2 pending waits move over. Nothing is deleted.</div>
+          <div class="btn bold">Hand over</div>
+          <div class="btn">Cancel</div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">Android 1</span><span class="zh">"Context · Usage" → 对话框</span></div>
+      <div class="phone"><div class="screen" style="background:#fbf8ff">
+        <div class="chat">…Fix login redirect is in review.</div>
+        <div class="dim"></div>
+        <div class="md-dlg m-mark">
+          <span class="m-n">3</span>
+          <div class="t">Context and plan usage</div>
+          <div class="b">Context: 820k / 1M tokens</div>
+          <div class="prog"><i style="width:82%"></i></div>
+          <div class="b" style="margin-top:8px">Plan usage: 79%</div>
+          <div class="sep"></div>
+          <div class="md-act"><svg><use href="#i-compact"/></svg><span><b>Compact</b><span>Summarize earlier turns and keep going here.</span></span></div>
+          <div class="md-act"><svg><use href="#i-handoff"/></svg><span><b>Start a new coordinator</b><span>This one writes a handoff note, then the project continues in a fresh conversation.</span></span></div>
+          <div class="md-btns"><span>Close</span></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">Android 2</span><span class="zh">运行中 · 普通会话</span></div>
+      <div class="phone"><div class="screen" style="background:#fbf8ff">
+        <div class="chat">Working on the retry backoff…</div>
+        <div class="dim"></div>
+        <div class="md-dlg m-mark" style="top:170px">
+          <span class="m-n">4</span>
+          <div class="t">Context and plan usage</div>
+          <div class="b">Context: 410k / 1M tokens</div>
+          <div class="prog"><i style="width:41%;background:#3f51b5"></i></div>
+          <div class="b" style="margin-top:8px">Plan usage: 79%</div>
+          <div class="sep"></div>
+          <div class="md-act dis"><svg><use href="#i-compact"/></svg><span><b>Compact</b><span>Available when this turn ends.</span></span></div>
+          <div class="md-btns"><span>Close</span></div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>iOS：</b>点上下文圆环，从现在的弹出层改成底部弹出面板（中等高度），读数一组、操作一组，操作行用系统蓝色。macOS 仍是 01 的悬停弹出面板。</span></li>
+    <li><span class="m-n">2</span><span><b>确认用系统 Alert</b>，Hand over 加粗放在上面，Cancel 在下面。交接过程和失败处理在 iOS 上和 02-2 至 02-5 一样，都显示在会话里，不再弹额外窗口。</span></li>
+    <li><span class="m-n">3</span><span><b>Android 扩展现有的 "Context and plan usage" 对话框：</b>读数下面加一条分隔线，再放两行操作；点击后关闭这个对话框，换成确认对话框（Hand over / Cancel）。</span></li>
+    <li><span class="m-n">4</span><span><b>显示条件和桌面端一致：</b>普通会话只有 Compact；运行中 Compact 灰掉并说明原因；Cursor 显示 Unavailable、Codex 未接入时，不显示操作区。</span></li>
+  </ul>
+</div>
+</body>
+</html>

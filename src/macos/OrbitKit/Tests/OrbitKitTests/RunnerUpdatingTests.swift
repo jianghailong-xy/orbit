@@ -133,8 +133,8 @@ final class RunnerUpdatingTests: XCTestCase {
 
         XCTAssertTrue(RunnerUpdating.tailHolds([card]))
         XCTAssertTrue(RunnerUpdating.tailHolds([mine, steer, card]))
-        // The reader's own message waits in the tray, not the tail: the last message keeps the tag.
-        XCTAssertFalse(RunnerUpdating.tailHolds([mine]))
+        // The reader's own message waits in the tray, whose row says it: the last message does not.
+        XCTAssertTrue(RunnerUpdating.tailHolds([mine]))
         XCTAssertFalse(RunnerUpdating.tailHolds([steer, failed, undelivered]))
         XCTAssertFalse(RunnerUpdating.tailHolds([]))
     }

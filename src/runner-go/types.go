@@ -58,6 +58,11 @@ type HeartbeatRequest struct {
 	// older runners omit both fields and retain the legacy heartbeat behavior.
 	LeaseOwner           string   `json:"leaseOwner,omitempty"`
 	SupervisedSessionIDs []string `json:"supervisedSessionIds,omitempty"`
+	// BackgroundJobSessionIDs are the sessions that occupy a slot of IdleCapacity's count only
+	// through runner-hosted background jobs of their own (sessionPool.admissionOccupancy): no turn
+	// runs, yet the runner takes no work in their place. The control plane counts them as running.
+	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
+	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its

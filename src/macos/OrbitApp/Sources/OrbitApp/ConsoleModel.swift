@@ -1718,6 +1718,7 @@ final class ConsoleModel {
         refreshSubagentRunsIfNeeded()
         clearAwaitingReplyIfSatisfied()
         reconcileReplyContext()
+        followPendingWaitingCard()
     }
 
     /// Read the session's SubAgent runs whenever a `delegate` call starts or ends (web parity:
@@ -4801,6 +4802,7 @@ final class ConsoleModel {
         }
         // A press that arrived before this read now has its row to land on.
         scrollToPendingOwnerItem()
+        followPendingWaitingCard()
         lastRulerRead = Date()
     }
 
@@ -5092,6 +5094,7 @@ final class ConsoleModel {
         for request in requests {
             deliver(.ownerRequest(requestID: request.id), placement: .at(request.createdAt))
         }
+        followPendingWaitingCard()
     }
 
     /// The owner requests of this conversation still pending, by storage key.
@@ -5166,6 +5169,9 @@ final class ConsoleModel {
         guard !closedCards.contains(card.id), !decisionCards.contains(where: { $0.id == card.id })
         else { return }
         decisionCards.append(card)
+        // A card arriving by a read of its own — an owner request comes from the account's list, not
+        // from a publish or the ruler's read — may be the one a project row's tap is waiting for.
+        followPendingWaitingCard()
     }
 
     /// Put the answers this project's read publishes into the conversation as records, and let go of
@@ -5518,6 +5524,7 @@ final class ConsoleModel {
                 evidenceDecisions = queue
                 adoptEvidenceQueue(queue)
                 lastEvidenceRead = Date()
+                followPendingWaitingCard()
             }
         } while evidenceReadOwed && !Task.isCancelled
     }
@@ -5774,6 +5781,52 @@ final class ConsoleModel {
     func focusStartCard() {
         pendingStartCard = true
         Task { await refreshRulerQuestions(force: true) }
+    }
+
+    /// Until when this conversation, opened from a project row whose line says it is waiting on you,
+    /// still lands on its waiting card (`focusWaitingCard`). The reader's own scroll or send ends it
+    /// sooner (`readerTookOver`); the ceiling only keeps a card read much later from moving a reader
+    /// who has been reading a while. Long enough for a slow first read: 15 s was not, on a cold
+    /// simulator.
+    private var pendingWaitingCardUntil: Date?
+    /// The waiting card's row, for the transcript to open at its top. Its own request, apart from
+    /// `scrollRequest` (the bar's, which centres the card and opens its review) and `recordRequest`
+    /// (a link's, which marks the row): this one only places the reader at the card's header.
+    private(set) var cardRequest: ScrollRequest?
+
+    /// Open this conversation at the top of the card it is waiting on you with (owner 2026-11-14: a
+    /// project row's tap on "Waiting on you · <member>"), not at the transcript's end — a card taller
+    /// than the screen would otherwise show its buttons with its title above the fold. Spent by the
+    /// first publish or read that has the card; the reads run as the console opens.
+    func focusWaitingCard() {
+        pendingWaitingCardUntil = Date().addingTimeInterval(60)
+        followPendingWaitingCard()
+        Task { await refreshRulerQuestions(force: true) }
+    }
+
+    private func followPendingWaitingCard() {
+        guard let until = pendingWaitingCardUntil else { return }
+        guard Date() < until else { pendingWaitingCardUntil = nil; return }
+        let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
+        guard let rowID = SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)
+        else { return }
+        pendingWaitingCardUntil = nil
+        scrollTick += 1
+        cardRequest = ScrollRequest(rowID: rowID, tick: scrollTick)
+    }
+
+    /// The transcript placed the reader at the card: consume the request, so a transcript appearing
+    /// again later does not jump back to it.
+    func cardRequestFollowed() {
+        cardRequest = nil
+    }
+
+    /// The reader moved the list or sent something before the card was reached: the conversation is
+    /// theirs now, and a card read after this does not move them.
+    func readerTookOver() {
+        pendingWaitingCardUntil = nil
+        cardRequest = nil
     }
 
     /// Spend the pending press, if the card it names is on screen now.

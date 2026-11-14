@@ -305,8 +305,8 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 		}
 		cliParts = append(cliParts, value)
 	}
-	if len(cliParts) < 2 || strings.Join(cliParts, "\n\n") != orbitCLIInstructions(exe, false, true) {
-		t.Fatalf("orbit CLI context in %d values = %q, want %q", len(cliParts), strings.Join(cliParts, "\n\n"), orbitCLIInstructions(exe, false, true))
+	if len(cliParts) < 2 || strings.Join(cliParts, "\n\n") != orbitCLIInstructions(exe, false, true, true) {
+		t.Fatalf("orbit CLI context in %d values = %q, want %q", len(cliParts), strings.Join(cliParts, "\n\n"), orbitCLIInstructions(exe, false, true, true))
 	}
 	if !strings.HasPrefix(cliParts[0], agentPrimerLead) {
 		t.Fatalf("the first orbit CLI value does not open with the agent primer: %q", cliParts[0])

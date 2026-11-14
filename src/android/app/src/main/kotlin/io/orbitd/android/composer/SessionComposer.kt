@@ -398,7 +398,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
  * above the parking strip (docs/mocks/pending-tray-above-parking, decided 2026-10-28).
  */
 @Composable
-internal fun SessionPendingTray(model: ComposerModel, session: SessionState?, unreadSteers: List<UnreadSteer>) {
+internal fun SessionPendingTray(model: ComposerModel, session: SessionState?, unreadSteers: List<UnreadSteer>,
+    held: (@Composable () -> Unit)? = null) {
     val state by model.state.collectAsState()
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
     // What is still waiting, as the transcript's tail draws it (A07-14), and whether one can go into the turn running now.
@@ -413,7 +414,7 @@ internal fun SessionPendingTray(model: ComposerModel, session: SessionState?, un
     PendingTrayCard(rows, enabled = usable, steer = { model.steer(it.turnId) },
         withdraw = { model.withdraw(it.turnId, it.restores, it.steer, engine) },
         // Cursor CLI takes no message mid-turn — one would stop the turn — so the tray says why its rows wait (iOS 5 ⑤).
-        note = if (engine == CursorRuntime.ENGINE) CursorRuntime.QUEUE_NOTE else null)
+        note = if (engine == CursorRuntime.ENGINE) CursorRuntime.QUEUE_NOTE else null, held = held)
 }
 
 /** The engine's guess in the empty box (docs/prompt-suggestions-design.md §4.3): the words, cut at the end, and "Double-tap to use"

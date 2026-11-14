@@ -1,3 +1,4 @@
+import { capacityHeldTitle, isCapacityHeld } from './queuedCapacity';
 import {
   sessionIsStarting,
   sessionRunStateOf,
@@ -441,7 +442,9 @@ export function queuedTitle(gate?: QueuedGate | null): string {
     case null:
       return QUEUED_LABEL;
     default:
-      return PENDING_SLOT_TITLE;
+      // A full runner, run or batch names itself (board queued-card-runner-full ②); only a server too
+      // old to name the gate keeps the slot wording.
+      return isCapacityHeld(gate) ? capacityHeldTitle(gate!) : PENDING_SLOT_TITLE;
   }
 }
 
@@ -455,6 +458,6 @@ export function queuedLabel(gate?: QueuedGate | null): string {
     case null:
       return QUEUED_LABEL;
     default:
-      return PENDING_SLOT_LABEL;
+      return isCapacityHeld(gate) ? capacityHeldTitle(gate!) : PENDING_SLOT_LABEL;
   }
 }
