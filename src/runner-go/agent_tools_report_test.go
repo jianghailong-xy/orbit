@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -261,4 +263,71 @@ func TestClaudeSpawnGetsThePlaybooksOnlyWhenNewEnough(t *testing.T) {
 			t.Errorf("claude %s: --plugin-dir passed = %v, want %v (%q)", c.version, got, c.want, args)
 		}
 	}
+}
+
+// The report reads the frames the real engines write, as recorded by the P1-03 probe against this branch's own
+// `orbit mcp` and generated playbooks (no model called): Claude Code 2.1.325's system/init, and Codex 0.167.2's
+// startup statuses for Orbit's server. A shape either engine changes shows here first.
+func TestAgentToolsReportReadsTheRecordedEngineFrames(t *testing.T) {
+	withClaudeSpawnVersion(t, "2.1.325")
+	blob, err := os.ReadFile(filepath.Join("testdata", "agent-tools", "recorded", "claude-2.1.325-init.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var init map[string]interface{}
+	if err := json.Unmarshal(blob, &init); err != nil {
+		t.Fatal(err)
+	}
+	job := agentToolsJob() // orchestration off, as the probe's orbit mcp was spawned
+	r := claudeAgentToolsReport(job, init)
+	want := len(agentToolsServedForTest(agentToolsSwitches{Orchestration: false, Watches: true, Wiki: true}))
+	if r.MCP.Status != "connected" || r.MCP.Tools != want {
+		t.Errorf("recorded Claude init read as %+v, want connected with %d tools", r.MCP, want)
+	}
+	if r.Skill.Loaded == nil || !*r.Skill.Loaded {
+		t.Errorf("recorded Claude init does not show the playbooks loaded: %+v", r.Skill)
+	}
+	for _, f := range r.Families {
+		if f.ID == "orchestration" && (f.Served != 0 || f.Reason != "orchestration") {
+			t.Errorf("orchestration family = %+v", f)
+		}
+	}
+
+	lines, err := os.ReadFile(filepath.Join("testdata", "agent-tools", "recorded", "codex-0.167.2-startup.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientReader, serverWriter := io.Pipe()
+	app := &codexAppServer{ctx: context.Background(), pending: map[string]chan codexRPCMessage{},
+		notifications: make(chan codexRPCMessage, 64), done: make(chan struct{}), engineVersion: "0.167.2"}
+	app.setInstructionMode(codexInstructionsAdditionalContext)
+	go app.readLoop(clientReader)
+	var mu sync.Mutex
+	var last map[string]interface{}
+	tools := newCodexAgentTools(job, app, func(kind string, payload map[string]interface{}) {
+		mu.Lock()
+		defer mu.Unlock()
+		last, _ = payload["agentTools"].(map[string]interface{})
+	})
+	app.listenOrbitMCP(tools.mcpStatus)
+	if _, err := serverWriter.Write(lines); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		mu.Lock()
+		mcp, _ := last["mcp"].(map[string]interface{})
+		mu.Unlock()
+		if mcp["status"] == "connected" {
+			if mcp["tools"] != float64(want) {
+				t.Errorf("recorded Codex startup read as %v, want %d tools", mcp, want)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("recorded Codex startup never read as connected: %v", last)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_ = serverWriter.Close()
 }
