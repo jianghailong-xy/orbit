@@ -317,7 +317,7 @@ final class RunnerSelfUpdateTests: XCTestCase {
 
     func testTheRunnerPagePressesUpdateRunnerNowAndShowsTheLastUpdate() throws {
         let page = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/SkillsRunnersView.swift")
-        let actions = try slice(page, from: "private func attentionButton(", to: "private func diskRow(")
+        let actions = try slice(page, from: "private func attentionButton(", to: "private func engineRow(")
         XCTAssertTrue(actions.contains("case .updateRunner:\n            Button(RunnerPageCopy.RUNNER_UPDATE_RUNNER_NOW) { updateRunner() }"),
                       "a failed update's card presses Update Runner Now")
         let about = try slice(page, from: "private func aboutSection(", to: "private var rotateSection: some View {")
