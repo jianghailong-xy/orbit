@@ -664,6 +664,20 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string, atRest bool) strin
 		return execDir
 	}
 
+	if src.Kind == sourceKindSessionFork {
+		// A fork's snapshot exists only in the forking session's repository on its machine (SR55): the
+		// authority is this machine's checkout, and nothing is fetched. Any other authority is not one
+		// this build can honour for a snapshot, and guessing would start the task from something else.
+		if src.RefAuthority != refAuthorityRunnerLocal {
+			return refuseSourceWorktree(job, sourceRefusalAuthorityUnreachable,
+				fmt.Sprintf("a forked run's snapshot is %s-authoritative, and only a RUNNER_LOCAL snapshot can be checked out", src.RefAuthority))
+		}
+		if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
+			return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
+				fmt.Sprintf("the session snapshot %s this task was forked from is not in the repository at %s: "+
+					"the task must run in a workspace whose workDir is the forking session's repository", pin, repoRoot))
+		}
+	}
 	if _, err := git(repoRoot, "cat-file", "-e", pin+"^{commit}"); err != nil {
 		return refuseSourceWorktree(job, sourceRefusalShaUnavailable,
 			fmt.Sprintf("pinned commit %s is not in the repository at %s", pin, repoRoot))
@@ -778,6 +792,9 @@ func setupCheckout(job *ClaimedSession, baseDir string, atRest bool) string {
 		} else {
 			logln(fmt.Sprintf("session %s — created missing workDir %q", job.SessionID, baseDir))
 		}
+	}
+	if job.Branch == "" && job.CodelessCheckout && isGitRepo(baseDir) {
+		return setupCodelessCheckout(job, baseDir)
 	}
 	if job.Branch == "" {
 		job.IsolationStatus = isoShared
@@ -1023,11 +1040,38 @@ func finalizeWorktreeReport(req *RunFinalizeRequest, sessionID string, wt *Workt
 	// Candidate merge targets for the ended session's "Merge to…" dropdown.
 	req.MergeTargets = mergeTargetsForWT(wt)
 	// The tip the work ends on, the finalize commit included: what the control plane freezes as a
-	// finished task's delivered commit (contract §10.5 O-L4). Not for a park checkpoint, which the
-	// next resume undoes — the tip the last live report gave stands for that session.
+	// finished task's delivered commit (contract §10.5 O-L4). A park checkpoint is not part of it —
+	// the next resume undoes it — so a cancelled run reports the commit under its checkpoint. It is
+	// still reported: a run the control plane ends (a task its acceptance made DONE ends as
+	// `task_done`, which the runner sees as a cancel) has no later report, and the last live one
+	// may predate the run's own commits.
 	if status != stCancelled {
 		req.BranchSha = effectiveBranchSha(wt)
+	} else {
+		req.BranchSha = tipUnderParkCheckpoint(wt)
 	}
+}
+
+// tipUnderParkCheckpoint is the tip of the effective branch with this session's park checkpoint
+// left out: its parent when the tip is that checkpoint, else the tip. Empty when either cannot be
+// resolved, which leaves the tip the last live report gave.
+func tipUnderParkCheckpoint(wt *Worktree) string {
+	tip := effectiveBranchSha(wt)
+	if tip == "" {
+		return ""
+	}
+	msg, err := git(wt.RepoDir, "log", "-1", "--format=%B", tip)
+	if err != nil {
+		return ""
+	}
+	if !strings.Contains(msg, parkCheckpointTrailer+": "+wt.Session) {
+		return tip
+	}
+	parent, err := git(wt.RepoDir, "rev-parse", "--verify", "--quiet", tip+"^")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(parent)
 }
 
 // uncommitParkCheckpoint undoes a park checkpoint (see parkCheckpointTrailer) at the start of a

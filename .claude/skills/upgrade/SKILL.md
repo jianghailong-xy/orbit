@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. Use whenever someone wants to deploy the latest code, update/upgrade the running containers, or bring a Compose deployment up to date.
+description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing; a rollback deploys an earlier commit (--deploy). Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
 ---
 
 # Upgrade the Orbit stack
@@ -12,7 +12,8 @@ runs the `apiserver` image with another command; `postgres` and `gateway`
 (nginx) use pinned upstream images. A routine upgrade rebuilds the locally-built
 images and recreates only the services that actually changed — an unchanged
 `postgres` is never restarted. Refreshing the upstream base images is opt-in via
-`--pull-base`.
+`--pull-base`. With `ORBIT_REGISTRY` set, the images are built on one host and run on another: see
+[Two-stage release](#two-stage-release).
 
 Database migrations are **not** a separate step — the apiserver container runs
 `prisma migrate deploy` on startup (see `src/apiserver/Dockerfile` `CMD`), so
@@ -176,6 +177,128 @@ ssh root@backup-host ls -l "/data/backup/orbit-pg-archive-files/${f#data/files/}
 
 With no `ORBIT_BACKUP_SYNC_TARGET`, or with `ORBIT_FILES_BACKEND=s3`, the last two have nothing to
 show: see the [backup and restore runbook](../../../docs/postgres-backup-restore.md#attachment-files).
+
+## Two-stage release
+
+With `ORBIT_REGISTRY` set, the upgrade builds on this host and deploys on another, which runs the
+deployment and builds nothing. Orbit's production builds on wikova, pushes to the WireGuard-only
+registry `10.66.0.1:5000`, and runs on `10.66.0.4`. Without `ORBIT_REGISTRY` nothing in this section
+applies, and the script does exactly what the sections above say.
+
+```bash
+# Build and check here, push, then deploy on the target: the usual upgrade.
+ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .claude/skills/upgrade/upgrade.sh --prune
+# Build, check and push only: the release is in the registry, and nothing runs it yet.
+ORBIT_REGISTRY=10.66.0.1:5000 .claude/skills/upgrade/upgrade.sh --build-only
+# Deploy a release that is in the registry already, building nothing. A rollback is this, with an earlier commit.
+ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .claude/skills/upgrade/upgrade.sh --deploy <40-character commit>
+# What that deploy would change on the target, changing nothing there.
+ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .claude/skills/upgrade/upgrade.sh --plan <40-character commit>
+```
+
+`ORBIT_DEPLOY_DIR` is the deployment's directory on the target, `/root/orbit` unless it is set. The script
+still takes this host's lock, refuses a dirty checkout and pulls `main` first (`--deploy` and `--plan` pull
+nothing unless `--pull` is given); then `deploy/two-stage/release.sh` takes over, and nothing else in the script
+runs: this host's own containers, `.env` and runner link are left as they are.
+
+**Build stage, on this host.** A release is named by the commit it was built from:
+`<registry>/orbit-apiserver:<commit>`, which `wiki-worker` runs too, `<registry>/orbit-web:<commit>`, and
+`<registry>/orbit-link-gateway:<commit>`, where that commit is the last one under `src/link-gateway`, its
+whole build context, so that a release which does not change the gateway recreates nothing. A tag names one
+build: one that is in the registry already is kept and never pushed again (to rebuild it, delete it from the
+registry first). For each image that is not there yet:
+
+1. `docker compose build apiserver wiki-worker web`, under those names. This checkout's `.env` supplies the
+   build arguments (`PUBLIC_ORIGIN`, and `COMPOSE_FILE` where it adds the macOS signing file), so they have to
+   be the target's. The web image keeps the runner release the target's `web` serves at `/dl/previous/`, as
+   on a single host: that image, pulled if this host lacks it, is tagged `orbit-web:previous-release` and
+   passed as `PREVIOUS_RELEASE_IMAGE`. Before the target serves any, this host's own `orbit-web` is.
+2. `scripts/image-boot-check.sh` boots the apiserver and web images, as CI does, before either is pushed.
+3. The link gateway: `docker build --provenance=false`, as a single host builds it.
+4. `docker push` of each.
+
+**Deploy stage, on the target, driven from here over ssh.** The target has no checkout and no runner. The
+build host ships it what the deployment's Compose reads from its directory, taken from the release's commit
+with `git archive`, never from the working tree: `docker-compose.yml`, `gateway/`,
+`scripts/pg-archive-wal.sh`, `scripts/pg-backup.sh`, `src/link-gateway/nats.conf`, `deploy/runner-link/`, and
+the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgres-pinned.yml` and
+`deploy/db-proxy.yml`, with `deploy/db-proxy/`. They are staged under `.upgrade/release-<commit>/` there, beside
+`deploy/two-stage/deploy-stage.sh`, which then, on the target:
+
+1. takes the target's upgrade lock, `/tmp/orbit-upgrade.lock`, as a single host's upgrade takes its own: one
+   upgrade at a time, a second refused at once, a lock whose holder is gone taken over;
+2. stops, having changed nothing, where the target has no `.env`, where its `.env` switches on managed
+   runners (their images are built where they run), or where a `postgres` of the name this release renders
+   keeps its `/archive` in another directory;
+3. puts the release's files in place, each whole by a rename, keeping the ones they replace until the
+   release's images are all there: a deploy that stops before then puts them back, and takes away the files
+   and directories it added, having changed nothing;
+4. prints the plan: each service's `docker compose config --hash` for this release against the hash its
+   container was made with, as `create`, `unchanged`, `start` or `recreate`. `db-proxy`, `gateway` and
+   `pgbackup` each bind-mount one file on its own (`deploy/db-proxy/haproxy.cfg`, `gateway/nginx.conf`,
+   `scripts/pg-backup.sh`), which a running container keeps from its start whatever Compose sees, so one that
+   runs another than the release's is `recreate` too, and says which file;
+5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
+   `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
+   list it is refused. `--plan` stops here in any case, with every file put back;
+6. pulls every image the release runs, and stops if one is missing;
+7. writes the release's names into `.env` (below);
+8. brings each service up on its own, `docker compose up -d --wait --no-deps --no-build <service>`, in the
+   order `depends_on` gives: `postgres` only when it is new or not running (a running one whose configuration
+   the release changes is left running, and the run says so, unless `--pull-base`), `db-proxy` where the
+   target lists `deploy/db-proxy.yml` (recreating it ends every database connection once, and the apiserver
+   reconnects on its own), `nats`, `apiserver`, which applies the database migrations as it starts,
+   `apiserver-2` and on, `wiki-worker`, `web`, `link-gateway`, `gateway`, and `pgbackup`, as on a single host,
+   but created where the target has never run one. `up` recreates only what changed, and `--force-recreate`
+   what the plan found running another file;
+9. prints `docker compose ps`, and adds the release to `.upgrade/history`. Its whole output is in
+   `.upgrade/deploy.log`.
+
+A lost ssh connection does not stop it halfway: it ignores the hangup and goes on, writing its log.
+
+**Plan.** `--plan <commit>` runs the deploy stage up to step 5 and stops there: it prints the plan of deploying
+that release, from the target's own `.env` and files, and leaves the target as it found it. No image is pulled,
+nothing is written to `.env` or brought up, and every file it put in place to render the release is put back with
+its bytes, mode and modification time. As in a deploy, the files move by rename, so each comes back as a new file:
+a running container that bind-mounts one keeps the one it started on, which has the same bytes. It holds the
+target's lock for the few seconds it reads, and adds its output to `.upgrade/deploy.log` there. Run it before a
+deploy or a rollback whose effect on a running `postgres` or `db-proxy` matters.
+
+**What the target keeps.** Its `.env` is its own: its secrets and settings, which no deploy ships or copies
+back. Make it once, before the first deploy; for the move to `10.66.0.4`, a copy of the build host's
+(`install -m 600`), changed where the two differ, and with the lines `10.66.0.4` has already: its
+`COMPOSE_FILE=docker-compose.yml:deploy/postgres-pinned.yml:deploy/db-proxy.yml`, its `ORBIT_REGISTRY` and its
+pgbackup's `ORBIT_BACKUP_*` (docs/postgres-standby.md). A deploy writes only the block between
+`# >>> The release this host runs` and `# <<< The release this host runs` at its end: `ORBIT_REGISTRY`,
+`ORBIT_IMAGE_TAG`, `ORBIT_LINK_GATEWAY_TAG`, `ORBIT_NGINX_IMAGE` and `ORBIT_NATS_IMAGE` (docs/configuration.md,
+"Images and the two-stage release"). It replaces the whole file by a rename, every other line as it was, so that
+any later `docker compose` there renders the release that runs, and never builds anything. `COMPOSE_FILE` lists
+`docker-compose.yml` and `deploy/postgres-pinned.yml` on every target, and `deploy/db-proxy.yml` where the
+apiserver connects through the proxy; each release ships its own copy of those. Any other Compose file the
+target has, `docker-compose.override.yml` or another that `COMPOSE_FILE` lists, stays as it is and is rendered
+with each release; a service it adds is left as it is. Its `./data` stays where it is.
+
+**Base images.** Each runs by digest, pulled from the registry, which holds them under Docker Hub's own path,
+`library/<name>`. `postgres` and `pgbackup` run PostgreSQL 16.14 as `deploy/postgres-pinned.yml` pins it, never
+the floating `16-alpine` tag, which has moved on, and `db-proxy` the HAProxy `deploy/db-proxy.yml` pins; the
+release's `deploy/two-stage/base-images.env` pins `gateway` (nginx) and `nats`. Each pin is in one file only,
+and changes in a commit, so a release and its rollback both name the base images they ran with. A new digest has
+to be copied to the registry, as `base-images.env` says, before a release names it.
+
+**Rollback.** Deploy an earlier release: `upgrade.sh --deploy <its commit>`, with the same
+`ORBIT_REGISTRY` and `ORBIT_DEPLOY_HOST`; `--plan <its commit>` first shows what it changes. Its images are in
+the registry, its files come from its commit, nothing is built, and `up` recreates what differs from it. The
+target's `.upgrade/history` lists the releases it ran, newest last. The database keeps the migrations a later
+release applied: roll back past a migration only to code that runs on the database as that migration left it.
+
+**Requirements.** Both hosts' Docker trust the registry. One served over plain HTTP, as `10.66.0.1:5000` is,
+is listed in each host's `/etc/docker/daemon.json` under `insecure-registries`, which
+`systemctl reload docker` applies without stopping a container; the build stage checks this host's before it
+builds. This host reaches the target as root over `ssh` with a key, and has `git`, `curl` and
+`docker manifest`; the target has Docker with Compose v2, and GNU `tar` and `tee`. `--no-cache` applies to
+the build, `--prune` to both hosts, and `--pull-base` to the deploy, as above. To confirm that the target
+built nothing, `docker buildx du` there reports no build cache, and `docker image ls` lists only the
+registry's images.
 
 ## Requirements
 

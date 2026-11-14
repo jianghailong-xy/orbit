@@ -201,13 +201,14 @@ public struct NavState: Equatable, Sendable {
     public var highlightedSessionID: String? { consoleOnTop }
 
     /// The drawer row the screen belongs to — the one drawn as selected, and the one whose tap only
-    /// closes the drawer. A project's sessions page anywhere on the Agents stack makes it that
-    /// project's, with what was pushed over it; otherwise the Agents stack is the workspace's
+    /// closes the drawer. A project's sessions page the drawer's project row opened, anywhere on the
+    /// Agents stack, makes it that project's, with what was pushed over it; one a session list's row
+    /// opened stays the workspace's (owner, 2026-11-14). Otherwise the Agents stack is the workspace's
     /// (`agentID`, the agent its pane shows), and every other section's stack is the section's own.
     public func drawerDestination(agentID: String?) -> DrawerDestination {
         guard section == .agents else { return .section(section) }
         if let runnerID = machineDraftOnTop { return .machine(runnerID: runnerID) }
-        if let project = projectSessionsColumn { return .project(projectID: project.projectID) }
+        if let project = projectSessionsColumnDestination { return .project(projectID: project.projectID) }
         return agentID.map { .workspace(agentID: $0) } ?? .section(.agents)
     }
 
@@ -257,6 +258,15 @@ public struct NavState: Equatable, Sendable {
     public var projectSessionsColumn: SessionProjectAddress? {
         for frame in path.reversed() {
             if case .sessionProject(let address, _) = frame { return address }
+        }
+        return nil
+    }
+
+    /// The project whose sidebar row opened the session column's page (``enterProjectSessions(_:asDestination:)``).
+    /// Nil when a session list's row opened it: the Mac's sidebar keeps the workspace selected then.
+    public var projectSessionsColumnDestination: SessionProjectAddress? {
+        for frame in path.reversed() {
+            if case .sessionProject(let address, true) = frame { return address }
         }
         return nil
     }
@@ -519,11 +529,13 @@ public struct NavState: Equatable, Sendable {
 
     /// Open a project's session list over the workspace's list or its folder. The detail console
     /// stays above it on an iPad; a phone's back button returns to the list it came from.
-    public mutating func enterProjectSessions(_ address: SessionProjectAddress) {
+    /// `asDestination`: a sidebar's project row opened it, so that row is the one drawn as selected;
+    /// a session list's row opens it over the workspace, which stays selected.
+    public mutating func enterProjectSessions(_ address: SessionProjectAddress, asDestination: Bool = false) {
         var frames = path
         frames.removeAll { if case .sessionProject = $0 { return true }; return false }
         let index = frames.first.map { if case .folder = $0 { return 1 }; return 0 } ?? 0
-        frames.insert(.sessionProject(address, asDestination: false), at: index)
+        frames.insert(.sessionProject(address, asDestination: asDestination), at: index)
         path = frames
     }
 
@@ -563,6 +575,15 @@ public struct NavState: Equatable, Sendable {
             withPath { $0.append(node) }
         } else {
             replaceTop(with: node)
+        }
+    }
+
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): it takes
+    /// the place of the conversation the sheet was opened over, so Back returns to the list (or the
+    /// folder page) that conversation was opened from, never to the conversation it replaced.
+    public mutating func switchConsole(to node: NavNode) {
+        withPath {
+            if case .console? = $0.last { $0[$0.count - 1] = node } else { $0.append(node) }
         }
     }
 

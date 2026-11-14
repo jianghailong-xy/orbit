@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Profile · 改密码收进对话框 · 效果图</title>
+<style>
+  :root { --border:#dee0e3; --bsub:#eceef1; --t1:#1f2329; --t2:#646a73; --t3:#8f959e; --brand:#3370ff; --ok:#1a7f37; --okbg:#e8f6ec; --okbd:#b6e7c4; --danger:#d83931; --dangerbg:#fff1f0; --dangerbd:#ffccc7; }
+  body { margin:0; background:#f4f4f6; font:15px/1.55 "Inter","Noto Sans SC","WenQuanYi Zen Hei",sans-serif; color:#1d1d1f; }
+  .b-part { width:1440px; margin:0 auto; padding:36px 44px 40px; box-sizing:border-box; background:#fff; border-bottom:1px solid #e3e3e8; }
+  h1 { font-size:26px; margin:0 0 6px; } h2 { font-size:20px; margin:0 0 14px; }
+  .b-sub { color:#6e6e73; margin:0 0 20px; }
+  .b-cols { display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:start; }
+  .b-cols3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:22px; align-items:start; }
+  .b-cap { font-size:14px; font-weight:700; margin:0 0 8px; }
+  .b-cap.old { color:#8e8e93; } .b-cap.new { color:#1f8a3b; }
+  .b-n { display:inline-block; min-width:22px; height:22px; line-height:22px; text-align:center; border-radius:11px; background:#ff3b30; color:#fff; font-size:13px; font-weight:700; font-style:normal; }
+  .pin { position:absolute; z-index:6; }
+  .b-notes { margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:6px 28px; font-size:14px; }
+  .b-notes p { margin:0; }
+  .b-mono { font-family:"DejaVu Sans Mono",monospace; font-size:12.5px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th,td { border:1px solid #e0e0e5; padding:8px 10px; vertical-align:top; text-align:left; }
+  th { background:#f6f6f8; }
+
+  /* web frame */
+  .win { border:1px solid #d6d7da; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 6px 24px rgba(0,0,0,.07); position:relative; }
+  .win-top { height:30px; background:#f3f4f6; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:6px; }
+  .win-top i { width:11px; height:11px; border-radius:6px; background:#d0d2d6; display:inline-block; }
+  .page { padding:22px 30px 28px; font-size:14px; color:var(--t1); line-height:1.57; }
+  .page.dim { min-height:620px; }
+  .ph { font-size:22px; font-weight:650; margin:0 0 18px; }
+  .sec { font-size:15px; font-weight:600; margin:0 0 10px; }
+  .sec + .card, .card + .sec { }
+  .card { border:1px solid var(--border); border-radius:12px; background:#fff; padding:0 16px; margin-bottom:28px; position:relative; }
+  .card.pad { padding:16px; }
+  .rw { display:flex; align-items:center; gap:16px; padding:12px 0; }
+  .rw + .rw { border-top:1px solid var(--bsub); }
+  .rw .tx { flex:1; min-width:0; }
+  .rw .ti { font-size:14px; } .rw .ti.b { font-weight:500; }
+  .rw .de { font-size:12.5px; color:var(--t2); margin-top:2px; }
+  .rw .de.n { font-size:14px; }
+  .rw .ctl { display:flex; gap:8px; align-items:center; flex:none; }
+  .av { width:36px; height:36px; border-radius:18px; background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .btn { font-size:14px; border:1px solid var(--border); border-radius:6px; padding:4px 14px; background:#fff; color:var(--t1); white-space:nowrap; line-height:22px; display:inline-block; }
+  .btn.pri { background:var(--brand); border-color:var(--brand); color:#fff; }
+  .btn.dis { background:#f5f5f5; color:#b8bcc2; }
+  .btn.load:before { content:""; display:inline-block; width:10px; height:10px; border:2px solid rgba(255,255,255,.55); border-top-color:#fff; border-radius:7px; margin-right:7px; vertical-align:-1px; }
+  .btn.hl { outline:2px solid #34a853; outline-offset:2px; }
+  .inp { border:1px solid var(--border); border-radius:6px; height:32px; box-sizing:border-box; padding:0 11px; display:flex; align-items:center; color:var(--t1); font-size:14px; background:#fff; }
+  .inp.foc { border-color:var(--brand); box-shadow:0 0 0 2px rgba(51,112,255,.16); }
+  .inp.err { border-color:var(--danger); }
+  .inp .eye { margin-left:auto; color:var(--t3); font-size:13px; }
+  .inp .dots { letter-spacing:2px; }
+  .badge { font-size:12px; padding:0 8px; border-radius:4px; line-height:22px; border:1px solid var(--okbd); background:var(--okbg); color:var(--ok); }
+  .badge.def { border-color:var(--border); background:#f5f6f7; color:var(--t2); }
+  .note { font-size:12px; color:var(--t3); margin-top:4px; }
+  .gone { border:2px dashed #ff3b30; border-radius:12px; padding:10px 14px; color:#c62828; background:#fff5f5; font-size:13px; }
+  .ghost { opacity:.35; }
+
+  /* fields */
+  .fl { margin-bottom:16px; }
+  .fl .lb { font-size:14px; margin-bottom:6px; }
+  .fl .lb:before { content:"* "; color:var(--danger); }
+  .fl .ex { font-size:13px; color:var(--t3); margin-top:4px; }
+  .fl .er { font-size:13px; color:var(--danger); margin-top:4px; }
+  .cb { display:flex; gap:8px; align-items:center; font-size:14px; }
+  .cb i { width:16px; height:16px; border:1px solid #c9cdd4; border-radius:4px; display:inline-block; background:#fff; flex:none; }
+  .cb i.on { background:var(--brand); border-color:var(--brand); position:relative; }
+  .cb i.on:after { content:""; position:absolute; left:5px; top:1px; width:4px; height:9px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
+
+  /* dialog */
+  .scrim { position:absolute; inset:30px 0 0 0; background:rgba(0,0,0,.45); z-index:2; }
+  .dlg { position:absolute; left:50%; top:72px; transform:translateX(-50%); width:440px; background:#fff; border-radius:8px; box-shadow:0 6px 16px rgba(0,0,0,.08),0 3px 6px -4px rgba(0,0,0,.12),0 9px 28px 8px rgba(0,0,0,.05); padding:20px 24px; z-index:3; font-size:14px; color:var(--t1); box-sizing:border-box; }
+  .dlg .h { font-size:16px; font-weight:600; line-height:24px; margin-bottom:16px; }
+  .dlg .x { position:absolute; right:20px; top:20px; color:var(--t3); font-size:16px; line-height:1; }
+  .dlg .ft { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  .alert { border:1px solid var(--dangerbd); background:var(--dangerbg); border-radius:8px; padding:8px 12px; font-size:14px; margin-bottom:16px; }
+  .alert b { font-weight:500; display:block; } .alert span { color:var(--t2); font-size:13px; }
+  .toast { position:absolute; top:44px; left:50%; transform:translateX(-50%); background:#fff; border-radius:8px; box-shadow:0 6px 16px rgba(0,0,0,.12); padding:9px 14px; font-size:14px; display:flex; gap:8px; align-items:flex-start; z-index:4; white-space:nowrap; }
+  .toast .ic { width:16px; height:16px; border-radius:8px; background:#52c41a; color:#fff; font-size:11px; line-height:16px; text-align:center; flex:none; margin-top:3px; }
+  .toast small { display:block; color:var(--t2); font-size:13px; }
+
+  /* narrow */
+  .narrow { width:390px; border:1px solid #d6d7da; border-radius:28px; overflow:hidden; position:relative; height:650px; background:#fff; box-shadow:0 6px 24px rgba(0,0,0,.07); margin:0 auto; }
+  .narrow .page { padding:18px 16px; }
+  .narrow .scrim { inset:0; }
+  .narrow .dlg { width:358px; top:60px; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ ① -->
+<section class="b-part">
+<h1>Profile：改密码收进对话框（Web）</h1>
+<p class="b-sub">改密码一年也用不了几次，却在资料页上整块敞开，主按钮比改名字的 Save 还醒目；而上面 Sign-in methods 已经有一行 <b>Password · Set</b>，同一件事说了两遍。改后：那一行带一个 <b>Change</b> 按钮，表单只在对话框里出现。iOS、macOS、Android 本来就是"一行入口 → 单独页面"，不动。</p>
+
+<h2>① 资料页：现在 / 改后</h2>
+<div class="b-cols">
+  <div>
+    <p class="b-cap old">现在</p>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="page">
+        <div class="ph">Profile</div>
+        <div class="sec">Basic information</div>
+        <div class="card">
+          <div class="rw"><div class="tx"><div class="ti">Photo</div></div><div class="ctl"><div class="av">j</div><span class="btn">Choose photo</span><span class="btn">Remove photo</span></div></div>
+          <div class="rw"><div class="tx"><div class="ti">Name</div><div class="de">People in your shared pools see you by this name.</div></div><div class="ctl"><div class="inp" style="width:170px">jianghailong.rd</div><span class="btn dis">Save</span></div></div>
+          <div class="rw"><div class="tx"><div class="ti">Email</div></div><div class="ctl" style="color:var(--t2)">jianghailong.rd@gmail.com</div></div>
+        </div>
+        <div class="sec">Sign-in methods</div>
+        <div class="card pad">
+          <div class="rw" style="padding-top:0"><div class="tx"><div class="ti b">Password</div><div class="de n">You can sign in with your email and password.</div></div><span class="badge">Set</span></div>
+          <div class="rw" style="padding-bottom:0"><div class="tx"><div class="ti b">Google</div><div class="de n">Connected as <b>jianghailong.rd@gmail.com</b></div></div><span class="btn">Disconnect</span></div>
+        </div>
+        <div class="sec">Change password</div>
+        <div class="card pad gone" style="margin-bottom:0">
+          <div class="fl"><div class="lb">Current password</div><div class="inp"><span class="eye">◌</span></div></div>
+          <div class="fl"><div class="lb">New password</div><div class="inp"><span class="eye">◌</span></div></div>
+          <div class="fl"><div class="lb">Confirm new password</div><div class="inp"><span class="eye">◌</span></div></div>
+          <div class="cb"><i></i>Also revoke all my access tokens</div>
+          <div class="fl"><div class="ex">Scripts and the orbit CLI using them stop working at once. Unticked, they keep working.</div></div>
+          <span class="btn pri">Change password</span>
+          <div class="pin" style="right:12px;top:12px"><i class="b-n">1</i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">改后</p>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="page">
+        <div class="ph">Profile</div>
+        <div class="sec">Basic information</div>
+        <div class="card">
+          <div class="rw"><div class="tx"><div class="ti">Photo</div></div><div class="ctl"><div class="av">j</div><span class="btn">Choose photo</span><span class="btn">Remove photo</span></div></div>
+          <div class="rw"><div class="tx"><div class="ti">Name</div><div class="de">People in your shared pools see you by this name.</div></div><div class="ctl"><div class="inp" style="width:170px">jianghailong.rd</div><span class="btn dis">Save</span></div></div>
+          <div class="rw"><div class="tx"><div class="ti">Email</div></div><div class="ctl" style="color:var(--t2)">jianghailong.rd@gmail.com</div></div>
+        </div>
+        <div class="sec">Sign-in methods</div>
+        <div class="card pad" style="margin-bottom:0">
+          <div class="rw" style="padding-top:0"><div class="tx"><div class="ti b">Password</div><div class="de n">You can sign in with your email and password.</div></div><div class="ctl"><span class="badge">Set</span><span class="btn hl">Change</span></div>
+            <div class="pin" style="right:-34px;top:2px"><i class="b-n">2</i></div></div>
+          <div class="rw" style="padding-bottom:0"><div class="tx"><div class="ti b">Google</div><div class="de n">Connected as <b>jianghailong.rd@gmail.com</b></div></div><span class="btn">Disconnect</span></div>
+        </div>
+        <div style="height:120px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes">
+  <p><i class="b-n">1</i> 整块 <b>Change password</b> 卡片删掉，页面上不再有密码输入框，也不再有蓝色主按钮。</p>
+  <p><i class="b-n">2</i> <b>Password</b> 行在 <b>Set</b> 徽标后加一个普通按钮 <b>Change</b>（不是主按钮）。行名已经叫 Password，按钮不再重复"password"。点开 ② 的对话框。</p>
+</div>
+</section>
+
+<!-- ============================================================ ② -->
+<section class="b-part">
+<h2>② 对话框：打开 / 填错 / 服务器拒绝</h2>
+<div class="b-cols3">
+  <div>
+    <p class="b-cap new">打开：空表单，光标在 Current password</p>
+    <div class="win" style="height:600px"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="page ghost"><div class="ph">Profile</div><div class="sec">Sign-in methods</div></div>
+      <div class="scrim"></div>
+      <div class="dlg" style="width:380px">
+        <span class="x">✕</span>
+        <div class="h">Change password</div>
+        <div class="fl"><div class="lb">Current password</div><div class="inp foc"><span class="eye">◌</span></div></div>
+        <div class="fl"><div class="lb">New password</div><div class="inp"><span class="eye">◌</span></div><div class="ex">At least 6 characters</div></div>
+        <div class="fl"><div class="lb">Confirm new password</div><div class="inp"><span class="eye">◌</span></div></div>
+        <div class="cb"><i></i>Also revoke all my access tokens</div>
+        <div class="ex" style="font-size:13px;color:var(--t3);margin:4px 0 0 24px">Scripts and the orbit CLI using them stop working at once. Unticked, they keep working.</div>
+        <div class="ft"><span class="btn">Cancel</span><span class="btn pri">Change password</span></div>
+        <div class="pin" style="left:-25px;top:58px"><i class="b-n">3</i></div>
+        <div class="pin" style="left:-25px;top:330px"><i class="b-n">4</i></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">点了 Change password，本地校验没过</p>
+    <div class="win" style="height:600px"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="page ghost"><div class="ph">Profile</div><div class="sec">Sign-in methods</div></div>
+      <div class="scrim"></div>
+      <div class="dlg" style="width:380px">
+        <span class="x">✕</span>
+        <div class="h">Change password</div>
+        <div class="fl"><div class="lb">Current password</div><div class="inp err"><span class="eye">◌</span></div><div class="er">Enter your current password</div></div>
+        <div class="fl"><div class="lb">New password</div><div class="inp"><span class="dots">••••••••••</span><span class="eye">◌</span></div></div>
+        <div class="fl"><div class="lb">Confirm new password</div><div class="inp err"><span class="dots">•••••••••</span><span class="eye">◌</span></div><div class="er">Passwords do not match</div></div>
+        <div class="cb"><i class="on"></i>Also revoke all my access tokens</div>
+        <div class="ex" style="font-size:13px;color:var(--t3);margin:4px 0 0 24px">Scripts and the orbit CLI using them stop working at once. Unticked, they keep working.</div>
+        <div class="ft"><span class="btn">Cancel</span><span class="btn pri">Change password</span></div>
+        <div class="pin" style="left:-25px;top:58px"><i class="b-n">5</i></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">服务器拒绝：对话框不关，错误写在里面</p>
+    <div class="win" style="height:600px"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="page ghost"><div class="ph">Profile</div><div class="sec">Sign-in methods</div></div>
+      <div class="scrim"></div>
+      <div class="dlg" style="width:380px">
+        <span class="x">✕</span>
+        <div class="h">Change password</div>
+        <div class="alert"><b>Couldn't change the password</b><span>current password is incorrect</span></div>
+        <div class="fl"><div class="lb">Current password</div><div class="inp foc"><span class="dots">•••••••</span><span class="eye">◌</span></div></div>
+        <div class="fl"><div class="lb">New password</div><div class="inp"><span class="dots">••••••••••</span><span class="eye">◌</span></div></div>
+        <div class="fl"><div class="lb">Confirm new password</div><div class="inp"><span class="dots">••••••••••</span><span class="eye">◌</span></div></div>
+        <div class="cb"><i class="on"></i>Also revoke all my access tokens</div>
+        <div class="ft"><span class="btn">Cancel</span><span class="btn pri">Change password</span></div>
+        <div class="pin" style="left:-25px;top:58px"><i class="b-n">6</i></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes">
+  <p><i class="b-n">3</i> 标题 <b>Change password</b>，宽 400（图里为了放标注缩到 380）。每次打开都是空表单，光标落在 Current password（和 New access token 对话框一样，<span class="b-mono">initialFocus</span>）。字段、校验文案、眼睛按钮都沿用现在的 <span class="b-mono">PasswordInput</span> 和 <span class="b-mono">useForm</span>。</p>
+  <p><i class="b-n">4</i> 页脚：Cancel + 主按钮 <b>Change password</b>。Cancel、✕、Esc、点遮罩都直接关闭并丢掉已输入的内容，不再确认。<b>New password</b> 下面常驻 "At least 6 characters"，规则提前说，不等用户撞上。</p>
+  <p><i class="b-n">5</i> 本地校验的错误还是写在各自字段下面，文案不变（Enter your current password / Passwords do not match / At least 6 characters）。</p>
+  <p><i class="b-n">6</i> 服务器拒绝（比如当前密码不对）：对话框保持打开，输入都保留，在标题下方用 <span class="b-mono">Alert</span> 写出原因，光标回到 Current password。不再用 toast：它离对话框远，几秒就消失，用户改哪一格还得自己猜。</p>
+</div>
+</section>
+
+<!-- ============================================================ ③ -->
+<section class="b-part">
+<h2>③ 提交中 / 成功</h2>
+<div class="b-cols">
+  <div>
+    <p class="b-cap new">提交中：主按钮转圈，Cancel 和 ✕ 不能点</p>
+    <div class="win" style="height:560px"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="page ghost"><div class="ph">Profile</div><div class="sec">Sign-in methods</div></div>
+      <div class="scrim"></div>
+      <div class="dlg">
+        <span class="x" style="opacity:.4">✕</span>
+        <div class="h">Change password</div>
+        <div class="fl"><div class="lb">Current password</div><div class="inp"><span class="dots">•••••••••</span><span class="eye">◌</span></div></div>
+        <div class="fl"><div class="lb">New password</div><div class="inp"><span class="dots">••••••••••</span><span class="eye">◌</span></div></div>
+        <div class="fl"><div class="lb">Confirm new password</div><div class="inp"><span class="dots">••••••••••</span><span class="eye">◌</span></div></div>
+        <div class="cb"><i class="on"></i>Also revoke all my access tokens</div>
+        <div class="ft"><span class="btn" style="color:#b8bcc2">Cancel</span><span class="btn pri load">Change password</span></div>
+        <div class="pin" style="left:-25px;top:58px"><i class="b-n">7</i></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">成功：对话框关掉，toast 报结果</p>
+    <div class="win" style="height:560px"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="toast"><span class="ic">✓</span><div>Password changed<small>2 access tokens revoked</small></div></div>
+      <div class="page">
+        <div class="ph">Profile</div>
+        <div class="sec">Sign-in methods</div>
+        <div class="card pad" style="margin-bottom:0">
+          <div class="rw" style="padding-top:0"><div class="tx"><div class="ti b">Password</div><div class="de n">You can sign in with your email and password.</div></div><div class="ctl"><span class="badge">Set</span><span class="btn" style="box-shadow:0 0 0 2px rgba(51,112,255,.25)">Change</span></div></div>
+          <div class="rw" style="padding-bottom:0"><div class="tx"><div class="ti b">Google</div><div class="de n">Connected as <b>jianghailong.rd@gmail.com</b></div></div><span class="btn">Disconnect</span></div>
+        </div>
+        <div class="pin" style="right:10px;top:168px"><i class="b-n">8</i></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes">
+  <p><i class="b-n">7</i> 提交期间对话框不能关，免得用户以为取消了，其实请求已经发出去。</p>
+  <p><i class="b-n">8</i> 成功：关闭对话框，焦点回到 <b>Change</b> 按钮。toast 文案和现在一样：没撤销 token 时只说 "Password changed"，撤销了就加一行 "N access tokens revoked"，Access tokens 列表同时刷新。</p>
+</div>
+</section>
+
+<!-- ============================================================ ④ -->
+<section class="b-part">
+<h2>④ 边界：没有密码的账号 / 服务器没开 Google 登录</h2>
+<div class="b-cols">
+  <div>
+    <p class="b-cap new">只用 Google 登录（没有密码）：不给 Change</p>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="page">
+        <div class="sec">Sign-in methods</div>
+        <div class="card pad" style="margin-bottom:0">
+          <div class="rw" style="padding-top:0"><div class="tx"><div class="ti b">Password</div><div class="de n">No password is set: you sign in with Google. An administrator can set one for you.</div></div><span class="badge def">Not set</span></div>
+          <div class="rw" style="padding-bottom:0"><div class="tx"><div class="ti b">Google</div><div class="de n">Connected as <b>someone@gmail.com</b></div><div class="note">Google is the only way you sign in. Ask an administrator to set a password before disconnecting it.</div></div><span class="btn dis">Disconnect</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="b-notes" style="grid-template-columns:1fr"><p>和现在一样：没有密码就没有可改的，所以这一行只有 <b>Not set</b>。</p></div>
+  </div>
+  <div>
+    <p class="b-cap new">服务器没开 Google 登录：卡片照样出现，只剩 Password 一行</p>
+    <div class="win"><div class="win-top"><i></i><i></i><i></i></div>
+      <div class="page">
+        <div class="sec">Sign-in methods</div>
+        <div class="card pad" style="margin-bottom:0">
+          <div class="rw" style="padding:0"><div class="tx"><div class="ti b">Password</div><div class="de n">You can sign in with your email and password.</div></div><div class="ctl"><span class="badge">Set</span><span class="btn">Change</span></div></div>
+        </div>
+        <div class="pin" style="right:8px;top:4px"><i class="b-n">9</i></div>
+      </div>
+    </div>
+    <div class="b-notes" style="grid-template-columns:1fr"><p><i class="b-n">9</i> 现在这种情况下整张 Sign-in methods 卡片都不画，改密码靠下面那块表单。表单删掉后，卡片必须出现，不然就找不到改密码的入口了。Google 行在这里<b>隐藏</b>：服务器没开 Google，账号也没绑 Google，说一句 "Google sign-in is turned off on this server." 没有意义。账号已经绑了 Google 的话，Google 行照现在的规则显示。</p></div>
+  </div>
+</div>
+</section>
+
+<!-- ============================================================ ⑤ -->
+<section class="b-part">
+<h2>⑤ 窄屏（手机浏览器）</h2>
+<div class="b-cols">
+  <div>
+    <p class="b-cap new">资料页</p>
+    <div class="narrow">
+      <div class="page">
+        <div class="ph">Profile</div>
+        <div class="sec">Sign-in methods</div>
+        <div class="card pad" style="margin-bottom:0">
+          <div class="rw" style="padding-top:0;align-items:flex-start"><div class="tx"><div class="ti b">Password</div><div class="de n">You can sign in with your email and password.</div></div><div class="ctl"><span class="badge">Set</span><span class="btn">Change</span></div></div>
+          <div class="rw" style="padding-bottom:0;align-items:flex-start"><div class="tx"><div class="ti b">Google</div><div class="de n">Connected as <b>jianghailong.rd@gmail.com</b></div></div><span class="btn">Disconnect</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <p class="b-cap new">对话框：宽度到屏幕两边各留 16px</p>
+    <div class="narrow">
+      <div class="page ghost"><div class="ph">Profile</div></div>
+      <div class="scrim"></div>
+      <div class="dlg">
+        <span class="x">✕</span>
+        <div class="h">Change password</div>
+        <div class="fl"><div class="lb">Current password</div><div class="inp foc"><span class="eye">◌</span></div></div>
+        <div class="fl"><div class="lb">New password</div><div class="inp"><span class="eye">◌</span></div><div class="ex">At least 6 characters</div></div>
+        <div class="fl"><div class="lb">Confirm new password</div><div class="inp"><span class="eye">◌</span></div></div>
+        <div class="cb"><i></i>Also revoke all my access tokens</div>
+        <div class="ex" style="font-size:13px;color:var(--t3);margin:4px 0 0 24px">Scripts and the orbit CLI using them stop working at once. Unticked, they keep working.</div>
+        <div class="ft"><span class="btn">Cancel</span><span class="btn pri">Change password</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="b-notes" style="grid-template-columns:1fr">
+  <p>用现成的 <span class="b-mono">Dialog</span>（<span class="b-mono">max-width: calc(100vw - 32px)</span>），不用另外做窄屏版本。</p>
+</div>
+</section>
+
+<!-- ============================================================ ⑥ -->
+<section class="b-part">
+<h2>⑥ 改动范围</h2>
+<table>
+  <tr><th style="width:220px">位置</th><th>改什么</th></tr>
+  <tr><td class="b-mono">pages/ProfilePage.tsx</td><td>删掉 "Change password" 卡片和那里的表单状态。</td></tr>
+  <tr><td class="b-mono">components/SignInMethodsCard.tsx</td><td>Password 行加 <b>Change</b> 按钮（有密码才显示），打开新对话框。有密码时，服务器没开 Google 也要画这张卡片，Google 行按 ④ 处理。</td></tr>
+  <tr><td class="b-mono">components/ChangePasswordDialog.tsx</td><td>新文件：表单、校验、提交、成功和失败的处理从 ProfilePage 搬过来，服务器错误改成对话框里的 Alert。</td></tr>
+  <tr><td class="b-mono">ProfilePage.*.test.tsx</td><td>password / revokeAccessTokens / signInMethods 三份测试改为先点 Change，再在对话框里操作；补测试：服务器没开 Google 时也有入口、取消后再打开是空表单、失败时对话框不关。</td></tr>
+  <tr><td>iOS / macOS / Android</td><td>不动，它们本来就是一行入口加单独页面。</td></tr>
+</table>
+</section>
+
+</body>
+</html>

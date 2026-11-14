@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,10 @@ const (
 	defaultPingInterval      = 20 * time.Second
 	defaultPingTimeout       = 60 * time.Second
 	defaultMaxConnsPerRunner = 2
+	// defaultBackendMaxConns is LINK_BACKEND_MAX_CONNS's default: the connections to each backend, which before the
+	// cap were the idle ones kept. An apiserver serves its calls with 10 database connections, so more calls at once
+	// than this only wait inside it instead.
+	defaultBackendMaxConns = 256
 )
 
 // config is everything the gateway is told at start, from the environment (README.md, "Configuration").
@@ -84,6 +89,9 @@ type config struct {
 	InternalAPIURLs []string
 	// RPCTimeout bounds one forwarded call to a backend, retries included.
 	RPCTimeout time.Duration
+	// BackendMaxConns bounds the connections to each backend (LINK_BACKEND_MAX_CONNS); a call past it waits for one
+	// to come free (backend.go).
+	BackendMaxConns int
 
 	// DrillLoseAnswers is LINK_DRILL_LOSE_ANSWERS: how many answers of each call a staging drill has the gateway lose
 	// (drill.go). Nil, the default, loses none.
@@ -112,6 +120,11 @@ type linkTuning struct {
 	MaxQueued creditLevel
 	// HoldFor is how long room freed for a session in line is held for its runner to send again.
 	HoldFor time.Duration
+	// CreditHold is how long after the queue was last past HighWater the credit stays reduced, below LowWater too.
+	CreditHold time.Duration
+	// A credit change is told to CreditSpreadBatch connections every CreditSpreadEvery (creditBook.spread).
+	CreditSpreadBatch int
+	CreditSpreadEvery time.Duration
 	// RetryBudget is how long a call keeps being retried on other backends, and BackendDownFor how long a backend
 	// that could not be dialed is passed over.
 	RetryBudget, BackendDownFor time.Duration
@@ -164,13 +177,29 @@ func defaultLinkTuning() linkTuning {
 		LowWater:         defaultMaxQueued.half().half(),
 		MaxQueued:        defaultMaxQueued,
 		HoldFor:          15 * time.Second,
-		RetryBudget:      5 * time.Second,
-		BackendDownFor:   5 * time.Second,
-		WatchersTTL:      60 * time.Second,
-		PrefixTimeout:    10 * time.Second,
-		WelcomeTimeout:   3 * time.Second,
-		Merge:            defaultMergeTuning(),
+		// Longer than the 11-13 s between a large gateway's GC marks, each of which can push the queue past HighWater.
+		CreditHold: 30 * time.Second,
+		// 100,000 connections a second: 400,000 are told in 4 s.
+		CreditSpreadBatch: 1_000,
+		CreditSpreadEvery: 10 * time.Millisecond,
+		RetryBudget:       5 * time.Second,
+		BackendDownFor:    5 * time.Second,
+		WatchersTTL:       60 * time.Second,
+		PrefixTimeout:     10 * time.Second,
+		WelcomeTimeout:    3 * time.Second,
+		Merge:             defaultMergeTuning(),
 	}
+}
+
+// defaultHandshakeRate is LINK_HANDSHAKE_RATE's default, and LINK_HANDSHAKE_BURST's (a second of it): 100 new
+// connections a second for each CPU the gateway may use (GOMAXPROCS, which follows the container's CPU limit), and
+// never under 200. A vCPU completes about 500 TLS handshakes a second at 1.5-1.8 ms each, and past about twice that a
+// core the handshakes time out and are retried rather than level off (task 34paLvEDFObkoBxYLAJSN, series D), so a
+// fifth of it leaves the rest for the connections already open. At 28 vCPUs that is 2,800 a second, which brings
+// 800,000 runners back in under 5 minutes after a restart, inside the 10 min 45 s the reaper holds their work; at the
+// old 200 a second a lone gateway got about 130,000 back in that time.
+func defaultHandshakeRate(cpus int) int {
+	return max(100*cpus, 200)
 }
 
 // letsEncrypt is the ACME directory used unless LINK_ACME_DIRECTORY_URL names another.
@@ -245,8 +274,8 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		HandshakeTimeout:   dur("LINK_HANDSHAKE_TIMEOUT", 5*time.Second),
 		IPRate:             num("LINK_IP_RATE", 1),
 		IPBurst:            integer("LINK_IP_BURST", 20),
-		HandshakeRate:      num("LINK_HANDSHAKE_RATE", 200),
-		HandshakeBurst:     integer("LINK_HANDSHAKE_BURST", 400),
+		HandshakeRate:      num("LINK_HANDSHAKE_RATE", float64(defaultHandshakeRate(runtime.GOMAXPROCS(0)))),
+		HandshakeBurst:     integer("LINK_HANDSHAKE_BURST", defaultHandshakeRate(runtime.GOMAXPROCS(0))),
 		MaxConnsPerRunner:  defaultMaxConnsPerRunner,
 		DrainBatch:         integer("LINK_DRAIN_BATCH", 250),
 		DrainBatchInterval: dur("LINK_DRAIN_BATCH_INTERVAL", time.Second),
@@ -259,6 +288,7 @@ func configFromEnv(getenv func(string) string) (config, error) {
 		FrameLog:           str("LINK_FRAME_LOG", "lifecycle"),
 		InternalAPIURLs:    splitList(getenv("LINK_INTERNAL_API_URLS")),
 		RPCTimeout:         dur("LINK_RPC_TIMEOUT", 60*time.Second),
+		BackendMaxConns:    integer("LINK_BACKEND_MAX_CONNS", defaultBackendMaxConns),
 		link:               defaultLinkTuning(),
 	}
 	// Merged ingest (events_merge.go): a window of 0 forwards every batch alone, as before merging.

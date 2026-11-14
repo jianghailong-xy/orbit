@@ -201,6 +201,15 @@ describe('what the page must not take over', { timeout: 60_000 }, () => {
     expect(notFound()).toBe(false);
   });
 
+  it('the guest page’s first address goes to the one address a session has, then to log in (board 11, D8)', async () => {
+    await visit(`/g/${ID}`);
+    expect(addressBar()).toBe(`/login?next=${encodeURIComponent(`/sessions/${ID}`)}`);
+    signIn();
+    await visit(`/g/${ID}`);
+    expect(addressBar()).toBe(`/sessions/${ID}`);
+    expect(container.textContent).toContain('the console');
+  });
+
   it('signed out, an address’s query still rides along', async () => {
     await visit('/tasks?scope=all');
     expect(addressBar()).toBe(`/login?next=${encodeURIComponent('/tasks?scope=all')}`);

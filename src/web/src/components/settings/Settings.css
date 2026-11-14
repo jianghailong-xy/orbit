@@ -101,6 +101,17 @@
   background: var(--bg-hover);
   color: var(--text-1);
 }
+/* A group's + shows under the pointer, on keyboard focus, and while the group is empty.
+   Where nothing hovers (touch) it stays in sight. */
+@media (hover: hover) {
+  .settings-nav-group:not(.settings-nav-group--empty) .settings-nav-add {
+    opacity: 0;
+  }
+  .settings-nav-group:hover .settings-nav-add,
+  .settings-nav-group .settings-nav-add:focus-visible {
+    opacity: 1;
+  }
+}
 
 .settings-nav-row {
   display: flex;
@@ -324,6 +335,18 @@
 .settings-row-control {
   flex-shrink: 0;
 }
+/* A row that opens something from a press anywhere on it: lit across the card's width on hover, its
+   control level with the title's line however many lines the description takes. */
+.settings-row--link {
+  align-items: flex-start;
+  cursor: pointer;
+}
+.settings-row--link:hover {
+  background: var(--bg-hover);
+  box-shadow:
+    -16px 0 0 var(--bg-hover),
+    16px 0 0 var(--bg-hover);
+}
 /* The row a search result opened, lit for a moment across the card's width (useFoundRowFlash). */
 .settings-row--found {
   animation: settings-row-found 2s ease-out;
@@ -416,7 +439,7 @@
 .sp-chip.on {
   background: var(--text-1);
   border-color: var(--text-1);
-  color: var(--bg);
+  color: var(--bg-base);
 }
 .sp-chip-count {
   opacity: 0.6;
@@ -694,4 +717,125 @@
   align-items: center;
   gap: 8px;
   margin-top: 20px;
+}
+
+/* Admin, drawn as Settings is (AdminLayout, docs/mocks/admin-settings-style): text fields 300px wide in a row's
+   control, a value or a code line in place of one, and one Save under the page's sections. Narrower than 760px a
+   row with a field or a picker puts it under the row's text, full width. */
+.admin-form .settings-row-control .admin-row-input {
+  width: 300px;
+}
+.admin-row-code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}
+.admin-form-note {
+  margin-top: 10px;
+}
+.admin-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.admin-email-ok {
+  color: var(--success);
+}
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) {
+  flex-wrap: wrap;
+}
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) .settings-row-control {
+  width: 100%;
+}
+/* Over the picker's own inline width. */
+.settings-shell--narrow .admin-form .settings-row:has(.admin-row-input, [role="combobox"]) .settings-row-control > * {
+  width: 100% !important;
+}
+/* Admin → Users: the search across the column, the table in a card as Settings' are. */
+.admin-users-page .admin-users-search {
+  width: 100%;
+  margin-bottom: 12px;
+}
+.admin-users-page .admin-users-frame {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.admin-users-page .admin-users-frame tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Settings → Storage: each ranking row opens the files it counts. */
+.storage-usage-chevron {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.storage-files-back {
+  margin: 0 0 8px -8px;
+}
+.storage-file-row {
+  align-items: flex-start;
+}
+.storage-file-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-size: 15px;
+}
+.storage-file-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.storage-file-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.storage-file-pin {
+  font-size: 12px;
+  color: var(--brand);
+}
+.storage-file-facts {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.storage-file-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.storage-files-more {
+  margin-top: 12px;
+  text-align: center;
+}
+.storage-menu-blocked {
+  display: flex;
+  flex-direction: column;
+  max-width: 240px;
+  white-space: normal;
+}
+.storage-menu-why {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+/* A file list goes back to Storage, not to the Settings list. */
+.settings-column:has(.storage-files-page) > .settings-back--list {
+  display: none;
+}
+.storage-files-empty {
+  margin: 24px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
 }

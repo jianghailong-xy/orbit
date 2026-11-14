@@ -7,8 +7,9 @@ import { ImagePreview, type ImagePreviewItem } from './ImagePreview';
 
 /**
  * The picture viewer the replaced Image and Image.PreviewGroup opened, and the thumbnail that opens it on its own.
- * What it does is what a reader does with it: page a group with the arrows or ←/→ (stopping at either end), zoom
- * with the buttons, the wheel and a double click, turn and flip, drag, and close with the button, Esc or a press on
+ * What it does is what a reader does with it: page a group with the arrows or ←/→ (stopping at either end), open a
+ * picture at its actual size and scroll it with the wheel, zoom with the buttons, ⌘/Ctrl and the wheel and a double
+ * click, go between the actual size and the whole picture, turn and flip, drag, and close with the button, Esc or a press on
  * the mask — never on the picture — with focus back where it was. Geometry is the browser comparison's
  * (ui-migration/p52.browser.mjs); here jsdom lays nothing out, so a zoom is read from the transform it asks for.
  */
@@ -107,7 +108,9 @@ describe('ImagePreview', () => {
     // The controls, in the replaced preview's order.
     expect([...dialog()!.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual([
       'Close', 'Previous image', 'Next image', 'Flip vertically', 'Flip horizontally', 'Rotate left', 'Rotate right', 'Zoom out', 'Zoom in',
+      'Fit to window',
     ]);
+    expect(dialog()!.querySelector('.orbit-image-preview-scale')?.textContent).toBe('100%');
   });
 
   it('pages with the arrows and with ←/→, and stops at either end', async () => {
@@ -164,7 +167,7 @@ describe('ImagePreview', () => {
     expect(picture().getAttribute('src')).toBe('blob:first');
   });
 
-  it('zooms with the buttons, the wheel and a double click, and never below its own size', async () => {
+  it('zooms with the buttons, ⌘/Ctrl and the wheel and a double click, and never below its own size', async () => {
     await render(<Group />);
     expect(button('Zoom out')!.getAttribute('aria-disabled')).toBe('true');
     await click(button('Zoom in')!);
@@ -175,6 +178,12 @@ describe('ImagePreview', () => {
     expect(picture().style.transform).toContain('translate3d(0px, 0px, 0)');
     await act(async () => {
       picture().dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 10, clientY: 10, bubbles: true }));
+    });
+    await settle();
+    // A plain wheel scrolls; this picture fits, so it stays.
+    expect(picture().style.transform).toBe('translate3d(0px, 0px, 0) scale3d(1, 1, 1) rotate(0deg)');
+    await act(async () => {
+      picture().dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 10, clientY: 10, ctrlKey: true, bubbles: true, cancelable: true }));
     });
     await settle();
     expect(picture().style.transform).toContain('scale3d(1.5, 1.5, 1)');
@@ -272,6 +281,78 @@ describe('ImagePreview', () => {
     expect(picture().style.transform).toBe('translate3d(0px, 0px, 0) scale3d(1, 1, 1) rotate(0deg)');
   });
 
+  describe('a picture larger than the window', () => {
+    // A 3200×4000 board rendered at 2x, on a 2x screen, in a 1000×800 window: 1600×2000 at its actual size, whole at
+    // 0.28 (70% of the window's height).
+    async function board() {
+      vi.stubGlobal('devicePixelRatio', 2);
+      await render(<Group />);
+      const body = dialog()!.querySelector<HTMLElement>('.orbit-image-preview-body')!;
+      body.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1000, height: 800, top: 0, left: 0, right: 1000, bottom: 800, toJSON: () => ({}) });
+      const img = picture();
+      Object.defineProperty(img, 'naturalWidth', { configurable: true, value: 3200 });
+      Object.defineProperty(img, 'naturalHeight', { configurable: true, value: 4000 });
+      Object.defineProperty(img, 'offsetWidth', { configurable: true, get: () => parseFloat(img.style.width) || 0 });
+      Object.defineProperty(img, 'offsetHeight', { configurable: true, get: () => parseFloat(img.style.height) || 0 });
+      await act(async () => {
+        img.dispatchEvent(new Event('load'));
+      });
+      await settle();
+    }
+    const wheel = async (init: WheelEventInit) => {
+      await act(async () => {
+        picture().dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ...init }));
+      });
+      await settle();
+    };
+
+    it('opens at its actual size from its top-left corner, and the wheel scrolls it to its edges', async () => {
+      await board();
+      expect(picture().style.width).toBe('1600px');
+      expect(picture().style.height).toBe('2000px');
+      expect(picture().style.transform).toBe('translate3d(300px, 600px, 0) scale3d(1, 1, 1) rotate(0deg)');
+      await wheel({ deltaY: 100 });
+      expect(picture().style.transform).toContain('translate3d(300px, 500px, 0)');
+      await wheel({ deltaX: 50 });
+      expect(picture().style.transform).toContain('translate3d(250px, 500px, 0)');
+      await wheel({ deltaY: 1, deltaMode: 1 });
+      expect(picture().style.transform).toContain('translate3d(250px, 484px, 0)');
+      // No further than its bottom-right corner.
+      await wheel({ deltaX: 10_000, deltaY: 10_000 });
+      expect(picture().style.transform).toContain('translate3d(-300px, -600px, 0)');
+      expect(picture().style.transform).toContain('scale3d(1, 1, 1)');
+    });
+
+    it('goes between its actual size and the whole picture with the button and a double click', async () => {
+      await board();
+      await click(button('Fit to window')!);
+      expect(picture().style.transform).toBe('translate3d(0px, 0px, 0) scale3d(0.28, 0.28, 1) rotate(0deg)');
+      expect(dialog()!.querySelector('.orbit-image-preview-scale')?.textContent).toBe('28%');
+      expect(button('Zoom out')!.getAttribute('aria-disabled')).toBe('true');
+      await click(button('Actual size')!);
+      expect(picture().style.transform).toBe('translate3d(300px, 600px, 0) scale3d(1, 1, 1) rotate(0deg)');
+      await act(async () => {
+        picture().dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 500, clientY: 400 }));
+      });
+      await settle();
+      expect(picture().style.transform).toContain('scale3d(0.28, 0.28, 1)');
+      await act(async () => {
+        picture().dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 500, clientY: 400 }));
+      });
+      await settle();
+      expect(picture().style.transform).toContain('scale3d(1, 1, 1)');
+      // ⌘ and the wheel zoom it, never below the whole picture.
+      for (let turn = 0; turn < 5; turn += 1) await wheel({ deltaY: 10_000, metaKey: true });
+      expect(picture().style.transform).toContain('scale3d(0.28, 0.28, 1)');
+    });
+
+    it('opens whole on a touch screen', async () => {
+      vi.stubGlobal('matchMedia', (query: string) => ({ matches: query.includes('pointer: coarse'), media: query, addEventListener() {}, removeEventListener() {} }));
+      await board();
+      expect(picture().style.transform).toBe('translate3d(0px, 0px, 0) scale3d(0.28, 0.28, 1) rotate(0deg)');
+    });
+  });
+
   it('draws nothing while closed', async () => {
     await render(<ImagePreview open={false} items={ITEMS} onClose={() => {}} group />);
     expect(dialog()).toBeNull();
@@ -338,7 +419,7 @@ describe('Image', () => {
 });
 
 describe('what a caller adds to the viewer', () => {
-  it('says the position its own way, says what the picture is, and adds its buttons after the zoom', async () => {
+  it('says the position its own way, says what the picture is, and adds its buttons after the zoom and fit', async () => {
     const onSave = vi.fn();
     await render(
       <ImagePreview
@@ -357,7 +438,7 @@ describe('what a caller adds to the viewer', () => {
     expect(popup.querySelector('.orbit-image-preview-caption .what-it-is')?.textContent).toBe('shots/menu.png');
     expect(popup.classList.contains('orbit-image-preview-captioned')).toBe(true);
     const buttons = [...popup.querySelectorAll<HTMLButtonElement>('.orbit-image-preview-action')].map((button) => button.getAttribute('aria-label'));
-    expect(buttons.slice(-2)).toEqual(['Zoom in', 'Download']);
+    expect(buttons.slice(-3)).toEqual(['Zoom in', 'Fit to window', 'Download']);
     await act(async () => popup.querySelector<HTMLButtonElement>('[aria-label="Download"]')!.click());
     expect(onSave).toHaveBeenCalledTimes(1);
   });
@@ -380,7 +461,7 @@ describe('what a caller adds to the viewer', () => {
     expect(popup.querySelector('.orbit-image-preview-progress')?.textContent).toBe('2 / 3');
     expect(popup.querySelector('.orbit-image-preview-caption')).toBeNull();
     expect(popup.classList.contains('orbit-image-preview-captioned')).toBe(false);
-    expect(popup.querySelectorAll('.orbit-image-preview-action')).toHaveLength(6);
+    expect(popup.querySelectorAll('.orbit-image-preview-action')).toHaveLength(7);
   });
 
   it('waits on an empty frame while a picture is being read', async () => {

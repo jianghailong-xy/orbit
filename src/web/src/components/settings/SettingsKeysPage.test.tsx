@@ -280,9 +280,28 @@ describe('the API keys page in Settings', () => {
     expect(keyRows().map((row) => text(row.querySelector('.vk-name')))).toEqual(['DeepSeek', 'DeepSeek 2']);
     // The table's endpoint and model count are the key's own page's.
     expect(text(vendorSections()[0])).not.toContain('https://');
-    // Each key's Edit opens its own page in Settings' right-hand column.
-    await act(async () => button('Edit', keyRow('DeepSeek 2'))!.click());
+    // A press anywhere on a key's row opens its own page in Settings' right-hand column
+    // (settings-buttons board 01) — there is no Edit button on the row any more.
+    expect(button('Edit', keyRow('DeepSeek 2'))).toBeNull();
+    await act(async () => keyRow('DeepSeek 2').querySelector<HTMLElement>('.vk-name')!.click());
     expect(path).toBe(`/settings/providers/keys/${DEEPSEEK_2.id}`);
+  });
+
+  it('opens a key from its ⋯ too, and not from a press on the row’s own controls', async () => {
+    await mount('deepseek');
+    const here = path;
+    // The balance's ↻ is the row's own control: it refreshes, and the page stays.
+    let refresh: HTMLButtonElement | null = null;
+    await act(async () => {
+      await vi.waitFor(() => {
+        refresh = keyRow('DeepSeek').querySelector<HTMLButtonElement>('button[aria-label="Refresh the balance"]');
+        if (!refresh) throw new Error('no balance yet');
+      });
+    });
+    await act(async () => refresh!.click());
+    expect(path).toBe(here);
+    await pressMenuItem(keyRow('DeepSeek'), 'Edit');
+    expect(path).toBe(`/settings/providers/keys/${DEEPSEEK.id}`);
   });
 
   it('adds another of a vendor’s keys from its section’s heading', async () => {
@@ -354,8 +373,8 @@ describe('the API keys page in Settings', () => {
     expect(text(row.querySelector('.vk-name'))).toBe('Claude Max Disabled');
     expect(text(row.querySelector('.vk-used.never'))).toBe('never used');
     expect(row.querySelector('.vk-used[title]')).toBeNull();
+    // One button on the row, its ⋯ (Edit and Delete in it), named after the key; the row itself opens it.
     expect([...row.querySelectorAll('.vk-act button')].map((b) => b.getAttribute('aria-label'))).toEqual([
-      'Edit Claude Max',
       'More for Claude Max',
     ]);
   });

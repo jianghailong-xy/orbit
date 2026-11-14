@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Runner 更新提示：从整行横幅改成右上角小标识 · 效果图</title>
+<style>
+  :root { --border:#dee0e3; --t1:#1f2329; --t2:#646a73; --t3:#8f959e; --brand:#3370ff; --tint:#eaf1ff; --bborder:#bcd3ff; --warn:#c2710c; --warnbg:#fdf3e3; --warnbd:#f5d7a8; --danger:#d83931; }
+  body { margin:0; background:#f4f4f6; font:15px/1.55 "Inter","Noto Sans SC","WenQuanYi Zen Hei",sans-serif; color:#1d1d1f; }
+  .b-part { width:1440px; margin:0 auto; padding:36px 44px 40px; box-sizing:border-box; background:#fff; border-bottom:1px solid #e3e3e8; }
+  h1 { font-size:26px; margin:0 0 6px; } h2 { font-size:20px; margin:0 0 14px; }
+  .b-sub { color:#6e6e73; margin:0 0 20px; }
+  .b-cols { display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+  .b-cap { font-size:14px; font-weight:700; margin:0 0 8px; }
+  .b-cap.old { color:#8e8e93; } .b-cap.new { color:#1f8a3b; }
+  .b-n { display:inline-block; min-width:22px; height:22px; line-height:22px; text-align:center; border-radius:11px; background:#ff3b30; color:#fff; font-size:13px; font-weight:700; margin-right:6px; font-style:normal; }
+  .b-pin { position:absolute; z-index:5; }
+  .b-notes { margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:8px 28px; font-size:14px; }
+  .b-notes p { margin:0; }
+  .b-mono { font-family:"DejaVu Sans Mono",monospace; font-size:12.5px; }
+  .b-warn { border-left:4px solid #ff9f0a; background:#fff8ec; padding:10px 14px; border-radius:6px; margin-top:14px; font-size:14px; }
+  .b-foot { font-size:13px; color:#6e6e73; text-align:center; margin-top:8px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th,td { border:1px solid #e0e0e5; padding:8px 10px; vertical-align:top; text-align:left; }
+  th { background:#f6f6f8; } td.rec { background:#f1fbf3; }
+  .b-tag { display:inline-block; font-size:12px; padding:1px 7px; border-radius:8px; background:#34a853; color:#fff; margin-left:6px; }
+  .b-strike { text-decoration:line-through; color:#8e8e93; }
+
+  /* web app frame */
+  .win { border:1px solid #d6d7da; border-radius:12px; overflow:hidden; background:#fff; box-shadow:0 6px 24px rgba(0,0,0,.07); position:relative; }
+  .win-top { height:30px; background:#f3f4f6; border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 12px; gap:6px; }
+  .win-top i { width:11px; height:11px; border-radius:6px; background:#d0d2d6; display:inline-block; }
+  .app { display:grid; grid-template-columns:200px 1fr; height:430px; }
+  .side { border-right:1px solid var(--border); background:#fafbfc; padding:10px 8px; font-size:13px; }
+  .side .ws { font-size:11.5px; color:var(--t3); text-transform:uppercase; letter-spacing:.04em; margin:6px 8px; }
+  .row { padding:7px 8px; border-radius:7px; margin-bottom:2px; display:flex; justify-content:space-between; gap:6px; align-items:center; color:var(--t1); }
+  .row.sel { background:#e8edf7; }
+  .row .nm { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .chip { font-size:11px; color:var(--t3); white-space:nowrap; }
+  .chip.upd { color:var(--warn); }
+  .pane { display:flex; flex-direction:column; position:relative; min-width:0; }
+  .banner { display:flex; align-items:center; gap:10px; padding:9px 16px; background:var(--warnbg); border-bottom:1px solid var(--warnbd); font-size:13px; color:var(--t1); }
+  .banner .ic { color:var(--warn); font-size:15px; }
+  .banner .tx { flex:1; min-width:0; }
+  .head { display:flex; align-items:center; gap:10px; padding:12px 16px 10px; border-bottom:1px solid var(--border); }
+  .head-main { flex:1; min-width:0; }
+  .head-title { font-weight:600; font-size:14.5px; color:var(--t1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .head-sub { font-size:12px; color:var(--t3); }
+  .more { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:var(--t2); font-size:16px; letter-spacing:1px; }
+  .pill { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px; border:1px solid var(--border); border-radius:13px; background:#f7f8fa; font-size:12.5px; color:var(--t2); white-space:nowrap; position:relative; }
+  .pill.on { background:#eef0f3; border-color:#c9cdd4; }
+  .pill .spin { width:12px; height:12px; border:1.6px solid #b4b9c1; border-top-color:var(--t2); border-radius:7px; box-sizing:border-box; }
+  .body { flex:1; padding:16px 20px; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+  .bubble-u { align-self:flex-end; max-width:70%; background:#f2f3f5; border-radius:14px; padding:9px 13px; font-size:13.5px; color:var(--t1); }
+  .bubble-q { align-self:flex-end; max-width:70%; background:var(--tint); border:1px dashed var(--bborder); border-radius:14px; padding:9px 13px; font-size:13.5px; color:var(--t1); }
+  .agent { font-size:13.5px; color:var(--t1); max-width:86%; line-height:1.55; }
+  .foot { align-self:flex-end; font-size:12px; color:var(--t3); margin-top:-6px; }
+  .foot .upd { color:var(--warn); }
+  .composer { margin:8px 16px 14px; border:1px solid var(--border); border-radius:12px; height:50px; color:var(--t3); font-size:13px; padding:10px 14px; box-sizing:border-box; }
+  .btn { font-size:13px; border:1px solid var(--border); border-radius:8px; padding:4px 11px; background:#fff; color:var(--t1); white-space:nowrap; }
+  .btn .car { color:var(--t3); margin-left:4px; font-size:11px; }
+  .x { color:var(--t3); font-size:16px; padding:0 4px; }
+
+  /* popover */
+  .pop { position:absolute; right:12px; top:52px; width:390px; background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 32px rgba(0,0,0,.14); padding:14px 16px 14px; z-index:4; font-size:13px; color:var(--t1); }
+  .pop h4 { margin:0 0 4px; font-size:14px; }
+  .pop .p-sub { color:var(--t2); margin:0 0 10px; line-height:1.5; }
+  .pop .turns { border:1px solid var(--border); border-radius:8px; margin-bottom:10px; }
+  .pop .turn { display:flex; justify-content:space-between; gap:10px; padding:7px 10px; border-bottom:1px solid var(--border); }
+  .pop .turn:last-child { border-bottom:0; }
+  .pop .turn .tt { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--brand); }
+  .pop .turn .tm { color:var(--t3); white-space:nowrap; }
+  .pop .waits { color:var(--t2); margin:0 0 12px; }
+  .pop .acts { display:flex; gap:8px; align-items:center; }
+  .pop .acts .lnk { margin-left:auto; color:var(--brand); }
+  .dim { position:absolute; inset:0; }
+</style>
+</head>
+<body>
+
+<!-- ───────────────────────────── part 1 ───────────────────────────── -->
+<section class="b-part" id="part-1">
+  <h1>Runner 更新提示：从整行横幅改成右上角小标识</h1>
+  <p class="b-sub">参考 macOS 上应用有更新时的做法：右上角一个安静的小标识，平时不挡内容，点开才看详情和操作。去掉整行横幅，也去掉同时发的手机推送。</p>
+  <div class="b-cols">
+    <div>
+      <p class="b-cap old">① 今天：整行警告色横幅，工作区里每个会话顶上都有</p>
+      <div class="win">
+        <div class="win-top"><i></i><i></i><i></i></div>
+        <div class="app">
+          <div class="side">
+            <div class="ws">orbit</div>
+            <div class="row sel"><span class="nm">Tidy the release notes</span><span class="chip">Idle</span></div>
+            <div class="row"><span class="nm">Backfill missing shard rows</span><span class="chip">Running</span></div>
+            <div class="row"><span class="nm">Why are 11-08 metrics zero</span><span class="chip upd">Runner updating</span></div>
+            <div class="row"><span class="nm">Fix login redirect</span><span class="chip upd">Runner updating</span></div>
+          </div>
+          <div class="pane">
+            <div class="banner" style="position:relative">
+              <span class="ic">ⓘ</span>
+              <span class="tx">HPC is updating — 10 sessions and 19 messages are waiting for 5 turns to finish.</span>
+              <span class="btn">Later<span class="car">▾</span></span>
+              <span class="x">×</span>
+              <span class="b-pin" style="right:-8px; top:-10px"><i class="b-n">1</i></span>
+            </div>
+            <div class="head">
+              <div class="head-main"><div class="head-title">Tidy the release notes</div><div class="head-sub">orbit · HPC · Claude</div></div>
+              <span class="more">···</span>
+            </div>
+            <div class="body">
+              <div class="bubble-u">Group the 0.1.256 notes by client, newest first.</div>
+              <div class="agent">Done — the notes now open with macOS, then iOS and Android. The two server fixes moved under “Platform”.</div>
+            </div>
+            <div class="composer">Reply…</div>
+          </div>
+        </div>
+      </div>
+      <p class="b-foot">这个会话本身什么都没在等，却被一整行警告色横幅压在顶上</p>
+    </div>
+    <div>
+      <p class="b-cap new">② 建议：标题栏右上角一个灰色小标识，横幅没有了</p>
+      <div class="win">
+        <div class="win-top"><i></i><i></i><i></i></div>
+        <div class="app">
+          <div class="side">
+            <div class="ws">orbit</div>
+            <div class="row sel"><span class="nm">Tidy the release notes</span><span class="chip">Idle</span></div>
+            <div class="row"><span class="nm">Backfill missing shard rows</span><span class="chip">Running</span></div>
+            <div class="row"><span class="nm">Why are 11-08 metrics zero</span><span class="chip upd">Runner updating</span></div>
+            <div class="row"><span class="nm">Fix login redirect</span><span class="chip upd">Runner updating</span></div>
+          </div>
+          <div class="pane">
+            <div class="head">
+              <div class="head-main"><div class="head-title">Tidy the release notes</div><div class="head-sub">orbit · HPC · Claude</div></div>
+              <span class="pill"><span class="spin"></span>HPC updating · 5 turns left
+                <span class="b-pin" style="right:-12px; top:-14px"><i class="b-n">2</i></span></span>
+              <span class="more">···</span>
+            </div>
+            <div class="body">
+              <div class="bubble-u">Group the 0.1.256 notes by client, newest first.</div>
+              <div class="agent">Done — the notes now open with macOS, then iOS and Android. The two server fixes moved under “Platform”.</div>
+            </div>
+            <div class="composer">Reply…</div>
+          </div>
+        </div>
+      </div>
+      <p class="b-foot">会话内容回到最上面；左侧列表里 <span style="color:#c2710c">Runner updating</span> 的标记照旧</p>
+    </div>
+  </div>
+  <div class="b-notes">
+    <p><i class="b-n">1</i>今天的横幅占满整行，用警告色和感叹号，说的是整台机器的总数（10 个会话、19 条消息）；× 只在当前页面有效，刷新后又出来。同一时刻还会推一条内容相同的手机通知。</p>
+    <p><i class="b-n">2</i>标识放在标题栏右侧、⋯ 的左边（和 <span class="b-mono">Shared · Live</span> 同一种胶囊，中性灰色，不用警告色）。文字只说机器名和还剩几个 turn：<span class="b-mono">HPC updating · 5 turns left</span>；没有在跑的 turn 时显示 <span class="b-mono">HPC restarting</span>。没有 ×，更新完自动消失。</p>
+  </div>
+</section>
+
+<!-- ───────────────────────────── part 2 ───────────────────────────── -->
+<section class="b-part" id="part-2">
+  <h2>③ 点开标识：详情和操作都在小面板里　④ 正在等的会话：标识 + 原有的排队标签</h2>
+  <div class="b-cols">
+    <div>
+      <p class="b-cap new">③ 点标识，弹出小面板（点外面或按 Esc 关掉）</p>
+      <div class="win">
+        <div class="win-top"><i></i><i></i><i></i></div>
+        <div class="app">
+          <div class="side">
+            <div class="ws">orbit</div>
+            <div class="row sel"><span class="nm">Tidy the release notes</span><span class="chip">Idle</span></div>
+            <div class="row"><span class="nm">Backfill missing shard rows</span><span class="chip">Running</span></div>
+            <div class="row"><span class="nm">Why are 11-08 metrics zero</span><span class="chip upd">Runner updating</span></div>
+            <div class="row"><span class="nm">Fix login redirect</span><span class="chip upd">Runner updating</span></div>
+          </div>
+          <div class="pane">
+            <div class="head">
+              <div class="head-main"><div class="head-title">Tidy the release notes</div><div class="head-sub">orbit · HPC · Claude</div></div>
+              <span class="pill on"><span class="spin"></span>HPC updating · 5 turns left</span>
+              <span class="more">···</span>
+            </div>
+            <div class="pop">
+              <h4>HPC is updating to 0.1.257 <i class="b-n" style="margin-left:6px">3</i></h4>
+              <p class="p-sub">It installs once these turns finish. Nothing is lost — waiting work starts right after.</p>
+              <div class="turns">
+                <div class="turn"><span class="tt">Backfill missing shard rows</span><span class="tm">running 1 h 52 min</span></div>
+                <div class="turn"><span class="tt">Rebuild the wiki index</span><span class="tm">running 47 min</span></div>
+                <div class="turn"><span class="tt">Port the gauge to Android</span><span class="tm">running 12 min</span></div>
+                <div class="turn"><span class="tm">and 2 more</span><span></span></div>
+              </div>
+              <p class="waits">10 sessions and 19 messages of yours wait for it.</p>
+              <div class="acts">
+                <span class="btn">Later<span class="car">▾</span></span>
+                <span class="btn">Update Now…</span>
+                <i class="b-n">4</i>
+                <span class="lnk">Open HPC</span>
+              </div>
+            </div>
+            <div class="body">
+              <div class="bubble-u">Group the 0.1.256 notes by client, newest first.</div>
+              <div class="agent">Done — the notes now open with macOS, then iOS and Android.</div>
+            </div>
+            <div class="composer">Reply…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="b-cap new">④ 这个会话自己有消息在等：会话里的提示不变</p>
+      <div class="win">
+        <div class="win-top"><i></i><i></i><i></i></div>
+        <div class="app">
+          <div class="side">
+            <div class="ws">orbit</div>
+            <div class="row"><span class="nm">Tidy the release notes</span><span class="chip">Idle</span></div>
+            <div class="row"><span class="nm">Backfill missing shard rows</span><span class="chip">Running</span></div>
+            <div class="row sel"><span class="nm">Why are 11-08 metrics zero</span><span class="chip upd">Runner updating</span></div>
+            <div class="row"><span class="nm">Fix login redirect</span><span class="chip upd">Runner updating</span></div>
+          </div>
+          <div class="pane">
+            <div class="head">
+              <div class="head-main"><div class="head-title">Why are 11-08 metrics zero</div><div class="head-sub">orbit · HPC · Codex</div></div>
+              <span class="pill"><span class="spin"></span>HPC updating · 5 turns left</span>
+              <span class="more">···</span>
+            </div>
+            <div class="body">
+              <div class="bubble-u">The 11-08 row in the usage chart reads zero. Find out why.</div>
+              <div class="agent">The collector skipped that day: its cron ran during the 02:00 restart. Backfilling it now…</div>
+              <div class="bubble-q" style="position:relative">Also check 11-09 while you're there.
+                <span class="b-pin" style="left:-34px; top:4px"><i class="b-n">5</i></span></div>
+              <div class="foot">Queued · <span class="upd">runner updating</span></div>
+            </div>
+            <div class="composer">Reply…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <p><i class="b-n">3</i>面板里放原来横幅的全部信息：要更新到哪个版本、在等哪些 turn（每个可点开、显示跑了多久，最多列 3 个，其余写 <span class="b-mono">and 2 more</span>），以及你有多少会话和消息在等。</p>
+    <p><i class="b-n">4</i>操作和今天一样：<span class="b-mono">Later ▾</span>（1 小时 / 今晚 / 明天）、<span class="b-mono">Update Now…</span>（只在 runner 支持时出现，确认框不变），再加一个 <span class="b-mono">Open HPC</span> 去机器页的 Update 卡片。选了 Later 之后，排空结束，标识随之消失。</p>
+    <p><i class="b-n">5</i>真正在等的地方本来就有自己的提示：消息下面的 <span class="b-mono">Queued · runner updating</span>、排队会话的 Runner updating 卡片、左侧列表的标记。这些都不改。</p>
+  </div>
+</section>
+
+<!-- ───────────────────────────── part 3 ───────────────────────────── -->
+<section class="b-part" id="part-3">
+  <h2>规则、推送、落地</h2>
+  <table>
+    <tr><th style="width:24%">情况</th><th style="width:38%">今天</th><th>改后</th></tr>
+    <tr><td>机器在排空，你有会话或消息在等它</td><td>该机器下每个会话顶部一整行警告色横幅 + 一条手机推送</td><td class="rec">该机器下的会话标题栏右上角一个灰色标识；<b>不推送</b></td></tr>
+    <tr><td>机器在排空，但你没有东西在等它</td><td>不显示</td><td class="rec">不显示（条件不变：GET /runners 带 <span class="b-mono">drainWaiting</span> 才显示）</td></tr>
+    <tr><td>正在跑的 turn 都结束，机器重启中</td><td>横幅写 <span class="b-mono">waiting for it to restart</span></td><td class="rec">标识写 <span class="b-mono">HPC restarting</span>，面板里没有 turn 列表</td></tr>
+    <tr><td>选了 Later / 更新完成</td><td>横幅消失</td><td class="rec">标识消失</td></tr>
+    <tr><td>关掉提示</td><td>× 只对当前页面有效，刷新后又出来</td><td class="rec">没有 ×；标识本身很小，不需要关</td></tr>
+    <tr><td>窄屏 / 手机网页</td><td>横幅换行成两三行</td><td class="rec">标识只剩图标和 <span class="b-mono">5</span>，点开同一个面板</td></tr>
+  </table>
+
+  <div class="b-warn"><b>推送去掉：</b>排空等更新不再发手机通知。服务端删掉 heartbeat 里认领并发送这条推送的代码（<span class="b-mono">claimDrainWaitingPush</span> 和 <span class="b-mono">push.service.ts</span> 里的 drain 通知）。已发布的 Android/iOS 版本收不到这一类推送就什么都不显示，不需要发新版本。</div>
+
+  <h2 style="margin-top:26px">落地（按代价排）</h2>
+  <table>
+    <tr><th style="width:34%">文件</th><th>改什么</th></tr>
+    <tr><td class="b-mono">src/web/src/components/RunnerDrainBanner.tsx → RunnerUpdateIndicator.tsx</td><td>横幅换成胶囊 + 弹出面板；复用现有的 <span class="b-mono">RunnerUpdateLaterMenu</span>、<span class="b-mono">RunnerUpdateNowButton</span> 和 Popover，不造新外观</td></tr>
+    <tr><td class="b-mono">src/web/src/components/WorkspaceView.tsx</td><td>从标题栏上方挪到 ⋯ 左边</td></tr>
+    <tr><td class="b-mono">src/web/src/lib/runnerDrainBanner.ts</td><td>拆出标识的短文字（<span class="b-mono">HPC updating · 5 turns left</span>）和面板里的句子</td></tr>
+    <tr><td class="b-mono">src/web/src/index.css</td><td>删掉 <span class="b-mono">.runner-drain-banner*</span>，加胶囊和面板的样式</td></tr>
+    <tr><td class="b-mono">src/apiserver/src/push/push.service.ts、common/runner-drain-waiting.ts、runner heartbeat 的调用处</td><td>去掉 drain 推送；<span class="b-mono">drainWaiting</span> 字段本身保留（标识要用）</td></tr>
+    <tr><td>测试</td><td>改写 <span class="b-mono">RunnerDrainBanner.test.tsx</span>；删掉 drain 推送的 spec（<span class="b-mono">runner-drain-waiting-push.pg.spec.ts</span>、push.service.spec 里的对应用例）</td></tr>
+  </table>
+
+  <h2 style="margin-top:26px">待你定</h2>
+  <table>
+    <tr><th style="width:18%"></th><th>方案 A <span class="b-tag">推荐</span></th><th>方案 B</th></tr>
+    <tr><td>标识出现在哪些会话</td><td class="rec">这台机器上的所有会话都显示（和 macOS 一样，标识很小，不打扰；在哪个会话都能点 Later）</td><td>只在自己有东西在等的会话里显示；其他会话完全看不到，想延后要去机器页</td></tr>
+    <tr><td>macOS / iOS / Android 原生端</td><td class="rec">这次不动：它们没有这条横幅，排空只出现在已有的提醒列表里</td><td>原生端也加同样的右上角标识（另开任务）</td></tr>
+  </table>
+</section>
+
+</body>
+</html>

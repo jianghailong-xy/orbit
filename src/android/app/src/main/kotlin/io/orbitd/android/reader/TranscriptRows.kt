@@ -2,6 +2,7 @@ package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
 import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.cards.OwnerChatReply
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
@@ -10,6 +11,14 @@ internal fun JsonObject.string(key: String) = (get(key) as? JsonPrimitive)?.cont
 internal fun RunEvent.toolId() = fields.string("toolUseId") ?: fields.string("tool_use_id") ?: fields.string("id")
 internal fun RunEvent.parent() = fields.string("parentToolUseId")
 internal fun RunEvent.body() = fields.string("text") ?: contentText(fields["content"]) ?: fields.string("message") ?: fields.string("result").orEmpty()
+
+/** The owner's words when [row] is one of Orbit's own calls they answered with "Chat about this" (OwnerChatReply). */
+internal fun ownerChatWords(row: TranscriptRow): String? {
+    val result = row.result ?: return null
+    val isError = result.fields.string("isError") == "true" || result.fields.string("is_error") == "true"
+    return OwnerChatReply.words(row.event.fields.string("name") ?: row.event.fields.string("toolName"),
+        contentText(result.fields["content"]) ?: result.fields.string("result"), isError)
+}
 
 internal fun contentText(value: JsonElement?): String? = when (value) {
     null, JsonNull -> null
@@ -135,6 +144,17 @@ internal class EngineReading(events: List<RunEvent>) {
         var lastFailure: Failure? = null
         val open = LinkedHashMap<String, String>()
         var lastRow: RunEvent? = null
+        // Sign-in failures the conversation moved past (web `settled`, OrbitKit `TranscriptSettlement`): superseded by a later
+        // message or failure, resolved once the agent worked again. The account switches beside them mute once anything follows.
+        var openAuth: RunEvent? = null
+        val settledAuth = LinkedHashMap<Long, Pair<RunEvent, Boolean>>()
+        val switches = mutableListOf<Pair<RunEvent, String>>()
+        val settledSwitches = mutableSetOf<Long>()
+        val openSwitches = mutableListOf<Long>()
+        fun settleSwitches() { settledSwitches += openSwitches; openSwitches.clear() }
+        fun supersede() { openAuth?.let { settledAuth.putIfAbsent(it.seq, it to false) } }
+        fun authFailed(e: RunEvent) { supersede(); openAuth = e }
+        fun agentWorked() { openAuth?.let { settledAuth[it.seq] = it to true }; openAuth = null; settleSwitches() }
         fun retry(e: RunEvent, message: String, quota: Boolean) {
             retries.lastOrNull()?.stale = true
             val afterUserMsg = lastRow?.let { it.type == "user" && it.personWords().isNotBlank() } == true
@@ -158,13 +178,15 @@ internal class EngineReading(events: List<RunEvent>) {
                 return@forEach
             }
             when (e.type) {
-                "tool_use" -> { e.toolId()?.let { open[it] = e.fields.string("name") ?: e.fields.string("toolName") ?: "tool" }; lastRow = e }
+                "tool_use" -> { e.toolId()?.let { open[it] = e.fields.string("name") ?: e.fields.string("toolName") ?: "tool" }; lastRow = e; agentWorked() }
                 "tool_result" -> { val id = e.toolId(); if (id != null) open.remove(id) else open.keys.lastOrNull()?.let { open.remove(it) } }
-                "user" -> { retries.lastOrNull()?.stale = true; lastRow = e }
+                "user" -> { retries.lastOrNull()?.stale = true; lastRow = e; supersede(); settleSwitches() }
                 "assistant" -> {
                     val text = e.fields.string("text") ?: e.fields.string("content") ?: ""
                     if (!selfHealing(e, text)) {
-                        if (!EngineAuth.isAuthErrorText(text) && EngineErrors.isApiErrorText(text)) rows[e.seq] = e.row("error") { put("text", text) }
+                        if (EngineAuth.isAuthErrorText(text)) authFailed(e)
+                        else if (EngineErrors.isApiErrorText(text)) rows[e.seq] = e.row("error") { put("text", text) }
+                        else if (text.isNotBlank()) agentWorked()
                         lastRow = e
                     }
                 }
@@ -173,7 +195,10 @@ internal class EngineReading(events: List<RunEvent>) {
                     when (val region = ClaudeRegion.errorLine(message)) {
                         ClaudeRegion.ErrorLine.Refusal -> rows[e.seq] = null
                         is ClaudeRegion.ErrorLine.Stopped -> { rows[e.seq] = e.row("error") { put("text", region.sentence) }; lastRow = e }
-                        ClaudeRegion.ErrorLine.NotRegion -> if (!selfHealing(e, message)) lastRow = e
+                        ClaudeRegion.ErrorLine.NotRegion -> if (!selfHealing(e, message)) {
+                            if (EngineAuth.isAuthErrorText(message)) authFailed(e)
+                            lastRow = e
+                        }
                     }
                 }
                 "thinking", "interrupt" -> lastRow = e
@@ -197,6 +222,7 @@ internal class EngineReading(events: List<RunEvent>) {
                     val notice = e.fields.string("notice")?.ifEmpty { null }
                     if (notice != null) {
                         rows[e.seq] = e.row("notice") { put("text", notice) }
+                        if (e.fields.string("noticeKind") == "pool-member-switched") { switches += e to notice; openSwitches += e.seq }
                         lastRow = e
                         return@forEach
                     }
@@ -256,6 +282,13 @@ internal class EngineReading(events: List<RunEvent>) {
         failures.forEach { f -> toolFailures[f.toolId] = RunEvent("tool_result", f.seq, buildJsonObject {
             put("toolUseId", f.toolId); put("content", f.message); put("isError", true)
         }) }
+        settledAuth.values.forEach { (e, resolved) -> rows[e.seq] = e.row("auth_settled") {
+            put("text", e.fields.string("text") ?: e.fields.string("content") ?: e.fields.string("message") ?: e.fields.string("error").orEmpty())
+            put("resolved", resolved)
+        } }
+        switches.filter { it.first.seq in settledSwitches }.forEach { (e, notice) -> rows[e.seq] = e.row("notice") {
+            put("text", notice); put("settled", true)
+        } }
         retries.forEach { r -> rows[r.event.seq] = r.event.row("auto_retry") {
             put("text", r.message); put("variant", if (r.quota) "quota" else "apiError")
             put("stale", r.stale); put("afterUserMsg", r.afterUserMsg)
@@ -267,9 +300,12 @@ internal class EngineReading(events: List<RunEvent>) {
         copy(type = type, payload = buildJsonObject(build), truncated = false)
 }
 
-/** A signed-out engine's own words (OrbitKit `EngineAuth.isAuthErrorText`): a sign-in remedy, not an API error. */
+/** A signed-out engine's own words (OrbitKit `EngineAuth.isAuthErrorText`): a sign-in remedy, not an API error.
+ * A failure of the connection — Cloudflare's block page, a dropped socket — carries the same prefix but is not
+ * one: the credentials are intact and it clears on its own, so it is excluded here and retried instead. */
 internal object EngineAuth {
-    fun isAuthErrorText(text: String?): Boolean = text != null && text.trimStart().startsWith("Failed to authenticate")
+    fun isAuthErrorText(text: String?): Boolean =
+        text != null && !EngineErrors.isConnectionFailureText(text) && text.trimStart().startsWith("Failed to authenticate")
 }
 
 /**

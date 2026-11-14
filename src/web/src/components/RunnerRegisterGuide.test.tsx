@@ -31,16 +31,17 @@ function Where() {
 
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
-async function open(qc: QueryClient): Promise<HTMLDivElement> {
+async function open(qc: QueryClient, inSettings = false): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
     root!.render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/runners/register']}>
+        <MemoryRouter initialEntries={[inSettings ? '/settings/machines/new' : '/runners/register']}>
           <Routes>
             <Route path="/runners/register" element={<RunnerRegisterGuide />} />
+            <Route path="/settings/machines/new" element={<RunnerRegisterGuide inSettings />} />
             <Route path="*" element={<Where />} />
           </Routes>
         </MemoryRouter>
@@ -130,5 +131,43 @@ describe('Add a runner, for an account with no machine yet', () => {
     });
     await settle();
     expect(page.querySelector('[data-testid="where"]')?.textContent).toBe(`/runners/${encodeId(RUNNER_ID)}/new`);
+  });
+});
+
+/**
+ * Settings' own Add a runner (/settings/machines/new, docs/mocks/settings-add-machine): never the welcome card, even
+ * for an account with no machine — a new account's first sign-in still gets that at /runners/register — and once the
+ * machine is online it offers its Settings page beside Start a session, staying put until one is pressed.
+ */
+describe('Add a runner, in Settings', () => {
+  it('is the plain guide for an account with no machine, and Machine settings opens the new machine’s page', async () => {
+    let reads = 0;
+    vi.mocked(api).mockImplementation(async (path: string) => {
+      expect(path).toBe('/runners');
+      return reads++ === 0 ? [] : [{ id: RUNNER_ID, name: 'orbit@austin', online: true }];
+    });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const page = await open(qc, true);
+    const said = (element: Element | null) => element?.textContent?.replace(/\s+/g, ' ').trim();
+    expect(said(page.querySelector('.page-title'))).toBe('Add a runner');
+    expect(page.querySelector('.welcome-card')).toBeNull();
+    expect(page.textContent).toContain('It appears under Machines on the left once it comes online.');
+
+    await act(async () => {
+      await qc.refetchQueries({ queryKey: ['runners'] });
+    });
+    await settle();
+    expect(page.querySelector('[data-testid="where"]')).toBeNull();
+    expect(said(page.querySelector('.runner-status-sub'))).toBe(
+      "It's now under Machines on the left. Next, start a session on it — you pick the folder it works in and " +
+        'sign in a coding CLI there.',
+    );
+    expect(said(page.querySelector('.runner-done-btn'))).toBe('Start a session');
+    const settings = [...page.querySelectorAll('button')].find((b) => said(b) === 'Machine settings');
+    await act(async () => {
+      settings!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await settle();
+    expect(page.querySelector('[data-testid="where"]')?.textContent).toBe(`/settings/machines/${encodeId(RUNNER_ID)}`);
   });
 });

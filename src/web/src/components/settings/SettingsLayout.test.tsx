@@ -87,7 +87,11 @@ vi.mock('./WorkspaceSettingsPage', async () => {
 });
 // Home lands in a workspace's console.
 vi.mock('../WorkspaceConsole', () => ({ WorkspaceConsole: () => <p data-page="console">console</p> }));
-vi.mock('../RunnerRegisterGuide', () => ({ RunnerRegisterGuide: () => <p data-page="register">register</p> }));
+vi.mock('../RunnerRegisterGuide', () => ({
+  RunnerRegisterGuide: ({ inSettings }: { inSettings?: boolean }) => (
+    <p data-page={inSettings ? 'register:settings' : 'register'}>register</p>
+  ),
+}));
 vi.mock('../../pages/ProviderConnectPage', () => ({
   ProviderPickPage: () => <p data-page="pick-vendor">pick</p>,
   ProviderConnectPage: () => <p data-page="key">key</p>,
@@ -259,6 +263,25 @@ describe('the Settings window', () => {
     expect(group('Workspaces').querySelector('.settings-nav-add')?.getAttribute('aria-label')).toBe('New workspace');
   });
 
+  // Settings.css shows a group's + under the pointer only, except on a group marked empty.
+  it('marks no group empty while each has something in it', async () => {
+    await visit('/settings/general');
+    for (const title of ['Machines', 'Providers', 'Workspaces']) {
+      expect(group(title).classList.contains('settings-nav-group--empty')).toBe(false);
+    }
+  });
+
+  it('marks a group with nothing in it empty, so its + stays in sight', async () => {
+    runners = [];
+    workspaces = [];
+    keys = [];
+    pools = [];
+    await visit('/settings/general');
+    for (const title of ['Machines', 'Providers', 'Workspaces']) {
+      expect(group(title).classList.contains('settings-nav-group--empty')).toBe(true);
+    }
+  });
+
   it('lists Personal, each machine with its status dot, API keys and Account pools, and each workspace with its machine', async () => {
     await visit('/settings/general');
     expect(rows('Personal').map((r) => [r.label, r.href])).toEqual([
@@ -360,9 +383,12 @@ describe('the Settings window', () => {
 
   it('sends each + where it adds one', async () => {
     await visit('/settings/general');
+    // Registering a machine stays in Settings (docs/mocks/settings-add-machine, A): the nav is still there.
     await click(group('Machines').querySelector('.settings-nav-add'));
-    expect(addressBar()).toBe('/runners/register');
-    expect(page()).toBe('register');
+    expect(addressBar()).toBe('/settings/machines/new');
+    expect(container.querySelector('.settings-column [data-page]')?.getAttribute('data-page')).toBe('register:settings');
+    expect(nav()).toBeTruthy();
+    expect(container.querySelector('[data-testid="app-shell"]')).toBeNull();
 
     await go('/settings/general');
     await click(group('Providers').querySelector('.settings-nav-add'));
@@ -374,6 +400,17 @@ describe('the Settings window', () => {
     await click(group('Workspaces').querySelector('.settings-nav-add'));
     expect(addressBar()).toBe('/settings/workspaces/new');
     expect(page()).toBe('workspace:new');
+  });
+
+  it('with no machine at all, Machines has a Register a machine row, and Workspaces’ + registers one first, in Settings', async () => {
+    runners = [];
+    workspaces = [];
+    await visit('/settings/general');
+    expect(rows('Machines').map((r) => [r.label, r.href])).toEqual([['Register a machine', '/settings/machines/new']]);
+    await click(group('Workspaces').querySelector('.settings-nav-add'));
+    expect(addressBar()).toBe('/settings/machines/new');
+    expect(page()).toBe('register:settings');
+    expect(nav()).toBeTruthy();
   });
 
   it('Back to Orbit returns to the page Settings was opened from, across pages inside it', async () => {

@@ -57,6 +57,7 @@ import {
   questionLead,
   questionOutcome,
   questionReplyLine,
+  ownerChatWords,
   workflowLaunchReceipt,
   workflowTitle,
   type AskedQuestion,
@@ -670,7 +671,11 @@ type DiagnosticNode = {
   code?: string;
   repeats?: number;
 };
-type AuthErrorNode = { kind: 'authError'; seq: number; message: string };
+// `settled`: the session moved past this failure, so the card is history rather than a remedy —
+// 'resolved' once the agent did work after it, 'superseded' once a later message or failure came
+// first. Only an unsettled card offers sign-in and Retry: its Retry re-sends the session's latest
+// message, which above a later bubble is no longer the message this failure ate.
+type AuthErrorNode = { kind: 'authError'; seq: number; message: string; settled?: 'resolved' | 'superseded' };
 /** A runner-side heads-up that isn't a failure: the turn worked, but something about WHERE it
  *  worked needs saying — today, edits it left in the machine's shared checkout instead of this
  *  session's worktree. Rendered as a calm note, not an error: nothing is broken yet. */
@@ -680,6 +685,8 @@ type NoticeNode = {
   message: string;
   /** The main checkout's card (board 01) or an action's result line (board 03), drawn instead of the text. */
   mainCheckout?: MainCheckoutChangedNotice | MainCheckoutResultNotice;
+  /** An account switch the session has since moved past (see `settleAccountSwitches`). */
+  settled?: boolean;
 };
 // A failure that fixes itself, so the card carries a pending retry rather than a remedy: the
 // account's quota spent, or the provider briefly unable to answer. `stale` marks every such
@@ -1035,7 +1042,25 @@ function buildTranscript(
     const list = into(parentId);
     const prev = list[list.length - 1];
     if (prev?.kind === 'authError' && prev.message === message) return;
-    list.push({ kind: 'authError', seq, message });
+    if (openAuth) openAuth.settled ??= 'superseded';
+    openAuth = { kind: 'authError', seq, message };
+    list.push(openAuth);
+  };
+  // The latest sign-in card whose outcome is still open. A next message supersedes it (its Retry
+  // would re-send that message, not the one the failure ate); the agent doing work afterwards
+  // resolves it — even past a later message, since that work is what the sign-in was for.
+  let openAuth: AuthErrorNode | undefined;
+  // "Switched to … — … is signed out" lines not yet followed by anything. Once the conversation
+  // moves on, the switch is history and drops to the muted tone with the card it came with.
+  let openSwitches: NoticeNode[] = [];
+  const settleAccountSwitches = () => {
+    for (const n of openSwitches) n.settled = true;
+    openSwitches = [];
+  };
+  const agentWorked = () => {
+    if (openAuth) openAuth.settled = 'resolved';
+    openAuth = undefined;
+    settleAccountSwitches();
   };
   // Only the latest auto-retry card is live; the ones above it describe outages that are over.
   // "Over" is decided by the next user message, whoever sent it: the retry firing, the user
@@ -1223,6 +1248,8 @@ function buildTranscript(
     switch (ev.type) {
       case 'user': {
         outageOver();
+        if (openAuth) openAuth.settled ??= 'superseded';
+        settleAccountSwitches();
         // The composer's just-sent previews join in by turnId (instant, local object URLs);
         // the runner also echoes durable image refs in the event payload, used when there's
         // no local preview (after a reload, or the server-seeded first turn). An image-only
@@ -1391,6 +1418,7 @@ function buildTranscript(
           else if (isApiErrorText(text)) into(parent).push({ kind: 'error', seq: ev.seq, message: text });
           else {
             const siblings = into(parent);
+            agentWorked();
             siblings.push({ kind: 'assistant', seq: ev.seq, text });
             if (siblings === roots) turnReply = text;
           }
@@ -1429,6 +1457,7 @@ function buildTranscript(
         };
         if (node.id) byId.set(node.id, node);
         openTools.push({ node, parent });
+        agentWorked();
         into(parent).push(node);
         lastOpenTool = node;
         break;
@@ -1523,12 +1552,14 @@ function buildTranscript(
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
           lastStderr = undefined;
-          into(parent).push({
+          const notice: NoticeNode = {
             kind: 'notice',
             seq: ev.seq,
             message: String(p.notice),
             ...(isMainCheckoutChanged(p) || isMainCheckoutResult(p) ? { mainCheckout: p } : {}),
-          });
+          };
+          if (p.noticeKind === 'pool-member-switched') openSwitches.push(notice);
+          into(parent).push(notice);
           break;
         }
         // Runner stderr (e.g. "No conversation found with session ID: …") — surface as
@@ -2133,7 +2164,26 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__task_create_batch' &&
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
-    !isBackgroundTaskCall(node.name)
+    !isBackgroundTaskCall(node.name) &&
+    !ownerChatReplyOf(node)
+  );
+}
+
+// The owner's words when they answered one of Orbit's own asks with "Chat about this": the runner
+// hands them to the agent as the call's result (`ownerChatWords`), and the conversation draws them as
+// the message they are, under the call (OwnerChatBubble), rather than inside its folded result.
+function ownerChatReplyOf(node: ToolNode): string | null {
+  if (!node.name.startsWith('mcp__orbit__') || !node.result || node.result.isError) return null;
+  return ownerChatWords(resultText(node.result.content));
+}
+
+function OwnerChatBubble({ words }: { words: string }) {
+  return (
+    <div className="chat-user-wrap">
+      <div className="chat-msg chat-user">
+        <MD breaks>{words}</MD>
+      </div>
+    </div>
   );
 }
 
@@ -2564,12 +2614,12 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         return <MainCheckoutResultRow notice={node.mainCheckout} seq={node.seq} />;
       }
       return (
-        <div className="chat-notice" data-seq={node.seq}>
+        <div className={node.settled ? 'chat-notice chat-notice-settled' : 'chat-notice'} data-seq={node.seq}>
           ⚠ {node.message}
         </div>
       );
     case 'authError':
-      return <AuthErrorCard message={node.message} seq={node.seq} />;
+      return <AuthErrorCard message={node.message} seq={node.seq} settled={node.settled} />;
     case 'autoRetry':
       return (
         <AutoRetryCard
@@ -2669,13 +2719,13 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi', 'antigravity']);
  * needs nothing on that box, and the cases it can't cover (a CLI too old to relay, no `script`)
  * report themselves with the command to run — as does the runtime's own message above.
  */
-function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
+function AuthErrorCard({ message, seq, settled }: { message: string; seq?: number; settled?: 'resolved' | 'superseded' }) {
   const help = useContext(AuthErrorCtx);
   // A press that would be the server's own re-send is a promise only the server makes, and the
   // window's last bubble can be somebody else's — so this card asks for the answer rather than
   // quoting the bubble (the same rule, and the same hook, as the quota card's). Above the branches
   // below, which return early.
-  const retryIsTheServers = !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
+  const retryIsTheServers = !settled && !!help?.onNeedRetryText && help?.retryWordsAreTheReaders === false;
   const onNeedRetryText = help?.onNeedRetryText;
   useEffect(() => {
     if (retryIsTheServers) onNeedRetryText?.();
@@ -2683,6 +2733,24 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
+  const title = !help
+    ? 'Authentication failed'
+    : local
+        ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
+        : 'Provider authentication failed';
+  // The session moved past it: one muted line, the runtime's words a click away, and no actions —
+  // signing in or re-sending from here would act on a failure that is over.
+  if (settled) {
+    return (
+      <details className="chat-authfix-settled" data-seq={seq} data-settled={settled}>
+        <summary>
+          {settled === 'resolved' ? <span className="chat-authfix-settled-ok">✓</span> : <span>⚠</span>}
+          <span>{settled === 'resolved' ? `${title} — resolved` : title}</span>
+        </summary>
+        <div className="chat-authfix-msg">{message}</div>
+      </details>
+    );
+  }
   if (help && (provider === 'antigravity' || (help.runtime === 'antigravity' && antigravityRepair(message) === 'needsKey'))) {
     return <AntigravityRepairCard repair="needsKey" help={help} seq={seq} />;
   }
@@ -2690,13 +2758,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
     <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
         <WarningFilled className="chat-authfix-icon" />
-        <div className="chat-authfix-title">
-          {!help
-            ? 'Authentication failed'
-            : local
-                ? `Sign-in expired${help.accountLabel ? ` for ${help.accountLabel}` : ''}${help.runnerName ? ` on “${help.runnerName}”` : ''}`
-                : 'Provider authentication failed'}
-        </div>
+        <div className="chat-authfix-title">{title}</div>
       </div>
       <div className="chat-authfix-msg">{message}</div>
       {local ? (
@@ -4250,7 +4312,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
   // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
   // question's record.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall;
+  // So does the owner's chat reply to a card, whose words are the end of the result.
+  const chatReply = ownerChatReplyOf(node) !== null;
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall || chatReply;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
@@ -4262,6 +4326,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // How a question ended lives only in the result text ("The user answered: …"), so the card reads
   // it back (`questionOutcome`, the same reader the native client is held to).
   const answer = node.result ? resultText(resultContent) : '';
+  const ownerWords = chatReply ? ownerChatWords(answer) : null;
   const questions = useMemo(() => (isQuestion ? askedQuestions(input) : []), [isQuestion, input]);
   const outcome = useMemo(
     () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
@@ -4314,94 +4379,97 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     if (node.result.truncated && !fullResult) return null;
   }
   return (
-    <div
-      data-seq={node.seq}
-      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
-        hasDetail && open ? ' is-open' : ''
-      }`}
-    >
+    <>
       <div
-        className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
-        onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
+        data-seq={node.seq}
+        className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
+          hasDetail && open ? ' is-open' : ''
+        }`}
       >
-        {/* Keep the disclosure column stable even before a result gives a no-input tool something
-            to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
-        <span className="chat-tool-caret">
-          {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
-        </span>
-        <span className="chat-tool-icon">{icon}</span>
-        <span className="chat-tool-name">{label}</span>
-        {p ? (
-          <span className="chat-tool-summary mono chat-path" title={path}>
-            <b className="chat-path-file">{p.base}</b>
-            {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+        <div
+          className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
+          onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
+        >
+          {/* Keep the disclosure column stable even before a result gives a no-input tool something
+              to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
+          <span className="chat-tool-caret">
+            {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
           </span>
-        ) : (
-          title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
+          <span className="chat-tool-icon">{icon}</span>
+          <span className="chat-tool-name">{label}</span>
+          {p ? (
+            <span className="chat-tool-summary mono chat-path" title={path}>
+              <b className="chat-path-file">{p.base}</b>
+              {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+            </span>
+          ) : (
+            title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
+          )}
+          {isBackgroundTask ? (
+            <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+          ) : outcome?.kind === 'replied' ? (
+            // The engine files "Chat about this" as the call's error; it is the person's reply.
+            <MessageFilled className="chat-tool-status replied" />
+          ) : (
+            <>
+              {meta && <span className="chat-tool-meta">{meta}</span>}
+              <ToolStatus node={node} live={live} />
+            </>
+          )}
+        </div>
+        {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
+        {questions.length > 0 && !(hasDetail && open) && (
+          <QuestionFolded
+            questions={questions}
+            outcome={outcome}
+            onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
+          />
         )}
-        {isBackgroundTask ? (
-          <TaskBadgeAndStatus node={node} live={live} meta={meta} />
-        ) : outcome?.kind === 'replied' ? (
-          // The engine files "Chat about this" as the call's error; it is the person's reply.
-          <MessageFilled className="chat-tool-status replied" />
-        ) : (
-          <>
-            {meta && <span className="chat-tool-meta">{meta}</span>}
-            <ToolStatus node={node} live={live} />
-          </>
+        {hasDetail && open && (
+          <div className="chat-tool-detail">
+            {/* A failed call is opened to find out why, and the input is rarely the answer — a
+                heredoc alone clamps to sixteen lines, which is enough to push the reason off the
+                bottom of the card. Put the error first when there is one; everywhere else the
+                call still reads input-then-output. */}
+            {node.result?.isError && !outcome && (
+              <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
+            )}
+            {node.name === 'Workflow' && (
+              <WorkflowProgressDetail
+                node={node}
+                live={live}
+                // Before a runner that reports progress, a workflow's receipt is still all there is.
+                // An agent's ack is internal metadata; its own transcript below says what it did.
+                fallback={
+                  launchReceipt && node.name === 'Workflow' ? (
+                    <ToolResult seq={node.seq} content={resultContent} compact />
+                  ) : null
+                }
+              />
+            )}
+            {body && (node.name === 'Workflow' ? (
+              <details className="chat-workflow-source" open={exp ? true : undefined}>
+                <summary>Workflow source</summary>
+                <div className="chat-tool-body">{body}</div>
+              </details>
+            ) : <div className="chat-tool-body">{body}</div>)}
+            {node.name !== 'Workflow' && node.children.length > 0 && (
+              <div className="chat-subagent">
+                <NodeList nodes={node.children} live={live} />
+              </div>
+            )}
+            {/* A sub-agent's totals close its transcript rather than open it. */}
+            {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
+            {/* A question's result, once read, is only the replay above said again. */}
+            {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
+              <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
+            )}
+            {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
+          </div>
         )}
       </div>
-      {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
-      {questions.length > 0 && !(hasDetail && open) && (
-        <QuestionFolded
-          questions={questions}
-          outcome={outcome}
-          onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
-        />
-      )}
-      {hasDetail && open && (
-        <div className="chat-tool-detail">
-          {/* A failed call is opened to find out why, and the input is rarely the answer — a
-              heredoc alone clamps to sixteen lines, which is enough to push the reason off the
-              bottom of the card. Put the error first when there is one; everywhere else the
-              call still reads input-then-output. */}
-          {node.result?.isError && !outcome && (
-            <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
-          )}
-          {node.name === 'Workflow' && (
-            <WorkflowProgressDetail
-              node={node}
-              live={live}
-              // Before a runner that reports progress, a workflow's receipt is still all there is.
-              // An agent's ack is internal metadata; its own transcript below says what it did.
-              fallback={
-                launchReceipt && node.name === 'Workflow' ? (
-                  <ToolResult seq={node.seq} content={resultContent} compact />
-                ) : null
-              }
-            />
-          )}
-          {body && (node.name === 'Workflow' ? (
-            <details className="chat-workflow-source" open={exp ? true : undefined}>
-              <summary>Workflow source</summary>
-              <div className="chat-tool-body">{body}</div>
-            </details>
-          ) : <div className="chat-tool-body">{body}</div>)}
-          {node.name !== 'Workflow' && node.children.length > 0 && (
-            <div className="chat-subagent">
-              <NodeList nodes={node.children} live={live} />
-            </div>
-          )}
-          {/* A sub-agent's totals close its transcript rather than open it. */}
-          {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
-          {/* A question's result, once read, is only the replay above said again. */}
-          {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
-            <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
-          )}
-          {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
-        </div>
-      )}
-    </div>
+      {ownerWords && <OwnerChatBubble words={ownerWords} />}
+    </>
   );
 }
 

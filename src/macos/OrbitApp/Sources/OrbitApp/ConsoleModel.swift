@@ -169,6 +169,9 @@ final class ConsoleModel {
     private(set) var sessionSourceState: String?
     private(set) var sessionSourceRefusalCode: String?
     private(set) var sessionSourceRefusalDetail: SourceRefusalDetail?
+    /// SR18's line for a run of a task forked from a session, as the detail read words it. Nil on
+    /// any other session.
+    private(set) var sessionForkSource: String?
     private(set) var antigravityInstalling = false
     private(set) var runnerInstall: RunnerInstallState?
 
@@ -441,6 +444,15 @@ final class ConsoleModel {
         let clocks = ReceiptAnchor.Clocks(state.items)
         clocksCache = (stateRevision, clocks)
         return clocks
+    }
+    /// Which sign-in cards and account switches the conversation has moved past, read once per
+    /// published `state` like the clocks above: every row of the transcript asks.
+    @ObservationIgnored private var settlementCache: (revision: Int, settlement: TranscriptSettlement)?
+    var settlement: TranscriptSettlement {
+        if let cached = settlementCache, cached.revision == stateRevision { return cached.settlement }
+        let settlement = TranscriptSettlement(state.items)
+        settlementCache = (stateRevision, settlement)
+        return settlement
     }
     /// Bumped whenever the LOCAL user sends a message from this console. The transcript observes it
     /// to force a scroll to the live tail on send — even when the user had scrolled up to read
@@ -2348,6 +2360,9 @@ final class ConsoleModel {
         sessionSourceState = session.sourceState
         sessionSourceRefusalCode = session.sourceRefusalCode
         sessionSourceRefusalDetail = session.sourceRefusalDetail
+        // Only the detail read carries it, and a fork never changes (SR12): a list row's absence
+        // is not taken as its end.
+        if let fork = session.forkSource { sessionForkSource = fork }
         if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a

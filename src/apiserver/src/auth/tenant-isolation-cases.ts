@@ -141,6 +141,7 @@ export interface Tenant {
     agentId: string;
     workspaceId: string;
     attachmentId: string;
+    storedFileId: string;
     projectId: string;
     providerId: string;
     poolId: string;
@@ -273,6 +274,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /attachments/:id': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
   'PUT /attachments/:id/pin': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
   'DELETE /attachments/:id/pin': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
+  'GET /attachments/usage/projects/:id/files': { request: (of) => ({ params: { id: of.projectId } }) },
+  'GET /attachments/usage/tasks/:id/files': { request: (of) => ({ params: { id: of.taskId } }) },
+  'DELETE /attachments/:id/everywhere': { request: (of) => ({ params: { id: of.spare.storedFileId } }) },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -840,6 +844,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).
+  'GET /attachments/usage/weeks/:week/files':
+    'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
   // ── main checkout (0534) ──
   'GET /workspaces/:id/main-checkout':
     'the workspace is read by (id, the caller, not deleted) before anything else, so another account\'s id answers 404 and nothing is queued (workspaces/main-checkout.service.ts:535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it',
@@ -1375,6 +1382,10 @@ export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'counted among the caller\'s own uploads (attachment by id and owner) before anything is written; one that is not answers 404 (projects/project-criterion-confirmation.service.ts:281)',
   'POST /projects/:id/criteria/:criterionId/checks body workspaceId':
     'handed to TasksService.create as the check task\'s assignee, which reads the workspace by (id, the caller) and refuses another account\'s 403 before any row is written (tasks/tasks.service.ts:2606)',
+  'POST /tasks body fork.sessionId':
+    'refused 403 whatever it names: the browser door has no calling session, and a fork is only ever of the session making the call (tasks/task-fork.ts:117); task-session-fork.pg.spec.ts sends one from the owner door',
+  'POST /tasks/batch-create body tasks[].fork.sessionId':
+    'refused 403 whatever it names: the browser door has no calling session, and a fork is only ever of the session making the call (tasks/task-fork.ts:117); task-session-fork.pg.spec.ts sends one from the owner door',
   'POST /owner-requests/:id/secret body savedSecretId':
     'read by (id, the caller) before anything is written, so another account\'s saved secret is the 404 of one that does not exist (owner-requests/owner-secrets.service.ts:217); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'POST /tasks/:id/execute body triggerId':
