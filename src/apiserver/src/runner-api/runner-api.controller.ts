@@ -37,6 +37,7 @@ import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
+import { reloadCarriesEnv } from '../sessions/session-settings';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -101,6 +102,7 @@ import {
   parseQuotaResetAt,
   usageLimitResetsAt,
   workflowLaunchReceipt,
+  delegateLaunchReceipt,
   type PlanUsage,
   PermissionMode,
   QuestionAnswers,
@@ -241,6 +243,8 @@ import {
   stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
+import { fileSubagentWake, interruptOrphanedSubagentRuns } from './subagent-wake';
+import { remoteSubagentHeartbeat } from './subagent-remote';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -511,6 +515,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { sessionProviderExec } from './session-provider-exec';
 import { gatewayBooksSpend, withKeyGatewayToken } from '../providers/key-gateway';
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
@@ -1012,8 +1017,9 @@ const APPROVAL_POLL_INTERVAL_MS = 1_500;
 // Spread over which quota retries are scattered past their reset. See retryPlanFor.
 const QUOTA_RETRY_JITTER_MS = 60_000;
 // The runtime tools whose call starts work that outlives it — see subStarted in the events ingest.
-// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them.
-const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow']);
+// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them; and
+// Orbit's own SubAgent (docs/subagent-design.md §6.2), whatever engine the parent runs.
+const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow', 'mcp__orbit__delegate']);
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
 // entity-ID validation separate from the stricter runner-generated lease UUID
@@ -2338,6 +2344,15 @@ export class RunnerApiController {
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: repository operations skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
+    // Remote SubAgent runs this runner is the target of (docs/subagent-design.md §10.2, §10.3): the ones to claim —
+    // none to a draining process, whose successor takes them — and the claimed ones whose parent stopped or ended.
+    // Reads only, on its own try: a failure costs this beat's lists, and the next beat lists them again.
+    let remoteSubagents: Awaited<ReturnType<typeof remoteSubagentHeartbeat>> = { remoteSubagentRuns: [], stopSubagentRunIds: [] };
+    try {
+      remoteSubagents = await remoteSubagentHeartbeat(this.prisma, runner.id);
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: remote SubAgent runs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
     // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,
@@ -2680,6 +2695,9 @@ export class RunnerApiController {
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
+      // Present only while this runner has remote SubAgent runs to claim or to stop.
+      ...(!draining && remoteSubagents.remoteSubagentRuns.length > 0 ? { remoteSubagentRuns: remoteSubagents.remoteSubagentRuns } : {}),
+      ...(remoteSubagents.stopSubagentRunIds.length > 0 ? { stopSubagentRunIds: remoteSubagents.stopSubagentRunIds } : {}),
       ...(mainCheckoutRequests ? { mainCheckoutRequests } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
@@ -4091,6 +4109,7 @@ export class RunnerApiController {
           workspaceModel: workspace?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
+          sessionEnv: s.env,
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
@@ -4401,7 +4420,9 @@ export class RunnerApiController {
         throw new ConflictException('session is no longer open');
       }
       const currentOwner = owned[0].inboxLeaseOwner;
-      if (currentOwner === leaseOwner) return { status: owned[0].status, orphanedApprovals: [] };
+      if (currentOwner === leaseOwner) {
+        return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[] };
+      }
       if (
         pendingWorktreeOperationMayBeExecuting(
           owned[0].mergeStatus,
@@ -4484,8 +4505,23 @@ export class RunnerApiController {
       const orphanedApprovals = currentOwner
         ? await reapApprovalsOfReplacedSupervisor(tx, sessionId)
         : [];
-      return { status: owned[0].status, orphanedApprovals };
+      // The SubAgents the predecessor hosted went with it, as its background shells did, and none of them will
+      // report an end: each still RUNNING ends INTERRUPTED here, owing the parent a wake that says why
+      // (subagent-wake.ts), filed once this commits. A predecessor that stopped in good order reported them
+      // itself, and none is left RUNNING.
+      const interruptedSubagents = currentOwner ? await interruptOrphanedSubagentRuns(tx, sessionId) : [];
+      return { status: owned[0].status, orphanedApprovals, interruptedSubagents };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
+    if (taken.interruptedSubagents.length > 0 && this.sessions) {
+      for (const runId of taken.interruptedSubagents) {
+        try {
+          await fileSubagentWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          // The wake sweep files it on its next pass.
+          this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
     // After commit, and one frame per card: a client holds these from the `approval_request` it was
     // sent live, and nothing it can see changes at a takeover, so without this the card it is
     // drawing stays answerable-looking until the session is next opened from scratch.
@@ -5914,8 +5950,9 @@ export class RunnerApiController {
   }
 
   /**
-   * The environment a `reload` re-spawns with, for the one reload that needs it: a provider switch
-   * (see SessionsService.updateConfig). Every other reload — model, permission mode, effort — runs
+   * The environment a `reload` re-spawns with, for the reloads that need it (reloadCarriesEnv): a
+   * provider switch (see SessionsService.updateConfig), and a Settings restart, which re-spawns on the
+   * same provider with the session's env as it stands (SessionsService.restart). Every other reload — model, permission mode, effort — runs
    * on the environment the engine already has, and returns undefined so the runner leaves its
    * process alone beyond the flags.
    *
@@ -5940,114 +5977,38 @@ export class RunnerApiController {
     sessionId: string,
     content: string | null,
   ): Promise<{ env?: Record<string, string>; refusal?: string }> {
-    let declared: unknown;
-    try {
-      declared = (JSON.parse(content ?? '{}') as { provider?: unknown }).provider;
-    } catch {
-      return {};
-    }
-    if (typeof declared !== 'string' || !declared) return {};
-    const session = await tx.session.findUnique({
-      where: { id: sessionId },
-      select: {
-        id: true,
-        ownerId: true,
-        model: true,
-        provider: true,
-        providerBuiltin: true,
-        engine: true,
-        poolMemberProviderId: true,
-        poolKeyId: true,
-        poolCodexAccountId: true,
-        usesRuntimeDefaultModel: true,
-        codexAccount: true,
-        claudeAccount: true,
-        antigravityAccount: true,
-        kimiAccount: true,
-        cursorAccount: true,
-        workspace: {
-          select: {
-            model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
-            cursorAccount: true,
-          },
-        },
-        assignedRunner: {
-          select: {
-            runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
-            planUsage: true,
-          },
-        },
-      },
+    if (!reloadCarriesEnv(content)) return {};
+    const resolved = await sessionProviderExec(tx, this.queue, sessionId);
+    if (!resolved.exec) return resolved.refusal ? { refusal: resolved.refusal } : {};
+    // The engine this reload re-spawns runs on the session's env as read here, so the Settings panel
+    // owes no restart for it (sessionSettingsOf) — only while the env is still the one read, as on the
+    // claim (QueueService): a PATCH since then is not in this engine, and stays owed. Stamped as the
+    // reload is handed out, which is the runner's acknowledgement of a control turn (dequeueTurn).
+    await tx.session.updateMany({
+      where: { id: sessionId, envChangedAt: resolved.envChangedAt ?? null },
+      data: { envAppliedAt: new Date() },
     });
-    if (!session) return {};
-    // The claim's words for a credential nothing holds: a member's session on a shared provider is told
-    // only an admin can run it, any other to check the configuration — asked of the slug the credential
-    // names, which on OpenCode is the key its model names.
-    const unavailable = async (customRow: unknown): Promise<string> => {
-      const slug = !isBuiltinProvider(session.provider, session.providerBuiltin)
-        ? session.provider
-        : session.provider === AgentProvider.OPENCODE ? openCodeKeyOf(session.model)?.slug : undefined;
-      return !customRow && slug && (await adminOnlyProviderRefusal(tx, session.ownerId, slug))
-        ? ADMIN_ONLY_PROVIDER_ERROR
-        : PROVIDER_UNAVAILABLE_ERROR;
-    };
-    // The environment is built for the engine the session runs on — the one it was spawned with and
-    // is re-spawned with now — from wherever its credential now comes from: a switch moves the
-    // credential, never the engine.
-    const engine = await sessionEngine(tx, session);
-    if (!engine) return { refusal: await unavailable(null) };
-    // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
-    // session's default DeepSeek key when its workspace holds no key itself.
-    // Claude Code on an OpenAI key re-spawns on a token minted for this reload, as the claim mints one.
-    const keyRow = await withKeyGatewayToken(tx, session, engine, await dispatchKeyRow(tx, session, session.workspace?.env));
-    const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
-      ? keyRow
-      : (keyRow ??
-        (await this.queue.resolveLoginPool(tx, session, session.provider!, false, engine)) ??
-        (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
-        (await this.queue.resolveSharedPool(tx, session, session.provider!)));
-    // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
-    // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
-    const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
-      && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
-    let exec: ReturnType<typeof resolveProviderExec>;
-    try {
-      exec = resolveProviderExec({
-        engine,
-        declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
-        declaredProviderBuiltin: poolFallback || session.providerBuiltin,
-        customRow,
-        openCodeKeys:
-          session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
-            ? await openCodeKeyRows(tx, session.ownerId)
-            : undefined,
-        sessionModel: session.model,
-        usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
-        runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
-        workspaceModel: session.workspace?.model,
-        modelCatalog: session.assignedRunner?.modelCatalog,
-        workspaceEnv: session.workspace?.env as Record<string, string> | null,
-        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-        claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
-        antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
-        kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
-        cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
-        runner: session.assignedRunner,
-      });
-    } catch (error) {
-      // Every refusal it makes is of the credential: gone, disabled, on a runtime no engine speaks, or
-      // one this session's engine cannot run — which last the claim and the reclaim say in its own words.
-      if (!(error instanceof BadRequestException)) throw error;
-      const refusal = error.getResponse() as { code?: string; message?: string };
-      return {
-        refusal: refusal.code === 'PROVIDER_ENGINE_INCOMPATIBLE' && refusal.message
-          ? refusal.message
-          : await unavailable(customRow),
-      };
-    }
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
     // previous provider's variables must still go, which an empty map is how the runner is told.
-    return { env: exec.env ?? {} };
+    return { env: resolved.exec.env ?? {} };
+  }
+
+  /** The SubAgent run a card names, when it is one of this session's; 404 for any other id. */
+  private async subagentRunOfSession(sessionId: string, raw: string | undefined): Promise<string | null> {
+    const given = stripNul(raw ?? '').trim();
+    if (given === '') return null;
+    // The route's pipe has decoded a base62 id already; a caller that skips it (a spec) may hand either spelling.
+    let runId: string | null = null;
+    try {
+      runId = toUuid(given);
+    } catch {
+      runId = null;
+    }
+    const run = runId
+      ? await this.prisma.subagentRun.findFirst({ where: { id: runId, sessionId }, select: { id: true } })
+      : null;
+    if (!run) throw new NotFoundException('SubAgent run not found');
+    return run.id;
   }
 
   /**
@@ -6061,9 +6022,9 @@ export class RunnerApiController {
   async createApproval(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() dto: ApprovalCreateRequest,
+    @Body(PublicIdPipe.forFields('subagentRunId')) dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const session = await this.assertSessionOrSubagentTarget(sessionId, runner, dto.subagentRunId);
     // Stripped before the lookup, not only before the write, so a retry finds the row the first
     // call created: the idempotency key and the column it was stored in have to agree.
     const toolUseId = stripNul(dto.toolUseId);
@@ -6106,6 +6067,10 @@ export class RunnerApiController {
     // and an in-turn MCP call has none (`sessions/abandoned-approvals.ts` reads it back against the
     // jobs the runner says are still up).
     const backgroundJobId = stripNul(dto.backgroundJobId ?? '').trim();
+    // The third reader: a SubAgent's child engine, asking under its parent's session (docs/subagent-design.md
+    // §5.3). It outlives the parent's turn and calls, so the card names its run, which has to be one of this
+    // session's: anything else names nothing here.
+    const subagentRunId = await this.subagentRunOfSession(sessionId, dto.subagentRunId);
     const approvalData = {
       sessionId,
       // Stripped for the same reason the event batch is (see strip-nul): a tool argument is
@@ -6121,6 +6086,7 @@ export class RunnerApiController {
       toolUseId: toolUseId || null,
       turnId: openingTurn?.id ?? null,
       backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
+      subagentRunId,
       ...(allowedMessage
         ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
         : {}),
@@ -6306,7 +6272,8 @@ export class RunnerApiController {
     /** A link call reads the decision once and answers (wait=0): a hint says when there is one. */
     @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<ApprovalDecisionResponse> {
-    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const card = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId }, select: { subagentRunId: true } });
+    await this.assertSessionOrSubagentTarget(sessionId, runner, card?.subagentRunId ?? undefined);
     const deadline = Date.now() + (link ? 0 : APPROVAL_LONG_POLL_MS);
     for (;;) {
       const a = await this.prisma.approval.findFirst({
@@ -9077,7 +9044,10 @@ export class RunnerApiController {
             e.type === RunEventType.TOOL_RESULT &&
             !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
             !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content) &&
-            !workflowLaunchReceipt((e.payload as { content?: unknown }).content),
+            !workflowLaunchReceipt((e.payload as { content?: unknown }).content) &&
+            // A background SubAgent's `{ runId, status: "running" }`: it runs on, and its terminal
+            // background_task clears it.
+            !delegateLaunchReceipt((e.payload as { content?: unknown }).content),
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
@@ -9105,10 +9075,21 @@ export class RunnerApiController {
       // would be a second row. Only a report carrying a `kind` counts — that is what marks a
       // runner-hosted job, as background-jobs-context.ts reads it too — because an engine's own
       // shell carries none, and that shell died with its engine.
+      // A SubAgent still running, reported again behind a `resumed` handshake (runner-go subagent.go
+      // announceSubagents): its delegate call goes back into the running SubAgents, never the job sets.
+      const subRunning = events
+        .filter((e) => {
+          if (e.type !== RunEventType.BACKGROUND_TASK) return false;
+          const { status, subagentRunId } = e.payload as { status?: unknown; subagentRunId?: unknown };
+          return status === 'running' && typeof subagentRunId === 'string' && subagentRunId !== '';
+        })
+        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+        .filter(Boolean);
       const bgRunningReports = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, kind } = e.payload as { status?: unknown; kind?: unknown };
+          const { status, kind, subagentRunId } = e.payload as { status?: unknown; kind?: unknown; subagentRunId?: unknown };
+          if (typeof subagentRunId === 'string' && subagentRunId !== '') return false;
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
         .map((e) => {
@@ -9164,6 +9145,7 @@ export class RunnerApiController {
       // Same fold, narrower set: a shell an engine launched is in `shells` and never here.
       for (const id of bgJobRunning) if (!jobs.includes(id)) jobs = [...jobs, id];
       for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
+      for (const id of subRunning) if (!subagents.includes(id)) subagents = [...subagents, id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
       // removing from the set that doesn't hold it is a no-op, so clear from both.
       for (const id of bgEnded) {
@@ -11110,6 +11092,32 @@ export class RunnerApiController {
       select: { sessionKind: true },
     });
     if (landing) assertEngineSessionRow(landing);
+  }
+
+  /**
+   * A card's door: the runner hosting the session, or — for a card a remote SubAgent's child asks under its parent
+   * (docs/subagent-design.md §10.3) — the run's target runner, for a run of this session and this account only.
+   */
+  private async assertSessionOrSubagentTarget(sessionId: string, runner: { id: string }, subagentRunId?: string) {
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    let runId: string | null = null;
+    try {
+      runId = subagentRunId ? toUuid(stripNul(subagentRunId).trim()) : null;
+    } catch {
+      runId = null;
+    }
+    if (runId && ownerId) {
+      const run = await this.prisma.subagentRun.findFirst({
+        where: { id: runId, sessionId, ownerId, targetRunnerId: runner.id },
+        select: { id: true },
+      });
+      const session = run ? await this.prisma.session.findUnique({ where: { id: sessionId } }) : null;
+      if (session && session.ownerId === ownerId) {
+        assertEngineSessionRow(session);
+        return session;
+      }
+    }
+    return this.assertSessionOwnership(sessionId, runner.id, ownerId);
   }
 
   private async assertSessionOwnership(sessionId: string, runnerId: string, ownerId?: string) {

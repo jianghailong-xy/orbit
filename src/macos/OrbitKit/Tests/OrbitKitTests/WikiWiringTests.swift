@@ -60,9 +60,13 @@ final class WikiWiringTests: XCTestCase {
     /// The rail's work rows lead with Projects, Tasks and the Wiki, and the Wiki gets its own row.
     func testTheDrawerDrawsAWikiRowAfterTasks() throws {
         let shell = code(try source("Views/CompactShell.swift"))
-        let rail = try slice(shell, from: "ForEach(AppSection.workSections) { section in", to: "workspacesHeader")
-        XCTAssertTrue(rail.contains("} else if section == .wiki {\n                        if model.wiki?.shown == true { wikiRow }"),
-                      "the Wiki's section is drawn by its own row, and only for an account that has the wiki")
+        // The work rows are one array (`DrawerWorkLogic.rows`), drawn by one ForEach; the Wiki is
+        // dropped there as data from the server's answer, not by an `if` in the row builder.
+        let rail = try slice(shell, from: "ForEach(DrawerWorkLogic.rows(", to: ".workspacesHeader")
+        XCTAssertTrue(rail.contains("wiki: model.wiki?.shown == true"),
+                      "the Wiki's visibility is the server's answer, carried into the row array")
+        XCTAssertTrue(rail.contains("case .wiki:"), "the Wiki's section is drawn by its own row")
+        XCTAssertTrue(rail.contains("wikiRow"), "the Wiki's row opens the section")
         XCTAssertTrue(shell.contains(".task { await model.wiki?.loadSpaces() }"),
                       "the drawer reads the spaces that its number counts")
     }
@@ -75,14 +79,19 @@ final class WikiWiringTests: XCTestCase {
         let model = code(try source("WikiModel.swift"))
         XCTAssertTrue(model.contains("var shown: Bool { WikiLogic.shown(spacesState, disabled: disabled) }"))
         let spaces = try slice(model, from: "func loadSpaces() async {", to: "func loadHome() async {")
-        assertOrder(spaces, ["let list = try await api.wikiSpaces()", "disabled = false", "spacesState.succeed()",
-                             "} catch let error where WikiLogic.isDisabled(error) {", "} catch {", "spacesState.fail()"],
+        assertOrder(spaces, ["assignIfChanged(\\.spaces, try await api.wikiSpaces())",
+                             "assignIfChanged(\\.disabled, false)",
+                             "assignIfChanged(\\.spacesState, spacesState.afterSuccess())",
+                             "} catch let error where WikiLogic.isDisabled(error) {", "} catch {",
+                             "assignIfChanged(\\.spacesState, spacesState.afterFailure())"],
                     "the spaces read")
         let answer = try slice(spaces, from: "} catch let error where WikiLogic.isDisabled(error) {", to: "} catch {")
-        XCTAssertTrue(answer.contains("disabled = true"))
-        XCTAssertTrue(answer.contains("spacesState.succeed()"), "WIKI_DISABLED is an answer, not a failure to retry")
+        XCTAssertTrue(answer.contains("assignIfChanged(\\.disabled, true)"))
+        XCTAssertTrue(answer.contains("assignIfChanged(\\.spacesState, spacesState.afterSuccess())"),
+                      "WIKI_DISABLED is an answer, not a failure to retry")
         let entry = try slice(model, from: "func loadEntry(_ id: String) async {", to: "private func articlesSpace()")
-        assertOrder(entry, ["} catch let error where WikiLogic.isDisabled(error) {", "disabled = true",
+        assertOrder(entry, ["} catch let error where WikiLogic.isDisabled(error) {",
+                            "assignIfChanged(\\.disabled, true)",
                             "} catch APIError.http(let status, _) where status == 404 {"], "an entry's read")
 
         let screens = code(try source("Views/WikiScreens.swift"))
@@ -117,7 +126,8 @@ final class WikiWiringTests: XCTestCase {
         for handle in ["spacesRead", "principlesRead", "docsRead", "articlesRead"] {
             XCTAssertTrue(homeCancels.contains("\(handle).cancel()"), "the home's \(handle) is not cancelled on the way out")
         }
-        assertOrder(home, ["if articlesSpaceID == space.id {", "homeSpaceID = space.id", "} catch {", "await spacesRead.value"],
+        assertOrder(home, ["if articlesSpaceID == space.id {", "assignIfChanged(\\.homeSpaceID, space.id)",
+                           "} catch {", "await spacesRead.value"],
                     "the content stored, then the head's numbers awaited, never cut short")
         let activity = try slice(model, from: "func loadActivity() async {", to: "func loadReview() async {")
         for read in ["let documentRead = Task { try await api.wikiSpace(space.id) }",
@@ -265,8 +275,9 @@ final class WikiWiringTests: XCTestCase {
         }
         let header = try slice(page, from: "private var header: some View {", to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
         // The space's name is the head (board docs/mocks/wiki-rail-name B); the bar takes it once the head scrolls away.
-        XCTAssertTrue(header.contains("WikiSpacePicker(space: space, spaces: spaces, title: .largeTitle.bold(), pick: actions.pickSpace, manage: actions.openSettings)"),
-                      "the header")
+        assertOrder(header, ["WikiSpacePicker(space: space, spaces: spaces, title: .largeTitle.bold(), pick: actions.pickSpace, manage: actions.openSettings,",
+                             "create: actions.createWiki)"],
+                    "the header")
         XCTAssertFalse(header.contains("WikiCopy.title"), "the head says Wiki again")
         XCTAssertTrue(page.contains(".navigationTitle(besideContents || headerOnScreen ? \"\" : spaceName)"))
         XCTAssertTrue(page.contains("TextField(WikiCopy.searchPlaceholder, text: $query)"))
@@ -504,7 +515,8 @@ final class WikiWiringTests: XCTestCase {
                              "WikiSpaceLogic.defaultSpace(spaces, workspaceID: fromWorkspaceID, lastSlug: selectedSlug)",
                              "selectedSlug = space.slug"], "the choice")
         let spaces = try slice(model, from: "func loadSpaces() async {", to: "func loadHome() async {")
-        assertOrder(spaces, ["spacesState.succeed()", "chooseSpace()", "} catch let error where WikiLogic.isDisabled(error) {"],
+        assertOrder(spaces, ["assignIfChanged(\\.spacesState, spacesState.afterSuccess())", "chooseSpace()",
+                             "} catch let error where WikiLogic.isDisabled(error) {"],
                     "chosen once the spaces read answers")
     }
 

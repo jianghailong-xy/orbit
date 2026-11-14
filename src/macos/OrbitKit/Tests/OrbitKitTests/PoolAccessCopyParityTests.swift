@@ -99,7 +99,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
     // MARK: - the page
 
     /// The line under the pool's name — who can use it, how many people (to anybody but its owner), how many
-    /// of its accounts or keys can run, and what the reader's sessions run on — SHARED, and the head's press.
+    /// of its accounts or keys can run, and what the reader's sessions run on — Shared, and the head's press.
     func testThePageHeadSaysWhatTheWebPageSays() throws {
         let page = try web(Self.poolPage)
         assertSays(page, "<div className=\"pool-sub\"> \(CodexPoolPage.title) · <b>{who}</b> · {!mine && `${plural(access!.people.length, 'person', 'people')} · `} {availabilityOf(pool, NO_REFUSALS)} · {how} </div>",
@@ -432,7 +432,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
 
     // MARK: - elsewhere
 
-    /// The Providers card's head, by who reads it: whose it is and how many keys, "Just me", or SHARED.
+    /// The Providers card's head, by who reads it: whose it is and how many keys, "Just me", or Shared.
     func testTheProvidersCardSaysWhatTheWebCardSays() throws {
         let card = try web(Self.accountPools)
         let zhang = PoolAccessBoards.zhangsPage().pool
@@ -445,7 +445,9 @@ final class PoolAccessCopyParityTests: XCTestCase {
                    in: Self.accountPools)
         assertSays(card, "{people && <span className=\"re-chip pool-shared-chip\">\(CodexPoolPage.sharedChip)</span>}",
                    in: Self.accountPools)
-        assertSays(card, "{!member && <PoolGauge pool={pool} />}", in: Self.accountPools)
+        // The gauge is left to the row for an open pool of one account that can run (settings-buttons, board 02).
+        assertSays(card, "{!member && (collapsed || pool.members.length !== 1 || poolHeadline(pool).kind !== 'next') && <PoolGauge pool={pool} />}",
+                   in: Self.accountPools)
 
         let spec = try web(Self.whoSpec)
         let alone = PoolAccessBoards.ownersPage(people: [], keys: []).pool

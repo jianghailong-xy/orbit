@@ -39,13 +39,13 @@ struct WikiRunPage: View {
     var body: some View {
         let counted = summary
         List {
-            Section { head(counted) }
-            Section {
-                countsRow(counted)
+            ForEach(WikiRunPageListLogic.rows(counted)) { row in
+                switch row {
+                case .head:   Section { head(counted) }
+                case .counts: Section { countsRow(counted) }
+                case .group(let title, let rows): group(title, rows)
+                }
             }
-            group(WikiModeCopy.runAdded, counted.added)
-            group(WikiModeCopy.runAmended, counted.amended)
-            group(WikiModeCopy.runReinforced, counted.reinforced)
         }
         .wikiRunListStyle()
         .navigationTitle("")

@@ -10,7 +10,7 @@ import { WikiPage } from './WikiPage';
 /**
  * The space menu the Wiki's name opens among several spaces (board docs/mocks/wiki-space-menu B): the console's own
  * menu, not the browser's select — a row a space, its name over its repository and documents, what waits in it as the
- * sidebar's amber count, the current one lit; Manage spaces at its foot, into Wiki settings.
+ * sidebar's amber count, the current one lit; New wiki… (the Create wiki form) and Manage spaces at its foot, into Wiki settings.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -84,7 +84,7 @@ const trigger = () => container.querySelector('.wk-rail-head .wk-select');
 const rows = () => [...document.querySelectorAll('[role="menu"].wk-space-menu [role="menuitem"]')];
 
 describe('the Wiki’s space menu', () => {
-  it('is the console’s menu: a row a space with its repository and documents, the amber count, the current one lit, then Manage spaces', async () => {
+  it('is the console’s menu: a row a space with its repository and documents, the amber count, the current one lit, then New wiki… and Manage spaces', async () => {
     await visit('/wiki/orbit');
     expect(trigger()?.tagName).toBe('BUTTON');
     expect(trigger()?.textContent).toBe('orbit');
@@ -101,6 +101,7 @@ describe('the Wiki’s space menu', () => {
       ['orbit', 'github.com/wikova/orbit · 35 documents', '2', true],
       ['wikova', 'github.com/wikova/wikova · 12 documents', null, false],
       ['cbai', 'github.com/wikova/cbai · No documents yet', null, false],
+      ['New wiki…', null, null, false],
       ['Manage spaces', null, null, false],
     ]);
     // A reader that cannot see the amber hears what waits.

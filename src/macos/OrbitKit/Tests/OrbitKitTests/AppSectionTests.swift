@@ -36,6 +36,23 @@ final class AppSectionTests: XCTestCase {
         }
     }
 
+    /// The drawer rail's rows are one array: the work (the Wiki only when the server has it on), the
+    /// inbox only while it is served, then the Workspaces header and the rows under it.
+    func testDrawerRowsCarryTheWikiAnswerAndTheInboxAsData() {
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: true, waitingOnYou: true),
+                       [.projects, .section(.tasks), .wiki, .waitingOnYou, .workspacesHeader,
+                        .agents, .openProjects, .sharedWithMe])
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: false, waitingOnYou: false),
+                       [.projects, .section(.tasks), .workspacesHeader, .agents, .openProjects,
+                        .sharedWithMe])
+        // New wiki… is a row of its own under the Wiki row once there is a wiki, and never without the Wiki row.
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: true, newWiki: true, waitingOnYou: false),
+                       [.projects, .section(.tasks), .wiki, .newWiki, .workspacesHeader, .agents, .openProjects,
+                        .sharedWithMe])
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: false, newWiki: true, waitingOnYou: false),
+                       [.projects, .section(.tasks), .workspacesHeader, .agents, .openProjects, .sharedWithMe])
+    }
+
     /// Routing/notifications must land in the right section so the shell follows a deep link. There's
     /// no aggregate Active view anymore — home and an individual session both land in Agents.
     func testRouteMapsToSection() {

@@ -29,6 +29,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -184,7 +185,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     var placed by remember(model) { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var positioning by remember { mutableStateOf(false) }
-    var details by rememberSaveable { mutableStateOf(false) }
+    var settings by rememberSaveable { mutableStateOf(false) }
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8).
     val listed = remember(state.session?.snapshot?.detail) {
@@ -235,7 +236,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             return Offset.Zero
         }
     } }
-    LaunchedEffect(model, state.denied) { if (state.denied) { action = null; details = false; placed = false } }
+    LaunchedEffect(model, state.denied) { if (state.denied) { action = null; settings = false; placed = false } }
     LaunchedEffect(state.ready, state.window.seeded, state.targetTick) {
         if (!state.ready || !state.window.seeded || state.denied) return@LaunchedEffect
         positioning = true
@@ -441,6 +442,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
         TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
     }
+    // The SubAgent runs by `delegate` call (GET /sessions/:id/subagents), which each SubAgent block draws its tier, model, duration,
+    // cost and Why from: read again when a delegate call starts or ends (iOS `refreshSubagentRunsIfNeeded`). A session that never
+    // delegated reads nothing, and a failed read is left alone until the transcript moves again.
+    val subagentSignature = remember(state.window.events, background) { SubagentRuns.signature(state.window.events, background.orEmpty()) }
+    var subagentRuns by remember(handle, route.id) { mutableStateOf<Map<String, SubagentRun>>(emptyMap()) }
+    LaunchedEffect(handle, route.id, subagentSignature) {
+        if (subagentSignature.isEmpty()) { subagentRuns = emptyMap(); return@LaunchedEffect }
+        try {
+            val body = app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, "subagents"))).body
+            subagentRuns = SubagentRun.byCall((Wire.decode(body, JsonElement.serializer()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>())
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+    }
     LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
     val reviewStates = rememberSaveableStateHolder()
     val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
@@ -471,7 +484,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
-        LocalExchangeTree provides exchangeTree) {
+        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -502,7 +515,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
-                actions, open, { action = it }, { details = true }, leave)
+                actions, open, { action = it }, { settings = true }, leave)
         })
         if (projectSheet && projectId != null) ProjectSessionsSheet(app, handle, projectId, route.workspaceId, data, api, open,
             close = { projectSheet = false }, onCount = { sheetCount = it }) { next ->
@@ -524,21 +537,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
-                // The needs-you bar, under the header and over the transcript (iOS `NeedsYouBannerView` in the console's top
-                // inset). Its press here unpins the reader and shows the waiting card, which the card rail brings into view.
-                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = foldsChrome,
-                    below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
-                        follow = false
-                        scope.launch {
-                            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
-                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
-                            CardFocus.request(route.id!!, row)
-                            // A08-3: a card answered in a review opens it, over the card it scrolled to (iOS 419fa780b). Evidence and
-                            // exceptions are answered in place, so the press only shows them.
-                            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
-                                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
-                        }
-                    })
+                // The needs-you bar floats over the transcript (after it, below); the rows keep its height clear at their top.
+                var barHeight by remember { mutableIntStateOf(0) }
+                val barTop = with(LocalDensity.current) { barHeight.toDp() }
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = shownRows
                 val displayedWindow = state.window
@@ -557,7 +558,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld) null
                     else displayedRows.lastOrNull { it.event.type == "user" && it.steps.isEmpty() && it.exchanges.isEmpty() }?.event?.seq
                 val targetSeq = state.targetSeq
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().fadesIntoComposerBand().onSizeChanged {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                LazyColumn(Modifier.fillMaxSize().fadesIntoComposerBand().onSizeChanged {
                     if (viewport.resized(it.height, placed && follow && state.window.newerAfter == null)) repin++
                 }.nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
@@ -565,7 +567,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
                 }.testTag("transcript-list").lastPageProbe(lastPage, list, view), state = list,
                     // No room under the rows but the tail row's own: every follow and jump lands on it (iOS 9d3751ec2).
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + barTop), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
@@ -675,6 +677,25 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     // A06-12: the room the fade lies over, so a list at its tail has nothing in it — and the 1 dp anchor it always was.
                     item(key = "tail") { Spacer(Modifier.height(COMPOSER_BAND_FADE + 1.dp).testTag("transcript-tail")) }
                 }
+                Box(Modifier.zIndex(1f).onSizeChanged { barHeight = it.height }) {
+                // The needs-you bar, under the header and floating over the transcript (iOS `NeedsYouBannerView` in the console's
+                // safe-area bar; the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`): the rows go on behind it. Its
+                // press here unpins the reader and shows the waiting card, which the card rail brings into view.
+                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = foldsChrome,
+                    below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
+                        follow = false
+                        scope.launch {
+                            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
+                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+                            CardFocus.request(route.id!!, row)
+                            // A08-3: a card answered in a review opens it, over the card it scrolled to (iOS 419fa780b). Evidence and
+                            // exceptions are answered in place, so the press only shows them.
+                            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
+                                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
+                        }
+                    })
+                }
+                }
                 // Android's jump stays a row under the list (iOS floats a disc 6 pt above the fade): below the list, so never in its fade.
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth().testTag("transcript-jump"), horizontalArrangement = Arrangement.SpaceEvenly) {
                     TextButton(onClick = {
@@ -746,7 +767,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         if (!state.denied) CrossingReviewSheet(crossingStore, coordinated)
         if (!state.denied) CardReceiptSheet(cards, openLanding = { open(OrbitRoute(Destination.SESSION, it)) })
         if (!state.denied) EvidenceFilesSheet(cards)
-        if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
+        if (settings && !state.denied) SessionSettingsPage(state.session, api, handle.account.server, data.tags,
+            state.session?.fresh == true && data.fresh, openLink, { app.realtime.refreshDirectory(); app.realtime.refreshSession() }) { settings = false }
         action?.let { dialog -> DirectoryActionDialog(dialog, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
             // Deleted for good from its own page: the page goes with it, as iOS's console does.

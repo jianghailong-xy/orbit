@@ -560,22 +560,13 @@ private struct MergeTargetPickerSheet: View {
 
     var body: some View {
         NavigationStack {
-            List(filtered, id: \.self) { b in
-                Button {
-                    dismiss()
-                    onPick(b)
-                } label: {
-                    HStack(spacing: 8) {
-                        BranchLabelView(branch: b).lineLimit(1).truncationMode(.middle)
-                        Spacer(minLength: 8)
-                        if b == currentTarget {
-                            Image(systemName: "checkmark").font(.orbitMeta.weight(.semibold))
-                                .foregroundStyle(Color.accentColor)
-                        }
+            List {
+                ForEach(filtered, id: \.self) { b in
+                    MergeTargetRow(branch: b, isCurrent: b == currentTarget) {
+                        dismiss()
+                        onPick(b)
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             }
             .listStyle(.plain)
             .softTopEdgeEffect()
@@ -594,6 +585,28 @@ private struct MergeTargetPickerSheet: View {
         #else
         .frame(minWidth: 360, minHeight: 420)
         #endif
+    }
+}
+
+/// One branch in the merge-target sheet, marked when it is the one the merge already points at.
+private struct MergeTargetRow: View {
+    let branch: String
+    let isCurrent: Bool
+    let pick: () -> Void
+
+    var body: some View {
+        Button(action: pick) {
+            HStack(spacing: 8) {
+                BranchLabelView(branch: branch).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                if isCurrent {
+                    Image(systemName: "checkmark").font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -735,11 +748,13 @@ struct DiffSheet: View {
             ? (detail?.projectIntegrationRef ?? detail?.branch)
             : detail?.branch
         NavigationStack {
-            List(files) { file in
-                NavigationLink {
-                    DiffFileView(console: console, file: file)
-                } label: {
-                    DiffFileRow(file: file)
+            List {
+                ForEach(files) { file in
+                    NavigationLink {
+                        DiffFileView(console: console, file: file)
+                    } label: {
+                        DiffFileRow(file: file)
+                    }
                 }
             }
             .navigationTitle("Worktree changes")

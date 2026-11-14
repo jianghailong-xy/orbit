@@ -1,0 +1,40 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Session settings (web) r2</title>
+<style>
+body{margin:0;background:#eef0f3;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#1f2329}
+.board{width:2200px;padding:40px;box-sizing:border-box;background:#eef0f3}
+h1{margin:0 0 6px;font-size:30px} .sub{color:#646a73;font-size:16px;margin-bottom:28px}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:28px}
+.f{background:#fff;border-radius:14px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.f h2{font-size:17px;margin:0 0 10px} .f h2 b{display:inline-block;background:#1f2329;color:#fff;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px;font-size:13px;margin-right:8px}
+.f img{display:block;border:1px solid #e3e5e8;border-radius:8px}
+.cap{font-size:14px;color:#646a73;margin-top:8px;max-width:640px;line-height:1.5}
+.notes{flex:1;font-size:15px;line-height:1.6}
+table{border-collapse:collapse;width:100%;font-size:14px} td,th{border-top:1px solid #e3e5e8;padding:7px 8px;text-align:left;vertical-align:top} th{color:#646a73;font-weight:600}
+.done{background:#f0f9eb;border:1px solid #b7eb8f;border-radius:10px;padding:12px 16px;margin-top:14px}
+.todo{background:#fff7e6;border:1px solid #ffd591;border-radius:10px;padding:12px 16px;margin-top:14px}
+code{font-family:'SF Mono',Menlo,monospace;font-size:13px;background:#f2f3f5;padding:1px 4px;border-radius:4px}
+</style></head><body><div class="board">
+<h1>Session 页面 · Settings 设置（Web）· 第 3 版</h1>
+<div class="sub">输入框里已有的（Model、Permission mode、Effort、Fast mode）全部不放，Run 组去掉；Compact at 是引擎启动时读的环境变量，移进 Environment。原生端见 02-session-settings-native.png。</div>
+<div class="row">
+ <div class="f"><h2><b>①</b>入口：⋯ → Settings…</h2><img src="frames/b-new-menu.png" width="640"><div class="cap">放在 Move… 下方。⋯ 里原有的 Tags、Share… 保留，和抽屉里改的是同一份数据。</div></div>
+ <div class="f notes"><h2><b>i</b>各组内容</h2>
+ <table><tr><th>组</th><th>内容</th><th>生效</th></tr>
+ <tr><td>Session</td><td>Labels：× 去掉，+ Add 从工作区标签里选。Public link：开关即 Share 的公开链接，开着时显示链接和 Copy。不放 Folder 和改标题</td><td>立即</td></tr>
+ <tr><td>Environment</td><td>工作目录（只读）；Compact at；变量：灰色行继承自 Workspace，底色行为本会话自有，可增删，同名时会话的覆盖 Workspace 的</td><td>引擎下次启动 / Restart</td></tr>
+ <tr><td>Notifications</td><td>一轮结束时 / 需要你时：跟随账号设置 / 通知 / 不通知；静音本会话。Web、iOS、Android 推送都按这里</td><td>立即</td></tr>
+ <tr><td>Info</td><td>Engine、Runner、Account、Branch、Created、Tokens（in / out / cache）、Cost（含轮数）、Session ID、Engine session</td><td>只读</td></tr></table>
+ <div class="done"><b>已定</b><br>1. 改了马上生效，没有 Save；已结束、Completed 的会话不置灰。<br>2. 改了变量：引擎空闲 → Restart（图 ③）；这一轮在跑 → “Restart after this turn”，跑完再重启（图 ④）；引擎已结束 → 不显示，下一条消息自动带上新变量。<br>3. 会话级通知，iOS / Android 推送一起改。<br>4. Info 有 Tokens 和 Cost。<br>5. Session 组不放 Folder 和改标题。<br>6. iOS / Android 会话页加同样的 Settings（见原生图）。</div>
+ <p style="color:#646a73;font-size:13px">会改的地方：Web <code>WorkspaceView.tsx</code>（⋯ 菜单项）、新增 <code>SessionSettingsDrawer.tsx/.css</code>；apiserver 会话 PATCH 加 env、compact、通知字段，restart（含“这一轮结束后”），用量汇总；runner 起引擎时合并会话变量；推送发送端读会话级通知；shared DTO；iOS / Android 见原生图。</p>
+ </div>
+</div>
+<div class="row">
+ <div class="f"><h2><b>②</b>Settings 抽屉</h2><img src="frames/c-drawer.png" width="660"></div>
+ <div class="f"><h2><b>③</b>引擎空闲，改了变量 → Restart</h2><img src="frames/f-pending.png" width="660"></div>
+ <div class="f"><h2><b>④</b>这一轮在跑 → Restart after this turn</h2><img src="frames/g-busy.png" width="660"></div>
+</div>
+<div class="row">
+ <div class="f"><h2><b>⑤</b>手机 Web：全屏</h2><img src="frames/e-phone.png" width="390"></div>
+ <div class="f"><h2><b>⑥</b>深色</h2><img src="frames/d-drawer-dark.png" width="900"></div>
+</div>
+</div></body></html>
