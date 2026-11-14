@@ -81,6 +81,13 @@ class NeedsYouBarTest {
         compose.runOnIdle { assertEquals(1, pressed); assertEquals(1, folded) }
     }
 
+    /** Sessions blocked on a tool call carry no "+N": the ⌄ still says the press unfolds, standing on its own. */
+    @Test fun theUnfoldChevronStandsAloneWithoutACount() {
+        compose.setContent { OrbitTheme { NeedsYouBar("4 sessions need you", null, NeedsYouLogic.unfoldHint(4), unfolds = true) {} } }
+        compose.onNodeWithTag("needs-you-bar-unfolds", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("needs-you-bar-more", useUnmergedTree = true).assertDoesNotExist()
+    }
+
     @Test fun theThreeHintsAreIosOwn() {
         assertEquals("Shows what is waiting in this conversation", NeedsYouLogic.belowHint)
         assertEquals("Opens the session waiting on you", NeedsYouLogic.sessionHint)

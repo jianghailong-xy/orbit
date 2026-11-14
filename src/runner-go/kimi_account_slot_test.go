@@ -643,7 +643,7 @@ func TestKimiModelsAreReadOnDefaultElseTheFirstSignedInAccount(t *testing.T) {
 	}
 }
 
-// `orbit resume` of a Kimi session runs `kimi --resume` in the home the session's conversation is in:
+// `orbit resume --engine-cli` of a Kimi session runs `kimi --resume` in the home the session's conversation is in:
 // its account's, or — with none recorded — Default's.
 func TestOrbitResumeRunsKimiInTheSessionsAccountHome(t *testing.T) {
 	defaultHome, _ := kimiAccountTestHomes(t)
@@ -660,7 +660,7 @@ func TestOrbitResumeRunsKimiInTheSessionsAccountHome(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(runDir(id), "meta.json"), []byte(b), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		cmdResume([]string{id})
+		cmdResume([]string{"--engine-cli", id})
 	}
 	got := kimiCallsIn(t, seen)
 	want := map[string]bool{"--resume session_5d0c3c0e\t" + work.Dir: true, "--resume session_6e1d4d1f\t" + defaultHome: true}

@@ -1,3 +1,4 @@
+import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
@@ -34,7 +35,7 @@ import { readSessionActivities, sessionActivitySql } from './task-work-carrier';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath, runEventPayloadMentions } from './legacy-artifact-path';
 import { isWorktreeArtifactPath, readWorktreeArtifactRequest, worktreeFileAnswerKey } from './worktree-artifact';
-import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnKey } from './orbit-authored-turn';
+import { isOrbitAuthoredTurn, isOrbitAuthoredTurnOf, openingTurnId, openingTurnKey } from './orbit-authored-turn';
 import { importForkSessionId } from './import-fork';
 import { assertMayMoveRuns, assertSessionMayReach, type SessionAct } from './session-reach';
 import {
@@ -55,6 +56,7 @@ import {
   readSessionMessageFrom,
   type ExternalTurnSender,
 } from './session-message';
+import { senderClientColumns, type TurnSenderClient } from './turn-sender-client';
 import { readOrbitMessageFrom } from './orbit-message';
 import {
   closeRequestsTheRetryWillNotResend,
@@ -454,6 +456,9 @@ interface ListedActiveTurn extends ListedQueuedTurn {
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
+  /** The session's opening prompt (the `initial-` turn), listed until the runner echoes it. A client
+   *  that drew the prompt itself when it created the session reads this to know it is the same one. */
+  opening?: true;
 }
 
 const CURRENT_WORK_UNAVAILABLE = 'CURRENT_WORK_UNAVAILABLE';
@@ -1079,10 +1084,19 @@ export class SessionsService {
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
+    // CreateSessionDto is an interface, so nothing upstream checked the type: a string "false" must not
+    // quietly keep a worktree the caller asked to leave out.
+    if (dto.worktree != null && typeof dto.worktree !== 'boolean') {
+      throw new BadRequestException('worktree must be a boolean');
+    }
+    // `worktree: false` from any caller is the same deliberate override the internal doors pass as noWorktree.
+    const noWorktree = opts?.noWorktree === true || dto.worktree === false;
+    // The folder below workDir the session runs in: checked here, before anything is read or written.
+    const workSubdir = checkedWorkSubdir(dto.workSubdir, noWorktree);
     const wikiChat = opts?.wikiChat;
     // A chat is a conversation of its workspace and nothing else: it executes no task, makes no
     // workspace and opens with words (wiki contract `chat.create`). The door never asks for more.
-    if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || opts?.noWorktree)) {
+    if (wikiChat && (dto.taskId || dto.newWorkspace != null || dto.shell || !dto.workspaceId || noWorktree)) {
       throw new Error('a wiki chat is a session of its workspace that executes no task and opens with words');
     }
     // Attachments with no words are a whole opening message, as they are on any later turn: the
@@ -1520,9 +1534,10 @@ export class SessionsService {
         runner: targetRunner,
       });
     }
-    // §13.8: a conversation gets no worktree. Applied after the workspace's default is read, so it
-    // is a deliberate override rather than a second source of the default.
-    if (opts?.noWorktree) {
+    // §13.8: a conversation gets no worktree, nor does a session that asked for none (`worktree: false`, a
+    // terminal's). Applied after the workspace's default is read, so it is a deliberate override rather than a
+    // second source of the default.
+    if (noWorktree) {
       enableWorktree = false;
       branch = null;
     }
@@ -1537,6 +1552,7 @@ export class SessionsService {
         titleBeforeProjectManagement: null,
         promptByOrbit: opts?.promptByOrbit ?? false,
         branch,
+        workSubdir,
         prompt: dto.prompt,
         status: RunStatus.PENDING,
         provider,
@@ -6111,6 +6127,9 @@ export class SessionsService {
       externalSenderSource?: string;
       externalSenderId?: string;
       externalSenderName?: string | null;
+      /** Which client sent it (migration 0595), as `senderClientColumns` writes it. */
+      senderClient?: string;
+      senderClientDetail?: string | null;
       /** A wiki chat's page and selection (migration 0476), which delivery reads. */
       wikiContext?: Prisma.InputJsonValue;
     },
@@ -6125,7 +6144,11 @@ export class SessionsService {
       select: { seq: true },
     });
     return tx.conversationTurn.create({
-      data: { sessionId, seq: (last?.seq ?? 0) + 1, status: 'PENDING', ...data },
+      data: {
+        // The opening's id is fixed by the session (`openingTurnId`), as the claim writes it.
+        ...(data.clientTurnId === openingTurnKey(sessionId) ? { id: openingTurnId(sessionId) } : {}),
+        sessionId, seq: (last?.seq ?? 0) + 1, status: 'PENDING', ...data,
+      },
     });
   }
 
@@ -6339,6 +6362,12 @@ export class SessionsService {
        * §8.2). Like `senderSessionId`, an option of this call and never a field of `dto`. Written on a NEW turn only.
        */
       externalSender?: ExternalTurnSender;
+      /**
+       * Which client sent this turn (`conversation_turn.sender_client*`, migration 0595, turn-sender-client.ts),
+       * as the door derived it from its credential and the app's headers. Like `senderSessionId`, an option of
+       * this call and never a field of `dto`. Written on a NEW turn only.
+       */
+      senderClient?: TurnSenderClient;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
@@ -6662,6 +6691,7 @@ export class SessionsService {
         ...(targetTurnId ? { targetTurnId } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
         ...externalSenderColumns(opts?.externalSender),
+        ...senderClientColumns(opts?.senderClient),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
@@ -7080,10 +7110,14 @@ export class SessionsService {
       // What the cards are read against (turn-cards.ts): whose rows they may name, and the task a
       // run's brief was built from. And whether it is a wiki chat, whose opening turn is its prompt.
       // And whether the platform wrote that prompt (0493), which makes the opening Orbit's.
-      select: { id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true },
+      // And, for the active view, whether its opening is still only the prompt on the row (below).
+      select: {
+        id: true, ownerId: true, taskId: true, runSource: true, wikiChatSpaceId: true, promptByOrbit: true,
+        status: true, numTurns: true, importedAt: true, prompt: true, createdAt: true,
+      },
     });
     if (!session) throw new NotFoundException('session not found');
-    const turns = await this.prisma.conversationTurn.findMany({
+    const listedTurns = await this.prisma.conversationTurn.findMany({
       // One snapshot, including rows that are needed only to identify the executable head.
       where: {
         sessionId: id,
@@ -7116,8 +7150,11 @@ export class SessionsService {
         attachments: { select: { id: true, mimeType: true } },
       },
     });
-    const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
     const initialClientTurnId = SessionsService.initialTurnClientId(id);
+    const turns = view === 'active'
+      ? [...(await this.unseededOpening(session, listedTurns)), ...listedTurns]
+      : listedTurns;
+    const headExecutableId = turns.find((t) => t.kind === 'message' || t.kind === 'shell')?.id;
     const wakeContent = await this.queuedWakeContent(id, turns);
     const classified = turns
       // A background job's wake turn carries nobody's words (runner-api/background-job-wake.ts) and
@@ -7128,7 +7165,12 @@ export class SessionsService {
       //
       // A turn handing back the outcomes of this session's requests is the same kind of row
       // (sessions/session-request.ts): listed with the blocks it will be delivered with.
-      .filter((turn) => turn.clientTurnId !== initialClientTurnId
+      //
+      // The opening prompt is no queued follow-up anyone can withdraw, so the queue's own view leaves
+      // it out. The active view lists it: until the runner's echo of it lands it is the session's
+      // first message, and a client opening a session no runner has taken yet draws it from here.
+      .filter((turn) => (turn.clientTurnId !== initialClientTurnId
+          || (view === 'active' && turn.kind === 'message'))
         && !SessionsService.isChatOpeningTurn(session, turn)
         && (!isPlatformContentTurn(turn.clientTurnId) || wakeContent.has(turn.id)))
       .map((turn) => ({
@@ -7237,6 +7279,7 @@ export class SessionsService {
             : {}),
           ...cards.get(turn.id),
           ...(isOrbitAuthoredTurnOf(session, turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
+          ...(turn.clientTurnId === initialClientTurnId ? { opening: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
           attachments: turn.attachments.map((attachment) => ({
@@ -7249,6 +7292,61 @@ export class SessionsService {
     // unrelated UUID would reorder the executable head behind its queued successor in a recovered
     // snapshot.
     return [...activeTurns].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  /**
+   * The opening of a session no runner has claimed yet, as the turn the claim will lay down
+   * (QueueService.buildSession): its prompt, under the opening's key and the id that turn will have
+   * (`openingTurnId`), with the uploads the session holds for it. Until the claim, the opening is only
+   * the prompt on the row, so without this a session nobody has taken opens with no message at all;
+   * listed under the id its echo will carry, the client's placeholder is the row the echo takes over.
+   *
+   * Only where the claim will seed one: not an imported transcript, an empty prompt or a wiki chat, and
+   * only before the session has run a turn. Nothing once the turn exists, whatever its state: the
+   * listing then has the real row, or the transcript has it.
+   */
+  private async unseededOpening(
+    session: {
+      id: string; status: RunStatus; numTurns: number; importedAt: Date | null; prompt: string;
+      wikiChatSpaceId: string | null; createdAt: Date;
+    },
+    listed: ReadonlyArray<{ clientTurnId: string | null }>,
+  ) {
+    const key = SessionsService.initialTurnClientId(session.id);
+    if (
+      (session.status !== RunStatus.PENDING && session.status !== RunStatus.RUNNING)
+      || session.numTurns !== 0 || session.importedAt || !session.prompt || session.wikiChatSpaceId
+      || listed.some((turn) => turn.clientTurnId === key)
+    ) {
+      return [];
+    }
+    const seeded = await this.prisma.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId: session.id, clientTurnId: key } },
+      select: { id: true },
+    });
+    if (seeded) return [];
+    const attachments = await this.prisma.attachment.findMany({
+      where: { sessionId: session.id, turnId: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, mimeType: true },
+    });
+    return [{
+      id: openingTurnId(session.id),
+      seq: 0,
+      clientTurnId: key,
+      kind: 'message',
+      targetTurnId: null,
+      deliveryStatus: null,
+      deliveryFailureCode: null,
+      deliveryFailureReason: null,
+      status: 'PENDING' as const,
+      content: session.prompt,
+      createdAt: session.createdAt,
+      senderSessionId: null,
+      externalSenderSource: null,
+      externalSenderName: null,
+      attachments,
+    }];
   }
 
   /** What each of the session's still-queued wake turns has to say, by turn id.
@@ -8860,7 +8958,9 @@ export class SessionsService {
    *  (docs/feishu-bot-design.md §7.2): its clicker's open_id and the card's message_id are recorded
    *  beside it, and it carries only a plain allow or deny — "always allow" widens a standing grant and
    *  "Create and start" starts work, both of which stay in the app — so either is refused before anything
-   *  is written. */
+   *  is written. A TERMINAL one is `orbit` in a terminal (docs/terminal-session-design.md, "The terminal
+   *  credential"): its machine name is recorded beside it (0663), and it answers as the app does, "always
+   *  allow" included. Either one's decision that lands also writes an Activity row. */
   async decideApproval(
     ownerId: string,
     id: string,
@@ -8869,6 +8969,7 @@ export class SessionsService {
     credential?: AuthCredential,
   ): Promise<ApprovalInfo> {
     const feishu = credential?.kind === 'FEISHU' ? credential : null;
+    const terminal = credential?.kind === 'TERMINAL' ? credential : null;
     if (feishu && (dto.rememberRules !== undefined || dto.startAfterCreate !== undefined)) {
       throw new BadRequestException('a decision from a Feishu card is a plain allow or deny: "always allow" and "Create and start" stay in Orbit');
     }
@@ -8922,7 +9023,8 @@ export class SessionsService {
       select: { toolName: true, input: true },
     });
     // Only the first decision on a still-PENDING approval applies (idempotent). A Feishu card's
-    // decision is also an Activity row (docs/feishu-bot-design.md §7.2): written in the same
+    // decision is also an Activity row (docs/feishu-bot-design.md §7.2), and so is a terminal's
+    // (docs/human-only-authority.md, the TERMINAL row): written in the same
     // transaction, and only by the decision that lands, so a replayed event or a stale card's
     // click records nothing more.
     const decide = async (db: Prisma.TransactionClient) => {
@@ -8947,6 +9049,7 @@ export class SessionsService {
         decidedCredentialKind: credential?.kind ?? null,
         decidedFeishuOpenId: feishu?.openId ?? null,
         decidedFeishuMessageId: feishu?.messageId ?? null,
+        decidedTerminalMachineName: terminal?.machineName ?? null,
         decidedAt: new Date(),
       },
     });
@@ -8959,6 +9062,19 @@ export class SessionsService {
             payload: {
               sessionId: id, approvalId, behavior: dto.behavior,
               appId: feishu.appId, openId: feishu.openId, messageId: feishu.messageId ?? null,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+      if (terminal && landed.count > 0) {
+        await db.activity.create({
+          data: {
+            actorId: ownerId,
+            type: 'terminal.approval.decided',
+            credentialKind: 'TERMINAL',
+            payload: {
+              sessionId: id, approvalId, behavior: dto.behavior,
+              terminalId: terminal.terminalId, runnerId: terminal.runnerId, machineName: terminal.machineName,
             } as Prisma.InputJsonValue,
           },
         });
@@ -9322,6 +9438,8 @@ export class SessionsService {
        * `senderSessionId` is: a request is no less a request for having woken its recipient up.
        */
       onTurnWritten?: (tx: Prisma.TransactionClient, turn: ConversationTurn) => Promise<void>;
+      /** Which client sent the turn — see `createTurn`'s own. Carried onto both branches. */
+      senderClient?: TurnSenderClient;
       /**
        * This request is a PERSON saying something now — the HTTP resume door, and only that one.
        *
@@ -9451,6 +9569,7 @@ export class SessionsService {
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
         senderSessionId: opts?.senderSessionId,
+        senderClient: opts?.senderClient,
         externalSender: opts?.externalSender,
         onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
@@ -9744,6 +9863,7 @@ export class SessionsService {
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
+        ...senderClientColumns(opts?.senderClient),
         ...externalSenderColumns(opts?.externalSender),
         ...(wikiContext ? { wikiContext: wikiContext as unknown as Prisma.InputJsonValue } : {}),
       });
@@ -10973,6 +11093,8 @@ export class SessionsService {
         folderId,
         assignedRunnerId: target.runnerId,
         branch: branchAfterMove(session, fromWorktree, target.enableWorktree),
+        // A folder below the old workspace's directory names nothing in the new one.
+        workSubdir: null,
         baseSha: null,
         changedFiles: Prisma.DbNull,
         isolationStatus: null,

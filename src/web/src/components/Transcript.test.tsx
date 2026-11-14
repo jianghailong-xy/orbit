@@ -1469,6 +1469,29 @@ describe('Orbit write tool cards', () => {
     }
   });
 
+  it("draws the owner's words from the chat receipt an engine records in place of the text", () => {
+    // Claude Code and Codex record a result's structuredContent, the runner's receipt, instead of its
+    // text; a chat's receipt carries the same reply as its `text`.
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, '../../../shared/src/owner-chat-reply.fixture.json'), 'utf8'),
+    ) as { writerWords: string; cases: { name: string; result: string }[] };
+    const receipt = fixture.cases.find((c) => c.name === 'the receipt an engine shows in place of the text')!.result;
+    for (const content of [receipt, [{ type: 'text', text: receipt }]]) {
+      const html = renderToStaticMarkup(
+        <MemoryRouter>
+          <Transcript
+            events={[
+              toolEvent('mcp__orbit__project_create', { title: 'Move the database' }),
+              { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content } },
+            ]}
+          />
+        </MemoryRouter>,
+      );
+      expect(html).toContain('chat-msg chat-user');
+      expect(html).toContain(fixture.writerWords);
+    }
+  });
+
   it('says what a single create wrote, by name', () => {
     // One size down from the batch: the row names the task and carries its description, instead of
     // falling through to `orbit · task_create` over a dump of the call's own JSON.
@@ -1652,10 +1675,10 @@ describe('injected context in a user bubble', () => {
   // These events carry the note the apiserver records beside the echo (`controlPlaneNote`), which
   // is the only thing that tells what was appended apart; an event without one is drawn exactly as
   // echoed (Transcript.controlPlaneNote.test.tsx).
-  const COORDINATOR = `<orbit_project_coordinator_context>
-  你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
-</orbit_project_coordinator_context>`;
-  const appended = `\n\n${COORDINATOR}`;
+  const CONDITIONS = `<list-conditions>
+  这个列表的协调会话。
+</list-conditions>`;
+  const appended = `\n\n${CONDITIONS}`;
   const userEvent = (text: string, controlPlaneNote?: string): RunEvent => ({
     seq: 1,
     type: 'user',
@@ -1670,7 +1693,7 @@ describe('injected context in a user bubble', () => {
     // Over the whole markup: folded, the block is nowhere in it — not in the body, and not in an
     // attribute either, where it used to ride as a tooltip.
     expect(html).toContain('把这个项目协调起来');
-    expect(html).not.toContain('orbit_project_coordinator_context');
+    expect(html).not.toContain('list-conditions');
     expect(html).not.toContain('的协调会话');
   });
 
@@ -1687,7 +1710,7 @@ describe('injected context in a user bubble', () => {
     // here (⊕), and already open in an export (⊖), where there is nothing to click.
     const entry = (expanded: boolean) =>
       new RegExp(
-        `<button[^>]*aria-expanded="${expanded}"[^>]*><span class="chat-injected-mark">${expanded ? '⊖' : '⊕'}</span> Orbit attached: project coordinator context</button>`,
+        `<button[^>]*aria-expanded="${expanded}"[^>]*><span class="chat-injected-mark">${expanded ? '⊖' : '⊕'}</span> Orbit attached: list conditions</button>`,
       );
     expect(html).toMatch(entry(false));
     expect(exported).toMatch(entry(true));
@@ -1700,7 +1723,7 @@ describe('injected context in a user bubble', () => {
     );
 
     expect(html).toContain('Orbit attached');
-    expect(html).toContain('project coordinator context');
+    expect(html).toContain('list conditions');
   });
 
   it('leaves a message nobody appended to completely alone', () => {
