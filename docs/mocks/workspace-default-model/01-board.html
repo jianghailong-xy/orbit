@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Workspace 默认模型 · 方案图</title>
+<style>
+  :root {
+    --ink: #1d1d1f; --mute: #6e6e73; --line: #d2d2d7; --bg: #f5f5f7; --card: #fff;
+    --blue: #0a66d8; --blue-bg: #e8f1fd; --red: #c9372c; --red-bg: #fdecea;
+    --green: #1f8a4c; --green-bg: #e7f6ed; --amber: #a86400; --amber-bg: #fff4e0; --violet: #6b4fd8; --violet-bg: #f0ecfd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, "SF Pro Text", Inter, "PingFang SC", "Noto Sans SC", sans-serif; }
+  .b-part { width: 1280px; padding: 36px 44px 40px; background: var(--bg);
+    font: 15px/1.6 -apple-system, "SF Pro Text", Inter, "PingFang SC", "Noto Sans SC", sans-serif; }
+  .b-part + .b-part { border-top: 1px solid var(--line); }
+  h1 { font-size: 30px; margin: 0 0 4px; letter-spacing: -.01em; }
+  h2 { font-size: 24px; margin: 0 0 6px; letter-spacing: -.01em; }
+  h2 .b-no { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--ink); color: #fff; font-size: 17px; margin-right: 10px; vertical-align: 2px; }
+  .b-lede { color: var(--mute); margin: 0 0 22px; font-size: 16px; }
+  .b-row { display: flex; gap: 18px; align-items: stretch; }
+  .b-col { display: flex; flex-direction: column; gap: 10px; }
+  .b-box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .b-box b { font-weight: 650; }
+  .b-small { font-size: 13px; color: var(--mute); }
+  .b-red { background: var(--red-bg); border-color: #f1b8b2; }
+  .b-blue { background: var(--blue-bg); border-color: #b6d2f6; }
+  .b-green { background: var(--green-bg); border-color: #acdcbf; }
+  .b-amber { background: var(--amber-bg); border-color: #f0d29e; }
+  .b-violet { background: var(--violet-bg); border-color: #cfc4f6; }
+  .b-arrow { display: grid; place-items: center; color: var(--mute); font-size: 28px; min-width: 40px; }
+  .b-tag { display: inline-block; font-size: 12px; font-weight: 650; padding: 1px 8px; border-radius: 99px; margin-right: 6px; }
+  .b-tag.r { background: var(--red); color: #fff; } .b-tag.g { background: var(--green); color: #fff; }
+  .b-tag.b { background: var(--blue); color: #fff; } .b-tag.a { background: var(--amber); color: #fff; }
+  .b-tag.v { background: var(--violet); color: #fff; }
+  .b-note { margin-top: 18px; padding: 14px 18px; border-left: 4px solid var(--ink); background: var(--card); border-radius: 0 10px 10px 0; }
+  .b-note p { margin: 4px 0; }
+  code, .b-mono { font-family: "SF Mono", "JetBrains Mono", "Noto Sans Mono", monospace; font-size: .9em; }
+
+  /* ① 今天 */
+  .b-hub { display: grid; grid-template-columns: 330px 60px 300px 60px 1fr; align-items: center; }
+  .b-hub .b-center { text-align: center; padding: 22px 16px; border-width: 2px; }
+  .b-hub .b-center .b-big { font-size: 20px; font-weight: 700; }
+
+  /* timeline */
+  .b-tl { position: relative; padding-left: 26px; }
+  .b-tl::before { content: ""; position: absolute; left: 8px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
+  .b-ev { position: relative; margin: 0 0 12px; }
+  .b-ev::before { content: ""; position: absolute; left: -24px; top: 7px; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--card); border: 2px solid var(--mute); }
+  .b-ev.r::before { border-color: var(--red); background: var(--red); }
+  .b-ev.g::before { border-color: var(--green); background: var(--green); }
+  .b-ev .t { font-family: "SF Mono", "JetBrains Mono", monospace; font-size: 13px; color: var(--mute); margin-right: 8px; }
+
+  /* ② 数据 */
+  .b-bars { display: grid; grid-template-columns: 360px 1fr 150px; gap: 10px 16px; align-items: center; }
+  .b-bar { height: 22px; background: #e5e5ea; border-radius: 6px; overflow: hidden; display: flex; }
+  .b-bar span { display: block; height: 100%; }
+  .b-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .b-legend { display: flex; gap: 18px; font-size: 13px; color: var(--mute); margin: 4px 0 14px; }
+  .b-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+
+  /* ③ lanes */
+  .b-lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .b-lane { border-radius: 16px; padding: 18px 20px; border: 2px solid; }
+  .b-lane.a { border-color: #b6d2f6; background: #f4f8fe; }
+  .b-lane.b { border-color: #acdcbf; background: #f3fbf6; }
+  .b-lane h3 { margin: 0 0 4px; font-size: 19px; }
+  .b-flow { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin-top: 12px; }
+  .b-flow .b-down { text-align: center; color: var(--mute); font-size: 20px; line-height: 1; }
+  .b-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .b-chip { background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 3px 12px; font-size: 14px; }
+  .b-chain { display: flex; align-items: center; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+  .b-chain .b-box { padding: 8px 14px; }
+  .b-x { color: var(--red); font-weight: 700; }
+
+  /* ⑤ UI sketches */
+  .b-ui { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; align-items: start; }
+  .ui-win { background: #fff; border: 1px solid #c7c7cc; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.08);
+    font: 13px/1.45 -apple-system, Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .ui-bar { height: 34px; background: #f2f2f4; border-bottom: 1px solid #e0e0e4; display: flex; align-items: center; padding: 0 12px; gap: 6px; font-weight: 600; }
+  .ui-dot { width: 10px; height: 10px; border-radius: 50%; background: #d9d9de; }
+  .ui-body { padding: 14px; }
+  .ui-group { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #8a8a8d; margin: 4px 0 6px; }
+  .ui-rows { border: 1px solid #e5e5ea; border-radius: 10px; }
+  .ui-r { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; gap: 10px; }
+  .ui-r + .ui-r { border-top: 1px solid #ececf0; }
+  .ui-r .v { color: #6e6e73; }
+  .ui-pop { color: #0a66d8; }
+  .ui-hl { outline: 2.5px dashed var(--red); outline-offset: 2px; border-radius: 8px; }
+  .ui-foot { font-size: 11.5px; color: #85858a; padding: 6px 2px 0; }
+  .ui-composer { border: 1px solid #d8d8dd; border-radius: 14px; padding: 10px 12px; }
+  .ui-ph { color: #a1a1a6; height: 38px; }
+  .ui-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ui-pill { border: 1px solid #d8d8dd; border-radius: 99px; padding: 2px 10px; font-size: 12px; background: #fafafa; }
+  .ui-menu { margin-top: 8px; border: 1px solid #d8d8dd; border-radius: 10px; box-shadow: 0 8px 22px rgba(0,0,0,.12); background: #fff; padding: 4px; }
+  .ui-mi { padding: 6px 10px; border-radius: 6px; display: flex; justify-content: space-between; }
+  .ui-mi.on { background: #0a66d8; color: #fff; }
+  .ui-sep { height: 1px; background: #e5e5ea; margin: 4px 6px; }
+  .ui-check { display: flex; gap: 8px; align-items: center; padding: 6px 10px; }
+  .ui-box { width: 14px; height: 14px; border: 1.5px solid #8a8a8d; border-radius: 4px; }
+  .ui-hint { font-size: 12px; color: #6e6e73; margin-top: 6px; }
+  .b-pin { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--red); color: #fff;
+    font-size: 12px; font-weight: 700; margin-right: 6px; vertical-align: 1px; }
+  .b-cap { margin-top: 10px; font-size: 14px; }
+
+  /* ⑥ decisions */
+  table.b-t { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .b-t th, .b-t td { text-align: left; padding: 9px 12px; vertical-align: top; font-size: 14px; }
+  .b-t th { background: #ececf0; font-weight: 650; }
+  .b-t tr + tr td { border-top: 1px solid #ececf0; }
+  .b-t td:first-child { font-weight: 700; white-space: nowrap; }
+  .b-t .rec { background: var(--green-bg); }
+  .b-anchor { display: grid; grid-template-columns: 300px 340px 50px 1fr; gap: 10px 10px; align-items: stretch; }
+  .b-anchor .b-ah { font-size: 13px; color: var(--mute); }
+  .b-anchor .b-box { display: flex; flex-direction: column; justify-content: center; }
+</style>
+</head>
+<body>
+
+<!-- ① 今天 -->
+<section class="b-part" id="part-1">
+  <h1>Workspace 默认模型 · 方案图</h1>
+  <p class="b-lede">起因：2026-11-13 在 orbit-develop 新开一个会话用 GPT 问了个问题，之后同一 workspace 的项目工作改跑 GPT。</p>
+  <h2><span class="b-no">1</span>今天：一个值，管所有事</h2>
+  <p class="b-lede">workspace 不存默认，是每次<b>现算</b>的：「这个 workspace 最新一条不属于任务、也不是子会话的对话，用的是什么」。</p>
+
+  <div class="b-hub">
+    <div class="b-col">
+      <div class="b-small" style="margin-bottom:2px">谁会改它（最新一条就算）</div>
+      <div class="b-box">你开的对话 <span class="b-small">· 含一次性试用</span></div>
+      <div class="b-box b-amber">项目协调者会话 <span class="b-small">· 换凭据、轮换时</span></div>
+      <div class="b-box">wiki 对话 · 飞书 · 任务列表控制台 · @提及回复</div>
+    </div>
+    <div class="b-arrow">→</div>
+    <div class="b-box b-center b-red">
+      <div class="b-big">「最新一条对话」</div>
+      <div class="b-small">workspace-provider.ts<br>lastProviderByWorkspace</div>
+      <div style="margin-top:8px"><span class="b-tag r">唯一来源</span></div>
+    </div>
+    <div class="b-arrow">→</div>
+    <div class="b-col">
+      <div class="b-small" style="margin-bottom:2px">谁照着它跑（没指定时）</div>
+      <div class="b-box">你下一次新开会话的预选</div>
+      <div class="b-box b-red"><b>项目任务运行</b>（没 pin 的）</div>
+      <div class="b-box b-red"><b>新协调者</b> · 协调者裁决</div>
+      <div class="b-box b-red">MCP 子会话 · @提及投递 · 智能选模型的基线</div>
+    </div>
+  </div>
+
+  <div class="b-row" style="margin-top:26px; gap:28px">
+    <div class="b-box" style="flex:1">
+      <div style="font-weight:650; margin-bottom:10px">11-13 那一次，按时间顺序</div>
+      <div class="b-tl">
+        <div class="b-ev"><span class="t">之前</span>orbit-develop 最新一条对话：Claude Code · Claude 登录</div>
+        <div class="b-ev r"><span class="t">你</span>新开一条会话，草稿里选了 <b>GPT（Codex）</b>，问个问题</div>
+        <div class="b-ev r"><span class="t">同一刻</span>workspace 的「默认」悄悄变成 Codex —— 没有任何提示</div>
+        <div class="b-ev r"><span class="t">之后</span>项目里没 pin 的任务、补建的协调者、子会话 → 全跑 GPT</div>
+      </div>
+    </div>
+    <div class="b-note" style="flex:1; margin-top:0">
+      <p><b>问题不是「记住上次用的」本身</b>，而是把两件性质相反的事绑在了一起：</p>
+      <p>· 你开对话：要<b>顺手</b>，记住我刚用的挺好；</p>
+      <p>· 没人看着的工作：要<b>稳定</b>，只在有人明确改它时才变。</p>
+      <p class="b-small" style="margin-top:8px">docs/project-agent-contract.md §7.2 P5 早就点名过这个耦合，规定要改成显式默认，但一直没实现。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ② 数据 -->
+<section class="b-part" id="part-2">
+  <h2><span class="b-no">2</span>数据怎么说（生产库只读，2026-09-14 至 11-13，60 天）</h2>
+  <p class="b-lede">871 条人开的会话（一个账号占 859），3,970 次任务运行，481 个协调者会话。</p>
+
+  <div class="b-bars">
+    <div>人开会话里，<b>手动换了</b>模型 / 凭据的</div>
+    <div class="b-bar"><span style="width:21%;background:var(--blue)"></span></div>
+    <div><span class="b-num">21%</span> <span class="b-small">184 / 871</span></div>
+
+    <div>换了之后，下一条<b>继续用新的</b></div>
+    <div class="b-bar"><span style="width:61%;background:var(--blue)"></span></div>
+    <div><span class="b-num">61%</span> <span class="b-small">143 / 236</span></div>
+
+    <div>换了之后，下一条就<b>换回去</b>（一次性试用）</div>
+    <div class="b-bar"><span style="width:25%;background:var(--amber)"></span></div>
+    <div><span class="b-num">25%</span> <span class="b-small">中位 30 分钟</span></div>
+
+    <div>默认被改的 236 次里，<b>协调者</b>改的</div>
+    <div class="b-bar"><span style="width:22%;background:var(--red)"></span></div>
+    <div><span class="b-num">52 次</span> <span class="b-small">不是你</span></div>
+
+    <div>236 次里，只换<b>凭据</b>（引擎没变）</div>
+    <div class="b-bar"><span style="width:63%;background:var(--violet)"></span></div>
+    <div><span class="b-num">149</span> <span class="b-small">换引擎 87</span></div>
+
+    <div>切换前 6 小时内旧凭据撞过<b>限额 / 报错</b></div>
+    <div class="b-bar"><span style="width:17%;background:var(--violet)"></span></div>
+    <div><span class="b-num">17%</span> <span class="b-small">是原因之一</span></div>
+
+    <div>没 pin 的项目任务，引擎和<b>建它的协调者</b>不同</div>
+    <div class="b-bar"><span style="width:9%;background:var(--red)"></span></div>
+    <div><span class="b-num">9%</span> <span class="b-small">141 / 1,519</span></div>
+
+    <div>agent 建项目任务时<b>主动 pin</b> 模型</div>
+    <div class="b-bar"><span style="width:44%;background:var(--red)"></span></div>
+    <div><span class="b-num">44%</span> <span class="b-small">多为 claude:claude</span></div>
+  </div>
+
+  <div class="b-row" style="margin-top:22px">
+    <div class="b-box b-blue" style="flex:1"><span class="b-tag b">结论 1</span>你开对话的选择是<b>按会话、有延续</b>的 → 草稿预选继续「记住上次」。</div>
+    <div class="b-box b-red" style="flex:1"><span class="b-tag r">结论 2</span>一次性试用和协调者换凭据都会<b>带走无人值守的工作</b>；agent 用 44% 的 pin 在补洞。</div>
+    <div class="b-box b-violet" style="flex:1"><span class="b-tag v">结论 3</span>多数切换是<b>同引擎换凭据</b>，部分因限额 → 该是显式的备选顺序，不是「上次聊天用了哪份」。</div>
+    <div class="b-box b-amber" style="flex:1"><span class="b-tag a">结论 4</span>09-28 那周 orbit-develop 整体切到 Codex（45 : 13）→ <b>整段迁移</b>是真需求，要一步可达。</div>
+  </div>
+</section>
+
+<!-- ③ 方案 -->
+<section class="b-part" id="part-3">
+  <h2><span class="b-no">3</span>方案：每类工作跟着「人选定的那个会话」走</h2>
+  <p class="b-lede">不加设置、不加界面。项目工作天然有一个人选定的锚点：协调者。</p>
+
+  <div class="b-anchor">
+    <div class="b-ah">工作</div><div class="b-ah">今天跟着</div><div></div><div class="b-ah">改为跟着</div>
+
+    <div class="b-box"><div><b>项目里没 pin 的任务</b></div></div>
+    <div class="b-box b-red"><div>workspace 最新一条对话</div></div><div class="b-arrow">→</div>
+    <div class="b-box b-green"><div><b>这个项目当前的协调者</b>用的引擎 · 账号</div></div>
+
+    <div class="b-box"><div><b>协调者</b> 补建 · 替换 · 裁决</div></div>
+    <div class="b-box b-red"><div>最新一条对话<span class="b-small">（轮换已跟前任）</span></div></div><div class="b-arrow">→</div>
+    <div class="b-box b-green"><div><b>上一个协调者</b>用的</div></div>
+
+    <div class="b-box"><div><b>MCP 子会话</b>（没给引擎）</div></div>
+    <div class="b-box b-red"><div>目标 workspace 最新一条对话</div></div><div class="b-arrow">→</div>
+    <div class="b-box b-green"><div><b>派生它的父会话</b>用的</div></div>
+
+    <div class="b-box"><div>你开新会话的预选 · @提及 · 任务列表 · 飞书 · 非项目任务</div></div>
+    <div class="b-box b-amber"><div>最新一条对话<span class="b-small">（协调者、wiki、飞书开的也算）</span></div></div><div class="b-arrow">→</div>
+    <div class="b-box b-blue"><div>最新一条对话，但<b>只算你亲手开的</b></div></div>
+
+    <div class="b-box"><div>新会话草稿里的<b>模型</b></div></div>
+    <div class="b-box b-amber"><div>账号级「记住我选的模型」<span class="b-small">（任何会话里换都会写）</span></div></div><div class="b-arrow">→</div>
+    <div class="b-box b-blue"><div>和引擎、账号<b>同一个来源</b>：那条会话的模型<span class="b-small">；账号级记忆停用</span></div></div>
+  </div>
+
+  <div style="margin-top:22px; font-weight:650">统一一条解析链</div>
+  <div class="b-chain">
+    <div class="b-box">请求 / 任务 pin</div><span class="b-arrow">→</span>
+    <div class="b-box">智能选模型<br><span class="b-small">开着时，只填 pin 的空位</span></div><span class="b-arrow">→</span>
+    <div class="b-box b-green"><b>锚点</b><br><span class="b-small">协调者 / 父会话 / 你上次开的</span></div><span class="b-arrow">→</span>
+    <div class="b-box">Claude（兜底）</div>
+    <div class="b-box b-red" style="margin-left:24px"><span class="b-x">✕</span> 协调者、wiki、飞书开的会话不再改任何人的默认</div>
+  </div>
+
+  <div class="b-row" style="margin-top:22px">
+    <div class="b-box" style="flex:1"><b>想整个项目换模型</b>：在协调者会话里换账号 / 模型（现有界面）；换引擎就替换协调者（现有入口）。之后的任务跟着走。</div>
+    <div class="b-box" style="flex:1"><b>锚点的账号失效</b>：照今天拒绝，并说清楚是哪个会话的账号失效；不静默换引擎。</div>
+    <div class="b-box" style="flex:1"><b>项目没有协调者</b>：项目任务退回「workspace 里你上次亲手开的会话」。</div>
+  </div>
+</section>
+
+<!-- ④ 同一场景 -->
+<section class="b-part" id="part-4">
+  <h2><span class="b-no">4</span>同一个场景，改完以后</h2>
+  <p class="b-lede">项目协调者跑在 Claude Code 上。左：今天；右：方案。</p>
+  <div class="b-row" style="gap:28px">
+    <div class="b-box b-red" style="flex:1">
+      <div style="font-weight:650; margin-bottom:10px">今天</div>
+      <div class="b-tl">
+        <div class="b-ev"><span class="t">10:00</span>新开会话，选 GPT，问个问题</div>
+        <div class="b-ev r"><span class="t">10:00</span>workspace「默认」→ Codex</div>
+        <div class="b-ev r"><span class="t">10:05</span>项目任务开跑 → <b>GPT</b></div>
+        <div class="b-ev r"><span class="t">10:20</span>协调者派生子会话 → <b>GPT</b></div>
+        <div class="b-ev"><span class="t">10:30</span>你再开会话：预选 GPT</div>
+        <div class="b-ev r"><span class="t">之后</span>要么你手动改回去，要么 agent 给每个任务 pin claude</div>
+      </div>
+    </div>
+    <div class="b-box b-green" style="flex:1">
+      <div style="font-weight:650; margin-bottom:10px">方案</div>
+      <div class="b-tl">
+        <div class="b-ev"><span class="t">10:00</span>新开会话，选 GPT，问个问题</div>
+        <div class="b-ev g"><span class="t">10:05</span>项目任务开跑 → 跟协调者 → <b>Claude</b></div>
+        <div class="b-ev g"><span class="t">10:20</span>协调者派生子会话 → 跟父会话 → <b>Claude</b></div>
+        <div class="b-ev"><span class="t">10:30</span>你再开会话：预选 GPT + 上次那个 GPT 模型（记住你上次的）</div>
+        <div class="b-ev g"><span class="t">想整体换</span>在协调者会话里换，或替换协调者 —— 都是现有入口</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ⑤ 改动清单 -->
+<section class="b-part" id="part-5">
+  <h2><span class="b-no">5</span>改哪里：没有新界面</h2>
+  <p class="b-lede">服务端改解析；客户端只改「从哪读」，看起来和今天一样。</p>
+  <div class="b-row" style="gap:22px">
+    <div class="b-box" style="flex:1">
+      <div><span class="b-tag b">P0</span><b>服务端</b></div>
+      <div style="margin-top:8px">· 项目任务、协调者、子会话改读锚点（§0 表）</div>
+      <div>· 「最新一条对话」只算人亲手开的会话（按创建入口打的来源标记，不靠标题）</div>
+      <div>· workspace 返回值在 <code>lastEngine</code> / <code>lastProvider</code> 旁加 <code>lastModel</code></div>
+      <div>· 智能选模型的基线改为锚点</div>
+      <div>· 任务详情「Runs with」、<code>orbit status</code> 显示与实际开跑一致</div>
+      <div class="b-small" style="margin-top:8px">规约测试：新开一条 Codex 对话后，项目任务 / 协调者 / 子会话的引擎都不变；你下次开会话预选 Codex + 那个模型。</div>
+    </div>
+    <div class="b-box" style="flex:1">
+      <div><span class="b-tag v">P1</span><b>客户端</b>（web · iOS / macOS · Android）</div>
+      <div style="margin-top:8px">· 新会话草稿的模型改读 <code>lastModel</code></div>
+      <div>· 不再读、不再写账号级 <code>defaultModels</code></div>
+      <div>· 任务详情「Runs with」读服务端给的锚点</div>
+      <div class="b-small" style="margin-top:8px">旧版 App 照旧写 <code>defaultModels</code>，服务端照收不报错，只是没人再读。</div>
+    </div>
+    <div class="b-box" style="flex:1">
+      <div><span class="b-tag a">不做</span><b>记录在案</b></div>
+      <div style="margin-top:8px">· workspace 显式默认、设置页「Default model」、草稿「也用于任务」—— 界面改动非必要</div>
+      <div>· 账号撞限额时按备选顺序换账号 —— 另立一期</div>
+      <div>· effort 的来源 —— 不在本次范围</div>
+      <div>· 遗留列 <code>agent.default_*</code>、<code>workspace.model</code> 的清理 —— 另行处理</div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
