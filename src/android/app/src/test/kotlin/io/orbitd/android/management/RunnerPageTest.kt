@@ -155,6 +155,14 @@ class RunnerPageTest {
         assertEquals("Resets Tue, Sep 29 at 3:00 AM. ${quota.detail}", RunnerPage.attentionDetail(quota, 0L, ZoneId.of("UTC")))
     }
 
+    /** Max Concurrent's use: the slots taken of it — none while offline, when the count is stale. */
+    @Test fun runningIsTheSlotsTakenWhileOnline() {
+        fun runner(online: Boolean) = buildJsonObject { put("online", online); put("maxConcurrent", 12); put("activeSessions", 4) }
+        assertEquals(4 to 12, RunnerPage.slots(runner(true), System.currentTimeMillis()))
+        assertEquals("4 of 12 running", RunnerCopy.runningOf(4, 12))
+        assertEquals(null, RunnerPage.slots(runner(false), System.currentTimeMillis()))
+    }
+
     /** OrbitKit testAMachineWithNoCodingCLISignedInNamesItsCLIsAndSignsInTheFirst (rule 10 of docs/mocks/first-workspace-in-conversation/04):
      * one item, naming every CLI installed there by its own name, in the engines' order, and signing in the first. When it is raised is
      * the case file's, above. */
@@ -375,5 +383,119 @@ class RunnerPageTest {
         assertEquals("Not supported here", status("""{"engine":"dsh","installed":false,"installationError":"DSH_PLATFORM_UNSUPPORTED: darwin"}"""))
         assertEquals("Not installed", status("""{"engine":"dsh","installed":false}"""))
         assertEquals("Unsupported version", status("""{"engine":"dsh","installed":true,"dsh":{"versionCompatible":false}}"""))
+    }
+
+    // Dismiss until the next release (web runnerEngines.test.ts / runnerAttention.cases.json's dismissal cases)
+
+    private val dismissedCase = "Codex update warning dismissed against the release that is still the latest"
+    /** The dismissal case's runner, with Codex's latest and the dismissal set as given. */
+    private fun dismissal(latest: String, dismissed: String?): JsonObject {
+        val input = case(dismissedCase)
+        val runner = runnerOf(input)
+        val engines = runner.list("engines").map { e ->
+            if (e.str("engine") != "codex") e else JsonObject(e + ("update" to JsonObject(e.obj("update")!! + ("latest" to JsonPrimitive(latest)))))
+        }
+        val dismissals = dismissed?.let { buildJsonObject { put("codex", it) } } ?: JsonNull
+        return JsonObject(input + ("runner" to JsonObject(runner + mapOf("engines" to JsonArray(engines), "engineUpdateDismissals" to dismissals))))
+    }
+    private fun codexUpdate(input: JsonObject) = runnerOf(input).list("engines").first { it.str("engine") == "codex" }.obj("update")
+
+    @Test fun aWarningDismissedAgainstTheLatestGoesQuietAndANewerLatestWarnsAgain() {
+        val now = case(dismissedCase)["nowMs"]!!.jsonPrimitive.long
+        val still = dismissal("0.169.0", "0.169.0")
+        assertEquals("quiet" to "13d behind 0.169.0 · warning dismissed", RunnerPage.updateNoteOf(codexUpdate(still), now, dismissed = "0.169.0"))
+        assertEquals("0.169.0", RunnerPage.engineUpdateDismissedFor(runnerOf(still), "codex"))
+        val newer = dismissal("0.170.0", "0.169.0")
+        assertEquals("warn" to "13d behind 0.170.0", RunnerPage.updateNoteOf(codexUpdate(newer), now, dismissed = "0.169.0"))
+        assertEquals("not dismissed", "warn" to "13d behind 0.169.0", RunnerPage.updateNoteOf(codexUpdate(still), now))
+        assertEquals("an empty dismissal is none", "warn" to "13d behind 0.169.0", RunnerPage.updateNoteOf(codexUpdate(still), now, dismissed = ""))
+        // A note that was not a warning is left as it is.
+        val quiet = buildJsonObject { put("status", "skipped"); put("latest", "0.169.0") }
+        assertEquals("quiet" to "not auto-updated", RunnerPage.updateNoteOf(quiet, now, dismissed = "0.169.0"))
+        assertNull("an older server sends no dismissals", RunnerPage.engineUpdateDismissedFor(runnerOf(dismissal("0.169.0", null)), "codex"))
+    }
+
+    @Test fun aDismissedEngineRaisesNoItemNorCountsUntilTheLatestMoves() {
+        val now = case(dismissedCase)["nowMs"]!!.jsonPrimitive.long
+        val still = dismissal("0.169.0", "0.169.0")
+        assertEquals(emptyList<AttentionItem>(), items(still))
+        assertNull("the machine is not in Needs Attention", RunnerPage.listAttentionLine(items(still)))
+        assertFalse(RunnerPage.offersUpdateDismiss(runnerOf(still), "codex", now))
+        assertNull(RunnerPage.updateFailedLine(runnerOf(still).list("engines")[1], now, ZoneId.of("UTC"), dismissed = "0.169.0"))
+        assertFalse(MachinesAndModels.summary(runnerOf(still), now).contains("not updating"))
+
+        val newer = dismissal("0.170.0", "0.169.0")
+        assertEquals(listOf("engineNotUpdating"), items(newer).map { it.kind })
+        assertEquals("Codex update failed", RunnerPage.listAttentionLine(items(newer)))
+        assertTrue(RunnerPage.offersUpdateDismiss(runnerOf(newer), "codex", now))
+        assertEquals("1 engine not updating", MachinesAndModels.summary(runnerOf(newer), now))
+        assertEquals("Dismiss until next Codex release", RunnerCopy.dismissUntilNextRelease(RunnerPage.engineName("codex")))
+        assertEquals("runners/r1/engines/codex/update-warning/dismiss", RunnerPage.updateDismissPath("r1", "codex"))
+    }
+
+    // Fix with an agent (agent-fix contract; RunnerAgentFix in src/shared/src/dto.ts)
+
+    private fun fixRunner(blocked: String? = null, fixing: String = "") = Json.parseToJsonElement("""{"id":"r1","agentFix":{
+        "workspaceId":"w1","workspaceName":"orbit-dev","engine":"claude","engineName":"Claude Code",
+        "blocked":${blocked?.let { """{"code":"$it","message":"Why: $it."}""" } ?: "null"},"fixing":[$fixing]}}""").jsonObject
+    private fun fixingEntry(kind: String, engine: String?) =
+        """{"kind":"$kind","engine":${engine?.let { "\"$it\"" } ?: "null"},"sessionId":"s1","workspaceId":"w1","workspaceName":"orbit-dev"}"""
+    private fun item(kind: String, engine: String? = null) = AttentionItem(kind, "warn", kind, kind, "", engine?.let { AttentionAction("updateEngines", engine = it) })
+
+    @Test fun agentFixDecodesFromTheRunnerAndAnOlderServerSendsNone() {
+        val fix = RunnerPage.agentFixOf(fixRunner("engineSignedOut", fixingEntry("engineNotUpdating", "codex") + "," + fixingEntry("cannotSelfUpdate", null)))!!
+        assertEquals(AgentFix("w1", "orbit-dev", "claude", "Claude Code", "engineSignedOut", "Why: engineSignedOut.", listOf(
+            AgentFixing("engineNotUpdating", "codex", "s1", "w1", "orbit-dev"), AgentFixing("cannotSelfUpdate", null, "s1", "w1", "orbit-dev"))), fix)
+        assertNull(RunnerPage.agentFixOf(buildJsonObject { put("id", "r1") }))
+        assertNull(RunnerPage.agentFixOf(buildJsonObject { put("id", "r1"); put("agentFix", JsonNull) }))
+        val none = Json.parseToJsonElement("""{"agentFix":{"workspaceId":null,"workspaceName":null,"engine":null,"engineName":null,
+            "blocked":{"code":"noWorkspace","message":"No workspace runs on this machine yet."},"fixing":[]}}""").jsonObject
+        assertEquals(AgentFix(null, null, null, null, "noWorkspace", "No workspace runs on this machine yet.", emptyList()), RunnerPage.agentFixOf(none))
+    }
+
+    @Test fun onlyAnEngineThatWontUpdateAndARunnerThatCantUpdateItselfGetTheButton() {
+        val runner = fixRunner()
+        assertEquals(AgentFixView(null, true, null), RunnerPage.agentFixOnCard(runner, item("engineNotUpdating", "codex")))
+        assertEquals(AgentFixView(null, true, null), RunnerPage.agentFixOnCard(runner, AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+        for (kind in listOf("offline", "signedOut", "noCliSignedIn", "quota", "disk", "checkout", "claudeRegion")) {
+            assertNull(kind, RunnerPage.agentFixOnCard(runner, item(kind)))
+        }
+        assertNull("no agentFix, no button", RunnerPage.agentFixOnCard(buildJsonObject { put("id", "r1") }, item("engineNotUpdating", "codex")))
+        assertNull("offline draws nothing at all", RunnerPage.agentFixOnCard(fixRunner("offline"), item("engineNotUpdating", "codex")))
+        assertEquals(AgentFixView(null, false, "Why: noWorkspace."), RunnerPage.agentFixOnCard(fixRunner("noWorkspace"), item("engineNotUpdating", "codex")))
+        assertEquals("the card adds no sign-in hint", AgentFixView(null, false, "Why: engineSignedOut."),
+            RunnerPage.agentFixOnCard(fixRunner("engineSignedOut"), AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+    }
+
+    @Test fun aFixingEntryOfTheSameKindAndEngineTakesTheButtonsPlace() {
+        val codex = fixRunner(fixing = fixingEntry("engineNotUpdating", "codex"))
+        val entry = AgentFixing("engineNotUpdating", "codex", "s1", "w1", "orbit-dev")
+        assertEquals(AgentFixView(entry, false, null), RunnerPage.agentFixOnCard(codex, item("engineNotUpdating", "codex")))
+        assertEquals("another engine's card still offers it", AgentFixView(null, true, null), RunnerPage.agentFixOnCard(codex, item("engineNotUpdating", "claude")))
+        assertEquals("another kind's too", AgentFixView(null, true, null), RunnerPage.agentFixOnCard(codex, AttentionItem("cannotSelfUpdate", "warn", "", "", "")))
+        assertEquals(AgentFixView(null, true, RunnerCopy.agentFixStarts("orbit-dev", "Claude Code")), RunnerPage.agentFixOnInstall(codex, "codex"))
+        val self = fixRunner(fixing = fixingEntry("cannotSelfUpdate", null))
+        assertEquals(AgentFixing("cannotSelfUpdate", null, "s1", "w1", "orbit-dev"),
+            RunnerPage.agentFixOnCard(self, AttentionItem("cannotSelfUpdate", "warn", "", "", ""))?.fixing)
+        val installing = fixRunner("engineSignedOut", fixingEntry("installFailed", "codex"))
+        assertEquals("fixing outranks a later block", AgentFixing("installFailed", "codex", "s1", "w1", "orbit-dev"), RunnerPage.agentFixOnInstall(installing, "codex")?.fixing)
+        assertEquals("An agent is fixing this in orbit-dev · ", RunnerCopy.agentFixing("orbit-dev"))
+    }
+
+    @Test fun theInstallFailedLineSaysWhereTheSessionStartsOrWhyNot() {
+        assertEquals(AgentFixView(null, true, "Starts a session in orbit-dev on this machine, with Claude Code."), RunnerPage.agentFixOnInstall(fixRunner(), "codex"))
+        assertEquals(AgentFixView(null, false, "Why: engineSignedOut. Sign in to Claude Code above to use this."),
+            RunnerPage.agentFixOnInstall(fixRunner("engineSignedOut"), "codex"))
+        assertEquals(AgentFixView(null, false, "Why: noWorkspace."), RunnerPage.agentFixOnInstall(fixRunner("noWorkspace"), "codex"))
+        assertEquals("offline is said here, the button off", AgentFixView(null, false, "Why: offline."), RunnerPage.agentFixOnInstall(fixRunner("offline"), "codex"))
+        assertNull(RunnerPage.agentFixOnInstall(buildJsonObject { put("id", "r1") }, "codex"))
+    }
+
+    @Test fun thePressPostsTheKindWithItsEngineOrTheLatestRelease() {
+        assertEquals("runners/r1/attention/installFailed/fix", RunnerPage.agentFixPath("r1", "installFailed"))
+        assertEquals(buildJsonObject { put("engine", "codex") }, RunnerPage.agentFixBody("engineNotUpdating", "codex", "0.1.250"))
+        assertEquals(buildJsonObject { put("engine", "codex") }, RunnerPage.agentFixBody("installFailed", "codex", null))
+        assertEquals(buildJsonObject { put("latest", "0.1.250") }, RunnerPage.agentFixBody("cannotSelfUpdate", null, "0.1.250"))
+        assertEquals(buildJsonObject { }, RunnerPage.agentFixBody("cannotSelfUpdate", null, null))
     }
 }

@@ -130,6 +130,36 @@ class ProjectCrossingsTest {
         assertEquals(1, ProjectCrossings.waitingCount(decoded())); assertEquals("1 waiting", ProjectCrossings.waiting(1))
     }
 
+    // MARK: which rows the page lists
+
+    private fun to(row: JsonObject, toProject: JsonElement) = JsonObject(row + ("toProject" to toProject))
+    private fun coordinated(session: String?) = buildJsonObject { put("title", "Runner hardening"); put("coordinatorSessionId", session) }
+
+    /** A target with a live coordinator answers the row as a card in its conversation, so the page drops it, answered too. */
+    @Test fun aRowACoordinatorConversationAnswersIsNotListed() {
+        assertEquals(emptyList<JsonObject>(), ProjectCrossings.pageRows(listOf(to(move(), coordinated("34bCoord")))))
+        assertEquals(emptyList<JsonObject>(), ProjectCrossings.pageRows(listOf(to(filing(state = "APPLIED"), coordinated("34bCoord")))))
+    }
+
+    /** No coordinator, no target, or an older server that never sends the key: the page is the only place to answer it. */
+    @Test fun aRowNoConversationAnswersStaysListed() {
+        val none = to(move(), coordinated(null))
+        val out = to(move(), JsonNull)
+        val older = move()
+        assertNull(older.obj("toProject")?.get("coordinatorSessionId"))
+        assertEquals(listOf(none, out, older), ProjectCrossings.pageRows(listOf(none, out, older)))
+        assertEquals(decoded(), ProjectCrossings.pageRows(decoded()))
+    }
+
+    /** The count is over the listed rows only, and with none left there is nothing to list. */
+    @Test fun theCountAndTheSectionAreOverTheListedRowsOnly() {
+        val rows = listOf(to(move(), coordinated("34bCoord")), to(filing(id = "uncovered"), coordinated(null)), to(filing(id = "covered"), coordinated("34bCoord")))
+        val shown = ProjectCrossings.pageRows(rows)
+        assertEquals(listOf("uncovered"), shown.map { it.text("id") })
+        assertEquals(3, ProjectCrossings.waitingCount(rows)); assertEquals(1, ProjectCrossings.waitingCount(shown))
+        assertTrue(ProjectCrossings.pageRows(rows.filter { it.text("id") != "uncovered" }).isEmpty())
+    }
+
     /** The questions first, the one that has waited longest leading; then history, newest first. */
     @Test fun questionsLeadOldestFirstAndHistoryFollowsNewestFirst() {
         val rows = listOf(filing(state = "APPLIED", requestedAt = "2026-10-01T00:00:00.000Z", id = "old-answer"),

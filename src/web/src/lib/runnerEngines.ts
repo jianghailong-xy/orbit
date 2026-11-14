@@ -1,4 +1,10 @@
-import { AgentProvider, ENGINE_CLI_NAMES, type ReportedEngine, type RunnerEngineUpdate } from '@orbit/shared';
+import {
+  AgentProvider,
+  ENGINE_CLI_NAMES,
+  type ReportedEngine,
+  type RunnerEngineUpdate,
+  type RunnerEngineUpdateDismissals,
+} from '@orbit/shared';
 import { runnerKnowsCursor, type CursorRunnerFacts } from './cursorRuntime';
 
 /**
@@ -74,6 +80,37 @@ export function updateNoteOf(
   update: RunnerEngineUpdate | undefined,
   now: number = Date.now(),
   pinned = false,
+  dismissed?: string | null,
+): { tone: 'quiet' | 'warn'; text: string } | null {
+  const note = undismissedUpdateNoteOf(update, now, pinned);
+  // Dismissed until the next release (engineUpdateDismissedFor): while the release it was dismissed
+  // against is still the latest, the warning goes quiet — no card, no panel, out of Needs Attention —
+  // but the drift stays on the version line, in grey. A newer latest no longer matches, and warns again.
+  if (note?.tone === 'warn' && dismissed && update?.latest === dismissed) {
+    return { tone: 'quiet', text: `${note.text}${ENGINE_UPDATE_WARNING_DISMISSED}` };
+  }
+  return note;
+}
+
+/** What the version line adds after the drift once its warning is dismissed: `13d behind 0.169.0 · warning dismissed`. */
+export const ENGINE_UPDATE_WARNING_DISMISSED = ' · warning dismissed';
+
+/**
+ * The release this engine's update warning was dismissed against on this runner
+ * (runner.engineUpdateDismissals, POST /runners/:id/engines/:engine/update-warning/dismiss), or null.
+ * updateNoteOf's `dismissed`: the warning stays hidden only while this equals the engine's update.latest.
+ */
+export function engineUpdateDismissedFor(
+  runner: { engineUpdateDismissals?: RunnerEngineUpdateDismissals | null },
+  engine: ReportedEngine,
+): string | null {
+  return runner.engineUpdateDismissals?.[engine] ?? null;
+}
+
+function undismissedUpdateNoteOf(
+  update: RunnerEngineUpdate | undefined,
+  now: number,
+  pinned: boolean,
 ): { tone: 'quiet' | 'warn'; text: string } | null {
   if (!update) return null;
   // Orbit deliberately isn't updating this one. There is more than one reason it might not be

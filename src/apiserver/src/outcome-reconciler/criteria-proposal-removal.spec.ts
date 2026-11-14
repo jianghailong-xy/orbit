@@ -389,7 +389,7 @@ const NAMES_THE_FORK = /tighten|weaken|held|hold|收紧|削弱|扣下/i;
 
 test('CLI, MCP and web copy about acceptance criteria matches what a write now does', () => {
   const surfaces: Array<[string, string]> = [
-    ['src/runner-go/mcp.go', read('src/runner-go/mcp.go')],
+    ['src/runner-go/mcp.go + operation_catalog.go', read('src/runner-go/mcp.go') + read('src/runner-go/operation_catalog.go')],
     ['src/runner-go/project_cli.go', read('src/runner-go/project_cli.go')],
     ['src/apiserver/src/projects/dto.ts', read('src/apiserver/src/projects/dto.ts')],
     ['src/apiserver/src/runner-api/runner-projects.controller.ts',
@@ -435,7 +435,7 @@ test('CLI and MCP say what the write does rather than merely not lying about it'
   // semantics it actually has, and since the hold came back that is two statements rather than
   // one: what the set means, and which of the two outcomes a caller's own edit got. (The name of
   // this test is one door behind: the runner's HTTP route and its DTO are held to it too.)
-  const mcp = read('src/runner-go/mcp.go');
+  const mcp = read('src/runner-go/mcp.go') + '\n' + read('src/runner-go/operation_catalog.go');
   const property = mcp.slice(mcp.indexOf('projectCriteriaUpdateProp'));
   assert.match(property.slice(0, property.indexOf('items')), /whole structured replacement/i,
     'the MCP acceptanceCriteriaItems property must say the set is replaced');
@@ -447,7 +447,8 @@ test('CLI and MCP say what the write does rather than merely not lying about it'
   // about a fork with nothing to look at leaves a caller unable to tell which side it landed on.
   const mcpUpdate = mcp.slice(mcp.indexOf('"name": "project_update"'));
   const cliHelp = cli.slice(cli.indexOf('Structured acceptance is a whole-collection replacement'));
-  const cliEntry = cli.slice(cli.indexOf('{Tool: "project_update"'));
+  const catalogue = read('src/runner-go/operation_catalog.go');
+  const cliEntry = catalogue.slice(catalogue.indexOf('{Tool: "project_update"'));
   // The runner's bare HTTP door is the third way to this write and the only one with no tool
   // description in front of it: a caller that speaks it reads the route and the DTO, so both have
   // to carry the sentence. Two entries rather than one, because the point is that EACH of them

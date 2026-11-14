@@ -697,6 +697,17 @@ export interface TaskSummary {
   dueDate?: string | null;
 }
 
+/** What the task's next fresh run starts on, as the server resolves it for dispatch (apiserver
+ *  workspaces/start-anchor.ts TaskRunsWith, on the task payload). */
+interface TaskRunsWith {
+  engine: string | null;
+  provider: string | null;
+  providerBuiltin: boolean;
+  source: 'TASK_PIN' | 'PROJECT_COORDINATOR' | 'WORKSPACE' | 'DEFAULT';
+  anchorSessionId: string | null;
+  refusal: string | null;
+}
+
 interface WorkspaceRow {
   id: string;
   name: string;
@@ -940,9 +951,20 @@ export function TaskDetailPanel({
   const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
   const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
   const navigate = useNavigate();
-  // What an unpinned task runs on: what its assignee's project last ran, engine and provider both.
-  const assigneeProvider = assigneeWorkspace?.lastProvider ?? assigneeWorkspace?.provider ?? AgentProvider.CLAUDE;
-  const assigneeEngine = sessionEngineOf(assigneeWorkspace?.lastEngine, assigneeProvider, configuredProviders);
+  // What an unpinned task runs on: the server's `runsWith`, the resolution its dispatch makes (its
+  // project's coordinator session, else the workspace's newest person-opened session). Under a pin it
+  // is the pin, which the pins below already say; an older server sends none, and the assignee's
+  // lastEngine/lastProvider stand in.
+  const unpinnedRuns: TaskRunsWith | null = q.data?.runsWith?.source && q.data.runsWith.source !== 'TASK_PIN'
+    ? q.data.runsWith
+    : null;
+  const assigneeProvider =
+    unpinnedRuns?.provider ?? assigneeWorkspace?.lastProvider ?? assigneeWorkspace?.provider ?? AgentProvider.CLAUDE;
+  const assigneeEngine = sessionEngineOf(
+    unpinnedRuns ? unpinnedRuns.engine : assigneeWorkspace?.lastEngine,
+    assigneeProvider,
+    configuredProviders,
+  );
   // The task's own pins (docs/provider-engine-contract.md §1.2): an engine, a credential it runs, a
   // model. A provider pinned alone — by an older client — runs on its default engine.
   const pinnedProvider: string | null = q.data?.provider ?? null;
@@ -1477,7 +1499,15 @@ export function TaskDetailPanel({
     { label: 'Agent', value: task?.assignee?.name ?? 'Unassigned' },
     ...(smartSelection && q.data?.modelHint ? [{ label: 'Tier', value: modelHintLabel(q.data.modelHint, modelHintOptions) }] : []),
     { label: 'Engine', value: ENGINE_CLI_NAMES[runEngine] },
-    { label: 'Provider', value: pinnedProvider ? pinLabelOf(pinnedProvider) : capital(engineDefaultLabel) },
+    {
+      label: 'Provider',
+      // Unpinned on a key or a pool (runsWith), that credential; on an engine's own sign-in, as before.
+      value: pinnedProvider
+        ? pinLabelOf(pinnedProvider)
+        : !pinnedEngine && unpinnedRuns?.provider && !unpinnedRuns.providerBuiltin
+          ? pinLabelOf(unpinnedRuns.provider)
+          : capital(engineDefaultLabel),
+    },
     {
       label: 'Model',
       value: q.data?.model

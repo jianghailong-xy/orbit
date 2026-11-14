@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -46,16 +48,24 @@ func replyFileScope(asked, existing []string) localFileScope {
 }
 
 func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, roots []string, upload artifactUploader) string {
+	rewritten, _ := rewriteLocalMarkdownLinks(ctx, text, roots, upload)
+	return rewritten
+}
+
+// rewriteLocalMarkdownLinks is rewriteLocalMarkdownImagesWithUploader, and also names the links it left as written only
+// because they lead outside the session's directories (localFileOutsideTheSession), as the reply wrote them, each once.
+func rewriteLocalMarkdownLinks(ctx context.Context, text string, roots []string, upload artifactUploader) (string, []string) {
 	if text == "" || upload == nil || len(roots) == 0 {
-		return text
+		return text, nil
 	}
 	cleanRoots := cleanExistingRoots(roots)
 	if len(cleanRoots) == 0 {
-		return text
+		return text, nil
 	}
 	scope := replyFileScope(roots, cleanRoots)
 	uploaded := map[string]string{}
-	return markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
+	var outside []string
+	rewritten := markdownAttachmentRE.ReplaceAllStringFunc(text, func(match string) string {
 		parts := markdownAttachmentRE.FindStringSubmatch(match)
 		if len(parts) < 5 {
 			return match
@@ -70,6 +80,10 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 		}
 		file, _, err := scope.open(path)
 		if err != nil {
+			var refused *localFileRefused
+			if errors.As(err, &refused) && refused.reason == localFileOutsideTheSession && !slices.Contains(outside, raw) {
+				outside = append(outside, raw)
+			}
 			return match
 		}
 		defer file.Close()
@@ -93,6 +107,7 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 		}
 		return fmt.Sprintf("[%s](orbit-attachment:%s %q)", parts[2], id, filepath.Base(path))
 	})
+	return rewritten, outside
 }
 
 // codexGeneratedImagesDir is the directory Codex's image tools write into —

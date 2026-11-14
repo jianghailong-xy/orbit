@@ -639,3 +639,70 @@ test('without an orchestration credential the door refuses and opens nothing',
       await stack.db.$disconnect();
     }
   });
+
+// ── a coordinator moved to Trash is replaced at once (account owner, 2026-11-14) ────────────────
+
+test('trashing the coordinator of an OPEN project opens the next one, and the old one stays in Trash',
+  { skip, timeout: 120_000 }, async () => {
+    await verifyDisposableDatabase();
+    const stack = connect();
+    try {
+      const w = await world(stack, 'reopen-owner', { deletedAt: new Date() });
+      const before = await coordination(stack.db, w.projectId);
+
+      const reopened = await stack.projects.reopenTrashedCoordinator(w.ownerId, standingSession(w));
+
+      assert.ok(reopened);
+      assert.equal(reopened.projectId, w.projectId);
+      assert.notEqual(reopened.sessionId, standingSession(w));
+      const after = await coordination(stack.db, w.projectId);
+      assert.equal(after.sessionId, reopened.sessionId);
+      assert.equal(after.generation, before.generation + 1n);
+      const trashed = await stack.db.session.findUniqueOrThrow({
+        where: { id: standingSession(w) },
+        select: { deletedAt: true },
+      });
+      assert.ok(trashed.deletedAt instanceof Date, 'the deletion a person made stands');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an agent that trashes the coordinator opens the next one through the ensure door',
+  { skip, timeout: 120_000 }, async () => {
+    await verifyDisposableDatabase();
+    const stack = connect();
+    try {
+      const w = await world(stack, 'reopen-agent', { deletedAt: new Date() });
+
+      const reopened = await stack.projects.reopenTrashedCoordinator(
+        w.ownerId, standingSession(w), w.actingSessionId);
+
+      assert.ok(reopened);
+      assert.equal((await coordination(stack.db, w.projectId)).sessionId, reopened.sessionId);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('nothing opens for a coordinator that is not in Trash, or a project that is not OPEN',
+  { skip, timeout: 120_000 }, async () => {
+    await verifyDisposableDatabase();
+    const stack = connect();
+    try {
+      const live = await world(stack, 'reopen-live');
+      const liveBefore = await sessionsOf(stack.db, live.ownerId);
+      assert.equal(await stack.projects.reopenTrashedCoordinator(live.ownerId, standingSession(live)), null);
+      assert.deepEqual(await sessionsOf(stack.db, live.ownerId), liveBefore);
+
+      const cancelled = await world(stack, 'reopen-cancelled', { deletedAt: new Date() });
+      await stack.db.project.update({ where: { id: cancelled.projectId }, data: { status: 'CANCELLED' } });
+      const cancelledBefore = await sessionsOf(stack.db, cancelled.ownerId);
+      assert.equal(
+        await stack.projects.reopenTrashedCoordinator(cancelled.ownerId, standingSession(cancelled)), null);
+      assert.deepEqual(await sessionsOf(stack.db, cancelled.ownerId), cancelledBefore);
+      assert.equal((await coordination(stack.db, cancelled.projectId)).sessionId, standingSession(cancelled));
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });

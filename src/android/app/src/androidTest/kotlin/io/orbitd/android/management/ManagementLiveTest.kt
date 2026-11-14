@@ -270,7 +270,9 @@ class ManagementLiveTest {
         back(); await("About This Runner")
         eventually("server: displayName = Stack box") { runner(owner).s("displayName") == "Stack box" }
         val capacity = runner(owner).i("maxConcurrent")!!
-        compose.onNodeWithContentDescription("Increase Max Concurrent").performScrollTo().performClick()
+        click(hasContentDescription("Edit Max Concurrent"))
+        compose.onNodeWithContentDescription("Increase Max Concurrent").performClick()
+        click(hasText("Save") and hasClickAction(), scroll = false)
         eventually("server: maxConcurrent = ${capacity + 1}") { runner(owner).i("maxConcurrent") == capacity + 1 }
         click(hasText("Keep Free") and hasClickAction()); click(hasText("10 GB") and hasClickAction(), scroll = false)
         eventually("server: minFreeDiskMb = 10240") { runner(owner).i("minFreeDiskMb") == 10_240 }

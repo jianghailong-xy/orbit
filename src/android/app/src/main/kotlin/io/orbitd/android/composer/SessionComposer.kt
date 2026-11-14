@@ -281,7 +281,14 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                 // Cursor CLI's model by its catalogue's name, its effort and what the session set (iOS 5 ①②).
                 val cursorModel = if (shownEngine == CursorRuntime.ENGINE) CursorRuntime.modelName(state.catalog,
                     effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort")) else null
-                ModelChip(cursorModel ?: if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else effective.text("model")?.ifBlank { "Runtime default" } ?: "Model",
+                // Any other model by its catalogue's name too (web and iOS do), and a Claude id the catalogue has no row for
+                // as Claude Code names it — a signed-out runner whose probe failed showed the bare `claude-opus-5-5`.
+                val modelName = effective.text("model")?.let { id ->
+                    if (id.isBlank()) "Runtime default"
+                    else state.catalog?.modelLabel(shownEngine, effective.text("provider") ?: shownEngine, id)
+                        ?: if (shownEngine == ProviderEngines.CLAUDE) ProviderEngines.claudeModelName(id) else id
+                }
+                ModelChip(cursorModel ?: if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else modelName ?: "Model",
                     effortLabel(effective.text("effort")), smart != null,
                     enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f),
                     // …and aloud with its effort said once (iOS `chipAccessibilityLabel`): the name above already holds it.

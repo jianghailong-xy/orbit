@@ -167,6 +167,9 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
           create: tasks.create.bind(tasks),
           createMany: tasks.createMany.bind(tasks),
           resolveAgentCreator: tasks.resolveAgentCreator.bind(tasks),
+          // The runner door's card gate (`task-write-approval.ts`): the controller calls it before
+          // every session create, so a facade that does not lend it answers 500 instead.
+          assertSessionTaskWriteApproved: tasks.assertSessionTaskWriteApproved.bind(tasks),
         },
       },
       { provide: MergeReceiptService, useValue: {} },
@@ -559,8 +562,18 @@ test('a coordinator’s creates in a project nobody has started, or one that is 
 
     // The premise of the case, from the other door: this body's write is refused too, with the same
     // answer. That is what makes the card pointless — a person pressing it can only be turned away.
+    // The write names a session that holds an answered card for this exact body, so the runner
+    // door's card policy has nothing to say and the service's own check is what answers; the card
+    // the ROUTE would file is still never raised, which the assertions below hold.
+    const carded = await conversation('a session holding a card for a body the write refuses');
+    await prisma.approval.create({
+      data: {
+        sessionId: carded, toolName: 'orbit_task_create', input: refused as never,
+        status: 'ALLOWED', decidedById: ownerId, decidedAt: new Date(),
+      },
+    });
     const writeAnswer = await send('POST', '/runner/tasks', refused, {
-      'x-orbit-session-id': uuidToBase62(someone),
+      'x-orbit-session-id': uuidToBase62(carded),
       'x-orbit-workspace-id': uuidToBase62(workspaceId),
     });
     assert.equal(writeAnswer.status, 409, writeAnswer.text);

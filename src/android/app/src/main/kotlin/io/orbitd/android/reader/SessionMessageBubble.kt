@@ -111,7 +111,7 @@ internal fun SessionMessageBubble(source: JsonObject, event: RunEvent?, open: (S
                     add { sep -> FootText(label + sep, tone) }
                 }
             }
-            note?.let { add { sep -> AttachedNoteLabel(it, noteOpen, sep, quiet) { noteOpen = !noteOpen } } }
+            note?.takeIf { describeNote(it).isNotEmpty() }?.let { add { sep -> AttachedNoteLabel(it, noteOpen, sep, quiet) { noteOpen = !noteOpen } } }
         }
         if (items.isNotEmpty()) FlowRow(Modifier.testTag("session-message:foot")) {
             items.forEachIndexed { index, item -> item(if (index < items.lastIndex) " · " else "") }

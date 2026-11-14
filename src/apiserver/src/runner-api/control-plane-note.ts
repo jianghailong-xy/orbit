@@ -4,6 +4,7 @@ import type {
   ConfirmationReviewRequestCard,
   CoordinatorDeliveryCard,
   ExternalMessageFrom,
+  MessageSentFrom,
   OpenItemDeliveryCard,
   OwnerAnswerCard,
   ProjectStartedCard,
@@ -191,6 +192,23 @@ export function withExternalSender(
   const stored = { ...payload };
   delete stored.externalSender;
   if (card !== null) stored.externalSender = card;
+  return stored;
+}
+
+/**
+ * And which client sent the turn (`sentFrom`, sessions/turn-sender-client.ts): the app, the terminal and its machine,
+ * Feishu, another session or the runner's own credential, read off the turn when the echo is stored — what `orbit` in a
+ * terminal draws "· from iPhone" with. Absent when the turn records none, and one arriving from the runner is dropped
+ * for the reason above.
+ */
+export function withSentFrom(
+  payload: Record<string, unknown>,
+  card: MessageSentFrom | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.sentFrom;
+  if (card !== null) stored.sentFrom = card;
   return stored;
 }
 
