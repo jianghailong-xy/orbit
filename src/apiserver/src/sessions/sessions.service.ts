@@ -162,6 +162,7 @@ import { cursorDefaultPermissionMode } from '../common/permission-semantics';
 import { PatRefusal, refuseOwnerFieldsToToken } from '../auth/pat-scope.decorator';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { orchestrationEnabled } from '../common/orchestration-switch';
+import { isStopping } from '../common/graceful-stop';
 import { normalizePermissionRules } from '../common/permission-rules';
 import { reachesPastOneMcpTool } from './remember-rules';
 import {
@@ -8081,7 +8082,8 @@ export class SessionsService {
         };
       }
       const remaining = deadline - Date.now();
-      if (remaining <= 0) {
+      // A stopping apiserver stops waiting (common/graceful-stop.ts): the merge is the runner's, and goes on.
+      if (remaining <= 0 || isStopping()) {
         return {
           outcome: 'TIMED_OUT' as const,
           operationId,
@@ -8089,7 +8091,9 @@ export class SessionsService {
           receipt: null,
           receiptAbsentReason: 'MERGE_STILL_RUNNING' as const,
           nextStep:
-            `no outcome after ${waitSeconds}s, and none is claimed here: the merge is still queued ` +
+            (remaining > 0
+              ? 'no outcome yet: this server is restarting, so it stopped waiting early. None is claimed here: the merge is still queued '
+              : `no outcome after ${waitSeconds}s, and none is claimed here: the merge is still queued `) +
             `as operation ${operationId ?? '(none recorded)'}. A runner picks a merge up on its ` +
             'next heartbeat, which ticks every 30 seconds, so a shorter wait than that times out ' +
             'even for a merge that then succeeds. Read the outcome with merge_receipts on this ' +

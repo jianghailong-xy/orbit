@@ -565,6 +565,8 @@ func (t *Transport) finalizeRun(ctx context.Context, sessionID string, b RunFina
 	b.LeaseOwner = t.leaseOwner
 	b = scrubRunFinalize(b, sessionID)
 	path := "/runner/sessions/" + sessionID + "/finalize"
+	// The finalize carries the run's last worktree state: no sample scanned before it is newer.
+	worktreeReports.reported(sessionID)
 	if err := t.do(ctx, "POST", path, b, &r, 35*time.Second); err != nil {
 		return true, err
 	}
@@ -847,6 +849,9 @@ func (t *Transport) turnComplete(ctx context.Context, sessionID string, b TurnCo
 	b.LeaseOwner = t.leaseOwner
 	// Every path a completion is sent by, a kept one an earlier process journaled included (secret_wire.go).
 	b = scrubTurnComplete(b, sessionID)
+	// What this completion reports of the worktree is newer than any heartbeat sample scanned before
+	// now (worktreeReportClock). Recorded before the send: one still in flight already outranks them.
+	worktreeReports.reported(sessionID)
 	err := retryIdempotentWhile(ctx, func(attemptCtx context.Context) error {
 		r = TurnCompleteResponse{}
 		return t.do(attemptCtx, "POST", "/runner/sessions/"+sessionID+"/turn-complete", b, &r, 35*time.Second)
@@ -1123,6 +1128,7 @@ func (t *Transport) diffResult(sessionID string, b DiffResultRequest) error {
 }
 
 func (t *Transport) diffResultContext(ctx context.Context, sessionID string, b DiffResultRequest) error {
+	worktreeReports.reported(sessionID)
 	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/diff", b, nil, 35*time.Second)
 }
 
