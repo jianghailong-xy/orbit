@@ -220,9 +220,15 @@ final class SessionProjectPageWiringTests: XCTestCase {
                              to: "\n        }")
         XCTAssertTrue(card.contains("console.cardRequestFollowed()"))
         XCTAssertTrue(card.contains("atBottom = false"), "off the live tail, so the next publish does not pull it down")
-        XCTAssertTrue(card.contains("holdScroll(to: request.rowID, anchor: .top, animated: false)"),
+        XCTAssertTrue(card.contains("holdScroll(to: hold.rowID, anchor: .top, animated: false)"),
                       "the card's top — header and title — not its middle or the transcript's end")
         XCTAssertFalse(card.contains("opensReview"), "the card is answered in place, no review sheet")
+        XCTAssertTrue(card.contains("for delay in [0.4, 1.0, 2.0] {"),
+                      "re-aimed while the rows above are measured: a self-sizing List lands by estimates first")
+        let publishFollow = try slice(view, from: ".onChange(of: console.stateRevision) {", to: "recomputeStuck()")
+        XCTAssertTrue(publishFollow.contains("if let hold = cardHold, hold.sessionID == console.sessionID, Date() < hold.until {"),
+                      "a publish in the first moments keeps the card's top rather than following the tail")
+        XCTAssertTrue(view.contains("atBottom = true; cardHold = nil"), "the reader's own send lets go of the card")
         XCTAssertTrue(view.contains(".onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }"),
                       "every other opening keeps the bottom pin")
     }

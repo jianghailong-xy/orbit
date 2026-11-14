@@ -835,6 +835,9 @@ struct TranscriptView: View {
     // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
     // on the macOS 14 floor it stays true — the view keeps the unconditional follow and hides the button.
     @State private var atBottom = true
+    /// The waiting card a project row's tap opened this conversation at (`console.cardRequest`), held
+    /// for a moment while the rows above it are measured.
+    @State private var cardHold: CardHold?
     // Whether more than `TailPinning.nearBottom` of content sits below the viewport right now, for any
     // reason. `atBottom` can't say: it un-pins on a scroll UP alone, so a pinned transcript whose tail
     // left the view some other way — a row that grew under it (a card opened, an image or link card
@@ -1068,7 +1071,10 @@ struct TranscriptView: View {
             let prependAnchor = console.takePrependAnchor()
             // A window opened at a record ends at a gap, so its bottom is never the live tail to
             // follow — pinning there would only walk the window down page by page.
-            if atBottom && !console.detached && !reviewingCard {
+            if let hold = cardHold, hold.sessionID == console.sessionID, Date() < hold.until {
+                // Opened at a waiting card: a publish in the first moments keeps the card's top.
+                proxy.scrollTo(hold.rowID, anchor: .top)
+            } else if atBottom && !console.detached && !reviewingCard {
                 proxy.scrollTo(bottomID, anchor: .bottom)
             } else if let prependAnchor {
                 proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
@@ -1096,7 +1102,7 @@ struct TranscriptView: View {
             }
         }
         .onChange(of: console.sessionID) {
-            atBottom = true; stranded = false; ruler.reset(); stuckID = nil
+            atBottom = true; stranded = false; ruler.reset(); stuckID = nil; cardHold = nil
             console.setReadingHistory(false)
             // The reader's place went with the transcript that was on screen: the new one has
             // not been laid out yet, and the bar's direction word must not answer for the
@@ -1108,13 +1114,13 @@ struct TranscriptView: View {
         // they'd scrolled up to read history (the stateRevision follow above only re-pins while
         // already at the bottom). Web parity: onSend re-pins atBottom on send (AgentView.tsx).
         .onChange(of: console.localSendTick) {
-            atBottom = true
+            atBottom = true; cardHold = nil
             proxy.scrollTo(bottomID, anchor: .bottom)
         }
         // A local command is an explicit new tail item, so reveal it even when the reader had
         // scrolled up. This matches a normal local send and web's `pinToBottom()` behavior.
         .onChange(of: console.localStatusCards.count) {
-            atBottom = true
+            atBottom = true; cardHold = nil
             proxy.scrollTo(bottomID, anchor: .bottom)
         }
         // The "N open questions below" bar, pressed. It sits outside this reader (it is an
@@ -1159,16 +1165,20 @@ struct TranscriptView: View {
             #if os(iOS)
             transcriptScroll.halt()
             #endif
-            let sessionID = console.sessionID
+            let hold = CardHold(rowID: request.rowID, sessionID: console.sessionID,
+                                until: Date().addingTimeInterval(2.5))
+            cardHold = hold
             DispatchQueue.main.async {
                 atBottom = false
-                holdScroll(to: request.rowID, anchor: .top, animated: false)
+                holdScroll(to: hold.rowID, anchor: .top, animated: false)
             }
-            // Once more after the rows above have taken their measured heights: a self-sizing List
-            // places a row by estimates first, and the card's top drifts by their difference.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                guard console.sessionID == sessionID, !atBottom else { return }
-                holdScroll(to: request.rowID, anchor: .top, animated: false)
+            // Again while the rows above take their measured heights: a self-sizing List places a
+            // row it has not laid out by estimates, which put the card's first landing far above it.
+            for delay in [0.4, 1.0, 2.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard cardHold == hold, console.sessionID == hold.sessionID else { return }
+                    holdScroll(to: hold.rowID, anchor: .top, animated: false)
+                }
             }
         }
         // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
@@ -1862,6 +1872,13 @@ struct SessionStatusCardView: View {
 }
 
 /// A transcript scroll waiting for the next update to make it (`TranscriptView.heldScroll`).
+/// A waiting card the transcript keeps its top on until `until` (`TranscriptView.cardHold`).
+private struct CardHold: Equatable {
+    let rowID: String
+    let sessionID: String
+    let until: Date
+}
+
 private struct HeldScroll: Equatable {
     let rowID: String
     let anchor: UnitPoint
