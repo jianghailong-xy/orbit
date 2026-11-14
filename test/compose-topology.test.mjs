@@ -123,6 +123,11 @@
 // requests in flight when it stops, long polls included, are answered rather than cut at Docker's default 10 s. It adds
 // one line to the apiserver, `stop_grace_period: 30s`, and nothing else: no service, mount, port or environment. A
 // second apiserver defined with `extends` takes it with the rest of the definition. The block below pins it.
+//
+// On 2026-11-11 the Claude-on-OpenAI gateway project (34vZPMzFs7c8OTMPJYYHn, which the account owner approved) added three
+// lines to the apiserver's environment, each empty unless the host's .env sets it: ORBIT_CLAUDE_OPENAI_GATEWAY (e1cc642fa),
+// ORBIT_GATEWAY_UPSTREAM_HOSTS (b147aca36) and ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY (3e93075ee). They switch on and bound the
+// apiserver's own /api/gw/anthropic route: no service, mount, port or resident process is added. The block below pins them.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -358,6 +363,14 @@ const APPROVED_APISERVER_BLOCKS = [
   // because the line comes right after `logging`, before the environment.
   [
     '    stop_grace_period: 30s',
+  ],
+  // The Claude-on-OpenAI gateway's switches (2026-11-11, project 34vZPMzFs7c8OTMPJYYHn, commits e1cc642fa, 3e93075ee and
+  // b147aca36; the top of this file), each empty unless the host's .env sets it. They come right after PUBLIC_ORIGIN's line,
+  // before the proxies'.
+  [
+    '      ORBIT_CLAUDE_OPENAI_GATEWAY: "${ORBIT_CLAUDE_OPENAI_GATEWAY:-}"',
+    '      ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY: "${ORBIT_CLAUDE_CODEX_LOGIN_GATEWAY:-}"',
+    '      ORBIT_GATEWAY_UPSTREAM_HOSTS: "${ORBIT_GATEWAY_UPSTREAM_HOSTS:-}"',
   ],
   // The proxies in front of the gateway (2026-10-28, the top of this file), empty unless the host's .env sets it.
   // Listed first because the line comes right after PUBLIC_ORIGIN's, before the runner link's.
