@@ -68,12 +68,14 @@ class CoordinatorHandoffDeviceTest {
             server.dispatcher = dispatcher()
             try {
                 signIn(server)
+                dismissSystemDialogs()
                 // Board 03 Android 1: a coordinator's dialog, both actions.
                 handoff = null
                 open("orbit-session:$coordinator")
                 await("Fix login redirect is in review")
                 openContext()
-                compose.waitUntil(15_000) { has(hasTestTag("context-action-new-coordinator")) }
+                // Compact waits for the runner's slash commands, which the dialog reads as it opens.
+                compose.waitUntil(15_000) { has(hasTestTag("context-action-new-coordinator")) && has(hasTestTag("context-action-compact")) }
                 compose.onNodeWithTag("context-action-new-coordinator").performScrollTo()
                 capture("03-android1-coordinator-dialog-$pass")
                 // Board 02 ① as board 03 asks of a phone: the confirm, the waits as a count.
@@ -142,7 +144,16 @@ class CoordinatorHandoffDeviceTest {
         }
         compose.waitForIdle()
     }
-    private fun reopen(id: String) { back(); open("orbit-session:$id"); compose.waitForIdle() }
+    /** The session page again, read afresh: a system dialog under load can eat the Back, so the store is also asked to read it. */
+    private fun reopen(id: String) {
+        back(); open("orbit-session:$id"); app.realtime.refreshSession(); compose.waitForIdle()
+        dismissSystemDialogs()
+    }
+    /** A cold emulator under load can show "isn't responding" over the app: it is not this app's, and it is closed. */
+    private fun dismissSystemDialogs() {
+        automation.executeShellCommand("am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS").close()
+        compose.waitForIdle()
+    }
     private fun openContext() {
         click(hasText("· Usage", substring = true) and hasClickAction())
         await("Context and plan usage")
@@ -163,6 +174,7 @@ class CoordinatorHandoffDeviceTest {
     }
     private fun back() { instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK); compose.waitForIdle() }
     private fun capture(label: String) {
+        dismissSystemDialogs()
         compose.waitForIdle(); instrumentation.waitForIdleSync()
         SystemClock.sleep(900)
         val bitmap = (1..4).firstNotNullOfOrNull { automation.takeScreenshot() ?: run { SystemClock.sleep(1_000); null } } ?: return
