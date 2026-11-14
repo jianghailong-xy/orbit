@@ -1,7 +1,8 @@
 import { useEffect, useMemo, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { DownOutlined, HistoryOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckOutlined, DownOutlined, HistoryOutlined, SearchOutlined, SettingOutlined } from '@ant-design/icons';
+import { Menu, type MenuItem } from '../components/ui/Menu';
 import { OrbitLinkCardsProvider } from '../components/OrbitLinkCard';
 import { statusLabel } from '../components/WorkspaceView';
 import { WikiActivityButton, WikiActivityPage } from '../components/WikiActivityPage';
@@ -35,6 +36,7 @@ import {
   WIKI_SEARCH_SHORTCUT,
   WIKI_SPACE_PICKER_HINT,
   WIKI_ENTRY_NOUN,
+  WIKI_MANAGE_SPACES,
   WIKI_TITLE,
   WIKI_TO_REVIEW,
   wikiActivityPath,
@@ -46,7 +48,8 @@ import {
 import { wikiArticlePath, wikiCount } from '../lib/wikiArticles';
 import { useWikiDirectoryWidth } from '../lib/wikiDirectoryWidth';
 import { wikiStatusParts, wikiStatusText } from '../lib/wikiHealth';
-import { wikiDocPath } from '../lib/wikiDocs';
+import { WIKI_NO_DOCUMENTS, wikiDocPath, wikiDocumentCount } from '../lib/wikiDocs';
+import { wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
   readWikiLastSpace,
@@ -54,6 +57,7 @@ import {
   wikiSpaceNames,
   wikiSpaceOption,
   wikiWaiting,
+  wikiWaitingIn,
   writeWikiLastSpace,
 } from '../lib/wikiSpace';
 
@@ -458,18 +462,51 @@ function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly Sp
       </span>
     );
   }
+  // The console's own menu, as the Tasks title's scope picker opens (board docs/mocks/wiki-space-menu): a row a space —
+  // its name, the repository and its documents under it, what waits in it as the sidebar's amber count — the current one
+  // lit, and Manage spaces at the foot, into Wiki settings, as the native pickers end (iOS and Android `WikiSpacePicker`).
+  const items: MenuItem[] = [
+    ...spaces.map((row): MenuItem => {
+      const rowName = names.get(row.id) ?? row.title;
+      const waiting = wikiWaitingIn(row);
+      const line = [row.repoUrlNorm || null, row.docs ? wikiDocumentCount(row.docs.total) : WIKI_NO_DOCUMENTS].filter(Boolean).join(' · ');
+      const current = row.id === space.id;
+      return {
+        key: row.slug,
+        // What a screen reader says and typeahead reads: the name, and what waits in it in words.
+        textValue: wikiSpaceOption(names.get(row.id) ?? row.title, row),
+        selected: current,
+        icon: current ? <CheckOutlined /> : <span />,
+        label: (
+          <span className="wk-space-row">
+            <span className="wk-space-row-text">
+              <span className="n">{rowName}</span>
+              <span className="s">{line}</span>
+            </span>
+            {waiting > 0 && (
+              <span className="tp-count needs-you" title={wikiWaitingOnYou(waiting)}>
+                {waiting}
+              </span>
+            )}
+          </span>
+        ),
+        onSelect: current ? undefined : () => navigate(wikiSpacePath(row.slug)),
+      };
+    }),
+    { type: 'separator', key: 'rule' },
+    { key: 'manage', label: WIKI_MANAGE_SPACES, icon: <SettingOutlined />, onSelect: () => navigate(wikiSettingsPath(space.slug)) },
+  ];
   return (
-    <span className="wk-select" title={WIKI_SPACE_PICKER_HINT}>
-      <span className="v">{name}</span>
-      <select value={space.slug} aria-label={WIKI_SPACE_PICKER_HINT} onChange={(event) => navigate(wikiSpacePath(event.target.value))}>
-        {spaces.map((row) => (
-          <option key={row.id} value={row.slug}>
-            {wikiSpaceOption(names.get(row.id) ?? row.title, row)}
-          </option>
-        ))}
-      </select>
-      <DownOutlined className="ic caret" />
-    </span>
+    <Menu
+      popupClassName="wk-space-menu"
+      items={items}
+      trigger={
+        <button type="button" className="wk-select" title={WIKI_SPACE_PICKER_HINT} aria-label={`${name}: ${WIKI_SPACE_PICKER_HINT}`}>
+          <span className="v">{name}</span>
+          <DownOutlined className="ic caret" />
+        </button>
+      }
+    />
   );
 }
 

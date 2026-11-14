@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Wiki space menu</title>
+<style>
+  body { margin: 0; padding: 32px; background: #eef0f3; font: 14px/1.55 Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+  .b-part { width: 1480px; padding: 28px 32px 32px; margin: 0 0 28px; background: #fff; border-radius: 14px; box-sizing: border-box; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  h2 { margin: 0 0 6px; font-size: 18px; }
+  .b-lead { margin: 0 0 20px; color: #4e5969; }
+  .b-row { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .b-fig { margin: 0; }
+  .b-fig img { display: block; border: 1px solid #dfe3e8; border-radius: 8px; }
+  .b-fig figcaption { margin-top: 8px; font-size: 13px; color: #4e5969; max-width: 420px; }
+  .b-fig figcaption b { color: #1f2329; }
+  .b-tag { display: inline-block; padding: 1px 8px; margin-right: 6px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .b-tag.rec { background: #e8f3ff; color: #1664ff; }
+  .b-tag.now { background: #f2f3f5; color: #4e5969; }
+  .b-arrow { align-self: center; font-size: 28px; color: #86909c; }
+  .b-notes { margin: 18px 0 0; padding-left: 20px; color: #4e5969; }
+  .b-notes li { margin: 4px 0; }
+  .b-w394 img { width: 394px; }
+  .b-w267 img { width: 267px; }
+  .b-w390 img { width: 390px; }
+</style>
+</head>
+<body>
+
+<section class="b-part">
+  <h1>Wiki 名字的下拉菜单</h1>
+  <p class="b-lead">右边是真实页面截图：这个分支的生产构建 + 仓库 ui-migration 固件，3 个 wiki（orbit 有 2 件等你处理）。菜单已按右图写成代码，还没提交。</p>
+  <div class="b-row">
+    <figure class="b-fig b-w267"><img src="shots/today-native.png" alt=""><figcaption><span class="b-tag now">今天</span>浏览器原生 select 弹出的系统菜单：样式不归控制台管，“· 2 waiting” 只能写成文字</figcaption></figure>
+    <div class="b-arrow">→</div>
+    <figure class="b-fig b-w394"><img src="shots/b.png" alt=""><figcaption><span class="b-tag rec">建议 B</span>控制台自己的菜单（和 Tasks 标题 “All tasks ⌄” 弹出的是同一个组件）</figcaption></figure>
+  </div>
+  <ul class="b-notes">
+    <li>每行一个 wiki：名字，下面一行灰字写仓库和文档数（“35 documents”，没有计划时写 “No documents yet”）。</li>
+    <li>等你处理的数量用侧栏同款橙色计数，放在行尾。</li>
+    <li>当前 wiki：蓝底 + ✓。</li>
+    <li>底部 “⚙ Manage spaces” 进入 Wiki 设置，和 iOS / Android 的菜单结尾一样。</li>
+    <li>键盘：↑↓ 选择，Enter 切换，Esc 关闭；手机上点开是同一个菜单。</li>
+  </ul>
+</section>
+
+<section class="b-part">
+  <h2>要你选 ①：每行写多少</h2>
+  <p class="b-lead">A 是同一个构建，截图时把第二行藏掉。</p>
+  <div class="b-row">
+    <figure class="b-fig b-w394"><img src="shots/a.png" alt=""><figcaption><b>A　一行：只有名字和橙色计数</b><br>更紧凑，和左侧主导航 Wiki 分组的写法一样。但同名不同仓库时看不出区别，也看不出哪个 wiki 还没写文档。</figcaption></figure>
+    <figure class="b-fig b-w394"><img src="shots/b.png" alt=""><figcaption><span class="b-tag rec">建议</span><b>B　两行：名字 + 仓库 · 文档数</b><br>和 iOS / Android 的 wiki 菜单写的内容一致（它们已是名字下面写仓库和文档数）。wiki 不多，菜单高一点没关系。</figcaption></figure>
+  </div>
+</section>
+
+<section class="b-part">
+  <h2>B 的其他状态</h2>
+  <div class="b-row">
+    <figure class="b-fig b-w394"><img src="shots/b-hover.png" alt=""><figcaption>悬停到另一行：浅灰底</figcaption></figure>
+    <figure class="b-fig b-w394"><img src="shots/b-dark.png" alt=""><figcaption>暗色</figcaption></figure>
+    <figure class="b-fig b-w390"><img src="shots/b-phone.png" alt=""><figcaption>手机（390 宽）：顶部名字点开，同一个菜单</figcaption></figure>
+  </div>
+  <ul class="b-notes">
+    <li>只有一个 wiki 时名字不能点，没有菜单（不变）。</li>
+    <li>Mac / iPad / iPhone / Android 各用平台自己的菜单，内容已是 B 的写法，这次不动。</li>
+  </ul>
+</section>
+
+</body>
+</html>
