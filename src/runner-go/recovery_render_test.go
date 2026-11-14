@@ -772,8 +772,17 @@ func TestRecoveryCLIOnlyActualNonemptyIDsProtectTheWrite(t *testing.T) {
 				if !reflect.DeepEqual(report.Next.Argv[1:], test.args) {
 					t.Fatalf("retry changed ID: %#v", report.Next)
 				}
-			} else if sent["clientTurnId"] != nil || report.Error.Retry.Policy != "VERIFY_THEN_RETRY" || report.Next.Type == recoveryNextInvoke {
-				t.Fatalf("keyless replay: sent=%#v report=%#v", sent, report)
+			} else {
+				// Message calls now generate an ID when none was supplied. The
+				// envelope sees that outbound ID, but rerunning the original argv
+				// would draw a different one, so it must not offer an invocation.
+				id, _ := sent["clientTurnId"].(string)
+				if strings.TrimSpace(id) == "" || id == "x" || report.Error.Retry.Policy != "SAME_REQUEST_ID" || report.Next.Type != recoveryNextManual {
+					t.Fatalf("generated ID replay unsafe: sent=%#v report=%#v", sent, report)
+				}
+				if test.name == "literal" && sent["message"] != "--client-turn-id=x" {
+					t.Fatalf("literal message became a flag: %#v", sent)
+				}
 			}
 		})
 	}
