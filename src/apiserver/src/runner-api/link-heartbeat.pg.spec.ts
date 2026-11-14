@@ -17,6 +17,8 @@
  *   9. an HTTPS heartbeat is answered as it always was, and a link heartbeat after it reconciles in full;
  *  10. a managed runner is admitted with its instance and reconciles in full on every beat.
  *  13. a draining beat asks for the drain's one push even when quiet, so work queuing behind a drain is told once.
+ *  14. the sessions a background job holds slots for (backgroundJobSessionIds) are written by the beat's one statement
+ *      and counted by the runners list as running, a session named both ways once; an older runner's beat clears them.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/link-heartbeat.pg.spec.ts
  *
@@ -833,6 +835,63 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
 
     await prisma.session.update({ where: { id: waiting }, data: { status: RunStatus.CANCELLED } });
     for (let i = 0; i < 4 && isFull((await beat()).answer); i += 1);
+    await settle();
+  });
+
+  // ── 14 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('14. the sessions a background job holds slots for ride the link beat into presence, and the runners list counts them', async () => {
+    await settle();
+    const holders = async () => (await sql.query(
+      `SELECT "background_job_session_ids"::text[] AS ids FROM "runner_presence" WHERE "runner_id" = $1`, [runnerId])).rows[0].ids as string[];
+    const running = async () => {
+      const listed = (await runners.listRunners(ownerId)).find((r) => r.id === runnerId)!;
+      return listed.activeSessions;
+    };
+    const inTurn = await prisma.session.count({ where: { assignedRunnerId: runnerId, status: RunStatus.RUNNING } });
+    assert.ok(inTurn >= 1, 'busy is in a turn');
+    assert.equal(await running(), inTurn, 'a beat without the member counts turns alone');
+    assert.deepEqual(await holders(), []);
+
+    // idle has no turn but its job holds a slot: one statement, written by the beat itself, and counted.
+    const held = await beat({ backgroundJobSessionIds: [idle.toUpperCase()] } as Partial<RunnerHeartbeatRequest>);
+    assert.equal(isFull(held.answer), false, 'nothing a beat delivers depends on it');
+    assert.equal(held.statements.length, 1, held.statements.join('\n---\n'));
+    assert.deepEqual(await holders(), [idle]);
+    assert.equal(await running(), inTurn + 1, 'a RUNNING session and a background-job holder are two');
+
+    // busy named too: it is counted once.
+    await beat({ backgroundJobSessionIds: [busy, idle] } as Partial<RunnerHeartbeatRequest>);
+    assert.equal(await running(), inTurn + 1, 'a session in a turn and named by its job counts once');
+
+    // An ended session, another account's session and a malformed id are not counted.
+    const ended = await session(RunStatus.SUCCEEDED, { inboxLeaseOwner: null });
+    const strangerId = randomUUID();
+    await prisma.user.create({ data: { id: strangerId, email: `link-heartbeat-${strangerId}@runner-link.invalid`, name: 'x', passwordHash: 'x' } });
+    const strangerRunner = randomUUID();
+    await prisma.runner.create({ data: { id: strangerRunner, ownerId: strangerId, name: 'theirs', tokenHash: sha256(randomUUID()), status: 'ONLINE' } });
+    const theirs = randomUUID();
+    await prisma.session.create({
+      data: {
+        id: theirs, ownerId: strangerId, creatorId: strangerId, title: 'theirs', prompt: 'work', provider: 'claude',
+        status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER, assignedRunnerId: strangerRunner,
+      },
+    });
+    await beat({ backgroundJobSessionIds: [ended, theirs, 'not-a-session'] } as Partial<RunnerHeartbeatRequest>);
+    assert.deepEqual((await holders()).sort(), [ended, theirs].sort(), 'malformed ids are not kept');
+    assert.equal(await running(), inTurn, 'neither an ended session nor another runner\'s is counted');
+
+    // A stale report counts as before.
+    await beat({ backgroundJobSessionIds: [idle] } as Partial<RunnerHeartbeatRequest>);
+    assert.equal(await running(), inTurn + 1);
+    await sql.query(`UPDATE "runner_presence" SET "last_beat_at" = "last_beat_at" - interval '10 minutes' WHERE "runner_id" = $1`, [runnerId]);
+    await prisma.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: new Date(Date.now() - 10 * 60_000) } });
+    assert.equal(await running(), inTurn, 'an offline runner\'s report is not counted');
+    await prisma.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: new Date() } });
+
+    // An older runner, which never sends the member: the next beat clears what was kept.
+    await beat();
+    assert.deepEqual(await holders(), []);
+    assert.equal(await running(), inTurn, 'a runner that omits the member counts as before');
     await settle();
   });
 

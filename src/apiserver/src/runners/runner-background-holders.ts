@@ -1,0 +1,68 @@
+import { ACTIVE_TURN_STATUSES, OPEN_SESSION_STATUSES } from '../common/session-scheduling';
+import type { PrismaService } from '../prisma/prisma.service';
+import { runnerIsOnline, type RunnerBeats } from './runner-presence';
+
+/**
+ * The sessions a runner's background jobs hold slots for (RunnerHeartbeatRequest.backgroundJobSessionIds,
+ * runner_presence.background_job_session_ids, migration 0780).
+ *
+ * A runner counts a session against its maxConcurrent while it holds a turn permit OR while runner-hosted background
+ * jobs of its own still run (src/runner-go/session_pool.go admissionOccupancy). The second kind runs no turn, so a count
+ * of turns alone reads a full machine as having room. Each beat names those sessions, and the beat's own write keeps
+ * them on the presence row, replaced every time: the link beat statement (runner-api/link-heartbeat.ts readLinkBeat) or,
+ * over HTTPS and for a managed runner, recordRunnerBeat.
+ */
+
+/** At most this many ids are kept from one beat: far above any runner's maxConcurrent. */
+export const BACKGROUND_JOB_SESSIONS_MAX = 512;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The ids as they may be stored: UUIDs only, in lower case, each once, sorted. Empty for a beat that names none. */
+export function sanitizeBackgroundJobSessionIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  for (const id of value) {
+    if (typeof id === 'string' && UUID_RE.test(id)) ids.add(id.toLowerCase());
+    if (ids.size >= BACKGROUND_JOB_SESSIONS_MAX) break;
+  }
+  return [...ids].sort();
+}
+
+/** A runner as runningSessionCounts reads it: its liveness, and the presence row's holders. */
+export interface RunnerWithHolders {
+  id: string;
+  status: string;
+  presence?: (NonNullable<RunnerBeats['presence']> & { backgroundJobSessionIds?: string[] | null }) | null;
+}
+
+/**
+ * How many sessions each runner is running, as its "N of M running" shows it: the distinct sessions that are either
+ * assigned to it in a turn (ACTIVE_TURN_STATUSES), or named by its last beat as held by a background job and still open
+ * and assigned to it. A session both ways counts once. Only a runner online by its presence row's own beat has its
+ * holders counted: a stale report, or none (an older runner, a row a crash emptied), counts turns alone, as before.
+ */
+export async function runningSessionCounts(
+  prisma: Pick<PrismaService, 'session'>,
+  runners: readonly RunnerWithHolders[],
+  now: number,
+): Promise<Map<string, number>> {
+  if (runners.length === 0) return new Map();
+  const held = runners.flatMap((runner) => {
+    const ids = runner.presence?.backgroundJobSessionIds ?? [];
+    const fresh = runnerIsOnline({ status: runner.status, presence: runner.presence }, now);
+    return fresh && ids.length > 0 ? [{ assignedRunnerId: runner.id, id: { in: ids } }] : [];
+  });
+  const counts = await prisma.session.groupBy({
+    by: ['assignedRunnerId'],
+    where: {
+      assignedRunnerId: { in: runners.map((r) => r.id) },
+      OR: [
+        { status: { in: ACTIVE_TURN_STATUSES } },
+        ...(held.length > 0 ? [{ status: { in: OPEN_SESSION_STATUSES }, OR: held }] : []),
+      ],
+    },
+    _count: { _all: true },
+  });
+  return new Map(counts.map((c) => [c.assignedRunnerId as string, c._count._all]));
+}

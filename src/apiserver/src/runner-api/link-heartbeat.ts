@@ -55,8 +55,9 @@ export type HeartbeatFactRole =
   /** The runner's report, kept where the heartbeat keeps it, which nothing the heartbeat hands out depends on: a
    *  changed value is written by writeLinkBeatReports, and nothing is drained. */
   | 'REPORT'
-  /** Written on every beat by the statement that writes the beat itself (readLinkBeat, recordRunnerResources), so it
-   *  needs no digest: the machine's resources, which change on nearly every beat. */
+  /** Written on every beat by the statement that writes the beat itself (readLinkBeat, recordRunnerResources,
+   *  recordRunnerBeat), so it needs no digest: the machine's resources, which change on nearly every beat, and the
+   *  sessions its background jobs hold slots for. */
   | 'PRESENCE'
   /** The heartbeat route does not read it. */
   | 'UNREAD';
@@ -73,6 +74,8 @@ export type HeartbeatFactRole =
  *                                                one statement cannot write a row twice.
  *   managedWorkload                              a managed runner's beat always reconciles in full.
  *   resources                                    kept on the presence row by the beat's own write (runners/runner-resources.ts).
+ *   backgroundJobSessionIds                      kept on the presence row by the beat's own write, replaced on every beat
+ *                                                (runners/runner-background-holders.ts).
  *   the rest but idleCapacity                    reports: the runner row's catalogues and state, its plan usage, its
  *                                                sessions' worktrees, its workspaces' directories.
  */
@@ -98,6 +101,7 @@ export const HEARTBEAT_FACTS = {
   selfUpdate: 'REPORT',
   managedWorkload: 'DELIVERY',
   resources: 'PRESENCE',
+  backgroundJobSessionIds: 'PRESENCE',
 } as const satisfies { [K in keyof Required<RunnerHeartbeatRequest>]: HeartbeatFactRole };
 
 export type HeartbeatFactKind = keyof typeof HEARTBEAT_FACTS;
@@ -374,6 +378,8 @@ export interface LinkBeatInput {
   planUsageDigest: string | null;
   /** The machine's reading, sanitized (runners/runner-resources.ts); absent or null for a beat without one. */
   resources?: RunnerResources | null;
+  /** The sessions its background jobs hold slots for, sanitized (runners/runner-background-holders.ts); empty for none. */
+  backgroundJobSessionIds?: string[];
 }
 
 /** One row of the beat statement; none when the runner does not exist or is not the token's owner's. */
@@ -433,9 +439,11 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
        WHERE r."id" = ${input.runnerId}::uuid AND r."owner_id" = ${input.ownerId}::uuid
     ),
     beat AS (
-      INSERT INTO "runner_presence" ("runner_id", "process_id", "gateway_id", "last_beat_at", "link_state", "resources")
+      INSERT INTO "runner_presence" ("runner_id", "process_id", "gateway_id", "last_beat_at", "link_state", "resources",
+                                     "background_job_session_ids")
       SELECT c."id", ${input.processId}::uuid, ${input.gatewayId}::text, (now() AT TIME ZONE 'UTC'), 'LINK',
-             ${resourcesAfterBeatSql(Prisma.sql`NULL::jsonb`, input.resources ?? null)}
+             ${resourcesAfterBeatSql(Prisma.sql`NULL::jsonb`, input.resources ?? null)},
+             ${input.backgroundJobSessionIds ?? []}::uuid[]
         FROM caller c
        WHERE c."credentialHeld" AND NOT c."ownerDisabled" AND NOT c."managed" AND NOT c."landingNamed"
       ON CONFLICT ("runner_id") DO UPDATE
@@ -444,6 +452,7 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
              "last_beat_at" = EXCLUDED."last_beat_at",
              "link_state" = EXCLUDED."link_state",
              "resources" = ${resourcesAfterBeatSql(Prisma.sql`"runner_presence"."resources"`, input.resources ?? null)},
+             "background_job_session_ids" = EXCLUDED."background_job_session_ids",
              "lost_at" = CASE
                WHEN "runner_presence"."last_beat_at" < EXCLUDED."last_beat_at" - (${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')
                  THEN "runner_presence"."last_beat_at"

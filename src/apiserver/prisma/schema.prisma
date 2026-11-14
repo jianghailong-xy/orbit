@@ -1124,6 +1124,10 @@ model RunnerPresence {
   /// {at, latest, samples: [[ms, cpu %, memory %, disk %], …]}. Null until the runner reports one; a beat without
   /// one leaves it as it is (runners/runner-presence.ts).
   resources     Json?     @map("resources")
+  /// The sessions that hold one of the runner's slots only through runner-hosted background jobs, as its last beat
+  /// named them (migration 0780, RunnerHeartbeatRequest.backgroundJobSessionIds): replaced on every beat, empty for a
+  /// beat that names none. The runners list counts them as running while the runner is online.
+  backgroundJobSessionIds String[] @default([]) @map("background_job_session_ids") @db.Uuid
 
   @@map("runner_presence")
 }

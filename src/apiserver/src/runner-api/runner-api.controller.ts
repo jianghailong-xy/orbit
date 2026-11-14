@@ -544,6 +544,7 @@ import {
   runnerLastBeatAt,
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
+import { sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -1963,6 +1964,7 @@ export class RunnerApiController {
         supervisedSessionIds: supervised,
         planUsageDigest: digests.facts.planUsage ?? null,
         resources: sanitizeRunnerResources(dto?.resources),
+        backgroundJobSessionIds: sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
       });
     } catch (error) {
       // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
@@ -2215,6 +2217,7 @@ export class RunnerApiController {
         processId: heartbeatLeaseOwner,
         gatewayId: link?.gatewayId ?? null,
         linkState: link ? 'LINK' : 'HTTP',
+        backgroundJobSessionIds: sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
         at: beatAt,
       }).catch(beatLost);
       // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.

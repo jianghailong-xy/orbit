@@ -369,15 +369,20 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 // and not per job — several jobs of one session share one checkout, and a session is
 // the unit that new work displaces. A watch is not among those jobs: it only waits.
 func (p *sessionPool) admissionIdleCapacity() int {
+	idle, _ := p.admissionOccupancy()
+	return idle
+}
+
+// admissionOccupancy is the one count admission and the heartbeat both read: the idle
+// capacity admissionIdleCapacity reports, and the sessions that occupy a slot only
+// through background jobs of their own — no turn permit, no reclaim under way — which
+// the heartbeat reports as backgroundJobSessionIds, so the control plane can show them
+// as running (sorted). A draining runner offers no capacity, and its job holders still
+// hold their slots.
+func (p *sessionPool) admissionOccupancy() (int, []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.drainingForUpdate {
-		return 0
-	}
 	occupied := make(map[string]bool, len(p.sessions))
-	for sessionID := range p.backgroundJobCountsLocked() {
-		occupied[sessionID] = true
-	}
 	for id, s := range p.sessions {
 		if s.active {
 			occupied[id] = true
@@ -389,11 +394,22 @@ func (p *sessionPool) admissionIdleCapacity() int {
 			occupied[id] = true
 		}
 	}
+	var backgroundOnly []string
+	for sessionID := range p.backgroundJobCountsLocked() {
+		if !occupied[sessionID] {
+			occupied[sessionID] = true
+			backgroundOnly = append(backgroundOnly, sessionID)
+		}
+	}
+	sort.Strings(backgroundOnly)
+	if p.drainingForUpdate {
+		return 0, backgroundOnly
+	}
 	idle := p.max - len(occupied)
 	if idle < 0 {
 		idle = 0
 	}
-	return idle
+	return idle, backgroundOnly
 }
 
 // holdWorktreeForBackgroundJob records one background shell as a live writer of
