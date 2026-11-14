@@ -521,6 +521,31 @@ export function attentionEngineUpdateDetail(note: string): string {
   return `${note}. Orbit retries every 30 min — Update Engines Now tries again right away.`;
 }
 
+/** Fix with an agent: one press starts a session on that machine (docs/mocks/install-failed-fix-with-agent). */
+export const AGENT_FIX_BUTTON = 'Fix with an agent';
+/** In place of the button while that session is open; the link opens it. */
+export function agentFixFixing(workspace: string): string {
+  return `An agent is fixing this in ${workspace} · `;
+}
+export const AGENT_FIX_OPEN_SESSION = 'Open session';
+/** Under the button on an Install failed panel: where the session would run. */
+export function agentFixStartsIn(workspace: string, engine: string): string {
+  return `Starts a session in ${workspace} on this machine, with ${engine}.`;
+}
+/** After a signed-out reason on an Install failed panel, whose engine rows (and their Sign in) are above it. */
+export function agentFixSignInAbove(engine: string): string {
+  return ` Sign in to ${engine} above to use this.`;
+}
+export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
+
+/** The card's second action, beside Update Engines Now; `engine` is the CLI's own name. */
+export function attentionDismissUntilNextRelease(engine: string): string {
+  return `Dismiss until next ${engine} release`;
+}
+
+/** The engine row's warning panel: the same dismissal, after its retry hint. */
+export const RUNNER_ENGINE_UPDATE_DISMISS = 'Dismiss';
+
 // MARK: the Update card (docs/runner-update-drain-design.md, board 4)
 
 export const RUNNER_UPDATE_TAG_AVAILABLE = 'Available';
