@@ -3,6 +3,7 @@ import { PauseAccountDto } from '../common/account-pause';
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden, PatScope } from '../auth/pat-scope.decorator';
+import { TerminalRoute } from '../auth/terminal-credentials';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import {
   AddProviderPoolMemberDto,
@@ -31,6 +32,8 @@ export class ProvidersController {
   ) {}
 
   @PatScope('workspaces:read', { workspaceConfinable: false })
+  // A terminal's model picker reads it too: listPublic is keyless and endpointless.
+  @TerminalRoute('PROVIDER_LIST')
   @Get()
   list(@CurrentUser() user: AuthUser) {
     return this.providers.listPublic(user.userId);

@@ -38,6 +38,7 @@ import { SetupPage } from './pages/SetupPage';
 import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { AccessTokensPage } from './pages/AccessTokensPage';
+import { TerminalsPage } from './pages/TerminalsPage';
 import { FeishuConnectGroupPage } from './pages/FeishuConnectGroupPage';
 import { FeishuIntegrationPage } from './pages/FeishuIntegrationPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
@@ -278,6 +279,8 @@ export function App() {
             <Route path="shared-links" element={<SharedLinksPage />} />
             {/* The personal access tokens this account has issued: issue, list, revoke. */}
             <Route path="access-tokens" element={<AccessTokensPage />} />
+            {/* The terminals this account has approved: list, revoke (docs/terminal-session-design.md). */}
+            <Route path="terminals" element={<TerminalsPage />} />
             {/* The account's own Feishu or Lark app (docs/feishu-bot-design.md §4.1, §4.2). */}
             <Route path="integrations/feishu" element={<FeishuIntegrationPage />} />
             {/* Connecting a Feishu group, opened from the bot's card with its one-time ticket (docs/feishu-bot-design.md §8.1). */}

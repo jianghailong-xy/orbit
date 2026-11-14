@@ -2377,6 +2377,10 @@ export interface ClaimedSession {
    *  (`mkdir -p`, 0755) before the engine starts when it is missing — only when the resolved path lies
    *  inside its own resolved reposRoot. Absent otherwise, never false. */
   createWorkDir?: boolean;
+  /** The folder below workDir a session with no worktree runs in (POST /sessions `workSubdir`): relative,
+   *  `/`-separated, normalized, no `..`. The runner starts the engine in workDir/workSubdir and refuses to
+   *  start when that folder, symlinks followed, is missing or lies outside workDir. Absent: workDir itself. */
+  workSubdir?: string;
   /** The branch this session's work merges INTO (its recorded mergeTarget, else its agent's
    *  defaultMergeTarget) — the same branch the status bar's Merge button names. The runner
    *  judges "already merged" against it, so work landed in e.g. `develop` isn't reported
@@ -2864,6 +2868,8 @@ export interface ReclaimSession {
   autoInitGit?: boolean;
   /** Make a missing workDir inside reposRoot first, cf. ClaimedSession.createWorkDir. */
   createWorkDir?: boolean;
+  /** The folder below workDir it runs in, cf. ClaimedSession.workSubdir. */
+  workSubdir?: string;
   /** Branch this session merges into, cf. ClaimedSession.mergeTarget. */
   mergeTarget?: string;
   /** DB id of the session's agent (ORBIT_AGENT_ID), cf. ClaimedSession.agentId. */
