@@ -87,6 +87,9 @@ struct CompactShell: View {
                 // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
                 // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
+                    // The needs-you bar over a page with none of its own, inside the sliding card
+                    // so it travels with the page it covers (see `needsYouOverPage`).
+                    .needsYouOverPage(wide: false)
                     // An opaque backing *inside* the sliding content so its translucent bars — the
                     // transcript is a `.scrollContentBackground(.hidden)` (see-through) list, with `.bar`
                     // material on the status line / worktree bar / composer — sample a surface that
@@ -759,10 +762,14 @@ struct NavigationDrawer: View {
                 // second ForEach under it is the shape the source list's reload aborted on.
                 ForEach(DrawerWorkLogic.rows(
                     AppSection.workSections,
-                    wiki: model.wiki?.shown == true)) { row in
+                    wiki: model.wiki?.shown == true,
+                    // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
+                    // that the Wiki's own page is the Set up your first wiki card.
+                    newWiki: model.wiki?.spaces.isEmpty == false)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
+                    case .newWiki:        newWikiRow
                     case .section(let section): sectionRow(section)
                     case .workspacesHeader: workspacesHeader
                     case .agents:         agentsRows
@@ -1066,6 +1073,27 @@ struct NavigationDrawer: View {
         }
         .buttonStyle(.plain)
         .drawerRow()
+    }
+
+    /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
+    /// the shell and leaves the drawer where it is.
+    private var newWikiRow: some View {
+        Button {
+            model.wiki?.creating = true
+        } label: {
+            pill(selected: false) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus")
+                        .frame(width: 24)
+                    Text(WikiStartCopy.newWiki)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("drawer-new-wiki")
     }
 
     /// The rule and the group label that set the Workspaces apart from the work above them.

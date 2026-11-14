@@ -7,6 +7,8 @@ import Foundation
 public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
     case projects
     case wiki
+    /// New wiki…, right under the Wiki row once there is a wiki.
+    case newWiki
     case section(AppSection)
     case workspacesHeader
     case agents
@@ -17,6 +19,7 @@ public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
         switch self {
         case .projects: "projects"
         case .wiki: "wiki"
+        case .newWiki: "new-wiki"
         case .section(let section): "section:\(section.rawValue)"
         case .workspacesHeader: "workspaces-header"
         case .agents: "agents"
@@ -28,14 +31,15 @@ public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
 
 public enum DrawerWorkLogic {
     /// The rail's rows: the work sections `sections` names — the Wiki dropped here when the server
-    /// has it off (`wiki`), as data — then the Workspaces header and the rows under it. There is
-    /// no Waiting on you row: a request is drawn in the session that asked.
-    public static func rows(_ sections: [AppSection], wiki: Bool) -> [DrawerWorkRow] {
-        let work: [DrawerWorkRow] = sections.filter { $0 != .wiki || wiki }.map { section in
+    /// has it off (`wiki`), as data, and New wiki… under it once there is a wiki (`newWiki`) — then
+    /// the Workspaces header and the rows under it. There is no Waiting on you row: a request is
+    /// drawn in the session that asked.
+    public static func rows(_ sections: [AppSection], wiki: Bool, newWiki: Bool = false) -> [DrawerWorkRow] {
+        let work: [DrawerWorkRow] = sections.filter { $0 != .wiki || wiki }.flatMap { section -> [DrawerWorkRow] in
             switch section {
-            case .projects: .projects
-            case .wiki: .wiki
-            default: .section(section)
+            case .projects: [.projects]
+            case .wiki: newWiki ? [.wiki, .newWiki] : [.wiki]
+            default: [.section(section)]
             }
         }
         return work

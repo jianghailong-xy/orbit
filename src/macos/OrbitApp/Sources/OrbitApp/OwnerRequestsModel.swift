@@ -35,6 +35,13 @@ final class OwnerRequestsModel {
         snoozes = store.all()
     }
 
+    /// The store over a transport handed in (the observation tests): the app builds `api` above.
+    init(api: APIClient, store: OwnerRequestSnoozes = OwnerRequestSnoozes()) {
+        self.api = api
+        self.store = store
+        snoozes = store.all()
+    }
+
     /// Every request this client has read, the newest read of each winning.
     var known: [OwnerRequest] { OwnerRequests.merged(all, open) }
 
@@ -44,13 +51,13 @@ final class OwnerRequestsModel {
 
     func load() async {
         do {
-            open = try await api.ownerRequests(state: "open").requests
-            all = try await api.ownerRequests(state: "all").requests
+            assignIfChanged(\.open, try await api.ownerRequests(state: "open").requests)
+            assignIfChanged(\.all, try await api.ownerRequests(state: "all").requests)
             await loadTerminalRequests()
         } catch {
             // The next tick reads again; what was drawn stays.
         }
-        snoozes = store.all()
+        assignIfChanged(\.snoozes, store.all())
     }
 
     /// The one request a door that holds only its id names — a link, a push's action, a reminder.
@@ -66,9 +73,9 @@ final class OwnerRequestsModel {
     /// The terminals waiting for a decision. A server that predates terminals answers 404: no cards.
     func loadTerminalRequests() async {
         do {
-            terminalRequests = try await api.terminalRequests()
+            assignIfChanged(\.terminalRequests, try await api.terminalRequests())
         } catch APIError.http(let status, _) where status == 404 {
-            terminalRequests = []
+            assignIfChanged(\.terminalRequests, [])
         } catch {
             // The next tick reads again; what was drawn stays.
         }
@@ -96,13 +103,18 @@ final class OwnerRequestsModel {
 
     func loadSavedSecrets() async {
         guard let list = try? await api.accountSecrets() else { return }
-        savedSecrets = list.secrets
+        assignIfChanged(\.savedSecrets, list.secrets)
     }
 
     // MARK: the doors
 
     func complete(_ request: OwnerRequest, _ body: OwnerRequestDoneBody) async throws {
         adopt(try await api.completeOwnerRequest(request.id, body))
+    }
+
+    /// A WIKI_CREATE card's Create wiki: the server makes the wiki and answers with the card, DONE.
+    func createWiki(_ request: OwnerRequest) async throws {
+        adopt(try await api.createWikiFromOwnerRequest(request.id))
     }
 
     func decline(_ request: OwnerRequest, reason: String) async throws {

@@ -96,21 +96,17 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertFalse(console.contains("softTopEdgeEffect"), "the transcript keeps the 11-11 rule")
     }
 
-    /// With the needs-you bar over the Sessions list, the soft edge carries on under the bar
-    /// (iOS 26) rather than the bar standing on the page's colour, which cut the rows off at its
-    /// lower edge (the owner, 2026-11-12, option B of 02-board.html).
-    func testTheNeedsYouBarOverTheListStandsOnTheSoftEdge() throws {
+    /// The needs-you bar over the Sessions list floats (the owner, 2026-11-15, 04-floating.html,
+    /// which took back 11-12's option B of 02-board.html): no soft edge of its own carried on down
+    /// under it — the rows go on behind the capsule, under the nav bar's own soft edge.
+    func testTheNeedsYouBarOverTheListFloats() throws {
         let sessions = section(try source(views + "AgentsView.swift"),
                                from: ".topInsetClearOfRefresh {", to: "#endif")
         XCTAssertTrue(sessions.contains("overList: true"), "the Sessions list mounts it over the list")
         let banner = try source(views + "NeedsYouBannerView.swift")
-        let surface = section(banner, from: "@ViewBuilder private var surface", to: "private var listSoftEdge")
-        XCTAssertTrue(surface.contains("else if overList {"))
-        XCTAssertTrue(surface.contains("listSoftEdge"))
-        let edge = section(banner, from: "private var listSoftEdge: some View {", to: "\n}")
-        XCTAssertTrue(edge.contains(".ignoresSafeArea(edges: .top)"), "up behind the nav bar")
-        XCTAssertTrue(edge.contains(".padding(.bottom, -20)"), "fading out 20pt below the bar")
-        XCTAssertTrue(edge.contains(".allowsHitTesting(false)"), "taking no touches")
+        let surface = section(banner, from: "@ViewBuilder private var surface", to: "\n    }")
+        XCTAssertTrue(surface.contains("if floats || overList {"))
+        XCTAssertFalse(banner.contains("SoftEdgeLayer"))
     }
 
     /// The iPhone drawer, the same treatment (the owner, 2026-11-12, 03-board.html, D1–D3 = A): its
@@ -131,9 +127,9 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertTrue(title.contains(".font(.title2.weight(.bold))"), "the drawer's title stays bold")
     }
 
-    func testTheNeedsYouBarAndTheDrawerShareOneSoftEdge() throws {
-        let banner = try source(views + "NeedsYouBannerView.swift")
-        XCTAssertTrue(banner.contains("SoftEdgeLayer(solidAt: .top, color: Color(uiColor: .systemBackground))"))
+    /// The drawer's soft edge: a blur fading to nothing. (The needs-you bar stood on it too until it
+    /// floated, 2026-11-15 — see `testTheNeedsYouBarOverTheListFloats`.)
+    func testTheDrawersSoftEdgeIsABlurThatFades() throws {
         let identity = try source(views + "AgentIdentity.swift")
         let layer = section(identity, from: "struct SoftEdgeLayer: View {", to: "\n}\n")
         XCTAssertTrue(layer.contains("Rectangle().fill(.ultraThinMaterial)"), "a blur")

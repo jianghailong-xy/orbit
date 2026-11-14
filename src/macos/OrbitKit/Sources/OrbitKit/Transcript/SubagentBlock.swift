@@ -19,8 +19,14 @@ public struct SubagentBlock: Equatable, Sendable {
     /// duration and cost only once the run has ended. Nil when the call has not been answered yet by
     /// a run and named no type of its own.
     public let detailLine: String?
-    /// The router's reasons in order, joined — the opened block's Why line. Nil when it gave none.
+    /// The opened block's Why line: the server's one-line Why, or, from a server or a row from before
+    /// it was kept, the router's reasons in order, joined. A run on another workspace leads with how
+    /// that workspace was chosen. Nil when there is neither (web parity: `subagentWhy`).
     public let why: String?
+    /// What the Why line's Details open to: every reason the router gave (none when the Why line is
+    /// already those reasons), then every candidate it removed as `Removed · <provider>: <reason>`
+    /// (web parity: `subagentWhyDetails` and its list). Empty when there is nothing more to show.
+    public let details: [String]
     /// Whether the run is still going (a background call answers at once, so its card's status is
     /// already `ok` while the work goes on).
     public let running: Bool
@@ -36,14 +42,42 @@ public struct SubagentBlock: Equatable, Sendable {
         if let duration = duration(run) { parts.append(duration) }
         if let cost = cost(run) { parts.append(cost) }
 
-        let reasons = (run?.reasons ?? []).filter { !$0.isEmpty }
         return SubagentBlock(
             type: type,
             background: background,
             detailLine: parts.joined(separator: " · "),
-            why: reasons.isEmpty ? nil : reasons.joined(separator: " · "),
+            why: why(run),
+            details: details(run),
             running: run?.isRunning ?? (status == .running),
         )
+    }
+
+    private static func why(_ run: SubagentRunView?) -> String? {
+        guard let run else { return nil }
+        let reasons = run.reasons.filter { !$0.isEmpty }
+        guard let why = nonEmpty(run.why) ?? (reasons.isEmpty ? nil : reasons.joined(separator: " · ")) else {
+            return nil
+        }
+        // A run on another workspace leads with how that workspace was chosen: its first reason.
+        if nonEmpty(run.workspaceName) != nil, let chosen = nonEmpty(run.reasons.first), !why.hasPrefix(chosen) {
+            return "\(chosen) · \(why)"
+        }
+        return why
+    }
+
+    private static func details(_ run: SubagentRunView?) -> [String] {
+        guard let run else { return [] }
+        let reasons = nonEmpty(run.why) == nil ? [] : run.reasons.filter { !$0.isEmpty }
+        let removed = (run.removed ?? []).map { c -> String in
+            var line = c.provider
+            if let engine = nonEmpty(c.engine), engine != c.provider { line += " (" + engine + ")" }
+            if let model = nonEmpty(c.model) {
+                line += ", " + model
+                if let effort = nonEmpty(c.effort) { line += " · " + effort }
+            }
+            return "Removed · " + line + ": " + c.reason
+        }
+        return reasons + removed
     }
 
     /// How long the run took, once it has ended. A run still going has no duration to show yet.

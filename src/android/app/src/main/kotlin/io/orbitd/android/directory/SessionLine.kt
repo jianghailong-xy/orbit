@@ -208,7 +208,7 @@ internal object SessionHeader {
  * requests of one kind only; two kinds are a mix, which the server sends under another kind and the row keeps "Waiting for approval". */
 internal object OwnerRequestRowWords {
     val requestWords = mapOf("DECISION" to "Decision for you", "SECRET" to "Key needed", "MANUAL_STEP" to "Steps for you",
-        "CONFIRM" to "Confirm for you")
+        "CONFIRM" to "Confirm for you", "WIKI_CREATE" to "Create wiki")
     fun taskMoves(moves: Int) = if (moves == 1) "Approve task move" else "Approve $moves task moves"
 
     /** The word, or null when the kind is neither or the list it needs is missing or empty (an older control plane). */

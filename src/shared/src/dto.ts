@@ -2484,8 +2484,12 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
   /** The engine's own words, for an attempt that hit a limit; truncated. */
   error?: string;
   /** The account of an account pool it ran on, chosen for this SubAgent alone: never written onto the parent
-   *  session, whose own pool member stays as it was. */
-  poolMember?: { providerId: string; label: string };
+   *  session, whose own pool member stays as it was. A Claude pool's member provider, or a Codex pool's ChatGPT
+   *  account or API key. */
+  poolMember?:
+    | { providerId: string; label: string }
+    | { accountId: string; label: string }
+    | { keyId: string; label: string };
   startedAt: string;
   endedAt?: string;
 }

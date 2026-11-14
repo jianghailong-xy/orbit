@@ -10,10 +10,6 @@ import OrbitKit
 //
 // Every word is `WikiChatCopy`'s and every rule `WikiChatLogic`'s (OrbitKit), held there to the web and the contract.
 
-// MARK: - the transcript, here
-
-// TranscriptView's wiki-chat init lives in ConsoleView.swift, beside the private state it relies on.
-
 private struct WikiChatPanelKey: EnvironmentKey {
     static let defaultValue = false
 }

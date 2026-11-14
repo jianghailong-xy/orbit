@@ -91,9 +91,21 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
             }
             if (open) {
                 // The router's reasons first, then the steps, then the result (board 03).
+                // The server's one-line Why in at most two lines; every reason and removed candidate behind Details (web `SubagentWhy`).
                 block.why?.let { why ->
                     Text(buildAnnotatedString { withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append("Why") }; append(" · $why") },
-                        Modifier.testTag("subagent-why"), color = grey, style = MaterialTheme.typography.bodyMedium)
+                        Modifier.testTag("subagent-why"), color = grey, style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (block.details.isNotEmpty()) {
+                        var details by rememberSaveable(row.key, "why") { mutableStateOf(false) }
+                        Text(if (details) "Hide" else "Details", Modifier.testTag("subagent-why-more")
+                            .clickable(role = Role.Button) { details = !details }
+                            .semantics { stateDescription = if (details) "Expanded" else "Collapsed" },
+                            color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                        if (details) Column(Modifier.testTag("subagent-why-list"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            block.details.forEach { Text(it, color = grey, style = MaterialTheme.typography.bodySmall) }
+                        }
+                    }
                 }
                 if (nested.isNotEmpty()) Column(Modifier.drawBehind { drawRect(grey.copy(alpha = 0.3f), size = size.copy(width = 1.dp.toPx())) }
                     .padding(start = 6.dp)) {

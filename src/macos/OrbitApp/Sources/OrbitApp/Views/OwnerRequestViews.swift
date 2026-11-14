@@ -42,6 +42,7 @@ struct OwnerRequestContent: View {
 
 /// A pending request, whole: panel 1 of the owner-action board.
 struct OwnerRequestCard: View {
+    @Environment(AppModel.self) private var appModel
     let model: OwnerRequestsModel
     let request: OwnerRequest
     var onChat: ((OwnerRequest) -> Void)? = nil
@@ -57,6 +58,8 @@ struct OwnerRequestCard: View {
     @State private var reason = ""
     @State private var busy = false
     @State private var failure: String?
+    /// WIKI_CREATE's Change settings…: the Create wiki form on the asking session's workspace.
+    @State private var changingSettings = false
     @FocusState private var field: Field?
     /// Closes the review sheet this card may be drawn in, so the composer it arms is in view.
     @Environment(\.dismissApprovalReview) private var dismissReview
@@ -178,6 +181,8 @@ struct OwnerRequestCard: View {
             secret
         case .confirm:
             EmptyView()
+        case .wikiCreate:
+            OwnerRequestWikiCreateFacts(request: request)
         }
     }
 
@@ -278,26 +283,36 @@ struct OwnerRequestCard: View {
     }
 
     /// The buttons as every other card draws them (`ApprovalActions`: stacked full width on a phone,
-    /// one row on a Mac), Chat about this after the press; then the ways out, as links.
-    private var actions: some View {
+    /// one row on a Mac), Chat about this after the press; then the ways out, as links. A WIKI_CREATE card's
+    /// are its own three (design §3.6): Create wiki, Change settings…, Not for this repository.
+    @ViewBuilder private var actions: some View {
+        if request.kind == .wikiCreate { wikiCreateActions } else { kindActions }
+    }
+
+    private var kindActions: some View {
         VStack(alignment: .leading, spacing: 10) {
             ApprovalActions {
                 doors
-                if let onChat, !closed {
-                    Button {
-                        PlatformHaptics.tap()
-                        dismissReview()
-                        onChat(request)
-                    } label: {
-                        Text(Approvals.chatAction).approvalActionLabel()
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("owner-request-chat")
-                }
+                chat
             }
             HStack(spacing: 12) { exits }
         }
         .lineLimit(1)
+    }
+
+    /// Chat about this: on any pending card in its conversation (an `onChat` to hand it to), none past the deadline.
+    @ViewBuilder private var chat: some View {
+        if let onChat, !closed {
+            Button {
+                PlatformHaptics.tap()
+                dismissReview()
+                onChat(request)
+            } label: {
+                Text(Approvals.chatAction).approvalActionLabel()
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("owner-request-chat")
+        }
     }
 
     @ViewBuilder private var doors: some View {
@@ -345,6 +360,53 @@ struct OwnerRequestCard: View {
             .disabled(OwnerRequests.snoozeChoices(request).isEmpty)
     }
 
+    private var wikiCreateActions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ApprovalActions {
+                Button {
+                    run {
+                        try await model.createWiki(request)
+                        await appModel.wiki?.loadSpaces()
+                    }
+                } label: {
+                    Text(OwnerRequests.primaryLabel(request.kind)).bold().approvalActionLabel()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(busy || closed)
+                .accessibilityIdentifier("owner-request-primary")
+                Button { changingSettings = true } label: {
+                    Text(WikiStartCopy.changeSettings).approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(busy || closed || appModel.wiki == nil)
+                .accessibilityIdentifier("owner-request-wiki-settings")
+                chat
+            }
+            HStack(spacing: 12) {
+                Button(WikiStartCopy.notHere) { run { try await model.decline(request, reason: WikiStartCopy.notHere) } }
+                    .buttonStyle(.borderless)
+                    .disabled(busy || closed)
+                    .accessibilityIdentifier("owner-request-not-here")
+                Spacer(minLength: 0)
+                Menu(OwnerRequests.remindLater) {
+                    ForEach(OwnerRequests.snoozeChoices(request)) { choice in
+                        Button(choice.label) { model.snooze(request.id, for: choice.seconds) }
+                    }
+                }
+                .fixedSize()
+                .font(.orbitLabel)
+                .disabled(OwnerRequests.snoozeChoices(request).isEmpty)
+            }
+        }
+        .lineLimit(1)
+        .sheet(isPresented: $changingSettings) {
+            if let wiki = appModel.wiki {
+                WikiCreateSheet(wiki: wiki, workspaceID: request.workspaceId, created: { await model.load() })
+            }
+        }
+    }
+
     private var declineForm: some View {
         VStack(alignment: .leading, spacing: 8) {
             TextField(OwnerRequests.declinePrompt, text: $reason, axis: .vertical)
@@ -388,6 +450,40 @@ struct OwnerRequestCard: View {
     static func markdown(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
+    }
+}
+
+/// What a WIKI_CREATE card will make (docs/wiki-explicit-creation-design.md §3.6, board 46 part 3): the repository,
+/// the asking session's workspace it reads it from — offline when its runner is — and the maintenance it starts with.
+struct OwnerRequestWikiCreateFacts: View {
+    @Environment(AppModel.self) private var appModel
+    let request: OwnerRequest
+
+    var body: some View {
+        let facts = WikiStartLogic.cardFacts(repoUrlNorm: request.repoUrlNorm, workspaceId: request.workspaceId,
+                                             choices: appModel.wikiWorkspaceChoices)
+        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 16, verticalSpacing: 6) {
+            if let repository = facts.repository {
+                GridRow {
+                    Text(WikiStartCopy.cardRepository).foregroundStyle(.secondary)
+                    Text(repository).textSelection(.enabled)
+                }
+            }
+            GridRow {
+                Text(WikiStartCopy.cardReadsFrom).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(facts.readsFrom ?? "—")
+                    if facts.offline {
+                        Text(WikiStartCopy.workspaceOffline).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            GridRow {
+                Text(WikiStartCopy.cardMaintenance).foregroundStyle(.secondary)
+                Text(facts.maintenance)
+            }
+        }
+        .font(.orbitSubtext)
     }
 }
 

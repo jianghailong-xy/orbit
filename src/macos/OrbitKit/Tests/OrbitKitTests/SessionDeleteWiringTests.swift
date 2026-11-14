@@ -148,8 +148,9 @@ final class SessionDeleteWiringTests: XCTestCase {
         let load = try slice(agents, from: "func loadSessions(agentID: String, view: SessionView, reset: Bool = false) async {",
                              to: "\n    }\n")
         let read = try positions(["let read = try await api.listSessions(view: view)",
-                                  "let all = SessionFilter.removing(trashing, from: read)", "allSessions = all",
-                                  "agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)"], in: load)
+                                  "let all = SessionFilter.removing(trashing, from: read)",
+                                  "assignIfChanged(\\.allSessions, all)",
+                                  "SessionFilter.forAgent(all, agentID: agentID, view: view)"], in: load)
         XCTAssertEqual(read, read.sorted())
 
         let project = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {",

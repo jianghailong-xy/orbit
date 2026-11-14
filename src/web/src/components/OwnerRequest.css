@@ -204,6 +204,15 @@
   color: var(--text-3);
   font-size: 12px;
 }
+/* WIKI_CREATE's decline stands at the end of the row, as Remind me later does on the other kinds (board 46 part 3). */
+.owner-request-not-here {
+  margin-left: auto;
+}
+.owner-request-offline {
+  margin-left: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .owner-request-link:disabled,
 .owner-request-later:disabled {
   cursor: not-allowed;

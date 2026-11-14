@@ -287,6 +287,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /managed-runner/retry',
   'POST /managed-runner/sleep',
   'POST /managed-runner/wake',
+  'POST /owner-requests/:id/create-wiki',
   'POST /owner-requests/:id/decline',
   'POST /owner-requests/:id/done',
   'POST /owner-requests/:id/secret',

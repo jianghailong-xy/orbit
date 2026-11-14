@@ -56,7 +56,8 @@ class OwnerRequestRowWordsTest {
     private fun line(s: DirectorySession) = SessionLine.make(s, live = true, now = now)
 
     @Test fun anOpenRequestSaysItsKind() {
-        mapOf("DECISION" to "Decision for you", "SECRET" to "Key needed", "MANUAL_STEP" to "Steps for you", "CONFIRM" to "Confirm for you")
+        mapOf("DECISION" to "Decision for you", "SECRET" to "Key needed", "MANUAL_STEP" to "Steps for you", "CONFIRM" to "Confirm for you",
+            "WIKI_CREATE" to "Create wiki")
             .forEach { (kind, word) ->
                 assertEquals(SessionLine(word, Tone.APPROVAL), line(row("OWNER_REQUEST", requests(kind))))
                 assertEquals(word, SessionHeader.statusWord(row("OWNER_REQUEST", requests(kind, kind), pending = 2), now = now))

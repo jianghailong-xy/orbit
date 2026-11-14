@@ -18,6 +18,7 @@ describe('sessionLine — owner requests and task moves', () => {
     ['SECRET', 'Key needed'],
     ['MANUAL_STEP', 'Steps for you'],
     ['CONFIRM', 'Confirm for you'],
+    ['WIKI_CREATE', 'Create wiki'],
   ])('a %s request says “%s”', (kind, words) => {
     expect(sessionLine({ ...parked, waitingKind: 'OWNER_REQUEST', ownerRequests: [request(kind), request(kind)] }, true))
       .toEqual({ text: words, tone: 'approval' });

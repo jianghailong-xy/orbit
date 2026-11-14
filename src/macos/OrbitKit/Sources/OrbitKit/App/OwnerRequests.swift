@@ -15,6 +15,7 @@ public enum OwnerRequests {
         case .secret:     return "SECRET"
         case .manualStep: return "STEPS"
         case .confirm:    return "CONFIRM"
+        case .wikiCreate: return "WIKI"
         }
     }
 
@@ -25,6 +26,7 @@ public enum OwnerRequests {
         case .secret:     return "Provide key"
         case .manualStep: return "Mark done"
         case .confirm:    return "Confirm"
+        case .wikiCreate: return "Create wiki"
         }
     }
 
@@ -146,7 +148,7 @@ public enum OwnerRequests {
         switch request.kind {
         case .secret:   return draft.body != nil
         case .decision: return option != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manualStep, .confirm: return true
+        case .manualStep, .confirm, .wikiCreate: return true
         }
     }
 
@@ -187,6 +189,7 @@ public enum OwnerRequests {
             if let label { return words.map { "\(label): “\($0)”" } ?? label }
             return words.map { "“\($0)”" } ?? "Answered"
         }
+        if request.kind == .wikiCreate { return WikiStartCopy.created(request.answer?.name) }
         return request.kind == .confirm ? "Confirmed" : "Marked done"
     }
 

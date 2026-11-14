@@ -8,8 +8,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -106,27 +122,50 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         open(OrbitRoute(Destination.SESSION, target, workspace))
     }
     // Several waiting, unfolded (the owner, 2026-11-13, option B of `docs/mocks/needs-you-capsule/03-expand.html`): one capsule
-    // per conversation, the first the one the folded bar names, pushing the page down. The first carries the ↑ that folds them.
-    val entries = if (unfolded && waiting.count > 1) remember(openRows, sessionId, trashing, terminals) {
+    // per conversation, the first the one the folded bar names, standing where the folded bar stood and carrying the ↑ that folds
+    // them. Since 2026-11-15 (`04-floating.html`) they hang over the page on a scrim instead of pushing it down: the folded bar
+    // keeps its place, unseen, so the page under it never moves, and the stack is a popup over everything from there down.
+    val several = waiting.count > 1
+    val entries = if (unfolded && several) remember(openRows, sessionId, trashing, terminals) {
         listOfNotNull(terminals) + NeedsYouLogic.entries(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
     } else emptyList()
-    if (entries.size > 1) {
-        // At most five; the last says "+N" for the ones behind it, as the folded bar does.
-        val shown = entries.take(NeedsYouLogic.unfoldedLimit)
-        Column(measured) {
-            shown.forEachIndexed { index, entry ->
-                NeedsYouBar(entry.text, null, hint(entry),
-                    detail = entry.detail, since = entry.since, glyph = entry.glyph,
-                    more = if (index == shown.lastIndex) entries.size - shown.size else 0,
-                    onFold = if (index == 0) ({ unfolded = false }) else null) { go(entry) }
-            }
-        }
-        return
-    }
-    val several = waiting.count > 1
-    NeedsYouBar(waiting.text, null, if (several) NeedsYouLogic.unfoldHint(waiting.count) else hint(waiting), measured, detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph, unfolds = several) {
+    val stacked = entries.size > 1
+    var top by remember { mutableStateOf(0) }
+    NeedsYouBar(waiting.text, null, if (several) NeedsYouLogic.unfoldHint(waiting.count) else hint(waiting), measured.onGloballyPositioned { top = it.positionInWindow().y.toInt() }
+        .then(if (stacked) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier),
+        detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph, deck = several) {
         if (several) unfolded = true else go(waiting)
     }
+    if (stacked) NeedsYouStack(top, { unfolded = false }) {
+        // At most five; the last says "+N" for the ones behind it, as the folded bar does.
+        val shown = entries.take(NeedsYouLogic.unfoldedLimit)
+        shown.forEachIndexed { index, entry ->
+            NeedsYouBar(entry.text, null, hint(entry),
+                detail = entry.detail, since = entry.since, glyph = entry.glyph,
+                more = if (index == shown.lastIndex) entries.size - shown.size else 0,
+                onFold = if (index == 0) ({ unfolded = false }) else null) { go(entry) }
+        }
+    }
+}
+
+/** The unfolded capsules over everything from [top] (the folded bar's place in the window) down, on a scrim a press on which folds
+ * them — never reaching the row under it. */
+@Composable
+private fun NeedsYouStack(top: Int, fold: () -> Unit, capsules: @Composable ColumnScope.() -> Unit) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    Popup(popupPositionProvider = WholeWindow, onDismissRequest = fold, properties = PopupProperties(focusable = true)) {
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (dark) 0.55f else 0.18f))
+            .clickable(remember { MutableInteractionSource() }, null, onClickLabel = NeedsYouLogic.foldLabel, onClick = fold)
+            .testTag("needs-you-scrim")) {
+            Column(Modifier.offset { IntOffset(0, top) }.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp), content = capsules)
+        }
+    }
+}
+
+/** The popup laid over the whole window, so its scrim covers the page and its capsules stand where the bar's window position says. */
+private object WholeWindow : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) =
+        IntOffset.Zero
 }
 
 /** What a press on one line does, for TalkBack. */
@@ -151,16 +190,20 @@ private fun hint(entry: NeedsYouBanner) = when {
  */
 @Composable
 internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, modifier: Modifier = Modifier, detail: String? = null,
-    since: String? = null, more: Int = 0, glyph: NeedsYouGlyph = NeedsYouGlyph.QUESTION, unfolds: Boolean = false,
+    since: String? = null, more: Int = 0, glyph: NeedsYouGlyph = NeedsYouGlyph.QUESTION, deck: Boolean = false,
     onFold: (() -> Unit)? = null, onPress: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val amber = LocalOrbitColors.current.needsYou
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val press = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPress() }
-    Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 16.dp, bottom = 6.dp)
+    // Nothing under it: the rows go on behind the capsule, which a shadow lifts off them (04-floating). Several waiting, two edges
+    // of the capsules behind it show under it as a stack of notifications does, and the bar keeps their room.
+    Box(modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 6.dp + if (deck) DECK_REACH else 0.dp)
         .testTag("needs-you-bar")) {
+        if (deck) NeedsYouDeck()
         // Read as its words, a button, and what the press does (iOS `accessibilityHint`).
-        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant),
+        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).shadow(8.dp, CircleShape).clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant),
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).heightIn(min = 44.dp).clickable(onClickLabel = hint, role = Role.Button, onClick = press)
                 .padding(start = 7.dp, end = if (onFold == null) 16.dp else 0.dp, top = 5.dp, bottom = 5.dp),
@@ -173,18 +216,9 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(text, Modifier.weight(1f).testTag("needs-you-bar-text"), color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        // "+N" for those behind it, with a ⌄ when the press unfolds them rather than going.
-                        if (more > 0) Row(Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("+$more", Modifier.testTag("needs-you-bar-more"), style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold, color = muted)
-                            if (unfolds) Icon(painterResource(R.drawable.ic_chevron_down), null,
-                                Modifier.size(10.dp).testTag("needs-you-bar-unfolds"), tint = muted)
-                        }
-                        // No count to carry it (sessions blocked on a tool call have no "+N"): the ⌄ stands bare, as the fold's
-                        // ↑ does — a pill around the chevron alone squashed to the glyph's height.
-                        else if (unfolds) Icon(painterResource(R.drawable.ic_chevron_down), null,
-                            Modifier.size(14.dp).testTag("needs-you-bar-unfolds"), tint = muted)
+                        // "+N" for those behind it; that a press unfolds them is the deck's to say.
+                        if (more > 0) Text("+$more", Modifier.background(muted.copy(alpha = 0.14f), CircleShape).padding(horizontal = 6.dp)
+                            .testTag("needs-you-bar-more"), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = muted)
                         since?.let { NeedsYouAge(it) }
                     }
                     detail?.let {
@@ -207,6 +241,21 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
             }
         }
     }
+}
+
+/** How far the deck shows below the capsule (iOS `deckReach`). */
+private val DECK_REACH = 13.dp
+
+/** The two edges under the capsule while several are waiting: 7 and 13 dp below it, standing in 12 and 26 dp from its ends. */
+@Composable
+private fun BoxScope.NeedsYouDeck() {
+    // The capsule's own surface, a step and two steps back towards the page's.
+    val capsule = MaterialTheme.colorScheme.surfaceVariant
+    val page = MaterialTheme.colorScheme.surface
+    Box(Modifier.matchParentSize().padding(horizontal = 26.dp).offset(y = DECK_REACH).clip(CircleShape)
+        .background(lerp(capsule, page, 0.6f)).testTag("needs-you-bar-deck"))
+    Box(Modifier.matchParentSize().padding(horizontal = 12.dp).offset(y = 7.dp).shadow(4.dp, CircleShape).clip(CircleShape)
+        .background(lerp(capsule, page, 0.3f)))
 }
 
 /** How long the thing the bar names has waited — "12m", "2h" — kept current while it sits there: the words of a duration still

@@ -24,10 +24,18 @@ export interface RunnerUpdateIndicator {
   waits: string;
   /** The runner is stopping, not updating (docs/mocks/runner-stopping): no Later, no Update Now. */
   stopping: boolean;
+  /** The runner reports phase `restarting` (an Update Now, or a drain that ended): no turn is waited
+   *  for any more, so the popover lists none and offers no Later. */
+  restarting: boolean;
 }
 
 export const RUNNER_UPDATE_INDICATOR_BODY = 'It installs once these turns finish. Nothing is lost — waiting work starts right after.';
 export const RUNNER_UPDATE_INDICATOR_BODY_RESTARTING = 'It is restarting into the new version. Waiting work starts right after.';
+/** Restarting for the owner's Update Now, which interrupted turns: `… 5 interrupted turns continue once it is back, …` */
+export function runnerUpdateIndicatorRestartingInterrupted(turns: number): string {
+  const continues = turns === 1 ? '1 interrupted turn continues' : `${turns} interrupted turns continue`;
+  return `It is restarting into the new version. ${continues} once it is back, and waiting work starts right after.`;
+}
 /** The body for a runner that is stopping rather than updating (docs/mocks/runner-stopping). */
 export const RUNNER_STOPPING_INDICATOR_BODY = 'It stops once these turns finish. Nothing is lost — waiting work starts once it is back.';
 export const RUNNER_STOPPING_INDICATOR_BODY_NOW = 'It is stopping now. Waiting work starts once it is back.';
@@ -60,8 +68,11 @@ export function runnerUpdateIndicator(runner: UpdateIndicatorRunner, machine: st
   const waiting = runner.drainWaiting;
   if (!waiting || waiting.sessions + waiting.messages <= 0) return null;
   const report = runner.selfUpdate ?? null;
+  // A runner restarting waits for no turn: Update Now interrupted them, and its report then carries no
+  // turnsInFlight, so the reader's named turns must not stand in for it.
+  const restarting = report?.phase === 'restarting';
   // The runner's own count covers every turn in flight; the reader's named turns are the nearest from one that sends none.
-  const turns = report?.turnsInFlight ?? runner.updateTurns?.length ?? 0;
+  const turns = restarting ? 0 : report?.turnsInFlight ?? runner.updateTurns?.length ?? 0;
   const version = report?.targetVersion ?? null;
   if (waiting.stopping === true) {
     return {
@@ -71,14 +82,23 @@ export function runnerUpdateIndicator(runner: UpdateIndicatorRunner, machine: st
       body: turns > 0 ? RUNNER_STOPPING_INDICATOR_BODY : RUNNER_STOPPING_INDICATOR_BODY_NOW,
       waits: runnerUpdateIndicatorWaits(waiting),
       stopping: true,
+      restarting: false,
     };
   }
   return {
     pill: turns > 0 ? `${machine} updating · ${counted(turns, 'turn', 'turns')} left` : `${machine} restarting`,
     short: turns > 0 ? String(turns) : '',
-    title: version ? `${machine} is updating to ${version}` : `${machine} is updating`,
-    body: turns > 0 ? RUNNER_UPDATE_INDICATOR_BODY : RUNNER_UPDATE_INDICATOR_BODY_RESTARTING,
+    // Restarting reads as the runner page's Update card does: `Restarting into 0.1.261…`.
+    title: restarting
+      ? version ? `${machine} is restarting into ${version}` : `${machine} is restarting`
+      : version ? `${machine} is updating to ${version}` : `${machine} is updating`,
+    body: turns > 0
+      ? RUNNER_UPDATE_INDICATOR_BODY
+      : report?.interruptedTurns
+        ? runnerUpdateIndicatorRestartingInterrupted(report.interruptedTurns)
+        : RUNNER_UPDATE_INDICATOR_BODY_RESTARTING,
     waits: runnerUpdateIndicatorWaits(waiting),
     stopping: false,
+    restarting,
   };
 }

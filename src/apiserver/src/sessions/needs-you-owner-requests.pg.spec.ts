@@ -9,7 +9,8 @@
  *
  *   (a) each of the four owner-request kinds, filed by a session, is counted on THAT session's row —
  *       `pendingApprovals`, `waitingKind` 'OWNER_REQUEST', `ownerRequests` and the row's word
- *       (`ownerRequestRowWord`: "Decision for you", "Key needed", "Steps for you", "Confirm for you");
+ *       (`ownerRequestRowWord`: "Decision for you", "Key needed", "Steps for you", "Confirm for you",
+ *       "Create wiki");
  *       `needsYouSessions` includes the session, and filing tells the row at once;
  *   (b) two kinds on one row are a mix: counted, and the row keeps "Waiting for approval"
  *       (`waitingKind` null);
@@ -208,6 +209,25 @@ test('the needs-you signal counts owner requests and waiting task moves', {
     return created.id;
   }
 
+  /** A WIKI_CREATE request, written as the door writes it (4424f65ed): the door reads the repository from the asking session's
+   *  workspace, which is not what is under test. */
+  async function wikiRequest(w: World, sessionId: string): Promise<string> {
+    const created = await prisma.ownerRequest.create({
+      data: {
+        ownerId: w.ownerId,
+        askedBySessionId: sessionId,
+        kind: 'WIKI_CREATE',
+        state: 'PENDING',
+        title: 'Create a wiki for lfs-builder?',
+        why: 'the work reads the codebase often',
+        repoUrlNorm: `github.com/sample/lfs-builder-${randomUUID()}`,
+        workspaceId: w.workspaceId,
+      },
+      select: { id: true },
+    });
+    return created.id;
+  }
+
   async function refusalOf(run: () => Promise<unknown>): Promise<Record<string, unknown>> {
     try {
       await run();
@@ -226,6 +246,8 @@ test('the needs-you signal counts owner requests and waiting task moves', {
       { kind: 'SECRET', word: 'Key needed' },
       { kind: 'MANUAL_STEP', word: 'Steps for you' },
       { kind: 'CONFIRM', word: 'Confirm for you' },
+      // An agent asking for a wiki (4424f65ed): the card's own action.
+      { kind: 'WIKI_CREATE', word: 'Create wiki' },
     ] as const;
     for (const { kind, word: expected } of cases) {
       const asker = await session(w, `asks a ${kind}`);
@@ -234,6 +256,8 @@ test('the needs-you signal counts owner requests and waiting task moves', {
       told.length = 0;
       const id = kind === 'SECRET'
         ? await secretRequest(w, asker)
+        : kind === 'WIKI_CREATE'
+        ? await wikiRequest(w, asker)
         : (await requests.file(w.ownerId, asker, {
           kind,
           title: `a ${kind} for the owner`,
@@ -241,7 +265,7 @@ test('the needs-you signal counts owner requests and waiting task moves', {
           ...(kind === 'DECISION' ? { options: [{ label: 'Yes' }, { label: 'No' }] } : {}),
           ...(kind === 'MANUAL_STEP' ? { steps: [{ text: 'Rotate the key' }] } : {}),
         })).id;
-      if (kind !== 'SECRET') assert.ok(toldAbout(asker), `${kind}: filing tells the asking row at once`);
+      if (kind !== 'SECRET' && kind !== 'WIKI_CREATE') assert.ok(toldAbout(asker), `${kind}: filing tells the asking row at once`);
 
       const listed = await row(w, asker);
       assert.equal(listed.pendingApprovals, 1, `${kind}: counted once`);
