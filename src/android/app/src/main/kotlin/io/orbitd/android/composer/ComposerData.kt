@@ -286,26 +286,18 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         }.orEmpty()
     }
 
-    /** The model last picked for [engine] on [provider] (`preferences.defaultModels`, contract §6.5's order; OrbitKit
-     * `AgentDefaults.rememberedModel`, web `rememberedModel`): the pair's own key, `<engine>:<provider>`, then what an older client
-     * remembered — `opencode/<slug>` (whose value names the key, `orbit-<slug>/<model>`) and `opencode` for OpenCode, the bare slug
-     * for the engine a provider runs on by default. */
-    fun rememberedModel(engine: String, provider: String, remembered: Map<String, String>): String? {
-        remembered["$engine:$provider"]?.let { return it }
-        if (engine == ProviderEngines.OPENCODE) {
-            if (provider == ProviderEngines.OPENCODE) return remembered[ProviderEngines.OPENCODE]?.takeUnless { it.startsWith("orbit-") && '/' in it }
-            val named = remembered["opencode/$provider"] ?: return null
-            return named.removePrefix("orbit-$provider/").takeIf { named.startsWith("orbit-$provider/") }
-        }
-        return remembered[provider]?.takeIf { providerEngines(provider).firstOrNull() == engine }
-    }
+    /** The [workspace]'s `lastModel` — the model of the session a person last opened there — when a draft on [engine] with [provider]
+     * runs on its `lastEngine` and `lastProvider` (never the deprecated `provider` alias), else null (docs/workspace-default-model-design.md;
+     * web `newSessionModelFor`). The account-wide model memory is retired: nothing reads or writes it. */
+    fun lastModel(engine: String, provider: String, workspace: JsonObject?): String? =
+        workspace?.text("lastModel")?.takeIf { workspace.text("lastEngine") == engine && workspace.text("lastProvider") == provider }
 
     /** That model while the pair still offers it, null once the runtime has retired it (OrbitKit `AgentDefaults.livePin`, web
      * `livePinnedModel`): OpenCode owns its own selection, a key's own list is a document rather than a live probe, a catalogue not
      * reported retires nothing, and an id the runtime names as its default is current by definition. Judged against the catalogue of
      * the CLI that runs it — DeepSeek Harness's own, whichever key it spends. */
-    fun liveRememberedModel(engine: String, provider: String, remembered: Map<String, String>): String? {
-        val model = rememberedModel(engine, provider, remembered) ?: return null
+    fun liveLastModel(engine: String, provider: String, workspace: JsonObject?): String? {
+        val model = lastModel(engine, provider, workspace) ?: return null
         if (engine == ProviderEngines.OPENCODE) return model
         val row = row(provider)
         if (model.isEmpty()) return if (row == null && engine == ProviderEngines.ANTIGRAVITY) null else model
@@ -318,10 +310,10 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         return model.takeIf { offered.any { it.text("value") == model || it.text("value") == name } }
     }
 
-    /** The model a new session on [engine] with [provider] starts on (A07-19 (e); OrbitKit `AgentDefaults.newSessionModel`, web
-     * `newSessionModelFor`): the one last picked for the pair while it is still offered, else the pair's default. */
-    fun newSessionModel(engine: String, provider: String, remembered: Map<String, String>): String =
-        liveRememberedModel(engine, provider, remembered) ?: defaultModel(engine, provider)
+    /** The model a new session on [engine] with [provider] starts on (web `newSessionModelFor`): the [workspace]'s `lastModel` on its
+     * own engine and credential while still offered, else the pair's runner or key default. */
+    fun newSessionModel(engine: String, provider: String, workspace: JsonObject?): String =
+        liveLastModel(engine, provider, workspace) ?: defaultModel(engine, provider)
 
     /** A credential by the name a sentence gives it where its engine is not beside it (OrbitKit `SessionProviderChoices.providerName`,
      * web `providerNameOn`): an engine's own sign-in by the engine's CLI, anything else by its own label. */
