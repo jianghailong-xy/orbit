@@ -25,6 +25,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
 import { machineDraftPath } from '../../lib/machineSetup';
+import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
+import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
 import { AbandonedCheckouts } from '../AbandonedCheckouts';
@@ -233,6 +235,9 @@ function engineUpdateReportLines(message: string | null | undefined): string[] {
   return lines.length > 0 ? lines : ['Nothing here needs your attention.'];
 }
 
+/** A managed runner's row tone as the pill's colour; a moving state carries a spinner on the neutral pill. */
+const MANAGED_PILL = { ready: 'online', progress: 'offline', idle: 'offline', attention: 'attention' } as const;
+
 export function MachineSettingsPage() {
   const runnerId = routeId(useParams().id);
   const navigate = useNavigate();
@@ -246,6 +251,10 @@ export function MachineSettingsPage() {
     refetchInterval: (q) => machinePagePollMs(q.state.data, runnerId),
   });
   const runner = (runners.data ?? []).find((r) => r.id === runnerId) ?? null;
+  // When this machine is the account's managed runner: its state in the shared words, and its notice on top.
+  const { managed: accountManaged } = useManagedRunner();
+  const managed =
+    accountManaged?.status.runnerId && routeId(accountManaged.status.runnerId) === runnerId ? accountManaged : null;
 
   const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<MachineWorkspace[]>('/workspaces') });
   const workspaces = (workspacesQ.data ?? []).filter((a) => a.runnerId === runnerId);
@@ -669,8 +678,14 @@ export function MachineSettingsPage() {
 
   // The status pill: online and how many of its sessions are running, amber when something needs a
   // person (the nav's dot says the same), grey and when it was last seen while offline.
-  const pillTone = !runner.online ? 'offline' : attention.length > 0 ? 'attention' : 'online';
-  const pillText = runner.online
+  // The managed runner's pill is its shared short label instead (asleep is Asleep, never Offline).
+  const managedRow = managedRowOf(managed, runnerId);
+  const pillTone = managedRow
+    ? MANAGED_PILL[managedRow.tone]
+    : !runner.online ? 'offline' : attention.length > 0 ? 'attention' : 'online';
+  const pillText = managedRow
+    ? managedRow.label
+    : runner.online
     ? [RUNNER_ONLINE, typeof runner.maxConcurrent === 'number' ? runnerRunningOf(runner.activeSessions ?? 0, runner.maxConcurrent) : null]
         .filter(Boolean)
         .join(RUNNER_LINE_SEPARATOR)
@@ -695,7 +710,11 @@ export function MachineSettingsPage() {
         <div className="machine-title-row">
           <h1 className="machine-title">{shownName}</h1>
           <span className={`machine-pill machine-pill--${pillTone}`} data-testid="machine-status">
-            <span className={`settings-dot settings-dot--${pillTone}`} aria-hidden />
+            {managedRow?.tone === 'progress' ? (
+              <Spinner size="small" aria-hidden />
+            ) : (
+              <span className={`settings-dot settings-dot--${pillTone}`} aria-hidden />
+            )}
             {pillText}
           </span>
           <div style={{ flex: 1 }} />
@@ -709,6 +728,11 @@ export function MachineSettingsPage() {
         </div>
         {metaline.length > 0 && <div className="machine-metaline">{metaline.join(RUNNER_LINE_SEPARATOR)}</div>}
       </header>
+
+      {/* The managed runner's own state, Retry and the way to a model included; none while it is ready. */}
+      {managed && managed.display.kind !== 'available' && (
+        <ManagedRunnerNotice managed={managed} className="machine-managed-notice" />
+      )}
 
       {/* The Update card (board 4): a release this runner is behind, in the phase it reports. */}
       {updateCard && (

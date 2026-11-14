@@ -242,7 +242,8 @@ import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
 import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
 import type { LoginEngine } from '@orbit/shared';
-import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
+import { managedRowOf, managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
+import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
   currentEngineChoice,
   currentProviderChoice,
@@ -3189,6 +3190,8 @@ export function WorkspaceView({
   // refused as offline: the server queues a message for it, and the resume of an ended session
   // too (SessionsService.resume). Sending is what wakes it.
   const runnerTakesWork = !!runner.online || !!managed?.display.acceptsWork;
+  // The managed runner's shared state, for the column head's dot and the composer's asleep line.
+  const managedHeadRow = managedRowOf(managed, runner.id);
   const managedResumes = !!managed?.display.acceptsWork && selectedResumeBlockedReason === 'RUNNER_OFFLINE';
   const resumable = selectedSession
     ? sessionCapabilityOf(selectedSession, 'canResume', legacyResumable) || managedResumes
@@ -9688,7 +9691,18 @@ export function WorkspaceView({
           </div>
         ) : (
           <div className="session-col-head">
-            <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
+            {managedHeadRow ? (
+              // The managed runner's dot is its shared state: grey asleep, never the dot of an offline runner.
+              <span
+                className={`workspace-status-dot managed-mark--${managedHeadRow.tone}`}
+                role="img"
+                aria-label={managedHeadRow.label}
+                title={managedHeadRow.detail ? `${managedHeadRow.label} · ${managedHeadRow.detail}` : managedHeadRow.label}
+                data-managed-kind={managedHeadRow.kind}
+              />
+            ) : (
+              <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
+            )}
             <span className="session-col-title">{headWorkspaceName}</span>
             {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
                 chip row — both read as clutter in a narrow column, and Open is nearly always
@@ -10691,7 +10705,8 @@ export function WorkspaceView({
                   {sessionEndedBanner(
                     selectedSession ?? selected,
                     !!resumable,
-                    !!runner.online,
+                    // A sleeping managed runner takes work (sending wakes it): never "Runner offline".
+                    runnerTakesWork,
                     !resumable ? selectedResumeBlockedCopy : null,
                   )}
                 </div>
@@ -10811,7 +10826,16 @@ export function WorkspaceView({
         />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
-        {managed && managed.display.kind !== 'available' && !managedWelcome && <ManagedRunnerNotice managed={managed} />}
+        {managed && managed.display.kind !== 'available' && !managedWelcome && (
+          // Asleep is not a fault: one calm line that sending wakes it, rather than the notice.
+          managedHeadRow?.asleep && managedHeadRow.kind === 'sleeping' ? (
+            <div className="managed-runner-composer-line" role="status" data-kind="sleeping">
+              {MANAGED_RUNNER_COPY.asleep.composer}
+            </div>
+          ) : (
+            <ManagedRunnerNotice managed={managed} />
+          )
+        )}
         {/* What this session is waiting on: live watches it observes. A watch waits on the server,
             not in a process, so it gets its own strip rather than a row in the tray below
             (docs/watch-contract.md §9.2). Hidden when there are none. */}
