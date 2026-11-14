@@ -33,7 +33,8 @@ phone / web ──────────────────────�
 
 - The session runs on this machine's runner, exactly like a session started from the app. Every
   engine works, including DeepSeek Harness and Cursor, because the terminal never runs the engine.
-- The TUI reads `GET /sessions/:id/events/page` once, then follows the SSE `GET /sessions/:id/events`.
+- The TUI reads `GET /sessions/:id/events/page` and the cards still pending
+  (`GET /sessions/:id/approvals?status=PENDING`) once, then follows the SSE `GET /sessions/:id/events`.
   It writes through `POST /sessions/:id/turns`, `/interrupt` and
   `/approvals/:approvalId/decision`: the same doors the app uses, so steering and queueing behave
   as they do there.

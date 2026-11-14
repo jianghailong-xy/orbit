@@ -187,19 +187,4 @@ public enum ReferencedTaskNote {
         let counted = task.runs == 1 ? "1 run" : "\(task.runs) runs"
         return task.executed == task.runs ? counted : "\(counted), \(task.executed) with turns"
     }
-
-    /// "DONE" — or "6 DONE, 2 OPEN" — in the accessibility label of the line that names the note.
-    ///
-    /// What the reader came for is the state of the thing they referenced, so one task says its
-    /// status outright and several are counted by it, in the order the note named them.
-    public static func summary(_ tasks: [ReferencedTask]) -> String {
-        if tasks.count == 1, let only = tasks.first { return only.status }
-        var order: [String] = []
-        var counts: [String: Int] = [:]
-        for task in tasks {
-            if counts[task.status] == nil { order.append(task.status) }
-            counts[task.status, default: 0] += 1
-        }
-        return order.map { "\(counts[$0] ?? 0) \($0)" }.joined(separator: ", ")
-    }
 }

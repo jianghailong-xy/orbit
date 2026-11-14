@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { CoordinatorQuestionCard, coordinatorQuestions, type ProjectOpenItemRow } from '../components/CoordinatorQuestionCard';
 import { OwnerRequestCard, OwnerRequestResolved } from '../components/OwnerRequestCard';
+import { TerminalApproveCard } from '../components/TerminalApproveCard';
 import { Spinner } from '../components/ui/Spinner';
 import { formatSpan, ago } from '../lib/watches';
 import { markdownToPlainText } from '../lib/markdownText';
@@ -23,6 +24,7 @@ import {
 } from '../lib/ownerRequests';
 import { decisionReceiptTime } from '../components/EvidenceDecisionCard';
 import { openProjectsQuery, ownerRequestsQuery, projectOpenItemsQuery } from '../lib/queries';
+import { terminalRequestsQuery } from '../lib/terminals';
 import '../components/OwnerRequest.css';
 
 type InboxTab = 'open' | 'done' | 'declined';
@@ -119,6 +121,8 @@ export function WaitingOnYouPage(): JSX.Element {
   const tab: InboxTab = isTab(tabParam) ? tabParam : 'open';
   const count = useWaitingOnYouCount();
   const open = useQuery(ownerRequestsQuery('open'));
+  // A terminal asking to be approved waits ten minutes at most, so its card is drawn whole at the top, not folded.
+  const terminals = useQuery(terminalRequestsQuery()).data?.requests ?? [];
   const ended = useQuery({ ...ownerRequestsQuery(tab === 'declined' ? 'declined' : 'done'), enabled: tab !== 'open' });
   const projects = useQuery(openProjectsQuery());
   const asking = useMemo(() => projectsWithQuestions(projects.data ?? []), [projects.data]);
@@ -139,7 +143,7 @@ export function WaitingOnYouPage(): JSX.Element {
   const current = TABS.find((candidate) => candidate.key === tab)!;
   const loading = tab === 'open' ? open.isLoading : ended.isLoading;
   const endedRows = ended.data?.requests ?? [];
-  const empty = !loading && (tab === 'open' ? rows.length === 0 : endedRows.length === 0);
+  const empty = !loading && (tab === 'open' ? rows.length === 0 && terminals.length === 0 : endedRows.length === 0);
 
   return (
     <div className="owner-inbox">
@@ -163,6 +167,11 @@ export function WaitingOnYouPage(): JSX.Element {
       </header>
       {loading ? <Spinner /> : null}
       {empty ? <p className="owner-inbox-empty">{current.empty}</p> : null}
+      {tab === 'open' && terminals.length > 0 ? (
+        <div className="owner-inbox-terminals">
+          {terminals.map((request) => <TerminalApproveCard key={request.id} request={request} now={now} />)}
+        </div>
+      ) : null}
       {tab === 'open' && rows.length > 0 ? (
         <ul className="owner-inbox-list">
           {rows.map((row) => {

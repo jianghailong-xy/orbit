@@ -137,27 +137,3 @@ function takeSuffix(fields: string[], prefix: RegExp): string | null {
   fields.pop();
   return last.replace(prefix, '');
 }
-
-/**
- * "2 running, 1 failed" — what the block holds, in the accessible name and tooltip of the line that
- * names it.
- *
- * "background jobs" alone never said whether opening it was worth it. The count stays off the line's
- * words, where what the person typed is what the eye should land on (owner, 2026-10-27). A lone job
- * that ended says how, because that one number is what its reader came for.
- */
-export function summarizeBackgroundJobs({ running, ended }: BackgroundJobs): string {
-  if (running.length === 0 && ended.length === 1) {
-    const [job] = ended;
-    if (job.exitCode !== null) return `1 ended, exit ${job.exitCode}`;
-    return `1 ${job.status || 'ended'}`;
-  }
-  const failed = ended.filter((job) => job.status === 'failed' || job.status === 'killed');
-  return [
-    running.length > 0 ? `${running.length} running` : null,
-    ended.length > failed.length ? `${ended.length - failed.length} ended` : null,
-    failed.length > 0 ? `${failed.length} failed` : null,
-  ]
-    .filter(Boolean)
-    .join(', ');
-}

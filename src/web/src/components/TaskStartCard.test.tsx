@@ -190,7 +190,8 @@ describe('the turn that starts a task run', () => {
   });
 
   it('carries the task\'s inputs and whatever delivery appended inside the card, not in a bubble beside it', async () => {
-    const note = '\n\n<background-jobs>\n- bgj_1 completed\n</background-jobs>';
+    // A block that names itself: the jobs inventory draws no entry (owner, 2026-11-14).
+    const note = `\n\n${'<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>'}`;
     await mount([started(CARD, {
       // The echo is the brief and then what delivery appended; the note says where the brief ends.
       text: BRIEF + note,

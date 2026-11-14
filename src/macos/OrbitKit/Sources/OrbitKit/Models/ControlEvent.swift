@@ -43,6 +43,10 @@ public enum ControlEventType: String, Codable, Sendable {
     /// and nothing else (contract `realtime.redaction`): a nudge to re-read the Wiki pages and the
     /// Review queue, never the session list, and nothing depends on it arriving at all.
     case wikiChanged = "wiki.changed"
+    /// The owner's terminals changed — a terminal asked to be approved, a request was decided or collected, or a
+    /// terminal was revoked. USER-scoped; `data` names the request or terminal and nothing else: a nudge to re-read
+    /// `GET /terminals/requests` (the approve card) and `GET /terminals` (Settings → Terminals).
+    case terminalsChanged = "terminals.changed"
     /// The account's Open list may read differently now (docs/realtime-control-plane-stream.md
     /// §4.8). USER-scoped; `data` carries the list's version (`ControlListChanged`). Sent only to a
     /// stream that declared `?hints=list_changed` (`URLSessionControlStream`): a hint to make one

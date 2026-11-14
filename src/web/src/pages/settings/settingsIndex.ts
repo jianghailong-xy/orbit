@@ -21,6 +21,7 @@ export const PERSONAL_PAGES = [
   { path: '/settings/storage', label: 'Storage' },
   { path: '/settings/shared-links', label: 'Shared links' },
   { path: '/settings/access-tokens', label: 'Access tokens' },
+  { path: '/settings/terminals', label: 'Terminals' },
 ] as const;
 
 /** The Integrations group of Settings: each connected service's page, its nav label and address. */
