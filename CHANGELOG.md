@@ -17,7 +17,45 @@ change, the affected surface, and the upgrade or migration impact.
 
 ## Unreleased (main)
 
+Nothing yet.
+
+## 0.1.261
+
+The current version of record; its operator notes are in
+[`release-notes/0.1.261.md`](release-notes/0.1.261.md). The stable release after `v0.1.260`, with everything
+merged since that tag. Its notes also correct the 0.1.260 notes' lists of migrations and security fixes.
+
 ### Added
+
+- `GET /projects/:id/handoffs` names each crossing's target coordinator conversation
+  (`toProject.coordinatorSessionId`).
+- A dispatch of `ci.yml` on a branch reports all six of `main`'s required checks on the branch head,
+  `Dependency review` included ([release process](docs/release-process.md#before-tagging)).
+
+### Changed
+
+- A busy runner's automatic self-update waits six hours for the runner to go idle, then drains between 02:00 and
+  06:00 local time. A drain that lasts five minutes interrupts the turns still running, which resume on the
+  updated runner. A release postponed with Later keeps its plain deferral.
+- Project pages (web, macOS/iOS, Android) leave off the crossings their target's coordinator conversation
+  already answers, and trashing an open project's coordinator opens the next one at once.
+- macOS and iOS label a shared pool "Shared", as the web does.
+- Both release skills (`.claude` and `.agents`) state the exact tag and its full commit SHA, and get explicit
+  confirmation of both before tagging.
+
+### Fixed
+
+- A session queued before any runner claims it shows its first message instead of an empty page.
+- iOS: the session list's pinned section header is glass on iOS 26, edge to edge.
+- iOS and Android: the needs-you fold's chevron no longer squashes when there is no count.
+- CI: Swift core's copy-parity and wiring checks follow the current web again, and the JavaScript required
+  checks pass.
+
+### Already in the v0.1.260 tree, first recorded here
+
+These were merged before `v0.1.260` was tagged, but that release did not move them out of `Unreleased`.
+
+#### Added
 
 - A maintainer-curated public changelog, linked from the README, the documentation index, the community
   guide, and the website.
@@ -26,7 +64,7 @@ change, the affected surface, and the upgrade or migration impact.
 - Five scoped, independently reviewable `good first issue` tasks with stated scope, environment, acceptance
   criteria, contribution guidance, and maintainer response cadence.
 
-### Changed
+#### Changed
 
 - The public roadmap now separates current work, recently shipped work, and later direction, and no longer
   lists the onboarding, configuration-reference, API-reference, or release-verification work as upcoming.
@@ -35,12 +73,25 @@ change, the affected surface, and the upgrade or migration impact.
 - The release checklist now includes moving the `Unreleased` changelog entries under the version being
   tagged.
 
+### Upgrade notes
+
+- No database migrations since `v0.1.260`. Runners self-update; the update to 0.1.261 is taken under the rules
+  of the runner it replaces. See the [release notes](release-notes/0.1.261.md).
+
+## 0.1.257 to 0.1.260
+
+`v0.1.260` is the first published release after `v0.1.2-beta.246`. 0.1.257 and 0.1.259 were never tagged, and
+`v0.1.258`'s release run failed before it published anything. Their operator notes are
+[0.1.257](release-notes/0.1.257.md), [0.1.258](release-notes/0.1.258.md), [0.1.259](release-notes/0.1.259.md)
+and [0.1.260](release-notes/0.1.260.md). The [0.1.261 notes](release-notes/0.1.261.md) list the migrations and
+the security fix they left out. `v0.1.260` also carries everything listed under 0.1.257-beta.1 below.
+
 ## 0.1.257-beta.1
 
-The current version of record on `main`; its operator notes are in
-[`release-notes/0.1.257-beta.1.md`](release-notes/0.1.257-beta.1.md). This release establishes the single
-version of record and the verifiable supply chain, and publishes the onboarding and reference documentation
-written against them.
+Never tagged: `/dl` served it briefly from an untagged commit. Its operator notes are in
+[`release-notes/0.1.257-beta.1.md`](release-notes/0.1.257-beta.1.md). This version brought in the single
+version of record and the verifiable supply chain, with the onboarding and reference documentation written
+against them.
 
 ### Added
 
