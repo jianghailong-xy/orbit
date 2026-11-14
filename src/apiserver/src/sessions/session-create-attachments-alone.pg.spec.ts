@@ -137,7 +137,7 @@ scenario('attachments with no words open a session whose first turn carries them
   );
 });
 
-scenario('a session opened with words still leaves its opening turn to the claim', async () => {
+scenario('a session opened with words lays its opening turn down at create, with the upload on it', async () => {
   const attachmentId = await upload('crash.log');
 
   const session = await sessions.create(OWNER_ID, {
@@ -148,8 +148,58 @@ scenario('a session opened with words still leaves its opening turn to the claim
   });
 
   assert.equal(session.title, 'debug it, pls');
-  assert.deepEqual(await turnsOf(session.id), [], 'no turn until the runner claims it');
-  assert.deepEqual(await attachmentRow(attachmentId), { session_id: session.id, turn_id: null });
+  const turns = await turnsOf(session.id);
+  assert.deepEqual(
+    turns.map(({ client_turn_id, kind, content, status }) => ({ client_turn_id, kind, content, status })),
+    [{ client_turn_id: `initial-${session.id}`, kind: 'message', content: 'debug it, pls', status: 'PENDING' }],
+    'the opening is a turn before any runner claims the session',
+  );
+  assert.deepEqual(await attachmentRow(attachmentId), { session_id: session.id, turn_id: turns[0].id });
+});
+
+scenario('a queued session lists its opening as the accepted head until the runner echoes it', async () => {
+  const session = await sessions.create(OWNER_ID, {
+    prompt: 'Fix: Codex update failed',
+    workspaceId: WORKSPACE_ID,
+    effort: '',
+  });
+  const [opening] = await turnsOf(session.id);
+
+  const active = (await sessions.listQueuedTurns(OWNER_ID, session.id, 'active')) as Array<{
+    turnId: string; kind: string; placement: string; content: string; opening?: true;
+  }>;
+  assert.deepEqual(
+    active.map(({ turnId, kind, placement, content, opening }) => ({ turnId, kind, placement, content, opening })),
+    [{ turnId: opening.id, kind: 'message', placement: 'accepted', content: 'Fix: Codex update failed', opening: true }],
+    'unclaimed, the first message is what the session page draws',
+  );
+  assert.deepEqual(
+    await sessions.listQueuedTurns(OWNER_ID, session.id),
+    [],
+    'the queue itself still leaves the opening out: it is no follow-up to withdraw',
+  );
+
+  // The runner claims it and echoes the opening: the transcript draws it from now on, so the
+  // active view must stop listing it, or a client would draw it twice.
+  await admin.query(
+    `UPDATE "conversation_turn" SET status = 'IN_FLIGHT' WHERE id = $1::uuid`,
+    [opening.id],
+  );
+  assert.equal(
+    ((await sessions.listQueuedTurns(OWNER_ID, session.id, 'active')) as unknown[]).length,
+    1,
+    'taken but not yet echoed, it is still the accepted head',
+  );
+  await admin.query(
+    `INSERT INTO "run_event"(session_id, seq, type, payload, turn_id)
+     VALUES ($1::uuid, 1, 'user', '{"text":"Fix: Codex update failed"}'::jsonb, $2::uuid)`,
+    [session.id, opening.id],
+  );
+  assert.deepEqual(
+    await sessions.listQueuedTurns(OWNER_ID, session.id, 'active'),
+    [],
+    'echoed, the transcript holds the one copy',
+  );
 });
 
 scenario('no words and nothing attached, or a shell command without its words, is still refused', async () => {
