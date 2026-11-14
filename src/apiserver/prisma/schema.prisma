@@ -7412,7 +7412,7 @@ model PoolGatewayToken {
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
 /// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
 /// disabled or rotated revokes them (`revokedAt`).
-/// A coordinator handoff (migration 0761, docs/coordinator-handoff.md): the outgoing coordinator
+/// A coordinator handoff (migration 0771, docs/coordinator-handoff.md): the outgoing coordinator
 /// writes a note in a platform turn, then the replacement opens its successor with that note. One
 /// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
 model CoordinatorHandoff {
