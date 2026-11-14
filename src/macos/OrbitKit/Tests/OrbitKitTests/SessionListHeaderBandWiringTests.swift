@@ -94,5 +94,7 @@ final class SessionListHeaderBandWiringTests: XCTestCase {
         XCTAssertTrue(band.contains("Color(uiColor: .systemBackground).opacity(0.85)"),
                       "a wash dense enough that a row passing under the title can't be read")
         XCTAssertTrue(band.contains(".frame(height: 9)"), "fading out over the strip below the title")
+        XCTAssertTrue(band.contains(".padding(.horizontal, -20)"),
+                      "the glass runs edge to edge, past the header's side insets")
     }
 }

@@ -1170,6 +1170,8 @@ struct AgentPanes: View {
     /// 2026-11-14: "Pinned has no glass"). There the band is glass of the same make — a material blur
     /// under a wash of the page's colour — solid under the title, so a row still can't read through
     /// it, and fading out over the 9pt below it, so rows blur into the header rather than end at a line.
+    /// Glass shows its own edges, so it is grown by the 20pt side insets as well and runs edge to edge
+    /// (measured on the iOS 26 simulator, probe run 43601744335: without them, a slab with hard sides).
     ///
     /// The Mac's list draws its own section headers' backing, so there the band is the title alone.
     @ViewBuilder private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
@@ -1191,6 +1193,7 @@ struct AgentPanes: View {
                     }
                     .padding(.top, -33)
                     .padding(.bottom, -9)
+                    .padding(.horizontal, -20)
                 } else {
                     Color(uiColor: .systemBackground)
                         .padding(.top, -33)
