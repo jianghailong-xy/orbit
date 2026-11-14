@@ -179,6 +179,7 @@ export class ProjectSettledUnmergedProducer {
             sourceSha: true,
             targetShaAfter: true,
             createdAt: true,
+            detail: true,
             id: true,
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
