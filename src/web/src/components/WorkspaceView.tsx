@@ -5481,16 +5481,17 @@ export function WorkspaceView({
   // of the transcript, below the pinned bar, with the tail pin let go first as above. A card not drawn
   // yet (its read still on the way) leaves the request standing for the next render.
   useEffect(() => {
-    if (!waitingReveal || waitingReveal !== selectedId || seeding) return;
+    if (!waitingReveal || waitingReveal !== selectedId || seeding || eventsSessionId !== selectedId) return;
     const root = scrollRef.current;
     const card = root?.querySelector<HTMLElement>(WAITING_CARD_SELECTOR);
-    if (!root || !card) return;
+    // Not before this session's own transcript is drawn under it, in a pane that has its size.
+    const view = root?.getBoundingClientRect();
+    if (!root || !card || !view?.height) return;
     setWaitingReveal(null);
     atBottomRef.current = false;
     setAtBottom(false);
-    root.scrollTop += card.getBoundingClientRect().top - root.getBoundingClientRect().top
-      - waitingCardGap(hasMoreOlder);
-  }, [waitingReveal, selectedId, seeding, transcriptEvents, transcriptInserts, approvals, hasMoreOlder]);
+    root.scrollTop += card.getBoundingClientRect().top - view.top - waitingCardGap(hasMoreOlder);
+  }, [waitingReveal, selectedId, seeding, eventsSessionId, transcriptEvents, transcriptInserts, approvals, hasMoreOlder]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the
