@@ -596,6 +596,14 @@ import {
   waitingNoticeFor,
   waitingNoticeScope,
 } from '../lib/runnerSlots';
+import {
+  capacityHeldMessageText,
+  capacityHeldTag,
+  capacityHeldTitle,
+  capacityHeldWaited,
+  isCapacityHeld,
+  type CapacityGate,
+} from '../lib/queuedCapacity';
 import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
 import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
@@ -2072,6 +2080,47 @@ export function RunnerUpdatingTag({
         </div>
       </Popover>
       {updateRunnerNow.confirmation}
+    </span>
+  );
+}
+
+/**
+ * The foot-row tag under a message a full runner, run or batch holds (board queued-card-runner-full ②③):
+ * `Queued · runner full`, drawn as RunnerUpdatingTag draws its tag (and in its classes), the popover
+ * counting how the slots are taken. Nothing to press there: a full machine has no action of its own.
+ */
+export function CapacityHeldTag({ gate, machine }: { gate: CapacityGate; machine?: string | null }) {
+  const now = useMinuteNow();
+  const [open, setOpen] = useState(false);
+  const waited = capacityHeldWaited(gate, now);
+  return (
+    <span className="chat-runner-updating">
+      Queued
+      <span className="chat-meta-sep">·</span>
+      <Popover
+        open={open}
+        onOpenChange={setOpen}
+        title={capacityHeldTitle(gate)}
+        side="bottom"
+        align="end"
+        trigger={
+          <button type="button" className="chat-runner-updating-reason">
+            {capacityHeldTag(gate)}
+          </button>
+        }
+      >
+        <div className="runner-updating-pop">
+          <p>
+            {capacityHeldMessageText(gate, machine)}
+            {waited && (
+              <>
+                <br />
+                {waited}.
+              </>
+            )}
+          </p>
+        </div>
+      </Popover>
     </span>
   );
 }
@@ -4305,6 +4354,11 @@ export function WorkspaceView({
     selectedIsQueued && isRunnerUpdating(selectedStartingSession)
       ? (selectedStartingSession as QueuedGate)
       : null;
+  // Held by a full runner, run or batch: each waiting message says so (board queued-card-runner-full).
+  const capacityGate: CapacityGate | null =
+    selectedIsQueued && isCapacityHeld(selectedStartingSession)
+      ? (selectedStartingSession as CapacityGate)
+      : null;
   const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
   // Starting or compacting — see waitingNoticeFor. Its `since` is the clock the notice counts from.
   const selectedWaiting = selected ? waitingNoticeFor(selectedStartingSession) : null;
@@ -4573,18 +4627,23 @@ export function WorkspaceView({
   // The tag says it on each turn of the queued tail the update holds — what is actually waiting
   // (board queued-card-runner-updating ②⑤) — and falls back to that last message only where the
   // tail holds none.
-  const runnerUpdatingHeldTag = runnerUpdatingGate ? (
+  const queuedHeldTag = runnerUpdatingGate ? (
     <RunnerUpdatingTag
       gate={runnerUpdatingGate}
       machine={machineName(runner)}
       actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
       updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
     />
+  ) : capacityGate ? (
+    // A full runner, run or batch, said in the same places by the same rules (board queued-card-runner-full ②④).
+    <CapacityHeldTag gate={capacityGate} machine={machineName(runner)} />
   ) : null;
-  const tailHeld = !!runnerUpdatingHeldTag && queuedTailEvents.some(({ turn }) => queuedTurnWaitsItsTurn(turn));
-  const footSeq = runnerUpdatingHeldTag && !tailHeld ? lastUserEventSeq(transcriptEvents) : null;
+  // The reader's own waiting messages sit in the tray, which carries the tag itself; only where nothing
+  // anywhere is waiting does it fall back to the last message they sent.
+  const tailHeld = !!queuedHeldTag && visibleQueuedTurns.some((turn) => queuedTurnWaitsItsTurn(turn));
+  const footSeq = queuedHeldTag && !tailHeld ? lastUserEventSeq(transcriptEvents) : null;
   const queuedFoot: { seq: number; tag: ReactNode } | null =
-    footSeq !== null ? { seq: footSeq, tag: runnerUpdatingHeldTag } : null;
+    footSeq !== null ? { seq: footSeq, tag: queuedHeldTag } : null;
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -7887,6 +7946,7 @@ export function WorkspaceView({
     restoreUndelivered,
     shownEngine,
     steerOffered,
+    queuedHeldTag,
   });
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
@@ -10693,7 +10753,7 @@ export function WorkspaceView({
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
                         wake={wake}
-                        held={runnerUpdatingHeldTag}
+                        held={queuedHeldTag}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
                         onPutBack={
                           restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined
@@ -12656,6 +12716,7 @@ export function usePendingTray({
   restoreUndelivered,
   shownEngine,
   steerOffered,
+  queuedHeldTag = null,
 }: {
   selectedId: string | null;
   selectedTrashed: boolean;
@@ -12668,6 +12729,9 @@ export function usePendingTray({
   restoreUndelivered: ((text: string, attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[]) => void) | null;
   shownEngine: AgentProvider;
   steerOffered: boolean;
+  /** What holds the session's waiting messages from their turn (a runner's update, a full runner, run or
+   *  batch), as the tag each queued row says in place of `Queued for next turn`. Null where nothing does. */
+  queuedHeldTag?: ReactNode;
 }) {
   const message = useToast();
   // The reader's steers the engine has not read yet: the transcript leaves them out, and the tray
@@ -12822,7 +12886,13 @@ export function usePendingTray({
         text: turn.content,
         shell: turn.shell,
         ...trayPictures(turnImages[turn.turnId], refs),
-        state: withdrawing ? 'Withdrawing…' : intoTurn ? steerDeliveryState(undefined).label : 'Queued for next turn',
+        // Held by its runner's update or by a full runner, run or batch: the tag says which, as it does
+        // on every other waiting item (boards queued-card-runner-updating ⑤, queued-card-runner-full ②).
+        state: withdrawing
+          ? 'Withdrawing…'
+          : intoTurn
+            ? steerDeliveryState(undefined).label
+            : queuedHeldTag ?? 'Queued for next turn',
         busy: withdrawing || steering,
         // Not handed to a runner yet, either way: the server takes it back alone.
         onWithdraw: turn.placement === 'steer'

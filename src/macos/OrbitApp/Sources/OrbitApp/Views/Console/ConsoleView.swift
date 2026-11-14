@@ -239,6 +239,14 @@ struct ConsoleView: View {
     }
     #endif
 
+    /// The session, when its runner's update or a full runner, run or batch holds what it queued: the
+    /// tray's waiting rows say which (`PendingTrayView.held`).
+    private func trayHeld(_ console: ConsoleModel) -> Session? {
+        guard let session = appModel.session(id: console.sessionID),
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+        return session
+    }
+
     private func bandMembers(_ console: ConsoleModel) -> some View {
         // Unread messages, error, background tray, git bar, composer — web's order
         // (`workspace-composer`). Staged attachments are not a member: they sit inside the
@@ -252,7 +260,8 @@ struct ConsoleView: View {
             PendingTrayView(console: console, rows: console.pendingTrayRows(
                 turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running),
                             // Why none of them goes into the turn running now: Cursor CLI's would stop it.
-                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil)
+                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil,
+                            held: trayHeld(console))
             // The managed runner's state while it is anything but ready, when this
             // console's runner is it (docs/managed-runner-design.md): about the runner the
             // message goes to, so it stays in sight while you type.
@@ -953,14 +962,17 @@ struct TranscriptView: View {
         #endif
     }
 
-    /// The session as the list holds it, when its runner's update is what holds it.
+    /// The session as the list holds it, when its runner's update is what holds it — or a full runner,
+    /// run or batch, which is said in the same places by the same rules (docs/mocks/queued-card-runner-full).
     private var runnerUpdatingSession: Session? {
-        guard let session = app.session(id: console.sessionID), RunnerUpdating.holds(session) else { return nil }
+        guard let session = app.session(id: console.sessionID),
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
         return session
     }
 
-    /// Whether a turn on the queued tail is what the update holds: then that turn's own queued line
-    /// says so (`runnerUpdatingQueued`), and neither the last message nor the queued page does.
+    /// Whether a waiting turn is what the update holds — on the queued tail, whose line says so
+    /// (`runnerUpdatingQueued`), or in the tray, whose row does (`PendingTrayView.held`): then neither
+    /// the last message nor the queued page does (web `tailHeld`).
     private var runnerUpdatingTailHeld: Bool { RunnerUpdating.tailHolds(console.state.queued) }
 
     private var runnerUpdatingFoot: RunnerUpdatingFoot? {
@@ -976,7 +988,7 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
-        if let session = runnerUpdatingSession, !runnerUpdatingTailHeld,
+        if let session = runnerUpdatingSession, RunnerUpdating.holds(session), !runnerUpdatingTailHeld,
            RunnerUpdating.footBubbleID(console.state.items) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
                                      onOpenSession: { app.route(to: .session($0)) })
