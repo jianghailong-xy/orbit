@@ -1,3 +1,4 @@
+import { CoordinatorHandoffService } from '../projects/coordinator-handoff.service';
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
@@ -1638,6 +1639,12 @@ export class RunnerApiController {
      * routes answer 503.
      */
     @Optional() private readonly mainCheckout?: MainCheckoutService,
+    /**
+     * A coordinator's handoff (projects/coordinator-handoff.service.ts): the end of its note turn is
+     * settled from turnComplete. `@Optional()` like the rest: without it a note turn's end is settled
+     * by the handoff sweep instead.
+     */
+    @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -7832,6 +7839,16 @@ export class RunnerApiController {
       }
       if (finalized.regionHeld) this.queue.notifySessionQueued(runner.id);
       return { ok: true, status: finalized.status };
+    }
+    // A coordinator's handoff note turn that ended (projects/coordinator-handoff.service.ts): a success
+    // runs the coordinator replacement, which the runner — blocked on this reply — must not wait for,
+    // so it is settled off the response path. Any other turn of the session is a read that finds
+    // no WRITING handoff and stops.
+    if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
+      void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
+        `coordinator handoff after turn ${dto.turnId} of ${sessionId} failed: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
     }
     // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
     // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).

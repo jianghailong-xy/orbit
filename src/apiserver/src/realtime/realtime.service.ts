@@ -42,6 +42,7 @@ import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
 import { lastUserFromExternalOf, lastUserFromOf, lastUserFromOrbitOf } from '../sessions/session-message';
+import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
@@ -1680,6 +1681,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // That Orbit wrote it, with the notification card its line is written from; cleared with it.
       lastUserFromOrbit: lastUserFromOrbitOf(s),
       lastUserFromExternal: lastUserFromExternalOf(s),
+      // A coordinator's handoff, both halves, sent as null too — a value, which is how a row learns
+      // one cleared (projects/coordinator-handoff.ts).
+      ...(await readSessionCoordinatorHandoffs(this.prisma, sessionId)),
       recapText: s.recapText ?? null,
       recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both

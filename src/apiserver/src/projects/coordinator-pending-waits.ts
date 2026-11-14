@@ -1,10 +1,8 @@
 import type { WatchLeaf, WatchLeafParams, WatchPredicate } from '../watches/watch-predicate';
 
-/** One wait the outgoing coordinator set, as the replacement's confirm dialog lists it. */
-export interface CoordinatorPendingWait {
-  id: string;
-  label: string;
-}
+/** One wait the outgoing coordinator set, as the replacement's confirm dialog lists it — a PAUSED
+ *  watch marked `paused`, since it moves too and stays paused. */
+export type { CoordinatorPendingWait } from '@orbit/shared';
 
 /** What a leaf waits FOR, as the end of "Waiting for <target> …". */
 function leafPhrase(leaf: WatchLeaf, params?: WatchLeafParams): string {

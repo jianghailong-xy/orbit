@@ -2261,6 +2261,8 @@ model Session {
   messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   keyGatewayTokens      KeyGatewayToken[]
+  coordinatorHandoffsFrom CoordinatorHandoff[] @relation("CoordinatorHandoffFrom")
+  coordinatorHandoffsTo   CoordinatorHandoff[] @relation("CoordinatorHandoffTo")
   keyGatewayUsage       KeyGatewayUsage[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
@@ -3387,6 +3389,7 @@ model Project {
   // `@unique` already is one.)
   @@index([coordinatorWorkspaceId])
   @@map("project")
+  coordinatorHandoffs CoordinatorHandoff[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -7322,6 +7325,40 @@ model PoolGatewayToken {
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
 /// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
 /// disabled or rotated revokes them (`revokedAt`).
+/// A coordinator handoff (migration 0642, docs/coordinator-handoff.md): the outgoing coordinator
+/// writes a note in a platform turn, then the replacement opens its successor with that note. One
+/// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
+model CoordinatorHandoff {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  projectId     String    @map("project_id") @db.Uuid
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  fromSessionId String    @map("from_session_id") @db.Uuid
+  fromSession   Session   @relation("CoordinatorHandoffFrom", fields: [fromSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toSessionId   String?   @map("to_session_id") @db.Uuid
+  toSession     Session?  @relation("CoordinatorHandoffTo", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// WRITING | HANDING_OVER | FAILED | CANCELLED | COMPLETED (a CHECK).
+  state         String
+  /// Advanced by Try again; the note turn's key carries it.
+  attempt       Int       @default(1)
+  /// The note turn's `conversation_turn.client_turn_id`; null once a skip took the note out.
+  clientTurnId  String?   @map("client_turn_id")
+  startedAt     DateTime  @default(now()) @map("started_at")
+  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED, only while FAILED.
+  failureCode   String?   @map("failure_code")
+  note          String?
+  /// The waits the swap moved, as `{ id, label, paused }`.
+  movedWaits    Json      @default("[]") @map("moved_waits")
+  endedAt       DateTime? @map("ended_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([fromSessionId, createdAt])
+  @@index([toSessionId])
+  @@index([projectId])
+  @@map("coordinator_handoff")
+}
+
 model KeyGatewayToken {
   id         String        @id @default(uuid(7)) @db.Uuid
   tokenHash  String        @unique @map("token_hash")

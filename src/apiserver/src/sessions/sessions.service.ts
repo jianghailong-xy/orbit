@@ -1,3 +1,4 @@
+import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
@@ -4591,6 +4592,9 @@ export class SessionsService {
       lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
       lastUserFromExternal: lastUserFromExternalOf({ lastUserFromExternalSource, lastUserFromExternalName }),
       sourceLanding,
+      // A coordinator's handoff (projects/coordinator-handoff.ts): `coordinatorHandoff` on the outgoing
+      // one, `coordinatorHandoffReceived` on its successor, null on every other session.
+      ...(await readSessionCoordinatorHandoffs(this.prisma, session.id)),
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,

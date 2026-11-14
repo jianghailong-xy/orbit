@@ -144,11 +144,11 @@ function store(
         return values.map((id) => find(id)).filter(Boolean).map((row) => ({ id: row!.id }));
       }
       if (text.includes('UPDATE "watch"')) {
-        // The outgoing coordinator's ACTIVE watches, re-pointed at the successor.
+        // The outgoing coordinator's live watches (ACTIVE, PAUSED), re-pointed at the successor.
         const [successor, outgoing] = values;
-        const moved = watches.filter((w) => w.observer === outgoing && w.state === 'ACTIVE');
+        const moved = watches.filter((w) => w.observer === outgoing && (w.state === 'ACTIVE' || w.state === 'PAUSED'));
         for (const w of moved) w.observer = successor;
-        return moved.map((w) => ({ id: w.id }));
+        return moved.map((w) => ({ id: w.id, state: w.state }));
       }
       if (text.includes('FROM "project"')) {
         return values[0] === project.id && values[1] === project.ownerId
@@ -373,16 +373,18 @@ test('a replacement named somewhere that cannot take it refuses before ending an
 
 // ── The waits the outgoing coordinator set ───────────────────────────────────────────────────
 
-test('a replacement answers how many of the outgoing coordinator\'s ACTIVE waits it moved', async () => {
+test('a replacement answers how many of the outgoing coordinator\'s live waits it moved, PAUSED included', async () => {
   const { service, watches } = store(sessionRow());
   watches.push(
     { id: 'w1', observer: STANDING, state: 'ACTIVE' },
     { id: 'w2', observer: STANDING, state: 'MATCHED' },
     { id: 'w3', observer: 'someone-else', state: 'ACTIVE' },
+    { id: 'w4', observer: STANDING, state: 'PAUSED' },
   );
 
   const replaced = await service.coordinator(OWNER, PROJECT, undefined, 'replace');
 
-  assert.equal(replaced.movedWatches, 1);
-  assert.deepEqual(watches.map((w) => w.observer), [OPENED, STANDING, 'someone-else']);
+  assert.equal(replaced.movedWatches, 2);
+  assert.deepEqual(watches.map((w) => w.observer), [OPENED, STANDING, 'someone-else', OPENED]);
+  assert.equal(watches[3].state, 'PAUSED');
 });
