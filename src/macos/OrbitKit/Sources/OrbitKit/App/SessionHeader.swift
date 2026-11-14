@@ -90,6 +90,8 @@ public enum SessionHeader {
         // and was not asked about in time: the two rows web's `waitingLabel` names.
         case .doneRequest:       return ProjectDone.readyToClose
         case .recordAsDone:      return ProjectDone.recordAsDoneRow
+        // An owner request this session filed: its card's and the inbox's words.
+        case .ownerRequest:      return OwnerRequests.waitingOnYou
         default:                 return unnamedWord
         }
     }
