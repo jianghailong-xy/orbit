@@ -26411,6 +26411,9 @@ button.agent-progress-agent:hover {
 .wt-recovery { margin: 0 12px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); font-size: 12px; overflow-wrap: anywhere; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
+/* What the last check found scrolls inside the panel: the panel stands in the band above the composer, and a long
+   push list must not push the composer off screen. The title, the repair row and the actions stay in view. */
+.wt-recovery-snapshot { max-height: 28vh; overflow-y: auto; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .wt-recovery-histories > :only-child { grid-column: 1 / -1; }
 .wt-recovery-route code { font-size: 11px; }
