@@ -259,6 +259,64 @@ struct RunnerAttentionRow<Action: View>: View {
     }
 }
 
+/// Fix with an agent's button: gone while an agent is fixing the warning, greyed while it is blocked.
+struct RunnerAgentFixButton: View {
+    let state: RunnerAgentFixState
+    let pressing: Bool
+    let press: () -> Void
+
+    var body: some View {
+        switch state {
+        case .fixing:
+            EmptyView()
+        case .ready, .blocked:
+            Button(RunnerPageCopy.AGENT_FIX_BUTTON, action: press)
+                .buttonStyle(RunnerCapsuleButtonStyle())
+                .disabled(pressing || blocked)
+        }
+    }
+
+    private var blocked: Bool {
+        if case .blocked = state { return true }
+        return false
+    }
+}
+
+/// The line under Fix with an agent's row: why it is greyed, where its session would start, or — while an
+/// agent is at it — "An agent is fixing this in <workspace> · " with a blue dot and Open session.
+struct RunnerAgentFixLine: View {
+    let state: RunnerAgentFixState
+    let openSession: (String) -> Void
+
+    var body: some View {
+        switch state {
+        case .ready(let hint):
+            if let hint {
+                Text(hint)
+                    .font(.orbitLabel)
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        case .blocked(let reason):
+            Text(reason)
+                .font(.orbitLabel)
+                .foregroundStyle(Color.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        case .fixing(let entry):
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 6, height: 6)
+                Text(RunnerPageCopy.agentFixFixing(workspace: entry.workspaceName))
+                    .foregroundStyle(Color.secondary)
+                Button(RunnerPageCopy.AGENT_FIX_OPEN_SESSION) { openSession(entry.sessionId) }
+                    .linkButtonStyle()
+            }
+            .font(.orbitLabel)
+        }
+    }
+}
+
 /// An in-row press drawn as a tinted capsule — Set a Reserve…, Copy Command. Its own style, so a
 /// list row that holds one doesn't hand the whole row's tap to it.
 struct RunnerCapsuleButtonStyle: ButtonStyle {

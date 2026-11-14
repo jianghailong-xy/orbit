@@ -73,6 +73,8 @@ private struct RunnerEngineContent: View {
     @State private var renaming: RunnerPageFormat.AccountLine?
     @State private var renameDraft = ""
     @State private var notice: String?
+    /// A Fix with an agent press is on its way: its button holds until the list read after it.
+    @State private var fixPressing = false
 
     private static let adding = "+"
     /// What a runner account's pause applies to, as the Pause Account sheet says it.
@@ -187,6 +189,13 @@ private struct RunnerEngineContent: View {
                     Text(message)
                         .font(.orbitLabel)
                         .foregroundStyle(Color.secondary)
+                }
+                // Install failed: an agent can be sent to fix it, under the failure; Retry stays as it is.
+                if let fix = RunnerAgentFixLogic.installFailedState(runner, engine: engine) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        RunnerAgentFixButton(state: fix, pressing: fixPressing) { fixInstall() }
+                        RunnerAgentFixLine(state: fix) { openSession($0) }
+                    }
                 }
             } footer: {
                 // Cursor CLI's page has no Update Engines Now to carry its footer.
@@ -859,6 +868,26 @@ private struct RunnerEngineContent: View {
         Task {
             if let failure = await runners.dismissEngineUpdateWarning(id, engine: slug) { show(failure) }
         }
+    }
+
+    /// Fix with an agent on the failed install: one press, no sheet; the list read after it turns the
+    /// button into the fixing line, and the page stays. A refusal is the server's own sentence.
+    private func fixInstall() {
+        let id = runner.id
+        let target = RunnerAgentFixTarget(kind: .installFailed, engine: engine)
+        fixPressing = true
+        Task {
+            if let failure = await runners.fixAttention(id, target: target) {
+                show("\(RunnerPageCopy.AGENT_FIX_FAILED) — \(failure)")
+            }
+            fixPressing = false
+        }
+    }
+
+    /// The session fixing it: its conversation, after the Settings sheet comes down.
+    private func openSession(_ id: String) {
+        model.settingsPresented = false
+        model.route(to: .session(id))
     }
 
     private func install() {

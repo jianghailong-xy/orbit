@@ -410,6 +410,19 @@ public enum RunnerPageCopy {
     public static func attentionEngineUpdateDetail(note: String) -> String {
         "\(note). Orbit retries every 30 min — Update Engines Now tries again right away."
     }
+    /// Fix with an agent: one press starts a session on that machine (`RunnerAgentFixLogic`).
+    public static let AGENT_FIX_BUTTON = "Fix with an agent"
+    /// In place of the button while that session is open; the link after it opens it.
+    public static func agentFixFixing(workspace: String) -> String { "An agent is fixing this in \(workspace) · " }
+    public static let AGENT_FIX_OPEN_SESSION = "Open session"
+    /// Under the button on an Install failed panel: where the session would run.
+    public static func agentFixStartsIn(workspace: String, engine: String) -> String {
+        "Starts a session in \(workspace) on this machine, with \(engine)."
+    }
+    /// After a signed-out reason on an Install failed panel, whose engine's Sign In is above it.
+    public static func agentFixSignInAbove(engine: String) -> String { " Sign in to \(engine) above to use this." }
+    /// The head of what a press that didn't start a session says, before the server's own sentence.
+    public static let AGENT_FIX_FAILED = "Couldn’t start the agent"
     /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.
     public static func attentionDismissUntilNextRelease(engine: String) -> String {
         "Dismiss until next \(engine) release"

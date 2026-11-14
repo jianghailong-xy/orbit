@@ -116,6 +116,9 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("RUNNER_SIGN_IN", RunnerPageCopy.RUNNER_SIGN_IN),
         ("RUNNER_UPDATE_ENGINES_NOW", RunnerPageCopy.RUNNER_UPDATE_ENGINES_NOW),
         ("RUNNER_ENGINE_UPDATE_DISMISS", RunnerPageCopy.RUNNER_ENGINE_UPDATE_DISMISS),
+        ("AGENT_FIX_BUTTON", RunnerPageCopy.AGENT_FIX_BUTTON),
+        ("AGENT_FIX_OPEN_SESSION", RunnerPageCopy.AGENT_FIX_OPEN_SESSION),
+        ("AGENT_FIX_FAILED", RunnerPageCopy.AGENT_FIX_FAILED),
         ("RUNNER_REFRESH_MODEL_LISTS", RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS),
         ("RUNNER_ENGINES_FOOTER", RunnerPageCopy.RUNNER_ENGINES_FOOTER),
         ("RUNNER_ENGINES_OFFLINE_FOOTER", RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER),
@@ -383,6 +386,9 @@ final class RunnerPageCopyParityTests: XCTestCase {
         ("attentionEngineUpdateDetail", RunnerPageCopy.attentionEngineUpdateDetail(note: "${note}")),
         ("attentionDismissUntilNextRelease",
          RunnerPageCopy.attentionDismissUntilNextRelease(engine: "${engine}")),
+        ("agentFixFixing", RunnerPageCopy.agentFixFixing(workspace: "${workspace}")),
+        ("agentFixStartsIn", RunnerPageCopy.agentFixStartsIn(workspace: "${workspace}", engine: "${engine}")),
+        ("agentFixSignInAbove", RunnerPageCopy.agentFixSignInAbove(engine: "${engine}")),
     ]
 
     // MARK: the words

@@ -222,6 +222,17 @@ final class RunnersModel {
         await press { try await self.api.dismissEngineUpdateWarning(id, engine: engine) }
     }
 
+    /// Fix with an agent: one press starts the session, then the list is read again — its `agentFix`
+    /// carries the session as `fixing`, which turns the button into the fixing line. Nothing navigates.
+    /// A refusal (a 409's own sentence) comes back to show, and the list is read again then too.
+    @discardableResult
+    func fixAttention(_ id: String, target: RunnerAgentFixTarget) async -> String? {
+        let body = RunnerAgentFixLogic.request(target, latestVersion: latestVersion)
+        let failure = await press { _ = try await self.api.fixRunnerAttention(id, kind: target.kind, body: body) }
+        if failure != nil { await load() }
+        return failure
+    }
+
     /// The list in a new order: the rows move at once, and the server's answer — every runner, in the
     /// order it keeps — settles it.
     func reorder(_ ids: [String]) async {
