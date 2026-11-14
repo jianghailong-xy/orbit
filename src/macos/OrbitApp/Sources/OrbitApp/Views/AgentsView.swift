@@ -421,11 +421,7 @@ struct AgentPanes: View {
                 searchResults
             } else if groupByTag {
                 ForEach(SessionTagGrouping.sections(shownSessions)) { section in
-                    Section {
-                        ForEach(section.sessions) { sessionRow($0) }
-                    } header: {
-                        sectionHeaderBand { tagSectionHeader(section.tag) }
-                    }
+                    tagGroupSection(section)
                 }
             } else {
                 groupedSections(folderListing: folderListing, timeSections: timeSections,
@@ -1112,6 +1108,16 @@ struct AgentPanes: View {
 
     private var newFolderFailed: Binding<Bool> {
         Binding(get: { newFolderFailure != nil }, set: { if !$0 { newFolderFailure = nil } })
+    }
+
+    /// One tag's sessions under the tag's header band. The section is the row the list's ForEach
+    /// draws, so the ForEach closure holds no branch of its own.
+    @ViewBuilder private func tagGroupSection(_ section: SessionTagSection) -> some View {
+        Section {
+            ForEach(section.sessions) { sessionRow($0) }
+        } header: {
+            sectionHeaderBand { tagSectionHeader(section.tag) }
+        }
     }
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {

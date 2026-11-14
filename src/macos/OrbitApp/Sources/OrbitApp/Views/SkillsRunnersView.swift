@@ -20,18 +20,7 @@ struct SkillsView: View {
                                              search: search)
             List {
                 ForEach(groups) { g in
-                    Section {
-                        ForEach(g.skills) { SkillRow(item: $0, isSkill: true) }
-                        ForEach(g.commands) { SkillRow(item: $0, isSkill: false) }
-                    } header: {
-                        HStack(spacing: 6) {
-                            Text(g.title)
-                            Text(g.runnerName).font(.orbitLabel).foregroundStyle(.secondary)
-                            if !g.online { Image(systemName: "moon.zzz").font(.orbitMeta).foregroundStyle(.secondary) }
-                            Spacer()
-                            Text("\(g.count)").font(.orbitLabel).foregroundStyle(.secondary)
-                        }
-                    }
+                    SkillsGroupSection(group: g)
                 }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -43,6 +32,29 @@ struct SkillsView: View {
             .task { await runners.load() }
         } else {
             ProgressView()
+        }
+    }
+}
+
+/// One agent's skills and commands under a section title. A child view so the Skills list's ForEach
+/// draws one group per row and no second ForEach sits under it.
+private struct SkillsGroupSection: View {
+    let group: SkillGroup
+
+    var body: some View {
+        Section {
+            ForEach(group.skills) { SkillRow(item: $0, isSkill: true) }
+            ForEach(group.commands) { SkillRow(item: $0, isSkill: false) }
+        } header: {
+            HStack(spacing: 6) {
+                Text(group.title)
+                Text(group.runnerName).font(.orbitLabel).foregroundStyle(.secondary)
+                if !group.online {
+                    Image(systemName: "moon.zzz").font(.orbitMeta).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(group.count)").font(.orbitLabel).foregroundStyle(.secondary)
+            }
         }
     }
 }

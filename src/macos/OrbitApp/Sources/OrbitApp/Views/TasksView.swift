@@ -332,11 +332,18 @@ struct TasksListView: View {
         #if os(iOS)
         // Selecting swaps the list's selection for a set — the system's multi-select, in edit mode —
         // so the same rows can be checked instead of opened.
+        let rows = TaskListLogic.compactRows(batches: tasks.viewMode == .batches,
+                                             pinned: tasks.visiblePinned, rest: tasks.visibleRest,
+                                             hasMore: tasks.hasMore)
         Group {
             if selecting {
-                List(selection: $selectedIDs) { compactListContent(tasks) }
+                List(selection: $selectedIDs) {
+                    ForEach(rows) { row in compactRow(tasks, row) }
+                }
             } else {
-                List(selection: selection) { compactListContent(tasks) }
+                List(selection: selection) {
+                    ForEach(rows) { row in compactRow(tasks, row) }
+                }
             }
         }
         .orbitRevealSurface()
@@ -346,10 +353,12 @@ struct TasksListView: View {
         .overlay { emptyOverlay(tasks) }
         #else
         List(selection: selection) {
-            ForEach(tasks.visible) { task in
-                taskRow(tasks, task)
+            ForEach(TaskListLogic.listRows(tasks.visible, hasMore: tasks.hasMore)) { row in
+                switch row {
+                case .task(let task): taskRow(tasks, task)
+                case .loadMore:       loadMoreRow(tasks)
+                }
             }
-            if tasks.hasMore { loadMoreRow(tasks) }
         }
         .orbitRevealSurface()
         .overlay { emptyOverlay(tasks) }
@@ -371,29 +380,30 @@ struct TasksListView: View {
     }
 
     #if os(iOS)
-    /// The web page's blocks in its order — progress, the line about projects, the tabs, the
-    /// scope's tokens, then Happening now over the rest of the rows (or Batches in their place).
+    /// One row of the phone's Tasks list — the web page's blocks in its order: progress, the line
+    /// about projects, the tabs, the scope's tokens, then Happening now over the rest of the rows (or
+    /// Batches in their place).
     @ViewBuilder
-    private func compactListContent(_ tasks: TasksModel) -> some View {
-        headerRows(tasks)
-        if tasks.viewMode == .batches {
+    private func compactRow(_ tasks: TasksModel, _ row: TaskCompactListRow) -> some View {
+        switch row {
+        case .header:
+            headerRows(tasks)
+        case .batches:
             batchRows(tasks)
-        } else {
-            let pinned = tasks.visiblePinned
-            if !pinned.isEmpty {
-                TaskListSectionHeader(title: TaskListCopy.happeningNow, count: tasks.pinnedTotal)
-                    .listRowSeparator(.hidden)
-                    .selectionDisabled()
-                ForEach(pinned) { task in taskRow(tasks, task) }
-            }
-            let rest = tasks.visibleRest
-            if !rest.isEmpty {
-                TaskListSectionHeader(title: TaskListCopy.restHeader(sort: tasks.sort, descending: tasks.descending))
-                    .listRowSeparator(.hidden)
-                    .selectionDisabled()
-                ForEach(rest) { task in taskRow(tasks, task) }
-            }
-            if tasks.hasMore { loadMoreRow(tasks).selectionDisabled() }
+        case .pinnedHeader:
+            TaskListSectionHeader(title: TaskListCopy.happeningNow, count: tasks.pinnedTotal)
+                .listRowSeparator(.hidden)
+                .selectionDisabled()
+        case .pinned(let task):
+            taskRow(tasks, task)
+        case .restHeader:
+            TaskListSectionHeader(title: TaskListCopy.restHeader(sort: tasks.sort, descending: tasks.descending))
+                .listRowSeparator(.hidden)
+                .selectionDisabled()
+        case .rest(let task):
+            taskRow(tasks, task)
+        case .loadMore:
+            loadMoreRow(tasks).selectionDisabled()
         }
     }
 
@@ -1424,6 +1434,32 @@ private struct TaskDetailContent: View {
     /// on screen. A bracketed block is drawn only when it has something to say.
     private func page(_ task: TaskItem) -> some View {
         List {
+            ForEach(TaskDetailPageListLogic.rows(
+                hasVerifier: TaskJudgment.isGateRow(task) || task.verifier != nil,
+                hasLiveRun: TaskDetailLogic.liveRun(task) != nil,
+                hasEvidence: tasks.evidence.last != nil,
+                hasLanding: TaskLandingLogic.status(task.integration,
+                                                    taskStatus: task.status.rawValue) != nil,
+                hasDependencies: TaskDetailLogic.hasDependencies(task),
+                hasInputs: !(task.attachments ?? []).isEmpty,
+                hasAttribution: tasks.attribution.map {
+                    TaskDetailLogic.attributionNeedsCard($0, projectId: task.projectId)
+                } ?? false,
+                hasFollowers: hasFollowers(task))) { row in
+                pageRow(task, row)
+            }
+        }
+        .taskPageListStyle()
+        .safeAreaInset(edge: .bottom) { composer(task) }
+        .refreshable { await reload() }
+    }
+
+    /// One block of the task page. Which blocks are in the array is the logic's; this draws the one
+    /// it was handed, so the List's ForEach closure holds no branch of its own.
+    @ViewBuilder
+    private func pageRow(_ task: TaskItem, _ row: TaskDetailPageListRow) -> some View {
+        switch row {
+        case .header:
             Section {
                 header(task)
                     .onAppear { headerOnScreen = true }
@@ -1433,31 +1469,35 @@ private struct TaskDetailContent: View {
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
-            // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why
-            // it waits or where it stopped, apart from the status above — the web's first block.
-            // A row settled by a check always gets the card — with the check, or with the fact that
-            // there isn't one. That empty state is where a reader otherwise reads the header hint's
-            // sentence and finds nothing behind it.
-            if TaskJudgment.isGateRow(task) || task.verifier != nil { verifierSection(task) }
+        case .verifier:
+            verifierSection(task)
+        case .now:
             if let run = TaskDetailLogic.liveRun(task) { nowSection(task, run) }
+        case .evidence:
             if let latest = tasks.evidence.last { evidenceSection(task, latest) }
+        case .landing:
             if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {
                 landingSection(landing)
             }
+        case .acceptance:
             acceptanceSection(task)
+        case .brief:
             briefSection(task)
-            if TaskDetailLogic.hasDependencies(task) { planSection(task) }
+        case .plan:
+            planSection(task)
+        case .runsWith:
             runsWithSection(task)
-            if !(task.attachments ?? []).isEmpty { inputsSection(task, addFile: { importingInput = true }) }
-            if let view = tasks.attribution, TaskDetailLogic.attributionNeedsCard(view, projectId: task.projectId) {
+        case .inputs:
+            inputsSection(task, addFile: { importingInput = true })
+        case .attribution:
+            if tasks.attribution != nil {
                 attributionSection(task)
             }
-            if hasFollowers(task) { followedBySection(task) }
+        case .followedBy:
+            followedBySection(task)
+        case .activity:
             activitySection(task)
         }
-        .taskPageListStyle()
-        .safeAreaInset(edge: .bottom) { composer(task) }
-        .refreshable { await reload() }
     }
 
     private func header(_ task: TaskItem) -> some View {
@@ -2018,6 +2058,25 @@ private struct TaskDetailContent: View {
             .joined(separator: " · ")
     }
 
+    /// One field of the Run settings sheet, in the order `TaskEnvelopeListLogic` gives them.
+    @ViewBuilder
+    private func envelopeRow(_ task: TaskItem, _ row: TaskEnvelopeListRow) -> some View {
+        switch row {
+        case .assignee: assigneePicker(task)
+        case .suggested: suggestedPicker(task)
+        case .engine:   enginePicker(task)
+        case .provider: providerPicker(task)
+        case .model:    modelPicker(task)
+        case .list:     listPicker(task)
+        case .startAt:
+            Button { editingSchedule = true } label: {
+                detailRow(TaskDetailCopy.startAtLabel, value: TaskDetailLogic.scheduleValue(task.runAt),
+                          glyph: "chevron.up.chevron.down")
+            }
+            .disabled(tasks.isMutating(task.id))
+        }
+    }
+
     /// The fields, as the platform's form rows in a sheet: the label on the left, the value on the
     /// right in grey with its chooser mark. Start at opens its own sheet from here, and the inputs
     /// are listed under them.
@@ -2027,17 +2086,9 @@ private struct TaskDetailContent: View {
             NavigationStack {
                 List {
                     Section {
-                        assigneePicker(task)
-                        if smartSelection { suggestedPicker(task) }
-                        enginePicker(task)
-                        providerPicker(task)
-                        modelPicker(task)
-                        listPicker(task)
-                        Button { editingSchedule = true } label: {
-                            detailRow(TaskDetailCopy.startAtLabel, value: TaskDetailLogic.scheduleValue(task.runAt),
-                                      glyph: "chevron.up.chevron.down")
+                        ForEach(TaskEnvelopeListLogic.rows(smartSelection: smartSelection)) { row in
+                            envelopeRow(task, row)
                         }
-                        .disabled(tasks.isMutating(task.id))
                     } footer: {
                         VStack(alignment: .leading, spacing: 4) {
                             // The coordinator's reason for the suggested tier, in grey under the card.
@@ -3081,11 +3132,7 @@ private struct TaskDependencyPicker: View {
                 } else {
                     ForEach(candidates) { candidate in
                         Button {
-                            Task {
-                                if await tasks.addDependency(taskID, dependsOn: candidate.id) {
-                                    dismiss()
-                                }
-                            }
+                            add(candidate)
                         } label: {
                             HStack(spacing: 8) {
                                 TaskStatusPill(pill: TaskListLogic.pill(candidate))
@@ -3122,6 +3169,15 @@ private struct TaskDependencyPicker: View {
             candidate.id != taskID
                 && !existing.contains(candidate.id)
                 && (needle.isEmpty || candidate.title.localizedCaseInsensitiveContains(needle))
+        }
+    }
+
+    /// Add the picked task as this one's prerequisite, and close once the server takes it.
+    private func add(_ candidate: TaskItem) {
+        Task {
+            if await tasks.addDependency(taskID, dependsOn: candidate.id) {
+                dismiss()
+            }
         }
     }
 }
