@@ -45,13 +45,13 @@ class TranslationCopyParityTest {
     @Test fun webSaysTheSameWords() {
         // The web draws the language names from @orbit/shared (TRANSLATION_LANGUAGE_NAMES), so its words are its own and shared's.
         val web = source("src/web/src", setOf("ts", "tsx")) + " " + source("src/shared/src", setOf("ts"))
-        assertTrue("Web has no Settings › Translation", web.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
+        assertTrue("Web has no Settings › Translation copy in src/web/src/lib/translation.ts", web.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
         assertEquals("Android words the web does not say", emptyMap<String, String>(), missing(web))
     }
 
     @Test fun iosAndMacosSayTheSameWords() {
         val swift = source("src/macos", setOf("swift"))
-        assertTrue("iOS/macOS has no Settings › Translation", swift.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
+        assertTrue("iOS/macOS has no Settings › Translation copy in src/macos/OrbitKit/Sources/OrbitKit/Models/Translation.swift", swift.contains(TranslationCopy.TRANSLATE_CONVERSATIONS))
         assertEquals("Android words iOS/macOS does not say", emptyMap<String, String>(), missing(swift))
     }
 
