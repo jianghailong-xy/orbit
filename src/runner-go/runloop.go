@@ -46,6 +46,17 @@ const (
 	// updates without draining, and one that never is gets the release within the hour plus the
 	// longest turn it was running when the limit came (docs/runner-link-design.md §15.14).
 	selfUpdateDeferralLimit = time.Hour
+	// A busy runner's automatic update does not drain at selfUpdateDeferralLimit (owner, 2026-11-14):
+	// a drain starting an hour after a release came out landed while the owner was at work, and their
+	// new session waited behind it. It waits for idle for selfUpdateIdleWait instead, then drains at
+	// the first check inside the low hours, selfUpdateLowHoursFrom to selfUpdateLowHoursTo on the
+	// runner's local clock. A window rather than one moment, so a wait that runs out at 03:00 still
+	// drains that night. Worst case: the wait runs out just past the window, and the drain comes the
+	// next night, about 26 hours after the release. A release the owner put off (Later) keeps
+	// selfUpdateDeferralLimit and no window: the owner chose its time.
+	selfUpdateIdleWait     = 6 * time.Hour
+	selfUpdateLowHoursFrom = 2
+	selfUpdateLowHoursTo   = 6
 	// How often a draining runner looks again whether its turns have run out: the drain holds work
 	// back, so it should not outlast them by a whole check interval.
 	selfUpdateDrainCheckInterval = 15 * time.Second
@@ -143,6 +154,9 @@ func waitForRunLoopStop(ctx context.Context, signals <-chan os.Signal, server st
 // clock is not restarted by a check that finds nothing, a failed one included: the runner has been
 // behind a release since it started.
 //
+// In runLoop the gate waits longer and at night (lowHours, drainIsDue): selfUpdateIdleWait, then the
+// first check in the low hours, so the drain does not land while the owner works.
+//
 // An automatic update also waits for the runner to be quiet (quiet, selfUpdateQuietWindow in
 // runLoop): no turn ended and nothing claimed within it. Neither the drain nor the owner's Update
 // Runner Now (sessionPool.askForUpdateNow) waits for that: past the limit the drain has already
@@ -162,6 +176,9 @@ type selfUpdateGate struct {
 	interval, limit, quiet time.Duration
 	// drainLimit: how long a drain waits for its turns before interrupting them (selfUpdateDrainLimit).
 	drainLimit time.Duration
+	// lowHours: an automatic update drains after selfUpdateIdleWait and only in the low hours
+	// (inUpdateLowHours), not at limit. runLoop sets it.
+	lowHours bool
 
 	mu                                           sync.Mutex
 	deferredSince, drainingSince, postponedUntil time.Time
@@ -274,7 +291,7 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		logln(fmt.Sprintf("orbit %s update available; deferred — a turn ended or was claimed in the last %s, checking again in %s",
 			remote, g.quiet, g.interval))
 	}
-	if g.draining == "" && now.Sub(g.deferredSince) >= g.limit {
+	if g.draining == "" && g.drainIsDue(now) {
 		g.draining = remote
 		g.drainingSince = now
 		g.turnsAtDrain = turns
@@ -303,6 +320,21 @@ func (g *selfUpdateGate) take(ctx context.Context, server string) (string, bool)
 		turnsInFlight: turns,
 	})
 	return "", false
+}
+
+// drainIsDue is whether a busy runner's wait for idle is over, so the pool drains for the release.
+func (g *selfUpdateGate) drainIsDue(now time.Time) bool {
+	waited := now.Sub(g.deferredSince)
+	if !g.lowHours || g.cameDue {
+		return waited >= g.limit
+	}
+	return waited >= selfUpdateIdleWait && inUpdateLowHours(now)
+}
+
+// inUpdateLowHours is whether t, on its own clock, falls in the hours an automatic update drains in.
+func inUpdateLowHours(t time.Time) bool {
+	h := t.Hour()
+	return h >= selfUpdateLowHoursFrom && h < selfUpdateLowHoursTo
 }
 
 // postpone is the owner's Later (HeartbeatResponse.PostponeSelfUpdateUntil): the drain ends at
@@ -1609,6 +1641,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	var updateGate *selfUpdateGate
 	if selfUpdateEnabled() {
 		updateGate = newSelfUpdateGate(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval, selfUpdateDeferralLimit, selfUpdateQuietWindow)
+		updateGate.lowHours = true
 		gated := updateGate.take
 		check = func(ctx context.Context, server string) (string, bool) {
 			remote, ok := gated(ctx, server)

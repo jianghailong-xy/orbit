@@ -283,6 +283,71 @@ func TestTheDrainInterruptsTheTurnsPastItsLimit(t *testing.T) {
 	}
 }
 
+// runLoop's gate (lowHours) gives a busy runner selfUpdateIdleWait to go idle, then drains at the first
+// check in the low hours, on the runner's local clock: a release out at 08:00 is not drained for at
+// 14:00 when the wait runs out, nor at 01:59, but at 02:00; one out at 21:00 drains at 03:00, inside
+// the window, not the next night.
+func TestAnAutomaticUpdateDrainsInTheLowHours(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		release, notBefore time.Time
+		drainsAt           time.Time
+	}{
+		{"out in the morning", time.Date(2026, 11, 14, 8, 0, 0, 0, time.Local), time.Date(2026, 11, 15, 1, 59, 0, 0, time.Local), time.Date(2026, 11, 15, 2, 0, 0, 0, time.Local)},
+		{"out in the evening", time.Date(2026, 11, 14, 21, 0, 0, 0, time.Local), time.Date(2026, 11, 15, 2, 59, 0, 0, time.Local), time.Date(2026, 11, 15, 3, 0, 0, 0, time.Local)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetSelfUpdateStatus(t)
+			clock := newFakePoolClock()
+			clock.now = tc.release
+			p := newSessionPoolWithClock(2, clock)
+			registerPoolSession(t, p, "a", true)
+			gate := newSelfUpdateGate(func(context.Context, string) (string, bool) { return "0.1.260", true },
+				p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
+			gate.lowHours = true
+
+			gate.take(context.Background(), "")
+			for clock.Now().Before(tc.notBefore) {
+				clock.Advance(selfUpdateCheckInterval)
+				if clock.Now().After(tc.notBefore) {
+					clock.Advance(tc.notBefore.Sub(clock.Now()))
+				}
+				if _, ok := gate.take(context.Background(), ""); ok || p.isDrainingForUpdate() {
+					t.Fatalf("at %s: ok=%v draining=%v; want still waiting for idle", clock.Now().Format("01-02 15:04"), ok, p.isDrainingForUpdate())
+				}
+			}
+			clock.Advance(tc.drainsAt.Sub(clock.Now()))
+			if _, ok := gate.take(context.Background(), ""); ok || !p.isDrainingForUpdate() {
+				t.Fatalf("at %s: ok=%v draining=%v; want the drain", clock.Now().Format("01-02 15:04"), ok, p.isDrainingForUpdate())
+			}
+		})
+	}
+}
+
+// A release the owner put off (Later) keeps the plain limit once its time comes, low hours or not:
+// the owner chose that time.
+func TestAPostponedUpdateIgnoresTheLowHours(t *testing.T) {
+	resetSelfUpdateStatus(t)
+	clock := newFakePoolClock()
+	clock.now = time.Date(2026, 11, 14, 10, 0, 0, 0, time.Local)
+	p := newSessionPoolWithClock(2, clock)
+	registerPoolSession(t, p, "a", true)
+	gate := newSelfUpdateGate(func(context.Context, string) (string, bool) { return "0.1.260", true },
+		p, noOperations, selfUpdateCheckInterval, selfUpdateDeferralLimit, 0)
+	gate.lowHours = true
+
+	gate.take(context.Background(), "")
+	if !gate.postpone(clock.Now().Add(time.Hour)) {
+		t.Fatal("Later refused with a release waiting")
+	}
+	clock.Advance(time.Hour)
+	gate.take(context.Background(), "")
+	clock.Advance(selfUpdateDeferralLimit)
+	if _, ok := gate.take(context.Background(), ""); ok || !p.isDrainingForUpdate() {
+		t.Fatalf("at 12:00, the limit after Later ran out: ok=%v draining=%v; want the drain", ok, p.isDrainingForUpdate())
+	}
+}
+
 // The heartbeat's operations are drained for in the same way: past the limit claims stop, the
 // landing goes on, and the update follows it.
 func TestTheDrainWaitsForTheHeartbeatOperationsInFlight(t *testing.T) {
