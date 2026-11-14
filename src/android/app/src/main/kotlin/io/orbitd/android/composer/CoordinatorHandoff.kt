@@ -37,6 +37,8 @@ internal object CoordinatorHandoffCopy {
     const val COMPACT_WHILE_RUNNING = "Available when this turn ends."
     const val START_NEW_COORDINATOR = "Start a new coordinator"
     const val START_NEW_COORDINATOR_DETAIL = "This one writes a handoff note, then the project continues in a fresh conversation."
+    /** While a turn runs: still pressable, and the handoff waits for the turn to end (web and OrbitKit say the same). */
+    const val START_NEW_COORDINATOR_WHILE_RUNNING = "Begins after this turn ends: a handoff note, then a fresh conversation."
     /** What Compact sends: the engine's own slash command. */
     const val COMPACT_COMMAND = "/compact"
 
@@ -72,7 +74,7 @@ internal object CoordinatorHandoffCopy {
         "REPLACE_FAILED" to "the new coordinator could not be opened.",
     )
     fun failureSentence(code: String?) = "The handoff note wasn't written: ${FAILURE_REASONS[code] ?: FAILURE_REASONS.getValue("TURN_FAILED")}"
-    /** The first line of the platform turn that asks for the note (apiserver `coordinatorHandoffPrompt`): Orbit's, never drawn. */
+    /** The first line of the platform turn that asks for the note (`COORDINATOR_HANDOFF_PROMPT_HEAD`): Orbit's, never drawn. */
     const val NOTE_PROMPT_HEAD = "From Orbit · handoff note"
 }
 
@@ -98,8 +100,8 @@ internal object CoordinatorHandoff {
     /** Compact is offered where the engine advertises `compact` among its slash commands (the composer's Command list). */
     fun compactOffered(slashItems: List<JsonObject>) = slashItems.any { it.text("type") == "command" && it.text("name") == "compact" }
 
-    /** Compact waits while a turn runs: offered greyed, saying why. */
-    fun compactEnabled(running: Boolean) = !running
+    /** Compact waits while a turn runs, and while a handoff has the composer locked: offered greyed, saying why (OrbitKit's rule). */
+    fun compactEnabled(running: Boolean, handoff: OutgoingHandoff? = null) = !running && handoff?.locksComposer != true
 
     /** Start a new coordinator: only in the project's current coordinator (its membership's role), while that conversation is not
      * completed and has no handoff under way or behind it. */

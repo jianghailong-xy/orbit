@@ -128,14 +128,15 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
             val handOver = model.target == null && CoordinatorHandoff.startOffered(detail)
             if (compact || handOver) HorizontalDivider(Modifier.padding(vertical = 8.dp))
             if (compact) {
-                val enabled = CoordinatorHandoff.compactEnabled(running)
+                val enabled = CoordinatorHandoff.compactEnabled(running, CoordinatorHandoff.outgoing(detail))
                 ContextActionRow(R.drawable.ic_compact, CoordinatorHandoffCopy.COMPACT,
                     if (enabled) CoordinatorHandoffCopy.COMPACT_DETAIL else CoordinatorHandoffCopy.COMPACT_WHILE_RUNNING, enabled, "context-action-compact") {
                     expanded = false; model.compact()
                 }
             }
             if (handOver) ContextActionRow(R.drawable.ic_handoff, CoordinatorHandoffCopy.START_NEW_COORDINATOR,
-                CoordinatorHandoffCopy.START_NEW_COORDINATOR_DETAIL, true, "context-action-new-coordinator") {
+                if (running) CoordinatorHandoffCopy.START_NEW_COORDINATOR_WHILE_RUNNING else CoordinatorHandoffCopy.START_NEW_COORDINATOR_DETAIL,
+                true, "context-action-new-coordinator") {
                 expanded = false; confirming = true
             }
         }

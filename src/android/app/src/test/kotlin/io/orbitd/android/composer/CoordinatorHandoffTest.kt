@@ -32,6 +32,10 @@ class CoordinatorHandoffTest {
     @Test fun compactIsDisabledWhileATurnRuns() {
         assertTrue(CoordinatorHandoff.compactEnabled(running = false))
         assertFalse(CoordinatorHandoff.compactEnabled(running = true))
+        fun handoff(state: String) = OutgoingHandoff(state, null, null, null, null)
+        assertFalse("while the note is written", CoordinatorHandoff.compactEnabled(false, handoff("WRITING")))
+        assertFalse("while it hands over", CoordinatorHandoff.compactEnabled(false, handoff("HANDING_OVER")))
+        assertTrue(CoordinatorHandoff.compactEnabled(false, handoff("FAILED")))
     }
 
     @Test fun startANewCoordinatorOnlyInTheCurrentOpenCoordinator() {

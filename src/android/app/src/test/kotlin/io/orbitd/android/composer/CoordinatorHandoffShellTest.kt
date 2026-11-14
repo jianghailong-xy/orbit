@@ -109,6 +109,8 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
     @Test fun theConfirmWhileRunningSaysTheNoteComesAfterTheTurnAndHidesNoWaits() {
         runnerWithCompact(); coordinatorSession(*running)
         signIn(); openSession(); openContext()
+        await { has(hasTestTag("context-action-new-coordinator")) }
+        assertTrue(has(hasText("Begins after this turn ends: a handoff note, then a fresh conversation."), unmerged = true))
         press(hasTestTag("context-action-new-coordinator"))
         await { has(inDialog("After the current turn ends, this coordinator writes a handoff note, then Checkout redesign continues in a new conversation that starts from that note. This one is completed — nothing is deleted.")) }
         await { ComposerShell.calls.contains("GET projects/$project/coordinator/pending-waits") }

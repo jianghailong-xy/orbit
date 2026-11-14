@@ -66,9 +66,15 @@ class CoordinatorHandoffCopyParityTest {
         assertEquals(Regex("'([^']*)'").findAll(sections).map { it.groupValues[1] }.toList(), CoordinatorHandoff.SECTIONS)
     }
 
+    /** The shared constant where src/shared holds it (the web task moved it there), the server's literal before that. */
     @Test fun theNotePromptsHeadIsTheServers() {
         val server = File(root, "src/apiserver/src/projects/coordinator-handoff.ts").readText()
-        assertTrue(server.contains("'${CoordinatorHandoffCopy.NOTE_PROMPT_HEAD}',"))
+        val head = CoordinatorHandoffCopy.NOTE_PROMPT_HEAD
+        assertTrue(shared.contains("export const COORDINATOR_HANDOFF_PROMPT_HEAD = '$head';") || server.contains("'$head',"))
+        if (shared.contains("COORDINATOR_HANDOFF_PROMPT_HEAD")) {
+            assertTrue(shared.contains("export const COORDINATOR_HANDOFF_PROMPT_HEAD = '$head';"))
+            assertTrue(server.contains("COORDINATOR_HANDOFF_PROMPT_HEAD,"))
+        }
     }
 
     /** Board 03 (Android 1 and 2), verbatim. */
@@ -78,6 +84,8 @@ class CoordinatorHandoffCopyParityTest {
         assertEquals("Available when this turn ends.", CoordinatorHandoffCopy.COMPACT_WHILE_RUNNING)
         assertEquals("Start a new coordinator", CoordinatorHandoffCopy.START_NEW_COORDINATOR)
         assertEquals("This one writes a handoff note, then the project continues in a fresh conversation.", CoordinatorHandoffCopy.START_NEW_COORDINATOR_DETAIL)
+        // Not on board 03; the line web (CONTEXT_ACTIONS_COPY) and OrbitKit (newCoordinatorWhileRunning) show while a turn runs.
+        assertEquals("Begins after this turn ends: a handoff note, then a fresh conversation.", CoordinatorHandoffCopy.START_NEW_COORDINATOR_WHILE_RUNNING)
         assertEquals("/compact", CoordinatorHandoffCopy.COMPACT_COMMAND)
     }
 }
