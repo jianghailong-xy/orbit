@@ -746,6 +746,8 @@ func TestALinkHeartbeatThatReconciledNothingFailed(t *testing.T) {
 // In link mode the long polls hang nowhere: a claim or the wake is asked once something says there is an answer (a
 // hint, the HintState of a HeartbeatAck, a new connection) and otherwise answers nothing at the end of its window
 // without asking at all. A session's inbox is fetched by its inbox poller, which decides when (inbox_poller_test.go).
+// Where a hint is what should end a wait, the window is made far longer than the test, so that ending at all says the
+// hint ended it, however late the host delivers the hint.
 func TestLinkLongPollsWaitForHints(t *testing.T) {
 	shortenLinkWaits(t, 300*time.Millisecond, 200*time.Millisecond, linkAfterSeqWait)
 	r := newLinkWorkRig(t)
@@ -774,6 +776,16 @@ func TestLinkLongPollsWaitForHints(t *testing.T) {
 	if n := len(r.g.rpcsTo("/runner/sessions/claim")); n != 1 {
 		t.Fatalf("%d claims asked with one reason to ask", n)
 	}
+	// The wake asks nothing, and answers false at the end of its window when nothing was hinted.
+	if woke, err := r.t.waitForWake(ctx); err != nil || !woke {
+		t.Fatalf("the new connection's first beat is owed at once: %v %v", woke, err)
+	}
+	if woke, _ := r.t.waitForWake(ctx); woke {
+		t.Fatal("woke with nothing hinted")
+	}
+
+	// From here only a hint ends a claim's or the wake's wait: their windows outlast the test.
+	shortenLinkWaits(t, time.Hour, 200*time.Millisecond, linkAfterSeqWait)
 	claimable.Store(true)
 	go func() {
 		time.Sleep(50 * time.Millisecond)
@@ -782,14 +794,7 @@ func TestLinkLongPollsWaitForHints(t *testing.T) {
 	if job, err := r.t.claimSession(ctx, nil); err != nil || job == nil || job.SessionID != "session-c" {
 		t.Fatalf("a hinted claim: %+v %v", job, err)
 	}
-
-	// The wake asks nothing: a CommandsHint is the wake.
-	if woke, err := r.t.waitForWake(ctx); err != nil || !woke {
-		t.Fatalf("the new connection's first beat is owed at once: %v %v", woke, err)
-	}
-	if woke, _ := r.t.waitForWake(ctx); woke {
-		t.Fatal("woke with nothing hinted")
-	}
+	// A CommandsHint is the wake.
 	conn.send(&linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: &linkpb.Hint{Kind: &linkpb.Hint_Commands{Commands: &linkpb.CommandsHint{}}}}})
 	if woke, _ := r.t.waitForWake(ctx); !woke {
 		t.Fatal("a CommandsHint did not wake")
@@ -808,16 +813,18 @@ func TestLinkLongPollsWaitForHints(t *testing.T) {
 	if took := time.Since(began); took < 350*time.Millisecond {
 		t.Errorf("three reads of a pending approval took %s: not paced", took)
 	}
+	// With the recheck outlasting the test, only the ApprovalHint can have the approval read again.
+	shortenLinkWaits(t, time.Hour, time.Hour, linkAfterSeqWait)
+	reads := len(r.g.rpcsTo("/runner/sessions/session-a/approvals/ap-1"))
 	go func() {
 		time.Sleep(20 * time.Millisecond)
 		conn.send(&linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: &linkpb.Hint{Kind: &linkpb.Hint_Approval{Approval: &linkpb.ApprovalHint{SessionId: "session-a", ApprovalId: "ap-1"}}}}})
 	}()
-	began = time.Now()
 	if _, err := r.t.pollApproval(ctx, "session-a", "ap-1"); err != nil {
 		t.Fatal(err)
 	}
-	if took := time.Since(began); took > 150*time.Millisecond {
-		t.Errorf("an ApprovalHint took %s to be read", took)
+	if n := len(r.g.rpcsTo("/runner/sessions/session-a/approvals/ap-1")) - reads; n != 1 {
+		t.Errorf("an ApprovalHint had the approval read %d times, want once", n)
 	}
 }
 
