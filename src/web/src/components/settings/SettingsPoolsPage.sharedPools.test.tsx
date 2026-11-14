@@ -233,9 +233,9 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
     await click(radio('Paste an OpenAI API key', choose));
     await click(button('Continue', choose));
   };
-  /** New account pool, in the Account pools heading: the page's one way to a new pool; resolves once its dialog is open. */
+  /** New pool, in the Account pools heading: the page's one way to a new pool; resolves once its dialog is open. */
   const newPool = async () => {
-    await click(button('New account pool'));
+    await click(button('New pool'));
     await openDialog('New account pool');
   };
 
@@ -327,7 +327,7 @@ describe("a shared pool on Settings' Account pools page and on its own page", { 
     expect(claude.querySelector('.pool-people')).toBeNull();
     // A head like the other sections', whose one press makes another pool.
     expect([...container.querySelectorAll('.pool-sec .re-sec-head button')].map((el) => el.textContent)).toEqual([
-      'New account pool',
+      'New pool',
     ]);
     expect(container.querySelector('.pool-sec .re-sec-sub')?.textContent).toBe(
       'Several accounts under one name.',

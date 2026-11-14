@@ -730,7 +730,7 @@ export function AccountPools({
 }: {
   pools: ProviderPool[];
   refusals: PoolRefusals;
-  /** On the heading's right: Settings' pools page puts New account pool there. */
+  /** On the heading's right: Settings' pools page puts New pool there. */
   action?: ReactNode;
 }) {
   const isMobile = useIsMobile();

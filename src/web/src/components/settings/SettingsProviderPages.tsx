@@ -104,7 +104,8 @@ export function SettingsKeysPage() {
     <>
       <div className="sp-vendor-head">
         <h1 className="sp-vendor-title">API keys</h1>
-        <Button size="small" icon={<PlusOutlined />} onClick={() => navigate('/settings/providers/new')}>
+        {/* The page's one solid button, as tall as the title beside it (settings-buttons board 03, A). */}
+        <Button variant="primary" icon={<PlusOutlined />} onClick={() => navigate('/settings/providers/new')}>
           Add key
         </Button>
       </div>
@@ -195,7 +196,7 @@ export function SettingsKeysPage() {
 
 /**
  * /settings/providers/pools — Infrastructure's Account pools section, unchanged, on its own page: the
- * user's account pools and the shared pools they are in, who can use each, New account pool, and the
+ * user's account pools and the shared pools they are in, who can use each, New pool, and the
  * offer to make one while there is something to pool and no pool yet (PoolHint).
  */
 export function SettingsPoolsPage() {
@@ -229,8 +230,9 @@ export function SettingsPoolsPage() {
           pools={poolList}
           refusals={refusals}
           action={
-            <Button size="small" icon={<PlusOutlined />} onClick={() => setCreatingPool(true)}>
-              New account pool
+            // The page's one solid button (settings-buttons board 03, A); the page's title says what kind of pool.
+            <Button variant="primary" icon={<PlusOutlined />} onClick={() => setCreatingPool(true)}>
+              New pool
             </Button>
           }
         />

@@ -254,9 +254,9 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     await click(button('Add account'));
     await click(button('Continue', dialog()!));
   };
-  /** New account pool, in the Account pools heading: the page's one way to a new pool; resolves once its dialog is open. */
+  /** New pool, in the Account pools heading: the page's one way to a new pool; resolves once its dialog is open. */
   const newPool = async () => {
-    await click(button('New account pool'));
+    await click(button('New pool'));
     await openDialog('New account pool');
   };
 
