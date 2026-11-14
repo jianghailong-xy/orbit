@@ -157,12 +157,30 @@ struct SectionSidebar: View {
     /// ⌘ is down: the workspace rows show their ⌘1…⌘9 shortcuts only then, as Safari shows its tab
     /// numbers, instead of a column of faint hints beside the state marks all the time.
     @State private var commandHeld = false
-    /// The source list's ONE selection. The List writes this value; the navigation it asks for runs
-    /// in `.onChange(of: selection)`, after the List has applied the update — never inside a Binding
-    /// setter, where a model write lands in the middle of SwiftUI's own outline-view update.
-    @State private var selection: SidebarSelection?
-    /// What was last read from or written to the model, so a re-sync cannot re-run the side effects.
-    @State private var applied: SidebarSelection?
+    /// The beta.242 shape, restored as the runtime crash gate's red control: the List's selection
+    /// is a Binding derived from four model fields, and its setter writes those models (and what
+    /// their own setters write) while the List is applying the update.
+    private var selection: Binding<SidebarSelection?> {
+        Binding(
+            get: {
+                if model.selectedSection == .agents, let id = model.guestSessionID { return .guestSession(id) }
+                if let runnerID = model.machineDraftRunnerID { return .machine(runnerID) }
+                if model.selectedSection == .agents, let id = selectedProjectID { return .project(id) }
+                if model.selectedSection == .agents, let id = model.selectedAgentID { return .agent(id) }
+                return .section(model.selectedSection)
+            },
+            set: { value in
+                switch value {
+                case .section(let section): model.selectedSection = section
+                case .agent(let id): openWorkspace(id)
+                case .machine(let runnerID): model.openMachineDraft(runnerID)
+                case .project(let id): model.openProjectSessions(id, inColumn: true)
+                case .guestSession(let id): model.openGuestSession(id)
+                case nil: break
+                }
+            }
+        )
+    }
 
     /// The project the session column is showing, in the project list's own spelling of the id (the
     /// spelling the row's tag uses), or nil when no project's sessions page is in the column. A page a
@@ -173,29 +191,20 @@ struct SectionSidebar: View {
         return model.projects?.projects.first { PublicID.storageKey($0.id) == key }?.id ?? address.projectID
     }
 
-    /// The navigation state as one value — what a deep link, a shortcut or a notification moved.
-    private var modelSelection: SidebarSelection {
-        SidebarLogic.selection(section: model.selectedSection, agentID: model.selectedAgentID,
-                               machineDraftRunnerID: model.machineDraftRunnerID,
-                               projectID: selectedProjectID,
-                               guestSessionID: model.guestSessionID)
-    }
-
     var body: some View {
-        let agents = model.agents
-        // One read of the models, one snapshot: the work rows (the Wiki's visibility is DATA here),
-        // the Workspaces rows and the open projects. Each area draws one ForEach over its rows.
-        let sections = AgentListLogic.sidebarSections(
-            AppSection.workSections,
-            wiki: model.wiki?.shown == true,
-            projectsWaiting: model.projects?.needsYouCount ?? 0,
-            wikiWaiting: model.wiki?.waiting ?? 0)
+        // Touch the driving fields so Observation re-renders the rail (and re-reads `selection`)
+        // when the section/agent changes from outside the sidebar, e.g. a deep-link route.
+        _ = (model.selectedSection, model.selectedAgentID, model.machineDraftRunnerID,
+             model.guestSessionID, model.nav.path)
         let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         let projects = AgentListLogic.sidebarProjects(openProjects, coordinators: model.projectCoordinators)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
-        return List(selection: $selection) {
-            ForEach(sections) { row in
-                sectionRow(row)
+        return List(selection: selection) {
+            // The beta.242 shape: an `if` inside the ForEach decides whether the Wiki row exists.
+            ForEach(AppSection.workSections) { section in
+                if section != .wiki || model.wiki?.shown == true {
+                    sectionRow(section)
+                }
             }
             // "Waiting on you", raised as a sheet over whatever is selected.
             OwnerRequestInboxEntry()
@@ -264,47 +273,29 @@ struct SectionSidebar: View {
         // The Projects row counts the projects waiting on you, and the last group lists the open ones.
         .task { await model.projects?.load() }
         .task { await model.followSharedWithMe() }
-        .onChange(of: selection) { _, now in
-            guard now != applied else { return }
-            applied = now
-            switch SidebarLogic.target(now) {
-            case .section(let section):
-                model.selectedSection = section
-            case .agent(let id):
-                openWorkspace(id)
-            case .machine(let runnerID):
-                model.openMachineDraft(runnerID)
-            case .project(let id):
-                model.openProjectSessions(id, inColumn: true)
-            case .guestSession(let id):
-                model.openGuestSession(id)
-            case .none:
-                break
-            }
-        }
-        .onChange(of: modelSelection, initial: true) { _, now in
-            // A deep link, ⌘N or a notification moved the model: bring the list's stored value along.
-            guard now != selection else { return }
-            applied = now
-            selection = now
-        }
     }
 
-    /// Projects, Tasks or the Wiki, with the drawer's amber count of what waits on you there. One
-    /// view per row from the snapshot; a count of 0 is drawn hidden, not removed.
-    private func sectionRow(_ row: SidebarSectionRow) -> some View {
-        HStack {
-            Label(row.section.title, systemImage: row.section.systemImage)
-            Spacer(minLength: 6)
-            Text("\(row.waiting)")
-                .font(.orbitMeta.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(.orange)
-                .opacity(row.waiting > 0 ? 1 : 0)
-                .accessibilityHidden(row.waiting == 0)
-                .accessibilityLabel("\(row.waiting) waiting on you")
+    /// Projects, Tasks or the Wiki, with the drawer's amber count of what waits on you there — and,
+    /// in the beta.242 shape, the count is removed rather than hidden when it is 0.
+    private func sectionRow(_ section: AppSection) -> some View {
+        let waiting: Int
+        switch section {
+        case .projects: waiting = model.projects?.needsYouCount ?? 0
+        case .wiki:     waiting = model.wiki?.waiting ?? 0
+        default:        waiting = 0
         }
-        .tag(SidebarSelection.section(row.section))
+        return HStack {
+            Label(section.title, systemImage: section.systemImage)
+            Spacer(minLength: 6)
+            if waiting > 0 {
+                Text("\(waiting)")
+                    .font(.orbitMeta.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("\(waiting) waiting on you")
+            }
+        }
+        .tag(SidebarSelection.section(section))
     }
 
     /// The line standing in for an empty workspace list. It says there are none only after a fetch
