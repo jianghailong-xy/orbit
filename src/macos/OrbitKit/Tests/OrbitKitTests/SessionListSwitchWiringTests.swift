@@ -65,13 +65,13 @@ final class SessionListSwitchWiringTests: XCTestCase {
         let order = try positions(["let isCurrent = { self.lastSessionQuery.map",
                                    "let read = try await api.listSessions(view: view)",
                                    "guard isCurrent() else { return }",
-                                   "agentSessions = SessionFilter.forAgent(all, agentID: agentID, view: view)"], in: load)
+                                   "SessionFilter.forAgent(all, agentID: agentID, view: view)"], in: load)
         XCTAssertEqual(order, order.sorted(),
                        "the currency check exists before the fetch and gates the write after it")
 
-        for part in ["defer { if isCurrent() { sessionsLoading = false } }",
+        for part in ["defer { if isCurrent() { assignIfChanged(\\.sessionsLoading, false) } }",
                      "if isCurrent() { adoptOpen(all, agentID: agentID) }",
-                     "catch { if isCurrent() { errorText = friendly(error) } }"] {
+                     "catch { if isCurrent() { assignIfChanged(\\.errorText, friendly(error)) } }"] {
             XCTAssertTrue(load.contains(part), "a superseded load doesn't touch `\(part)`")
         }
     }
