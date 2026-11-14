@@ -740,6 +740,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     open(OrbitRoute(Destination.SESSION, it)) } }
                 // Board 02 ② and ⑤: the coordinator's handoff while it is written, and when it failed, right above the composer.
                 val handoff = CoordinatorHandoff.outgoing(detail)
+                // Its next state comes after the note turn has ended, when nothing else reads a session that is not live: read it
+                // again while the handoff is in hand, so FAILED, the banner and the way to the successor arrive without a press.
+                val latestDetail by rememberUpdatedState(detail)
+                val following = CoordinatorHandoff.keepsReading(detail)
+                LaunchedEffect(route.id, following) {
+                    if (following) CoordinatorHandoff.follow({ latestDetail }) { app.realtime.refreshSession() }
+                }
                 val handoffProject = detail?.let(CoordinatorHandoff::projectId)
                 val handoffApi = remember(handle) { CoordinatorHandoffApi(app.session, handle) }
                 var handoffBusy by remember(handle, route.id) { mutableStateOf(false) }

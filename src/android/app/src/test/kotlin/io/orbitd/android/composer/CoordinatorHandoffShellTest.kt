@@ -139,6 +139,25 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         await { ComposerShell.calls.contains("POST projects/$project/coordinator/handoff/cancel") }
     }
 
+    /** The note turn has ended and the session is not running: its handoff still moves on screen without a press — WRITING to
+     * FAILED (the server's sweep), and HANDING_OVER to the banner. */
+    @Test fun aHandoffInHandIsReadAgainAfterTheTurnEnds() {
+        coordinatorSession(handoff("WRITING"))
+        signIn(); open("orbit-session:${ComposerShell.SESSION}")
+        await { has(hasTestTag("handoff-progress")) }
+        val reads = ComposerShell.calls.count { it == "GET sessions/${ComposerShell.SESSION}" }
+        coordinatorSession(handoff("FAILED", "TIMED_OUT", "The handoff note wasn't written: the turn timed out."))
+        await { has(hasTestTag("handoff-failed")) }
+        assertTrue(ComposerShell.calls.count { it == "GET sessions/${ComposerShell.SESSION}" } > reads)
+        assertTrue(shows("The handoff note wasn't written: the turn timed out."))
+        compose.onNodeWithTag("composer-input").assertIsEnabled()
+        coordinatorSession(handoff("HANDING_OVER"))
+        app().realtime.refreshSession()
+        await { has(hasTestTag("handoff-progress")) }
+        ComposerShell.session = mapOf("lifecycleState" to JsonPrimitive("COMPLETED"), handoff("COMPLETED", to = successor))
+        await { has(hasTestTag("handoff-handed-over")) }
+    }
+
     @Test fun handingOverIsTheProgressRowWithoutItsButtons() {
         coordinatorSession(handoff("HANDING_OVER"))
         signIn(); open("orbit-session:${ComposerShell.SESSION}")

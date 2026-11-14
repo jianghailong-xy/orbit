@@ -135,6 +135,19 @@ internal object CoordinatorHandoff {
     fun failureActions(failureCode: String?): List<String> = if (failureCode == "REPLACE_FAILED") listOf(CoordinatorHandoffCopy.HAND_OVER_WITHOUT_NOTE)
         else listOf(CoordinatorHandoffCopy.TRY_AGAIN, CoordinatorHandoffCopy.HAND_OVER_WITHOUT_NOTE, CoordinatorHandoffCopy.KEEP_THIS_COORDINATOR)
 
+    /** How often a handoff in hand is read again. */
+    const val FOLLOW_MS = 4_000L
+
+    /** The handoff is still in hand (WRITING or HANDING_OVER): its next state comes after the note turn has ended — the server's
+     * sweep, the replacement — when the session is no longer live and nothing else reads it again. */
+    fun keepsReading(detail: JsonObject?) = outgoing(detail)?.locksComposer == true
+
+    /** Reads the session again every [FOLLOW_MS] for as long as [detail] says the handoff is in hand, live or not; returns once it is
+     * FAILED, COMPLETED or gone. [reload] asks for a fresh read; [detail] answers with the latest one. */
+    suspend fun follow(detail: () -> JsonObject?, reload: suspend () -> Unit) {
+        while (keepsReading(detail())) { delay(FOLLOW_MS); reload() }
+    }
+
     /** The platform's note-asking turn, which the transcript leaves out (Orbit's words, not the owner's). */
     fun isNotePrompt(text: String?) = text?.trimStart()?.startsWith(CoordinatorHandoffCopy.NOTE_PROMPT_HEAD) == true
 

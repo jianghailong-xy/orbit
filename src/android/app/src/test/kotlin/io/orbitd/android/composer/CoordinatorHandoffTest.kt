@@ -5,6 +5,11 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 
 /** The context dialog's and the handoff's rules (boards 02, 03), off the session's detail as the server sends it. */
 class CoordinatorHandoffTest {
@@ -61,6 +66,62 @@ class CoordinatorHandoffTest {
         assertEquals(listOf("Try again", "Hand over without a note", "Keep this coordinator"), CoordinatorHandoff.failureActions("TURN_FAILED"))
         assertEquals(listOf("Hand over without a note"), CoordinatorHandoff.failureActions("REPLACE_FAILED"))
         assertEquals("The handoff note wasn't written: the turn timed out.", CoordinatorHandoffCopy.failureSentence("TIMED_OUT"))
+    }
+
+    /** A session as the server says it — not running: the note turn has ended — with its handoff in [state], or none. */
+    private fun ended(state: String?) = obj("""{"id":"S1","status":"AWAITING_INPUT","runState":"AWAITING_INPUT","lifecycleState":"OPEN"""" +
+        (state?.let { ""","coordinatorHandoff":{"state":"$it","startedAt":"2026-11-14T10:00:00Z"}""" } ?: "") + "}")
+
+    @Test fun aHandoffInHandIsReadAgainLiveOrNot() {
+        assertTrue(CoordinatorHandoff.keepsReading(ended("WRITING")))
+        assertTrue(CoordinatorHandoff.keepsReading(ended("HANDING_OVER")))
+        assertFalse(CoordinatorHandoff.keepsReading(ended("FAILED")))
+        assertFalse(CoordinatorHandoff.keepsReading(ended("COMPLETED")))
+        assertFalse(CoordinatorHandoff.keepsReading(ended(null)))
+        assertFalse(CoordinatorHandoff.keepsReading(null))
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun aNonLiveSessionWritingItsNoteKeepsReloadingUntilTheHandoffSettles() = runTest {
+        // The server's answers, one per read: still writing, then handing over, then handed over.
+        val answers = ArrayDeque(listOf(ended("WRITING"), ended("HANDING_OVER"), ended("COMPLETED")))
+        var current = ended("WRITING")
+        var reloads = 0
+        val job = launch { CoordinatorHandoff.follow({ current }) { reloads++; current = answers.removeFirst() } }
+        runCurrent()
+        assertEquals("nothing before the first interval", 0, reloads)
+        advanceTimeBy(CoordinatorHandoff.FOLLOW_MS - 1); runCurrent()
+        assertEquals(0, reloads)
+        advanceTimeBy(1); runCurrent()
+        assertEquals("every 4 s while WRITING, though the session is not running", 1, reloads)
+        advanceTimeBy(CoordinatorHandoff.FOLLOW_MS); runCurrent()
+        assertEquals("and while HANDING_OVER", 2, reloads)
+        advanceTimeBy(CoordinatorHandoff.FOLLOW_MS); runCurrent()
+        assertEquals(3, reloads)
+        assertTrue("COMPLETED ends it", job.isCompleted)
+        advanceTimeBy(CoordinatorHandoff.FOLLOW_MS * 5); runCurrent()
+        assertEquals(3, reloads)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun aWritingNoteThatFailsStopsReloadingAtFailed() = runTest {
+        var current = ended("WRITING")
+        var reloads = 0
+        val job = launch { CoordinatorHandoff.follow({ current }) { reloads++; if (reloads == 2) current = ended("FAILED") } }
+        advanceTimeBy(CoordinatorHandoff.FOLLOW_MS * 10); runCurrent()
+        assertEquals(2, reloads)
+        assertTrue(job.isCompleted)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun aSessionWithNoHandoffIsNotReloaded() = runTest {
+        for (state in listOf(null, "FAILED", "COMPLETED")) {
+            var reloads = 0
+            val job = launch { CoordinatorHandoff.follow({ ended(state) }) { reloads++ } }
+            advanceTimeBy(CoordinatorHandoff.FOLLOW_MS * 10); runCurrent()
+            assertEquals("no reload for ${state ?: "no handoff"}", 0, reloads)
+            assertTrue(job.isCompleted)
+        }
     }
 
     @Test fun theNotePromptIsOrbitsAndOnlyIt() {
