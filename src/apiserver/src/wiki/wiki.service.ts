@@ -260,7 +260,17 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_MAINTENANCE_RUNNING: 409,
   WIKI_MAINTENANCE_DAILY_LIMIT: 409,
   WIKI_MAINTENANCE_WRONG_REPOSITORY: 409,
+  WIKI_SPACE_EXISTS: 409,
 };
+
+/** POST /api/wiki/spaces for a repository that already has a wiki in use (docs/wiki-explicit-creation-design.md §3.4). */
+const SPACE_EXISTS = 'This repository already has a wiki.';
+
+/** A unique index refused the row (Prisma's P2002, or PostgreSQL's 23505 however it is wrapped). */
+function isUniqueViolation(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return true;
+  return /23505|Unique constraint/u.test(String((error as Error | undefined)?.message ?? ''));
+}
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */
 export class WikiRefusalError extends HttpException {
@@ -1199,6 +1209,9 @@ export class WikiService {
    * maintenance from the start when the request names it, which is the owner channel's alone, as the
    * PATCH that sets it later is. The maintenance a request names is checked before the space is made
    * (the workspace is the owner's), so a refused one makes nothing.
+   * Making a wiki at all is the owner channel's: a request with a session header is refused
+   * WIKI_OWNER_CHANNEL_ONLY, maintenance or not, and a repository with a wiki in use is refused
+   * WIKI_SPACE_EXISTS rather than meeting the unique index (docs/wiki-explicit-creation-design.md §3.1, §3.4).
    * A personal access token is refused it the same way, by `credential` (docs/personal-access-token-design.md §5).
    */
   async createSpace(
@@ -1207,11 +1220,11 @@ export class WikiService {
     actingSessionId: string | null = null,
     credential?: AuthCredential,
   ) {
-    if (input.maintenance !== undefined && actingSessionId) {
+    if (actingSessionId) {
       return refuse(
         'WIKI_OWNER_CHANNEL_ONLY',
-        "a space's Wiki maintenance is the account owner's to set, through an owner channel with no acting session: "
-          + 'create the space without it, and let a person set it.',
+        'making a wiki is the account owner\'s to do, through an owner channel with no acting session: '
+          + 'file request_owner_action with kind WIKI_CREATE, and let a person create it.',
       );
     }
     refuseOwnerFieldsToToken(credential, { maintenance: input.maintenance });
@@ -1219,12 +1232,22 @@ export class WikiService {
     if (input.repoUrl && normalized === null) {
       return refuse('WIKI_SCHEMA', 'repoUrl says nothing a repository identity can be read from');
     }
+    // One wiki in use per repository (unique (owner_id, repo_url_norm); a wiki in Trash has set its repository aside).
+    // Asked before anything is written, and the index answers the same refusal for two creates that race past it.
+    const repositoryTaken = async () =>
+      normalized !== null && (await this.prisma.wikiSpace.count({ where: { ownerId, repoUrlNorm: normalized } })) > 0;
+    if (await repositoryTaken()) return refuse('WIKI_SPACE_EXISTS', SPACE_EXISTS);
     if (input.maintenance !== undefined) await checkWikiMaintenanceInput(this.prisma, ownerId, input.maintenance);
     const spaceId = await withTransactionRetry(
       this.prisma,
       (tx) => this.createSpaceRow(tx, ownerId, input.title, normalized, input.slug),
       loggedRetry(this.logger, 'wiki.createSpace'),
-    );
+    ).catch(async (error: unknown) => {
+      // A create that raced this one may meet the slug's index first (both read the same free slug), so whichever
+      // index refused the row, the question is asked again: a repository now taken is the same refusal.
+      if (isUniqueViolation(error) && (await repositoryTaken())) return refuse('WIKI_SPACE_EXISTS', SPACE_EXISTS);
+      throw error;
+    });
     if (input.maintenance !== undefined) await setWikiMaintenance(this.prisma, ownerId, spaceId, input.maintenance);
     await this.spaceCreated(ownerId, spaceId, ownerId);
     return this.requireSpace(ownerId, spaceId);

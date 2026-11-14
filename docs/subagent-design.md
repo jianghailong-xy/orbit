@@ -130,11 +130,15 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
   Why 追加 `Moved to <model> after <model>'s account hit its limit`（容量：`… was at capacity`）。同一次 `delegate` 最多换 2 次。
   runner 问 `POST /runner/sessions/:id/subagents/:runId/fallback`（带子进程的原话）；服务端从开跑时存下的决策里取
   候选（选中的那个 + `decision.fallbacks`，同档按排序剩下的），跳过已经撞过限额的 Provider，所以影子模式下同样生效。
-  每次尝试记进 `subagent_run.attempts`（引擎、Provider、模型、结果、原话）。Claude 账号池可以是选中项，也可以是换去的目标：
-  SubAgent 自己选池成员（`subagentPoolMember`，规则同 claim 的 `choosePoolMember`），记在那次尝试的 `poolMember` 上，
-  不写父会话的 `poolMemberProviderId`。Codex 账号池的网关按会话行上的账号发请求，SubAgent 无法有自己的成员，所以跳过并记原因。
+  每次尝试记进 `subagent_run.attempts`（引擎、Provider、模型、结果、原话）。自己的账号池（Claude 或 Codex）可以是选中项，
+  也可以是换去的目标：SubAgent 自己选池成员（`subagentPoolMember`；Claude 池规则同 claim 的 `choosePoolMember`，
+  Codex 池同 claim 的 `choosePoolCredential`：先选能跑的 ChatGPT 账号，没有再用池里的 API key），记在那次尝试的 `poolMember` 上
+  （`{providerId}` / `{accountId}` / `{keyId}` 加 `label`），不写父会话的 `poolMemberProviderId` / `poolCodexAccountId` / `poolKeyId`。
+  Codex 池的子进程拿一张只给它铸的网关 token（`mintSubagentPoolLoginToken`，迁移 0800：`pool_login_token.account_id` / `key_id`），
+  网关按 token 上的账号或 key 发请求，而不是父会话行上的；这种 token 只在 codex 网关有效，网关也不给父会话记换号提示。
+  别人的池（包括别人共享、没把本人加进去的池）不是候选，按名字点它也会被拒。
   换第 3 次时回 `SUBAGENT_FALLBACK_SPENT`，不是额度失败回 `SUBAGENT_NOT_A_LIMIT_FAILURE`。
-- **开跑时选中项起不来**（例如 Codex 账号池、凭证缺失）：按排序取同档下一个，被跳过的记进 `candidates` 并带原因，
+- **开跑时选中项起不来**（例如账号池里没有能跑的账号、凭证缺失）：按排序取同档下一个，被跳过的记进 `candidates` 并带原因，
   Why 里计入被去掉的数目。
 - **活本身失败**：不升档、不重跑，交回父 Agent，结果里写明。父 Agent 决定加档再派，还是自己做。
 - 池子是空的：`delegate` 立刻返回错误 `NO_SUBAGENT_PROVIDER`，并列出每个 Provider 被去掉的原因；不会退回父会话的模型。
@@ -171,6 +175,10 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 ### 5.3 权限与审批
 
 - 权限模式：定义里 `readonly` → plan；否则与父会话相同。不会比父会话宽（沿用 `assertChildModeOrNarrow` 的规则）。
+  只读子 Agent 在各引擎上怎样读仓库：Claude、Kimi、OpenCode、Cursor、Antigravity 在 plan 下保留各自的读文件工具；
+  DSH 没有 plan，用它的只读文件策略（Don't Ask）。Codex 只能用 shell 读仓库，而它的 plan 拒绝一切命令，所以只读的
+  Codex 子 Agent 不走 plan 的 Codex 配置，改用 Codex 自己的 `read-only` 沙箱（无写、无网络）加 `never`：命令不问人，
+  在沙箱里跑，写入由沙箱拒绝；要求越出沙箱的请求一律拒绝（`codexReadonlySubagentMode`）。会话本身的 plan 含义不变。
 - 审批卡用父会话的 `sessionId` 发出，`toolUseId` 加 runId 前缀，并带 `subagentRunId`（与 `backgroundJobId` 同一作用：
   父会话的 tool_result 到达时不把它当作已返回的调用收走）。卡片出现在父会话的审批区，标题写明来自哪个 SubAgent。
 - 子 Agent 的 AskUserQuestion / 计划审批一律拒绝，提示它把疑问写进结果里交回。Cursor 在 subagent 里也是这样。

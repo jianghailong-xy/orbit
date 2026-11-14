@@ -1360,6 +1360,10 @@ type ClaimedSession struct {
 	// liveMode is the session's permission mode as the goroutines serving its socket read it
 	// (background_gate.go); nil until that service starts.
 	liveMode *sessionLiveMode
+	// readonlySubagent marks a read-only SubAgent's child claim (subagentChildJob). Its permission mode is plan,
+	// which every engine keeps; Codex alone reads this too, since its plan mode refuses every command and a shell
+	// is the only way Codex reads a repository (codexPermissionMode).
+	readonlySubagent bool
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir          string `json:"workDir,omitempty"`
 	SessionUUID      string `json:"sessionUuid"`

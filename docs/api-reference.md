@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 438 |
+| `user` | 439 |
 | `admin` | 28 |
 | `runner` | 186 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **687** |
+| **Total** | **688** |
 
 ## Public routes
 
@@ -157,6 +157,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/outcomes/inbox` | query `limit` | `OutcomeSurfacesController.inbox` |
 | `GET` | `/api/owner-requests` | query `state` | `OwnerRequestsController.list` |
 | `GET` | `/api/owner-requests/:id` | path `id` | `OwnerRequestsController.get` |
+| `POST` | `/api/owner-requests/:id/create-wiki` | path `id` | `OwnerRequestsController.createWiki` |
 | `POST` | `/api/owner-requests/:id/decline` | body `DeclineOwnerRequestDto`; path `id` | `OwnerRequestsController.decline` |
 | `POST` | `/api/owner-requests/:id/done` | body `CompleteOwnerRequestDto`; path `id` | `OwnerRequestsController.complete` |
 | `POST` | `/api/owner-requests/:id/secret` | body `SubmitOwnerSecretDto`; path `id` | `OwnerRequestsController.submitSecret` |

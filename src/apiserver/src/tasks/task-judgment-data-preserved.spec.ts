@@ -2929,6 +2929,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0531 adds three nullable conversation_turn columns and their CHECK only; no preserved rows, triggers or DONE
       // fence change.
       '0531_conversation_turn_translation',
+      // 0531 adds two nullable owner_request columns (repo_url_norm, workspace_id), swaps owner_request's kind CHECK
+      // for one that admits WIKI_CREATE, adds one CHECK and one partial unique index; `owner_request` is none of the
+      // preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      '0531_owner_request_wiki_create',
       // 0534 creates main_checkout_request only; no preserved rows, triggers or DONE fence change.
       '0534_main_checkout_request',
       // 0535 adds project's non-code mark, who wrote it and when, and one CHECK; no preserved rows, triggers or DONE
@@ -3026,7 +3030,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0770 widens main_checkout_request_action_chk to allow 'discard' (docs/main-checkout-git-contract.md), added NOT
       // VALID and then validated; `main_checkout_request` is none of the preserved relations, no trigger, function or
       // DONE fence changes, and no row is written.
-      '0770_main_checkout_discard'],
+      '0770_main_checkout_discard',
+      // 0790 adds the schedule tables, a SCHEDULE session_run_source value and a nullable session.schedule_run_id
+      // only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0790_schedules',
+      // 0800 adds two nullable pool_login_token columns (account_id, key_id: a SubAgent's token's own credential),
+      // catalog-only; `pool_login_token` is none of the preserved relations, no trigger, function or DONE fence
+      // changes, and no row is written.
+      '0800_pool_login_token_subagent_credential'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -53,12 +53,18 @@ func codexSandboxPolicy(permissionMode string, job *ClaimedSession, execDir, upD
 			"networkAccess": false,
 		}
 	}
+	if permissionMode == codexReadonlySubagentMode {
+		return map[string]interface{}{"type": "readOnly", "networkAccess": false}
+	}
 	return map[string]interface{}{"type": "dangerFullAccess"}
 }
 
 func codexSandboxMode(permissionMode string) string {
 	if permissionMode == "auto" {
 		return "workspace-write"
+	}
+	if permissionMode == codexReadonlySubagentMode {
+		return "read-only"
 	}
 	return "danger-full-access"
 }

@@ -275,8 +275,9 @@ final class WikiWiringTests: XCTestCase {
         }
         let header = try slice(page, from: "private var header: some View {", to: "private func band(_ band: WikiLogic.HomeBand) -> some View {")
         // The space's name is the head (board docs/mocks/wiki-rail-name B); the bar takes it once the head scrolls away.
-        XCTAssertTrue(header.contains("WikiSpacePicker(space: space, spaces: spaces, title: .largeTitle.bold(), pick: actions.pickSpace, manage: actions.openSettings)"),
-                      "the header")
+        assertOrder(header, ["WikiSpacePicker(space: space, spaces: spaces, title: .largeTitle.bold(), pick: actions.pickSpace, manage: actions.openSettings,",
+                             "create: actions.createWiki)"],
+                    "the header")
         XCTAssertFalse(header.contains("WikiCopy.title"), "the head says Wiki again")
         XCTAssertTrue(page.contains(".navigationTitle(besideContents || headerOnScreen ? \"\" : spaceName)"))
         XCTAssertTrue(page.contains("TextField(WikiCopy.searchPlaceholder, text: $query)"))
