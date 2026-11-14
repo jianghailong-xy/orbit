@@ -580,20 +580,25 @@ struct WikiFirstStartPage: View {
 
     var body: some View {
         List {
-            Section {
-                Text(WikiCopy.title)
-                    .font(.largeTitle.bold())
-                    .accessibilityAddTraits(.isHeader)
-                    .padding(.top, 4)
-                    .wikiHomeOnBackground()
-            }
-            WikiStartSection(card: card, act: act)
-            if trashed > 0 {
-                Section {
-                    Button(WikiModeCopy.trashOpenTrash, action: openTrash)
-                } header: {
-                    Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))
-                        .textCase(nil)
+            ForEach(WikiFirstStartListLogic.rows(trashed: trashed)) { row in
+                switch row {
+                case .title:
+                    Section {
+                        Text(WikiCopy.title)
+                            .font(.largeTitle.bold())
+                            .accessibilityAddTraits(.isHeader)
+                            .padding(.top, 4)
+                            .wikiHomeOnBackground()
+                    }
+                case .start:
+                    WikiStartSection(card: card, act: act)
+                case .trash:
+                    Section {
+                        Button(WikiModeCopy.trashOpenTrash, action: openTrash)
+                    } header: {
+                        Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))
+                            .textCase(nil)
+                    }
                 }
             }
         }

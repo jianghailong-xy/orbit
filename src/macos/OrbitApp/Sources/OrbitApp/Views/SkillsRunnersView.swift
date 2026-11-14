@@ -20,18 +20,7 @@ struct SkillsView: View {
                                              search: search)
             List {
                 ForEach(groups) { g in
-                    Section {
-                        ForEach(g.skills) { SkillRow(item: $0, isSkill: true) }
-                        ForEach(g.commands) { SkillRow(item: $0, isSkill: false) }
-                    } header: {
-                        HStack(spacing: 6) {
-                            Text(g.title)
-                            Text(g.runnerName).font(.orbitLabel).foregroundStyle(.secondary)
-                            if !g.online { Image(systemName: "moon.zzz").font(.orbitMeta).foregroundStyle(.secondary) }
-                            Spacer()
-                            Text("\(g.count)").font(.orbitLabel).foregroundStyle(.secondary)
-                        }
-                    }
+                    SkillsGroupSection(group: g)
                 }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -43,6 +32,29 @@ struct SkillsView: View {
             .task { await runners.load() }
         } else {
             ProgressView()
+        }
+    }
+}
+
+/// One agent's skills and commands under a section title. A child view so the Skills list's ForEach
+/// draws one group per row and no second ForEach sits under it.
+private struct SkillsGroupSection: View {
+    let group: SkillGroup
+
+    var body: some View {
+        Section {
+            ForEach(group.skills) { SkillRow(item: $0, isSkill: true) }
+            ForEach(group.commands) { SkillRow(item: $0, isSkill: false) }
+        } header: {
+            HStack(spacing: 6) {
+                Text(group.title)
+                Text(group.runnerName).font(.orbitLabel).foregroundStyle(.secondary)
+                if !group.online {
+                    Image(systemName: "moon.zzz").font(.orbitMeta).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(group.count)").font(.orbitLabel).foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -125,6 +137,9 @@ struct RunnersListView: View {
                 MachinesAndModelsKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
                                           cursorModel: MachinesAndModels.cursorModel(lists.runners.filter { $0.online == true }),
                                           open: opensPools ? push : nil)
+                if let agents = model.agents {
+                    InfrastructureModelTiersSection(agents: agents)
+                }
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
             .modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId))
@@ -599,6 +614,29 @@ struct RunnerDetailContent: View {
     /// Change ▾ once postponed. Update Now… (`RunnerUpdateNowControl`) while available, draining or
     /// postponed for a runner that declares `self-update-now/v1`; one without it keeps the postponed
     /// card's Update Now…, which asks for Update Runner Now.
+    /// One turn the update waits for: its session's title, and how long it has run when it says.
+    /// The turn is the row the section's ForEach draws, so that closure holds no branch.
+    private func updateTurnRow(_ turn: RunnerPageFormat.UpdateCard.Turn) -> some View {
+        Button { openSession(turn.id) } label: {
+            HStack(alignment: .firstTextBaseline) {
+                Text(turn.title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 8)
+                if let running = turn.running {
+                    Text(running)
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
+                }
+                RunnerChevron()
+            }
+            .foregroundStyle(Color.primary)
+            .contentShape(Rectangle())
+        }
+        .runnerRowButtonStyle()
+    }
+
     @ViewBuilder private func updateSection(_ card: RunnerPageFormat.UpdateCard) -> some View {
         Section {
             VStack(alignment: .leading, spacing: 6) {
@@ -628,24 +666,7 @@ struct RunnerDetailContent: View {
             .listRowBackground(card.warn ? Color.orange.opacity(0.08) : nil)
             // The turns it waits for (board 4): each opens its session.
             ForEach(card.turns, id: \.id) { turn in
-                Button { openSession(turn.id) } label: {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(turn.title)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer(minLength: 8)
-                        if let running = turn.running {
-                            Text(running)
-                                .font(.orbitLabel)
-                                .foregroundStyle(Color.secondary)
-                                .lineLimit(1)
-                        }
-                        RunnerChevron()
-                    }
-                    .foregroundStyle(Color.primary)
-                    .contentShape(Rectangle())
-                }
-                .runnerRowButtonStyle()
+                updateTurnRow(turn)
             }
             if card.phase == "available", RunnerUpdateNow.offered(runner) {
                 RunnerUpdateNowControl(runnerID: runner.id, machine: RunnerPageFormat.displayName(runner),

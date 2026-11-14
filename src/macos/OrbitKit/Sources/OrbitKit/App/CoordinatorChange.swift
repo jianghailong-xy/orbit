@@ -185,4 +185,26 @@ public enum CoordinatorChangeLogic {
         // The current workspace leads, as it does when the server lists the targets.
         return rows.filter(\.isCurrent) + rows.filter { !$0.isCurrent }
     }
+
+    /// The sheet's one row array: the workspaces to pick, or the single sentence that stands in while
+    /// the server's targets are being read or could not be. The view draws it with one ForEach and no
+    /// branch of its own around the rows.
+    public static func listRows(_ rows: [CoordinatorChangeRow]?, failure: String?) -> [CoordinatorChangeListRow] {
+        if let rows { return rows.map(CoordinatorChangeListRow.pick) }
+        return [.note(failure ?? SessionMoveCopy.loadingWorkspaces)]
+    }
+}
+
+/// One row of the change-workspace sheet's list.
+public enum CoordinatorChangeListRow: Equatable, Sendable, Identifiable {
+    case pick(CoordinatorChangeRow)
+    /// A sentence about the rows themselves (still loading, or why they could not be read).
+    case note(String)
+
+    public var id: String {
+        switch self {
+        case .pick(let row): "pick:\(row.id)"
+        case .note(let text): "note:\(text)"
+        }
+    }
 }

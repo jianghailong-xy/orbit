@@ -29,6 +29,9 @@ export interface CrossingBatch {
   fromProjectId: string;
   /** The source project by name, never by id. */
   sourceTitle: string;
+  /** A request to take tasks out of every project (`toProjectId` null), drawn in the SOURCE
+   *  project's coordinator conversation because it has no target to be drawn in. */
+  out: boolean;
   /** Oldest first. */
   rows: ProjectCrossingRow[];
   /** The first row's requestedAt: where the card is drawn in the conversation. */
@@ -40,6 +43,11 @@ export const CROSSING_PROVENANCE = 'From Orbit — not the requesting agent.';
 export const CROSSING_TO_THIS_PROJECT = 'this project';
 export const CROSSING_APPROVE_LABEL = 'Approve';
 export const CROSSING_REFUSE_LABEL = 'Refuse';
+export const CROSSING_NO_PROJECT = 'No project';
+export const MOVE_OUT_APPROVE_CONSEQUENCE =
+  'Confirming takes the task out of this project as soon as you answer, and nobody has to send the request again.';
+export const MOVE_OUT_MANY_APPROVE_CONSEQUENCE =
+  'Confirming takes the tasks out of this project as soon as you answer, and nobody has to send the request again.';
 export const CROSSING_LINK_LIVE = 'View details & act';
 export const CROSSING_LINK_ANSWERED = 'View details';
 export const CROSSING_RECORDED = 'Decision recorded';
@@ -55,6 +63,13 @@ function targets(row: ProjectCrossingRow, projectId: string): boolean {
   return row.toProjectId === projectId || row.toProjectPublicId === projectId;
 }
 
+/** A request to take a task out of every project, asked about this one: it has no target, so the
+ *  source's coordinator conversation draws it (the server's `crossingCardSessionId`). */
+function movesOutOf(row: ProjectCrossingRow, projectId: string): boolean {
+  return row.toProjectId == null && row.kind === 'MOVE_TASK'
+    && (row.fromProjectId === projectId || row.fromProjectPublicId === projectId);
+}
+
 /** A batch is still open at `at` while any member is undecided, or was decided after `at`. */
 function openAt(rows: ProjectCrossingRow[], at: string): boolean {
   return rows.some((row) => row.decidedAt == null || row.decidedAt > at);
@@ -67,8 +82,9 @@ export function crossingBatches(
 ): CrossingBatch[] {
   const groups = new Map<string, ProjectCrossingRow[]>();
   for (const row of rows) {
-    if (!targets(row, projectId)) continue;
-    const key = `${row.fromProjectId}\u0000${row.kind}`;
+    const out = movesOutOf(row, projectId);
+    if (!out && !targets(row, projectId)) continue;
+    const key = `${row.fromProjectId}\u0000${row.kind}\u0000${out ? 'out' : 'in'}`;
     const group = groups.get(key);
     if (group) group.push(row);
     else groups.set(key, [row]);
@@ -88,6 +104,7 @@ export function crossingBatches(
           kind: first.kind,
           fromProjectId: first.fromProjectId,
           sourceTitle: first.fromProject?.title ?? UNNAMED_PROJECT,
+          out: first.toProjectId == null,
           rows: current,
           moment: first.requestedAt,
         });
@@ -125,8 +142,9 @@ export function batchDecidedAt(batch: CrossingBatch): string | null {
 
 // ── copy ────────────────────────────────────────────────────────────────────────────────────────
 
-export function crossingTitle(kind: string, count: number): string {
+export function crossingTitle(kind: string, count: number, out = false): string {
   const one = count === 1;
+  if (out) return one ? 'Take this task out of the project?' : 'Take these tasks out of the project?';
   if (kind === 'FILE_TASK') return one ? 'File this task here?' : 'File these tasks here?';
   if (kind === 'DEPEND_ON_TASK') return one ? 'Allow this dependency?' : 'Allow these dependencies?';
   return one ? 'Move this task here?' : 'Move these tasks here?';
@@ -138,9 +156,10 @@ export function crossingBadge(kind: string): string {
   return 'move';
 }
 
-export function answeredBadge(kind: string, verdict: CrossingVerdict): string {
+export function answeredBadge(kind: string, verdict: CrossingVerdict, out = false): string {
   if (verdict === 'REFUSED') return 'refused';
   if (verdict === 'MIXED') return 'answered';
+  if (out) return 'taken out';
   return kind === 'MOVE_TASK' ? 'moved' : 'approved';
 }
 
@@ -149,7 +168,8 @@ export function crossingNoun(kind: string, count: number): string {
   return count === 1 ? 'task' : 'tasks';
 }
 
-export function crossingListHead(kind: string): string {
+export function crossingListHead(kind: string, out = false): string {
+  if (out) return 'Tasks to take out';
   if (kind === 'FILE_TASK') return 'Tasks to file';
   if (kind === 'DEPEND_ON_TASK') return 'Tasks waited on';
   return 'Tasks to move';
@@ -170,6 +190,7 @@ export function criteriaRange(keys: readonly string[]): string {
 
 export function crossingSummary(batch: CrossingBatch): string {
   const count = batch.rows.length;
+  if (batch.out) return `${count} ${crossingNoun(batch.kind, count)} to take out of ${batch.sourceTitle}`;
   const head = `${count} ${crossingNoun(batch.kind, count)} from ${batch.sourceTitle}`;
   const keys = batch.rows.flatMap((row) => (row.requestedCriterion ? [row.requestedCriterion.key] : []));
   if (keys.length === 0) return head;
@@ -205,8 +226,17 @@ export function batchReasons(batch: CrossingBatch): string[] {
 }
 
 export function approveConsequence(batch: CrossingBatch): string {
+  if (batch.out) return batch.rows.length === 1 ? MOVE_OUT_APPROVE_CONSEQUENCE : MOVE_OUT_MANY_APPROVE_CONSEQUENCE;
   if (batch.kind !== 'MOVE_TASK') return FILE_APPROVE_CONSEQUENCE;
   return batch.rows.length === 1 ? MOVE_TASK_APPROVE_CONSEQUENCE : MOVE_TASKS_APPROVE_CONSEQUENCE;
+}
+
+/** The two buttons, in the words of what they do: a request to take tasks out says so. */
+export function decisionLabels(batch: CrossingBatch): { approve: string; refuse: string } {
+  if (!batch.out) return { approve: CROSSING_APPROVE_LABEL, refuse: CROSSING_REFUSE_LABEL };
+  return batch.rows.length === 1
+    ? { approve: 'Take it out', refuse: 'Keep it here' }
+    : { approve: 'Take them out', refuse: 'Keep them here' };
 }
 
 export function showMore(hidden: number): string {

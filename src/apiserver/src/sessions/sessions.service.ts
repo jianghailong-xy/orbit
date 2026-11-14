@@ -1,9 +1,12 @@
+import type { SubagentRunView } from '@orbit/shared';
+import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
 import {
   SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
-  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionActivity,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction, type SessionActivity, type SessionSettings,
+  type SessionUsage, type SessionRestartResponse,
 } from '@orbit/shared';
 import {
   BadRequestException,
@@ -253,9 +256,19 @@ import {
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
-import { countLiveApprovals, readByLiveBackgroundJob } from './abandoned-approvals';
+import {
+  countLiveApprovals,
+  liveSubagentCards,
+  readByLiveBackgroundJob,
+  readByRunningSubagent,
+  runningSubagentCards,
+} from './abandoned-approvals';
 import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  parseSessionSettingsPatch, reloadCarriesEnv, RESTART_RELOAD_CONTENT, sameEnv, sessionSettingsOf, stringEnv,
+} from './session-settings';
+import { sessionTokenTotals } from '../runner-api/running-totals';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
@@ -273,7 +286,7 @@ import {
   type EngineProviderDeps,
   type SessionSwitch,
 } from '../providers/engine-provider';
-import { ownsModel } from '../providers/preset-overlay';
+import { ownsModel, withPreset } from '../providers/preset-overlay';
 import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
@@ -3566,6 +3579,32 @@ export class SessionsService {
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
     }
+    // And the cards a running SubAgent asked (docs/subagent-design.md §5.3): its child engine reads them
+    // while the parent sits idle, so a background SubAgent waiting on a person lights its row the same way.
+    const withSubagents = await this.prisma.session.findMany({
+      where: {
+        ...open,
+        // `open` says it already; said here too, where the session-kind census reads this scan.
+        sessionKind: SESSION_KIND_CONVERSATION,
+        runningSubagents: { isEmpty: false },
+        approvals: { some: { status: 'PENDING', subagentRunId: { not: null } } },
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        approvals: { where: { status: 'PENDING', subagentRunId: { not: null } }, select: { id: true, toolName: true, subagentRunId: true } },
+      },
+    });
+    const subagentCards = await visibleQuestions(this.prisma, await runningSubagentCards(
+      this.prisma,
+      withSubagents.flatMap((w) => (w.approvals ?? []).map((card) => ({ ...card, sessionId: w.id }))),
+    ));
+    for (const session of withSubagents) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      if (!subagentCards.some((card) => card.sessionId === session.id)) continue;
+      needsYou.add(session.id);
+      row(session.workspaceId).needsYou += 1;
+    }
     // The activity tallies, after `needsYou` because a session counted there is counted only there
     // (see the doc above).
     for (const session of running) {
@@ -4299,16 +4338,34 @@ export class SessionsService {
       rows.filter((r) => r.runningBgShells.length > 0).map((r) => [r.id, r.runningBgShells]),
     );
     const candidates = [...new Set([...generating, ...shells.keys()])];
-    const cards = candidates.length === 0
+    const asked = candidates.length === 0
       ? []
       : await this.prisma.approval.findMany({
           where: { sessionId: { in: candidates }, status: 'PENDING' },
           select: { id: true, toolName: true, sessionId: true, backgroundJobId: true },
         });
+    // The third class: the cards of a SubAgent still running, which its child engine reads whatever the
+    // parent's turn is doing (docs/subagent-design.md §5.3). Its candidates are the sessions not generating
+    // with a SubAgent in flight (`runningSubagentCount`), a handful at most.
+    const withSubagents = rows.filter((r) => !generating.has(r.id) && r.runningSubagentCount > 0).map((r) => r.id);
+    const subagentCards = withSubagents.length === 0
+      ? []
+      : await liveSubagentCards(this.prisma, { sessionId: { in: withSubagents } });
+    const readBySubagent = new Set(subagentCards.map((card) => card.id));
+    const cards = [
+      ...asked,
+      ...subagentCards
+        .filter((card) => !asked.some((a) => a.id === card.id))
+        .map((card) => ({ ...card, backgroundJobId: null })),
+    ];
     const heldQuestions = await questionsWithCoordinator(this.prisma, sessions.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
-      if (!generating.has(card.sessionId) && !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? [])) {
+      if (
+        !generating.has(card.sessionId) &&
+        !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? []) &&
+        !readBySubagent.has(card.id)
+      ) {
         continue;
       }
       byId.set(card.sessionId, (byId.get(card.sessionId) ?? 0) + 1);
@@ -4521,6 +4578,13 @@ export class SessionsService {
       lastUserFromOrbit,
       lastUserFromExternalSource,
       lastUserFromExternalName,
+      // Read, never spread: answered as one `settings` object, the shape PATCH /settings returns.
+      env: _sessionEnv,
+      envChangedAt: _envChangedAt,
+      envAppliedAt: _envAppliedAt,
+      notifyTurnFinished: _notifyTurnFinished,
+      notifyNeedsYou: _notifyNeedsYou,
+      notificationsMuted: _notificationsMuted,
       ...rest
     } = projected;
     const tags = tagLinks
@@ -4557,11 +4621,22 @@ export class SessionsService {
       : undefined;
     // As clients have always read it: `lastHeartbeatAt` is its last beat, from either record of it.
     const assignedRunner = session.assignedRunner && servedRunner(withRunnerLastBeat(session.assignedRunner));
+    // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
+    // tell (docs/provider-engine-contract.md §6.1).
+    const engine = await sessionEngine(this.prisma, session);
+    // Settings → Info: tokens in one aggregate (only Claude ever wrote running totals), and cost and
+    // turns from the row as booked — `numTurns` from the row itself, not the resume projection above.
+    const usage: SessionUsage = {
+      ...(await sessionTokenTotals(this.prisma, session.id, engine === 'claude')),
+      costUsd: session.costUsd,
+      numTurns: session.numTurns,
+    };
+    // Not stored per session: what the assigned runner last reported for this engine.
+    const engineVersion = (engine
+      && sanitizeRunnerEngines(session.assignedRunner?.engines)?.find((e) => e.engine === engine)?.version) || null;
     return withSessionCapabilities({
       ...rest,
-      // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
-      // tell (docs/provider-engine-contract.md §6.1).
-      engine: await sessionEngine(this.prisma, session),
+      engine,
       // What its Trash note says when a file is keeping it there past the 30 days.
       trashHold: session.deletedAt ? await trashHoldOf(this.prisma, session.id) : null,
       workspace: session.workspace ? {
@@ -4610,6 +4685,9 @@ export class SessionsService {
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
+      settings: sessionSettingsOf(session, session.workspace?.env, SessionsService.engineLive(session)),
+      usage,
+      engineVersion,
     });
   }
 
@@ -5364,6 +5442,29 @@ export class SessionsService {
    * on every client regardless of how much transcript is loaded. Reuses the exact derivation the
    * web client overlays live (@orbit/shared deriveBackgroundShells), so the two never drift.
    */
+  /** A session's SubAgent runs, oldest first (`GET /sessions/:id/subagents`). */
+  async listSubagentRuns(userId: string, id: string): Promise<SubagentRunView[]> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { assignedRunner: { select: { modelCatalog: true } } },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const rows = await this.prisma.subagentRun.findMany({
+      where: { sessionId: id },
+      orderBy: { createdAt: 'asc' },
+      include: { workspace: { select: { name: true } } },
+    });
+    if (rows.length === 0) return [];
+    // The owner's keys and the shared rows anyone may pick: only their model names are read.
+    const providers = await this.prisma.modelProvider.findMany({
+      where: { OR: [{ ownerId: userId }, { ownerId: null }] },
+      select: { runtime: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
+    });
+    const catalog = session.assignedRunner?.modelCatalog as RunnerModelCatalog | null | undefined;
+    const labels = modelLabels(providers.map((row) => withPreset(row)), catalog);
+    return rows.map((row) => subagentRunView(row, labels));
+  }
+
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId: userId },
@@ -5850,6 +5951,11 @@ export class SessionsService {
       select: { sessionKind: true },
     });
     if (row) assertEngineSessionRow(row);
+  }
+
+  /** Whether an engine runs for the session now: the test getLive refuses with "the session has ended". */
+  private static engineLive(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
+    return SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt;
   }
 
   /** Load an owner's session and assert it's still live (not ended/cancelled). */
@@ -8908,7 +9014,7 @@ export class SessionsService {
    * `abandoned-approvals.ts`), so a card leaves this list exactly where it stops being answerable.
    */
   private async stillBeingAsked<
-    T extends { id: string; toolUseId: string | null; backgroundJobId: string | null },
+    T extends { id: string; toolUseId: string | null; backgroundJobId: string | null; subagentRunId?: string | null },
   >(
     session: {
       id: string;
@@ -8920,8 +9026,21 @@ export class SessionsService {
   ): Promise<T[]> {
     if (approvals.length === 0) return approvals;
     const generating = isSessionGenerating(session);
+    // A SubAgent's card is read by its child engine (docs/subagent-design.md §5.3): a question while its
+    // run is RUNNING and the child's call has no result yet, whatever the parent's turn is doing.
+    const asksForSubagent = approvals.some((a) => !!a.subagentRunId);
+    const runningSubagentRuns = new Set(
+      asksForSubagent
+        ? (
+            await this.prisma.subagentRun.findMany({
+              where: { sessionId: session.id, status: 'RUNNING' },
+              select: { id: true },
+            })
+          ).map((run) => run.id)
+        : [],
+    );
     const raised = approvals
-      .filter((a) => a.backgroundJobId === null)
+      .filter((a) => a.backgroundJobId === null && (generating || !!a.subagentRunId))
       .map((a) => a.toolUseId)
       .filter((id): id is string => id !== null);
     // An old runtime sent no tool_use id, so its rows can never be paired with a result and are
@@ -8929,7 +9048,7 @@ export class SessionsService {
     // read is skipped when there is nothing the turn could tell us about — no id to pair against,
     // or a turn that is not running, which leaves its cards over whatever the calls say.
     const over =
-      raised.length === 0 || !generating
+      raised.length === 0
         ? new Set<string>()
         : new Set(
             (
@@ -8944,9 +9063,11 @@ export class SessionsService {
             ).map((call) => call.toolUseId),
           );
     return approvals.filter((a) =>
-      a.backgroundJobId === null
-        ? generating && (a.toolUseId === null || !over.has(a.toolUseId))
-        : readByLiveBackgroundJob(a, session.runningBgShells),
+      a.subagentRunId
+        ? readByRunningSubagent(a, runningSubagentRuns) && (a.toolUseId === null || !over.has(a.toolUseId))
+        : a.backgroundJobId === null
+          ? generating && (a.toolUseId === null || !over.has(a.toolUseId))
+          : readByLiveBackgroundJob(a, session.runningBgShells),
     );
   }
 
@@ -9132,6 +9253,7 @@ export class SessionsService {
     input: Prisma.JsonValue;
     toolUseId: string | null;
     backgroundJobId: string | null;
+    subagentRunId?: string | null;
     status: string;
     message: string | null;
     createdAt: Date;
@@ -9146,6 +9268,7 @@ export class SessionsService {
       input: a.input,
       toolUseId: a.toolUseId ?? undefined,
       backgroundJobId: a.backgroundJobId ?? undefined,
+      ...(a.subagentRunId ? { subagentRunId: a.subagentRunId } : {}),
       answeredBy: a.decidedCredentialKind === 'COORDINATOR' ? 'COORDINATOR' : null,
       coordinatorFallback: a.coordinatorFallback as ApprovalInfo['coordinatorFallback'] ?? null,
       status: a.status as ApprovalStatus,
@@ -10790,6 +10913,106 @@ export class SessionsService {
    * effects and is allowed in any status (a dormant/ended session can still be renamed),
    * so there's no terminal guard and no reload turn.
    */
+  /**
+   * The session's Settings panel (docs/mocks/session-settings): its own env vars and notification
+   * overrides. Owner-only, and open on every session not in Trash — live, Completed or ended alike —
+   * because none of it touches the runner: a changed env reaches the engine at its next start
+   * (envChangedAt against envAppliedAt says one is owed). Answers the new `settings`.
+   */
+  async updateSettings(ownerId: string, id: string, body: unknown): Promise<SessionSettings> {
+    const write = parseSessionSettingsPatch(body);
+    const settings = await withTransactionRetry(this.prisma, async (tx) => {
+      // Serialized with other settings patches, so "did env change" is decided on the latest row.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findFirst({
+        where: { id, ownerId },
+        include: { workspace: { select: { env: true } } },
+      });
+      if (!session) throw new NotFoundException('session not found');
+      if (session.deletedAt) {
+        throw new ConflictException('the session is in Trash; restore it before changing its settings');
+      }
+      // A landing's row belongs to the platform (§2.9 LS6), as for rename and config.
+      assertEngineSessionRow(session);
+      const data: Prisma.SessionUpdateInput = {};
+      if (write.env !== undefined) {
+        const next = write.env ?? {};
+        if (!sameEnv(stringEnv(session.env), next)) {
+          data.env = write.env && Object.keys(write.env).length > 0
+            ? (write.env as Prisma.InputJsonValue)
+            : Prisma.DbNull;
+          data.envChangedAt = new Date();
+        }
+      }
+      if (write.notifyTurnFinished !== undefined) data.notifyTurnFinished = write.notifyTurnFinished;
+      if (write.notifyNeedsYou !== undefined) data.notifyNeedsYou = write.notifyNeedsYou;
+      if (write.notificationsMuted !== undefined) data.notificationsMuted = write.notificationsMuted;
+      const updated = Object.keys(data).length > 0
+        ? await tx.session.update({ where: { id }, data })
+        : session;
+      return sessionSettingsOf(updated, session.workspace?.env, SessionsService.engineLive(updated));
+    }, loggedRetry(this.logger, 'sessions.updateSettings'));
+    // The owner's other clients and tabs redraw the panel without waiting for a turn, as for rename.
+    this.realtime.publishSessionUpdated(id);
+    return settings;
+  }
+
+  /**
+   * The Settings panel's Restart (POST /sessions/:id/restart): reload the live engine so it runs on the
+   * session's env as it stands. Queued as a `reload` turn, which the inbox hands out with the env
+   * resolved at that moment (RunnerApiController.reloadProviderEnv) and only while no message or shell
+   * turn is in flight — so a restart asked for mid-turn happens when that turn ends (`afterTurn`).
+   * A reload already queued that will carry the env is the restart: nothing more is queued.
+   *
+   * An ended engine is refused 409 ENGINE_NOT_RUNNING: there is nothing to reload, and the claim that
+   * starts the next one builds it with the env as it is then.
+   */
+  async restart(ownerId: string, id: string): Promise<SessionRestartResponse> {
+    const { afterTurn, queued } = await withTransactionRetry(this.prisma, async (tx) => {
+      // Serialized with the settings PATCH and other restarts, so two restarts cannot both queue one.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findFirst({ where: { id, ownerId } });
+      if (!session) throw new NotFoundException('session not found');
+      if (session.deletedAt) {
+        throw new ConflictException('the session is in Trash; restore it before restarting it');
+      }
+      assertEngineSessionRow(session);
+      if (!SessionsService.engineLive(session)) {
+        throw new ConflictException({
+          code: 'ENGINE_NOT_RUNNING',
+          message: 'The session has ended, so there is no engine to restart. Its next message starts one with the new env.',
+        });
+      }
+      const inFlight = await tx.conversationTurn.findFirst({
+        where: { sessionId: id, kind: { in: ['message', 'shell'] }, status: 'IN_FLIGHT' },
+        select: { id: true },
+      });
+      const pending = await tx.conversationTurn.findMany({
+        where: { sessionId: id, kind: 'reload', status: 'PENDING' },
+        select: { id: true, content: true },
+      });
+      if (pending.some((turn) => reloadCarriesEnv(turn.content))) {
+        return { afterTurn: inFlight != null, queued: false };
+      }
+      await this.insertTurnLocked(tx, id, {
+        kind: 'reload',
+        content: RESTART_RELOAD_CONTENT,
+        clientTurnId: randomUUID(),
+      });
+      return { afterTurn: inFlight != null, queued: true };
+    }, loggedRetry(this.logger, 'sessions.restart'));
+    if (queued) this.realtime.notifyInbox(id);
+    return { queued: true, afterTurn };
+  }
+
   async rename(ownerId: string, id: string, rawTitle: string) {
     const title = (rawTitle ?? '').trim();
     if (!title) throw new BadRequestException('title must not be empty');
@@ -11147,6 +11370,7 @@ export class SessionsService {
     cancelRequestedAt: true,
     engineTurnActive: true,
     runningBgShells: true,
+    runningSubagents: true,
     mergeStatus: true,
     commitStatus: true,
     mergeRecovery: true,

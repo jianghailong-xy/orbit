@@ -380,6 +380,29 @@ struct WikiTopicEntriesPage: View {
     let entries: [WikiEntry]
     var actions = WikiArticleActions()
 
+    /// One kind's entries under its title. The group is the row the page's ForEach draws, so that
+    /// closure holds no branch or second ForEach of its own.
+    private func entryGroupSection(_ group: WikiArticleLogic.EntryGroup) -> some View {
+        Section(group.title) {
+            ForEach(group.entries) { entry in
+                Button { actions.openEntry(entry.id) } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(entry.displayTitle)
+                            .font(.orbitProse)
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        if let trust = entry.trust, trust != .unknown {
+                            WikiBadge(text: WikiCopy.trustLabel(trust), tone: WikiLogic.trustTone(trust))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -392,24 +415,7 @@ struct WikiTopicEntriesPage: View {
                     .listRowSeparator(.hidden)
             }
             ForEach(WikiArticleLogic.entryGroups(entries, cited: [])) { group in
-                Section(group.title) {
-                    ForEach(group.entries) { entry in
-                        Button { actions.openEntry(entry.id) } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Text(entry.displayTitle)
-                                    .font(.orbitProse)
-                                    .foregroundStyle(Color.primary)
-                                    .lineLimit(1)
-                                Spacer(minLength: 8)
-                                if let trust = entry.trust, trust != .unknown {
-                                    WikiBadge(text: WikiCopy.trustLabel(trust), tone: WikiLogic.trustTone(trust))
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                entryGroupSection(group)
             }
         }
         .listStyle(.plain)

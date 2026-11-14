@@ -84,6 +84,60 @@ export interface SessionMoveTarget {
   startsCoordinator: boolean;
 }
 
+/** A per-session notification choice: follow the account preference, or always / never notify. */
+export type SessionNotifyOverride = 'inherit' | 'on' | 'off';
+
+/**
+ * A session's Settings panel (docs/mocks/session-settings): what `GET /sessions/:id` carries as
+ * `settings` and what `PATCH /sessions/:id/settings` answers with.
+ */
+export interface SessionSettings {
+  /** The session's own variables, laid over the workspace's when the engine starts (session wins). */
+  env: Record<string, string>;
+  /** The session workspace's variables, as the workspace form shows them; read-only here. */
+  workspaceEnv: Record<string, string>;
+  notifyTurnFinished: SessionNotifyOverride;
+  /** Approvals and questions. */
+  notifyNeedsYou: SessionNotifyOverride;
+  /** No pushes at all for this session while true. */
+  muted: boolean;
+  /** The engine is live and started before the session's env last changed: a restart is owed. */
+  envPendingRestart: boolean;
+}
+
+/**
+ * What a session has spent over all its turns: what `GET /sessions/:id` carries as `usage`, beside
+ * `engineVersion` (the assigned runner's reported version of the session's engine, null when unknown).
+ */
+export interface SessionUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  costUsd: number;
+  numTurns: number;
+}
+
+/** `PATCH /sessions/:id/settings`. Every field optional; an omitted one is unchanged. */
+export interface SessionSettingsPatch {
+  /** Replaces the whole session map; null clears it. Keys match ^[A-Za-z_][A-Za-z0-9_]*$, no ORBIT_*. */
+  env?: Record<string, string> | null;
+  notifyTurnFinished?: SessionNotifyOverride;
+  notifyNeedsYou?: SessionNotifyOverride;
+  muted?: boolean;
+}
+
+/**
+ * `POST /sessions/:id/restart` (202): the live engine is reloaded with the session's env as it stands
+ * when the runner takes the reload up. Refused 409 `ENGINE_NOT_RUNNING` once the engine has ended — its
+ * next start already uses the new env.
+ */
+export interface SessionRestartResponse {
+  queued: true;
+  /** A turn is running now: the reload waits for it to end. */
+  afterTurn: boolean;
+}
+
 /** `GET /sessions/:id/move-targets`: everything the Move panel and its confirmation need. */
 export interface SessionMoveTargets {
   workspaceId: string | null;
@@ -1266,6 +1320,12 @@ export interface StorageBudget {
 export interface RunnerHeartbeatResponse {
   /** Session IDs the control plane wants the runner to interrupt / end. */
   cancelSessionIds: string[];
+  /** Remote SubAgent runs this runner is the target of and has not claimed (docs/subagent-design.md §10.2):
+   *  claim each with POST /runner/subagent-runs/:runId/claim. Absent when there are none. */
+  remoteSubagentRuns?: string[];
+  /** Remote SubAgent runs on this runner to stop, because their parent stopped them or ended (§10.3): stop the
+   *  child (10 s grace, then kill) and report STOPPED. Absent when there are none. */
+  stopSubagentRunIds?: string[];
   /** Supervised sessions that no longer belong to this exact runner process.
    *  Kept separate from durable user cancellation: a cold supervisor detaches
    *  without finalizing, while active/warm engines observe their endpoint fence. */
@@ -2345,6 +2405,298 @@ export interface ArtifactCommand {
   source?: 'worktree';
 }
 
+// ─────────────────────────────── SubAgents ───────────────────────────────
+// docs/subagent-design.md §5.1, §6.1: a parent session's `mcp__orbit__delegate` call, run by the runner
+// in the parent's cwd. POST /runner/sessions/:id/subagents opens one, PATCH …/subagents/:runId ends it.
+
+export const SUBAGENT_RUN_STATUSES = ['RUNNING', 'DONE', 'FAILED', 'INTERRUPTED', 'STOPPED'] as const;
+export type SubagentRunStatus = (typeof SUBAGENT_RUN_STATUSES)[number];
+
+export type SubagentSize = 'S' | 'M' | 'L' | 'XL';
+
+/** Where a SubAgent run's level came from; `not-routed` until routing is on (§8 P1). */
+export type SubagentTierSource =
+  'not-routed' | 'named-model' | 'definition-model' | 'size' | 'definition-size' | 'type-default';
+
+/**
+ * The router's record of one choice (`subagent_run.decision`, docs/subagent-design.md §4.1, §4.2). Reasons are
+ * English. `applied` is true since routing applies (§8 P3): the SubAgent runs on the engine, provider and model
+ * this names. Rows written while routing was in shadow (§8 P2) have it false: they ran on `runModel`, the parent's.
+ */
+export interface SubagentDecision {
+  level: SubagentSize | null;
+  tierSource: SubagentTierSource;
+  optimizeFor: string | null;
+  /** Null when no candidate was left in the tier. */
+  engine: string | null;
+  provider: string | null;
+  model: string | null;
+  effort: string | null;
+  reasons: string[];
+  /** Candidates that were dropped, each with why. A null model: the whole provider or engine went. */
+  candidates: Array<{ provider: string; engine: string | null; model: string | null; effort: string | null; reason: string }>;
+  policyVersion: string;
+  /** The rest of the tier's pool after the pick, ranked: where a run whose account hit its limit moves next
+   *  (§4.3). Absent on older rows; empty when the model was named rather than routed. */
+  fallbacks?: SubagentCandidateTarget[];
+  /** Whether the SubAgent runs on what this names. */
+  applied: boolean;
+  /** What it runs on now, when that is not the pick: the parent's model on a shadow row, or the candidate a
+   *  limit moved it to (§4.3). Absent otherwise and on older rows. */
+  runModel?: string | null;
+  runEffort?: string | null;
+  /** Where the tier or model came from, in a few words: the Why line's first clause. Absent on older rows. */
+  tierNote?: string;
+  /** Why the pick, in a few words: its billing and headroom. Absent for a named model and on older rows. */
+  note?: string;
+  /** One short line per move after a usage limit or capacity (§4.3), e.g. `Moved to glm-5 after …`. */
+  moves?: string[];
+  /** The workspace a remote SubAgent runs on (§10.1) and why it was chosen. Absent for one on the parent's machine. */
+  workspace?: SubagentWorkspaceChoice;
+}
+
+/** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
+export interface SubagentWorkspaceChoice {
+  /** The workspace's id, as the runner has it (a UUID). */
+  id: string;
+  name: string;
+  /** How it was chosen, English: named by the call, or the capabilities it was asked to have. */
+  reason: string;
+}
+
+/** One engine, provider, model and effort a SubAgent may run on. */
+export interface SubagentCandidateTarget {
+  engine: string;
+  provider: string;
+  model: string;
+  effort: string | null;
+  /** Its billing and headroom in a few words, as the Why line says it. */
+  note?: string;
+}
+
+/** How one attempt of a SubAgent run ended: still running, a usage-limit or capacity failure it moved on from, or the run's end. */
+export type SubagentAttemptOutcome = 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | Exclude<SubagentRunStatus, 'RUNNING'>;
+
+/** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
+export interface SubagentAttempt extends SubagentCandidateTarget {
+  attempt: number;
+  outcome: SubagentAttemptOutcome;
+  /** The engine's own words, for an attempt that hit a limit; truncated. */
+  error?: string;
+  /** The account of an account pool it ran on, chosen for this SubAgent alone: never written onto the parent
+   *  session, whose own pool member stays as it was. */
+  poolMember?: { providerId: string; label: string };
+  startedAt: string;
+  endedAt?: string;
+}
+
+/** The runner's ask for the next candidate after a child failed on a usage limit or capacity (§4.3). */
+export interface SubagentFallbackRequest {
+  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit or capacity error. */
+  error: string;
+  /** The definition's read-only flag and permission mode, as the start sent them. */
+  readonly?: boolean;
+  permissionMode?: string;
+}
+
+/** Where the run goes next: its new attempt, the reason added to its Why, and how to run the child there. */
+export interface SubagentFallbackResponse {
+  runId: string;
+  attempt: number;
+  reason: string;
+  decision: SubagentDecision;
+  exec: AgentExecConfig;
+}
+
+/**
+ * One SubAgent run as a client reads it (`GET /sessions/:id/subagents`), keyed by the `delegate` call it
+ * belongs to: what the transcript's SubAgent block shows beside the call — tier, model, Why, time and cost.
+ */
+export interface SubagentRunView {
+  /** The `delegate` call's tool_use id. */
+  toolUseId: string;
+  type: string;
+  background: boolean;
+  status: SubagentRunStatus;
+  level: SubagentSize | null;
+  /** The model it runs on, and how the runner's catalogue names it (the id itself when it does not). */
+  model: string | null;
+  modelLabel: string | null;
+  effort: string | null;
+  /** The router's full reasons, English: what the Why line's list opens to. */
+  reasons: string[];
+  /** The Why line itself, one clause per part: where the tier came from, the pick and why, any move, and how
+   *  many candidates were removed — each provider named once. Null on rows from before it was kept, whose
+   *  Why is their reasons. */
+  why: string | null;
+  /** Every candidate the router removed, with its reason: the rest of what the Why line's list opens to. */
+  removed: Array<{ provider: string; engine: string | null; model: string | null; effort: string | null; reason: string }>;
+  costUsd: number;
+  /** What it handed back, truncated: the result of a background run, whose call only returned its receipt. */
+  resultSummary: string | null;
+  /** The workspace a remote SubAgent ran on, which the block names as `on <workspace>`; null on the parent's machine. */
+  workspaceName: string | null;
+  createdAt: string;
+  endedAt: string | null;
+}
+
+/** What the runner sends when the parent model calls `delegate` (§5.1 step 2). */
+export interface SubagentRunCreateRequest {
+  /** The `delegate` call's tool_use id. A retry with the same id answers with the run it opened. */
+  toolUseId: string;
+  /** `explore` | `general` | a definition file's name. */
+  type: string;
+  /** `builtin`, or the path of the definition file `type` was read from. */
+  definitionSource: string;
+  background?: boolean;
+  /** The parent's judgement of the work's size. */
+  size?: SubagentSize;
+  sizeReason?: string;
+  /** A model the parent named. */
+  model?: string;
+  /** The definition's own `model` and size, when it has them. */
+  definitionModel?: string;
+  definitionSize?: SubagentSize;
+  /** The definition is read-only: the child runs in plan mode. */
+  readonly?: boolean;
+  /** The definition's own permission mode. Never wider than the parent's (403
+   *  PERMISSION_MODE_WIDER_THAN_SESSION); left out, the child runs in the parent's mode. */
+  permissionMode?: string;
+  /** The delegate call's description, which the wake for the run's end names. */
+  description?: string;
+  /** A workspace to run on, by name (§10.1 row 1): another workspace of the parent's repository. */
+  workspace?: string;
+  /** Runner capabilities the work needs, e.g. `os:darwin` (§10.1 row 2): the call's and its definition's. */
+  needs?: string[];
+  /** The brief. Sent for a call that may run remotely: the target runner needs it, the parent's machine has it. */
+  prompt?: string;
+}
+
+export interface SubagentRunCreateResponse {
+  runId: string;
+  status: SubagentRunStatus;
+  decision: SubagentDecision;
+  /** How to run the child: the same shape a session claim hands the runner. */
+  exec: AgentExecConfig;
+}
+
+/**
+ * The answer for a delegate call that runs on another workspace (§10): no `exec`, because the parent's machine
+ * runs nothing and the target's credential never reaches it. The parent reads the run's events from
+ * `GET /runner/sessions/:id/subagents/:runId/events` and its end from the run.
+ */
+export interface SubagentRemoteRunCreateResponse {
+  runId: string;
+  status: SubagentRunStatus;
+  decision: SubagentDecision;
+  remote: { workspaceId: string; workspaceName: string };
+}
+
+/** A remote SubAgent run as its target runner claims it (§10.2): what to run, where, and how. */
+export interface RemoteSubagentClaim {
+  runId: string;
+  /** The parent session; events and cards of the run are written under it. */
+  sessionId: string;
+  /** The delegate call: the parent's events nest under it. */
+  toolUseId: string;
+  workspaceId: string;
+  /** The target workspace's work dir, which the runner makes a temporary detached worktree of. */
+  workDir: string | null;
+  type: string;
+  definitionSource: string;
+  description: string | null;
+  background: boolean;
+  prompt: string;
+  /** How to run the child: the target workspace's own default engine and model, as a session claim hands it. */
+  exec: AgentExecConfig;
+}
+
+/** One child event the target runner relays (§10.3), numbered by the run from 1. */
+export interface RemoteSubagentEvent {
+  seq: number;
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+export interface RemoteSubagentEventBatch {
+  events: RemoteSubagentEvent[];
+}
+
+/**
+ * The relayed events as the parent's runner reads them, in seq order and already rewritten: nested under the
+ * delegate call (`parentToolUseId`), every child tool id prefixed with the run id. The parent's runner emits them
+ * into its own stream, which it numbers. `status` is the run's, so a reader knows when no more will come.
+ */
+export interface RemoteSubagentEventsPage {
+  events: RemoteSubagentEvent[];
+  status: SubagentRunStatus;
+  resultSummary: string | null;
+}
+
+/**
+ * One model of the Providers page's Tier column (GET /providers/subagent-tiers, docs/subagent-design.md §7):
+ * the tiers routeSubagent reads for it. Clients show `levels` joined with " · ", all four as "S–XL by effort",
+ * and none as "Not set": a model with no tier stays out of automatic routing.
+ */
+export interface ProviderModelTier {
+  model: string;
+  /** The tiers this model fills, lowest first, at whatever effort each takes. Empty: not routed. */
+  levels: SubagentSize[];
+  /** `catalogue`: the preset or the built-in tier table. `owner`: set on this page. Null: nobody has. */
+  source: 'catalogue' | 'owner' | null;
+  /** The owner may set or clear it (PATCH /providers/mine/:providerId/model-tier): a model of a key's own
+   *  list that the catalogue gives no tier. */
+  editable: boolean;
+  /** USD per million output tokens, when known (models.dev); null for a subscription or an unpriced key. */
+  outputPricePerMTok: number | null;
+}
+
+/** One provider as the SubAgents settings and the Tier column list it, in the owner's provider order. */
+export interface ProviderTierRow {
+  /** What `UserPreferences.subagentBlockedProviders` names. */
+  slug: string;
+  label: string;
+  kind: 'builtin' | 'key' | 'pool';
+  /** A key of the owner's own: the id the tier write takes. Null for anything else. */
+  providerId: string | null;
+  billing: 'subscription' | 'key';
+  models: ProviderModelTier[];
+}
+
+export interface SubagentTiersResponse {
+  providers: ProviderTierRow[];
+}
+
+/** PATCH /providers/mine/:id/model-tier: set or clear (null) the owner's tier for one model of that key. */
+export interface ProviderModelTierUpdate {
+  model: string;
+  tier: SubagentSize | null;
+}
+
+/**
+ * The runner's report when a SubAgent run ends (§5.1 step 5). `RUNNING` with `wake: true` is the one report
+ * that does not end it: the foreground call waiting for it stopped waiting, so its end is to wake the parent (§2).
+ */
+export interface SubagentRunUpdateRequest {
+  status: SubagentRunStatus;
+  /** The parent is owed a wake when the run ends; the server files it (`<orbit-subagent-finished>`). */
+  wake?: boolean;
+  /** What was handed back to the parent, truncated by the server. */
+  resultSummary?: string;
+  /** Paths the child's edit tools wrote, as the runner collected them. */
+  changedFiles?: string[];
+  /** The child's own spend; added once to the parent session's cost. */
+  costUsd?: number;
+  usage?: Record<string, unknown>;
+}
+
+export interface SubagentRunUpdateResponse {
+  runId: string;
+  status: SubagentRunStatus;
+  /** False when the run had already ended: nothing was written and no cost was added again. */
+  applied: boolean;
+}
+
 // ─────────────────────────── Interactive sessions (Route B) ───────────────────────────
 
 /** An interactive session atomically claimed by its assigned runner via long-poll. */
@@ -2493,6 +2845,10 @@ export interface ApprovalInfo {
    *  way the server does: the id is in the session's `runningBgShells` or it is not. Absent on
    *  in-turn asks, which is every ask that names no job. */
   backgroundJobId?: string;
+  /** The SubAgent run that asked this under the session (`ApprovalCreateRequest.subagentRunId`). Its
+   *  `toolUseId` is then the child's own call, prefixed with the run id as the parent's transcript writes it.
+   *  Absent on every card the session asked itself. */
+  subagentRunId?: string;
   status: ApprovalStatus;
   message?: string;
   createdAt: string;
@@ -2510,6 +2866,11 @@ export interface ApprovalCreateRequest {
    *  hands it back here; `sessions/abandoned-approvals.ts` refuses to collect a card whose job is
    *  still up, because that process outlives the turn. Absent on every in-turn ask. */
   backgroundJobId?: string;
+  /** The SubAgent run that asked this (docs/subagent-design.md §5.3). A SubAgent's cards are posted with its
+   *  parent's sessionId and a `toolUseId` prefixed with this id; its child engine reads the answer and outlives
+   *  the parent's turn and calls, so `sessions/abandoned-approvals.ts` collects the card when the run ends and
+   *  not when the parent's calls return. Must name a run of the session the path names. */
+  subagentRunId?: string;
   /** On an `orbit_task_create` card: the asker acts on the owner's "Create and start"
    *  (`ApprovalDecisionRequest.startAfterCreate`). The server records it on the stored card as
    *  `input.acceptsStartAfterCreate`, beside the preview; clients offer the button, and the server

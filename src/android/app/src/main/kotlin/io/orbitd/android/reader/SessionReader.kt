@@ -184,7 +184,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     var placed by remember(model) { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var positioning by remember { mutableStateOf(false) }
-    var details by rememberSaveable { mutableStateOf(false) }
+    var settings by rememberSaveable { mutableStateOf(false) }
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8).
     val listed = remember(state.session?.snapshot?.detail) {
@@ -235,7 +235,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             return Offset.Zero
         }
     } }
-    LaunchedEffect(model, state.denied) { if (state.denied) { action = null; details = false; placed = false } }
+    LaunchedEffect(model, state.denied) { if (state.denied) { action = null; settings = false; placed = false } }
     LaunchedEffect(state.ready, state.window.seeded, state.targetTick) {
         if (!state.ready || !state.window.seeded || state.denied) return@LaunchedEffect
         positioning = true
@@ -441,6 +441,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val taskActivity = remember(transcript?.taskProgress, state.window.events, background) {
         TaskActivity.of(transcript?.taskProgress, state.window.events, background.orEmpty())
     }
+    // The SubAgent runs by `delegate` call (GET /sessions/:id/subagents), which each SubAgent block draws its tier, model, duration,
+    // cost and Why from: read again when a delegate call starts or ends (iOS `refreshSubagentRunsIfNeeded`). A session that never
+    // delegated reads nothing, and a failed read is left alone until the transcript moves again.
+    val subagentSignature = remember(state.window.events, background) { SubagentRuns.signature(state.window.events, background.orEmpty()) }
+    var subagentRuns by remember(handle, route.id) { mutableStateOf<Map<String, SubagentRun>>(emptyMap()) }
+    LaunchedEffect(handle, route.id, subagentSignature) {
+        if (subagentSignature.isEmpty()) { subagentRuns = emptyMap(); return@LaunchedEffect }
+        try {
+            val body = app.session.request(handle, io.orbitd.android.core.net.ApiRequest(listOf("sessions", route.id!!, "subagents"))).body
+            subagentRuns = SubagentRun.byCall((Wire.decode(body, JsonElement.serializer()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>())
+        } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { }
+    }
     LaunchedEffect(cards, console.engine) { cards.engine = console.engine }
     val reviewStates = rememberSaveableStateHolder()
     val discussCard: ((String) -> Unit)? = if (!composerState.loaded) null else { context ->
@@ -471,7 +483,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
-        LocalExchangeTree provides exchangeTree) {
+        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -502,7 +514,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
-                actions, open, { action = it }, { details = true }, leave)
+                actions, open, { action = it }, { settings = true }, leave)
         })
         if (projectSheet && projectId != null) ProjectSessionsSheet(app, handle, projectId, route.workspaceId, data, api, open,
             close = { projectSheet = false }, onCount = { sheetCount = it }) { next ->
@@ -746,7 +758,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         if (!state.denied) CrossingReviewSheet(crossingStore, coordinated)
         if (!state.denied) CardReceiptSheet(cards, openLanding = { open(OrbitRoute(Destination.SESSION, it)) })
         if (!state.denied) EvidenceFilesSheet(cards)
-        if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
+        if (settings && !state.denied) SessionSettingsPage(state.session, api, handle.account.server, data.tags,
+            state.session?.fresh == true && data.fresh, openLink, { app.realtime.refreshDirectory(); app.realtime.refreshSession() }) { settings = false }
         action?.let { dialog -> DirectoryActionDialog(dialog, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
             // Deleted for good from its own page: the page goes with it, as iOS's console does.

@@ -279,6 +279,25 @@ public final class APIClient: @unchecked Sendable {
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
+    // MARK: a session's Settings panel (docs/mocks/session-settings)
+
+    /// The same `GET /sessions/:id`, read for what the Settings panel shows beyond the session row:
+    /// `settings`, `usage`, `engineVersion`, the working directory and the assigned runner.
+    public func sessionSettingsDetail(_ id: String) async throws -> SessionSettingsDetail {
+        try await get("sessions/\(id)")
+    }
+
+    /// `PATCH /sessions/:id/settings`: only the fields set are sent; answers the settings as they now stand.
+    public func patchSessionSettings(_ id: String, _ body: SessionSettingsPatch) async throws -> SessionSettingsValues {
+        try await patch("sessions/\(id)/settings", body: body)
+    }
+
+    /// `POST /sessions/:id/restart`: reload the live engine with the session's env once the turn in
+    /// flight (if any) ends. Refused 409 `ENGINE_NOT_RUNNING` once the engine has ended.
+    public func restartSession(_ id: String) async throws -> SessionRestartResponse {
+        try await post("sessions/\(id)/restart", body: Optional<Empty>.none)
+    }
+
     /// One session request as it stands now — the state a request card shows (`SessionRequestView`).
     public func sessionRequest(_ id: String) async throws -> SessionRequestView {
         try await get("session-requests/\(id)")
@@ -359,6 +378,12 @@ public final class APIClient: @unchecked Sendable {
     /// `getBackgroundShells` merged with the live-derived overlay in BackgroundShellsTray.
     public func backgroundShells(sessionID: String) async throws -> [BgShellDTO] {
         try await get("sessions/\(sessionID)/background")
+    }
+
+    /// The session's SubAgent runs, oldest first (GET /sessions/:id/subagents): what each `delegate`
+    /// call's block shows beside it — tier, model, Why, time and cost (docs/subagent-design.md §6.4).
+    public func sessionSubagents(sessionID: String) async throws -> [SubagentRunView] {
+        try await get("sessions/\(sessionID)/subagents")
     }
 
     /// The tasks this session's agent created, as its "Tasks created here" card draws them
@@ -1696,6 +1721,14 @@ public final class APIClient: @unchecked Sendable {
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
     public func personalProviders() async throws -> [ConfiguredProvider] { try await get("providers/mine") }
+    /// Every provider with its models' SubAgent tiers and prices (GET /providers/subagent-tiers): the
+    /// Providers page's Model tiers table and the SubAgents settings' provider list.
+    public func subagentTiers() async throws -> SubagentTiersResponse { try await get("providers/subagent-tiers") }
+    /// Set or clear (nil) the owner's tier for one model of their own key.
+    public func setModelTier(providerID: String, model: String, tier: String?) async throws {
+        _ = try await send(makeRequest("providers/mine/\(providerID)/model-tier", method: "PATCH",
+                                       body: ProviderModelTierUpdate(model: model, tier: tier)))
+    }
 
     /// The whole DeepSeek account's balance behind one of the account's own DeepSeek keys (GET
     /// /api/providers/mine/:id/balance), read by the server with the stored key, which never comes here.

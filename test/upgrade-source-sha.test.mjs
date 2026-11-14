@@ -153,7 +153,7 @@ test('the docker build carries the checkout commit into the runner-binary stage'
       'the web build must accept an unset ORBIT_SOURCE_SHA'],
     ['src/web/Dockerfile', /^ARG ORBIT_SOURCE_SHA$/m,
       'the runner-binary stage must accept the build argument'],
-    ['src/web/Dockerfile', /ORBIT_SOURCE_SHA="\$ORBIT_SOURCE_SHA" bash scripts\/build-binaries\.sh/,
+    ['src/web/Dockerfile', /ORBIT_SOURCE_SHA="\$\{ORBIT_RUNNER_SOURCE_SHA:-\$ORBIT_SOURCE_SHA\}" bash scripts\/build-binaries\.sh/,
       'a named commit must reach build-binaries.sh'],
     ['src/web/Dockerfile', /^COPY \.gi\[t\] \.\/\.git\/$/m,
       'the checkout metadata must reach the stage that reads it'],
@@ -186,7 +186,7 @@ test('legacy upgrade passes the checked-out commit to the web image build', () =
   const dockerLog = path.join(fixture, 'docker.log');
   const fakeDocker = path.join(fixture, 'docker');
   writeFileSync(fakeDocker, `#!/bin/sh
-printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
+printf '%s\\t%s\\t%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" "\${ORBIT_RUNNER_SOURCE-}" "\${ORBIT_RUNNER_SOURCE_SHA-}" >>"$ORBIT_FAKE_DOCKER_LOG"
 ${LINK_GATEWAY_ANSWERS}`);
   chmodSync(fakeDocker, 0o755);
 
@@ -215,7 +215,19 @@ ${LINK_GATEWAY_ANSWERS}`);
       .split('\n')
       .map((line) => line.split('\t'));
     const build = calls.find(([, args]) => args === 'compose build apiserver wiki-worker web');
-    assert.deepEqual(build, [head, 'compose build apiserver wiki-worker web']);
+    // The downloadable runner is built from the newest release tag behind HEAD, unpacked where the build reads it.
+    const tag = execFileSync('git', ['describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*', 'HEAD'], {
+      cwd: repo,
+      encoding: 'utf8',
+    }).trim();
+    const tagSha = execFileSync('git', ['rev-parse', `${tag}^{commit}`], { cwd: repo, encoding: 'utf8' }).trim();
+    assert.deepEqual(build, [head, 'compose build apiserver wiki-worker web', '.runner-release', tagSha]);
+    const tagged = execFileSync('git', ['show', `${tag}:package.json`], { cwd: repo, encoding: 'utf8' });
+    assert.equal(readFileSync(path.join(repo, '.runner-release/package.json'), 'utf8'), tagged);
+    assert.equal(
+      readFileSync(path.join(repo, '.runner-release/src/runner-go/main.go'), 'utf8'),
+      execFileSync('git', ['show', `${tag}:src/runner-go/main.go`], { cwd: repo, encoding: 'utf8' }),
+    );
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
@@ -460,3 +472,22 @@ for (const relative of ['.claude/skills/upgrade/upgrade.sh', '.agents/skills/upg
     }
   });
 }
+
+test('both copies of the upgrade build the downloadable runner from the release tag the same way', () => {
+  const block = (relative) => {
+    const text = readFileSync(path.join(repo, relative), 'utf8');
+    const start = text.indexOf('# The downloadable runner is a release\'s, not this checkout\'s');
+    const end = text.indexOf('\nfi\n', start);
+    assert.ok(start > 0 && end > start, `${relative} no longer builds the runner from the release tag`);
+    return text.slice(start, end);
+  };
+  assert.equal(block('.agents/skills/upgrade/scripts/upgrade.sh'), block('.claude/skills/upgrade/upgrade.sh'));
+  const dockerfile = readFileSync(path.join(repo, 'src/web/Dockerfile'), 'utf8');
+  for (const from of ['src/runner-go', 'package.json', 'scripts', 'contracts/runner-write-protocol.json']) {
+    assert.match(dockerfile, new RegExp(`^COPY \\$\\{ORBIT_RUNNER_SOURCE\\}/${from.replace('.', '\\.')} `, 'm'),
+      `the runner-binary stage must take ${from} from the release tree`);
+  }
+  const compose = readFileSync(path.join(repo, 'docker-compose.yml'), 'utf8');
+  assert.match(compose, /ORBIT_RUNNER_SOURCE: "\$\{ORBIT_RUNNER_SOURCE:-\.\}"/);
+  assert.match(compose, /ORBIT_RUNNER_SOURCE_SHA: "\$\{ORBIT_RUNNER_SOURCE_SHA:-\}"/);
+});

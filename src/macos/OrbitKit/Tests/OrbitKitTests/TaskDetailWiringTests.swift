@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import OrbitKit
 
 /// The native task page is the web panel's blocks in the web panel's order, drawn the way the owner
 /// approved on 2026-09-26 (docs/mocks/ios-task-detail.html) and reordered around the agent's work on
@@ -162,14 +163,23 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(view.contains(".sheet(isPresented: $editingEnvelope) { envelopeSheet }"))
         let details = try section(view, from: "private var envelopeSheet: some View {",
                                   to: "private func detailRow(")
+        // The fields are one row array (`TaskEnvelopeListLogic`), drawn by one ForEach; their order
+        // and the Suggested row's gating live there, and `envelopeRow` draws each case.
+        XCTAssertTrue(details.contains("ForEach(TaskEnvelopeListLogic.rows(smartSelection: smartSelection))"),
+                      "the fields are one row array")
+        let fieldRows = try section(view, from: "private func envelopeRow(",
+                                    to: "private var envelopeSheet: some View {")
         let order = try positions(["assigneePicker(task)", "suggestedPicker(task)", "enginePicker(task)",
                                    "providerPicker(task)", "modelPicker(task)", "listPicker(task)",
-                                   "TaskDetailCopy.startAtLabel", "inputsSection(task, addFile: { importingInputInSheet = true })"],
-                                  in: details)
-        XCTAssertEqual(order, order.sorted(), "the browser's field order, then the inputs")
-        XCTAssertTrue(details.contains("editingSchedule = true"), "Start at opens its sheet")
+                                   "TaskDetailCopy.startAtLabel"],
+                                  in: fieldRows)
+        XCTAssertEqual(order, order.sorted(), "the browser's field order")
+        XCTAssertNotNil(details.range(of: "inputsSection(task, addFile: { importingInputInSheet = true })"),
+                        "the inputs are listed under the fields")
+        XCTAssertTrue(fieldRows.contains("editingSchedule = true"), "Start at opens its sheet")
         XCTAssertTrue(details.contains(".sheet(isPresented: $editingSchedule) {"), "raised from the sheet it is opened in")
         XCTAssertTrue(details.contains("if TaskListLogic.isBusy(task) { Text(TaskDetailCopy.changesApplyToNextRun) }"))
+        XCTAssertFalse(fieldRows.contains("inputsSection(task,"), "the inputs are not one of the field rows")
         // Who filed the task and from where is the first entry of the timeline.
         let filed = try section(view, from: "private func filedRow(", to: "private func runEntry(")
         XCTAssertTrue(filed.contains("TaskDetailLogic.creatorName(task, agents: model.agents?.items ?? [])"))
@@ -276,7 +286,12 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("private var smartSelection: Bool { model.user?.preferences?.smartModelSelection ?? false }"))
         let details = try section(view, from: "private var envelopeSheet: some View {",
                                   to: "private func detailRow(")
-        XCTAssertTrue(details.contains("if smartSelection { suggestedPicker(task) }"), "no Suggested row")
+        XCTAssertTrue(details.contains("TaskEnvelopeListLogic.rows(smartSelection: smartSelection)"),
+                      "no Suggested row: the switch is the row array's input")
+        XCTAssertFalse(TaskEnvelopeListLogic.rows(smartSelection: false).contains(.suggested),
+                       "with smart selection off the Suggested row is not in the array")
+        XCTAssertTrue(TaskEnvelopeListLogic.rows(smartSelection: true).contains(.suggested),
+                      "and it is when the switch is on")
         XCTAssertTrue(details.contains("if smartSelection, let note = TaskDetailLogic.modelHintNote(task) {"),
                       "no coordinator's reason")
         let model = try section(view, from: "private func modelPicker(_ task: TaskItem) -> some View {",
@@ -341,7 +356,8 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("TaskStatusPill(pill: TaskDetailLogic.headPill(task))"), "one status, with its time")
         XCTAssertTrue(view.contains("TaskDetailLogic.totalCost(task)"))
         XCTAssertTrue(view.contains("TaskDetailLogic.planSentence(task)"))
-        XCTAssertTrue(view.contains("TaskDetailLogic.attributionNeedsCard(view, projectId: task.projectId)"))
+        XCTAssertTrue(view.contains("TaskDetailLogic.attributionNeedsCard($0, projectId: task.projectId)"),
+                      "the attribution row is in the page's array only when the card is needed")
         XCTAssertTrue(view.contains("TaskDetailLogic.activity(task, evidence: tasks.evidence)"))
         let composer = try section(view, from: "private func composer(_ task: TaskItem) -> some View {",
                                    to: "private func mentionedAgentIDs(")
