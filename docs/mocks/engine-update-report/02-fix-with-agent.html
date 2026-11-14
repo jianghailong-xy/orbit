@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Engine update failure: fix it with an agent</title>
+<style>
+/* Tokens copied from src/web/src/index.css (:root light). */
+:root {
+  --bg: #ffffff; --bg-subtle: #fafbfc; --bg-raised: #ffffff;
+  --border: #dee0e3; --border-subtle: #eceef1;
+  --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e;
+  --error: #cf3b35; --error-bg: #fdeceb; --error-border: #ffccc7;
+  --warning: #c2710c; --warning-bg: #fff4e6; --warning-border: #ffd591;
+  --brand: #3370ff;
+}
+body { margin: 0; background: #eef0f3; font-family: Inter, "Noto Sans SC", sans-serif; color: #1f2329; }
+.board { width: 1560px; padding: 36px 40px 40px; }
+h1 { font-size: 24px; margin: 0 0 6px; }
+.sub { font-size: 14px; color: #646a73; margin: 0 0 26px; line-height: 1.6; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.col h2 { font-size: 16px; margin: 0 0 10px; }
+.col h2 small { font-weight: 400; color: #8f959e; font-size: 13px; margin-left: 8px; }
+.frame { background: var(--bg); border-radius: 12px; padding: 22px 26px 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.sec-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+.sec-title { font-size: 17px; font-weight: 600; color: var(--text-1); }
+.sec-note { font-size: 12px; color: var(--text-3); }
+.engine-row { display: flex; align-items: center; gap: 10px; padding: 10px 13px; border: 1px solid var(--border-subtle); border-radius: 10px 10px 0 0; border-bottom: 0; font-size: 13.5px; }
+.engine-row b { font-weight: 600; }
+.engine-row .ver { color: var(--text-3); font-size: 12px; }
+.engine-row .dot { width: 8px; height: 8px; border-radius: 50%; background: #248a3d; }
+.engine-row .st { margin-left: auto; color: var(--text-3); font-size: 12px; }
+.callout { position: relative; outline: 2px dashed #3370ff; outline-offset: 3px; border-radius: 4px; }
+.tag { display: inline-block; background: #3370ff; color: #fff; font-size: 11px; font-weight: 600; border-radius: 9px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; }
+.notes { background: #fff; border-radius: 12px; padding: 18px 24px; font-size: 14px; line-height: 1.75; }
+.notes h3 { font-size: 15px; margin: 14px 0 4px; }
+.notes h3:first-child { margin-top: 0; }
+.notes code { font-family: "JetBrains Mono", monospace; font-size: 12.5px; background: #f2f3f5; padding: 1px 5px; border-radius: 4px; }
+.rec { color: #1a7f37; font-weight: 600; }
+.alt { color: #8f959e; }
+
+/* ---- Real rules, copied from src/web/src/index.css ---- */
+.rd-engine-relay { margin-bottom: 12px; padding: 12px 13px; border-radius: 10px; background: var(--bg-subtle); border: 1px solid var(--border-subtle); }
+.rd-engine-relay-row { font-size: 12.5px; color: var(--text-2); white-space: pre-wrap; }
+.rd-engine-relay-row.bad { color: var(--error); font-weight: 500; }
+.rd-engine-relay-hint { margin-top: 7px; font-size: 11.5px; color: var(--text-3); }
+.re-panel { margin-top: 0; padding: 12px 13px; border-radius: 0 0 10px 10px; background: var(--bg-subtle); border: 1px solid var(--border-subtle); }
+.re-panel.warn { background: var(--warning-bg); border-color: var(--warning-border); }
+.re-panel-row { font-size: 12.5px; color: var(--text-2); white-space: pre-wrap; }
+.re-panel.warn .re-panel-row { color: var(--warning); font-weight: 500; }
+.re-panel-hint { margin-top: 7px; font-size: 11.5px; color: var(--text-3); }
+.re-cmd { display: inline-block; margin-top: 4px; padding: 6px 10px; border-radius: 8px; background: var(--bg-raised); border: 1px solid var(--border); font-family: "JetBrains Mono", monospace; font-size: 11.5px; color: var(--text-2); }
+.re-link { border: 0; background: none; padding: 0; color: var(--brand); font-size: 11.5px; font-family: inherit; }
+.line-with-door { display: flex; gap: 12px; align-items: baseline; }
+
+/* conversation (drawn) */
+.chat-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 16px; }
+.chat-head .t { font-weight: 600; font-size: 15px; }
+.chat-head .m { color: var(--text-3); font-size: 12px; }
+.pill { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: #f2f3f5; color: var(--text-2); }
+.bubble { margin-left: auto; max-width: 88%; background: #f0f4ff; border: 1px solid #d6e2ff; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: var(--text-1); }
+.bubble code { font-family: "JetBrains Mono", monospace; font-size: 12px; background: rgba(255,255,255,.7); padding: 0 4px; border-radius: 4px; }
+.agent { margin-top: 14px; font-size: 13px; color: var(--text-2); }
+.agent .tool { margin-top: 8px; font-family: "JetBrains Mono", monospace; font-size: 12px; background: var(--bg-subtle); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 10px; color: var(--text-2); }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>引擎更新失败：交给 agent 去修</h1>
+  <p class="sub">失败的地方直接放一个 <b>Fix with an agent</b>：点一下，就在这台机器的 workspace 里开一个 session，把失败的细节交给 agent，让它查原因、修好、再跑一次 <code style="font-family:'JetBrains Mono',monospace;font-size:12.5px">orbit engine-update</code> 确认。<br>
+  卡片、行、面板用的是真实 class 和 index.css 的颜色 token；会话页是手画的示意。蓝色虚线框是新加的东西。</p>
+
+  <div class="cols">
+    <div class="col">
+      <h2>入口 ① 更新结果卡<small>每条失败行后面一个</small></h2>
+      <div class="frame">
+        <div class="sec-head"><span class="sec-title">Engines</span><span class="sec-note">Subscriptions signed in here are spent only by sessions on this machine.</span></div>
+        <div class="rd-engine-relay">
+          <div class="line-with-door">
+            <div class="rd-engine-relay-row bad">OpenCode — update timed out after 5m0s</div>
+            <button class="re-link callout">Fix with an agent →</button>
+          </div>
+          <div class="rd-engine-relay-hint">Orbit ran <code class="re-cmd">orbit engine-update</code></div>
+          <div class="rd-engine-relay-hint"><button class="re-link">Dismiss</button></div>
+        </div>
+      </div>
+
+      <h2 style="margin-top:26px">入口 ② 引擎行上的黄色提示<small>结果卡关掉后，失败还在这里</small></h2>
+      <div class="frame">
+        <div class="engine-row"><span class="dot"></span><b>OpenCode</b><span class="ver">1.19.4</span><span class="st">Signed in</span></div>
+        <div class="re-panel warn">
+          <div class="re-panel-row">1.19.4 → 1.19.5: `opencode upgrade` was still running after 5m0s and was stopped — wrote 2.1 KB, last 4m12s ago. Last output: "Downloading opencode-linux-x64…".</div>
+          <div class="re-panel-hint">Orbit tries every 30 min. <button class="re-link callout">Fix with an agent →</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <h2>点了之后<small>直接进到新 session，agent 已经开工</small></h2>
+      <div class="frame">
+        <div class="chat-head">
+          <span class="t">Fix the OpenCode update on hpc-01</span>
+          <span class="pill">orbit · no worktree</span><span class="pill">Claude Code</span>
+          <span class="m" style="margin-left:auto">just now</span>
+        </div>
+        <div class="bubble">Orbit couldn't update OpenCode on this machine (hpc-01).
+
+What the runner recorded:
+1.19.4 → 1.19.5: `opencode upgrade` was still running after 5m0s and was stopped — wrote 2.1 KB, last 4m12s ago. Last output: "Downloading opencode-linux-x64…".
+
+Binary: /root/.opencode/bin/opencode
+Update command: `opencode upgrade`
+
+Find out why the update fails here and fix it. Don't change Orbit's own code or config. When you're done, run `orbit engine-update` and check that OpenCode no longer fails.</div>
+        <div class="agent">
+          I'll start by checking whether the download itself is stalling.
+          <div class="tool">$ curl -sSI https://github.com/sst/opencode/releases/latest | head -3</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes" style="margin-top:28px">
+    <h3>要你定的四件事（每项给了建议）</h3>
+    <b>1. 点了之后：</b><span class="rec">直接开工（建议）</span>：建好 session 并把上面这段作为第一条消息发出去，页面跳到会话里。<span class="alt">另一种：只把这段填进新 session 的输入框，你看过再发。</span>Agent first 的意思就是不用你再按一次。<br>
+    <b>2. 在哪个 workspace：</b><span class="rec">这台机器上你最近用过的 workspace，不建 worktree（建议）</span>：修的是机器上的引擎，不是仓库代码，不需要隔离的 checkout。机器上一个 workspace 都没有时不显示这个入口（这种机器一般连更新都还没跑过）。<br>
+    <b>3. 用哪个引擎：</b><span class="rec">这个 workspace 的默认引擎；坏的正好是它（比如 Claude Code 跑不起来）时，换这台机器上另一个已登录的引擎（建议）</span>。一个可用的都没有就不显示入口。<br>
+    <b>4. 第一条消息谁来拼：</b><span class="rec">服务器（建议）</span>：用 runner 记下的完整失败细节（版本、命令、跑了多久、最后输出、二进制路径），比卡片上那一行字多得多；网页、macOS/iOS、Android 都只调同一个接口，说法不会分叉。<br>
+    <h3>范围</h3>
+    出现入口的只有失败（红色那几种）；“owned by another user” 这种需要安装者本人处理的，agent 没权限修，不放入口。网页、macOS/iOS、Android 同时做。
+  </div>
+</div>
+</body>
+</html>
