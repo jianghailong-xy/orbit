@@ -1107,7 +1107,7 @@ final class AppModel {
             // A restored-token launch sets `signedIn` in `init` without going through `login()`, so
             // `user` is nil or the launch snapshot's copy — read it once so the account footer shows
             // the real name and the preferences are this run's. A failed read keeps what is there.
-            if let self, let me = try? await self.api?.me() { self.user = me }
+            if let self, let me = try? await self.api?.me() { self.assignIfChanged(\.user, me) }
             while !Task.isCancelled {
                 guard let self else { return }
                 await poll.tick(at: Date(), visible: self.appVisible, live: self.controlPlaneLive)
