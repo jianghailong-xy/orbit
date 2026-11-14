@@ -58,7 +58,7 @@ import {
   verificationEpochNeedsHumanSql,
   verificationEpochOpenSql,
 } from '../tasks/verification-dependency';
-import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
+import { ProjectStatus as SharedProjectStatus, uuidToBase62 } from '@orbit/shared';
 import {
   CRITERIA_DECISIONS,
   CreateProjectDto,
@@ -110,7 +110,7 @@ import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
 import {
   buildCoordinatorInstructions,
   buildCoordinatorOpening,
-  buildDelegatedCoordinatorNotice,
+  buildChildCoordinatorPrompt,
   coordinatorSessionTitle,
 } from './coordinator-opening';
 import {
@@ -1018,12 +1018,9 @@ export class ProjectsService {
    * be bound to it, and landing unbound while reporting success is the defect this whole path
    * exists to stop producing.
    *
-   * It no longer carries a remedy, because the remedy is no longer the caller's to carry out:
-   * `createInSession` catches this and gives the new project a conversation of its own in the same
-   * workspace. What is left is the rule, which is still true and is still what the code below
-   * switches on. A caller that sees this message reached it some other way, and telling it "record
-   * this from a session that coordinates nothing yet" would name a workaround that produced the
-   * coordinator-less projects this deployment had to repair by hand.
+   * This is the bare rule, as `create` raises it. `createInSession` replaces it with the refusal the
+   * caller can act on (`alreadyCoordinatingRefusal`): the project the session coordinates, and the
+   * child-session recovery chain for the one it could not record.
    */
   private static readonly ALREADY_COORDINATING =
     'this session already coordinates another project, and a session coordinates at most one';
@@ -2475,29 +2472,7 @@ export class ProjectsService {
       project = await this.create(ownerId, dto, seed, principal);
     } catch (e) {
       if (!ProjectsService.isAlreadyCoordinating(e)) throw e;
-      // The acting session already coordinates a project, and the unique index on
-      // `coordinator_session_id` is what says a session coordinates at most one. That rule is
-      // sound and stays; what used to follow it was not. The caller was refused, and the only
-      // thing it could do about a refusal it had no other door for was to drop the session header
-      // and retry — which succeeds, and produces a project coordinated by nobody, in an account
-      // where nothing else produces one. This deployment has such a project and it took a manual
-      // write to make it openable.
-      //
-      // So the second project gets a conversation of its own, in the SAME workspace: the landing
-      // stays server-derived from where this request came from, exactly as the promotion's does,
-      // and only the session is new. Nothing here is caller-chosen, so this widens no authority —
-      // it spends a session, which is the thing a coordinator-less project costs anyway, only
-      // later and by hand.
-      const delegated = await this.createInWorkspace(ownerId, dto, seed.workspaceId, principal);
-      return {
-        coordinatorInstructions: buildDelegatedCoordinatorNotice(
-          delegated.title,
-          delegated.id,
-          // Non-null by construction: `createInWorkspace` returns only after the bind committed.
-          delegated.coordinatorSessionId as string,
-        ),
-        ...delegated,
-      };
+      throw await this.alreadyCoordinatingRefusal(ownerId, seed.sessionId, dto);
     }
     return {
       // `project_create` runs inside the turn that is being promoted. A prompt attached to a
@@ -2559,6 +2534,72 @@ export class ProjectsService {
     const project = await this.create(ownerId, dto, undefined, principal, credential);
     await this.coordinator(ownerId, project.id, workspaceId);
     return this.get(ownerId, project.id);
+  }
+
+  /**
+   * ALREADY_COORDINATING as the acting session receives it: which project it is bound to, and the
+   * whole recovery chain for the project it could not record (docs/recovery-contract.md §9).
+   *
+   * The rule stays: a session coordinates at most one project. What the caller is owed beside it
+   * is what it needs to act without guessing. `coordinatingProject` is the binding it keeps, by
+   * public id and title, so it can reconcile first: the answer to an earlier create may have been
+   * lost, and a project it already recorded is not a second one. (A repeat the receipts can prove
+   * is answered by `RunnerProjectsController` before this reaches the caller.) A project that
+   * really is a second one is the user's to open somewhere else, so the recovery block says a
+   * person confirms first, and `childSessionPrompt` is the self-contained first prompt of the child
+   * session that records it: once the user agrees, `session_create` with that prompt, and the
+   * child's own `project_create` makes the child the new project's coordinator, with
+   * `parentSessionId` keeping where it came from. Without `session_create` the same prompt is the
+   * manual fallback.
+   *
+   * Nothing is opened here any more. Opening a conversation on the caller's behalf, unasked, was
+   * the earlier answer; it spent a session nobody agreed to and kept no link to the one that
+   * planned the work.
+   */
+  private async alreadyCoordinatingRefusal(
+    ownerId: string,
+    sessionId: string,
+    dto: CreateProjectDto,
+  ): Promise<ConflictException> {
+    const current = await this.prisma.project.findFirst({
+      where: { ownerId, coordinatorSessionId: sessionId },
+      select: { id: true, title: true },
+    });
+    const sessionPublicId = uuidToBase62(sessionId);
+    const coordinatingProject = current
+      ? { id: uuidToBase62(current.id), title: current.title }
+      : null;
+    const childSessionPrompt = current
+      ? buildChildCoordinatorPrompt(dto, { sessionId, projectId: current.id, projectTitle: current.title })
+      : null;
+    return new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'ALREADY_COORDINATING',
+      message: current
+        ? `this session already coordinates project “${current.title}” (id: ${coordinatingProject!.id}), and a `
+          + 'session coordinates at most one. If that is the project you were creating, it is already recorded. '
+          + 'Otherwise ask the user first; if they agree, call session_create once with childSessionPrompt as its '
+          + 'prompt (the child records the project and becomes its coordinator) and do not follow it with '
+          + 'session_send. Without session_create, the user starts a new session in this workspace and sends '
+          + 'childSessionPrompt as its first message.'
+        : ProjectsService.ALREADY_COORDINATING,
+      requiredAction: 'CREATE_PROJECT_IN_CHILD_SESSION',
+      sessionId: sessionPublicId,
+      coordinatingProject,
+      childSessionPrompt,
+      recovery: {
+        effect: 'NONE',
+        retryPolicy: 'NEVER',
+        actionCode: 'CREATE_PROJECT_IN_CHILD_SESSION',
+        actor: 'CALLER',
+        userConfirmation: 'REQUIRED',
+        resources: [
+          ...(coordinatingProject ? [{ type: 'PROJECT', id: coordinatingProject.id }] : []),
+          { type: 'SESSION', id: sessionPublicId },
+        ],
+      },
+    });
   }
 
   /**

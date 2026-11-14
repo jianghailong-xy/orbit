@@ -311,6 +311,8 @@ func (f fakeRecoverySurface) read(tool, idKey, id string) (recoveryNext, bool) {
 	return recoveryNext{Tool: tool, Input: map[string]interface{}{idKey: id}}, true
 }
 
+func (f fakeRecoverySurface) exposes(tool string) bool { return f.readable[tool] }
+
 func (f fakeRecoverySurface) again() (recoveryNext, bool) {
 	if !f.canAgain {
 		return recoveryNext{}, false
@@ -980,5 +982,53 @@ func TestRecoveryCLITwoPositionalsFailure(t *testing.T) {
 	}
 	if report := decodeCLIReport(t, out); report.OK || report.Error.Code == "" {
 		t.Fatalf("missing recovery: %#v", report)
+	}
+}
+
+// ALREADY_COORDINATING as the server sends it: the user decides first on every surface, and what the
+// step says their yes leads to follows what this surface can reach — one session_create with the
+// server's prompt where it is listed or available, the manual fallback where it is not.
+func TestRecoveryAlreadyCoordinatingAsksTheUserAndNamesWhatIsReachable(t *testing.T) {
+	body := `{"statusCode":409,"error":"Conflict","code":"ALREADY_COORDINATING","message":"this session already coordinates project “A” (id: P1)",` +
+		`"requiredAction":"CREATE_PROJECT_IN_CHILD_SESSION","sessionId":"S1","coordinatingProject":{"id":"P1","title":"A"},"childSessionPrompt":"…",` +
+		`"recovery":{"effect":"NONE","retryPolicy":"NEVER","actionCode":"CREATE_PROJECT_IN_CHILD_SESSION","actor":"CALLER","userConfirmation":"REQUIRED",` +
+		`"resources":[{"type":"PROJECT","id":"P1"},{"type":"SESSION","id":"S1"}]}}`
+	env := recoveryOf(&transportHTTPError{method: "POST", path: "/api/runner/projects", statusCode: 409, body: body}, true)
+	if env.Code != "ALREADY_COORDINATING" || env.ActionCode == nil || *env.ActionCode != "CREATE_PROJECT_IN_CHILD_SESSION" ||
+		env.UserConfirmation != "REQUIRED" || env.Effect != "NONE" || env.Retry.Policy != "NEVER" {
+		t.Fatalf("envelope = %+v", env)
+	}
+	reachable := []recoverySurface{
+		mcpRecoverySurface{listed: map[string]bool{"session_create": true}},
+		cliRecoverySurface{capabilities: []cliCapability{{ID: "session_create", Argv: []string{"/opt/orbit", "session", "create"}, Available: true}}},
+	}
+	absent := []recoverySurface{
+		mcpRecoverySurface{listed: map[string]bool{}},
+		cliRecoverySurface{capabilities: []cliCapability{{ID: "session_create", Argv: []string{"/opt/orbit", "session", "create"}, Available: false}}},
+	}
+	for _, surface := range reachable {
+		n := renderRecoveryNext(env, surface, true)
+		if n.Type != recoveryNextAskUser || !strings.Contains(n.Reason, "call session_create once with childSessionPrompt") ||
+			!strings.Contains(n.Reason, "do not follow it with session_send") || !strings.Contains(n.Reason, "On a no, create nothing") {
+			t.Fatalf("%T reachable = %+v", surface, n)
+		}
+	}
+	for _, surface := range absent {
+		n := renderRecoveryNext(env, surface, true)
+		if n.Type != recoveryNextAskUser || !strings.Contains(n.Reason, "session_create is not available here") ||
+			!strings.Contains(n.Reason, "start a new session in this workspace and send childSessionPrompt") {
+			t.Fatalf("%T absent = %+v", surface, n)
+		}
+	}
+	// The real MCP server lists session_create only with orchestration on.
+	off := map[string]bool{}
+	for n := range (&mcpServer{}).listedTools() {
+		off[n] = true
+	}
+	if off["session_create"] {
+		t.Fatal("session_create listed without orchestration")
+	}
+	if n := renderRecoveryNext(env, mcpRecoverySurface{listed: off}, true); !strings.Contains(n.Reason, "not available here") {
+		t.Fatalf("orchestration off = %+v", n)
 	}
 }

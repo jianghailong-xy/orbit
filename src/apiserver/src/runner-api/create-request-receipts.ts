@@ -160,6 +160,37 @@ export class CreateRequestReceipts {
     }
   }
 
+  /**
+   * An earlier request, under any id, that said exactly this and created `resourceId` (base62): its
+   * stored answer, marked as the replay it is, or null when no receipt proves one.
+   *
+   * For the one case where a new id does not by itself mean a new request: a session that already
+   * coordinates the very project an identical earlier create made (ALREADY_COORDINATING). The first
+   * answer was lost and the caller asked again under a new id; the receipt shows nothing is missing.
+   * Read only on that refusal, and bounded by the owner's own PROJECT_CREATE receipts.
+   */
+  async completedAnswerFor(
+    ownerId: string,
+    kind: CreateRequestKind,
+    payload: unknown,
+    resourceId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const rows = await this.prisma.createRequestReceipt.findMany({
+      where: { ownerId, actionKind: kind, fingerprint: createRequestFingerprint(payload), status: 'COMPLETED' },
+      orderBy: { createdAt: 'asc' },
+    });
+    const row = rows.find((candidate) => resourceIdOf(candidate.result) === resourceId);
+    if (!row || !row.result || typeof row.result !== 'object' || Array.isArray(row.result)) return null;
+    const replayOf: CreateRequestReceipt = {
+      requestId: row.requestToken,
+      kind,
+      resourceId,
+      receivedAt: row.createdAt.toISOString(),
+      replayed: true,
+    };
+    return { ...(row.result as Record<string, unknown>), replayOf };
+  }
+
   /** The row for this id, made by this delivery: its received time, or null when another delivery has it. */
   private async claim(ownerId: string, kind: CreateRequestKind, requestId: string, fingerprint: string): Promise<Date | null> {
     try {

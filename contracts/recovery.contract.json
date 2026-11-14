@@ -103,6 +103,11 @@
       "meaning": "Write into the caller's own project, or send the write again with a handoff declaration.",
       "automaticRetry": false,
       "mayWrite": true
+    },
+    "CREATE_PROJECT_IN_CHILD_SESSION": {
+      "meaning": "This session already coordinates the project the answer names. If that is not the project being created, ask the user; once they agree, call session_create once with the answer's childSessionPrompt, and the child's own project_create makes it the new project's coordinator. Without session_create, the user starts that session by hand.",
+      "automaticRetry": false,
+      "mayWrite": true
     }
   },
   "defaultActionByPolicy": {

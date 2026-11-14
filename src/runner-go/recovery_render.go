@@ -251,11 +251,12 @@ func recoveryForFailure(err error, text string, mark transportMark, requestIDSen
 
 // ── the next step ──────────────────────────────────────────────────────────
 
-// recoverySurface is what one surface can really do: call a read-only tool on one resource, or make the
-// same call again. Each answers false when this process does not expose it.
+// recoverySurface is what one surface can really do: call a read-only tool on one resource, make the
+// same call again, or reach a named tool at all. Each answers false when this process does not expose it.
 type recoverySurface interface {
 	read(tool, idKey, id string) (recoveryNext, bool)
 	again() (recoveryNext, bool)
+	exposes(tool string) bool
 }
 
 // recoveryResourceID is an id that may be handed on as one argument: a single safe path segment that
@@ -316,6 +317,17 @@ func renderRecoveryNext(env recoveryEnvelope, surface recoverySurface, requestID
 		return recoveryStep(recoveryNextManual, env, "The outcome is not known and no reader for it is available here: check the state by hand before sending anything again.")
 	case "AWAIT_OWNER_DECISION":
 		return recoveryStep(recoveryNextAskUser, env, "The account owner has to decide; nothing is sent again until they have.")
+	case "CREATE_PROJECT_IN_CHILD_SESSION":
+		// ALREADY_COORDINATING. The user decides first either way; what this surface can reach decides
+		// what their yes leads to.
+		if surface.exposes("session_create") {
+			return recoveryStep(recoveryNextAskUser, env, "This session stays bound to the project the answer names. If that is not the "+
+				"project being created, ask the user whether to open a child session for it; on a yes, call session_create once "+
+				"with childSessionPrompt as its prompt, and do not follow it with session_send. On a no, create nothing.")
+		}
+		return recoveryStep(recoveryNextAskUser, env, "This session stays bound to the project the answer names, and session_create is "+
+			"not available here. If that is not the project being created, ask the user: on a yes, they start a new session in "+
+			"this workspace and send childSessionPrompt as its first message. On a no, create nothing.")
 	case "":
 		switch {
 		case confirm || env.Actor == "USER":
@@ -347,6 +359,8 @@ func (m mcpRecoverySurface) read(tool, idKey, id string) (recoveryNext, bool) {
 	}
 	return recoveryNext{Tool: tool, Input: map[string]interface{}{idKey: id}}, true
 }
+
+func (m mcpRecoverySurface) exposes(tool string) bool { return m.listed[tool] }
 
 func (m mcpRecoverySurface) again() (recoveryNext, bool) {
 	if !m.listed[m.tool] {
@@ -496,6 +510,11 @@ func (c cliRecoverySurface) read(tool, idKey, id string) (recoveryNext, bool) {
 	}
 	argv := append(append([]string{}, cap.Argv...), id, "--json")
 	return recoveryNext{Argv: argv}, true
+}
+
+func (c cliRecoverySurface) exposes(tool string) bool {
+	_, ok := c.capability(tool)
+	return ok
 }
 
 func (c cliRecoverySurface) again() (recoveryNext, bool) {

@@ -74,6 +74,7 @@ var (
 	recoveryActionCodes       = []string{
 		"RETRY", "RETRY_SAME_REQUEST", "VERIFY_STATE", "FIX_REQUEST", "USE_NEW_REQUEST_ID",
 		"ANSWER_ADVICE", "AWAIT_OWNER_DECISION", "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
+		"CREATE_PROJECT_IN_CHILD_SESSION",
 	}
 	// "" stands for no default action.
 	recoveryDefaultActionByPolicy = map[string]string{
@@ -222,6 +223,7 @@ var recoveryActionSemantics = map[string]struct{ AutomaticRetry, MayWrite bool }
 	"ANSWER_ADVICE":                          {AutomaticRetry: false, MayWrite: true},
 	"AWAIT_OWNER_DECISION":                   {AutomaticRetry: false, MayWrite: true},
 	"FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF": {AutomaticRetry: false, MayWrite: true},
+	"CREATE_PROJECT_IN_CHILD_SESSION":        {AutomaticRetry: false, MayWrite: true},
 }
 
 // The actions that resend the identical request with nobody in between.

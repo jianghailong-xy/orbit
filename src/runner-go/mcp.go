@@ -3878,9 +3878,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"this conversation rather than starting a fresh one that knows none of it. There " +
 				"is nothing to pass and nothing to choose; created outside a session there is no " +
 				"such binding. One session coordinates at most one project, so a second project " +
-				"recorded from this conversation is not coordinated by it: the server opens the " +
-				"new project its own coordinator conversation in the same workspace, and says so " +
-				"in the result. Existing " +
+				"recorded from this conversation is refused ALREADY_COORDINATING, naming the " +
+				"project this session coordinates (coordinatingProject) and creating nothing. " +
+				"Reconcile first: if that is the project you were creating, your earlier answer was " +
+				"lost and it is already recorded. Otherwise tell the user this session stays bound to " +
+				"it and ask whether to open a child session for the new one; on a yes, call " +
+				"session_create once with the refusal's childSessionPrompt as its prompt (the child's " +
+				"own project_create makes it the new project's coordinator) and do not follow it with " +
+				"session_send; without session_create, the user starts that session by hand with the " +
+				"same prompt. Existing " +
 				"legacy acceptanceCriteria text remains readable through project_get and writable " +
 				"through the old user/JWT API compatibility path. It is not an agent fallback: this " +
 				"runner tool refuses it because a criterion is authored one item at a time, each " +
@@ -3911,9 +3917,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"that names a coordination workspace has a coordinator, and recording the " +
 						"workspace alone would make the project read back as a conversation that went " +
 						"to Trash. Send it when the project should be coordinated somewhere other than " +
-						"here — including when you are already coordinating another project, though " +
-						"that case needs nothing from you: the server opens the new project its own " +
-						"conversation in this same workspace and tells you it did. Omit it and the " +
+						"here. Omit it and the " +
 						"session you are in becomes the coordinator, which is what you want when you " +
 						"just planned this work here. Requires orchestration to be enabled for this " +
 						"session, because it names a workspace rather than inheriting one.",

@@ -4,8 +4,8 @@
  *
  *   1. Concurrent deliveries of one named project_create create ONE Project, and every answer carries
  *      the same receipt; a later repeat (the first answer was lost after the commit) reads it back.
- *   2. A different request id from the same session is a new request: it creates a second Project,
- *      which gets a coordinator conversation of its own (one session coordinates one Project).
+ *   2. The same request under a new id from the session that coordinates what it made is read back
+ *      from the receipt; a different one is refused ALREADY_COORDINATING and creates nothing.
  *   3. The same id with another payload is refused (REQUEST_ID_REUSED), and creates nothing.
  *   4. Concurrent and serial repeats of one named session_create spawn ONE child Session.
  *   5. A 4xx refusal frees the id; a failure that may have written, or a holder whose lease ran out,
@@ -160,13 +160,20 @@ test('a named project_create or session_create is created once, and its repeats 
     assert.equal(again.requestReceipt!.receivedAt, answers[0].requestReceipt!.receivedAt);
     assert.equal((await projectsTitled('Receipt project')).length, 1);
 
-    // 2. A different request from the same session is a new Project with its own coordinator.
-    const second = await projectCreate(from, 'Receipt project', `req-${randomUUID()}`);
-    const both = await projectsTitled('Receipt project');
-    assert.equal(both.length, 2, 'a new request id is a new request');
-    const secondRow = both.find((row) => row.id === second.id)!;
-    assert.ok(secondRow.coordinatorSessionId, 'the second Project has a coordinator');
-    assert.notEqual(secondRow.coordinatorSessionId, from, 'one session coordinates one Project');
+    // 2. The same request under a new id, from the session that already coordinates what it made: the
+    // receipt shows the first answer was lost, so it is that answer, not a second Project. A different
+    // request is refused ALREADY_COORDINATING (one session coordinates one Project) and creates nothing.
+    const replay = await projectCreate(from, 'Receipt project', `req-${randomUUID()}`) as Receipted & {
+      replayOf?: { requestId: string; replayed: boolean };
+    };
+    assert.equal(replay.id, rows[0].id);
+    assert.equal(replay.replayOf?.requestId, requestId);
+    assert.equal((await projectsTitled('Receipt project')).length, 1);
+    await assert.rejects(
+      projectCreate(from, 'A second project', `req-${randomUUID()}`),
+      (error) => codeOf(error) === 'ALREADY_COORDINATING',
+    );
+    assert.equal((await projectsTitled('A second project')).length, 0);
 
     // 3. One name, two requests.
     await assert.rejects(projectCreate(from, 'Another title', requestId), (error) => codeOf(error) === 'REQUEST_ID_REUSED');

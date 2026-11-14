@@ -450,7 +450,7 @@ func TestRecoveryInvariantsHoldOnEveryServerBlockCombination(t *testing.T) {
 			}
 		}
 	}
-	if want := 3 * 2 * len(recoveryEffects) * len(recoveryRetryPolicies) * len(actions) * len(recoveryUserConfirmations) * 3; checked != want || want != 5400 {
-		t.Errorf("checked %d combinations, want %d (5400)", checked, want)
+	if want := 3 * 2 * len(recoveryEffects) * len(recoveryRetryPolicies) * len(actions) * len(recoveryUserConfirmations) * 3; checked != want || want != 5940 {
+		t.Errorf("checked %d combinations, want %d (5940)", checked, want)
 	}
 }

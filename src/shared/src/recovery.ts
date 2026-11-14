@@ -57,6 +57,7 @@ export const RECOVERY_ACTION_CODES = [
   'ANSWER_ADVICE',
   'AWAIT_OWNER_DECISION',
   'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF',
+  'CREATE_PROJECT_IN_CHILD_SESSION',
 ] as const;
 
 export const RECOVERY_DEFAULT_ACTION_BY_POLICY: Record<RecoveryRetryPolicy, string | null> = {
@@ -209,6 +210,7 @@ export const RECOVERY_ACTION_SEMANTICS: Record<string, { automaticRetry: boolean
   ANSWER_ADVICE: { automaticRetry: false, mayWrite: true },
   AWAIT_OWNER_DECISION: { automaticRetry: false, mayWrite: true },
   FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF: { automaticRetry: false, mayWrite: true },
+  CREATE_PROJECT_IN_CHILD_SESSION: { automaticRetry: false, mayWrite: true },
 };
 
 /** The actions that resend the identical request with nobody in between. */

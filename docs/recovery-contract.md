@@ -164,7 +164,7 @@ Only `VERIFY_STATE` has `mayWrite: false`. A token the registry does not list co
 these flags. Steps 3 and 4 use the first list, and step 6 uses the second.
 
 Every envelope satisfies the checks in `invariants.holdsOnEveryEnvelope`. Both test suites check
-them on every fixture, and on all 5,400 combinations a server block can state (effect × policy ×
+them on every fixture, and on all 5,940 combinations a server block can state (effect × policy ×
 action, including one unregistered token, × confirmation × request id × status × `retryable`).
 The check reads `mayWrite` and `automaticRetry` from the contract file itself rather than from the
 parser's tables, so if the parser misclassifies an action, the check still catches it.
@@ -374,9 +374,10 @@ the row before it creates anything, then stores the answer on it. The answer car
 | follows a first delivery that failed with a 4xx | The id is free again: a 4xx wrote nothing. |
 | follows a first delivery that failed otherwise, or died holding the row (lease 120 s) | `409 CREATE_REQUEST_OUTCOME_UNKNOWN` (effect `UNKNOWN`, `VERIFY_THEN_RETRY`): look first, and create again only under a new id. |
 
-A different request id is a different request. A second project created from the same session still
-gets its own coordinator conversation (one session coordinates one project). A request with no id writes
-no receipt and behaves as before.
+A different request id is a different request, with one reconciliation (§9): a `project_create` refused
+`ALREADY_COORDINATING` whose payload and calling session match a COMPLETED receipt for the very project
+the session coordinates is that receipt's answer, marked `replayOf: {requestId, kind, resourceId,
+receivedAt, replayed: true}`. A request with no id writes no receipt and behaves as before.
 
 **Unknown outcomes.** No answer, a body cut off after the status line, an unparsable body and an uncoded
 5xx are effect `UNKNOWN`. The runner never resends a create on its own. It fails with a partial receipt
@@ -389,3 +390,42 @@ fails, or a wait that runs out, is an outcome of the wait. The answer keeps the 
 `wait: {outcome: GET_FAILED | TIMEOUT, sessionId, created: true, error?, next: {tool: "session_get",
 command: "orbit session get <id>", arguments: {sessionId}}}`. The next step reads the child. It never
 creates it again.
+
+## 9. `ALREADY_COORDINATING`: the child-session recovery chain
+
+A session coordinates at most one project (`project.coordinator_session_id` is unique). A
+`project_create` from a session that already coordinates one is refused `409 ALREADY_COORDINATING`
+(`ProjectsService.alreadyCoordinatingRefusal`), and creates nothing. The body carries:
+
+| Field | Meaning |
+| --- | --- |
+| `coordinatingProject` | `{id, title}` of the project this session coordinates, `id` in base62. |
+| `sessionId` | The calling session, base62. |
+| `childSessionPrompt` | The self-contained first prompt of the child that records the new project: the parent session and its project, the exact `project_create` arguments (`title`, `goal`, `instructions`, structured `acceptanceCriteriaItems`) as JSON, and the success receipt the child replies with (`PROJECT_CREATED projectId=… coordinatorSessionId=…`). |
+| `requiredAction` | `CREATE_PROJECT_IN_CHILD_SESSION`. |
+| `recovery` | effect `NONE`, policy `NEVER`, action `CREATE_PROJECT_IN_CHILD_SESSION`, actor `CALLER`, `userConfirmation: REQUIRED`, resources `PROJECT` (the bound one) and `SESSION`. |
+
+The chain, in order:
+
+1. **Reconcile.** The runner door (`RunnerProjectsController.createInSessionOrReplay`) first looks for
+   a COMPLETED `PROJECT_CREATE` receipt with the same payload and calling session whose resource is
+   `coordinatingProject`. If there is one, the first answer was lost and the caller asked again under
+   a new id: the answer is the receipt's, with `replayOf`, and nothing is refused or created. Without
+   a receipt (no request id was sent), the Agent compares `coordinatingProject` with what it was
+   creating.
+2. **Ask.** A project that really is a second one is the user's decision. The Agent says that this
+   session stays bound to `coordinatingProject` and asks whether to open a child session. On a no,
+   nothing is created.
+3. **One child.** On a yes, and with `session_create` exposed (orchestration on), the Agent calls
+   `session_create` once with `childSessionPrompt` as its `prompt`. The server records the caller as
+   the child's `parentSessionId`. The Agent does not follow it with `session_send`: the prompt is
+   already the child's first turn.
+4. **The child records it.** The child's own `project_create` binds the child as the new project's
+   coordinator. The parent's binding is untouched. The child's reply names the project id and its own
+   session id, and the parent reports both.
+5. **Manual fallback.** Without `session_create` (the tool is not listed, orchestration is off, or the
+   call is refused), the user starts a new session in the workspace and sends `childSessionPrompt` as
+   its first message.
+
+`renderRecoveryNext` maps `CREATE_PROJECT_IN_CHILD_SESSION` to `ask_user` on every surface. Its
+reason names `session_create` when this surface exposes it, and the manual fallback when it does not.

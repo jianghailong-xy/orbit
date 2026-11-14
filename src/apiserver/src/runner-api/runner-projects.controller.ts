@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   ForbiddenException,
@@ -199,7 +200,7 @@ export class RunnerProjectsController {
       );
     }
     return inSession
-      ? this.projects.createInSession(runner.ownerId, runner.id, inSession, dto)
+      ? this.createInSessionOrReplay(runner, inSession, dto)
       : this.projects.create(
           runner.ownerId,
           dto,
@@ -207,6 +208,39 @@ export class RunnerProjectsController {
           { type: 'RUNNER', id: runner.id },
         );
   };
+
+  /**
+   * A create from inside a session, where ALREADY_COORDINATING is first reconciled against the
+   * receipts: when the project the session coordinates is the one an identical earlier
+   * `project_create` from this session created, the first answer was lost and this is its replay,
+   * so it is answered with that answer (`replayOf` names the request) rather than refused. Only a
+   * project the receipts cannot account for reaches the caller as the refusal, and its recovery
+   * chain asks the user before anything else is opened.
+   */
+  private readonly createInSessionOrReplay = async (runner: Runner, inSession: string, dto: CreateProjectDto) => {
+    try {
+      return await this.projects.createInSession(runner.ownerId, runner.id, inSession, dto);
+    } catch (error) {
+      const coordinating = RunnerProjectsController.coordinatingProjectOf(error);
+      if (!coordinating || !this.receipts) throw error;
+      const replay = await this.receipts.completedAnswerFor(
+        runner.ownerId,
+        'PROJECT_CREATE',
+        { sessionId: inSession, dto },
+        coordinating,
+      );
+      if (!replay) throw error;
+      return replay;
+    }
+  };
+
+  /** The public id ALREADY_COORDINATING names as the session's current project, or null for any other error. */
+  private static coordinatingProjectOf(error: unknown): string | null {
+    if (!(error instanceof ConflictException)) return null;
+    const body = error.getResponse() as { code?: unknown; coordinatingProject?: { id?: unknown } | null };
+    if (body?.code !== 'ALREADY_COORDINATING') return null;
+    return typeof body.coordinatingProject?.id === 'string' ? body.coordinatingProject.id : null;
+  }
 
   /**
    * Open a coordinator for a project whose own conversation cannot take a message — the agent
