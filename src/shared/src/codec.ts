@@ -78,6 +78,15 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'parentSessionId',
   'rootSessionId',
   'creatorSessionId',
+  // Scheduled tasks (migration 0770): the schedule a run, finding, revision or request belongs to; the run a session
+  // serves; the runs a finding was first and last seen in; the workspace an envelope allows; the session a schedule
+  // was created from. All addresses a reader follows and may hand back, none a fence.
+  'scheduleId',
+  'scheduleRunId',
+  'firstRunId',
+  'lastSeenRunId',
+  'envelopeWorkspaceId',
+  'createdFromSessionId',
   'authorSessionId',
   // A main checkout request's initiating session (migration 0534): where its result line is written.
   'initiatedFromSessionId',
