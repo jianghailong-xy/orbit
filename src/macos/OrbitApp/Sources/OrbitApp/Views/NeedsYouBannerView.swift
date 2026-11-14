@@ -39,9 +39,23 @@ import OrbitKit
 ///
 /// Mounted at the top of the screen it is about: a conversation's safe-area bar on iOS 26, which the
 /// transcript's scroll-edge effect runs on under as it does under the nav bar
-/// (`floatsOverTranscript`), and a top inset everywhere else, on the page's own colour so the rows it
-/// covers don't read through. With nothing waiting the body is empty, which insets by zero — the bar
-/// is absent from the layout rather than present at zero height.
+/// (`floatsOverTranscript`), and a top inset over the Sessions list. With nothing waiting the body is
+/// empty, which insets by zero — the bar is absent from the layout rather than present at zero height.
+///
+/// FLOATING, NOT A STRIP (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`)
+/// ------------------------------------------------------------------------------------------
+/// The inset only keeps the list's first row and the pull's spinner clear while the list rests. The
+/// capsule stands on nothing and casts a shadow, so the rows scroll on behind it as they do behind
+/// the nav bar's glass buttons; several waiting show as a deck under it. Unfolded, the capsules after
+/// the first hang over the page on a scrim instead of pushing it down, so the inset never changes
+/// height and nothing under a finger moves.
+///
+/// AND IT IS WHERE AN APPROVAL ARRIVES (`docs/mocks/needs-you-capsule/05-one-surface`)
+/// --------------------------------------------------------------------------------
+/// An approval landing while the app is open used to be an amber card of its own beside this bar.
+/// Now the bar says it (`NeedsYouBanner.arriving`): the push's line and an amber ring for six seconds,
+/// a press going straight to it, then the count again. Pages with no bar of their own carry this
+/// same view over the page (`needsYouOverPage`).
 struct NeedsYouBannerView: View {
     @Environment(AppModel.self) private var model
     /// Whether the transcript scrolls on under the bar with the system's scroll-edge effect softening
@@ -60,12 +74,12 @@ struct NeedsYouBannerView: View {
     /// Whether a project's sessions page opens in this shell's session column (an iPad's wide
     /// shell) rather than as a page of its own — where the merge into main's card is.
     var projectInColumn = false
-    /// Mounted over the Sessions list, which meets its nav bar with the soft scroll-edge effect
-    /// (`softTopEdgeEffect`). On iOS 26 the bar then stands on that same soft edge, drawn on down
-    /// under it, instead of on the page's colour: see `listSoftEdge`.
+    /// Mounted over a list or a page rather than a conversation: it floats there on every system,
+    /// with the rows going on behind it (see `surface`).
     var overList = false
     /// The bar's own width, for the margin that lines it up with the nav bar's buttons.
     @State private var width: CGFloat = 0
+    @Environment(\.colorScheme) private var scheme
     /// Unfolded to one capsule per waiting conversation. Folds again after a press goes somewhere,
     /// so the page it is left on is as it was.
     @State private var unfolded = false
@@ -90,38 +104,63 @@ struct NeedsYouBannerView: View {
         } else if let banner = model.needsYouBanner(excluding: excluding) {
             // Several waiting, unfolded (the owner, 2026-11-13, option B of
             // docs/mocks/needs-you-capsule/03-expand.html): one capsule per conversation, the first
-            // the one the folded bar names, pushing the page down rather than covering it. The
-            // first carries the ↑ that folds them back.
-            let entries = unfolded && banner.count > 1 ? model.needsYouEntries(excluding: excluding) : []
+            // the one the folded bar names and where the folded bar stood, carrying the ↑ that folds
+            // them back. The rest hang over the page on a scrim (04-floating) rather than pushing it.
+            // An arrival never unfolds: its press goes to the newcomer.
+            let several = banner.count > 1 && !banner.arriving
+            let entries = unfolded && several ? model.needsYouEntries(excluding: excluding) : []
             if entries.count > 1 {
                 // At most five; the last says "+N" for the ones behind it, as the folded bar does.
                 let shown = Array(entries.prefix(NeedsYouLogic.unfoldedLimit))
-                chrome {
-                    VStack(spacing: 6) {
-                        ForEach(Array(shown.enumerated()), id: \.element.target.id) { index, entry in
-                            bar(text: entry.text, detail: entry.detail, since: entry.since,
-                                more: index == shown.count - 1 ? entries.count - shown.count : 0,
-                                glyph: entry.glyph, chevron: nil, hint: hint(for: entry),
-                                fold: index == 0 ? { setUnfolded(false) } : nil) {
-                                open(entry)
+                chrome(deck: true) {
+                    bar(entries[0], more: 0, fold: { setUnfolded(false) })
+                        .overlay(alignment: .top) {
+                            VStack(spacing: 6) {
+                                ForEach(Array(shown.enumerated().dropFirst()), id: \.element.target.id) { index, entry in
+                                    bar(entry, more: index == shown.count - 1 ? entries.count - shown.count : 0)
+                                }
                             }
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 44 + 6)
                         }
-                    }
+                } scrim: {
+                    scrim
                 }
             } else {
                 // No chevron: the whole capsule is the press, as the nav bar's question capsule is —
                 // and where it goes is somewhere else, which the words already say. With more than
-                // one waiting the press unfolds them instead, and the "+N" carries a ⌄ to say so.
-                chrome {
+                // one waiting the press unfolds them instead, and the deck under it says so.
+                chrome(deck: banner.count > 1) {
                     bar(text: banner.text, detail: banner.detail, since: banner.since, more: banner.more,
                         glyph: banner.glyph, chevron: nil,
-                        hint: banner.count > 1 ? "Shows all \(banner.count) waiting on you" : hint(for: banner),
-                        unfolds: banner.count > 1) {
-                        if banner.count > 1 { setUnfolded(true) } else { open(banner) }
+                        hint: several ? "Shows all \(banner.count) waiting on you" : hint(for: banner),
+                        deck: banner.count > 1, arriving: banner.arriving) {
+                        if several { setUnfolded(true) } else { open(banner) }
                     }
                 }
             }
         }
+    }
+
+    /// One conversation's capsule in the unfolded stack: it opens its own.
+    private func bar(_ entry: NeedsYouBanner, more: Int, fold: (() -> Void)? = nil) -> some View {
+        bar(text: entry.text, detail: entry.detail, since: entry.since, more: more,
+            glyph: entry.glyph, chevron: nil, hint: hint(for: entry), fold: fold) {
+            open(entry)
+        }
+    }
+
+    /// Behind the unfolded stack and over everything else on the page: dimmed, and a press anywhere
+    /// on it folds the stack rather than reaching the row under it.
+    private var scrim: some View {
+        Color.black.opacity(scheme == .dark ? 0.55 : 0.18)
+            .frame(width: 4000, height: 4000)
+            .contentShape(Rectangle())
+            .onTapGesture { setUnfolded(false) }
+            .accessibilityElement()
+            .accessibilityLabel("Collapse")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { setUnfolded(false) }
     }
 
     private func setUnfolded(_ value: Bool) {
@@ -145,11 +184,12 @@ struct NeedsYouBannerView: View {
 
     /// One capsule, whichever fact it is carrying: the two differ in their words, their mark and
     /// which way a chevron points, and in nothing else — it is one signal, and a second style for it
-    /// would read as a second kind of thing. `unfolds` marks the "+N" with a ⌄ (the press shows them
-    /// all); `fold` is the ↑ on the first capsule of the unfolded stack, a press of its own.
+    /// would read as a second kind of thing. `deck` draws the two edges under it that say a press
+    /// shows them all; `arriving` rings it amber while it says an approval that has just come;
+    /// `fold` is the ↑ on the first capsule of the unfolded stack, a press of its own.
     private func bar(text: String, detail: String?, since: String?, more: Int, glyph: NeedsYouGlyph,
-                     chevron: String?, hint: String, unfolds: Bool = false, fold: (() -> Void)? = nil,
-                     action: @escaping () -> Void) -> some View {
+                     chevron: String?, hint: String, deck: Bool = false, arriving: Bool = false,
+                     fold: (() -> Void)? = nil, action: @escaping () -> Void) -> some View {
         HStack(spacing: 0) {
             Button {
                 // A press here moves the reader somewhere. The tap feedback is the same one the cards
@@ -175,21 +215,11 @@ struct NeedsYouBannerView: View {
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                             if more > 0 {
-                                HStack(spacing: 2) {
-                                    Text("+\(more)")
-                                    if unfolds { Image(systemName: "chevron.down").imageScale(.small) }
-                                }
-                                .font(.orbitMeta.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 6)
-                                .background(Color.primary.opacity(0.1), in: Capsule())
-                            } else if unfolds {
-                                // No count to carry it (sessions blocked on a tool call have no "+N"):
-                                // the ⌄ stands bare, as the ↑ that folds them does — a pill around the
-                                // chevron alone squashed to its glyph's height.
-                                Image(systemName: "chevron.down")
-                                    .font(.orbitLabel.weight(.semibold))
+                                Text("+\(more)")
+                                    .font(.orbitMeta.weight(.semibold))
                                     .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 6)
+                                    .background(Color.primary.opacity(0.1), in: Capsule())
                             }
                             if let since { NeedsYouAge(since: since) }
                         }
@@ -235,15 +265,58 @@ struct NeedsYouBannerView: View {
             }
         }
         .needsYouCapsule()
+        .overlay {
+            // An approval that has just arrived: the amber it came in with, round the glass
+            // rather than over it, for the seconds the bar says it.
+            if arriving {
+                Capsule().strokeBorder(Color.orange.opacity(0.75), lineWidth: 1.5)
+                    .shadow(color: .orange.opacity(0.35), radius: 6)
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: arriving)
+        // Lifted off the page: the rows scroll on behind it.
+        .shadow(color: .black.opacity(scheme == .dark ? 0.75 : 0.10), radius: 14, y: 10)
+        .background(alignment: .top) { if deck { deckEdges } }
     }
+
+    /// Several waiting: two edges of the capsules behind this one, showing under it as a stack of
+    /// notifications does — 7 and 13pt below, standing in 12 and 26pt from its ends.
+    private var deckEdges: some View {
+        ZStack(alignment: .top) {
+            Capsule().fill(Color(uiColor: .secondarySystemBackground).opacity(0.7))
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+                .padding(.horizontal, 26)
+                .offset(y: Self.deckReach)
+            Capsule().fill(Color(uiColor: .secondarySystemBackground))
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+                .padding(.horizontal, 12)
+                .offset(y: 7)
+        }
+        .frame(height: 44)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// How far the deck shows below the capsule; the bar keeps this much room under it while
+    /// several are waiting, folded or not, so unfolding never moves the page.
+    private static let deckReach: CGFloat = 13
 
     /// Where the bar stands: in from the edges by the margin the nav bar sets its own buttons in —
     /// UIKit's 20pt on a Plus- or Max-width phone, 16pt below that — so a capsule's ends line up
     /// under the back button and ⋯ (measured on the owner's 440pt phone: 20–64 and 376–420).
-    private func chrome<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    private func chrome<Content: View>(deck: Bool = false, @ViewBuilder _ content: () -> Content) -> some View {
+        chrome(deck: deck, content) { EmptyView() }
+    }
+
+    private func chrome<Content: View, Scrim: View>(deck: Bool, @ViewBuilder _ content: () -> Content,
+                                                    @ViewBuilder scrim: () -> Scrim) -> some View {
         content()
             .padding(.horizontal, width >= 414 ? 20 : 16)
+            .padding(.bottom, deck ? Self.deckReach : 0)
             .padding(.bottom, 6)
+            // Under the capsules and over the page: the unfolded stack's scrim.
+            .background { scrim() }
             .frame(maxWidth: .infinity)
             .background {
                 GeometryReader { proxy in
@@ -255,29 +328,46 @@ struct NeedsYouBannerView: View {
             .background { surface }
     }
 
+    /// Nothing under it where it floats — over the transcript, over the Sessions list (04-floating:
+    /// the rows go on behind it, under the nav bar's own soft edge) and over a page. Only a
+    /// conversation before iOS 26, where it is the inset it always was, stands on the page's colour.
     @ViewBuilder private var surface: some View {
-        if floats {
+        if floats || overList {
             Color.clear
-        } else if overList {
-            if #available(iOS 26.0, *) { listSoftEdge } else { Color(uiColor: .systemBackground) }
         } else {
             Color(uiColor: .systemBackground)
         }
     }
+}
 
-    /// The soft edge carried on down under the bar on the Sessions list (the owner, 2026-11-12,
-    /// option B of docs/mocks/ios-header-soft-edge/02-board.html). The system's soft effect sits
-    /// under the nav bar only: this bar is a top inset, not a `.safeAreaBar` (which stops the list
-    /// pulling to refresh, see `AgentPanes`), so on the page's colour the rows were cut off hard at
-    /// its lower edge. So it draws its own: a material blur and a wash of the page's colour, both
-    /// full from the top of the screen (up behind the nav bar, joining the system's) and fading to
-    /// nothing 20pt below the bar, so rows blur and fade into it rather than end at a line. It takes
-    /// no touches; the rows under it scroll as before.
-    private var listSoftEdge: some View {
-        SoftEdgeLayer(solidAt: .top, color: Color(uiColor: .systemBackground))
-            .padding(.bottom, -20)
-            .ignoresSafeArea(edges: .top)
-            .allowsHitTesting(false)
+extension View {
+    /// The needs-you bar over a page that has none of its own — Tasks, Projects, the Wiki, a page
+    /// pushed over a list — floating under the nav bar and covering the page rather than moving it,
+    /// where the amber approval card used to come down (the owner, 2026-11-15,
+    /// `docs/mocks/needs-you-capsule/05-one-surface`). Attach once at a shell's root; `wide` is the
+    /// iPad's three columns, where it stands at a capsule's width.
+    func needsYouOverPage(wide: Bool) -> some View { modifier(NeedsYouOverPage(wide: wide)) }
+}
+
+private struct NeedsYouOverPage: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let wide: Bool
+
+    func body(content: Content) -> some View {
+        let shows = model.pageHasNoNeedsYouBar(wide: wide) && model.needsYouBanner(excluding: nil) != nil
+        content
+            .overlay(alignment: .top) {
+                if shows {
+                    // Under an inline nav bar: 44pt of bar and the 10pt the lists leave above it.
+                    NeedsYouBannerView(excluding: nil, overList: true)
+                        .frame(maxWidth: wide ? 440 : .infinity)
+                        .padding(.top, 54)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy, value: shows)
+            // The tap the amber card came in with, wherever the bar that says it is.
+            .sensoryFeedback(.warning, trigger: model.needsYouArrival) { _, new in new != nil }
     }
 }
 
