@@ -586,3 +586,142 @@ extension View {
         .animation(.default, value: text)
     }
 }
+
+// MARK: Resources (docs/mocks/runner-resource-monitor)
+
+/// Resources' header: the title, and on its right where the readings come from — a green dot while
+/// live, a grey one offline, none for a runner that reads only its workspaces' disk.
+struct RunnerResourcesHeader: View {
+    let note: String
+    let dot: MachineResources.Dot?
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(RunnerPageCopy.RUNNER_RESOURCES)
+            Spacer(minLength: 8)
+            HStack(spacing: 6) {
+                if let dot {
+                    Circle()
+                        .fill(dot == .live ? Color.green : RunnerInk.idle)
+                        .frame(width: 7, height: 7)
+                }
+                Text(note)
+                    .fontWeight(.regular)
+                    .lineLimit(1)
+            }
+        }
+        .font(.orbitLabel.weight(.semibold))
+        .foregroundStyle(Color.secondary)
+        .textCase(nil)
+    }
+}
+
+/// One Resources tile: the figure's name, its reading large, what that is in cores or GB, and its last
+/// hour as a line — or, from a runner too old to read it, Update runner and why.
+struct RunnerResourceTile: View {
+    let tile: MachineResources.Tile
+    /// Nil when the runner reads no resources: no line is drawn.
+    let line: [[MachineResources.Point]]?
+
+    private var ink: Color {
+        switch tile.tone {
+        case .normal: return Color.accentColor
+        case .warn: return RunnerInk.full
+        case .off: return RunnerInk.idle
+        }
+    }
+
+    private var valueInk: Color {
+        switch tile.tone {
+        case .normal: return Color.primary
+        case .warn: return RunnerInk.amber
+        case .off: return Color.secondary
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(tile.label)
+                .font(.orbitListSubtitle.weight(.medium))
+                .foregroundStyle(Color.secondary)
+            if let update = tile.update {
+                Text(RunnerPageCopy.RUNNER_RESOURCES_UPDATE)
+                    .font(.orbitLabel.weight(.medium))
+                    .foregroundStyle(RunnerInk.amber)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(RunnerInk.amber.opacity(0.12)))
+                    .padding(.top, 8)
+                Text(update)
+                    .font(.orbitListSubtitle)
+                    .foregroundStyle(Color.secondary)
+                    .padding(.top, 8)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 1) {
+                    Text(verbatim: tile.value)
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(valueInk)
+                    if tile.percent != nil {
+                        Text(verbatim: "%")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(Color.secondary)
+                    }
+                }
+                .monospacedDigit()
+                if !tile.detail.isEmpty {
+                    Text(tile.detail)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(Color.secondary)
+                }
+                if let line {
+                    RunnerResourceLine(runs: line, ink: ink)
+                        .frame(height: 44)
+                        .padding(.top, 10)
+                        .accessibilityHidden(true)
+                }
+                if let note = tile.note {
+                    Text(note)
+                        .font(.orbitLabel)
+                        .foregroundStyle(RunnerInk.amber)
+                        .padding(.top, 4)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// A figure's last hour: a dashed guide near the top, and each run of readings as a line over a faint
+/// fill — a lone reading as a dot. Broken wherever the machine went unheard.
+struct RunnerResourceLine: View {
+    let runs: [[MachineResources.Point]]
+    let ink: Color
+
+    var body: some View {
+        Canvas { context, size in
+            var guide = Path()
+            guide.move(to: CGPoint(x: 0, y: size.height * 0.1))
+            guide.addLine(to: CGPoint(x: size.width, y: size.height * 0.1))
+            context.stroke(guide, with: .color(Color.secondary.opacity(0.4)),
+                           style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            for run in runs {
+                let points = run.map { CGPoint(x: $0.x * size.width, y: size.height * (1 - $0.y)) }
+                guard let first = points.first, let last = points.last else { continue }
+                if points.count == 1 {
+                    context.fill(Path(ellipseIn: CGRect(x: first.x - 1.5, y: first.y - 1.5, width: 3, height: 3)),
+                                 with: .color(ink))
+                    continue
+                }
+                var line = Path()
+                line.addLines(points)
+                var area = line
+                area.addLine(to: CGPoint(x: last.x, y: size.height))
+                area.addLine(to: CGPoint(x: first.x, y: size.height))
+                area.closeSubpath()
+                context.fill(area, with: .color(ink.opacity(0.12)))
+                context.stroke(line, with: .color(ink), style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
+            }
+        }
+    }
+}
