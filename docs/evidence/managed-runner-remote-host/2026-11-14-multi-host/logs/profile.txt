@@ -1,0 +1,21 @@
+==> 2026-11-14T11:51:19Z profile.json docker.hosts:
+{"instanceId":"orbit-lab-a","channel":{"url":"http://172.31.92.20:7300"},"tokenFile":"/var/lib/orbit-managed-runners/orbit-lab-a.token"}
+{"instanceId":"orbit-lab-b","channel":{"url":"http://172.31.92.30:7300"},"tokenFile":"/var/lib/orbit-managed-runners/orbit-lab-b.token"}
+==> 2026-11-14T11:51:19Z recreating the apiserver to read it
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Healthy 
+orbit-apiserver  | [Nest] 1  - 11/14/2026, 11:52:07 AM     LOG [ManagedRunners] managed runners are enabled in mrmh-lab (Docker instance orbit-lab-a (remote), Docker instance orbit-lab-b (remote))
+==> 2026-11-14T11:58:34Z profile.json docker.hosts:
+{"instanceId":"orbit-lab-a","channel":{"url":"http://172.31.92.20:7300"},"tokenFile":"/var/lib/orbit-managed-runners/orbit-lab-a.token","draining":true}
+{"instanceId":"orbit-lab-b","channel":{"url":"http://172.31.92.30:7300"},"tokenFile":"/var/lib/orbit-managed-runners/orbit-lab-b.token"}
+==> 2026-11-14T11:58:34Z recreating the apiserver to read it
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Healthy 
+orbit-apiserver  | [Nest] 1  - 11/14/2026, 11:59:37 AM     LOG [ManagedRunners] managed runners are enabled in mrmh-lab (Docker instance orbit-lab-a (remote) (draining), Docker instance orbit-lab-b (remote))
+==> 2026-11-14T12:03:16Z profile.json docker.hosts:
+{"instanceId":"orbit-lab-a","channel":{"url":"http://172.31.92.20:7300"},"tokenFile":"/var/lib/orbit-managed-runners/orbit-lab-a.token"}
+{"instanceId":"orbit-lab-b","channel":{"url":"http://172.31.92.30:7300"},"tokenFile":"/var/lib/orbit-managed-runners/orbit-lab-b.token"}
+==> 2026-11-14T12:03:16Z recreating the apiserver to read it
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Healthy 
+orbit-apiserver  | [Nest] 1  - 11/14/2026, 12:03:59 PM     LOG [ManagedRunners] managed runners are enabled in mrmh-lab (Docker instance orbit-lab-a (remote), Docker instance orbit-lab-b (remote))

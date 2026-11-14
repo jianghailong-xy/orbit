@@ -1,0 +1,224 @@
+==> 2026-11-14T22:16:40+08:00 gate: MemAvailable 2592 MB (need 2500), consecutive 1/3, load 32.09
+==> 2026-11-14T22:17:10+08:00 gate: MemAvailable 3966 MB (need 2500), consecutive 2/3, load 28.51
+==> 2026-11-14T22:17:40+08:00 gate: MemAvailable 1352 MB (need 2500), consecutive 0/3, load 33.40
+==> 2026-11-14T22:18:10+08:00 gate: MemAvailable 3777 MB (need 2500), consecutive 1/3, load 36.71
+==> 2026-11-14T22:18:40+08:00 gate: MemAvailable 2126 MB (need 2500), consecutive 0/3, load 30.59
+==> 2026-11-14T22:19:10+08:00 gate: MemAvailable 3392 MB (need 2500), consecutive 1/3, load 34.36
+==> 2026-11-14T22:19:40+08:00 gate: MemAvailable 3973 MB (need 2500), consecutive 2/3, load 31.72
+==> 2026-11-14T22:20:10+08:00 gate: MemAvailable 2570 MB (need 2500), consecutive 3/3, load 26.50
+==> 2026-11-14T14:20:10Z deploy/managed-runner/remote-host/remote-host.sh upgrade d29ffe5254e7da381a880bcc16ae20c68f7dfeee on mrmh-chan-b
+==> Checking out d29ffe5254e7da381a880bcc16ae20c68f7dfeee
+==> Building the Docker channel and the managed runners' firewall
+ Image orbit-managed-runner-firewall:local Building 
+ Image orbit-docker-channel:local Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.06kB done
+#1 DONE 0.0s
+
+#2 [docker-channel internal] load build definition from Dockerfile
+#2 DONE 0.0s
+
+#3 [managed-runner-firewall internal] load build definition from Dockerfile
+#3 transferring dockerfile:
+#3 transferring dockerfile: 916B 0.3s done
+#3 DONE 1.9s
+
+#2 [docker-channel internal] load build definition from Dockerfile
+#2 transferring dockerfile: 854B 0.0s done
+#2 DONE 3.6s
+
+#4 [managed-runner-firewall internal] load metadata for docker.io/library/python:3.13-alpine
+#4 DONE 4.1s
+
+#5 [docker-channel 1/2] FROM docker.io/library/python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e
+#5 resolve docker.io/library/python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e
+#5 ...
+
+#6 [docker-channel internal] load build context
+#6 transferring context: 193B 0.1s done
+#6 DONE 0.3s
+
+#7 [managed-runner-firewall internal] load build context
+#7 ...
+
+#5 [docker-channel 1/2] FROM docker.io/library/python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e
+#5 resolve docker.io/library/python:3.13-alpine@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57015b960e 1.3s done
+#5 DONE 1.4s
+
+#8 [docker-channel 2/2] COPY deploy/managed-runner/docker-channel/channel.py /opt/orbit-docker-channel/channel.py
+#8 CACHED
+
+#7 [managed-runner-firewall internal] load build context
+#7 transferring context: 37.89kB 0.0s done
+#7 DONE 1.9s
+
+#9 [managed-runner-firewall 2/3] RUN apk add --no-cache iptables iptables-legacy
+#9 CACHED
+
+#10 [managed-runner-firewall 3/3] COPY deploy/managed-runner/firewall/firewall.py /opt/orbit-managed-runner-firewall/firewall.py
+#10 CACHED
+
+#11 [docker-channel] exporting to image
+#11 exporting layers done
+#11 exporting manifest sha256:8e36ecb7112f8d23d60e2c5ac272ad1047bd7e7e2c43cc97f96eb2f2be6d8df5 0.1s done
+#11 exporting config sha256:2c53234b6ecbc08b89edbb69345bd8e603c93ff3924eff14d7c096d287687090 0.0s done
+#11 exporting attestation manifest sha256:f651e11270f73d982606860b074c721084ef024c375fcb07c5734d544a5b118e
+#11 exporting attestation manifest sha256:f651e11270f73d982606860b074c721084ef024c375fcb07c5734d544a5b118e 0.6s done
+#11 exporting manifest list sha256:378099599e8f5808df4d0995214d4ada5c8b3327927094e6aaffbfe8282cab3c
+#11 exporting manifest list sha256:378099599e8f5808df4d0995214d4ada5c8b3327927094e6aaffbfe8282cab3c 0.5s done
+#11 naming to docker.io/library/orbit-docker-channel:local
+#11 naming to docker.io/library/orbit-docker-channel:local 0.1s done
+#11 unpacking to docker.io/library/orbit-docker-channel:local
+#11 unpacking to docker.io/library/orbit-docker-channel:local 0.4s done
+#11 DONE 2.2s
+
+#12 [managed-runner-firewall] exporting to image
+#12 exporting layers done
+#12 exporting manifest sha256:190db3d1cc83051b924110dbc181878b54d8d657c64145d9945d5b741adea402 0.4s done
+#12 exporting config sha256:b9a7d6f02481f38d8372a7db809ed4aaf2566f137d9e630ab40aa9e3c7559cd0 0.4s done
+#12 exporting attestation manifest sha256:0afb2538cd7ade199a252a98bf6309f7d023c9a5f551b031d2d26f86e1daa1b7 0.5s done
+#12 exporting manifest list sha256:6f17eaa91a15d947d1cb56992e44aff9c01e13eef88466f08e1f880373b5b52c
+#12 exporting manifest list sha256:6f17eaa91a15d947d1cb56992e44aff9c01e13eef88466f08e1f880373b5b52c 0.2s done
+#12 naming to docker.io/library/orbit-managed-runner-firewall:local 0.1s done
+#12 unpacking to docker.io/library/orbit-managed-runner-firewall:local
+#12 unpacking to docker.io/library/orbit-managed-runner-firewall:local 0.4s done
+#12 DONE 2.5s
+
+#13 [docker-channel] resolving provenance for metadata file
+#13 DONE 0.0s
+
+#14 [managed-runner-firewall] resolving provenance for metadata file
+#14 DONE 0.0s
+ Image orbit-docker-channel:local Built 
+ Image orbit-managed-runner-firewall:local Built 
+==> Building the managed runner image from deploy/managed-runner/image (local, never pushed)
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 9.30kB done
+#1 DONE 0.2s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#2 DONE 2.0s
+
+#3 docker-image://docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#3 resolve docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.1s done
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
+#4 DONE 2.1s
+
+#5 [internal] load metadata for docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#5 DONE 2.3s
+
+#6 [internal] load build context
+#6 DONE 0.0s
+
+#7 [claude 1/2] FROM docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
+#7 resolve docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
+#7 resolve docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 0.3s done
+#7 DONE 0.4s
+
+#8 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#8 resolve docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#8 resolve docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 0.4s done
+#8 DONE 0.4s
+
+#6 [internal] load build context
+#6 transferring context: 390.20kB 0.1s
+#6 transferring context: 7.75MB 0.8s done
+#6 DONE 1.0s
+
+#9 [orbit-build 2/4] WORKDIR /src/runner-go
+#9 CACHED
+
+#10 [orbit-build 3/4] COPY src/runner-go/ ./
+#10 CACHED
+
+#11 [orbit-build 4/4] RUN test "$(go env GOVERSION)" = go1.27.1  && printf '%s\n' "d29ffe5254e7da381a880bcc16ae20c68f7dfeee" | grep -Eq '^[0-9a-f]{40}$'  && go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.sourceSHA=d29ffe5254e7da381a880bcc16ae20c68f7dfeee -X main.version=managed-d29ffe5254e7da381a880bcc16ae20c68f7dfeee"       -o /out/orbit .
+#11 8.254 go: downloading golang.org/x/sys v0.30.0
+#11 8.254 go: downloading github.com/coder/websocket v1.8.15
+#11 8.254 go: downloading google.golang.org/protobuf v1.36.12
+#11 DONE 65.4s
+
+#12 [stage-3  4/11] COPY --from=codex /opt/codex/ /opt/codex/
+#12 CACHED
+
+#13 [claude 2/2] RUN test "$(node --version)" = v26.10.0  && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.300  && install -D -m 0755       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude"       /opt/claude/bin/claude
+#13 CACHED
+
+#14 [stage-3  5/11] COPY --from=claude /opt/claude/ /opt/claude/
+#14 CACHED
+
+#15 [stage-3  6/11] COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
+#15 CACHED
+
+#16 [stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*  && printf '%s\n'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260928T000000Z/ trixie main'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260928T000000Z/ trixie-security main'       > /etc/apt/sources.list  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini  && rm -rf /var/lib/apt/lists/*  && groupadd --gid 10001 orbit  && useradd --uid 10001 --gid 10001 --home-dir /var/lib/orbit/home --no-create-home --shell /bin/bash orbit  && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
+#16 CACHED
+
+#17 [stage-3  3/11] COPY --from=orbit-build /usr/local/go/ /usr/local/go/
+#17 CACHED
+
+#18 [codex 2/2] RUN test "$(node --version)" = v26.10.0  && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.158.0  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex  && test -x /opt/codex/bin/codex  && test -x /opt/codex/codex-path/rg
+#18 CACHED
+
+#19 [stage-3  7/11] RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex  && ln -s /opt/claude/bin/claude /usr/local/bin/claude  && chown -R root:root /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit  && chmod -R go-w /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit  && chmod 0755 /usr/local/share/orbit  && git config --system user.name 'Orbit Runner'  && git config --system user.email runner@orbit.invalid
+#19 CACHED
+
+#20 [stage-3  8/11] COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
+#20 DONE 1.8s
+
+#21 [stage-3  9/11] COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
+#21 DONE 1.0s
+
+#22 [stage-3 10/11] RUN <<'SH' (set -eu...)
+#22 6.218 WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "/tmp/orbit-version-check/.codex", but that path does not exist
+#22 DONE 14.2s
+
+#23 [stage-3 11/11] WORKDIR /var/lib/orbit
+#23 DONE 1.2s
+
+#24 exporting to image
+#24 exporting layers
+#24 exporting layers 4.6s done
+#24 exporting manifest sha256:2e999fc4446ea8039885b2478ec4e92229624c714782e0e9f169c256b1a55553
+#24 exporting manifest sha256:2e999fc4446ea8039885b2478ec4e92229624c714782e0e9f169c256b1a55553 0.2s done
+#24 exporting config sha256:2049e3fec00cb3bd372a15f85baddccfeb2f1149ffa00992fe6dce0ac8b60949
+#24 exporting config sha256:2049e3fec00cb3bd372a15f85baddccfeb2f1149ffa00992fe6dce0ac8b60949 0.3s done
+#24 naming to docker.io/library/orbit-managed-runner:local
+#24 naming to docker.io/library/orbit-managed-runner:local 0.1s done
+#24 unpacking to docker.io/library/orbit-managed-runner:local
+#24 unpacking to docker.io/library/orbit-managed-runner:local 1.8s done
+#24 DONE 7.7s
+{"ok": true, "instanceId": "orbit-lab-b"}
+==> The managed runner image is now sha256:2e999fc4446ea8039885b2478ec4e92229624c714782e0e9f169c256b1a55553 in channel.json
+    (it was sha256:61e1370ab959fb736d88b112ca7bef18e12164ae8f3d3a703c4a212e37da0dad: containers made from it keep running on it until they stop)
+==> Recreating the managed runners' firewall if it changed
+ Container orbit-managed-runner-firewall Recreate 
+ Container orbit-managed-runner-firewall Recreated 
+ Container orbit-managed-runner-firewall Starting 
+ Container orbit-managed-runner-firewall Started 
+ Container orbit-managed-runner-firewall Waiting 
+ Container orbit-managed-runner-firewall Healthy 
+==> Recreating docker-channel to read channel.json
+ Container orbit-docker-channel Recreate 
+ Container orbit-docker-channel Recreated 
+ Container orbit-docker-channel Starting 
+ Container orbit-docker-channel Started 
+ Container orbit-docker-channel Waiting 
+ Container orbit-docker-channel Healthy 
+✓ Upgraded to d29ffe5254e7da381a880bcc16ae20c68f7dfeee.
+Instance:     orbit-lab-b
+Listens on:   {"host": "172.31.92.30", "port": 7300} for ["172.31.92.10"]
+Checkout:     d29ffe5254e7da381a880bcc16ae20c68f7dfeee
+Image:        sha256:2e999fc4446ea8039885b2478ec4e92229624c714782e0e9f169c256b1a55553 in channel.json, built from d29ffe5254e7da381a880bcc16ae20c68f7dfeee
+Firewall:     {"apiPort": 2086, "backend": "nft", "bootId": "b519c2e2-1152-4338-b996-c2108aeeb937", "bridge": "br-cf738c8d7e37", "checkedAt": 1794666199, "gateway": "172.18.0.1", "network": "orbit-managed-runners", "schemaVersion": 1, "state": "enforced", "validUntil": 1794666229}
+Services:
+docker-channel: Up 12 seconds (healthy)
+managed-runner-firewall: Up 22 seconds (healthy)
+Runner containers of orbit-lab-b:
+mr-01a1da64-d6b6-75e8-8a89-de62633fedae Up 13 minutes 61e1370ab959
+mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f Up 15 minutes 61e1370ab959
+mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f Up 15 minutes 61e1370ab959
+Data volumes: 5
+upgrade exit 0

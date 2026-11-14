@@ -1,0 +1,282 @@
+2026-11-14T11:40:07.272Z first: the first visitor created the administrator
+2026-11-14T11:40:07.542Z first: a model key on the fake model: deepseek
+2026-11-14T11:40:08.431Z first: placed (namespace, state, generation) = "orbit-lab-a\tPROVISIONING\t1"
+2026-11-14T11:40:35.888Z first: managed runner READY and usable: after 27.3 s
+2026-11-14T11:40:36.671Z first: READY on "orbit-lab-a\tREADY\t1"
+2026-11-14T11:51:06.119Z first: session 34xQWUYttgVjiTOEzXJGf answered (from POST /sessions): after 6.8 s
+2026-11-14T11:51:06.232Z first: session 34xQWUYttgVjiTOEzXJGf answered 7.0 s after POST /sessions, runner on "orbit-lab-a\tREADY\t1"
+2026-11-14T11:51:16.994Z === state: step 0: docker.hosts = [A]
+2026-11-14T11:51:17.917Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T11:51:17.917Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T11:51:17.917Z host A (mrmh-chan-a) runner containers:
+2026-11-14T11:51:18.247Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=1 image=7f66c5f86923 Up 11 minutes
+2026-11-14T11:51:18.247Z host B (mrmh-chan-b) runner containers:
+2026-11-14T11:53:05.638Z u2: the administrator created the account
+2026-11-14T11:53:06.185Z u2: a model key on the fake model: deepseek-2
+2026-11-14T11:53:06.683Z u2: placed (namespace, state, generation) = "orbit-lab-b\tPROVISIONING\t1"
+2026-11-14T11:54:03.518Z u2: managed runner READY and usable: after 56.7 s
+2026-11-14T11:54:05.942Z u2: READY on "orbit-lab-b\tREADY\t1"
+orbit-lab-a|1/5|1000/18000
+orbit-lab-b|1/5|1000/18000
+2026-11-14T11:54:12.836Z u3: the administrator created the account
+2026-11-14T11:54:13.526Z u3: a model key on the fake model: deepseek-3
+2026-11-14T11:54:15.209Z u3: placed (namespace, state, generation) = "orbit-lab-a\tPROVISIONING\t1"
+2026-11-14T11:54:40.546Z u3: managed runner READY and usable: after 25.2 s
+2026-11-14T11:54:41.042Z u3: READY on "orbit-lab-a\tREADY\t1"
+orbit-lab-a|2/5|2000/18000
+orbit-lab-b|1/5|1000/18000
+2026-11-14T11:54:41.726Z u4: the administrator created the account
+2026-11-14T11:54:41.989Z u4: a model key on the fake model: deepseek-4
+2026-11-14T11:54:42.129Z u4: placed (namespace, state, generation) = "orbit-lab-b\tREQUESTED\t1"
+2026-11-14T11:55:19.072Z u4: managed runner READY and usable: after 36.8 s
+2026-11-14T11:55:21.354Z u4: READY on "orbit-lab-b\tREADY\t1"
+orbit-lab-a|2/5|2000/18000
+orbit-lab-b|2/5|2000/18000
+2026-11-14T11:56:35.974Z u2: session 34xQdv5bO2eZCn3kz3hfq answered (from POST /sessions): after 43.3 s
+2026-11-14T11:56:36.454Z u2: session 34xQdv5bO2eZCn3kz3hfq answered 44.5 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T11:57:19.833Z u3: session 34xQf3UxSjHwhgml2REvs answered (from POST /sessions): after 42.8 s
+2026-11-14T11:57:21.485Z u3: session 34xQf3UxSjHwhgml2REvs answered 43.5 s after POST /sessions, runner on "orbit-lab-a\tREADY\t1"
+2026-11-14T11:57:48.418Z u4: session 34xQgKKJn4CiiiMsl8Pnd answered (from POST /sessions): after 20.1 s
+2026-11-14T11:57:48.570Z u4: session 34xQgKKJn4CiiiMsl8Pnd answered 22.7 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T11:57:48.961Z === state: step a: docker.hosts = [A, B], after u2 u3 u4
+2026-11-14T11:57:49.324Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T11:57:49.324Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T11:57:49.324Z   u2@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f
+2026-11-14T11:57:49.324Z   u3@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023
+2026-11-14T11:57:49.324Z   u4@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f
+2026-11-14T11:57:49.324Z host A (mrmh-chan-a) runner containers:
+2026-11-14T11:57:49.611Z   mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023 gen=1 image=7f66c5f86923 Up 3 minutes
+2026-11-14T11:57:49.612Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=1 image=7f66c5f86923 Up 17 minutes
+2026-11-14T11:57:49.612Z host B (mrmh-chan-b) runner containers:
+2026-11-14T11:57:49.818Z   mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=1 image=61e1370ab959 Up 3 minutes
+2026-11-14T11:57:49.818Z   mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=1 image=61e1370ab959 Up 4 minutes
+orbit-lab-a|2/5
+orbit-lab-b|2/5
+2026-11-14T12:00:09.232Z u5: the administrator created the account
+2026-11-14T12:00:10.267Z u5: a model key on the fake model: deepseek-5
+2026-11-14T12:00:10.917Z u5: placed (namespace, state, generation) = "orbit-lab-b\tPROVISIONING\t1"
+2026-11-14T12:01:10.842Z u5: managed runner READY and usable: after 59.7 s
+2026-11-14T12:01:15.051Z u5: READY on "orbit-lab-b\tREADY\t1"
+2026-11-14T12:01:28.617Z u5: session 34xQm8KR5BFrn2nNO8I0h answered (from POST /sessions): after 12.5 s
+2026-11-14T12:01:31.204Z u5: session 34xQm8KR5BFrn2nNO8I0h answered 12.9 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T12:02:13.969Z first: session 34xQmWv1T15jiO9goMqnN answered (from POST /sessions): after 42.1 s
+2026-11-14T12:02:15.698Z first: session 34xQmWv1T15jiO9goMqnN answered 43.8 s after POST /sessions, runner on "orbit-lab-a\tREADY\t1"
+2026-11-14T12:02:31.781Z u3: session 34xQnqDilIOD16ZYr2SiY answered (from POST /sessions): after 8.4 s
+2026-11-14T12:02:34.529Z u3: session 34xQnqDilIOD16ZYr2SiY answered 8.9 s after POST /sessions, runner on "orbit-lab-a\tREADY\t1"
+2026-11-14T12:02:38.409Z === state: step b: A draining, after u5
+2026-11-14T12:02:38.632Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T12:02:38.632Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T12:02:38.632Z   u2@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f
+2026-11-14T12:02:38.632Z   u3@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023
+2026-11-14T12:02:38.632Z   u4@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f
+2026-11-14T12:02:38.632Z   u5@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04
+2026-11-14T12:02:38.632Z host A (mrmh-chan-a) runner containers:
+2026-11-14T12:02:39.003Z   mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023 gen=1 image=7f66c5f86923 Up 8 minutes
+2026-11-14T12:02:39.003Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=1 image=7f66c5f86923 Up 22 minutes
+2026-11-14T12:02:39.003Z host B (mrmh-chan-b) runner containers:
+2026-11-14T12:02:39.424Z   mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04 gen=1 image=61e1370ab959 Up 2 minutes
+2026-11-14T12:02:39.424Z   mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=1 image=61e1370ab959 Up 7 minutes
+2026-11-14T12:02:39.424Z   mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=1 image=61e1370ab959 Up 9 minutes
+==> 2026-11-14T12:04:32Z stopping channel A (docker compose stop docker-channel on mrmh-chan-a)
+ Container orbit-docker-channel Stopped 
+2026-11-14T12:04:58.640Z u6: the administrator created the account
+2026-11-14T12:04:59.003Z u6: a model key on the fake model: deepseek-6
+2026-11-14T12:04:59.289Z u6: placed (namespace, state, generation) = "orbit-lab-b\tPROVISIONING\t1"
+2026-11-14T12:05:14.775Z u6: managed runner READY and usable: after 15.4 s
+2026-11-14T12:05:15.766Z u6: READY on "orbit-lab-b\tREADY\t1"
+2026-11-14T12:05:21.623Z u6: session 34xQsDoj8k8qoz1vLW6Qu answered (from POST /sessions): after 5.0 s
+2026-11-14T12:05:21.839Z u6: session 34xQsDoj8k8qoz1vLW6Qu answered 5.6 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T12:05:23.794Z u2: session 34xQsNJbPDL7kzzx9iUjb answered (from POST /sessions): after 1.6 s
+2026-11-14T12:05:24.401Z u2: session 34xQsNJbPDL7kzzx9iUjb answered 1.7 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T12:05:26.270Z u4: session 34xQsQzPpMeFnMu2XRcNR answered (from POST /sessions): after 1.8 s
+2026-11-14T12:05:26.532Z u4: session 34xQsQzPpMeFnMu2XRcNR answered 1.8 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T12:05:26.654Z === state: step c1: channel A stopped (refused), after u6
+2026-11-14T12:05:27.702Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T12:05:27.702Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T12:05:27.702Z   u2@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f
+2026-11-14T12:05:27.702Z   u3@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023
+2026-11-14T12:05:27.702Z   u4@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f
+2026-11-14T12:05:27.702Z   u5@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04
+2026-11-14T12:05:27.702Z   u6@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9f2-50e9-71d8-a277-1847e8ee0873
+2026-11-14T12:05:27.702Z host A (mrmh-chan-a) runner containers:
+2026-11-14T12:05:29.575Z   mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023 gen=1 image=7f66c5f86923 Up 11 minutes
+2026-11-14T12:05:29.575Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=1 image=7f66c5f86923 Up 25 minutes
+2026-11-14T12:05:29.575Z host B (mrmh-chan-b) runner containers:
+2026-11-14T12:05:30.186Z   mr-01a1d9f2-50e9-71d8-a277-1847e8ee0873 gen=1 image=61e1370ab959 Up 28 seconds
+2026-11-14T12:05:30.186Z   mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04 gen=1 image=61e1370ab959 Up 4 minutes
+2026-11-14T12:05:30.186Z   mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=1 image=61e1370ab959 Up 10 minutes
+2026-11-14T12:05:30.186Z   mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=1 image=61e1370ab959 Up 12 minutes
+2026-11-14T12:05:53.915Z u3: session 34xQsy7PuNvQiR4QzzBRn answered (from POST /sessions): after 8.3 s
+2026-11-14T12:05:54.098Z u3: session 34xQsy7PuNvQiR4QzzBRn answered 8.4 s after POST /sessions, runner on "orbit-lab-a\tREADY\t1"
+==> 2026-11-14T12:05:54Z starting channel A again
+==> 2026-11-14T12:06:25Z no channel-A warning in the apiserver's last 20 s
+2026-11-14T12:07:09.213Z first: session 34xQu0jGZ7TVIlfIOnQLm answered (from POST /sessions): after 42.2 s
+2026-11-14T12:07:11.715Z first: session 34xQu0jGZ7TVIlfIOnQLm answered 43.6 s after POST /sessions, runner on "orbit-lab-a\tREADY\t1"
+2026-11-14T12:07:14.349Z === state: step c1: channel A back
+2026-11-14T12:07:20.106Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T12:07:20.134Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T12:07:20.134Z   u2@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f
+2026-11-14T12:07:20.134Z   u3@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023
+2026-11-14T12:07:20.134Z   u4@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f
+2026-11-14T12:07:20.134Z   u5@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04
+2026-11-14T12:07:20.134Z   u6@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9f2-50e9-71d8-a277-1847e8ee0873
+2026-11-14T12:07:20.135Z host A (mrmh-chan-a) runner containers:
+2026-11-14T12:07:20.718Z   mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023 gen=1 image=7f66c5f86923 Up 12 minutes
+2026-11-14T12:07:20.718Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=1 image=7f66c5f86923 Up 27 minutes
+2026-11-14T12:07:20.718Z host B (mrmh-chan-b) runner containers:
+2026-11-14T12:07:21.228Z   mr-01a1d9f2-50e9-71d8-a277-1847e8ee0873 gen=1 image=61e1370ab959 Up 2 minutes
+2026-11-14T12:07:21.229Z   mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04 gen=1 image=61e1370ab959 Up 6 minutes
+2026-11-14T12:07:21.229Z   mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=1 image=61e1370ab959 Up 12 minutes
+2026-11-14T12:07:21.229Z   mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=1 image=61e1370ab959 Up 14 minutes
+==> 2026-11-14T12:07:51Z blackholing channel A: iptables -I INPUT -s 172.31.92.10 -p tcp --dport 7300 -j DROP on mrmh-chan-a
+2026-11-14T12:08:07.109Z u7: the administrator created the account
+2026-11-14T12:08:07.338Z u7: a model key on the fake model: deepseek-7
+2026-11-14T12:08:08.067Z u7: placed (namespace, state, generation) = "orbit-lab-a\tREQUESTED\t1"
+2026-11-14T12:19:04.317Z u2: session 34xRD4Sa8vPEb5NVArQbL answered (from POST /sessions): after 6.0 s
+2026-11-14T12:19:04.465Z u2: session 34xRD4Sa8vPEb5NVArQbL answered 6.1 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T12:19:04.496Z === state: step c2 before the fix: channel A blackholed, u7 placed on A
+2026-11-14T12:19:04.670Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T12:19:04.670Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T12:19:04.670Z   u2@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f
+2026-11-14T12:19:04.670Z   u3@mrmh.test | orbit-lab-a | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023
+2026-11-14T12:19:04.670Z   u4@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f
+2026-11-14T12:19:04.670Z   u5@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04
+2026-11-14T12:19:04.670Z   u6@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1d9f2-50e9-71d8-a277-1847e8ee0873
+2026-11-14T12:19:04.670Z   u7@mrmh.test | orbit-lab-a | PROVISIONING | RUNNING | 1 | OFFLINE | - | TRANSIENT
+2026-11-14T12:19:04.670Z host A (mrmh-chan-a) runner containers:
+2026-11-14T12:19:04.879Z   mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023 gen=1 image=7f66c5f86923 Up 24 minutes
+2026-11-14T12:19:04.880Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=1 image=7f66c5f86923 Up 38 minutes
+2026-11-14T12:19:04.880Z host B (mrmh-chan-b) runner containers:
+2026-11-14T12:19:04.977Z   mr-01a1d9f2-50e9-71d8-a277-1847e8ee0873 gen=1 image=61e1370ab959 Up 14 minutes
+2026-11-14T12:19:04.977Z   mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04 gen=1 image=61e1370ab959 Up 18 minutes
+2026-11-14T12:19:04.977Z   mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=1 image=61e1370ab959 Up 24 minutes
+2026-11-14T12:19:04.977Z   mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=1 image=61e1370ab959 Up 25 minutes
+==> 2026-11-14T12:19:04Z unblocking channel A
+container mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f: 3 reads; gaps between passes (s): [243, 246]; max 246.0
+2026-11-14T12:19:28.581Z u7: managed runner READY and usable: after 18.2 s
+2026-11-14T12:19:29.382Z u7: READY on "orbit-lab-a\tREADY\t1"
+2026-11-14T12:19:33.085Z u7: session 34xRDrhAlq6KZyJS9X5yv answered (from POST /sessions): after 3.4 s
+2026-11-14T12:19:33.211Z u7: session 34xRDrhAlq6KZyJS9X5yv answered 3.5 s after POST /sessions, runner on "orbit-lab-a\tREADY\t1"
+2026-11-14T12:19:34.710Z u3: session 34xRDxaiiPymj3Hqt6R3E answered (from POST /sessions): after 1.4 s
+2026-11-14T12:19:35.149Z u3: session 34xRDxaiiPymj3Hqt6R3E answered 1.4 s after POST /sessions, runner on "orbit-lab-a\tREADY\t1"
+container mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f: 4 reads; gaps between passes (s): [5, 5, 6]; max 6.0
+==> 2026-11-14T14:06:31Z lab machines OOM-killed by the HPC host (13:26Z), restarted; apiserver recreated at d29ffe525 (the fix)
+2026-11-14T14:08:10.750Z first: managed runner READY and usable: after 45.1 s
+2026-11-14T14:08:12.092Z first: READY on "orbit-lab-a\tREADY\t2"
+2026-11-14T14:08:12.515Z u2: managed runner READY and usable: after 0.0 s
+2026-11-14T14:08:12.641Z u2: READY on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:08:12.710Z u3: managed runner READY and usable: after 0.0 s
+2026-11-14T14:08:12.807Z u3: READY on "orbit-lab-a\tREADY\t2"
+2026-11-14T14:08:12.880Z u4: managed runner READY and usable: after 0.0 s
+2026-11-14T14:08:13.013Z u4: READY on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:08:13.128Z u5: managed runner READY and usable: after 0.0 s
+2026-11-14T14:08:13.231Z u5: READY on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:08:13.302Z u6: managed runner READY and usable: after 0.0 s
+2026-11-14T14:08:13.427Z u6: READY on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:08:13.508Z u7: managed runner READY and usable: after 0.0 s
+2026-11-14T14:08:13.616Z u7: READY on "orbit-lab-a\tREADY\t2"
+2026-11-14T14:08:13.932Z === state: after the OOM restart, apiserver at d29ffe525
+2026-11-14T14:08:14.041Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T14:08:14.041Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T14:08:14.041Z   u2@mrmh.test | orbit-lab-b | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f
+2026-11-14T14:08:14.041Z   u3@mrmh.test | orbit-lab-a | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023
+2026-11-14T14:08:14.041Z   u4@mrmh.test | orbit-lab-b | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f
+2026-11-14T14:08:14.041Z   u5@mrmh.test | orbit-lab-b | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04
+2026-11-14T14:08:14.041Z   u6@mrmh.test | orbit-lab-b | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9f2-50e9-71d8-a277-1847e8ee0873
+2026-11-14T14:08:14.041Z   u7@mrmh.test | orbit-lab-a | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9f5-3116-72f5-adf7-f6a99be0e467
+2026-11-14T14:08:14.041Z host A (mrmh-chan-a) runner containers:
+2026-11-14T14:08:14.155Z   mr-01a1d9e8-761f-7549-b1e8-d6e15b8ea023 gen=2 image=7f66c5f86923 Up 51 seconds
+2026-11-14T14:08:14.155Z   mr-01a1d9f5-3116-72f5-adf7-f6a99be0e467 gen=2 image=7f66c5f86923 Up 55 seconds
+2026-11-14T14:08:14.155Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=2 image=7f66c5f86923 Up 58 seconds
+2026-11-14T14:08:14.155Z host B (mrmh-chan-b) runner containers:
+2026-11-14T14:08:14.217Z   mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=2 image=61e1370ab959 Up 11 seconds
+2026-11-14T14:08:14.217Z   mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=2 image=61e1370ab959 Up 18 seconds
+2026-11-14T14:08:14.217Z   mr-01a1d9f2-50e9-71d8-a277-1847e8ee0873 gen=2 image=61e1370ab959 Up 35 seconds
+2026-11-14T14:08:14.217Z   mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04 gen=2 image=61e1370ab959 Up 39 seconds
+2026-11-14T14:08:19.779Z u3: sleep answered 202: {"state":"READY","desired":"SLEEPING","reason":null}
+2026-11-14T14:08:38.001Z u3: asleep: after 18.2 s
+2026-11-14T14:08:38.408Z u3: now "orbit-lab-a\tSLEEPING\t3"
+2026-11-14T14:08:38.793Z u7: sleep answered 202: {"state":"READY","desired":"SLEEPING","reason":null}
+2026-11-14T14:09:00.002Z u7: asleep: after 21.2 s
+2026-11-14T14:09:01.255Z u7: now "orbit-lab-a\tSLEEPING\t3"
+2026-11-14T14:09:01.909Z u5: sleep answered 202: {"state":"READY","desired":"SLEEPING","reason":null}
+2026-11-14T14:09:16.958Z u5: asleep: after 15.0 s
+2026-11-14T14:09:17.541Z u5: now "orbit-lab-b\tSLEEPING\t3"
+2026-11-14T14:09:17.849Z u6: sleep answered 202: {"state":"READY","desired":"SLEEPING","reason":null}
+2026-11-14T14:09:48.144Z u6: asleep: after 30.3 s
+2026-11-14T14:09:48.601Z u6: now "orbit-lab-b\tSLEEPING\t3"
+orbit-lab-a|1/5
+orbit-lab-b|2/5
+==> 2026-11-14T14:09:55Z (after the fix) blackholing channel A: iptables -I INPUT -s 172.31.92.10 -p tcp --dport 7300 -j DROP on mrmh-chan-a
+2026-11-14T14:10:03.987Z u8: the administrator created the account
+2026-11-14T14:10:04.341Z u8: a model key on the fake model: deepseek-8
+2026-11-14T14:10:04.797Z u8: placed (namespace, state, generation) = "orbit-lab-b\tREQUESTED\t1"
+2026-11-14T14:10:29.036Z u8: managed runner READY and usable: after 24.1 s
+2026-11-14T14:10:29.811Z u8: READY on "orbit-lab-b\tREADY\t1"
+2026-11-14T14:10:36.973Z u8: session 34xTwmActVlZOJmjIqCY8 answered (from POST /sessions): after 6.0 s
+2026-11-14T14:10:37.564Z u8: session 34xTwmActVlZOJmjIqCY8 answered 6.9 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T14:10:40.850Z u2: session 34xTwxdFt0LTXxi0yBjiN answered (from POST /sessions): after 3.2 s
+2026-11-14T14:10:41.312Z u2: session 34xTwxdFt0LTXxi0yBjiN answered 3.2 s after POST /sessions, runner on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:10:43.140Z u4: session 34xTx3VXUE1PUcUpAnzSs answered (from POST /sessions): after 1.8 s
+2026-11-14T14:10:43.344Z u4: session 34xTx3VXUE1PUcUpAnzSs answered 1.8 s after POST /sessions, runner on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:14:22.290Z u2: session 34xU2BpGKNo8IKzFSw7Ib answered (from POST /sessions): after 18.3 s
+2026-11-14T14:14:22.677Z u2: session 34xU2BpGKNo8IKzFSw7Ib answered 18.7 s after POST /sessions, runner on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:14:23.948Z === state: step c2 after the fix: channel A blackholed for 4 min, u8 placed on B
+2026-11-14T14:14:24.092Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T14:14:24.092Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T14:14:24.092Z   u2@mrmh.test | orbit-lab-b | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f
+2026-11-14T14:14:24.092Z   u3@mrmh.test | orbit-lab-a | SLEEPING | SLEEPING | 3 | ONLINE | LINK | - | 
+2026-11-14T14:14:24.092Z   u4@mrmh.test | orbit-lab-b | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f
+2026-11-14T14:14:24.092Z   u5@mrmh.test | orbit-lab-b | SLEEPING | SLEEPING | 3 | ONLINE | LINK | - | 
+2026-11-14T14:14:24.092Z   u6@mrmh.test | orbit-lab-b | SLEEPING | SLEEPING | 3 | ONLINE | LINK | - | 
+2026-11-14T14:14:24.092Z   u7@mrmh.test | orbit-lab-a | SLEEPING | SLEEPING | 3 | ONLINE | LINK | - | 
+2026-11-14T14:14:24.092Z   u8@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1da64-d6b6-75e8-8a89-de62633fedae
+2026-11-14T14:14:24.092Z host A (mrmh-chan-a) runner containers:
+2026-11-14T14:14:25.257Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=2 image=7f66c5f86923 Up 7 minutes
+2026-11-14T14:14:25.311Z host B (mrmh-chan-b) runner containers:
+2026-11-14T14:14:26.066Z   mr-01a1da64-d6b6-75e8-8a89-de62633fedae gen=1 image=61e1370ab959 Up 4 minutes
+2026-11-14T14:14:26.067Z   mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=2 image=61e1370ab959 Up 6 minutes
+2026-11-14T14:14:26.067Z   mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=2 image=61e1370ab959 Up 6 minutes
+container mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f: 32 reads; gaps between passes (s): [11, 8, 9, 8, 8, 8, 8, 9, 9, 8, 8, 8, 8, 8, 9, 8, 9, 8, 8, 9, 8, 8, 8, 9, 9, 8, 8, 8, 8, 9, 8]; max 11.0
+==> 2026-11-14T14:15:18Z unblocking channel A
+==> 2026-11-14T14:15:21Z channel A asked about first's container again: 2026-11-14T14:15:19Z orbit-docker-channel: GET /v1/info -> 200 2026-11-14T14:15:19Z orbit-docker-channel: GET /v1/volumes/mr-data-01a1d9db-8e96-76ef-bc25-e1055c8117cb -> 200 
+2026-11-14T14:15:57.494Z first: session 34xU4ASE0UsruAt8Q4eLB answered (from POST /sessions): after 35.6 s
+2026-11-14T14:15:58.721Z first: session 34xU4ASE0UsruAt8Q4eLB answered 36.0 s after POST /sessions, runner on "orbit-lab-a\tREADY\t2"
+2026-11-14T14:23:53.130Z u2: session 34xUGkZu4DvQSaswZPUt0 answered (from POST /sessions): after 15.1 s
+2026-11-14T14:23:53.647Z u2: session 34xUGkZu4DvQSaswZPUt0 answered 15.3 s after POST /sessions, runner on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:23:56.294Z u4: session 34xUH9OWsAnnPY3OCluUx answered (from POST /sessions): after 2.5 s
+2026-11-14T14:23:56.703Z u4: session 34xUH9OWsAnnPY3OCluUx answered 2.5 s after POST /sessions, runner on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:23:59.433Z u8: session 34xUHEWVlBkgsEwHldRDp answered (from POST /sessions): after 2.4 s
+2026-11-14T14:23:59.565Z u8: session 34xUHEWVlBkgsEwHldRDp answered 2.4 s after POST /sessions, runner on "orbit-lab-b\tREADY\t1"
+2026-11-14T14:24:14.232Z u5: wake answered 202: {"state":"SLEEPING","desired":"RUNNING","reason":null}
+2026-11-14T14:24:38.542Z u5: READY again: after 24.3 s
+2026-11-14T14:24:41.816Z u5: now "orbit-lab-b\tREADY\t3"
+2026-11-14T14:24:41.965Z u2: sleep answered 202: {"state":"READY","desired":"SLEEPING","reason":null}
+2026-11-14T14:25:12.287Z u2: asleep: after 30.3 s
+2026-11-14T14:25:34.369Z u2: now "orbit-lab-b\tSLEEPING\t3"
+2026-11-14T14:25:35.136Z u2: wake answered 202: {"state":"SLEEPING","desired":"RUNNING","reason":null}
+2026-11-14T14:26:09.051Z u2: READY again: after 33.9 s
+2026-11-14T14:26:09.731Z u2: now "orbit-lab-b\tREADY\t3"
+2026-11-14T14:26:15.933Z u5: session 34xUKbi8l4qEKl594yvrO answered (from POST /sessions): after 5.7 s
+2026-11-14T14:26:16.453Z u5: session 34xUKbi8l4qEKl594yvrO answered 5.9 s after POST /sessions, runner on "orbit-lab-b\tREADY\t3"
+2026-11-14T14:26:19.965Z u2: session 34xUKlnroI1QnWnFsqz2n answered (from POST /sessions): after 3.4 s
+2026-11-14T14:26:20.529Z u2: session 34xUKlnroI1QnWnFsqz2n answered 3.5 s after POST /sessions, runner on "orbit-lab-b\tREADY\t3"
+2026-11-14T14:26:23.404Z u4: session 34xUKsEwtduZ1vZz2sa2L answered (from POST /sessions): after 2.8 s
+2026-11-14T14:26:23.958Z u4: session 34xUKsEwtduZ1vZz2sa2L answered 2.8 s after POST /sessions, runner on "orbit-lab-b\tREADY\t2"
+2026-11-14T14:26:24.073Z === state: step d: after B's upgrade to d29ffe525, u5 woken, u2 slept and woken
+2026-11-14T14:26:24.224Z mappings (account, host instance, management_state, desired, generation, runner status, link, failure, container):
+2026-11-14T14:26:24.225Z   first@mrmh.test | orbit-lab-a | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb
+2026-11-14T14:26:24.225Z   u2@mrmh.test | orbit-lab-b | READY | RUNNING | 3 | ONLINE | LINK | - | mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f
+2026-11-14T14:26:24.225Z   u3@mrmh.test | orbit-lab-a | SLEEPING | SLEEPING | 3 | ONLINE | LINK | - | 
+2026-11-14T14:26:24.225Z   u4@mrmh.test | orbit-lab-b | READY | RUNNING | 2 | ONLINE | LINK | - | mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f
+2026-11-14T14:26:24.225Z   u5@mrmh.test | orbit-lab-b | READY | RUNNING | 3 | ONLINE | LINK | - | mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04
+2026-11-14T14:26:24.225Z   u6@mrmh.test | orbit-lab-b | SLEEPING | SLEEPING | 3 | ONLINE | LINK | - | 
+2026-11-14T14:26:24.225Z   u7@mrmh.test | orbit-lab-a | SLEEPING | SLEEPING | 3 | ONLINE | LINK | - | 
+2026-11-14T14:26:24.225Z   u8@mrmh.test | orbit-lab-b | READY | RUNNING | 1 | ONLINE | LINK | - | mr-01a1da64-d6b6-75e8-8a89-de62633fedae
+2026-11-14T14:26:24.225Z host A (mrmh-chan-a) runner containers:
+2026-11-14T14:26:24.351Z   mr-01a1d9db-8e96-76ef-bc25-e1055c8117cb gen=2 image=7f66c5f86923 Up 19 minutes
+2026-11-14T14:26:24.351Z host B (mrmh-chan-b) runner containers:
+2026-11-14T14:26:24.695Z   mr-01a1d9e7-704b-72ca-9cce-e0d0c038e27f gen=3 image=2e999fc4446e Up 44 seconds
+2026-11-14T14:26:24.695Z   mr-01a1d9ed-e642-7149-bdaf-f8b2ba09df04 gen=3 image=2e999fc4446e Up 2 minutes
+2026-11-14T14:26:24.695Z   mr-01a1da64-d6b6-75e8-8a89-de62633fedae gen=1 image=61e1370ab959 Up 16 minutes
+2026-11-14T14:26:24.695Z   mr-01a1d9e8-e703-76ed-ba9b-ccb502f8639f gen=2 image=61e1370ab959 Up 18 minutes

@@ -1,0 +1,584 @@
+==> 2026-11-14T11:30:38Z tunnels
+SERVER_URL=https://connection-retired-submit-sorry.trycloudflare.com
+FAKE_URL=https://hair-hitting-gzip-uri.trycloudflare.com
+==> 2026-11-14T11:30:52Z the server's images
+Loaded image: mrmh-apiserver:local
+Loaded image: mrmh-web:latest
+==> 2026-11-14T11:32:02Z install-server.sh --no-managed-runners --public-origin https://connection-retired-submit-sorry.trycloudflare.com --no-start
+==> Building the link gateway from src/link-gateway (orbit-link-gateway:local, local, never pushed)
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile:
+#1 transferring dockerfile: 1.12kB 0.0s done
+#1 DONE 0.3s
+
+#2 [internal] load metadata for docker.io/library/golang:1.27.3-alpine
+#2 DONE 3.2s
+
+#3 [internal] load .dockerignore
+#3 transferring context:
+#3 transferring context: 80B 0.0s done
+#3 DONE 0.7s
+
+#4 [internal] load build context
+#4 DONE 0.0s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 resolve docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 resolve docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 0.3s done
+#5 ...
+
+#4 [internal] load build context
+#4 transferring context: 685.74kB 0.9s done
+#4 DONE 1.5s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 extracting sha256:881fc932939efef04ca120ad44bbd2c0917851eb247aa4995428afb1e80ede17
+#5 sha256:3f6fea6449ae0cdc0aa3243e118dd884d76a5a908c6e37b868632ec1dde4363f 0B / 126B 0.2s
+#5 sha256:91cd85cbb99965c7b0f724a0fc60517c2c41f3d77b2da9236eaa8717a3de2357 0B / 244.48kB 0.2s
+#5 sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 0B / 71.15MB 0.2s
+#5 extracting sha256:881fc932939efef04ca120ad44bbd2c0917851eb247aa4995428afb1e80ede17 0.4s done
+#5 sha256:3f6fea6449ae0cdc0aa3243e118dd884d76a5a908c6e37b868632ec1dde4363f 126B / 126B 0.3s
+#5 sha256:3f6fea6449ae0cdc0aa3243e118dd884d76a5a908c6e37b868632ec1dde4363f 126B / 126B 0.4s done
+#5 sha256:91cd85cbb99965c7b0f724a0fc60517c2c41f3d77b2da9236eaa8717a3de2357 244.48kB / 244.48kB 1.2s
+#5 sha256:91cd85cbb99965c7b0f724a0fc60517c2c41f3d77b2da9236eaa8717a3de2357 244.48kB / 244.48kB 1.2s done
+#5 extracting sha256:91cd85cbb99965c7b0f724a0fc60517c2c41f3d77b2da9236eaa8717a3de2357 0.1s done
+#5 sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 6.29MB / 71.15MB 1.7s
+#5 sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 11.53MB / 71.15MB 2.7s
+#5 sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 28.31MB / 71.15MB 2.9s
+#5 sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 46.14MB / 71.15MB 3.0s
+#5 sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 63.79MB / 71.15MB 3.2s
+#5 sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 71.15MB / 71.15MB 3.3s
+#5 sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 71.15MB / 71.15MB 3.6s done
+#5 extracting sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b
+#5 extracting sha256:82e0bb27ae78502103ed383ed33346f88a83943fb7bd93977850d5890ee8fb3b 3.4s done
+#5 DONE 9.1s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 extracting sha256:3f6fea6449ae0cdc0aa3243e118dd884d76a5a908c6e37b868632ec1dde4363f 0.1s done
+#5 DONE 9.2s
+
+#5 [build 1/6] FROM docker.io/library/golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18
+#5 extracting sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 0.1s done
+#5 DONE 9.4s
+
+#6 [build 2/6] WORKDIR /src
+#6 DONE 1.2s
+
+#7 [build 3/6] COPY go.mod go.sum ./
+#7 DONE 0.7s
+
+#8 [build 4/6] RUN go mod download && go mod verify
+#8 7.793 all modules verified
+#8 DONE 8.3s
+
+#9 [build 5/6] COPY . .
+#9 DONE 0.8s
+
+#10 [build 6/6] RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=768d892f1215f37707ce984dc4fb3cdade1e5232" -o /link-gateway .
+#10 DONE 29.0s
+
+#11 [stage-1 1/2] COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+#11 DONE 0.6s
+
+#12 [stage-1 2/2] COPY --from=build /link-gateway /link-gateway
+#12 DONE 0.7s
+
+#13 exporting to image
+#13 exporting layers
+#13 exporting layers 1.6s done
+#13 exporting manifest sha256:4d76b27f106f7e6527ffec4b8945c93b557137bd34dfed09acaa186f992c8969 0.1s done
+#13 exporting config sha256:6ce7fb66269e4f79780ef1f63b02822a0dfc3d6233e435b7e69104bf19bc463d 0.1s done
+#13 naming to docker.io/library/orbit-link-gateway:local
+#13 naming to docker.io/library/orbit-link-gateway:local 0.0s done
+#13 unpacking to docker.io/library/orbit-link-gateway:local
+#13 unpacking to docker.io/library/orbit-link-gateway:local 0.9s done
+#13 DONE 2.7s
+==> Writing .env
+✓ Configuration written. Start the stack with: docker compose up -d --build --wait
+==> 2026-11-14T11:33:25Z managed runners on, the channel machines remote
+121:ORBIT_MANAGED_RUNNERS_ENABLED=true
+140:COMPOSE_PROFILES=runner-link
+141:ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+==> 2026-11-14T11:33:27Z profile.json docker.hosts:
+{"instanceId":"orbit-lab-a","channel":{"url":"http://172.31.92.20:7300"},"tokenFile":"/var/lib/orbit-managed-runners/orbit-lab-a.token"}
+==> 2026-11-14T11:33:27Z the fake model (not a model), on the server machine's port 18089
+==> 2026-11-14T11:33:28Z the stack, from the loaded images
+ Image postgres:16-alpine Pulling 
+ Image postgres:16-alpine Pulling 
+ Image nginx:alpine Pulling 
+ Image nats:2.15-alpine Pulling 
+ f5fbdd51c05f Pulling fs layer 0B
+ 97cb5292e90c Pulling fs layer 0B
+ 2058ceffc175 Pulling fs layer 0B
+ 710f3da1112f Pulling fs layer 0B
+ ea98517a315c Pulling fs layer 0B
+ b7106f8586ee Pulling fs layer 0B
+ a2d17f5b24d5 Pulling fs layer 0B
+ 86cc7190d1c0 Pulling fs layer 0B
+ f85a33377d83 Pulling fs layer 0B
+ 6bceb0db2fd1 Pulling fs layer 0B
+ 5959c7ea857a Pulling fs layer 0B
+ 5788ee6f91dc Pulling fs layer 0B
+ 41713cbe7496 Pulling fs layer 0B
+ f997efa53d88 Pulling fs layer 0B
+ 97cb5292e90c Downloading 408B
+ b7106f8586ee Pulling fs layer 0B
+ ea98517a315c Pulling fs layer 0B
+ 41713cbe7496 Pulling fs layer 0B
+ 5788ee6f91dc Pulling fs layer 0B
+ f997efa53d88 Pulling fs layer 0B
+ a2d17f5b24d5 Pulling fs layer 0B
+ f85a33377d83 Pulling fs layer 0B
+ 86cc7190d1c0 Pulling fs layer 0B
+ 5959c7ea857a Pulling fs layer 0B
+ 6bceb0db2fd1 Pulling fs layer 0B
+ 97cb5292e90c Download complete 0B
+ 2058ceffc175 Downloading 561B
+ f5fbdd51c05f Downloading 4.194MB
+ 2058ceffc175 Downloading 561B
+ 710f3da1112f Downloading 3.146MB
+ 710f3da1112f Downloading 3.794MB
+ f5fbdd51c05f Downloading 7.83MB
+ 2058ceffc175 Downloading 561B
+ 2058ceffc175 Downloading 561B
+ 710f3da1112f Downloading 3.794MB
+ f5fbdd51c05f Downloading 7.83MB
+ f5fbdd51c05f Downloading 7.83MB
+ 2058ceffc175 Downloading 561B
+ 710f3da1112f Downloading 3.794MB
+ f5fbdd51c05f Downloading 7.83MB
+ 2058ceffc175 Downloading 561B
+ 710f3da1112f Downloading 3.794MB
+ ea98517a315c Downloading 967B
+ ea98517a315c Downloading 967B
+ 2058ceffc175 Downloading 561B
+ 710f3da1112f Downloading 3.794MB
+ f5fbdd51c05f Downloading 7.83MB
+ f5fbdd51c05f Downloading 7.83MB
+ ea98517a315c Downloading 967B
+ ea98517a315c Downloading 967B
+ 2058ceffc175 Download complete 0B
+ 710f3da1112f Downloading 3.794MB
+ ea98517a315c Downloading 967B
+ f997efa53d88 Downloading 116B
+ f997efa53d88 Downloading 116B
+ ea98517a315c Downloading 967B
+ f5fbdd51c05f Download complete 0B
+ 710f3da1112f Download complete 0B
+ 710f3da1112f Extracting 1B
+ f997efa53d88 Downloading 116B
+ ea98517a315c Download complete 0B
+ f997efa53d88 Downloading 116B
+ ea98517a315c Download complete 0B
+ ea98517a315c Extracting 1B
+ ea98517a315c Extracting 1B
+ 710f3da1112f Extracting 1B
+ f85a33377d83 Downloading 9.673kB
+ f997efa53d88 Download complete 0B
+ f997efa53d88 Download complete 0B
+ f85a33377d83 Downloading 9.673kB
+ ea98517a315c Extracting 1B
+ ea98517a315c Extracting 1B
+ 710f3da1112f Extracting 1B
+ f85a33377d83 Downloading 9.673kB
+ 86cc7190d1c0 Downloading 128B
+ 41713cbe7496 Downloading 900kB
+ ea98517a315c Extracting 1B
+ 41713cbe7496 Downloading 900kB
+ 86cc7190d1c0 Downloading 128B
+ f85a33377d83 Downloading 9.673kB
+ ea98517a315c Extracting 1B
+ 710f3da1112f Extracting 1B
+ f85a33377d83 Downloading 9.673kB
+ 5959c7ea857a Downloading 167B
+ 41713cbe7496 Downloading 900kB
+ f85a33377d83 Downloading 9.673kB
+ 86cc7190d1c0 Downloading 128B
+ 5959c7ea857a Downloading 167B
+ 41713cbe7496 Downloading 900kB
+ 86cc7190d1c0 Downloading 128B
+ ea98517a315c Extracting 1B
+ ea98517a315c Extracting 1B
+ 710f3da1112f Extracting 1B
+ 5959c7ea857a Downloading 167B
+ 6bceb0db2fd1 Downloading 6.108kB
+ 5788ee6f91dc Downloading 175B
+ 41713cbe7496 Downloading 900kB
+ 86cc7190d1c0 Downloading 128B
+ 41713cbe7496 Downloading 900kB
+ 5788ee6f91dc Downloading 175B
+ 86cc7190d1c0 Downloading 128B
+ 5959c7ea857a Downloading 167B
+ 6bceb0db2fd1 Downloading 6.108kB
+ ea98517a315c Extracting 1B
+ ea98517a315c Extracting 1B
+ 710f3da1112f Extracting 1B
+ 41713cbe7496 Downloading 900kB
+ 5788ee6f91dc Downloading 175B
+ 6bceb0db2fd1 Downloading 6.108kB
+ 5788ee6f91dc Downloading 175B
+ 41713cbe7496 Downloading 900kB
+ 86cc7190d1c0 Downloading 128B
+ f85a33377d83 Download complete 0B
+ 5959c7ea857a Downloading 167B
+ f85a33377d83 Download complete 0B
+ 86cc7190d1c0 Downloading 128B
+ 5959c7ea857a Downloading 167B
+ 6bceb0db2fd1 Downloading 6.108kB
+ ea98517a315c Extracting 1B
+ ea98517a315c Extracting 1B
+ 710f3da1112f Extracting 1B
+ 41713cbe7496 Downloading 900kB
+ 5788ee6f91dc Downloading 175B
+ a2d17f5b24d5 Downloading 4.194MB
+ 710f3da1112f Extracting 1B
+ a2d17f5b24d5 Downloading 4.194MB
+ 6bceb0db2fd1 Downloading 6.108kB
+ 5788ee6f91dc Downloading 175B
+ 86cc7190d1c0 Downloading 128B
+ 5959c7ea857a Downloading 167B
+ 6bceb0db2fd1 Downloading 6.108kB
+ ea98517a315c Extracting 1B
+ 41713cbe7496 Downloading 900kB
+ 86cc7190d1c0 Downloading 128B
+ 5959c7ea857a Downloading 167B
+ ea98517a315c Extracting 1B
+ 5788ee6f91dc Downloading 175B
+ a2d17f5b24d5 Downloading 4.194MB
+ 86cc7190d1c0 Downloading 128B
+ 6b9066e344d7 Downloading 15.4kB
+ 5959c7ea857a Downloading 167B
+ b7106f8586ee Downloading 185B
+ 6bceb0db2fd1 Downloading 6.108kB
+ 710f3da1112f Pull complete 0B
+ 41713cbe7496 Downloading 900kB
+ ea98517a315c Extracting 1B
+ a2d17f5b24d5 Downloading 4.194MB
+ 6bceb0db2fd1 Downloading 6.108kB
+ 5788ee6f91dc Downloading 175B
+ 41713cbe7496 Downloading 900kB
+ 86cc7190d1c0 Downloading 128B
+ 5959c7ea857a Downloading 167B
+ b7106f8586ee Downloading 185B
+ ea98517a315c Extracting 1B
+ 6b9066e344d7 Downloading 15.4kB
+ 86cc7190d1c0 Download complete 0B
+ 5959c7ea857a Downloading 167B
+ b7106f8586ee Downloading 185B
+ 86cc7190d1c0 Download complete 0B
+ 5959c7ea857a Downloading 167B
+ b7106f8586ee Downloading 185B
+ 6bceb0db2fd1 Downloading 6.108kB
+ 5788ee6f91dc Downloading 175B
+ a2d17f5b24d5 Downloading 4.194MB
+ a2d17f5b24d5 Downloading 4.194MB
+ 6bceb0db2fd1 Downloading 6.108kB
+ 5788ee6f91dc Downloading 175B
+ ea98517a315c Pull complete 0B
+ ea98517a315c Pull complete 0B
+ 5959c7ea857a Download complete 0B
+ b7106f8586ee Downloading 185B
+ a2d17f5b24d5 Downloading 5.243MB
+ 6bceb0db2fd1 Downloading 6.108kB
+ 5788ee6f91dc Downloading 175B
+ a2d17f5b24d5 Downloading 5.243MB
+ 6b9066e344d7 Downloading 15.4kB
+ 41713cbe7496 Download complete 0B
+ 5959c7ea857a Download complete 0B
+ b7106f8586ee Downloading 185B
+ 6bceb0db2fd1 Downloading 6.108kB
+ 41713cbe7496 Download complete 0B
+ 5788ee6f91dc Downloading 175B
+ df1cd84c95ef Downloading 598kB
+ b7106f8586ee Downloading 185B
+ a2d17f5b24d5 Downloading 5.243MB
+ 6bceb0db2fd1 Download complete 0B
+ b7106f8586ee Downloading 185B
+ a2d17f5b24d5 Downloading 5.243MB
+ df1cd84c95ef Downloading 598kB
+ a2d17f5b24d5 Downloading 5.243MB
+ 5788ee6f91dc Download complete 0B
+ df1cd84c95ef Downloading 598kB
+ df1cd84c95ef Downloading 598kB
+ 6bceb0db2fd1 Download complete 0B
+ 6b9066e344d7 Downloading 15.4kB
+ 5788ee6f91dc Download complete 0B
+ a2d17f5b24d5 Downloading 6.291MB
+ a2d17f5b24d5 Downloading 6.291MB
+ df1cd84c95ef Downloading 598kB
+ a2d17f5b24d5 Downloading 6.291MB
+ df1cd84c95ef Downloading 598kB
+ 6b9066e344d7 Downloading 15.4kB
+ df1cd84c95ef Downloading 598kB
+ b7106f8586ee Download complete 0B
+ 89872578f4c5 Downloading 44.3kB
+ a2d17f5b24d5 Downloading 6.291MB
+ 6b9066e344d7 Download complete 0B
+ b7106f8586ee Download complete 0B
+ a2d17f5b24d5 Downloading 6.291MB
+ 89872578f4c5 Downloading 44.3kB
+ df1cd84c95ef Downloading 598kB
+ 89872578f4c5 Downloading 44.3kB
+ df1cd84c95ef Downloading 598kB
+ a2d17f5b24d5 Downloading 6.291MB
+ df1cd84c95ef Downloading 598kB
+ 89872578f4c5 Downloading 44.3kB
+ a2d17f5b24d5 Downloading 6.291MB
+ a2d17f5b24d5 Downloading 6.291MB
+ 89872578f4c5 Downloading 44.3kB
+ df1cd84c95ef Downloading 598kB
+ 89872578f4c5 Downloading 44.3kB
+ df1cd84c95ef Downloading 598kB
+ a2d17f5b24d5 Downloading 6.291MB
+ 89872578f4c5 Downloading 44.3kB
+ a2d17f5b24d5 Downloading 7.34MB
+ df1cd84c95ef Downloading 598kB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ df1cd84c95ef Downloading 598kB
+ 89872578f4c5 Downloading 44.3kB
+ a2d17f5b24d5 Downloading 8.389MB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 89872578f4c5 Downloading 44.3kB
+ df1cd84c95ef Downloading 598kB
+ a2d17f5b24d5 Downloading 8.389MB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 8801fee91458 Downloading 22.54kB
+ 4c900eca9c64 Downloading 869.6kB
+ 89872578f4c5 Download complete 0B
+ df1cd84c95ef Download complete 0B
+ a2d17f5b24d5 Downloading 9.957MB
+ df1cd84c95ef Download complete 0B
+ 4c900eca9c64 Downloading 869.6kB
+ 89872578f4c5 Download complete 0B
+ a2d17f5b24d5 Downloading 10.49MB
+ a2d17f5b24d5 Downloading 13.16MB
+ a2d17f5b24d5 Downloading 13.63MB
+ 4c900eca9c64 Downloading 869.6kB
+ a2d17f5b24d5 Downloading 24.12MB
+ a2d17f5b24d5 Downloading 24.12MB
+ 8801fee91458 Download complete 0B
+ 4c900eca9c64 Download complete 0B
+ a2d17f5b24d5 Downloading 35.65MB
+ a2d17f5b24d5 Downloading 35.65MB
+ a2d17f5b24d5 Downloading 47.19MB
+ a2d17f5b24d5 Downloading 47.19MB
+ a2d17f5b24d5 Downloading 59.77MB
+ a2d17f5b24d5 Downloading 59.77MB
+ a2d17f5b24d5 Downloading 70.25MB
+ a2d17f5b24d5 Downloading 70.25MB
+ a2d17f5b24d5 Downloading 82.84MB
+ a2d17f5b24d5 Downloading 82.84MB
+ f5fbdd51c05f Extracting 1B
+ a2d17f5b24d5 Downloading 94.37MB
+ a2d17f5b24d5 Downloading 94.37MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 105.9MB
+ a2d17f5b24d5 Downloading 105.9MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 1B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 2B
+ 41713cbe7496 Extracting 1B
+ 41713cbe7496 Extracting 1B
+ a2d17f5b24d5 Downloading 111.5MB
+ a2d17f5b24d5 Downloading 111.5MB
+ f5fbdd51c05f Extracting 2B
+ 41713cbe7496 Pull complete 0B
+ 41713cbe7496 Pull complete 0B
+ a2d17f5b24d5 Download complete 0B
+ a2d17f5b24d5 Download complete 0B
+ f5fbdd51c05f Pull complete 0B
+ 5788ee6f91dc Extracting 1B
+ 5788ee6f91dc Extracting 1B
+ 5788ee6f91dc Extracting 1B
+ 5788ee6f91dc Extracting 1B
+ 5788ee6f91dc Pull complete 0B
+ 5788ee6f91dc Pull complete 0B
+ 2058ceffc175 Pull complete 0B
+ f997efa53d88 Extracting 1B
+ f997efa53d88 Extracting 1B
+ f997efa53d88 Extracting 1B
+ f997efa53d88 Extracting 1B
+ Image nginx:alpine Pulled 
+ f997efa53d88 Extracting 1B
+ f997efa53d88 Extracting 1B
+ f997efa53d88 Pull complete 0B
+ 97cb5292e90c Pull complete 0B
+ f997efa53d88 Pull complete 0B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ Image nats:2.15-alpine Pulled 
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 1B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 2B
+ a2d17f5b24d5 Extracting 3B
+ a2d17f5b24d5 Extracting 3B
+ a2d17f5b24d5 Extracting 3B
+ a2d17f5b24d5 Extracting 3B
+ a2d17f5b24d5 Extracting 3B
+ a2d17f5b24d5 Extracting 3B
+ a2d17f5b24d5 Pull complete 0B
+ a2d17f5b24d5 Pull complete 0B
+ f85a33377d83 Pull complete 0B
+ f85a33377d83 Pull complete 0B
+ 86cc7190d1c0 Extracting 1B
+ 86cc7190d1c0 Extracting 1B
+ 86cc7190d1c0 Extracting 1B
+ 86cc7190d1c0 Extracting 1B
+ 86cc7190d1c0 Extracting 1B
+ 86cc7190d1c0 Extracting 1B
+ 86cc7190d1c0 Pull complete 0B
+ 86cc7190d1c0 Pull complete 0B
+ 5959c7ea857a Pull complete 0B
+ 5959c7ea857a Pull complete 0B
+ 6bceb0db2fd1 Pull complete 0B
+ 6bceb0db2fd1 Pull complete 0B
+ b7106f8586ee Pull complete 0B
+ b7106f8586ee Pull complete 0B
+ Image postgres:16-alpine Pulled 
+ Image postgres:16-alpine Pulled 
+ Network orbit_default Creating 
+ Volume orbit_pg-socket Creating 
+ Volume orbit_pg-socket Creating 
+ Network orbit_default Creating 
+ Volume orbit_pg-socket Created 
+ Volume orbit_pg-socket Created 
+ Network orbit_default Created 
+ Network orbit_default Created 
+ Container orbit-nats Creating 
+ Container orbit-postgres Creating 
+ Container orbit-nats Created 
+ Container orbit-postgres Created 
+ Container orbit-pgbackup Creating 
+ Container orbit-apiserver Creating 
+ Container orbit-pgbackup Created 
+ Container orbit-apiserver Created 
+ Container orbit-wiki-worker Creating 
+ Container orbit-link-gateway Creating 
+ Container orbit-web Creating 
+ Container orbit-wiki-worker Created 
+ Container orbit-link-gateway Created 
+ Container orbit-web Created 
+ Container orbit-gateway Creating 
+ Container orbit-gateway Created 
+ Container orbit-nats Starting 
+ Container orbit-postgres Starting 
+ Container orbit-nats Started 
+ Container orbit-postgres Started 
+ Container orbit-postgres Waiting 
+ Container orbit-postgres Waiting 
+ Container orbit-postgres Healthy 
+ Container orbit-apiserver Starting 
+ Container orbit-postgres Healthy 
+ Container orbit-pgbackup Starting 
+ Container orbit-apiserver Started 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-apiserver Waiting 
+ Container orbit-pgbackup Started 
+ Container orbit-apiserver Error dependency apiserver failed to start
+ Container orbit-apiserver Error dependency apiserver failed to start
+ Container orbit-apiserver Error dependency apiserver failed to start
+dependency failed to start: container orbit-apiserver is unhealthy
+ Container orbit-pgbackup Healthy 
+ Container orbit-gateway Healthy 
+apiserver: Up 5 minutes (healthy)
+gateway: Up 6 seconds (healthy)
+link-gateway: Up 23 seconds (healthy)
+nats: Up 5 minutes (healthy)
+pgbackup: Up 5 minutes
+postgres: Up 5 minutes (healthy)
+web: Up 15 seconds (healthy)
+wiki-worker: Up 21 seconds
+orbit-apiserver  | [Nest] 1  - 11/14/2026, 11:38:24 AM     LOG [ManagedRunners] managed runners are enabled in mrmh-lab (Docker instance orbit-lab-a (remote))
