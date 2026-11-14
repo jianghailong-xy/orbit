@@ -491,6 +491,8 @@ struct RunnerDetailContent: View {
     @State private var confirmingRemove = false
     /// The postponed Update card's Update Now… asks first (a runner without `self-update-now/v1`).
     @State private var confirmingUpdateNow = false
+    /// A Fix with an agent press is on its way: its button holds until the list read after it.
+    @State private var fixPressing = false
     /// The token a rotation just minted: shown on this page once, and gone with it.
     @State private var rotatedToken: String?
     @State private var notice: String?
@@ -933,9 +935,45 @@ struct RunnerDetailContent: View {
     }
 
     @ViewBuilder private func attentionAction(_ item: RunnerAttentionItem) -> some View {
-        if let action = item.action {
-            attentionButton(action)
-                .buttonStyle(RunnerCapsuleButtonStyle())
+        // Fix with an agent, on an engine not updating and a runner that can't update itself: after the
+        // card's own press, before its dismissal; the line under the row says why it is greyed, or which
+        // session is fixing it.
+        let fix = RunnerAgentFixLogic.attentionState(runner, item: item)
+        if let fix, let target = RunnerAgentFixLogic.target(item) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    if let action = item.action {
+                        attentionButton(action)
+                            .buttonStyle(RunnerCapsuleButtonStyle())
+                    }
+                    RunnerAgentFixButton(state: fix, pressing: fixPressing) { fixWithAnAgent(target) }
+                    if let engine = RunnerPageFormat.updateWarningDismissEngine(item) {
+                        Button(RunnerPageCopy.attentionDismissUntilNextRelease(
+                            engine: RunnerPageFormat.engineName(engine))) { dismissUpdateWarning(engine) }
+                            .linkButtonStyle()
+                            .font(.orbitListSubtitle)
+                            .padding(.top, 7)
+                    }
+                }
+                RunnerAgentFixLine(state: fix) { openSession($0) }
+            }
+        } else if let action = item.action {
+            // An engine not updating against a known latest can be dismissed until its next release,
+            // beside Update Engines Now.
+            if let engine = RunnerPageFormat.updateWarningDismissEngine(item) {
+                HStack(spacing: 12) {
+                    attentionButton(action)
+                        .buttonStyle(RunnerCapsuleButtonStyle())
+                    Button(RunnerPageCopy.attentionDismissUntilNextRelease(
+                        engine: RunnerPageFormat.engineName(engine))) { dismissUpdateWarning(engine) }
+                        .linkButtonStyle()
+                        .font(.orbitListSubtitle)
+                        .padding(.top, 7)
+                }
+            } else {
+                attentionButton(action)
+                    .buttonStyle(RunnerCapsuleButtonStyle())
+            }
         }
     }
 
@@ -1061,6 +1099,26 @@ struct RunnerDetailContent: View {
         let id = runner.id
         Task {
             if let failure = await runners.updateEngines(id) { show(failure) }
+        }
+    }
+
+    private func dismissUpdateWarning(_ engine: String) {
+        let id = runner.id
+        Task {
+            if let failure = await runners.dismissEngineUpdateWarning(id, engine: engine) { show(failure) }
+        }
+    }
+
+    /// One press, no sheet: the session starts and the list read after it turns the button into the
+    /// fixing line; the page stays where it is. A refusal is the server's own sentence.
+    private func fixWithAnAgent(_ target: RunnerAgentFixTarget) {
+        let id = runner.id
+        fixPressing = true
+        Task {
+            if let failure = await runners.fixAttention(id, target: target) {
+                show("\(RunnerPageCopy.AGENT_FIX_FAILED) — \(failure)")
+            }
+            fixPressing = false
         }
     }
 
