@@ -23,6 +23,13 @@ import { bringsOwnEnvCredential } from '../sessions/engine-signin-preflight';
 /** The runtimes that count, in the order a first session takes them: Orbit's own default first. */
 export const MANAGED_SUPPLY_RUNTIMES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
 
+/**
+ * The engines the managed runner image installs (deploy/managed-runner/image/Dockerfile, pins.json):
+ * what a runner that has not reported its engines yet will have. A key whose engine is not among them
+ * is one no managed runner can run until its heartbeat says otherwise.
+ */
+export const MANAGED_IMAGE_ENGINES: readonly LoginEngine[] = ['claude', 'codex'];
+
 /** The runner fields this reads — a subset of the Prisma row. */
 export interface ManagedSupplyRunner {
   /** Heartbeat-reported per-engine health, stored as sent (RunnerEngineHealth[]). */
@@ -62,6 +69,16 @@ export function managedRuntimeReady(
   return !advertised || (runner.capabilities ?? []).includes(`provider:${runtime}`);
 }
 
+/**
+ * Whether a session on one of the owner's keys, on `engine`, can run on this runner: by its last report
+ * (installed, the key bringing its own credential), or — before it has reported anything, or with no
+ * runner row read — by the managed image's engines (MANAGED_IMAGE_ENGINES).
+ */
+export function managedKeyRunnable(runner: ManagedSupplyRunner | null, engine: string): boolean {
+  if (runner?.engines == null) return (MANAGED_IMAGE_ENGINES as readonly string[]).includes(engine);
+  return managedRuntimeReady(runner, engine, { bringsOwnCredentials: true });
+}
+
 /** Every runtime ready on this runner, preferred first; empty when none is or nothing was reported. */
 export function managedRuntimeSupply(runner: ManagedSupplyRunner): LoginEngine[] {
   return MANAGED_SUPPLY_RUNTIMES.filter((runtime) => managedRuntimeReady(runner, runtime));
@@ -92,14 +109,36 @@ export async function managedKeySupply(
 }
 
 /**
- * The key a first session in a managed default workspace starts on while its runner has not been
- * found ready (no `initialProvider` yet), or null: the first of the owner's own keys that
- * `managedKeySupply` would consider, before the runner has said which engines it has. It is the key READY
- * records when the runner has that key's engine and no runtime of its own signed in, as a brand-new
- * runner has none. A session on it is queued and waits for the runner (`assertManagedFirstSessionRuntime`).
+ * The first of the owner's keys (`ownerManagedKeys`, in their order) that this runner can run
+ * (`managedKeyRunnable`), or null: never a key on an engine the runner does not have, whichever key
+ * the owner put first.
  */
-export async function managedFirstSessionKey(prisma: Pick<PrismaService, 'modelProvider'>, ownerId: string): Promise<string | null> {
-  return (await ownerManagedKeys(prisma, ownerId))[0]?.slug ?? null;
+export function managedFirstSessionKeyOf<K extends { slug: string; engine: LoginEngine }>(
+  keys: readonly K[],
+  runner: ManagedSupplyRunner | null,
+): K | null {
+  return keys.find((key) => managedKeyRunnable(runner, key.engine)) ?? null;
+}
+
+/**
+ * The key a first session in a managed default workspace starts on while its runner has not been
+ * found ready (no `initialProvider` yet), or null: the first of the owner's own keys that its runner
+ * can run (`managedFirstSessionKeyOf`) — by its report, or by the managed image's engines before it has
+ * reported any. It is the key READY records when the runner has no runtime of its own signed in, as a
+ * brand-new runner has none. A session on it is queued and waits for the runner
+ * (`assertManagedFirstSessionRuntime`).
+ */
+export async function managedFirstSessionKey(
+  prisma: Pick<PrismaService, 'modelProvider' | 'managedRunner' | 'runner'>,
+  ownerId: string,
+): Promise<string | null> {
+  const keys = await ownerManagedKeys(prisma, ownerId);
+  if (keys.length === 0) return null;
+  const mapping = await prisma.managedRunner.findUnique({ where: { ownerId }, select: { runnerId: true } });
+  const runner = mapping
+    ? await prisma.runner.findUnique({ where: { id: mapping.runnerId }, select: { engines: true, defaultRemoved: true, capabilities: true } })
+    : null;
+  return managedFirstSessionKeyOf(keys, runner)?.slug ?? null;
 }
 
 /**
@@ -107,10 +146,11 @@ export async function managedFirstSessionKey(prisma: Pick<PrismaService, 'modelP
  * status's `firstSessionProvider` (docs/managed-runner-design.md, "Server and three client interfaces"),
  * so a client offers that session exactly when this server would take it. Once the runner has been
  * READY it is `initialProvider`, which `lastProviderByWorkspace` answers for a workspace with no
- * history. Before that the default is the owner's first key (`managedFirstSessionKey`), and the
- * session is queued on it while the runner has not reported its engines, or taken at once when it
- * reported that key's engine ready; with no key, or a report without that engine, there is none
- * (`assertManagedFirstSessionRuntime` refuses it MODEL_UNAVAILABLE).
+ * history. Before that the default is the owner's first key the runner can run
+ * (`managedFirstSessionKey`), and the session is queued on it while the runner has not reported its
+ * engines (when the managed image has that key's engine), or taken at once when it reported that key's
+ * engine installed; with no such key there is none (`assertManagedFirstSessionRuntime` refuses it
+ * MODEL_UNAVAILABLE).
  */
 export function managedFirstSessionProvider(
   initialProvider: string | null,
@@ -118,9 +158,7 @@ export function managedFirstSessionProvider(
   runner: ManagedSupplyRunner | null,
 ): string | null {
   if (initialProvider) return initialProvider;
-  if (!firstKey) return null;
-  if (runner?.engines == null) return firstKey.slug;
-  return managedRuntimeReady(runner, firstKey.engine, { bringsOwnCredentials: true }) ? firstKey.slug : null;
+  return firstKey && managedKeyRunnable(runner, firstKey.engine) ? firstKey.slug : null;
 }
 
 /** The owner's own enabled keys, in the owner's order, that run on a runtime counted as supply, with that runtime. */
@@ -173,9 +211,10 @@ export async function assertManagedFirstSessionRuntime(
   // A runner that has never reported its engines — waiting for capacity, being provisioned, or started
   // and not yet heard from; the heartbeat stores a report, an empty one included, as sent — has not said
   // what it lacks. A session that brings its own credential, such as one of the owner's model keys,
-  // needs only its engine there: it is queued, and the runner runs it once it is READY. One that needs a
-  // runtime's own sign-in has none to wait for on a runner nobody could sign in to yet.
-  if (ownCredentials && args.runner.engines == null && (MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(args.runtime)) return;
+  // needs only its engine there, which the managed image has to install: it is queued, and the runner
+  // runs it once it is READY. One that needs a runtime's own sign-in has none to wait for on a runner
+  // nobody could sign in to yet.
+  if (ownCredentials && managedKeyRunnable(args.runner, args.runtime)) return;
   const ran = await prisma.session.findFirst({
     // `kind` is the seed's own measure (workspace-provider.ts): a LANDING row is not a session a
     // person started, and its provider is the reserved `orbit` slug no engine runs.

@@ -295,7 +295,21 @@ test('a new account queues its first session while its managed runner waits for 
     assert.equal(keylessFirst.status, 409, keylessFirst.text);
     assert.equal(keylessFirst.json.code, MODEL_UNAVAILABLE);
 
-    // It adds a model key of its own.
+    // A Kimi (Moonshot) key first: it runs on Kimi Code or OpenCode, and the managed image has neither, so
+    // there is still nothing to start on — the status names none rather than that key, and the create
+    // refuses the session a client would send with nothing named (found in the 2026-11-14 rollout).
+    const kimiKey = await call(server, 'POST', '/api/providers/mine', fresh.token,
+      { label: 'kimi key', presetSlug: 'moonshot', baseUrl: 'https://api.moonshot.ai/v1', apiKey: `sk-pg-first-session-kimi-${backend}-not-a-key` });
+    assert.equal(kimiKey.status, 201, kimiKey.text);
+    const kimiOnly = (await call(server, 'GET', '/api/managed-runner', fresh.token)).json;
+    assert.deepEqual([kimiOnly.managementState, kimiOnly.initialProvider, kimiOnly.firstSessionProvider], ['WAITING_CAPACITY', null, null]);
+    assert.equal(managedRunnerDisplay(kimiOnly)!.startsNewSession, false);
+    assert.deepEqual([(await listed()).lastProvider, (await listed()).providerBuiltin], ['claude', true], 'not the Kimi key');
+    const kimiFirst = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: keyless.id, prompt: 'hello', title: 'kimi key only' });
+    assert.equal(kimiFirst.status, 409, kimiFirst.text);
+    assert.equal(kimiFirst.json.code, MODEL_UNAVAILABLE);
+
+    // It adds a model key of its own that Claude Code runs, after the Kimi key in the owner's order.
     const key = await call(server, 'POST', '/api/providers/mine', fresh.token,
       { label: 'own key', presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: `sk-pg-first-session-${backend}-not-a-key` });
     assert.equal(key.status, 201, key.text);

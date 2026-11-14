@@ -129,6 +129,9 @@ test("a managed default workspace whose runner was never ready starts on the own
       findMany: async (args: { where: { ownerId: string; enabled: boolean } }) => (owners.push(args.where), args.where.ownerId === 'o1' ? keys : []),
       findFirst: async () => ({ runtime: 'claude' }),
     },
+    // The runner has not reported its engines yet: the managed image's decide.
+    managedRunner: { findUnique: async () => ({ runnerId: 'r1' }) },
+    runner: { findUnique: async () => ({ engines: null, defaultRemoved: null, capabilities: [] }) },
   } as never;
   const seeds = await lastProviderByWorkspace(prisma, ['a1', 'a2']);
   assert.deepEqual(seeds.get('a1'), { engine: 'claude', provider: 'deepseek', providerBuiltin: false });
