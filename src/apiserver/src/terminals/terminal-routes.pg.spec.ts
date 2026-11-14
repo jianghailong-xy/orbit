@@ -93,7 +93,7 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
   const providerSlug = `terminal-routes-${RUN}`;
   const providerKey = `iv:tag:secret-${randomUUID()}`;
   const providerUrl = `https://secret-endpoint-${RUN}.test`;
-  await db.modelProvider.create({
+  const ownProvider = await db.modelProvider.create({
     data: { slug: providerSlug, label: 'terminal routes', runtime: 'claude', ownerId: owner.id, baseUrl: providerUrl, apiKeyEnc: providerKey, enabled: true },
   });
   // Uploads land in a folder of this run's, on the local backend, as the file specs keep them.
@@ -246,6 +246,8 @@ test('a TERMINAL credential drives only its own runner\'s sessions, and is refus
       `PATCH /workspaces/${owner.a.workspaceId}`, 'GET /tasks', 'POST /tasks', 'GET /projects', 'POST /projects', `GET /runners/${owner.a.runnerId}`,
       'GET /providers/mine', 'GET /attachments/usage',
       'GET /users/me', 'GET /terminals', 'GET /access-tokens', 'GET /terminals/requests',
+      // The SubAgent routes (docs/subagent-design.md §6, §7): a session's runs, the tiers and the owner's tier write.
+      `GET /sessions/${onA.id}/subagents`, 'GET /providers/subagent-tiers', `PATCH /providers/mine/${ownProvider.id}/model-tier`,
     ];
     for (const knock of ordinary) {
       const [method, path] = knock.split(' ');
