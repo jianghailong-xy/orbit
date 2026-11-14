@@ -65,9 +65,11 @@ const LINE_PX = 16;
 
 /**
  * Scale 1 is the picture's actual size: one of its pixels on one of the screen's, which is how a screenshot or a
- * board rendered at 2x was taken, so its words read at the size they were written. A picture larger than the window
- * opens there, from its top (and its left edge when it is wider), and scrolls; the fit button and a double click show
- * it whole. A touch screen opens it whole, as a phone holds a board too small to read at its actual size either way.
+ * board rendered at 2x was taken, so its words read at the size they were written. A picture opens at its actual size
+ * or at the size the viewer always gave it (see fitScale), whichever is larger, so none opens smaller than it used to:
+ * one larger than the window opens from its top (and its left edge when it is wider) and scrolls, and a 1x picture
+ * still fills the room it filled. The fit button and a double click go between the two. A touch screen opens at the
+ * fit, as a phone holds a board too small to read at its actual size either way.
  */
 const opensWhole = () => typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none) and (pointer: coarse)').matches;
 
@@ -175,15 +177,16 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
   const [natural, setNatural] = useState<{ src: string; width: number; height: number } | null>(null);
   const size = natural && natural.src === item?.src ? natural : null;
 
-  /** The scale that shows the whole picture, as turned: in the window's width and 70% of its height (the room above
-   *  the footer when captioned), and never above its actual size. */
+  /** The size the viewer gave a picture before it knew actual size, as a scale: the whole picture, as turned, in the
+   *  window's width and 70% of its height (the room above the footer when captioned), and never above one of its
+   *  pixels to a CSS pixel. Below 1 for a picture larger than the window, above 1 for a 1x picture on a 2x screen. */
   const fitScale = (rotate: number) => {
     const area = body.current?.getBoundingClientRect();
     if (!size || !area || !area.width || !area.height) return 1;
     const turned = rotate % 180 !== 0;
     const width = turned ? size.height : size.width;
     const height = turned ? size.width : size.height;
-    return Math.min(1, area.width / width, (area.height * (caption != null ? 1 : 0.7)) / height);
+    return Math.min(window.devicePixelRatio || 1, area.width / width, (area.height * (caption != null ? 1 : 0.7)) / height);
   };
   /** Where a picture comes to rest: see rest(), on each axis of the area it is laid out in. */
   const rested = (next: Transform): Transform => {
@@ -201,7 +204,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
       y: rest(height, area.top, area.bottom, visibleBottom, next.y),
     };
   };
-  const { transform, reset, update, zoom, latest } = useImageTransform(image, () => fitScale(latest().rotate), rested);
+  const { transform, reset, update, zoom, latest } = useImageTransform(image, () => Math.min(1, fitScale(latest().rotate)), rested);
   const [transition, setTransition] = useState(true);
   const [moving, setMoving] = useState(false);
   const [touching, setTouching] = useState(false);
@@ -235,7 +238,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
   useLayoutEffect(() => {
     if (!size) return;
     setTransition(false);
-    reset(rested({ ...INITIAL, scale: opensWhole() ? fitScale(0) : 1, x: Infinity, y: Infinity }));
+    reset(rested({ ...INITIAL, scale: opensWhole() ? fitScale(0) : Math.max(1, fitScale(0)), x: Infinity, y: Infinity }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size]);
 
@@ -325,11 +328,11 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     const now = latest();
     update(rested({ ...now, x: now.x - dx * unit, y: now.y - dy * unit }));
   };
-  /** Between the actual size and the whole picture; a picture that fits at its actual size zooms in and back instead. */
+  /** Between the actual size and the fit (see fitScale); a picture whose fit is its actual size zooms in and back instead. */
   const onDoubleClick = (event: ReactMouseEvent<HTMLImageElement>) => {
     if (!open) return;
     const fit = fitScale(transform.rotate);
-    if (transform.scale === 1 && fit < 1) update(rested({ ...transform, x: 0, y: 0, scale: fit }));
+    if (transform.scale === 1 && fit !== 1) update(rested({ ...transform, x: 0, y: 0, scale: fit }));
     else if (transform.scale !== 1) zoom(1 / transform.scale, event.clientX, event.clientY);
     else zoom(1 + SCALE_STEP, event.clientX, event.clientY);
   };
@@ -364,7 +367,7 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     if (!open) return;
     if (touching) setTouching(false);
     touch.current = { ...touch.current, eventType: 'none' };
-    const min = fitScale(transform.rotate);
+    const min = Math.min(1, fitScale(transform.rotate));
     if (min > transform.scale) {
       update(rested({ ...transform, x: 0, y: 0, scale: min }));
       return;
@@ -395,10 +398,10 @@ export function ImagePreview({ open, onClose, items, current = 0, onCurrentChang
     { key: 'flipX', label: 'Flip horizontally', icon: <SwapOutlined aria-hidden />, onClick: () => update({ flipX: !transform.flipX }) },
     { key: 'rotateLeft', label: 'Rotate left', icon: <RotateLeftOutlined aria-hidden />, onClick: () => update(rested({ ...transform, rotate: transform.rotate - 90 })) },
     { key: 'rotateRight', label: 'Rotate right', icon: <RotateRightOutlined aria-hidden />, onClick: () => update(rested({ ...transform, rotate: transform.rotate + 90 })) },
-    { key: 'zoomOut', label: 'Zoom out', icon: <ZoomOutOutlined aria-hidden />, onClick: () => zoom(1 / (1 + SCALE_STEP)), disabled: transform.scale <= fit },
+    { key: 'zoomOut', label: 'Zoom out', icon: <ZoomOutOutlined aria-hidden />, onClick: () => zoom(1 / (1 + SCALE_STEP)), disabled: transform.scale <= Math.min(1, fit) },
     { key: 'zoomIn', label: 'Zoom in', icon: <ZoomInOutlined aria-hidden />, onClick: () => zoom(1 + SCALE_STEP), disabled: transform.scale === MAX_SCALE },
     actual
-      ? { key: 'fit', label: 'Fit to window', icon: <CompressOutlined aria-hidden />, onClick: () => update(rested({ ...transform, x: 0, y: 0, scale: fit })), disabled: fit >= 1 }
+      ? { key: 'fit', label: 'Fit to window', icon: <CompressOutlined aria-hidden />, onClick: () => update(rested({ ...transform, x: 0, y: 0, scale: fit })), disabled: fit === 1 }
       : { key: 'actual', label: 'Actual size', icon: <OneToOneOutlined aria-hidden />, onClick: () => update(rested({ ...transform, x: Infinity, y: Infinity, scale: 1 })) },
     ...moreActions,
   ];
