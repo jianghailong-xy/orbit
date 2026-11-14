@@ -1313,7 +1313,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
-		if err := requireHandoffNamesItsDestination(body); err != nil {
+		if err := requireMoveRequestNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
 		raw, err := s.t.updateTask(s.sessionID, id, body)
