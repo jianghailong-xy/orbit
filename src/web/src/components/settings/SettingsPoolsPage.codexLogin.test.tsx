@@ -578,6 +578,27 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     ]);
   });
 
+  it('stays open when the page behind it is pressed: only Cancel or ✕ gives up the code', async () => {
+    pools = [codexPool()];
+    await mount(PAGE);
+    await addAccount();
+    await click(button('Get a code', dialog()!));
+    const backdrop = document.querySelector('.orbit-overlay-backdrop');
+    expect(backdrop).not.toBeNull();
+    await act(async () => {
+      const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+      backdrop!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse' }));
+      backdrop!.dispatchEvent(new MouseEvent('mousedown', init));
+      backdrop!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse' }));
+      backdrop!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+      backdrop!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(nameOf(dialog())).toBe('Sign in with ChatGPT');
+    expect(dialog()?.querySelector('.cx-code-text')?.textContent).toContain(CODE);
+    expect(sent.filter((call) => call.method === 'DELETE')).toEqual([]);
+  });
+
   it('gives up a sign-in whose code was still on its way when the dialog closed', async () => {
     pools = [codexPool()];
     await mount(PAGE);

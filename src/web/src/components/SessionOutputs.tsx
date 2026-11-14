@@ -3,7 +3,7 @@ import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } f
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
 import { MAIN_CHECKOUT_COPY } from '@orbit/shared';
-import { MergeRecoveryPanel, mergeRecoveryChecking } from './MergeRecoveryPanel';
+import { MergeOperationLine, MergeRecoveryPanel, mergeRecoveryChecking, mergeRecoveryFastForward } from './MergeRecoveryPanel';
 import { MainCheckoutBar } from './MainCheckout';
 import { useMainCheckoutHost } from '../lib/mainCheckout';
 import { refreshSessionDiff } from '../api';
@@ -253,6 +253,15 @@ export function SessionOutputs({
   // we surface the untracked branch + an Adopt action instead of a stale "✓ In main" / Merge button.
   const worktreeBranch = detail.worktreeBranch ?? null;
   const diverged = !!worktreeBranch && worktreeBranch !== branch;
+  // Merge recovery owns the merge slot: one state at a time. A pending operation is one line in place of the panel
+  // (the repair loop's own check keeps the panel, which follows it); a plain fast-forward is a Merge button with no
+  // panel; anything else is the panel, which holds every action, so the slot carries none of its own.
+  const recovery = detail.mergeRecovery ?? null;
+  const canRecover = !!recovery && detail.mergeRecoverySupported === true && !!onRecoverMerge;
+  const recoveryOperating = !!recovery && detail.mergeStatus === 'pending' &&
+    !(detail.mergeRepairSession && detail.mergeRecoveryAction === 'preview');
+  // A failed attempt keeps the panel, which carries what went wrong.
+  const recoveryFastForward = canRecover && !failed && mergeRecoveryFastForward(recovery!);
 
   return (
     <>
@@ -301,11 +310,13 @@ export function SessionOutputs({
               busy={adopting}
               onAdopt={onAdopt}
             />
-          ) : detail.mergeRecovery && detail.mergeRecoverySupported && onRecoverMerge ? (
-            <button type="button" className="wt-merge-btn" disabled={merging || detail.mergeStatus === 'pending'}
-              onClick={(e) => { e.stopPropagation(); onRecoverMerge(detail.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? 'sync-local' : 'preview', detail.mergeRecovery?.previewId); }}>
-              {detail.mergeStatus === 'pending' ? 'Working…' : detail.mergeRecovery.code === 'LOCAL_SYNC_PENDING' ? 'Sync local checkout' : 'Check and repair'}
-            </button>
+          ) : canRecover ? (
+            recoveryFastForward && !recoveryOperating && (
+              <button type="button" className="wt-merge-btn" disabled={merging}
+                onClick={(e) => { e.stopPropagation(); onRecoverMerge!('apply', recovery!.previewId); }}>
+                {merging ? 'Merging…' : `Merge into ${recovery!.targetBranch}`}
+              </button>
+            )
           ) : (
             <MergeButton
               status={detail.mergeStatus}
@@ -321,7 +332,9 @@ export function SessionOutputs({
             />
           ))}
       </div>
-      {detail.mergeRecovery && <MergeRecoveryPanel recovery={detail.mergeRecovery}
+      {recovery && recoveryOperating && <MergeOperationLine action={detail.mergeRecoveryAction}
+        target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner} />}
+      {recovery && !recoveryOperating && !recoveryFastForward && <MergeRecoveryPanel recovery={recovery}
         branch={detail.branch}
         message={detail.mergeError}
         supported={detail.mergeRecoverySupported === true}
@@ -331,7 +344,8 @@ export function SessionOutputs({
         onRepair={onRepairRecovery}
         repairSession={detail.mergeRepairSession}
         repairStarting={repairStarting}
-        onOpenRepair={onOpenRepair} />}
+        onOpenRepair={onOpenRepair}
+        waitingForTurn={!!turnActive} />}
       {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
         <div className="wt-merge wt-bar-fail">
           {detail.commitStatus === 'error' ? (
