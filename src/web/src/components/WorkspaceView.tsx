@@ -7452,7 +7452,7 @@ export function WorkspaceView({
     }
   }, [followHandoff, selectedId, coordinatorHandoff?.state, coordinatorHandoff?.handedOverToSessionId]);
   const composerContextActions: Omit<ContextActionsProps, 'pct' | 'onPicked'> | undefined =
-    compactOffered || (handoffProjectId && !handingOver && !coordinatorHandedOver)
+    compactOffered || (handoffProjectId && !coordinatorHandoff)
       ? {
           running: turnRunning,
           compact: compactOffered
@@ -7466,12 +7466,13 @@ export function WorkspaceView({
               }
             : undefined,
           startCoordinator:
-            handoffProjectId && !handingOver && !coordinatorHandedOver
+            // Hidden while the session carries any handoff, FAILED included: that row has its own doors.
+            handoffProjectId && !coordinatorHandoff
               ? {
                   onStart: () =>
                     setHandoffConfirm({
                       projectId: handoffProjectId,
-                      projectTitle: handoffRow?.projectMembership?.projectTitle ?? 'This project',
+                      projectTitle: handoffRow?.projectMembership?.projectTitle ?? 'the project',
                       running: turnRunning,
                     }),
                 }

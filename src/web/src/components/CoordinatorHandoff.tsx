@@ -4,6 +4,7 @@ import {
   COORDINATOR_HANDOFF_COPY as COPY,
   COORDINATOR_HANDOFF_PROMPT_HEAD,
   COORDINATOR_HANDOFF_SECTIONS,
+  coordinatorHandoffFailureSentence,
   type CoordinatorHandoffView,
   type CoordinatorPendingWait,
   type SessionCoordinatorHandoff,
@@ -258,7 +259,7 @@ export function CoordinatorHandoffFailure({
     <div className="handoff-sys err" role="alert" data-handoff-state="FAILED">
       <ErrorIcon />
       <span className="grow">
-        {handoff.failureReason ?? ''}
+        {handoff.failureReason ?? coordinatorHandoffFailureSentence(handoff.failureCode ?? 'TURN_FAILED')}
         <span className="row">
           {!replaceFailed && <Button size="small" disabled={busy} onClick={onRetry}>{COPY.tryAgain}</Button>}
           <Button size="small" disabled={busy} onClick={onSkip}>{COPY.handOverWithoutNote}</Button>

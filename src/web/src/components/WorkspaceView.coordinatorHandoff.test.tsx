@@ -408,4 +408,40 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       expect(apiMock.mock.calls.some(([p]) => p === `/projects/${PROJECT}/coordinator/handoff/cancel`)).toBe(true),
     );
   });
+
+  it('02-5: does not offer Start a new coordinator while a handoff has failed: the row has its own doors', async () => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: { state: 'FAILED', startedAt: new Date().toISOString(), failureCode: 'TURN_FAILED',
+        failureReason: "The handoff note wasn't written: the turn failed.", handedOverToSessionId: null },
+    });
+    await mount();
+    await waitFor(() => expect(mounted().querySelector('[data-handoff-state="FAILED"]')).not.toBeNull());
+    expect((await contextActions()).map(titleOf)).toEqual(['Compact']);
+  });
+
+  it('02-5: falls back to the shared failure sentence when the handoff carries no failureReason', async () => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: { state: 'FAILED', startedAt: new Date().toISOString(), failureCode: 'TIMED_OUT',
+        failureReason: null, handedOverToSessionId: null },
+    });
+    await mount();
+    await waitFor(() => expect(mounted().querySelector('[data-handoff-state="FAILED"]')).not.toBeNull());
+    const row = mounted().querySelector('[data-handoff-state="FAILED"]')!;
+    expect(row.textContent).toMatch(/^The handoff note wasn't written: the turn timed out\./);
+  });
+
+  it('reads "the project" in the confirm when the project has no title', async () => {
+    detail = session({ projectId: PROJECT, projectMembership: { ...coordinator, projectTitle: null } });
+    await mount();
+    const rows = await contextActions();
+    await click(rows.find((r) => titleOf(r) === 'Start a new coordinator'));
+    await waitFor(() => expect(document.querySelector('.handoff-confirm-body')).not.toBeNull());
+    expect(document.querySelector('.handoff-confirm-body')?.textContent).toBe(
+      'This coordinator writes a handoff note, then the project continues in a new conversation that starts from that note. This one is completed — nothing is deleted.',
+    );
+  });
 });
