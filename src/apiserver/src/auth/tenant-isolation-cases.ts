@@ -876,13 +876,13 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'GET /schedules/:id/runs':
     "the schedule is counted by (id, the caller) first, 404 for another account's id (schedules/schedule-reads.service.ts:128)",
   'POST /schedules/:id/pause':
-    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /schedules/:id/resume':
-    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /schedules/:id/undo':
-    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'DELETE /schedules/:id':
-    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /schedules/:id/run':
     'the schedule is locked only when its owner is the caller, else 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:888)',
   'POST /schedule-runs/:id/stop':
@@ -890,9 +890,9 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'GET /schedule-requests/:id':
     "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:163)",
   'POST /schedule-requests/:id/allow':
-    "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:414); schedule-doors.pg.spec.ts presses real ones",
+    "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:427); schedule-doors.pg.spec.ts presses real ones",
   'POST /schedule-requests/:id/decline':
-    "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:414)",
+    "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:427)",
   'GET /sessions/:id/schedule-cards':
     "the session is read by (id, the caller) first, 404 for another account's (schedules/schedule-reads.service.ts:183), and the cards and records are read by the caller as owner",
   // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).

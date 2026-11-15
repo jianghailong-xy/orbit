@@ -232,8 +232,11 @@ export class SchedulesController {
     if (result.outcome === 'STALE') {
       throw new ConflictException({
         code: 'SCHEDULE_REQUEST_STALE',
-        message: 'The schedule changed after this was asked, so the card was withdrawn and nothing was applied. Ask '
-          + 'again from a session if it is still wanted.',
+        reason: result.reason,
+        message: (result.reason === 'WORKSPACE_GONE'
+          ? 'The workspace this card names is no longer yours, so the card was withdrawn and nothing was applied. '
+          : 'The schedule changed after this was asked, so the card was withdrawn and nothing was applied. ')
+          + 'Ask again from a session if it is still wanted.',
         ...answer,
       });
     }

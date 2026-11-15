@@ -116,7 +116,13 @@ export interface ScheduleDecisionInput {
 export type ScheduleDecisionResult =
   | { outcome: 'ALLOWED' | 'DECLINED'; request: ScheduleChangeRequest; schedule: Schedule | null }
   /** An UPDATE asked against a revision the schedule has moved past: superseded, nothing applied. */
-  | { outcome: 'STALE'; request: ScheduleChangeRequest; schedule: Schedule };
+  | {
+      outcome: 'STALE';
+      request: ScheduleChangeRequest;
+      schedule: Schedule | null;
+      /** REVISION_MOVED: the schedule changed since the ask. WORKSPACE_GONE: the workspace it names is no longer the owner's. */
+      reason: 'REVISION_MOVED' | 'WORKSPACE_GONE';
+    };
 
 /** What a change may touch. `intent` changes only when the person restates the goal (§8.2). */
 export interface SchedulePatch {
@@ -374,6 +380,13 @@ export class SchedulesService {
         const schedule = await this.lockSchedule(tx, actor.ownerId, scheduleId);
         const who = await this.resolveActor(tx, actor, scheduleId);
         assertRunSessionScope(who.servesScheduleId, scheduleId, 'UPDATE');
+        if (who.changedBy === 'RUN' && patch.intent !== undefined) {
+          // §8.2: the intent is the person's words, changed only when the person restates the goal.
+          throw new ForbiddenException({
+            code: 'SCHEDULE_RUN_MAY_NOT_RESTATE_INTENT',
+            message: 'A scheduled run may rewrite its prompt but not what the person asked; nothing was changed.',
+          });
+        }
         if (patch.workspaceId !== undefined) await this.assertOwnWorkspace(tx, actor.ownerId, patch.workspaceId);
         return this.changeLocked(tx, actor, who, schedule, patch, null);
       },
@@ -447,6 +460,14 @@ export class SchedulesService {
             );
           }
           checkTimezone(timezone);
+          // Re-judged as the world is now: a workspace deleted since the ask is not one to start runs in.
+          if (!(await this.ownsWorkspace(tx, actor.ownerId, proposal.workspaceId))) {
+            const superseded = await tx.scheduleChangeRequest.update({
+              where: { id: requestId },
+              data: { state: 'SUPERSEDED', decidedAt: now },
+            });
+            return { outcome: 'STALE' as const, request: superseded, schedule: null, reason: 'WORKSPACE_GONE' as const };
+          }
           const schedule = await this.insertSchedule(
             tx,
             actor.ownerId,
@@ -472,7 +493,16 @@ export class SchedulesService {
             where: { id: requestId },
             data: { state: 'SUPERSEDED', decidedAt: now },
           });
-          return { outcome: 'STALE' as const, request: superseded, schedule };
+          return { outcome: 'STALE' as const, request: superseded, schedule, reason: 'REVISION_MOVED' as const };
+        }
+        const moveTo = (request.proposed as FieldValues).workspaceId;
+        if (typeof moveTo === 'string' && !(await this.ownsWorkspace(tx, actor.ownerId, moveTo))) {
+          // Deleting a workspace bumps no revision, so the revision check above cannot see it.
+          const superseded = await tx.scheduleChangeRequest.update({
+            where: { id: requestId },
+            data: { state: 'SUPERSEDED', decidedAt: now },
+          });
+          return { outcome: 'STALE' as const, request: superseded, schedule, reason: 'WORKSPACE_GONE' as const };
         }
         const who: ResolvedActor = {
           changedBy: request.askedBy,
@@ -867,10 +897,14 @@ export class SchedulesService {
 
   /** Another workspace a change names must be one of the owner's live ones: anything else names nothing. */
   private async assertOwnWorkspace(tx: Tx, ownerId: string, workspaceId: string): Promise<void> {
-    const found = typeof workspaceId === 'string'
-      ? await tx.workspace.findFirst({ where: { id: workspaceId, ownerId, deletedAt: null }, select: { id: true } })
-      : null;
-    if (!found) throw refusal('NOT_FOUND', 'WORKSPACE_NOT_FOUND', 'No such workspace.');
+    if (!(await this.ownsWorkspace(tx, ownerId, workspaceId))) {
+      throw refusal('NOT_FOUND', 'WORKSPACE_NOT_FOUND', 'No such workspace.');
+    }
+  }
+
+  private async ownsWorkspace(tx: Tx, ownerId: string, workspaceId: unknown): Promise<boolean> {
+    if (typeof workspaceId !== 'string') return false;
+    return (await tx.workspace.count({ where: { id: workspaceId, ownerId, deletedAt: null } })) > 0;
   }
 
   private async assertUnderLimit(tx: Tx, ownerId: string): Promise<void> {

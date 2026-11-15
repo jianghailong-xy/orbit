@@ -34,7 +34,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerSchedulesController } from '../runner-api/runner-schedules.controller';
-import type { SessionsService } from '../sessions/sessions.service';
+import { SessionsService } from '../sessions/sessions.service';
 import { ScheduleReadsService } from './schedule-reads.service';
 import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
 import { SchedulesController } from './schedules.controller';
@@ -51,7 +51,6 @@ let runs: ScheduleRunsService;
 let reads: ScheduleReadsService;
 let tools: RunnerSchedulesController;
 let rest: SchedulesController;
-const draftSessions: Array<{ ownerId: string; workspaceId?: string; prompt: string }> = [];
 const interrupted: string[] = [];
 
 before(async () => {
@@ -73,12 +72,9 @@ before(async () => {
   runs = new ScheduleRunsService(prisma, port);
   reads = new ScheduleReadsService(prisma);
   tools = new RunnerSchedulesController(prisma, schedules, runs, reads);
-  const sessions = {
-    create: async (ownerId: string, dto: { workspaceId?: string; prompt: string }) => {
-      draftSessions.push({ ownerId, ...dto });
-      return { id: await makeSession(ownerId, dto.workspaceId!, PermissionMode.DEFAULT, null) };
-    },
-  } as unknown as SessionsService;
+  // The real create door, as the quick-add line uses it; its runner and realtime sides are no-ops here.
+  const quiet = new Proxy({}, { get: () => () => undefined });
+  const sessions = new SessionsService(db as never, quiet as never, quiet as never);
   rest = new SchedulesController(schedules, runs, reads, sessions);
 });
 
@@ -542,13 +538,18 @@ test('REST doors: list, detail with this month\'s use, runs, pause, resume, run,
 test('the Scheduled page\'s quick-add: a sentence opens an ordinary session; its create card is a draft', { skip }, async () => {
   const w = await world('drafts');
   const opened = await rest.draft(w.user, { workspaceId: w.workspaceId, text: 'every weekday at 9 summarise open PRs' });
-  const call = draftSessions.find((d) => d.ownerId === w.ownerId)!;
-  assert.equal(call.workspaceId, w.workspaceId);
-  assert.ok(call.prompt.includes('every weekday at 9 summarise open PRs'));
-  assert.ok(call.prompt.includes('mcp__orbit__schedule_create'));
+  // Opened through the real SessionsService.create: an ordinary session, the person's, in the line's workspace.
   const session = await db.session.findUniqueOrThrow({ where: { id: opened.sessionId } });
+  assert.equal(session.workspaceId, w.workspaceId);
+  assert.equal(session.ownerId, w.ownerId);
+  assert.ok(session.prompt.includes('every weekday at 9 summarise open PRs'));
+  assert.ok(session.prompt.includes('mcp__orbit__schedule_create'));
   assert.equal(session.runSource, SessionRunSource.MANUAL, 'an ordinary session');
   assert.equal(session.scheduleRunId, null);
+  assert.notEqual(session.openedBy, 'SCHEDULE');
+  // Another account's workspace opens nothing.
+  const stranger = await world('drafts-stranger');
+  await assert.rejects(rest.draft(stranger.user, { workspaceId: w.workspaceId, text: 'mine now' }));
   await db.session.update({ where: { id: opened.sessionId }, data: { assignedRunnerId: w.runner.id } });
   const pending = await tools.create(w.runner, opened.sessionId, { ...CREATE, rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] } } as never);
   const id = (pending as { card: { id: string } }).card.id;
@@ -557,4 +558,155 @@ test('the Scheduled page\'s quick-add: a sentence opens an ordinary session; its
   assert.equal(drafts[0].when?.text, 'Weekdays 09:00 · your time zone');
   await rest.decline(w.user, id, NO_SESSION);
   assert.deepEqual((await rest.drafts(w.user)).drafts, [], 'Not now takes the draft away');
+});
+
+// -----------------------------------------------------------------------------------------------------------------
+// Review round 1 (2026-11-15): re-judging at the press, a run and the intent, two accounts, races, a run's own controls
+// -----------------------------------------------------------------------------------------------------------------
+
+test('Allow re-checks the workspace: a create card whose workspace was deleted since the ask is withdrawn, not applied', { skip }, async () => {
+  const w = await world('gone-create');
+  const pending = await tools.create(w.runner, w.sessionId, { ...CREATE, timezone: 'UTC' } as never);
+  const id = (pending as { card: { id: string } }).card.id;
+  await db.workspace.update({ where: { id: w.workspaceId }, data: { deletedAt: new Date() } });
+  await assert.rejects(rest.allow(w.user, id, {}, NO_SESSION), (err: unknown) => {
+    const body = (err as { getResponse: () => { code: string; reason: string } }).getResponse();
+    assert.equal(body.code, 'SCHEDULE_REQUEST_STALE');
+    assert.equal(body.reason, 'WORKSPACE_GONE');
+    return true;
+  });
+  assert.equal((await db.scheduleChangeRequest.findUniqueOrThrow({ where: { id } })).state, 'SUPERSEDED');
+  assert.equal(await db.schedule.count({ where: { ownerId: w.ownerId } }), 0, 'no schedule in a deleted workspace');
+});
+
+test('Allow re-checks the workspace: an envelope card moving to a workspace deleted since the ask is withdrawn', { skip }, async () => {
+  const w = await world('gone-move');
+  const s = await createdThroughCard(w);
+  const pending = await tools.update(w.runner, w.sessionId, s.id, { workspaceId: w.otherWorkspaceId } as never);
+  const id = (pending as { card: { id: string } }).card.id;
+  await db.workspace.update({ where: { id: w.otherWorkspaceId }, data: { deletedAt: new Date() } });
+  await refusedWith(rest.allow(w.user, id, {}, NO_SESSION), 'SCHEDULE_REQUEST_STALE');
+  const now = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
+  assert.equal(now.workspaceId, w.workspaceId);
+  assert.equal(now.envelopeWorkspaceId, w.workspaceId);
+  // A workspace that is not the owner's at all is refused at the ask.
+  const stranger = await world('gone-move-stranger');
+  await refusedWith(tools.update(w.runner, w.sessionId, s.id, { workspaceId: stranger.workspaceId } as never), 'WORKSPACE_NOT_FOUND');
+});
+
+test('a run may not restate the intent; its prompt, rule, end and ending stay its own', { skip }, async () => {
+  const w = await world('run-intent');
+  const s = await createdThroughCard(w);
+  const run = await runSession(w, s.id);
+  await refusedWith(
+    tools.update(w.runner, run.sessionId, s.id, { intent: 'something else entirely' } as never),
+    'SCHEDULE_RUN_MAY_NOT_RESTATE_INTENT',
+  );
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).intent, CREATE.intent);
+  const ok = await tools.update(w.runner, run.sessionId, s.id, {
+    prompt: 'Check the releases page instead.', rule: { kind: 'DAILY', time: '11:00' }, endAt: '2027-01-01T00:00:00Z',
+  } as never);
+  assert.equal(ok.outcome, 'APPLIED');
+  // The person restating the goal, from a session, still may.
+  assert.equal((await tools.update(w.runner, w.sessionId, s.id, { intent: 'check it hourly-ish' } as never)).outcome, 'APPLIED');
+});
+
+test('a run on its OWN schedule may not resume it, run it now or undo, through the tools or the REST doors', { skip }, async () => {
+  const w = await world('run-own-controls');
+  const s = await createdThroughCard(w);
+  const run = await runSession(w, s.id);
+  const backedOff = await tools.update(w.runner, run.sessionId, s.id, { rule: { kind: 'WEEKLY', time: '10:00', weekdays: ['MON'] } } as never);
+  const revision = (backedOff as { record: { revision: number } }).record.revision;
+  await rest.pause(w.user, s.id, NO_SESSION);
+  await refusedWith(tools.resume(w.runner, run.sessionId, s.id), 'SCHEDULE_RUN_SESSION_SCOPE');
+  await refusedWith(tools.runNow(w.runner, run.sessionId, s.id), 'SCHEDULE_RUN_SESSION_SCOPE');
+  // The REST doors with the run's acting-session header are that run, and refuse it the same.
+  await refusedWith(rest.resume(w.user, s.id, acting(run.sessionId)), 'SCHEDULE_RUN_SESSION_SCOPE');
+  await refusedWith(rest.runNow(w.user, s.id, acting(run.sessionId)), 'SCHEDULE_RUN_SESSION_SCOPE');
+  await refusedWith(rest.undo(w.user, s.id, { revision }, acting(run.sessionId)), 'SCHEDULE_RUN_SESSION_SCOPE');
+  await refusedWith(rest.pause(w.user, s.id, acting(run.sessionId)), 'SCHEDULE_RUN_SESSION_SCOPE');
+  await refusedWith(rest.remove(w.user, s.id, acting(run.sessionId)), 'SCHEDULE_RUN_SESSION_SCOPE');
+  await refusedWith(rest.stop(w.user, run.runId, acting(run.sessionId)), 'SCHEDULE_RUN_SESSION_SCOPE');
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).state, 'PAUSED');
+});
+
+test('two accounts: another account\'s ids name nothing on every door and every tool', { skip }, async () => {
+  const a = await world('two-a');
+  const b = await world('two-b');
+  const s = await createdThroughCard(a);
+  const pending = await tools.update(a.runner, a.sessionId, s.id, { runLimitMinutes: 90 } as never);
+  const card = (pending as { card: { id: string } }).card.id;
+  const run = await db.scheduleRun.create({
+    data: { scheduleId: s.id, scheduleRevision: 1, plannedAt: new Date(), trigger: 'MANUAL', state: 'RUNNING', startedAt: new Date() },
+  });
+  const before = JSON.stringify(await db.schedule.findUniqueOrThrow({ where: { id: s.id } }));
+  // REST, as B.
+  assert.deepEqual((await rest.requests(b.user, 'all')).requests, []);
+  assert.deepEqual((await rest.list(b.user, 'all')).schedules, []);
+  assert.deepEqual((await rest.drafts(b.user)).drafts, []);
+  await refusedWith(rest.request(b.user, card), 'SCHEDULE_REQUEST_NOT_FOUND');
+  await refusedWith(rest.allow(b.user, card, {}, NO_SESSION), 'SCHEDULE_REQUEST_NOT_FOUND');
+  await refusedWith(rest.decline(b.user, card, NO_SESSION), 'SCHEDULE_REQUEST_NOT_FOUND');
+  await assert.rejects(rest.sessionCards(b.user, a.sessionId), /session not found/);
+  await refusedWith(rest.get(b.user, s.id), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(rest.listRuns(b.user, s.id), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(rest.pause(b.user, s.id, NO_SESSION), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(rest.resume(b.user, s.id, NO_SESSION), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(rest.runNow(b.user, s.id, NO_SESSION), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(rest.undo(b.user, s.id, { revision: 2 }, NO_SESSION), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(rest.remove(b.user, s.id, NO_SESSION), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(rest.stop(b.user, run.id, NO_SESSION), 'SCHEDULE_RUN_NOT_FOUND');
+  // Every tool, as B's own session on B's own runner.
+  await refusedWith(tools.get(b.runner, s.id), 'SCHEDULE_NOT_FOUND');
+  assert.deepEqual((await tools.list(b.runner, 'all')).schedules, []);
+  await refusedWith(tools.update(b.runner, b.sessionId, s.id, { title: 'mine' } as never), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(tools.pause(b.runner, b.sessionId, s.id), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(tools.resume(b.runner, b.sessionId, s.id), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(tools.runNow(b.runner, b.sessionId, s.id), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(tools.end(b.runner, b.sessionId, s.id), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(tools.remove(b.runner, b.sessionId, s.id), 'SCHEDULE_NOT_FOUND');
+  await refusedWith(tools.stop(b.runner, b.sessionId, run.id), 'SCHEDULE_RUN_NOT_FOUND');
+  await refusedWith(tools.report(b.runner, b.sessionId, { outcome: 'NO_CHANGE', summary: 'x' } as never), 'SCHEDULE_RUN_REPORT_NOT_A_RUN');
+  // B's runner cannot speak as A's session.
+  await assert.rejects(tools.update(b.runner, a.sessionId, s.id, { title: 'mine' } as never), /names no session this runner hosts/);
+  assert.equal(JSON.stringify(await db.schedule.findUniqueOrThrow({ where: { id: s.id } })), before, 'nothing of A\'s changed');
+  assert.equal((await db.scheduleChangeRequest.findUniqueOrThrow({ where: { id: card } })).state, 'PENDING');
+});
+
+test('presses at once: Allow with Decline, and Allow with Allow, apply exactly one outcome', { skip }, async () => {
+  const w = await world('race');
+  for (const pair of [['allow', 'decline'], ['allow', 'allow']] as const) {
+    const pending = await tools.create(w.runner, w.sessionId, { ...CREATE, timezone: 'UTC' } as never);
+    const id = (pending as { card: { id: string } }).card.id;
+    const before = await db.schedule.count({ where: { ownerId: w.ownerId } });
+    const press = (verb: 'allow' | 'decline') =>
+      verb === 'allow' ? rest.allow(w.user, id, {}, NO_SESSION) : rest.decline(w.user, id, NO_SESSION);
+    const settled = await Promise.allSettled(pair.map(press));
+    const won = settled.filter((r) => r.status === 'fulfilled');
+    const lost = settled.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    assert.equal(won.length, 1, `${pair.join('+')}: exactly one press wins`);
+    assert.equal((lost[0].reason as { getResponse: () => { code: string } }).getResponse().code, 'SCHEDULE_REQUEST_DECIDED');
+    const state = (await db.scheduleChangeRequest.findUniqueOrThrow({ where: { id } })).state;
+    const created = (await db.schedule.count({ where: { ownerId: w.ownerId } })) - before;
+    assert.ok((state === 'ALLOWED' && created === 1) || (state === 'DECLINED' && created === 0), `${pair.join('+')}: ${state}, ${created} written`);
+  }
+});
+
+test('Allow on a card whose schedule has ended, or whose envelope was narrowed since, applies nothing', { skip }, async () => {
+  const w = await world('after-ask');
+  const ended = await createdThroughCard(w);
+  const widen = await tools.update(w.runner, w.sessionId, ended.id, { runLimitMinutes: 60 } as never);
+  await rest.remove(w.user, ended.id, NO_SESSION);
+  await refusedWith(rest.allow(w.user, (widen as { card: { id: string } }).card.id, {}, NO_SESSION), 'SCHEDULE_REQUEST_DECIDED');
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: ended.id } })).runLimitMinutes, 30);
+
+  const narrowed = await createdThroughCard(w, { accessLevel: 'CHECK_ONLY', runLimitMinutes: 60 });
+  const ask = await tools.update(w.runner, w.sessionId, narrowed.id, { runLimitMinutes: 90 } as never);
+  // The person narrows it after the ask: the envelope shrinks to 20 minutes.
+  await tools.update(w.runner, w.sessionId, narrowed.id, { runLimitMinutes: 20 } as never);
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: narrowed.id } })).envelopeRunLimitMinutes, 20);
+  await refusedWith(rest.allow(w.user, (ask as { card: { id: string } }).card.id, {}, NO_SESSION), 'SCHEDULE_REQUEST_STALE');
+  const after = await db.schedule.findUniqueOrThrow({ where: { id: narrowed.id } });
+  assert.equal(after.runLimitMinutes, 20);
+  assert.equal(after.envelopeRunLimitMinutes, 20, 'not applied blind over the narrowing');
 });

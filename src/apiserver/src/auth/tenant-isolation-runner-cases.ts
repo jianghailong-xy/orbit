@@ -728,15 +728,15 @@ export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'GET /runner/schedules/:id':
     "read by (id, the runner's owner) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
   'PATCH /runner/schedules/:id':
-    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /runner/schedules/:id/pause':
-    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /runner/schedules/:id/resume':
-    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /runner/schedules/:id/end':
-    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'DELETE /runner/schedules/:id':
-    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
   'POST /runner/schedules/:id/run':
     "the schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:888)",
   'POST /runner/schedule-runs/:id/stop':
@@ -1440,7 +1440,7 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/schedule-runs/report header x-orbit-session-id':
     "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
   'PATCH /runner/schedules/:id body workspaceId':
-    "read by (id, the runner's owner, not deleted) before anything is written; another account's workspace answers 404 WORKSPACE_NOT_FOUND (schedules/schedules.service.ts:869)",
+    "read by (id, the runner's owner, not deleted) before anything is written; another account's workspace answers 404 WORKSPACE_NOT_FOUND (schedules/schedules.service.ts:899)",
   'POST /runner/main-checkout/:id/result body requestId':
     'never looked up: compared with the requestId of the row the calling runner\'s own id named, and refused 400 when it differs (workspaces/main-checkout.service.ts:745)',
   'POST /runner/main-checkout/:id/result body targetSessionId':
