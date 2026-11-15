@@ -1179,7 +1179,8 @@ final class AppModel {
         scheduled?.inspectedID = nil
         #if os(iOS)
         selectedSection = .scheduled
-        nav.path = [.console(sessionID: sessionID, origin: .deepLink)]
+        // Pushed over the Scheduled page from the schedule's history (a list), or put there by its push.
+        nav.path = [.console(sessionID: sessionID, origin: .list)]
         #else
         // The Mac's Scheduled page is its own task (I2): until then a run's session opens as any session does.
         route(to: .session(sessionID))

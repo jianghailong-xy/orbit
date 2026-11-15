@@ -76,6 +76,11 @@ final class ScheduleCopyParityTests: XCTestCase {
     }
 }
 
+/// The contract was not found: a failure naming it, never a skip (CrossClientChecksNeverSkipTests).
+private struct ScheduleContractMissing: Error, CustomStringConvertible {
+    var description: String { "contracts/schedule.contract.json was not found above this test file" }
+}
+
 /// The contract's `boardPhrases`: each phrase as a board shows it, with the input that must produce it. The web's
 /// rules are held to the same list by `scheduleContract.spec.ts`, so the two clients say one thing.
 final class ScheduleBoardPhraseTests: XCTestCase {
@@ -89,7 +94,7 @@ final class ScheduleBoardPhraseTests: XCTestCase {
             }
             dir = dir.deletingLastPathComponent()
         }
-        throw XCTSkip("unreachable")
+        throw ScheduleContractMissing()
     }
 
     private func rows(_ name: String) throws -> [JSONValue] {

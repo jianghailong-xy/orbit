@@ -110,40 +110,36 @@ struct ScheduledPage: View {
         let now = Date()
         let groups = scheduled.timeline(now: now)
         return List {
-                header(scheduled)
-                    .listRowSeparator(.hidden)
-                if scheduled.loaded && scheduled.shownSchedules.isEmpty && scheduled.drafts.isEmpty
-                    && scheduled.workspaceFilter == nil {
+            // One flat ForEach over the page's rows, headers included: the shape every List here keeps
+            // (ListRowShapeTests), no `if` and no second ForEach under it.
+            ForEach(pageRows(scheduled, groups: groups, now: now)) { row in
+                switch row {
+                case .header:
+                    header(scheduled).listRowSeparator(.hidden)
+                case .lead:
                     Text(SC.Empty.lead)
                         .font(.orbitSubtext).foregroundStyle(.secondary)
                         .listRowSeparator(.hidden)
-                    quickAdd(scheduled)
-                    ForEach(SC.Empty.examples, id: \.self) { example in
-                        Button { typed = example } label: {
-                            Text(example).font(.orbitSubtext).foregroundStyle(Color.accentColor)
-                                .multilineTextAlignment(.leading)
-                        }
-                        .buttonStyle(.plain)
+                case .example(let example):
+                    Button { typed = example } label: {
+                        Text(example).font(.orbitSubtext).foregroundStyle(Color.accentColor)
+                            .multilineTextAlignment(.leading)
                     }
-                } else {
-                    ForEach(groups) { group in
-                        Section {
-                            ForEach(rows(group, scheduled: scheduled, now: now)) { row in
-                                rowView(row)
-                            }
-                        } header: {
-                            groupHeader(group)
-                        }
-                    }
-                    quickAdd(scheduled)
-                        .listRowSeparator(.hidden)
-                }
-                if let error = scheduled.errorText {
-                    Text(error).font(.orbitLabel).foregroundStyle(.red).listRowSeparator(.hidden)
+                    .buttonStyle(.plain)
+                case .group(let group):
+                    groupHeader(group).listRowSeparator(.hidden)
+                case .item(let item):
+                    rowView(item)
+                case .quickAdd:
+                    quickAdd(scheduled).listRowSeparator(.hidden)
+                case .error(let text):
+                    Text(text).font(.orbitLabel).foregroundStyle(.red).listRowSeparator(.hidden)
                 }
             }
-            .listStyle(.plain)
-            .environment(\.defaultMinListRowHeight, 0)
+        }
+        .listStyle(.plain)
+        .softTopEdgeEffect()
+        .environment(\.defaultMinListRowHeight, 0)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -171,6 +167,48 @@ struct ScheduledPage: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+    }
+
+    /// The page's rows, in order: the head, then the empty page's lead and examples, or each group's header and
+    /// rows; the line at the end; a refusal under it.
+    private enum PageRow: Identifiable {
+        case header
+        case lead
+        case example(String)
+        case group(ScheduleDisplay.TimelineGroup)
+        case item(ScheduleRowModel)
+        case quickAdd
+        case error(String)
+
+        var id: String {
+            switch self {
+            case .header: return "header"
+            case .lead: return "lead"
+            case .example(let text): return "example-\(text)"
+            case .group(let group): return "group-\(group.id)"
+            case .item(let row): return row.id
+            case .quickAdd: return "quick-add"
+            case .error: return "error"
+            }
+        }
+    }
+
+    private func pageRows(_ scheduled: ScheduledModel, groups: [ScheduleDisplay.TimelineGroup],
+                          now: Date) -> [PageRow] {
+        var out: [PageRow] = [.header]
+        let empty = scheduled.loaded && scheduled.shownSchedules.isEmpty && scheduled.drafts.isEmpty
+            && scheduled.workspaceFilter == nil
+        if empty {
+            out += [.lead, .quickAdd] + SC.Empty.examples.map(PageRow.example)
+        } else {
+            for group in groups {
+                out.append(.group(group))
+                out += rows(group, scheduled: scheduled, now: now).map(PageRow.item)
+            }
+            out.append(.quickAdd)
+        }
+        if let error = scheduled.errorText { out.append(.error(error)) }
+        return out
     }
 
     /// "Scheduled 6" in the boards' blue, and the workspace filter under it (board 01 ②).
@@ -398,10 +436,11 @@ struct ScheduleDetailPanel: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .task { await model.scheduled?.loadDetail(scheduleID) }
-        .confirmationDialog(SC.Actions.delete, isPresented: $confirmingDelete, titleVisibility: .hidden) {
+        .orbitConfirmation(SC.Actions.delete, isPresented: $confirmingDelete) {
             Button(SC.Actions.delete, role: .destructive) {
                 Task { @MainActor in await model.scheduled?.delete(scheduleID) }
             }
+            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -548,8 +587,9 @@ struct ScheduleDetailPanel: View {
         return section(SC.Inspector.history) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                    if index > 0 { Divider().padding(.vertical, 8) }
                     historyRow(entry, scheduled: scheduled, s: s, detail: detail, now: now, zone: zone)
+                        .padding(.top, index > 0 ? 16 : 0)
+                        .overlay(alignment: .top) { Divider().padding(.top, 8).opacity(index > 0 ? 1 : 0) }
                 }
             }
         }
