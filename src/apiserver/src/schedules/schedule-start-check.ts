@@ -19,7 +19,7 @@ import { isWiderThanStarter, resolvePermissionMode } from '../common/permission-
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { scheduleRunMode } from './schedule-access';
 import { widenedParts, type AccessLevel, type Envelope } from './schedule-envelope';
-import { parseRule, runsPerWeek } from './schedule-time';
+import { instantOfLocal, offsetAt, parseRule, runsPerWeek } from './schedule-time';
 
 export type ScheduleHeldReason =
   | 'WORKSPACE_NOT_OWNED'
@@ -110,20 +110,34 @@ export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<St
   return { ok: true, plan: { mode, engine, provider } };
 }
 
-/** The window the weekly budget is counted over: a trailing 7×24 hours, not a calendar week. */
-export const SCHEDULE_BUDGET_WINDOW_MS = 7 * 24 * 60 * 60_000;
+/** The weekly budget's window: the 7 days before a slot, as the schedule's clock reads them. */
+const BUDGET_DAYS_MS = 7 * 24 * 60 * 60_000;
 
 /**
- * Whether the schedule has already used its envelope's runs per week (§4): the runs that actually started (a
- * session was opened, `startedAt`) in the trailing 7 days, of every trigger, against `envelopeRunsPerWeek`. A retry of
- * a start that never reached its engine is the same row back in QUEUED with `startedAt` cleared (§7.2), so its
- * attempts are one start. Read under the schedule lock the start takes, so two replicas cannot both pass.
+ * Where the budget's window opens for a slot planned at `plannedAt`: the same local wall-clock time 7 days earlier in
+ * the schedule's time zone. Not `plannedAt − 7×24 h`: across a daylight-saving change a week of a DAILY rule is 167
+ * or 169 hours, and the slot a week back would sit on the wrong side of the edge.
  */
-export async function scheduleOverBudget(db: Db, schedule: Schedule, now: Date): Promise<boolean> {
+export function scheduleBudgetWindowStart(plannedAt: Date, timezone: string): Date {
+  const wall = plannedAt.getTime() + offsetAt(plannedAt.getTime(), timezone);
+  return new Date(instantOfLocal(wall - BUDGET_DAYS_MS, timezone));
+}
+
+/**
+ * Whether a slot planned at `plannedAt` is over the envelope's runs per week (§4): the runs that actually started (a
+ * session was opened) whose own planned slot lies in the 7 days before it, of every trigger, against
+ * `envelopeRunsPerWeek`. Windowed on planned slots, not start times, so a start's latency (the worker's pass, a runner
+ * back after an outage) never moves a run into or out of the window: the slots of a rule inside its envelope are never
+ * closer than the envelope allows, and a rule moved to "a few minutes from now" still gives each run its own slot. A
+ * MANUAL run's slot is when it was asked for. A retry of a start that never reached its engine is the same row with
+ * `startedAt` cleared (§7.2), so its attempts are one start. Read under the schedule lock the start takes.
+ */
+export async function scheduleOverBudget(db: Db, schedule: Schedule, plannedAt: Date): Promise<boolean> {
   const started = await db.scheduleRun.count({
     where: {
       scheduleId: schedule.id,
-      startedAt: { gt: new Date(now.getTime() - SCHEDULE_BUDGET_WINDOW_MS) },
+      startedAt: { not: null },
+      plannedAt: { gt: scheduleBudgetWindowStart(plannedAt, schedule.timezone) },
     },
   });
   return started >= schedule.envelopeRunsPerWeek;

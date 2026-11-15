@@ -18,8 +18,8 @@
  * A QUEUED run starts when nothing of its schedule is RUNNING or AWAITING_APPROVAL and its `notBeforeAt` (a retry's
  * wait) has passed. The start checks run first (schedule-start-check.ts); a failure HOLDS the run and the schedule,
  * which then fires nothing until it is resumed. Then the weekly budget (§4): a run that is not MANUAL, on a schedule
- * that already started `envelopeRunsPerWeek` runs in the trailing 7 days, is MISSED (OVER_BUDGET) and the schedule
- * goes on. A run that passes is marked RUNNING with the id of the session it is
+ * that already started `envelopeRunsPerWeek` runs planned in the 7 days before its own slot, is MISSED
+ * (OVER_BUDGET) and the schedule goes on. A run that passes is marked RUNNING with the id of the session it is
  * about to open, in the same transaction, and the session is opened after it commits with that id, `runSource =
  * SCHEDULE` and `scheduleRunId` set; its first turn is the scheduled-run block and the prompt (schedule-run-block.ts).
  *
@@ -422,9 +422,10 @@ export class ScheduleRunsService {
           }
           return { outcome: 'HELD', alerts };
         }
-        // §4: the envelope's runs per week bound the runs that start, not only the rule. A slot over budget is MISSED
-        // (OVER_BUDGET) and the schedule goes on; a MANUAL run is the owner's press (runNow refuses a session's).
-        if (run.trigger !== 'MANUAL' && (await scheduleOverBudget(tx, schedule, now))) {
+        // §4: the envelope's runs per week bound the runs that start, not only the rule, counted on the slots they
+        // were planned for. A slot over budget is MISSED (OVER_BUDGET) and the schedule goes on; a MANUAL run is the
+        // owner's press (runNow refuses anyone else's over budget).
+        if (run.trigger !== 'MANUAL' && (await scheduleOverBudget(tx, schedule, run.plannedAt))) {
           return { outcome: 'MISSED', alerts: await this.missOverBudget(tx, schedule, run, now) };
         }
         const workspace = await tx.workspace.findUnique({
@@ -777,6 +778,7 @@ export class ScheduleRunsService {
         const now = this.clock();
         // §8.4: only the owner's own press (the owner-interactive channel) starts over budget. A session, or a personal
         // access token (what an agent with a shell on the runner holds), may not spend runs the owner did not allow.
+        // The run it would write is planned at now.
         if (actor.kind !== 'OWNER' && (await scheduleOverBudget(tx, schedule, now))) {
           throw refusal(
             'CONFLICT',
