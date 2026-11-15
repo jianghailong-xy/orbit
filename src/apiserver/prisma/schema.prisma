@@ -2179,6 +2179,11 @@ model Session {
   /// foreign key: a deleted space leaves its chats as sessions. Its partial index over
   /// (wiki_chat_space_id, created_at) is the migration's alone, as schema.prisma cannot spell one.
   wikiChatSpaceId          String?   @map("wiki_chat_space_id") @db.Uuid
+  /// The help center's Ask (migration 0850, @orbit/shared HelpAskMarker `{ page }`): a session is an Ask exactly
+  /// when it is set. Written by the Ask door (help/help-ask.ts) in this row's own INSERT and never afterwards (a
+  /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its
+  /// runner, and may call only the runner doors of help/help-ask-reads.ts.
+  helpAsk                  Json?     @map("help_ask")
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
   // git worktree on `branch`, forked from `baseSha` (the workDir HEAD at claim time).
