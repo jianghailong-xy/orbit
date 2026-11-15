@@ -145,6 +145,8 @@ export interface RunnerObjects {
   reviewerSessionId: string;
   /** Wiki: a session in a workspace bound to the space. */
   wikiSessionId: string;
+  /** The help center's Ask (migration 0850): a session of this machine's in no workspace, with `help_ask` set. */
+  helpAskSessionId: string;
   /** A SECRET grant to this machine, awaiting delivery, for the machine session's PENDING request (migration 0506). */
   secretGrantId: string;
   /** A grant of this machine being removed: what `removed` confirms. */
@@ -724,6 +726,8 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
 export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'GET /runner/help-ask/:read':
+    ':read names one of four account reads, never an object; the reads answer only an Ask session found by (the session header, the runner\'s owner, this runner) and read only that owner\'s rows (help/help-ask-reads.ts:224); help-ask.pg.spec.ts 6 sends them from another machine and another account',
   'POST /runner/main-checkout/:id/snapshot':
     'the read is found by (id, the calling runner) only, so another machine\'s id answers 404 and nothing is stored (workspaces/main-checkout.service.ts:330); main-checkout.pg.spec.ts "the read goes through the runner" sends it from another runner',
   'POST /runner/main-checkout/:id/result':
@@ -1329,6 +1333,13 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/notify header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, body: { message: 'from the census' } })),
 
   // ── the wiki ────────────────────────────────────────────────────────────────────────────────────
+  // The four help reads answer an Ask session of the runner's own (help/help-ask-reads.ts): another account's Ask in the
+  // header is the 404 of an Ask that is not there.
+  'GET /runner/help-ask/:read header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    (mine) => ({ params: { read: 'machines' }, headers: calling(mine.runner.helpAskSessionId) }),
+    (of) => of.runner.helpAskSessionId,
+  ),
   'GET /runner/wiki/search header x-orbit-session-id': fromTheirSession(RUNNER, () => ({ params: {}, query: { q: 'census' } }), (of) => of.runner.wikiSessionId),
   'POST /runner/wiki/changesets body spaceId': {
     as: RUNNER,

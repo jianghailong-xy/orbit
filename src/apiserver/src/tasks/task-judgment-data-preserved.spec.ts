@@ -3047,7 +3047,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // changes, and no row is written.
       '0800_pool_login_token_subagent_credential',
       // 0810 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
-      '0810_coordinator_handoff'],
+      '0810_coordinator_handoff',
+      // 0850 adds a nullable `session.help_ask` JSONB (catalog-only) and a BEFORE UPDATE OF help_ask trigger that
+      // refuses changing it; no preserved rows, no DONE fence change, and no row is written.
+      '0850_help_ask_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

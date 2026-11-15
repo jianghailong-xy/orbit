@@ -42,6 +42,7 @@ func cmdMcp() {
 		wikiOff:               !wikiEnabledFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
+		helpAsk:               helpAskModeFromEnv(),
 	}
 	srv.serve(os.Stdin, os.Stdout)
 }
@@ -62,6 +63,9 @@ type mcpServer struct {
 	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
 	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
 	callTimeout time.Duration
+	// helpAsk: spawned with ORBIT_HELP_ASK=1 for the help center's Ask, it serves the four help reads and nothing else
+	// (mcp_help_ask.go).
+	helpAsk bool
 	// rec is what the tool call being answered did, for its receipt (tool_receipt.go); nil outside one.
 	rec *callRecord
 	// Reads the session's live permission mode for Orbit's Plan gate (plan_gate.go); nil reads it from the runner
@@ -225,17 +229,24 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		}
 		// The agent primer, versioned in its first line, is the one set of instructions every engine's
 		// MCP client is handed; each engine's own instructions carry it too (agent_primer.go).
+		instructions := agentPrimer
+		if s.helpAsk {
+			instructions = helpAskInstructions
+		}
 		return s.ok(req.ID, map[string]interface{}{
 			"protocolVersion": pv,
 			"capabilities":    map[string]interface{}{"tools": map[string]interface{}{}},
 			"serverInfo":      map[string]interface{}{"name": "orbit", "version": version},
-			"instructions":    agentPrimer,
+			"instructions":    instructions,
 		}), true
 	case "notifications/initialized", "notifications/cancelled":
 		return rpcResponse{}, false // notifications get no response
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
+		if s.helpAsk {
+			return s.ok(req.ID, map[string]interface{}{"tools": helpAskToolDescriptors()}), true
+		}
 		return s.ok(req.ID, map[string]interface{}{"tools": s.listedToolDescriptors()}), true
 	case "tools/call":
 		var p struct {
@@ -245,6 +256,9 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		}
 		if json.Unmarshal(req.Params, &p) != nil {
 			return s.err(req.ID, -32602, "invalid params"), true
+		}
+		if s.helpAsk {
+			return s.ok(req.ID, s.callHelpAskTool(p.Name)), true
 		}
 		if s.onlyTools != nil && !s.onlyTools[p.Name] {
 			result := toolResult(p.Name+" is not served in this session", true)

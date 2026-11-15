@@ -1,4 +1,6 @@
 import { AgentFixButton, AgentFixLine } from '../AgentFix';
+import { HelpLearnMore } from '../help/HelpLearnMore';
+import { HELP_ERROR_ATTR } from '../../lib/help/drawerArticles';
 import { agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
@@ -826,13 +828,24 @@ export function MachineSettingsPage() {
               ? <AgentFixButton view={fixView} target={fixTarget} runnerId={runner.id} />
               : null;
             const action = attentionAction(item, fixButton);
+            // The offline card names its error, so the help drawer puts the article about it first, and opens it.
+            const offline = item.kind === 'offline';
             return (
-              <div key={`${item.kind}:${index}`} className={`rd-attention-card ${item.tone}`}>
+              <div
+                key={`${item.kind}:${index}`}
+                className={`rd-attention-card ${item.tone}`}
+                {...(offline ? { [HELP_ERROR_ATTR]: 'runner.offline' } : {})}
+              >
                 <span className="rd-attention-icon">{ATTENTION_ICON[item.kind]}</span>
                 <div className="rd-attention-main">
                   <div className="rd-attention-title">{item.title}</div>
                   <div className="rd-attention-detail">{attentionDetail(item)}</div>
                   {action && <div className="rd-attention-action">{action}</div>}
+                  {offline && (
+                    <div className="rd-attention-learn">
+                      <HelpLearnMore slug="machine-offline" />
+                    </div>
+                  )}
                   <AgentFixLine view={fixView} />
                 </div>
               </div>
