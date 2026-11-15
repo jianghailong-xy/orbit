@@ -1,11 +1,15 @@
 package io.orbitd.android.composer
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import io.orbitd.android.core.net.ApiResponse
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
 
 /**
  * Boards 03 and 02 on the session page, over the controlled server: the context dialog's Compact and Start a new coordinator, the
@@ -156,6 +160,38 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         await { has(hasTestTag("handoff-progress")) }
         ComposerShell.session = mapOf("lifecycleState" to JsonPrimitive("COMPLETED"), handoff("COMPLETED", to = successor))
         await { has(hasTestTag("handoff-handed-over")) }
+    }
+
+    /** Board 02-2's "Handing over" header badge has no slot on Android: the session page's top bar names no session and carries no
+     * run state (A06-18, after iOS d87e5fa67 — whether it runs, the composer says), so neither "Running" nor the badge is drawn there,
+     * in any handoff state. While the note is written and the replacement runs, the composer says it instead. The page as a phone draws
+     * it is a PNG under app/build/evidence/handing-over (not committed). */
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun theSessionBarHasNoStatusSlotSoTheComposerSaysHandingOver() {
+        for (state in listOf("WRITING", "HANDING_OVER", "FAILED", null)) {
+            if (state == null) coordinatorSession(*running) else coordinatorSession(handoff(state), *running)
+            if (state == "WRITING") { signIn(); open("orbit-session:${ComposerShell.SESSION}") } else app().realtime.refreshSession()
+            await { if (state == null || state == "FAILED") has(hasTestTag("composer-input") and isEnabled())
+                else has(hasTestTag("handoff-progress")) }
+            val inBar = { text: String -> has(hasText(text) and hasAnyAncestor(hasTestTag("app-bar")), unmerged = true) }
+            assertFalse("$state: the bar draws no badge", inBar(CoordinatorHandoffCopy.BADGE_HANDING_OVER))
+            assertFalse("$state: the bar draws no run word either", inBar("Running"))
+            assertFalse("$state: the bar has no second line", has(hasTestTag("page-bar-subtitle"), unmerged = true))
+            val composerSays = has(hasText(CoordinatorHandoffCopy.HANDING_OVER), unmerged = true)
+            assertEquals("$state: the composer says it is handing over", state == "WRITING" || state == "HANDING_OVER", composerSays)
+            if (state == "WRITING" || state == "HANDING_OVER") shot(state.lowercase())
+        }
+    }
+
+    private fun shot(name: String) {
+        compose.waitForIdle()
+        val view = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        val pixels = IntArray(bitmap.width * bitmap.height).also { bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height) }
+        assertTrue("$name: the shot is blank", pixels.any { it != 0 })
+        val file = File(System.getProperty("user.dir"), "build/evidence/handing-over/$name.png").also { it.parentFile?.mkdirs() }
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        println("shot $name ${bitmap.width}x${bitmap.height} -> $file")
     }
 
     @Test fun handingOverIsTheProgressRowWithoutItsButtons() {
