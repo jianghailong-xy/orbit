@@ -2930,6 +2930,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // for one that admits WIKI_CREATE, adds one CHECK and one partial unique index; `owner_request` is none of the
       // preserved relations, no trigger, function or DONE fence changes, and no row is written.
       '0531_owner_request_wiki_create',
+      // 0532 adds three nullable conversation_turn columns and their CHECK only; no preserved rows, triggers or DONE
+      // fence change.
+      '0532_conversation_turn_translation',
       // 0534 creates main_checkout_request only; no preserved rows, triggers or DONE fence change.
       '0534_main_checkout_request',
       // 0535 adds project's non-code mark, who wrote it and when, and one CHECK; no preserved rows, triggers or DONE
@@ -2940,6 +2943,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // as a third input (a TASKS row's hashes are computed exactly as before). No completion ledger,
       // DONE fence, preserved trigger or function is changed, and no row is written.
       '0545_criterion_confirmation',
+      // 0550 adds one nullable approval column only; no preserved rows, triggers or DONE fence change.
+      '0550_approval_translation',
       // 0555 adds project.non_code_reason, the confirmed wording on project_criterion_confirmation
       // (backfilled only on rows whose revision is still the criterion's) and two partial indexes on
       // activity. No completion ledger, DONE fence, preserved trigger or function is changed.
