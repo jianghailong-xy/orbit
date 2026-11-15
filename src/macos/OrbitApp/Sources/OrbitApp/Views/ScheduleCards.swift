@@ -146,7 +146,9 @@ struct ScheduleCreateCardView: View {
                     }
                 }
                 .padding(.top, 2)
-                Text(SC.CreateCard.notice).font(.orbitLabel).foregroundStyle(.secondary)
+                // The server words it from what the task finds (S5 `scheduleCreateNotice`); else the plain notice.
+                Text(card.notice ?? ScheduleDisplay.createNotice(findings: nil))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
                 if let said {
                     Text(said).font(.orbitLabel).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                 }
@@ -300,7 +302,7 @@ struct ScheduleRunStripView: View {
     var body: some View {
         let zone = TimeZone.current.identifier
         let session = console.scheduleRunSession ?? appModel.session(id: console.sessionID)
-        let head = ScheduleDisplay.runHeadText(session: session, run: run, now: Date())
+        let head = ScheduleDisplay.runHeadText(session: session, run: run, scheduleEngine: schedule.engine, now: Date())
         VStack(alignment: .leading, spacing: 6) {
             Button {
                 appModel.openSchedule(schedule.id)
@@ -491,11 +493,13 @@ struct ScheduleWaitingCardView: View {
             let run = schedule?.lastRun
             let t = ScheduleDisplay.failedWaiting(title: title, consecutiveFailures: max(schedule?.consecutiveFailures ?? 1, 1),
                                                   failureReason: run?.failureReason, reasonText: run?.reasonText,
+                                                  summary: run?.summary,
                                                   plannedAt: run?.plannedAt ?? item.createdAt, timezone: zone)
             return WaitingContent(kind: t.kind, title: t.title, body: t.body)
         case "SCHEDULE_HELD":
             let t = ScheduleDisplay.heldWaiting(title: title, heldReason: schedule?.heldReason,
                                                 plannedAt: schedule?.nextDueAt ?? schedule?.lastRun?.plannedAt ?? item.createdAt,
+                                                agentName: schedule?.agentName,
                                                 workspaceName: schedule?.workspaceName, now: Date(), timezone: zone)
             return WaitingContent(kind: t.kind, title: t.title, body: t.body)
         case "SCHEDULE_APPROVAL":

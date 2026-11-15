@@ -168,6 +168,10 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     public let workspaceId: String
     public let workspaceName: String?
     public let agentId: String?
+    /// S5: the agent's name, so a hold can say 'the agent "auditor" is disabled'; nil when it names none or is gone.
+    public var agentName: String? = nil
+    /// S5: the engine its runs start on ("codex"), when the conversation it came from still names one.
+    public var engine: String? = nil
     public let accessLevel: String
     public let runLimitMinutes: Int
     public let runsPerWeek: Int
@@ -227,7 +231,7 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, intent, prompt, rule, timezone, workspaceId, workspaceName, agentId, accessLevel
+        case id, title, intent, prompt, rule, timezone, workspaceId, workspaceName, agentId, agentName, engine, accessLevel
         case runLimitMinutes, runsPerWeek, envelope, state, heldReason, endedReason, note, revision, startAt, endAt
         case nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun, pausedAt
     }
@@ -243,6 +247,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
         workspaceId = try c.decode(String.self, forKey: .workspaceId)
         workspaceName = try? c.decodeIfPresent(String.self, forKey: .workspaceName)
         agentId = try? c.decodeIfPresent(String.self, forKey: .agentId)
+        agentName = try? c.decodeIfPresent(String.self, forKey: .agentName)
+        engine = try? c.decodeIfPresent(String.self, forKey: .engine)
         accessLevel = (try? c.decode(String.self, forKey: .accessLevel)) ?? "CHECK_ONLY"
         runLimitMinutes = (try? c.decode(Int.self, forKey: .runLimitMinutes)) ?? 30
         runsPerWeek = (try? c.decode(Int.self, forKey: .runsPerWeek)) ?? 7
@@ -493,6 +499,9 @@ public struct ScheduleCard: Codable, Equatable, Sendable, Identifiable {
     public let may: ScheduleEnvelopeLines.May?
     public let costs: ScheduleEnvelopeLines.Costs?
     public let today: ScheduleCardToday?
+    /// A create card's last line as the server words it (S5's `scheduleCreateNotice`: "You'll hear about new
+    /// versions and failures only."); nil from an envelope card.
+    public var notice: String? = nil
     public let proposed: [String: JSONValue]?
     public let envelope: ScheduleCardEnvelope?
 
@@ -531,7 +540,7 @@ public struct ScheduleCard: Codable, Equatable, Sendable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, kind, state, askedBy, askedBySessionId, scheduleId, createdAt, decidedAt, resultRevision
-        case decision, title, readBack, intent, when, runsIn, may, costs, today, proposed, envelope
+        case decision, title, readBack, intent, when, runsIn, may, costs, today, notice, proposed, envelope
     }
 
     public init(from decoder: Decoder) throws {
@@ -554,6 +563,7 @@ public struct ScheduleCard: Codable, Equatable, Sendable, Identifiable {
         may = try? c.decodeIfPresent(ScheduleEnvelopeLines.May.self, forKey: .may)
         costs = try? c.decodeIfPresent(ScheduleEnvelopeLines.Costs.self, forKey: .costs)
         today = try? c.decodeIfPresent(ScheduleCardToday.self, forKey: .today)
+        notice = try? c.decodeIfPresent(String.self, forKey: .notice)
         proposed = try? c.decodeIfPresent([String: JSONValue].self, forKey: .proposed)
         envelope = try? c.decodeIfPresent(ScheduleCardEnvelope.self, forKey: .envelope)
     }

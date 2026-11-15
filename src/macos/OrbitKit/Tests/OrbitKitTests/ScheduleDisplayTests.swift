@@ -288,6 +288,55 @@ final class ScheduleDisplayTests: XCTestCase {
                           + "enabled and you resume.")
     }
 
+    /// S5's pushes, the reported failure's own words and the create card's last line (scheduleContract.spec.ts).
+    func testThePushesTheReportedFailureAndTheNotice() {
+        let push = ScheduleDisplay.failedPush(title: "Nightly pg spec sweep", consecutiveFailures: 3,
+                                              failureReason: "NO_REPORT", reasonText: nil,
+                                              plannedAt: "2026-11-13T18:00:00.000Z", timezone: Self.tz)
+        XCTAssertEqual(push.title, "Nightly pg spec sweep failed 3 runs in a row")
+        XCTAssertEqual(push.body, "The last run ended without a report. It keeps running until you pause it.")
+        XCTAssertEqual(ScheduleDisplay.failedPush(title: "Codex stable check", consecutiveFailures: 1,
+                                                  failureReason: "REPORTED_FAILED", reasonText: nil,
+                                                  summary: "The releases page returned 503.",
+                                                  plannedAt: "2026-11-14T02:00:00.000Z", timezone: Self.tz).body,
+                       "The last run reported a failure: The releases page returned 503. It keeps running until you pause it.")
+        XCTAssertTrue(ScheduleDisplay.failedWaiting(title: "Codex stable check", consecutiveFailures: 1,
+                                                    failureReason: "REPORTED_FAILED", reasonText: nil,
+                                                    summary: "The releases page returned 503.",
+                                                    plannedAt: "2026-11-14T02:00:00.000Z", timezone: Self.tz)
+            .body.hasPrefix("The last run reported a failure: The releases page returned 503 ("))
+        XCTAssertEqual(ScheduleDisplay.goalReachedPushTitle("Release 2.0 freeze watch"), "Release 2.0 freeze watch ended itself")
+        XCTAssertEqual(ScheduleDisplay.createNotice(findings: "versions"), "You'll hear about new versions and failures only.")
+        XCTAssertEqual(ScheduleDisplay.createNotice(findings: "issues"), "You'll hear about new issues and failures only.")
+        XCTAssertEqual(ScheduleDisplay.createNotice(findings: nil), ScheduleCopy.CreateCard.notice)
+        XCTAssertEqual(ScheduleDisplay.createNotice(findings: "findings"), ScheduleCopy.CreateCard.notice)
+    }
+
+    /// S5's schedule names its agent and engine: a hold says which agent, and a run's head line has its engine
+    /// before the session's own read.
+    func testTheScheduleNamesItsAgentAndEngine() throws {
+        let row = """
+        {"id":"a","title":"Weekly dependency audit","rule":{"kind":"WEEKLY","time":"09:00","weekdays":["MON"]},
+         "timezone":"UTC","workspaceId":"w","workspaceName":"web","state":"HELD","heldReason":"AGENT_DISABLED",
+         "agentName":"auditor","engine":"codex"}
+        """
+        let s = try JSONDecoder().decode(ScheduleView.self, from: Data(row.utf8))
+        XCTAssertEqual(s.agentName, "auditor")
+        XCTAssertEqual(ScheduleDisplay.heldWaiting(title: s.title, heldReason: s.heldReason,
+                                                   plannedAt: sh("2025-11-10T09:00"), agentName: s.agentName,
+                                                   workspaceName: s.workspaceName,
+                                                   now: ScheduleDisplay.parse(sh("2025-11-10T09:01"))!, timezone: Self.tz).body,
+                       "It could not start on Monday 09:00: the agent \"auditor\" in workspace web is disabled. "
+                        + "Nothing runs until it is enabled and you resume.")
+        let run = ScheduleRunView(id: "r", scheduleId: "a", plannedAt: sh("2025-11-13T10:00"), state: "RUNNING",
+                                  startedAt: sh("2025-11-14T12:15"))
+        XCTAssertEqual(ScheduleDisplay.runHeadText(session: nil, run: run, scheduleEngine: s.engine, now: Self.now),
+                       "Codex agent · 4 min")
+        let card = try JSONDecoder().decode(ScheduleCard.self, from: Data(
+            #"{"id":"c","kind":"CREATE","notice":"You'll hear about new versions and failures only."}"#.utf8))
+        XCTAssertEqual(card.notice, "You'll hear about new versions and failures only.")
+    }
+
     func testTheRunsSession() {
         XCTAssertEqual(ScheduleDisplay.runStripText(plannedAt: sh("2025-11-13T10:00"), startedAt: sh("2025-11-13T10:01"),
                                                     accessLevel: "CHECK_ONLY", timezone: Self.tz),

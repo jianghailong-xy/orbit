@@ -211,6 +211,13 @@ public enum ScheduleDisplay {
         return fill(C.CreateCard.runsInEngine, ["workspace": workspaceName, "engine": engineName(engine)])
     }
 
+    /// The create card's last line (S5 `scheduleCreateNotice`): "You'll hear about new versions and failures only.";
+    /// with no word for what the task finds, the plain notice.
+    public static func createNotice(findings: String?) -> String {
+        let what = findings?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return what.isEmpty ? C.CreateCard.notice : fill(C.CreateCard.noticeAbout, ["findings": what])
+    }
+
     /// The create card's When: "Daily 10:00 · Asia/Shanghai · first run tomorrow", with its parts.
     public struct CreateWhen: Equatable, Sendable {
         public let text: String
@@ -749,9 +756,43 @@ public enum ScheduleDisplay {
         public var alwaysAllow: String? = nil
     }
 
+    static let summaryMax = 120
+
+    /// The failure clause a failure card and its push say (S5 `failedWaitingClause`): a REPORTED_FAILED run's own
+    /// summary, one line of at most 120 characters with no closing full stop, else the reason's clause.
+    static func failedWaitingClause(failureReason: String?, reasonText: String?, summary: String?) -> String {
+        let template = reasonText == nil ? C.failureReasonsWithSummary[failureReason ?? ""] : nil
+        var flat = (summary ?? "").split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        while let last = flat.last, last == "." || last == "。" { flat.removeLast() }
+        if let template, !flat.isEmpty {
+            let clipped = flat.count <= summaryMax
+                ? flat
+                : String(flat.prefix(summaryMax - 1)).trimmingCharacters(in: .whitespaces) + "…"
+            return fill(template, ["summary": clipped])
+        }
+        return failureClause(failureReason: failureReason, reasonText: reasonText) ?? C.failureReasons["REPORTED_FAILED"]!
+    }
+
+    /// A failure's push (S5 `scheduleFailedPush`): the card's title, and "The last run ended without a report. It
+    /// keeps running until you pause it."
+    public static func failedPush(title: String, consecutiveFailures: Int, failureReason: String?, reasonText: String?,
+                                  summary: String? = nil, plannedAt: String, timezone: String) -> (title: String, body: String) {
+        let card = failedWaiting(title: title, consecutiveFailures: consecutiveFailures, failureReason: failureReason,
+                                 reasonText: reasonText, summary: summary, plannedAt: plannedAt, timezone: timezone)
+        return (card.title, fill(C.Push.failedBody, ["reason": failedWaitingClause(failureReason: failureReason,
+                                                                                    reasonText: reasonText,
+                                                                                    summary: summary)]))
+    }
+
+    /// "Release 2.0 freeze watch ended itself".
+    public static func goalReachedPushTitle(_ title: String) -> String {
+        fill(C.Push.goalReachedTitle, ["title": title])
+    }
+
     /// A failed schedule's card: "Nightly pg spec sweep failed 3 runs in a row".
     public static func failedWaiting(title: String, consecutiveFailures: Int, failureReason: String?,
-                                     reasonText: String?, plannedAt: String, timezone: String) -> WaitingText {
+                                     reasonText: String?, summary: String? = nil, plannedAt: String,
+                                     timezone: String) -> WaitingText {
         let at = parse(plannedAt) ?? Date(timeIntervalSince1970: 0)
         return WaitingText(
             title: consecutiveFailures > 1
@@ -759,8 +800,7 @@ public enum ScheduleDisplay {
                 : fill(C.Waiting.failedTitle, ["title": title]),
             kind: C.Waiting.kindsSchedule,
             body: fill(C.Waiting.failedBody, [
-                "reason": failureClause(failureReason: failureReason, reasonText: reasonText)
-                    ?? C.failureReasons["REPORTED_FAILED"]!,
+                "reason": failedWaitingClause(failureReason: failureReason, reasonText: reasonText, summary: summary),
                 "when": "\(dateText(at, timezone: timezone)), \(localParts(at, timezone: timezone).time)",
             ]),
             actions: [C.Actions.openRun, C.Actions.pauseSchedule])
@@ -843,9 +883,11 @@ public enum ScheduleDisplay {
     /// A run's session's head line from the session's own read (its detail, which every run session has, in the
     /// app's lists or not): its lifecycle word, its engine's name as the web's ENGINE_CLI_NAMES gives it, and how long
     /// the run took. "Open · Codex agent · 5 min".
-    public static func runHeadText(session: Session?, run: ScheduleRunView, now: Date) -> String {
+    public static func runHeadText(session: Session?, run: ScheduleRunView, scheduleEngine: String? = nil,
+                                   now: Date) -> String {
+        // The session's own engine; before its read, the schedule's (S5 `ScheduleView.engine`).
         runHeadText(state: session.map(SessionHeader.lifecycleWord(for:)),
-                    engine: session?.engine.map(ProviderEngines.cliName),
+                    engine: (session?.engine ?? scheduleEngine).map(ProviderEngines.cliName),
                     startedAt: run.startedAt, endedAt: run.endedAt, now: now)
     }
 

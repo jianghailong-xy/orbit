@@ -137,6 +137,9 @@ public enum ScheduleCopy {
         "CANCELLED_BY_OWNER": "was stopped by you",
         "OVER_BUDGET": "was over what you allowed this week",
     ]
+    public static let failureReasonsWithSummary: [String: String] = [
+        "REPORTED_FAILED": "reported a failure: {summary}",
+    ]
     public static let heldReasons: [String: ScheduleHeldCopy] = [
         "WORKSPACE_NOT_OWNED": ScheduleHeldCopy(clause: "the workspace {workspace} is no longer yours", until: "it is yours again"),
         "WORKSPACE_DELETED": ScheduleHeldCopy(clause: "the workspace {workspace} was deleted", until: "it runs in another workspace"),
@@ -145,7 +148,7 @@ public enum ScheduleCopy {
         "AGENT_DISABLED": ScheduleHeldCopy(clause: "the agent \"{agent}\" is disabled", until: "it is enabled"),
         "OUTSIDE_ENVELOPE": ScheduleHeldCopy(clause: "it no longer fits what you allowed", until: "you allow it"),
         "ACCESS_NOT_ENFORCEABLE": ScheduleHeldCopy(clause: "the engine it would run on cannot enforce its access level", until: "it runs on an engine that can"),
-        "MODE_WIDER_THAN_ACCOUNT_DEFAULT": ScheduleHeldCopy(clause: "its access is wider than your account's default mode", until: "your default mode allows it"),
+        "MODE_WIDER_THAN_ACCOUNT_DEFAULT": ScheduleHeldCopy(clause: "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)", until: "your default mode allows it"),
         "NO_REPOSITORY": ScheduleHeldCopy(clause: "the workspace {workspace} has no repository", until: "it has one"),
         "SESSION_REFUSED": ScheduleHeldCopy(clause: "its run's session could not be opened", until: "that is fixed"),
     ]
@@ -264,6 +267,7 @@ public enum ScheduleCopy {
         public static let runsInEngine = "{workspace} · {engine} agent"
         public static let zoneFromDevice = "your time zone"
         public static let notice = "You'll hear about new findings and failures only."
+        public static let noticeAbout = "You'll hear about new {findings} and failures only."
     }
     public enum EnvelopeCard {
         public static let now = "Now"
@@ -295,6 +299,10 @@ public enum ScheduleCopy {
         public static let approvalBody = "If nobody answers by {deadline} this run fails; the next one starts {next}."
         public static let approvalAlwaysAllow = "Always allow covers {pattern} in {workspace}: later runs won't ask for this."
         public static let widenBody = "{reason} Now: {now}. Asked: {asked}"
+    }
+    public enum Push {
+        public static let failedBody = "The last run {reason}. It keeps running until you pause it."
+        public static let goalReachedTitle = "{title} ended itself"
     }
     public enum Empty {
         public static let lead = "Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once."
@@ -420,6 +428,7 @@ public enum ScheduleCopy {
         "failureReasons.RUN_LIMIT": ScheduleCopy.failureReasons["RUN_LIMIT"]!,
         "failureReasons.CANCELLED_BY_OWNER": ScheduleCopy.failureReasons["CANCELLED_BY_OWNER"]!,
         "failureReasons.OVER_BUDGET": ScheduleCopy.failureReasons["OVER_BUDGET"]!,
+        "failureReasonsWithSummary.REPORTED_FAILED": ScheduleCopy.failureReasonsWithSummary["REPORTED_FAILED"]!,
         "heldReasons.WORKSPACE_NOT_OWNED.clause": ScheduleCopy.heldReasons["WORKSPACE_NOT_OWNED"]!.clause,
         "heldReasons.WORKSPACE_NOT_OWNED.until": ScheduleCopy.heldReasons["WORKSPACE_NOT_OWNED"]!.until,
         "heldReasons.WORKSPACE_DELETED.clause": ScheduleCopy.heldReasons["WORKSPACE_DELETED"]!.clause,
@@ -534,6 +543,7 @@ public enum ScheduleCopy {
         "createCard.runsInEngine": ScheduleCopy.CreateCard.runsInEngine,
         "createCard.zoneFromDevice": ScheduleCopy.CreateCard.zoneFromDevice,
         "createCard.notice": ScheduleCopy.CreateCard.notice,
+        "createCard.noticeAbout": ScheduleCopy.CreateCard.noticeAbout,
         "envelopeCard.now": ScheduleCopy.EnvelopeCard.now,
         "envelopeCard.asked": ScheduleCopy.EnvelopeCard.asked,
         "envelopeCard.accessJoin": ScheduleCopy.EnvelopeCard.accessJoin,
@@ -557,6 +567,8 @@ public enum ScheduleCopy {
         "waiting.approval.body": ScheduleCopy.Waiting.approvalBody,
         "waiting.approval.alwaysAllow": ScheduleCopy.Waiting.approvalAlwaysAllow,
         "waiting.widen.body": ScheduleCopy.Waiting.widenBody,
+        "push.failedBody": ScheduleCopy.Push.failedBody,
+        "push.goalReachedTitle": ScheduleCopy.Push.goalReachedTitle,
         "empty.lead": ScheduleCopy.Empty.lead,
         "empty.examples.0": ScheduleCopy.Empty.examples[0],
         "empty.examples.1": ScheduleCopy.Empty.examples[1],
