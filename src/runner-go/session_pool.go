@@ -120,6 +120,10 @@ type liveSession struct {
 	// pool. It is called under p.mu, and the tailer calls into the pool from under its own
 	// lock (bgTailer.holdFor), so it must be lock-free on the tailer's side.
 	monitorProbe func() bool
+	// subagentProbe is this run's "is a SubAgent of this session still running" query
+	// (subagent.go), nil where no job service is at stake. Lock-free on the service's side, like
+	// monitorProbe, because it is called under p.mu.
+	subagentProbe func() bool
 }
 
 // heartbeatSupervisorSnapshot binds a heartbeat response to the exact local
@@ -369,15 +373,20 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 // and not per job — several jobs of one session share one checkout, and a session is
 // the unit that new work displaces. A watch is not among those jobs: it only waits.
 func (p *sessionPool) admissionIdleCapacity() int {
+	idle, _ := p.admissionOccupancy()
+	return idle
+}
+
+// admissionOccupancy is the one count admission and the heartbeat both read: the idle
+// capacity admissionIdleCapacity reports, and the sessions that occupy a slot only
+// through background jobs of their own — no turn permit, no reclaim under way — which
+// the heartbeat reports as backgroundJobSessionIds, so the control plane can show them
+// as running (sorted). A draining runner offers no capacity, and its job holders still
+// hold their slots.
+func (p *sessionPool) admissionOccupancy() (int, []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.drainingForUpdate {
-		return 0
-	}
 	occupied := make(map[string]bool, len(p.sessions))
-	for sessionID := range p.backgroundJobCountsLocked() {
-		occupied[sessionID] = true
-	}
 	for id, s := range p.sessions {
 		if s.active {
 			occupied[id] = true
@@ -389,11 +398,22 @@ func (p *sessionPool) admissionIdleCapacity() int {
 			occupied[id] = true
 		}
 	}
+	var backgroundOnly []string
+	for sessionID := range p.backgroundJobCountsLocked() {
+		if !occupied[sessionID] {
+			occupied[sessionID] = true
+			backgroundOnly = append(backgroundOnly, sessionID)
+		}
+	}
+	sort.Strings(backgroundOnly)
+	if p.drainingForUpdate {
+		return 0, backgroundOnly
+	}
 	idle := p.max - len(occupied)
 	if idle < 0 {
 		idle = 0
 	}
-	return idle
+	return idle, backgroundOnly
 }
 
 // holdWorktreeForBackgroundJob records one background shell as a live writer of
@@ -970,6 +990,28 @@ func (p *sessionPool) setMonitorProbe(s *liveSession, probe func() bool) func() 
 	}
 }
 
+// setSubagentProbe installs one session run's SubAgent liveness query and returns the
+// deregistration func, under the same epoch rule as setMonitorProbe.
+func (p *sessionPool) setSubagentProbe(s *liveSession, probe func() bool) func() {
+	p.mu.Lock()
+	if p.sessions[s.id] == s {
+		s.subagentProbe = probe
+	}
+	p.mu.Unlock()
+	return func() {
+		p.mu.Lock()
+		if p.sessions[s.id] == s {
+			s.subagentProbe = nil
+		}
+		p.mu.Unlock()
+	}
+}
+
+// subagentRunningLocked reports whether a SubAgent of this session is still running.
+func subagentRunningLocked(s *liveSession) bool {
+	return s.subagentProbe != nil && s.subagentProbe()
+}
+
 // monitorPinDeadlineLocked returns the instant after which this warm engine stops being held
 // for its Monitor, or the zero time when nothing is holding it at all: no probe registered, no
 // Monitor running, or the cap already spent. Past the cap a Monitor that is still running no
@@ -1366,8 +1408,12 @@ func (p *sessionPool) rewarmLocked(s *liveSession) {
 // tool_result are output only a generating engine produces; a turn_end, or a system
 // init/resumed handshake, says no turn is running. A Bash pair the runner ran itself — a
 // `!cmd`, an EXECUTABLE acceptance (shell.go) — wears the engine's tool shape under a
-// `shell-` id, and says nothing about the engine.
+// `shell-` id, and says nothing about the engine. Nor does a SubAgent's event (subagent.go): its child engine
+// writes into the parent's stream nested under the delegate call, while the parent's own engine sits idle.
 func engineTurnSignal(eventType string, payload map[string]interface{}) (generating, ended bool) {
+	if id, _ := payload["subagentRunId"].(string); id != "" {
+		return false, false
+	}
 	switch eventType {
 	case evAssistant, evThinking:
 		return true, false
@@ -1439,7 +1485,7 @@ func (p *sessionPool) permitGeneration(s *liveSession) uint64 {
 // turn the engine is running on its own does — requestEvictLocked declines — and the end
 // of that turn winds the next timer. A Monitor still running inside the engine does too,
 // and is the one deferral that has to re-arm the timer here: the engine is genuinely idle,
-// so nothing else will come along to wind it.
+// so nothing else will come along to wind it. So does a SubAgent of the session still running.
 func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 	p.mu.Lock()
 	if p.sessions[s.id] != s || s.active || !s.resident || s.evictRequested ||
@@ -1447,7 +1493,9 @@ func (p *sessionPool) expireWarm(s *liveSession, idleGeneration uint64) {
 		p.mu.Unlock()
 		return
 	}
-	if !p.monitorPinDeadlineLocked(s).IsZero() {
+	// A SubAgent still running defers the idle park outright, with no cap (docs/subagent-design.md §5.2, §9 C):
+	// the session is still at work, and its end wakes the parent, which this engine is then still here to take.
+	if !p.monitorPinDeadlineLocked(s).IsZero() || subagentRunningLocked(s) {
 		p.rewarmLocked(s)
 		p.mu.Unlock()
 		return

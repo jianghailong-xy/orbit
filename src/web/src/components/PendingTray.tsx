@@ -26,8 +26,9 @@ export interface PendingTrayRow {
   imageIds: string[];
   /** Attachments that are not pictures. */
   files: number;
-  /** How it stands: Sending…, Waiting to be read, Withdrawing…, Queued for next turn. */
-  state: string;
+  /** How it stands: Sending…, Waiting to be read, Withdrawing…, Queued for next turn — or what holds
+   *  it from its turn, `Queued · runner full` (a tag that opens why), in place of those words. */
+  state: ReactNode;
   /** A press for it is out: the row dims and offers nothing to press twice. */
   busy?: boolean;
   onSteer?: () => void;

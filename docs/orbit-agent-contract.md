@@ -250,7 +250,8 @@ What the text is held to (`src/runner-go/agent_primer_test.go`):
   (`autoRunWhenReady` defaults to true), and that only a returned id is a success. A client may show
   no more than that, and Codex shows less, so it opens with what Orbit is for.
 - **Budgets**: the primer at most 3,200 bytes; Orbit's own instructions to an engine (the primer and
-  the paragraphs after it, without the agent's own prompt) at most 6,400 bytes; no paragraph longer
+  the paragraphs after it, without the agent's own prompt) at most 7,000 bytes (6,400 until
+  2026-11-15, raised for the delegate paragraph a top-level session gets); no paragraph longer
   than one Codex context value (900 bytes, under Codex's 1,000-token cap whatever the tokenizer);
   ASCII.
 - **Versioned and snapshotted**: the exact text of the primer and of the four shapes of the engine

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CheckOutlined, DownOutlined, HistoryOutlined, SearchOutlined, SettingOutlined } from '@ant-design/icons';
+import { CheckOutlined, DownOutlined, HistoryOutlined, PlusOutlined, SearchOutlined, SettingOutlined } from '@ant-design/icons';
 import { Menu, type MenuItem } from '../components/ui/Menu';
 import { OrbitLinkCardsProvider } from '../components/OrbitLinkCard';
 import { statusLabel } from '../components/WorkspaceView';
@@ -22,11 +22,13 @@ import { WikiRunDrawer } from '../components/WikiRunPage';
 import { WikiSettingsButton } from '../components/WikiSettingsButton';
 import { WikiShareButton } from '../components/WikiShareButton';
 import { WikiSettingsPage } from '../components/WikiSettingsPage';
+import { WikiCreateDialog } from '../components/WikiSetUpDialog';
 import { WikiFirstStartCard } from '../components/WikiStartCard';
 import { openSessionSearch } from '../components/SessionSearch';
 import { wikiLinkHost } from '../components/WikiSources';
 import { wikiEntriesQuery, wikiEntryQuery, wikiHealthQuery, wikiSpacesQuery } from '../lib/queries';
 import { routeId } from '../lib/idCodec';
+import { WIKI_NEW } from '../lib/wikiStart';
 import {
   WIKI_ACTIVITY,
   WIKI_DISABLED_NOTE,
@@ -449,11 +451,13 @@ function WikiActivityRow({ space, waiting, on }: { space: SpaceRow; waiting: num
 /**
  * The head's space (design §12.3.4, mock 31 ④): with one space, its name as a label with nothing to
  * choose; with more, the native select — closed, the name alone; open, every space with what waits in
- * it. The name is the repository's (`wikiSpaceNames`), not the slug.
+ * it, then New wiki… under a divider (docs/wiki-explicit-creation-design.md §3.4), which opens the Create
+ * wiki form and leaves the head on this space. The name is the repository's (`wikiSpaceNames`), not the slug.
  */
 function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly SpaceRow[] }) {
   const navigate = useNavigate();
   const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);
+  const [creating, setCreating] = useState(false);
   const name = names.get(space.id) ?? space.title;
   if (spaces.length < 2) {
     return (
@@ -494,19 +498,23 @@ function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly Sp
       };
     }),
     { type: 'separator', key: 'rule' },
+    { key: 'new', label: WIKI_NEW, icon: <PlusOutlined />, onSelect: () => setCreating(true) },
     { key: 'manage', label: WIKI_MANAGE_SPACES, icon: <SettingOutlined />, onSelect: () => navigate(wikiSettingsPath(space.slug)) },
   ];
   return (
-    <Menu
-      popupClassName="wk-space-menu"
-      items={items}
-      trigger={
-        <button type="button" className="wk-select" title={WIKI_SPACE_PICKER_HINT} aria-label={`${name}: ${WIKI_SPACE_PICKER_HINT}`}>
-          <span className="v">{name}</span>
-          <DownOutlined className="ic caret" />
-        </button>
-      }
-    />
+    <>
+      <Menu
+        popupClassName="wk-space-menu"
+        items={items}
+        trigger={
+          <button type="button" className="wk-select" title={WIKI_SPACE_PICKER_HINT} aria-label={`${name}: ${WIKI_SPACE_PICKER_HINT}`}>
+            <span className="v">{name}</span>
+            <DownOutlined className="ic caret" />
+          </button>
+        }
+      />
+      {creating && <WikiCreateDialog onClose={() => setCreating(false)} />}
+    </>
   );
 }
 

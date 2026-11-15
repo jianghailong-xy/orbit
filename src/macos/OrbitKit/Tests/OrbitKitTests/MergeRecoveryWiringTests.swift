@@ -94,13 +94,17 @@ final class MergeRecoveryWiringTests: XCTestCase {
     /// `MergeRecovery.reviewNote`, which only names local-only commits when some go out.
     func testTheReviewLeadsWithTheBranchesAndTheCommitsThePushAdds() throws {
         let sheet = code(try source("Views/MergeRecoverySheet.swift"))
-        let review = try slice(sheet, from: "private func review(", to: ".safeAreaInset(edge: .bottom")
+        // The review's blocks are one row of the List's ForEach now (`MergeRecoveryListLogic.rows`),
+        // so what used to sit in the List builder is `reviewBlocks`’.
+        let review = try slice(sheet, from: "private func reviewBlocks(", to: "private func header(")
         let route = try XCTUnwrap(review.range(of: "RecoveryRouteRow("), "the branches have one row")
         let push = try XCTUnwrap(review.range(of: "r.inlinePushCommits()"), "the push's commits are listed")
         XCTAssertLessThan(route.lowerBound, push.lowerBound, "branches first, then what the push adds")
         let pushSection = try slice(review, from: "r.inlinePushCommits()", to: "Text(r.landingNote)")
         XCTAssertTrue(pushSection.contains("candidateDiffLink("), "the diff closes the push's list")
         XCTAssertTrue(review.contains("r.reviewNote"))
+        XCTAssertTrue(sheet.contains("MergeRecoveryListLogic.rows(hasRepair: repair != nil, landed: landed)"),
+                      "the List's rows are the logic's one array")
         XCTAssertFalse(sheet.contains("The local-only commits above"), "the note is the model's, which checks there are some")
         XCTAssertFalse(review.contains("Saved repair branch"), "the repair branch lives behind the branches row")
     }
@@ -124,7 +128,7 @@ final class MergeRecoveryWiringTests: XCTestCase {
     /// comes first, so the session opens in view rather than under the sheet.
     func testTheSheetFollowsTheRepairLoop() throws {
         let sheet = code(try source("Views/MergeRecoverySheet.swift"))
-        let review = try slice(sheet, from: "private func review(", to: ".safeAreaInset(edge: .bottom")
+        let review = try slice(sheet, from: "private func reviewBlocks(", to: "private func header(")
         XCTAssertTrue(review.contains(".opacity(checking ? 0.4 : 1)"), "the old snapshot fades")
         XCTAssertTrue(try slice(sheet, from: "private func header(", to: ".padding(.vertical, 4)")
             .contains("Text(\"Checking the repair…\")"))
@@ -145,7 +149,7 @@ final class MergeRecoveryWiringTests: XCTestCase {
     func testAnAlreadyLandedSessionIsLaidOutAsTheBoardsSixth() throws {
         let sheet = code(try source("Views/MergeRecoverySheet.swift"))
         let review = try slice(sheet, from: "private func review(", to: ".safeAreaInset(edge: .bottom")
-        XCTAssertTrue(review.contains("if landed {\n                landedSections(d, r, close: close)"),
+        XCTAssertTrue(review.contains("case .landed:\n                    landedSections(d, r, close: close)"),
                       "its own sections in place of the review's (no repair row: MergeRepairRow has none for it)")
         let landed = try slice(sheet, from: "private func landedSections(", to: "private func checkRow(")
         for piece in ["MergeRecoveryCommitRow(commit: $0, landed: true)", "Text(\"On origin/\\(target)\")",

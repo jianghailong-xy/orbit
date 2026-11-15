@@ -7,7 +7,7 @@ import { RunnerUpdateLaterMenu } from './RunnerUpdateLater';
 import { SELF_UPDATE_NOW_V1 } from '@orbit/shared';
 import type { QueuedGate } from '../lib/runnerSlots';
 import type { Runner } from './TasksSidePanel';
-import { RunnerUpdatingQueued, RunnerUpdatingTag, sessionLine, statusLabel } from './WorkspaceView';
+import { lastUserEventSeq, QueuedTurnMeta, queuedTurnWaitsItsTurn, RunnerUpdatingQueued, RunnerUpdatingTag, sessionLine, statusLabel } from './WorkspaceView';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -146,5 +146,45 @@ describe('a session held by a runner that is stopping', () => {
       'HPC starts no new turns until 2 turns finish, then stops. This message is sent once it is back.Waiting 38 min.',
     );
     expect(document.body.textContent).toContain('Runner stopping');
+  });
+});
+
+// docs/mocks/queued-card-runner-updating ②⑤: what the update holds is the queued turn itself — a card
+// Orbit queued as much as a message — so its own line says why, and Cancel stays where it was.
+describe('a queued turn held by its runner’s update', () => {
+  it('reads `Queued · runner updating` in place of its label, with Cancel beside it', async () => {
+    const cancelled: string[] = [];
+    const el = mount(withQueries(
+      <QueuedTurnMeta placement="queued" held={<RunnerUpdatingTag gate={gate} machine="studio-mac" />} onCancel={() => cancelled.push('t1')} />,
+    ));
+    expect(el.textContent).toBe('Queued·runner updatingCancel');
+    expect(el.querySelector('.chat-queued-tag')).toBeNull();
+    act(() => (el.querySelector('a') as HTMLElement).click());
+    expect(cancelled).toEqual(['t1']);
+    await act(async () => (el.querySelector('button.chat-runner-updating-reason') as HTMLButtonElement).click());
+    expect(document.querySelector('.runner-updating-pop')?.textContent).toContain('This message is sent right after.');
+  });
+
+  it('a steer and a settled delivery keep their own words', () => {
+    const held = <RunnerUpdatingTag gate={gate} machine="studio-mac" />;
+    const el = mount(withQueries(
+      <>
+        <QueuedTurnMeta placement="queued" held={held} delivery="failed" onCancel={() => {}} />
+        <QueuedTurnMeta placement="steer" held={held} onCancel={() => {}} />
+        <QueuedTurnMeta placement="queued" onCancel={() => {}} />
+      </>,
+    ));
+    expect(el.querySelectorAll('.chat-runner-updating')).toHaveLength(0);
+    expect([...el.querySelectorAll('.chat-queued-tag')].map((t) => t.textContent)).toEqual([
+      'Not delivered', expect.any(String), 'Queued for next turn',
+    ]);
+  });
+
+  it('the tail holds a turn only while it waits for its own turn; else the last message carries the tag', () => {
+    expect(queuedTurnWaitsItsTurn({ placement: 'queued' })).toBe(true);
+    expect(queuedTurnWaitsItsTurn({ placement: 'steer' })).toBe(false);
+    expect(queuedTurnWaitsItsTurn({ placement: 'queued', delivery: 'failed' })).toBe(false);
+    expect(lastUserEventSeq([{ type: 'user', seq: 3 }, { type: 'assistant', seq: 4 }, { type: 'user', seq: 7 }, { type: 'result', seq: 8 }])).toBe(7);
+    expect(lastUserEventSeq([{ type: 'assistant', seq: 1 }])).toBeNull();
   });
 });

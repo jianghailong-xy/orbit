@@ -58,6 +58,11 @@ type HeartbeatRequest struct {
 	// older runners omit both fields and retain the legacy heartbeat behavior.
 	LeaseOwner           string   `json:"leaseOwner,omitempty"`
 	SupervisedSessionIDs []string `json:"supervisedSessionIds,omitempty"`
+	// BackgroundJobSessionIDs are the sessions that occupy a slot of IdleCapacity's count only
+	// through runner-hosted background jobs of their own (sessionPool.admissionOccupancy): no turn
+	// runs, yet the runner takes no work in their place. The control plane counts them as running.
+	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
+	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its
@@ -522,6 +527,11 @@ type HeartbeatResponse struct {
 	// response until the control plane records a check made at or after it. Nil on older control
 	// planes and whenever nobody is asking.
 	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+	// Remote SubAgent runs this runner is the target of (docs/subagent-design.md §10.2, §10.3): the ones to claim,
+	// and the ones to stop because their parent session stopped them or ended (subagent_remote.go). Absent when
+	// there are none, and from older control planes.
+	RemoteSubagentRuns []string `json:"remoteSubagentRuns,omitempty"`
+	StopSubagentRunIDs []string `json:"stopSubagentRunIds,omitempty"`
 	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
 	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
 	// POINTER because only a present list states anything: absent (an older control plane, a quiet link
@@ -1375,6 +1385,10 @@ type ClaimedSession struct {
 	// liveMode is the session's permission mode as the goroutines serving its socket read it
 	// (background_gate.go); nil until that service starts.
 	liveMode *sessionLiveMode
+	// readonlySubagent marks a read-only SubAgent's child claim (subagentChildJob). Its permission mode is plan,
+	// which every engine keeps; Codex alone reads this too, since its plan mode refuses every command and a shell
+	// is the only way Codex reads a repository (codexPermissionMode).
+	readonlySubagent bool
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir          string `json:"workDir,omitempty"`
 	SessionUUID      string `json:"sessionUuid"`

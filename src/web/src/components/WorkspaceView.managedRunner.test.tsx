@@ -5,7 +5,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import type { ManagedRunnerStatus } from '@orbit/shared';
+import { MANAGED_RUNNER_COPY, type ManagedRunnerStatus } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -243,6 +243,8 @@ const composer = () => mounted().querySelector<HTMLTextAreaElement>('.workspace-
 const sendButton = () => mounted().querySelector<HTMLButtonElement>('button[aria-label="Send"]')!;
 const notice = () => mounted().querySelector<HTMLElement>('.workspace-composer .managed-runner-notice');
 const noticeTitle = () => notice()?.querySelector('.managed-runner-notice-title')?.textContent ?? null;
+/** Asleep is one calm line above the composer, the shared words, instead of the notice (owner, 2026-11-14). */
+const asleepLine = () => mounted().querySelector('.managed-runner-composer-line')?.textContent ?? null;
 
 /** Open the New Session draft of a workspace in the console, the way its route does (or `entry`). */
 async function open(workspaceId: string, entry = `/workspaces/${workspaceId}/new`): Promise<void> {
@@ -283,7 +285,8 @@ describe('a managed workspace in the console', () => {
       lastProvider: 'claude',
     };
     await open(MANAGED_WORKSPACE);
-    await waitForUi(() => expect(noticeTitle()).toBe('Managed runner asleep'));
+    await waitForUi(() => expect(asleepLine()).toBe(MANAGED_RUNNER_COPY.asleep.composer));
+    expect(notice()).toBeNull();
     // Not "Runner offline", no registration anywhere, and the engine it was ready with is offered.
     expect(composer().placeholder).toBe('Send this workspace a task…');
     expect(mounted().textContent?.toLowerCase()).not.toContain('register');
@@ -310,7 +313,8 @@ describe('a managed workspace in the console', () => {
       managedOnline: true,
     };
     await open(MANAGED_WORKSPACE);
-    await waitForUi(() => expect(noticeTitle()).toBe('Managed runner asleep'));
+    await waitForUi(() => expect(asleepLine()).toBe(MANAGED_RUNNER_COPY.asleep.composer));
+    expect(notice()).toBeNull();
     const reads = statusReads;
     await type('Wake up');
     await waitForUi(() => expect(sendButton().disabled).toBe(false));
@@ -425,7 +429,8 @@ describe('a managed workspace in the console', () => {
       lastProvider: 'claude',
     };
     await open(MANAGED_WORKSPACE, `/sessions/${ENDED_SESSION}`);
-    await waitForUi(() => expect(noticeTitle()).toBe('Managed runner asleep'));
+    await waitForUi(() => expect(asleepLine()).toBe(MANAGED_RUNNER_COPY.asleep.composer));
+    expect(notice()).toBeNull();
     await waitForUi(() => expect(mounted().textContent).toContain('Send a message to resume this session.'));
     expect(mounted().textContent).not.toContain('cannot accept messages');
 

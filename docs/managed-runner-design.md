@@ -551,9 +551,11 @@ actions { canEnsure, canWake, canSleep, canRetry, canDelete }
 ```
 
 `firstSessionProvider` (since 2026-10-18, task T07) is what a first session in the default workspace, sent with
-nothing named, starts on now: `initialProvider` once the runner has been READY, before that the owner's own model key
-such a session is queued on while the runner has not reported its engines or reported that key's engine installed, and
-null when the session would be refused `MODEL_UNAVAILABLE`. A client offers that session exactly when it is set; a
+nothing named, starts on now: `initialProvider` once the runner has been READY, before that the first of the owner's
+own model keys whose engine the runner reported installed, or, before it has reported any, whose engine the managed
+image installs (Claude Code and Codex, `MANAGED_IMAGE_ENGINES`), and null when there is no such key, as the create
+would refuse the session `MODEL_UNAVAILABLE`. A key no engine on the runner runs (a Kimi key on the managed image)
+is never named, whatever the owner's order; since 2026-11-14. A client offers that session exactly when it is set; a
 server that predates the field is read by `initialProvider`.
 
 IDs use the existing wire codec; timestamps are ISO 8601. Nullable IDs describe stages before the

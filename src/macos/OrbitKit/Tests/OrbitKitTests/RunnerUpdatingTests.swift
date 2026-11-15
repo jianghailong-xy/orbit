@@ -113,6 +113,32 @@ final class RunnerUpdatingTests: XCTestCase {
         XCTAssertEqual(RunnerUpdating.footBubbleID(reducer.state.items), users.last)
     }
 
+    // docs/mocks/queued-card-runner-updating ②⑤: a turn on the queued tail — a card Orbit queued — is what
+    // the update holds, so its own line says why; the tray's rows, a steer and a settled delivery are not.
+    func testAQueuedTailTurnTheUpdateHoldsSaysSoItselfAndTheTrayDoesNot() {
+        var card = UserBubble(id: "n", text: "Background job ended", ts: nil, turnId: "tn", pending: true, queued: true)
+        card.authoredByOrbit = true
+        let mine = UserBubble(id: "m", text: "also check iOS", ts: nil, turnId: "tm", pending: true, queued: true)
+        var steer = card
+        steer.steer = true
+        var failed = card
+        failed.delivery = "failed"
+        var undelivered = card
+        undelivered.undelivered = true
+
+        XCTAssertTrue(RunnerUpdating.holdsQueued(card))
+        XCTAssertFalse(RunnerUpdating.holdsQueued(steer))
+        XCTAssertFalse(RunnerUpdating.holdsQueued(failed))
+        XCTAssertFalse(RunnerUpdating.holdsQueued(undelivered))
+
+        XCTAssertTrue(RunnerUpdating.tailHolds([card]))
+        XCTAssertTrue(RunnerUpdating.tailHolds([mine, steer, card]))
+        // The reader's own message waits in the tray, whose row says it: the last message does not.
+        XCTAssertTrue(RunnerUpdating.tailHolds([mine]))
+        XCTAssertFalse(RunnerUpdating.tailHolds([steer, failed, undelivered]))
+        XCTAssertFalse(RunnerUpdating.tailHolds([]))
+    }
+
     func testTheListRowDecodesTheGateAndAnEventKeepsItOnlyWhileQueued() throws {
         let json = """
         {"id":"S1","status":"PENDING","runState":"QUEUED","queuedReason":"runner_updating","queuedActive":2,

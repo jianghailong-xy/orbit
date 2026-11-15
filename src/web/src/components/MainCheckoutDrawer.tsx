@@ -5,6 +5,10 @@ import {
   MAIN_CHECKOUT_COPY,
   mainCheckoutChooseFiles,
   mainCheckoutCommitButton,
+  mainCheckoutDefaultCommitMessage,
+  mainCheckoutDiscardBody,
+  mainCheckoutDiscardButton,
+  mainCheckoutDiscardTitle,
   mainCheckoutManagedBranchWarning,
   mainCheckoutPushLabel,
   mainCheckoutResultLine,
@@ -23,7 +27,6 @@ import { type MainCheckoutHost, type MainCheckoutTarget } from '../lib/mainCheck
 import { useToast } from '../lib/toast';
 import { MainCheckoutResultRow } from './MainCheckout';
 import { WorktreeDiffDrawer } from './SessionOutputs';
-import { Input } from './ui/Input';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useConfirm } from './ui/ConfirmDialog';
 
@@ -44,6 +47,7 @@ const VERB: Record<MainCheckoutActionKind, string> = {
   commit: 'commit',
   push: 'push',
   rescue: 'save the main checkout',
+  discard: 'discard the files',
 };
 
 export function checkedAgo(iso: string | undefined, now = Date.now()): string {
@@ -88,7 +92,6 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
   const [open, setOpen] = useState(false);
   const [path, setPath] = useState<string | null>(null);
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(new Set());
-  const [commitMessage, setCommitMessage] = useState('');
   const [inFlight, setInFlight] = useState<{ requestId: string; kind: MainCheckoutActionKind } | null>(null);
   const [lastResult, setLastResult] = useState<MainCheckoutActionResult | null>(null);
   const mounted = useRef(true);
@@ -103,7 +106,6 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
     setOpen(false);
     setPath(null);
     setUnchecked(new Set());
-    setCommitMessage('');
     setLastResult(null);
   }, [ws]);
 
@@ -154,7 +156,6 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
       void qc.invalidateQueries({ queryKey: mainCheckoutQueryKey(ws) });
       if ((result.status === 'done' || result.status === 'partial') && result.kind !== 'push') {
         setOpen(false);
-        setCommitMessage('');
         setUnchecked(new Set());
       }
       // Without a conversation to write the line into, say it here.
@@ -280,8 +281,6 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
         onClose={() => setOpen(false)}
         unchecked={unchecked}
         setUnchecked={setUnchecked}
-        commitMessage={commitMessage}
-        setCommitMessage={setCommitMessage}
         lastResult={lastResult}
         onCommit={(chosen) =>
           snapshot &&
@@ -290,7 +289,17 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
             root: snapshot.root,
             fingerprint: snapshot.fingerprint,
             files: chosen,
-            message: commitMessage.trim(),
+            message: defaultCommitMessage(snapshot.files, chosen),
+          })
+        }
+        onDiscard={(chosen) =>
+          snapshot &&
+          void confirm({
+            title: mainCheckoutDiscardTitle(chosen.length),
+            description: mainCheckoutDiscardBody(chosen.length, snapshot.branch ?? 'HEAD'),
+            confirmText: MAIN_CHECKOUT_COPY.discard,
+            danger: true,
+            onConfirm: () => void run({ kind: 'discard', root: snapshot.root, fingerprint: snapshot.fingerprint, files: chosen }),
           })
         }
         onMove={(chosen, targetSessionId) =>
@@ -311,8 +320,14 @@ export function useMainCheckoutController(o: MainCheckoutControllerOptions): {
   };
 }
 
+/** A commit's message: there is no box to type one in, so it is named after the chosen files. */
+function defaultCommitMessage(files: MainCheckoutView['snapshot']['files'], chosen: readonly string[]): string {
+  const set = new Set(chosen);
+  return mainCheckoutDefaultCommitMessage(files.filter((f) => set.has(f.path)));
+}
+
 /** Board 02: the session diff drawer, showing the main checkout. Files are chosen on the left (all by default); Commit,
- *  Move and Save leave from the bottom bar. */
+ *  Discard, Move and Save sit under the file list. */
 export function MainCheckoutDrawer({
   host,
   view,
@@ -326,12 +341,11 @@ export function MainCheckoutDrawer({
   onClose,
   unchecked,
   setUnchecked,
-  commitMessage,
-  setCommitMessage,
   lastResult,
   onCommit,
   onMove,
   onRescue,
+  onDiscard,
 }: {
   host: MainCheckoutHost;
   view?: MainCheckoutView;
@@ -345,19 +359,19 @@ export function MainCheckoutDrawer({
   onClose: () => void;
   unchecked: ReadonlySet<string>;
   setUnchecked: (next: ReadonlySet<string>) => void;
-  commitMessage: string;
-  setCommitMessage: (text: string) => void;
   lastResult: MainCheckoutActionResult | null;
   onCommit: (files: string[]) => void;
   onMove: (files: string[], targetSessionId: string) => void;
   onRescue: () => void;
+  onDiscard: (files: string[]) => void;
 }) {
   const snapshot = view?.snapshot;
   const branch = snapshot?.branch ?? 'HEAD';
   const chosen = files.filter((f) => !unchecked.has(f.path)).map((f) => f.path);
   const busy = !!host.inFlight || !!view?.inFlight;
   const actions = host.actionsSupported && (view?.actionsSupported ?? true);
-  const canCommit = actions && !busy && chosen.length > 0 && commitMessage.trim() !== '' && !!snapshot?.branch;
+  const canCommit = actions && !busy && chosen.length > 0 && !!snapshot?.branch;
+  const canDiscard = !!view?.discardSupported && actions && !busy && chosen.length > 0 && !!snapshot?.head;
   const total = snapshot?.fileCount ?? files.length;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -403,7 +417,8 @@ export function MainCheckoutDrawer({
     onSelect: () => onMove(chosen, t.id),
   }));
 
-  const footer = actions ? (
+  // Under the file list, in the left column: what is chosen there is what these act on.
+  const actionPanel = actions ? (
     <div className="mck-drawer-foot">
       {lastResult && lastResult.status !== 'done' && (
         <MainCheckoutResultRow
@@ -419,13 +434,6 @@ export function MainCheckoutDrawer({
         <div className="mck-managed">{mainCheckoutManagedBranchWarning(view.managedBranch.projectTitle)}</div>
       )}
       <div className="mck-drawer-actions">
-        <Input
-          className="mck-commit-msg"
-          placeholder={MAIN_CHECKOUT_COPY.commitMessagePlaceholder}
-          aria-label={MAIN_CHECKOUT_COPY.commitMessagePlaceholder}
-          value={commitMessage}
-          onChange={(e) => setCommitMessage(e.target.value)}
-        />
         <button
           type="button"
           className="mck-btn mck-btn-primary"
@@ -434,44 +442,51 @@ export function MainCheckoutDrawer({
         >
           {host.inFlight?.kind === 'commit' ? 'Committing…' : mainCheckoutCommitButton(chosen.length, branch)}
         </button>
-        {moveItems.length > 0 && (
+        {view?.discardSupported && (
+          <button type="button" className="mck-btn mck-btn-danger" disabled={!canDiscard} onClick={() => onDiscard(chosen)}>
+            {host.inFlight?.kind === 'discard' ? 'Discarding…' : mainCheckoutDiscardButton(chosen.length)}
+          </button>
+        )}
+        <div className="mck-drawer-actions-more">
+          {moveItems.length > 0 && (
+            <Menu
+              side="top"
+              align="start"
+              popupClassName="mck-menu"
+              items={moveItems}
+              disabled={busy || chosen.length === 0}
+              trigger={
+                <button type="button" className="mck-btn" disabled={busy || chosen.length === 0}>
+                  {MAIN_CHECKOUT_COPY.moveToAWorktree} ▾
+                </button>
+              }
+            />
+          )}
           <Menu
             side="top"
-            align="end"
+            align="start"
             popupClassName="mck-menu"
-            items={moveItems}
-            disabled={busy || chosen.length === 0}
+            items={[
+              {
+                key: 'rescue',
+                disabled: busy,
+                textValue: MAIN_CHECKOUT_COPY.saveAndClean,
+                label: (
+                  <span className="mck-menu-row">
+                    <span className="mck-menu-label">{MAIN_CHECKOUT_COPY.saveAndClean}</span>
+                    <span className="mck-menu-hint">{MAIN_CHECKOUT_COPY.saveAndCleanHint}</span>
+                  </span>
+                ),
+                onSelect: onRescue,
+              },
+            ]}
             trigger={
-              <button type="button" className="mck-btn" disabled={busy || chosen.length === 0}>
-                {MAIN_CHECKOUT_COPY.moveToAWorktree} ▾
+              <button type="button" className="mck-btn mck-btn-more" aria-label="More actions">
+                ⋯
               </button>
             }
           />
-        )}
-        <Menu
-          side="top"
-          align="end"
-          popupClassName="mck-menu"
-          items={[
-            {
-              key: 'rescue',
-              disabled: busy,
-              textValue: MAIN_CHECKOUT_COPY.saveAndClean,
-              label: (
-                <span className="mck-menu-row">
-                  <span className="mck-menu-label">{MAIN_CHECKOUT_COPY.saveAndClean}</span>
-                  <span className="mck-menu-hint">{MAIN_CHECKOUT_COPY.saveAndCleanHint}</span>
-                </span>
-              ),
-              onSelect: onRescue,
-            },
-          ]}
-          trigger={
-            <button type="button" className="mck-btn mck-btn-more" aria-label="More actions">
-              ⋯
-            </button>
-          }
-        />
+        </div>
       </div>
     </div>
   ) : undefined;
@@ -509,8 +524,12 @@ export function MainCheckoutDrawer({
         loading: diffLoading,
         title,
         listHead,
-        listFoot: <div className="mck-drawer-note">{MAIN_CHECKOUT_COPY.notShown}</div>,
-        footer,
+        listFoot: (
+          <div className="mck-drawer-side-foot">
+            <div className="mck-drawer-note">{MAIN_CHECKOUT_COPY.notShown}</div>
+            {actionPanel}
+          </div>
+        ),
         checked: (p) => !unchecked.has(p),
         onCheck: (p, on) => {
           const next = new Set(unchecked);

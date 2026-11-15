@@ -55,8 +55,9 @@ export type HeartbeatFactRole =
   /** The runner's report, kept where the heartbeat keeps it, which nothing the heartbeat hands out depends on: a
    *  changed value is written by writeLinkBeatReports, and nothing is drained. */
   | 'REPORT'
-  /** Written on every beat by the statement that writes the beat itself (readLinkBeat, recordRunnerResources), so it
-   *  needs no digest: the machine's resources, which change on nearly every beat. */
+  /** Written on every beat by the statement that writes the beat itself (readLinkBeat, recordRunnerResources,
+   *  recordRunnerBeat), so it needs no digest: the machine's resources, which change on nearly every beat, and the
+   *  sessions its background jobs hold slots for. */
   | 'PRESENCE'
   /** The heartbeat route does not read it. */
   | 'UNREAD';
@@ -73,6 +74,8 @@ export type HeartbeatFactRole =
  *                                                one statement cannot write a row twice.
  *   managedWorkload                              a managed runner's beat always reconciles in full.
  *   resources                                    kept on the presence row by the beat's own write (runners/runner-resources.ts).
+ *   backgroundJobSessionIds                      kept on the presence row by the beat's own write, replaced on every beat
+ *                                                (runners/runner-background-holders.ts).
  *   the rest but idleCapacity                    reports: the runner row's catalogues and state, its plan usage, its
  *                                                sessions' worktrees, its workspaces' directories.
  */
@@ -98,6 +101,7 @@ export const HEARTBEAT_FACTS = {
   selfUpdate: 'REPORT',
   managedWorkload: 'DELIVERY',
   resources: 'PRESENCE',
+  backgroundJobSessionIds: 'PRESENCE',
 } as const satisfies { [K in keyof Required<RunnerHeartbeatRequest>]: HeartbeatFactRole };
 
 export type HeartbeatFactKind = keyof typeof HEARTBEAT_FACTS;
@@ -213,6 +217,16 @@ export const HEARTBEAT_DELIVERIES = {
     how: 'MARKED',
     writers: ['wiki-worker/wiki-repo-ops.ts#enqueueWikiRepoOp'],
     pending: 'an operation of the runner queued or running',
+  },
+  remoteSubagentRuns: {
+    how: 'MARKED',
+    writers: ['runner-api/runner-subagents.controller.ts#openRemoteSubagentRun'],
+    pending: 'a remote SubAgent run of the runner RUNNING: every beat lists it to claim, or to stop once its parent stopped or ended',
+  },
+  stopSubagentRunIds: {
+    how: 'MARKED',
+    writers: ['runner-api/runner-subagents.controller.ts#stopRemoteSubagentRun'],
+    pending: "a remote SubAgent run of the runner RUNNING, whose parent's end is read on every beat (remoteSubagentHeartbeat)",
   },
   managedSleep: { how: 'FULL_ONLY', reads: 'a managed runner is admitted by RunnerAuthGuard and reconciles in full on every beat' },
   cursorKeyChecks: {
@@ -374,6 +388,9 @@ export interface LinkBeatInput {
   planUsageDigest: string | null;
   /** The machine's reading, sanitized (runners/runner-resources.ts); absent or null for a beat without one. */
   resources?: RunnerResources | null;
+  /** The sessions its background jobs hold slots for, sanitized (runners/runner-background-holders.ts); empty for none.
+   *  Only those assigned to this runner are kept. */
+  backgroundJobSessionIds?: string[];
 }
 
 /** One row of the beat statement; none when the runner does not exist or is not the token's owner's. */
@@ -433,9 +450,13 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
        WHERE r."id" = ${input.runnerId}::uuid AND r."owner_id" = ${input.ownerId}::uuid
     ),
     beat AS (
-      INSERT INTO "runner_presence" ("runner_id", "process_id", "gateway_id", "last_beat_at", "link_state", "resources")
+      INSERT INTO "runner_presence" ("runner_id", "process_id", "gateway_id", "last_beat_at", "link_state", "resources",
+                                     "background_job_session_ids")
       SELECT c."id", ${input.processId}::uuid, ${input.gatewayId}::text, (now() AT TIME ZONE 'UTC'), 'LINK',
-             ${resourcesAfterBeatSql(Prisma.sql`NULL::jsonb`, input.resources ?? null)}
+             ${resourcesAfterBeatSql(Prisma.sql`NULL::jsonb`, input.resources ?? null)},
+             ARRAY(SELECT s."id" FROM "session" s
+                    WHERE s."id" = ANY(${input.backgroundJobSessionIds ?? []}::uuid[]) AND s."assigned_runner_id" = c."id"
+                    ORDER BY s."id")
         FROM caller c
        WHERE c."credentialHeld" AND NOT c."ownerDisabled" AND NOT c."managed" AND NOT c."landingNamed"
       ON CONFLICT ("runner_id") DO UPDATE
@@ -444,6 +465,7 @@ export async function readLinkBeat(prisma: Pick<PrismaService, '$queryRaw'>, inp
              "last_beat_at" = EXCLUDED."last_beat_at",
              "link_state" = EXCLUDED."link_state",
              "resources" = ${resourcesAfterBeatSql(Prisma.sql`"runner_presence"."resources"`, input.resources ?? null)},
+             "background_job_session_ids" = EXCLUDED."background_job_session_ids",
              "lost_at" = CASE
                WHEN "runner_presence"."last_beat_at" < EXCLUDED."last_beat_at" - (${RUNNER_SILENT_AFTER_MS} * interval '1 millisecond')
                  THEN "runner_presence"."last_beat_at"
@@ -823,8 +845,8 @@ function diskBytes(value: unknown): string | null {
 /**
  * What a full reconcile left in flight that a beat renews, settles, redelivers or claims — one statement, read after the
  * reconcile: a merge or commit pending on a session of the runner (whichever process holds it), a Codex reset of the
- * runner still active, an integration job or a repository operation of its workspaces queued or running, a relay slot
- * of its own in flight. Any of them keeps the runner reconciling in full on every beat, as it would over HTTPS.
+ * runner still active, an integration job or a repository operation of its workspaces queued or running, a remote
+ * SubAgent run it is the target of still RUNNING, a relay slot of its own in flight. Any of them keeps the runner reconciling in full on every beat, as it would over HTTPS.
  */
 export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$queryRaw'>, runnerId: string): Promise<boolean> {
   const rows = await prisma.$queryRaw<Array<{ pending: boolean }>>`
@@ -847,6 +869,10 @@ export async function readLinkReconcilePending(prisma: Pick<PrismaService, '$que
       OR EXISTS (
         SELECT 1 FROM "owner_request_secret" g
          WHERE g."runner_id" = ${runnerId}::uuid AND g."state" IN ('PENDING_DELIVERY', 'REMOVING')
+      )
+      OR EXISTS (
+        SELECT 1 FROM "subagent_run" sr
+         WHERE sr."target_runner_id" = ${runnerId}::uuid AND sr."status" = 'RUNNING'
       )
       OR EXISTS (
         SELECT 1 FROM "main_checkout_request" m
@@ -886,6 +912,8 @@ export function heartbeatAnswerHandsOut(answer: RunnerHeartbeatResponse): boolea
     || (answer.artifactRequests?.length ?? 0) > 0
     || (answer.integrationJobs?.length ?? 0) > 0
     || (answer.wikiRepoOps?.length ?? 0) > 0
+    || (answer.remoteSubagentRuns?.length ?? 0) > 0
+    || (answer.stopSubagentRunIds?.length ?? 0) > 0
     || (answer.mainCheckoutRequests?.length ?? 0) > 0
     || (answer.cursorKeyChecks?.length ?? 0) > 0
     || (answer.secretGrantsRemoving?.length ?? 0) > 0

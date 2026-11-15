@@ -142,7 +142,7 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
             XCTAssertTrue(read.contains(piece), "the page's lists lost \(piece)")
         }
         let agents = code(try appSource("AgentsModel.swift"))
-        XCTAssertTrue(agents.contains("ownKeys = try await api.personalProviders()"),
+        XCTAssertTrue(agents.contains("assignIfChanged(\\.ownKeys, try await api.personalProviders())"),
                       "the keys are the account's own, as the web page reads them")
         // Every press stays in the app: a machine's record, a pool's page. An engine signed out is no line.
         let page = try XCTUnwrap(try lists().first?.code)

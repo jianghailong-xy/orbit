@@ -675,6 +675,26 @@ fi
 DEPLOY_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
 
+# The downloadable runner is a release's, not this checkout's (docs/release-process.md, "Runner binaries come from
+# the release tag"). /dl serves the runner built from the newest release tag behind HEAD, so a runner's version always
+# names the tag it was cut from, and a deploy between two releases publishes that release again rather than new
+# runner code under its number. The tag's tree goes to .runner-release/, which src/web/Dockerfile builds the binaries
+# from. A checkout with no release tag behind it (a fork, a shallow clone) builds the runner from itself, as before.
+RUNNER_RELEASE_DIR="$REPO_ROOT/.runner-release"
+rm -rf "$RUNNER_RELEASE_DIR"
+RUNNER_RELEASE_TAG="$(git -C "$REPO_ROOT" describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)"
+if [ -n "$RUNNER_RELEASE_TAG" ]; then
+  mkdir -p "$RUNNER_RELEASE_DIR"
+  git -C "$REPO_ROOT" archive "$RUNNER_RELEASE_TAG" src/runner-go package.json scripts contracts/runner-write-protocol.json |
+    tar -x -C "$RUNNER_RELEASE_DIR"
+  export ORBIT_RUNNER_SOURCE=.runner-release
+  ORBIT_RUNNER_SOURCE_SHA="$(git -C "$REPO_ROOT" rev-parse "$RUNNER_RELEASE_TAG^{commit}")"
+  export ORBIT_RUNNER_SOURCE_SHA
+  echo "==> The downloadable runner is release $RUNNER_RELEASE_TAG ($ORBIT_RUNNER_SOURCE_SHA)"
+else
+  echo "warning: no release tag (v*) behind HEAD — the downloadable runner is built from this checkout" >&2
+fi
+
 # ── Two-stage release: this section is the same in both copies of /upgrade's script ─────────────────────────────────
 # With ORBIT_REGISTRY set, this host builds and the deployment runs on ORBIT_DEPLOY_HOST (SKILL.md, "Two-stage
 # release"): deploy/two-stage/release.sh builds, boots and pushes the images here, tagged by commit, and drives the

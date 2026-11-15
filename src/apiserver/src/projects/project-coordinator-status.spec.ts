@@ -96,6 +96,8 @@ function serviceWith(fixture: Fixture = {}) {
     // The owner decisions the session list adds to the same row (`countOwnerDecisionsBySession`):
     // every read answers empty except the owner items, which `ownerItems` fills.
     ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: {
       findMany: async () => {
         queries.push('projectOpenItem.findMany');

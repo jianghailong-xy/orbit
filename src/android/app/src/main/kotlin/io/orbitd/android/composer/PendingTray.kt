@@ -165,7 +165,7 @@ private val TRAY_MAX_HEIGHT = 248.dp
  */
 @Composable
 internal fun PendingTrayCard(rows: List<PendingTrayRow>, enabled: Boolean, steer: (PendingTrayRow) -> Unit, withdraw: (PendingTrayRow) -> Unit,
-    modifier: Modifier = Modifier, note: String? = null) {
+    modifier: Modifier = Modifier, note: String? = null, held: (@Composable () -> Unit)? = null) {
     if (rows.isEmpty()) return
     val shape = RoundedCornerShape(14.dp)
     // As wide as the parking strip's cards under it (`WatchingCardStack`, `SessionTasksCard`).
@@ -176,7 +176,9 @@ internal fun PendingTrayCard(rows: List<PendingTrayRow>, enabled: Boolean, steer
         rows.forEachIndexed { index, row ->
             key(row.turnId) {
                 if (index > 0) HorizontalDivider(Modifier.padding(start = 38.dp), color = MaterialTheme.colorScheme.outlineVariant)
-                TrayRow(row, enabled, { steer(row) }, { withdraw(row) })
+                // What holds a row waiting for the next turn — a runner's update, a full runner, run or batch — said in place of
+                // `Queued for next turn` (boards queued-card-runner-updating ⑤, queued-card-runner-full ②; web `usePendingTray`).
+                TrayRow(row, enabled, { steer(row) }, { withdraw(row) }, held?.takeIf { !row.intoTurn && !row.busy })
             }
         }
         // Why none of them can go into the turn running now — an engine that takes no message mid-turn — said only while one waits for
@@ -190,7 +192,7 @@ internal fun PendingTrayCard(rows: List<PendingTrayRow>, enabled: Boolean, steer
 }
 
 @Composable
-private fun TrayRow(row: PendingTrayRow, enabled: Boolean, steer: () -> Unit, withdraw: () -> Unit) {
+private fun TrayRow(row: PendingTrayRow, enabled: Boolean, steer: () -> Unit, withdraw: () -> Unit, held: (@Composable () -> Unit)? = null) {
     // One line, so a long message does not push the composer up the screen; tapped, the words open in place.
     var open by rememberSaveable(row.turnId) { mutableStateOf(false) }
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
@@ -207,7 +209,8 @@ private fun TrayRow(row: PendingTrayRow, enabled: Boolean, steer: () -> Unit, wi
                 maxLines = if (open) Int.MAX_VALUE else 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
                 fontFamily = if (row.shell) FontFamily.Monospace else null,
                 color = if (row.filesOnly) secondary else MaterialTheme.colorScheme.onSurface)
-            Text(row.state, style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (held != null) held()
+            else Text(row.state, style = MaterialTheme.typography.bodySmall, color = secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (!row.busy) {
             if (row.offersSteer) Row(Modifier.minimumInteractiveComponentSize().clip(RoundedCornerShape(10.dp))

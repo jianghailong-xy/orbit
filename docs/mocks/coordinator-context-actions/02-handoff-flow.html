@@ -1,0 +1,128 @@
+<!doctype html>
+<!-- Design mock: what Start a new coordinator does — confirm, the outgoing coordinator writing its
+     handoff note, the successor opening with it and the moved waits, the outgoing conversation's end,
+     and the failure path. Replacement itself is ProjectsService.coordinator(..., 'replace'). Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Start a new coordinator · handoff flow</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="boards.css">
+<style>
+  .m-sheet { width: 1640px; }
+  .m-grid4 { grid-template-columns: 380px repeat(3, minmax(0, 1fr)); }
+</style>
+</head>
+<body class="m">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5M9 2.5h6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/></symbol>
+  <symbol id="i-handoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M3 12h11M10 8l4 4-4 4"/></symbol>
+  <symbol id="i-excl" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1.5a10.5 10.5 0 1 0 0 21 10.5 10.5 0 0 0 0-21zm0 5c.6 0 1 .4 1 1v6c0 .6-.4 1-1 1s-1-.4-1-1v-6c0-.6.4-1 1-1zm0 11.2a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></symbol>
+</svg>
+
+<div class="m-sheet">
+  <h1 class="m-h1 zh">02 · Start a new coordinator：确认 → 写交接说明 → 新会话接手</h1>
+  <p class="m-sub zh">替换本身沿用现有的 <code>POST /projects/:id/coordinator/replace</code>。新增两件事：替换前让旧 coordinator 写一份交接说明，作为新会话的第一条消息；旧会话还在等待中的项（task_await / watch）在切换的同一个事务里转到新会话名下。</p>
+
+  <div class="m-grid4">
+    <!-- 1 confirm -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">1</span><span class="zh">确认（Web/macOS 弹窗）</span></div>
+      <div class="dlg m-mark">
+        <span class="m-n">1</span>
+        <div class="dlg-t">Hand over to a new coordinator?</div>
+        <p class="dlg-b">This coordinator writes a handoff note, then <b>Checkout redesign</b> continues in a new conversation that starts from that note. This one is completed — nothing is deleted.</p>
+        <ul class="facts">
+          <li><svg><use href="#i-note"/></svg><span><b>Handoff note</b><span class="sub">Written by this coordinator before it hands over. Usually under a minute.</span></span></li>
+          <li><svg><use href="#i-bell"/></svg><span><b>2 pending waits move over</b><span class="sub">Fix login redirect reaching Done · Session “Payment retries” finishing its turn</span></span></li>
+        </ul>
+        <div class="dlg-f"><span class="a-btn">Cancel</span><span class="a-btn primary">Hand over</span></div>
+      </div>
+      <p class="m-cap zh">运行中点的：正文首句换成 "After the current turn ends, this coordinator writes…"。</p>
+    </div>
+
+    <!-- 2 writing -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k state">2</span><span class="zh">旧会话：正在写交接说明</span></div>
+      <div class="convo">
+        <div class="convo-h">Checkout redesign <span class="badge">Coordinator</span><span class="cstate">Handing over</span></div>
+        <div class="convo-b">
+          <div class="msg-a dim">…Fix login redirect is in review; I'm waiting on its evidence before asking you about the merge.</div>
+          <div class="sys brand m-mark">
+            <span class="m-n">2</span>
+            <span class="spin"></span>
+            <span class="grow">Writing the handoff note<span class="clock">0:24</span>
+              <span class="row"><span class="a-btn sm">Skip the note</span><span class="a-btn sm">Cancel handover</span></span>
+            </span>
+          </div>
+          <div class="msg-a"><b>Handoff</b><br><span style="color:var(--text-2)">Where things stand: 4 of 6 tasks done…</span></div>
+        </div>
+        <div class="composer" style="border-radius:0;border:none;border-top:1px solid var(--border-subtle);box-shadow:none">
+          <div class="ph dis">Handing over to a new coordinator…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 successor -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">3</span><span class="zh">新会话：从交接说明开始</span></div>
+      <div class="convo">
+        <div class="convo-h">Checkout redesign <span class="badge">Coordinator</span><span class="cstate">Running</span></div>
+        <div class="convo-b">
+          <div class="handoff m-mark">
+            <span class="m-n">3</span>
+            <div class="handoff-h"><svg><use href="#i-handoff"/></svg><span><b>Handoff</b> from <a href="#">the previous coordinator</a> · 3:42 PM</span></div>
+            <div class="handoff-b">
+              <h5>Where things stand</h5>
+              <ul><li>4 of 6 tasks done; Fix login redirect in review.</li></ul>
+              <h5>Agreed with the owner</h5>
+              <ul><li>Don't merge Payment retries before Friday's release.</li></ul>
+              <h5>Waiting on</h5>
+              <ul><li>Evidence for Fix login redirect.</li></ul>
+              <h5>Next</h5>
+              <ul><li>Ask for the merge once that evidence is in.</li></ul>
+            </div>
+          </div>
+          <div><span class="chip m-mark"><svg><use href="#i-bell"/></svg>2 waits moved here<span class="m-n">4</span></span></div>
+          <div class="msg-a">Picked up from the handoff. I re-read the project and its tasks — it matches: 4 of 6 done, one in review…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 outgoing ended + failure -->
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k">4</span><span class="zh">旧会话：已完成</span></div>
+        <div class="convo">
+          <div class="convo-h">Checkout redesign <span class="cstate">Completed</span></div>
+          <div class="convo-b"><div class="msg-a dim">…Ask for the merge once that evidence is in.</div></div>
+          <div class="ended"><span class="m-n" style="margin-top:0">5</span><span class="grow">Handed over to a new coordinator.</span><span class="a-btn sm primary">Open it</span></div>
+        </div>
+      </div>
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k" style="background:var(--error-bg);color:var(--error)">5</span><span class="zh">失败：交接说明没写成</span></div>
+        <div class="sys err m-mark">
+          <span class="m-n">6</span>
+          <svg><use href="#i-excl"/></svg>
+          <span class="grow">The handoff note wasn't written: the turn failed.
+            <span class="row"><span class="a-btn sm">Try again</span><span class="a-btn sm">Hand over without a note</span><span class="a-btn sm">Keep this coordinator</span></span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>确认弹窗列出实际会发生的两件事：</b>写交接说明，以及具体转移哪几个等待（数量和名称都从后端读，没有等待时这一行不显示）。按钮写 Hand over，不写 OK。旧会话不删除，沿用现有替换流程的说法。</span></li>
+    <li><span class="m-n">2</span><span><b>平台在旧会话里发一轮固定提示，让它写交接说明</b>（四个固定小节：现状 / 和 owner 的约定 / 在等什么 / 下一步）。这条提示属于平台消息，不显示成用户发言，界面上只有这条状态提示加计时。期间输入框禁用。Skip the note = 不带说明直接替换；Cancel handover = 什么都不改，会话恢复原样。</span></li>
+    <li><span class="m-n">3</span><span><b>交接说明在新会话里显示为一张卡片，</b>同时拼进开场消息；开场指令仍然要求先读 project_get 和 task_list，说明和项目状态冲突时以项目状态为准。卡片里的链接指向旧会话。</span></li>
+    <li><span class="m-n">4</span><span><b>等待的转移</b>：把旧会话名下所有 ACTIVE 状态的等待改到新会话名下，和 coordinator 指针切换放在同一个事务里，这样不会出现两边都收到或者两边都收不到。新会话里显示一枚提示，点开列出具体是哪些。</span></li>
+    <li><span class="m-n">5</span><span><b>旧会话完成后，输入框的位置换成一条横幅</b>，带链接跳到新会话，避免用户回到旧会话后继续在里面发消息。</span></li>
+    <li><span class="m-n">6</span><span><b>失败（这一轮报错、超时、被用户停掉）时，什么都不改</b>（旧 coordinator 继续有效，等待也不转移），给出三个出口。上下文满到连交接说明都写不出来时，引擎会自己先压缩，压缩期间显示 "Compacting…"，计时继续走。</span></li>
+  </ul>
+</div>
+</body>
+</html>
