@@ -1,0 +1,374 @@
+import { describe, expect, it } from 'vitest';
+import {
+  SCHEDULE_RUN_STATES,
+  type ScheduleCreateCard,
+  type ScheduleListRow,
+  type ScheduleRunState,
+  type ScheduleRunView,
+  scheduleApprovalWaiting,
+  scheduleCircle,
+  scheduleCreateWhen,
+  scheduleFailedWaiting,
+  scheduleHeldWaiting,
+  scheduleNeedsYou,
+  scheduleReportedText,
+  scheduleRowLine,
+  scheduleRunCircle,
+  scheduleRunLine,
+  scheduleRunOfText,
+  scheduleRunStripText,
+  scheduleTimeline,
+  scheduleWhenText,
+} from './schedule';
+
+// The boards' demo day: Friday Nov 14, 12:19 in Asia/Shanghai (UTC+8, no DST).
+const TZ = 'Asia/Shanghai';
+const NOW = new Date('2025-11-14T04:19:00.000Z');
+/** An instant from a Shanghai wall clock. */
+const sh = (local: string) => new Date(`${local}:00.000+08:00`).toISOString();
+
+let seq = 0;
+function schedule(over: Partial<ScheduleListRow> = {}): ScheduleListRow {
+  seq += 1;
+  return {
+    id: `s${seq}`,
+    title: `Schedule ${seq}`,
+    intent: 'intent',
+    prompt: 'prompt',
+    rule: { kind: 'DAILY', time: '09:00' },
+    ruleText: 'Daily 09:00',
+    timezone: TZ,
+    workspaceId: 'w1',
+    workspaceName: 'apiserver',
+    agentId: null,
+    accessLevel: 'CHECK_ONLY',
+    may: '',
+    runLimitMinutes: 30,
+    runsPerWeek: 7,
+    envelope: { workspaceId: 'w1', accessLevel: 'CHECK_ONLY', runsPerWeek: 7, runLimitMinutes: 30 },
+    state: 'ACTIVE',
+    heldReason: null,
+    endedReason: null,
+    note: null,
+    revision: 1,
+    startAt: sh('2025-11-01T00:00'),
+    endAt: null,
+    nextDueAt: null,
+    consecutiveFailures: 0,
+    createdFromSessionId: null,
+    createdAt: sh('2025-11-01T00:00'),
+    endedAt: null,
+    lastRun: null,
+    ...over,
+  };
+}
+
+function run(s: ScheduleListRow, state: ScheduleRunState, plannedAt: string, over: Partial<ScheduleRunView> = {}): ScheduleRunView {
+  return {
+    id: `r-${s.id}-${plannedAt}`,
+    scheduleId: s.id,
+    scheduleRevision: 1,
+    plannedAt,
+    trigger: 'SCHEDULED',
+    state,
+    attempt: 1,
+    startedAt: plannedAt,
+    endedAt: null,
+    sessionId: null,
+    key: null,
+    summary: null,
+    links: [],
+    failureReason: null,
+    heldReason: null,
+    ...over,
+  };
+}
+
+const names = (groups: ReturnType<typeof scheduleTimeline>) =>
+  groups.map((g) => [g.title, g.subtitle, g.items.map((i) => (i.kind === 'DRAFT' ? i.card.title : i.schedule.title))]);
+
+describe('scheduleTimeline', () => {
+  it('lays out board 1/2 ①: Needs you, Today, Tomorrow, Monday, Paused', () => {
+    const sweep = schedule({ title: 'Nightly pg spec sweep', consecutiveFailures: 3, nextDueAt: sh('2025-11-15T02:00') });
+    const audit = schedule({ title: 'Weekly dependency audit', state: 'HELD', heldReason: 'AGENT_DISABLED' });
+    const docs = schedule({ title: 'Docs link check', nextDueAt: sh('2025-11-15T12:00') });
+    const notes = schedule({ title: 'Release notes draft', nextDueAt: sh('2025-11-14T17:00') });
+    const deploy = schedule({ title: 'Deploy health check', rule: { kind: 'ONCE', at: '2025-11-14T18:00' }, nextDueAt: sh('2025-11-14T18:00') });
+    const codex = schedule({ title: 'Codex stable check', nextDueAt: sh('2025-11-15T09:00') });
+    const cost = schedule({ title: 'Weekly cost report', nextDueAt: sh('2025-11-17T10:00') });
+    const csp = schedule({ title: 'Gateway CSP report digest', state: 'PAUSED' });
+    const gone = schedule({ title: 'Ended one', state: 'ENDED', nextDueAt: null });
+    const groups = scheduleTimeline({
+      schedules: [sweep, audit, docs, notes, deploy, codex, cost, csp, gone],
+      runs: [run(docs, 'RUNNING', sh('2025-11-14T12:00'))],
+      now: NOW,
+      timezone: TZ,
+    });
+    expect(names(groups)).toEqual([
+      ['Needs you', '2', ['Nightly pg spec sweep', 'Weekly dependency audit']],
+      ['Today', 'Fri, Nov 14', ['Docs link check', 'Release notes draft', 'Deploy health check']],
+      ['Tomorrow', 'Sat, Nov 15', ['Nightly pg spec sweep', 'Codex stable check', 'Docs link check']],
+      ['Monday', 'Nov 17', ['Weekly cost report']],
+      ['Paused', '1', ['Gateway CSP report digest']],
+    ]);
+    expect(groups.map((g) => g.key)).toEqual(['NEEDS_YOU', 'TODAY', 'TOMORROW', 'DAY', 'PAUSED']);
+    expect(groups[1]!.items[0]!.kind).toBe('RUN');
+  });
+
+  it('splits at local midnight, not at UTC midnight', () => {
+    // 23:30 and 00:30 Shanghai are 15:30Z and 16:30Z on the same UTC day.
+    const late = schedule({ title: 'Late', nextDueAt: sh('2025-11-14T23:30') });
+    const early = schedule({ title: 'Early', nextDueAt: sh('2025-11-15T00:30') });
+    expect(new Date(late.nextDueAt!).getUTCDate()).toBe(new Date(early.nextDueAt!).getUTCDate());
+    const groups = scheduleTimeline({ schedules: [early, late], now: NOW, timezone: TZ });
+    expect(names(groups)).toEqual([
+      ['Today', 'Fri, Nov 14', ['Late']],
+      ['Tomorrow', 'Sat, Nov 15', ['Early']],
+    ]);
+  });
+
+  it('reads days in the viewer\'s zone: the same instants group differently in Los Angeles', () => {
+    const late = schedule({ title: 'Late', nextDueAt: sh('2025-11-14T23:30') }); // 07:30 Fri in LA
+    const early = schedule({ title: 'Early', nextDueAt: sh('2025-11-15T00:30') }); // 08:30 Fri in LA
+    // 12:19 Shanghai is 20:19 Thursday in Los Angeles.
+    const groups = scheduleTimeline({ schedules: [early, late], now: NOW, timezone: 'America/Los_Angeles' });
+    expect(names(groups)).toEqual([['Tomorrow', 'Fri, Nov 14', ['Late', 'Early']]]);
+  });
+
+  it('just before midnight, a slot a minute later is Tomorrow; just after, it is Today', () => {
+    const s = schedule({ title: 'Midnight', nextDueAt: sh('2025-11-15T00:00') });
+    const before = scheduleTimeline({ schedules: [s], now: new Date(sh('2025-11-14T23:59')), timezone: TZ });
+    expect(before.map((g) => g.title)).toEqual(['Tomorrow']);
+    const after = scheduleTimeline({ schedules: [s], now: new Date(sh('2025-11-15T00:00')), timezone: TZ });
+    expect(after.map((g) => [g.title, g.subtitle])).toEqual([['Today', 'Sat, Nov 15']]);
+  });
+
+  it('names the days of the coming week across the weekend, then Later', () => {
+    const at = (d: string) => schedule({ title: d, nextDueAt: sh(`${d}T09:00`) });
+    const groups = scheduleTimeline({
+      schedules: [at('2025-11-16'), at('2025-11-17'), at('2025-11-20'), at('2025-11-21'), at('2025-12-01')],
+      now: NOW,
+      timezone: TZ,
+    });
+    expect(names(groups)).toEqual([
+      ['Sunday', 'Nov 16', ['2025-11-16']],
+      ['Monday', 'Nov 17', ['2025-11-17']],
+      ['Thursday', 'Nov 20', ['2025-11-20']],
+      ['Later', null, ['2025-11-21', '2025-12-01']],
+    ]);
+  });
+
+  it('on a Sunday, Monday is Tomorrow and next Sunday is Later', () => {
+    const sunday = new Date(sh('2025-11-16T20:00'));
+    const mon = schedule({ title: 'Mon', nextDueAt: sh('2025-11-17T09:00') });
+    const sat = schedule({ title: 'Sat', nextDueAt: sh('2025-11-22T09:00') });
+    const sun = schedule({ title: 'Sun', nextDueAt: sh('2025-11-23T09:00') });
+    const groups = scheduleTimeline({ schedules: [sun, sat, mon], now: sunday, timezone: TZ });
+    expect(names(groups)).toEqual([
+      ['Tomorrow', 'Mon, Nov 17', ['Mon']],
+      ['Saturday', 'Nov 22', ['Sat']],
+      ['Later', null, ['Sun']],
+    ]);
+  });
+
+  it('across a month end and a year end', () => {
+    const now = new Date(sh('2025-12-31T22:00'));
+    const s = schedule({ title: 'New year', nextDueAt: sh('2026-01-01T09:00') });
+    const groups = scheduleTimeline({ schedules: [s], now, timezone: TZ });
+    expect(groups.map((g) => [g.title, g.subtitle])).toEqual([['Tomorrow', 'Thu, Jan 1']]);
+  });
+
+  it('puts a slot already due (being fired) under Today', () => {
+    const s = schedule({ title: 'Due', nextDueAt: sh('2025-11-13T09:00') });
+    expect(scheduleTimeline({ schedules: [s], now: NOW, timezone: TZ }).map((g) => g.title)).toEqual(['Today']);
+  });
+
+  it('shows ended runs only with Show past runs, and only today\'s', () => {
+    const s = schedule({ title: 'Codex stable check', nextDueAt: sh('2025-11-15T09:00') });
+    const runs = [
+      run(s, 'CHANGED', sh('2025-11-14T10:00')),
+      run(s, 'NO_CHANGE', sh('2025-11-13T10:00')),
+    ];
+    const hidden = scheduleTimeline({ schedules: [s], runs, now: NOW, timezone: TZ });
+    expect(hidden.map((g) => g.title)).toEqual(['Tomorrow']);
+    const shown = scheduleTimeline({ schedules: [s], runs, showPastRuns: true, now: NOW, timezone: TZ });
+    expect(names(shown)).toEqual([
+      ['Today', 'Fri, Nov 14', ['Codex stable check']],
+      ['Tomorrow', 'Sat, Nov 15', ['Codex stable check']],
+    ]);
+    const item = shown[0]!.items[0]!;
+    expect(item.kind === 'RUN' && item.run.state).toBe('CHANGED');
+  });
+
+  it('places a draft on the day of its first run', () => {
+    const card = {
+      id: 'c1', kind: 'CREATE', title: 'Weekday issue summary',
+      when: { rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] }, timezone: TZ, firstRunAt: sh('2025-11-17T09:00'), text: '' },
+    } as unknown as ScheduleCreateCard;
+    const cost = schedule({ title: 'Weekly cost report', nextDueAt: sh('2025-11-17T10:00') });
+    const groups = scheduleTimeline({ schedules: [cost], drafts: [card], now: NOW, timezone: TZ });
+    expect(names(groups)).toEqual([['Monday', 'Nov 17', ['Weekday issue summary', 'Weekly cost report']]]);
+  });
+});
+
+describe('circles', () => {
+  const EXPECTED: Record<ScheduleRunState, [string, string | null, string | null]> = {
+    QUEUED: ['open', null, null],
+    RUNNING: ['running', null, null],
+    AWAITING_APPROVAL: ['held', 'alert', 'Waiting for you'],
+    NO_CHANGE: ['done', 'check', 'No change'],
+    CHANGED: ['done', 'check', 'Known'],
+    FAILED: ['failed', 'alert', 'Failed'],
+    SKIPPED: ['muted', 'check', 'Skipped'],
+    MISSED: ['muted', 'check', 'Missed'],
+    HELD: ['held', 'alert', 'Held'],
+    CANCELLED: ['muted', 'check', 'Cancelled'],
+  };
+
+  it('maps every ScheduleRun state', () => {
+    expect(Object.keys(EXPECTED).sort()).toEqual([...SCHEDULE_RUN_STATES].sort());
+    for (const state of SCHEDULE_RUN_STATES) {
+      const v = scheduleRunCircle({ state });
+      expect([v.circle, v.mark, v.tag?.text ?? null], state).toEqual(EXPECTED[state]);
+    }
+  });
+
+  it('a CHANGED run with a new finding is a green tick tagged New', () => {
+    expect(scheduleRunCircle({ state: 'CHANGED' }, { newFinding: true })).toEqual({
+      circle: 'new', mark: 'check', tag: { tone: 'new', text: 'New' },
+    });
+  });
+
+  it('maps every schedule state, failing and draft', () => {
+    expect(scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }).circle).toBe('open');
+    expect(scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 3 })).toEqual({
+      circle: 'failed', mark: 'alert', tag: { tone: 'fail', text: 'Failed 3 in a row' },
+    });
+    expect(scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 1 }).tag?.text).toBe('Failed');
+    expect(scheduleCircle({ state: 'HELD', consecutiveFailures: 0 }).tag).toEqual({ tone: 'held', text: 'Held' });
+    expect(scheduleCircle({ state: 'PAUSED', consecutiveFailures: 0 }).circle).toBe('paused');
+    expect(scheduleCircle({ state: 'ENDED', consecutiveFailures: 0 }).circle).toBe('muted');
+    expect(scheduleCircle({ state: 'ACTIVE', consecutiveFailures: 0 }, { draft: true }).circle).toBe('draft');
+    expect(scheduleNeedsYou({ state: 'PAUSED', consecutiveFailures: 2 })).toBe(false);
+  });
+});
+
+describe('row lines', () => {
+  it('reads like board 1/2', () => {
+    expect(scheduleRowLine(schedule({ rule: { kind: 'DAILY', time: '02:00' } })))
+      .toBe('Every day at 02:00 · apiserver · Check only');
+    expect(scheduleRowLine(schedule({ rule: { kind: 'WEEKLY', time: '17:00', weekdays: ['FRI'] }, workspaceName: 'Orbit baseline', accessLevel: 'OPEN_PR' })))
+      .toBe('Every Friday at 17:00 · Orbit baseline · Open a PR');
+    expect(scheduleRowLine(schedule({ rule: { kind: 'ONCE', at: '2025-11-14T18:00' } })))
+      .toBe('Once · apiserver · Check only');
+    expect(scheduleRowLine(
+      schedule({ rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON'] }, workspaceName: 'web', state: 'HELD', heldReason: 'AGENT_DISABLED' }),
+      { agentName: 'auditor' },
+    )).toBe('Every Monday at 09:00 · web · the agent "auditor" is disabled');
+    expect(scheduleRowLine(schedule({ rule: { kind: 'DAILY', time: '12:00' }, workspaceName: 'web' }), { runningMinutes: 21 }))
+      .toBe('Every day at 12:00 · web · Check only · running for 21 min');
+    expect(scheduleRowLine(schedule({ rule: { kind: 'DAILY', time: '08:00' }, workspaceName: 'web', state: 'PAUSED' }), {
+      pausedAt: new Date(sh('2025-11-07T15:00')), timezone: TZ,
+    })).toBe('Every day at 08:00 · web · paused Nov 7');
+    expect(scheduleRowLine(schedule({ rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] } }), { draft: true }))
+      .toBe('Weekdays at 09:00 · apiserver · Check only · draft, waiting for you');
+  });
+
+  it('past runs', () => {
+    const s = schedule();
+    expect(scheduleRunLine(run(s, 'FAILED', NOW.toISOString(), { failureReason: 'NO_REPORT' }))).toBe('Ended without a report');
+    expect(scheduleRunLine(run(s, 'CHANGED', NOW.toISOString(), { summary: '2.1.310 is out' }), { notified: true }))
+      .toBe('2.1.310 is out · you were notified');
+    expect(scheduleRunLine(run(s, 'CHANGED', NOW.toISOString(), { summary: '0.49.0 again · linked PR #831' })))
+      .toBe('0.49.0 again · linked PR #831 · not notified');
+    expect(scheduleRunLine(run(s, 'MISSED', NOW.toISOString(), { failureReason: 'OVER_BUDGET', reasonText: 'Over budget: 7 of 7 runs this week' })))
+      .toBe('Over budget: 7 of 7 runs this week');
+  });
+
+  it('when', () => {
+    expect(scheduleWhenText(new Date(sh('2025-11-14T02:00')), NOW, TZ)).toBe('Today 02:00');
+    expect(scheduleWhenText(new Date(sh('2025-11-15T09:00')), NOW, TZ)).toBe('Tomorrow 09:00');
+    expect(scheduleWhenText(new Date(sh('2025-11-17T09:00')), NOW, TZ)).toBe('Monday 09:00');
+    expect(scheduleWhenText(new Date(sh('2025-11-24T09:00')), NOW, TZ)).toBe('Nov 24 09:00');
+  });
+});
+
+describe('cards', () => {
+  it('the create card When (board 2/2 ①, 1/2 ④)', () => {
+    const when = scheduleCreateWhen({
+      when: { rule: { kind: 'DAILY', time: '10:00' }, timezone: TZ, firstRunAt: sh('2025-11-15T10:00'), text: '' },
+    }, NOW, TZ);
+    expect(when.text).toBe('Daily 10:00 · Asia/Shanghai · first run tomorrow');
+    const draft = scheduleCreateWhen({
+      when: { rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] }, timezone: TZ, firstRunAt: sh('2025-11-17T09:00'), text: '' },
+    }, NOW, TZ);
+    expect([`${draft.rule} · ${draft.zone}`, draft.firstRun]).toEqual(['Weekdays at 09:00 · Asia/Shanghai', 'First run Monday']);
+    const noZone = scheduleCreateWhen({ when: { rule: { kind: 'DAILY', time: '10:00' }, timezone: null, firstRunAt: null, text: '' } }, NOW, TZ);
+    expect(noZone.text).toBe('Daily 10:00 · your time zone');
+  });
+
+  it('Waiting on you: failed, held, approval (board 2/2 ④)', () => {
+    expect(scheduleFailedWaiting({
+      title: 'Nightly pg spec sweep',
+      consecutiveFailures: 3,
+      run: { failureReason: 'NO_REPORT', reasonText: null, plannedAt: sh('2025-11-14T02:00') },
+      timezone: TZ,
+    })).toEqual({
+      title: 'Nightly pg spec sweep failed 3 runs in a row',
+      kind: 'Scheduled',
+      body: 'The last run ended without a report (Nov 14, 02:00). It keeps running on schedule until you pause it. '
+        + 'Open the run to see where it stopped, or ask a session to fix the prompt.',
+      actions: ['Open run', 'Pause schedule'],
+    });
+    expect(scheduleHeldWaiting({
+      title: 'Weekly dependency audit',
+      heldReason: 'AGENT_DISABLED',
+      plannedAt: sh('2025-11-10T09:00'),
+      agentName: 'auditor',
+      workspaceName: 'web',
+      now: new Date(sh('2025-11-10T09:01')),
+      timezone: TZ,
+    })).toEqual({
+      title: 'Weekly dependency audit is held',
+      kind: 'Scheduled',
+      body: 'It could not start on Monday 09:00: the agent "auditor" in workspace web is disabled. Nothing runs until it is enabled and you resume.',
+      actions: ['Open agent settings', 'Resume'],
+    });
+    const approval = scheduleApprovalWaiting({
+      title: 'Nightly pg spec sweep',
+      deadline: sh('2025-11-14T04:00'),
+      nextAt: sh('2025-11-15T02:00'),
+      pattern: 'psql:*',
+      workspaceName: 'apiserver',
+      now: new Date(sh('2025-11-14T02:03')),
+      timezone: TZ,
+    });
+    expect(approval).toEqual({
+      title: 'Nightly pg spec sweep wants to run a command',
+      kind: 'Scheduled run',
+      body: 'If nobody answers by 04:00 this run fails; the next one starts tomorrow.',
+      alwaysAllow: "Always allow covers psql:* in apiserver: later runs won't ask for this.",
+      actions: ['Always allow', 'Allow once', 'Deny'],
+    });
+  });
+
+  it('a held card without the agent\'s name still reads', () => {
+    const held = scheduleHeldWaiting({
+      title: 'Audit', heldReason: 'AGENT_DISABLED', plannedAt: sh('2025-10-27T09:00'), now: NOW, timezone: TZ,
+    });
+    expect(held.body).toBe('It could not start on Oct 27, 09:00: its agent is disabled. Nothing runs until it is enabled and you resume.');
+  });
+});
+
+describe('the run\'s session (board 2/2 ⑥)', () => {
+  it('strip, crumb and report', () => {
+    const s = schedule();
+    const r = run(s, 'CHANGED', sh('2025-11-13T10:00'), { startedAt: sh('2025-11-13T10:01'), key: 'codex@0.49.0' });
+    expect(scheduleRunStripText(r, 'CHECK_ONLY', TZ)).toBe(
+      'Scheduled run · planned 10:00, started 10:01 · access Check only · this session is not in your session list',
+    );
+    expect(scheduleRunOfText(r, TZ)).toBe('run of Nov 13');
+    expect(scheduleReportedText(r, { notified: true })).toBe('Reported: Changed · codex@0.49.0 · you were notified');
+    expect(scheduleReportedText({ state: 'NO_CHANGE', key: null })).toBe('Reported: No change');
+  });
+});
