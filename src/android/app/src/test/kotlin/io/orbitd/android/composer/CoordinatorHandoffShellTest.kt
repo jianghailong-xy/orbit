@@ -73,6 +73,17 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         assertFalse(has(inDialog("Summarize earlier turns and keep going here.")))
     }
 
+    private fun noCompactWhileTheHandoff(state: String) {
+        runnerWithCompact(); coordinatorSession(handoff(state))
+        signIn(); openSession(); openContext()
+        await { has(inDialog("No quota reported for this account.")) || has(inDialog("claude · claude-opus-5-5")) }
+        assertFalse(has(hasTestTag("context-action-compact")))
+        assertFalse(has(inDialog("Available when this turn ends.")))
+        assertFalse(has(hasTestTag("context-action-new-coordinator")))
+    }
+    @Test fun whileTheNoteIsWrittenTheDialogOffersNoCompact() = noCompactWhileTheHandoff("WRITING")
+    @Test fun whileItHandsOverTheDialogOffersNoCompact() = noCompactWhileTheHandoff("HANDING_OVER")
+
     @Test fun anEngineWithoutCompactShowsNoActionsInAnOrdinarySession() {
         signIn(); openSession(); openContext()
         await { has(inDialog("No quota reported for this account.")) || has(inDialog("claude · claude-opus-5-5")) }
@@ -212,17 +223,19 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
 
     @Test fun theSuccessorOpensWithTheNoteCardAndTheWaitsThatMoved() {
         ComposerShell.session = mapOf("coordinatorHandoffReceived" to Json.parseToJsonElement("""{"handoffFromSessionId":"34HandoffPrevious00001",
-            "note":"Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nAgreed with the owner\n- Don't merge Payment retries before Friday's release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.",
+            "note":"Handing over after Friday's release.\nWhere things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nAgreed with the owner\n- Don't merge Payment retries before Friday's release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.",
             "handedOverAt":"2026-11-14T15:42:00Z","movedWaits":[{"id":"w1","label":"Waiting for \"Fix login redirect\" to be DONE","paused":false},
-            {"id":"w2","label":"Session \"Payment retries\" finishing its turn","paused":false}]}"""))
+            {"id":"w2","label":"Session \"Payment retries\" finishing its turn","paused":true}]}"""))
         signIn(); open("orbit-session:${ComposerShell.SESSION}")
         await { has(hasTestTag("handoff-note-card")) }
         for (title in CoordinatorHandoff.SECTIONS) assertTrue(title, has(hasText(title), unmerged = true))
         assertTrue(has(hasText("•  4 of 6 tasks done; Fix login redirect in review."), unmerged = true))
+        assertTrue("the line before the first heading is kept", has(hasTestTag("handoff-note-preamble") and hasText("Handing over after Friday's release."), unmerged = true))
         assertTrue(has(hasText("the previous coordinator", substring = true), unmerged = true))
         assertTrue(has(hasText("2 waits moved here"), unmerged = true))
         press(hasTestTag("handoff-waits-moved"))
         await { has(hasText("•  Waiting for \"Fix login redirect\" to be DONE"), unmerged = true) }
+        assertTrue(has(hasText("•  Session \"Payment retries\" finishing its turn (paused)"), unmerged = true))
         press(hasTestTag("handoff-note-from"))
         await { ComposerShell.calls.any { it.startsWith("GET sessions/34HandoffPrevious00001") } }
     }

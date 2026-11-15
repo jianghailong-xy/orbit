@@ -65,6 +65,8 @@ internal object CoordinatorHandoffCopy {
     const val HANDING_OVER = "Handing over to a new coordinator…"
     const val NOTE_CARD_TITLE = "Handoff from the previous coordinator"
     fun waitsMovedHere(count: Int) = if (count == 1) "1 wait moved here" else "$count waits moved here"
+    /** After a paused wait's label in the moved-here list (web's `pendingWaitLabel`, OrbitKit's `pausedSuffix`). */
+    const val PAUSED_SUFFIX = " (paused)"
     const val HANDED_OVER = "Handed over to a new coordinator."
     const val OPEN_IT = "Open it"
     const val TRY_AGAIN = "Try again"
@@ -93,13 +95,19 @@ internal data class OutgoingHandoff(val state: String, val startedAt: String?, v
 }
 
 /** One wait as the handoff names it (`CoordinatorPendingWait`). */
-internal data class HandoffWait(val id: String, val label: String, val paused: Boolean)
+internal data class HandoffWait(val id: String, val label: String, val paused: Boolean) {
+    /** The label as the moved-here list shows it. */
+    val shownLabel get() = if (paused) label + CoordinatorHandoffCopy.PAUSED_SUFFIX else label
+}
 
 /** The handoff a successor opened with (`coordinatorHandoffReceived`). */
 internal data class ReceivedHandoff(val from: String, val note: String?, val handedOverAt: String?, val movedWaits: List<HandoffWait>)
 
 /** One section of the note as the card titles it, and its lines. */
 internal data class NoteSection(val title: String, val lines: List<String>)
+
+/** The note as the card shows it: the lines before the first heading (OrbitKit's `preamble`), then its sections. */
+internal data class HandoffNote(val preamble: List<String>, val sections: List<NoteSection>)
 
 /** The rules the context dialog and the conversation read (boards 02, 03). Pure, so the unit tests pin them. */
 internal object CoordinatorHandoff {
@@ -182,9 +190,11 @@ internal object CoordinatorHandoff {
     fun clock(at: String?, zone: ZoneId = ZoneId.systemDefault()): String? = at?.let { runCatching { Instant.parse(it) }.getOrNull() }
         ?.let { DateTimeFormatter.ofPattern("h:mm a", Locale.US).withZone(zone).format(it) }
 
-    /** The note's four sections as the card titles them; a note that does not keep to them is shown as it was written. */
-    fun sections(note: String): List<NoteSection>? {
+    /** The note's four sections as the card titles them, with any lines before the first heading kept above them (as OrbitKit
+     * does); a note with none of them is shown as it was written. */
+    fun sections(note: String): HandoffNote? {
         val found = mutableListOf<NoteSection>()
+        val preamble = mutableListOf<String>()
         var title: String? = null
         val lines = mutableListOf<String>()
         fun flush() { title?.let { found += NoteSection(it, lines.toList()) }; lines.clear() }
@@ -193,10 +203,10 @@ internal object CoordinatorHandoff {
             val heading = line.trimStart('#', ' ', '*').trimEnd('*', ':', ' ')
             val known = SECTIONS.firstOrNull { it.equals(heading, ignoreCase = true) }
             if (known != null) { flush(); title = known }
-            else if (line.isNotEmpty() && title != null) lines += line.removePrefix("- ").removePrefix("* ").removePrefix("• ")
+            else if (line.isNotEmpty()) (if (title != null) lines else preamble) += line.removePrefix("- ").removePrefix("* ").removePrefix("• ")
         }
         flush()
-        return found.takeIf { it.isNotEmpty() }
+        return found.takeIf { it.isNotEmpty() }?.let { HandoffNote(preamble.toList(), it) }
     }
 }
 
@@ -328,10 +338,14 @@ internal fun HandoffNoteCard(received: ReceivedHandoff, open: (String) -> Unit) 
                 val note = received.note
                 val sections = note?.let(CoordinatorHandoff::sections)
                 when {
-                    sections != null -> sections.forEach { section ->
+                    sections != null -> {
+                        if (sections.preamble.isNotEmpty()) Text(sections.preamble.joinToString("\n"), Modifier.testTag("handoff-note-preamble"),
+                            style = MaterialTheme.typography.bodyMedium)
+                        sections.sections.forEach { section ->
                         Text(section.title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(top = 4.dp))
                         section.lines.forEach { Text("•  $it", style = MaterialTheme.typography.bodyMedium) }
+                        }
                     }
                     note != null -> Text(note, style = MaterialTheme.typography.bodyMedium)
                 }
@@ -345,7 +359,7 @@ internal fun HandoffNoteCard(received: ReceivedHandoff, open: (String) -> Unit) 
                 Text(CoordinatorHandoffCopy.waitsMovedHere(received.movedWaits.size), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (waitsOpen) received.movedWaits.forEach { Text("•  ${it.label}", style = MaterialTheme.typography.bodySmall,
+            if (waitsOpen) received.movedWaits.forEach { Text("•  ${it.shownLabel}", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }

@@ -121,8 +121,9 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
                     model.target?.workspaceId ?: detail.text("agentId") ?: (detail["workspace"] as? JsonObject)?.text("id"))
             }
             // Board 03: under the readings, a divider and the actions — Compact where the engine has `/compact` (greyed while a turn
-            // runs), Start a new coordinator in a project's current coordinator. Neither, no divider.
-            val compact = model.target == null && CoordinatorHandoff.compactOffered(state.catalog?.let { it.slashItems(it.engineOf(detail), detail.text("agentId")) }.orEmpty())
+            // runs), Start a new coordinator in a project's current coordinator. Neither, no divider. While a handoff has the composer
+            // locked, no Compact at all: no turn of this conversation is to come (web's `compactOffered`, OrbitKit hides the gauge).
+            val compact = model.target == null && CoordinatorHandoff.outgoing(detail)?.locksComposer != true && CoordinatorHandoff.compactOffered(state.catalog?.let { it.slashItems(it.engineOf(detail), detail.text("agentId")) }.orEmpty())
             val handOver = model.target == null && CoordinatorHandoff.startOffered(detail)
             if (compact || handOver) HorizontalDivider(Modifier.padding(vertical = 8.dp))
             if (compact) {
