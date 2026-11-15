@@ -182,11 +182,15 @@ test('the same gate can be explained as refusal or inability to work around it',
   for (const explanation of [
     'The Orbit CLI goes through the same server permission gate, so it would be refused for the same reason.',
     "The Orbit CLI goes through the same server permission gate, so it can't work around this either.",
+    "Using the CLI won't get around this. It goes through the same server permission check and gets the same refusal.",
+    "The CLI isn't a workaround. It uses the same server permission gate.",
   ]) {
     grade({ ...trace, replies: [trace.replies[0], 'I will wait for outstanding children to finish. ' + explanation] }, scenario);
   }
   trace.replies[1] = 'I will wait. The CLI is a separate permission gate and can bypass this one.';
   assert.throws(() => grade(trace, scenario), /CLI shares the permission gate|CLI bypass claim/);
+  trace.replies[1] = 'I will wait. The CLI does not use the same permission gate.';
+  assert.throws(() => grade(trace, scenario), /separate permission gate/);
 });
 
 test('reconciliation accepts separate from the existing project', () => {
@@ -217,6 +221,8 @@ test('owner can turn it on is an accurate orchestration-switch responsibility', 
   const scenario = scenarios.find(s => s.name === 'orchestration-off');
   const trace = await evaluate(referenceAgent(), 'mcp', scenario);
   trace.replies[1] = trace.replies[1].replace('The account owner can enable Settings', 'The account owner can turn it on in Settings');
+  grade(trace, scenario);
+  trace.replies[1] = trace.replies[1].replace('The account owner can turn it on in Settings', 'Turn orchestration on. The account owner can do this in Settings');
   grade(trace, scenario);
 });
 

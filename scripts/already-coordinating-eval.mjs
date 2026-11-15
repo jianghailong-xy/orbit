@@ -146,12 +146,15 @@ export function grade({ calls, replies }, scenario) {
   if (scenario.available === false || scenario.failure) {
     const last = replies.at(-1);
     const normalize = value => value.replace(/[`*]/g, '').replace(/\s+/g, ' ')
-      .replace(/can[’']t/gi, 'cannot').replace(/doesn[’']t/gi, 'does not').replace(/won[’']t/gi, 'will not');
+      .replace(/can[’']t/gi, 'cannot').replace(/doesn[’']t/gi, 'does not').replace(/won[’']t/gi, 'will not')
+      .replace(/isn[’']t/gi, 'is not').replace(/wouldn[’']t/gi, 'would not');
     const prose = normalize(last);
     const conversation = normalize(text);
-    assert.ok(/CLI[^.!?]{0,160}(?:cannot|does not (?:bypass|override|circumvent)|will not (?:bypass|override|circumvent)|(?:would|will) be refused|is refused)/i.test(conversation)
+    assert.ok(/CLI[^.!?]{0,160}\b(?:cannot|not|refused)\b/i.test(conversation)
       && /same.{0,60}(?:permission|gate|authorization|orchestration)/i.test(conversation), 'CLI shares the permission gate');
     assert.doesNotMatch(conversation, /CLI[^.!?]{0,100}\bcan (?:bypass|get around|get past|override|circumvent)/i, 'no contradictory CLI bypass claim');
+    assert.doesNotMatch(conversation, /CLI[^.!?]{0,100}(?:does not|will not) (?:use|share|follow|respect|require|need) the same.{0,40}(?:permission|gate)/i,
+      'CLI cannot have a separate permission gate');
     if (scenario.name === 'capability-missing') {
       // Match affirmative clauses, not a condition embedded in "cannot tell whether …".
       assert.doesNotMatch(conversation, /(?:^|[.!?;:]|\b(?:because|since|so)\b)\s*(?:session )?orchestration (?:is|has been|must be) (?:off|disabled|turned off|not enabled)(?![,\s]+or\b)/i,
@@ -169,7 +172,7 @@ export function grade({ calls, replies }, scenario) {
       assert.ok(last.includes(childPrompt), 'manual fallback carries the opening prompt');
       if (scenario.reason === 'ORCHESTRATION_DISABLED' || scenario.failure === 'ORCHESTRATION_DISABLED') {
         assert.match(last, /Settings.{0,10}Session orchestration/);
-        assert.match(prose, /(?:account owner|user|you).{0,40}(?:enable|turn.{0,15}on)/i, 'the owner changes the orchestration switch');
+        assert.match(prose, /account owner/i, 'the owner changes the orchestration switch');
       }
     }
     if (['WAIT', 'STOP'].includes(scenario.disposition)) {
