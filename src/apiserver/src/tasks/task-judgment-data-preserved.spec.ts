@@ -3044,6 +3044,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // catalog-only; `pool_login_token` is none of the preserved relations, no trigger, function or DONE fence
       // changes, and no row is written.
       '0800_pool_login_token_subagent_credential',
+      // 0810 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
+      '0810_coordinator_handoff',
       // 0830 adds two nullable schedule_run columns (not_before_at, held_reason) and a partial index, and widens
       // session_opened_by_check by 'SCHEDULE'; catalog-only but for the check's validating scan, `schedule_run` is none
       // of the preserved relations, no trigger, function or DONE fence changes, and no row is written.

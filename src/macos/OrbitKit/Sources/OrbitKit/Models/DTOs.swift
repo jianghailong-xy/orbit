@@ -569,6 +569,15 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var queuedHeldByJobs: Int? = nil
     /// Beside `queuedReason` `runner_updating` only: what the update is and what it waits for.
     public var queuedRunnerUpdate: QueuedRunnerUpdate? = nil
+    /// What the engine is doing before it says anything, as the runner names it — so far only
+    /// `compacting`; nil when none (the server clears it on any engine output). Kept as the word: a
+    /// runner can name a phase this build has never heard of.
+    public var enginePhase: String? = nil
+    /// The handoff this coordinator is handing over through (docs/coordinator-handoff.md), as the
+    /// detail read and `session.updated` carry it: nil when there is none, or it was cancelled.
+    public var coordinatorHandoff: SessionCoordinatorHandoff? = nil
+    /// On a successor coordinator: the handoff it opened with — the note card and the moved waits.
+    public var coordinatorHandoffReceived: SessionCoordinatorHandoffReceived? = nil
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -836,6 +845,11 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         queuedLimit = try? values.decodeIfPresent(Int.self, forKey: .queuedLimit)
         queuedHeldByJobs = try? values.decodeIfPresent(Int.self, forKey: .queuedHeldByJobs)
         queuedRunnerUpdate = try? values.decodeIfPresent(QueuedRunnerUpdate.self, forKey: .queuedRunnerUpdate)
+        enginePhase = try? values.decodeIfPresent(String.self, forKey: .enginePhase)
+        // A shape this build cannot read is no handoff, rather than a session that fails to decode.
+        coordinatorHandoff = try? values.decodeIfPresent(SessionCoordinatorHandoff.self, forKey: .coordinatorHandoff)
+        coordinatorHandoffReceived = try? values.decodeIfPresent(SessionCoordinatorHandoffReceived.self,
+                                                                 forKey: .coordinatorHandoffReceived)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)

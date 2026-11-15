@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 455 |
+| `user` | 460 |
 | `admin` | 28 |
 | `runner` | 197 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **715** |
+| **Total** | **720** |
 
 ## Public routes
 
@@ -177,6 +177,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/acceptance/merge-evidence` | body `RecordMergeEvidenceDto`; path `id` | `ProjectsController.recordMergeEvidence` |
 | `POST` | `/api/projects/:id/blockers/:blockerId/resolve` | body `ResolveProjectBlockerDto`; path `blockerId`, `id` | `ProjectsController.resolveBlocker` |
 | `POST` | `/api/projects/:id/coordinator` | body `OpenProjectCoordinatorDto`; path `id` | `ProjectsController.openCoordinator` |
+| `POST` | `/api/projects/:id/coordinator/handoff` | path `id` | `CoordinatorHandoffController.start` |
+| `POST` | `/api/projects/:id/coordinator/handoff/cancel` | path `id` | `CoordinatorHandoffController.cancel` |
+| `POST` | `/api/projects/:id/coordinator/handoff/retry` | path `id` | `CoordinatorHandoffController.retry` |
+| `POST` | `/api/projects/:id/coordinator/handoff/skip` | path `id` | `CoordinatorHandoffController.skip` |
+| `GET` | `/api/projects/:id/coordinator/pending-waits` | path `id` | `CoordinatorHandoffController.pendingWaits` |
 | `POST` | `/api/projects/:id/coordinator/rebind` | body `RebindProjectCoordinatorDto`; path `id` | `ProjectsController.rebindCoordinator` |
 | `POST` | `/api/projects/:id/coordinator/replace` | body `ReplaceProjectCoordinatorDto`; path `id` | `ProjectsController.replaceCoordinator` |
 | `GET` | `/api/projects/:id/coordinator/status` | path `id` | `ProjectsController.coordinatorStatus` |

@@ -24,6 +24,7 @@ export * from './planUsage';
 export * from './project-progress';
 export * from './project-done';
 export * from './project-start';
+export * from './coordinator-handoff';
 export * from './providerPresets';
 export * from './openCodeKeys';
 export * from './providerEngines';
