@@ -386,7 +386,10 @@ at it, and `<name>` runs on.
 
 Orbit's production spans two workspaces, each with its own git checkout of this repository at `/root/orbit`:
 
-- **orbit-op** is wikova, the build host. Its checkout is where the two-stage release is built and driven from.
+- **orbit-op** is wikova, the build host. Other sessions share its `/root/orbit`, so a release is never built there
+  and nothing is checked out or merged in it. Each release is built and driven from a fresh detached worktree of it,
+  `/dev/shm/wkdir-release-main-<first 9 characters of the commit>`. That worktree gets the small build-only `.env`
+  (`PUBLIC_ORIGIN`, `JWT_SECRET`, `PROVIDER_SECRET_KEY`, `RUNNER_LINK_SIGNING_KEY`), copied from the newest earlier one.
 - **orbit-prod** is `10.66.0.4`, where the release runs. Its `/root/orbit` is the deploy directory. It is also a git
   checkout, detached at the commit production runs, so that a SubAgent can run there. The deploy stage does not read
   it as a checkout: it ships the release's files from orbit-op, and nothing is built on `10.66.0.4`. Its
@@ -398,7 +401,7 @@ deploys nothing. It coordinates the two through cross-workspace SubAgents (docs/
 builds and deploys, then orbit-prod checks production on the host itself and moves its checkout to the release. A
 session on orbit-op runs step 2's work itself, as in [Two-stage release](#two-stage-release), and still delegates step
 4 to orbit-prod. Either kind of SubAgent runs on its workspace's default engine, in a temporary worktree of that
-workspace's `/root/orbit`, which is deleted when it ends, so each brief works in `/root/orbit` by absolute path. A
+workspace's `/root/orbit`, which is deleted when it ends, so each brief works by absolute path. A
 SubAgent cannot ask anyone anything, so each brief settles every choice in advance, and any case the brief does not
 cover is a stop.
 
@@ -416,31 +419,51 @@ Deploying is the owner's decision. Delegate only when the owner asked for this d
 5. **Report** both results: the commit, the plan table, how the apiserver and web were replaced, the target's
    `docker compose ps`, the history line, where orbit-prod's checkout now is, and the log path.
 
-The orbit-op brief: fill in `<commit>`. Add `--stop-then-start` or `--pull-base` to the command in step 4 only when
-the owner asked for it.
+The orbit-op brief: fill in `<commit>`, and `<c9>`, its first 9 characters. Add `--stop-then-start` or `--pull-base` to
+the `--deploy` command in step 6 only when the owner asked for it.
 
 ```text
 You are on wikova, workspace orbit-op. Deploy Orbit commit <commit> to production (10.66.0.4) with the two-stage
 release, as .claude/skills/upgrade/SKILL.md describes under "Two-stage release". You run in a temporary worktree that
-is deleted when you end, so do all the work in /root/orbit by absolute path, and change no file in your worktree.
-Stop and report at the first step that fails. Do not retry, roll back, or run anything else on 10.66.0.4.
+is deleted when you end: work by absolute path. Stop and report at the first step that fails, and do not improvise
+around a guard. Do not retry, and do not roll back. Answer in English.
 
-1. Make sure no upgrade is running. If `cat /tmp/orbit-upgrade.lock/pid` here, or
-   `ssh root@10.66.0.4 cat /tmp/orbit-upgrade.lock/pid` there, names a live process, stop and report its pid.
-2. In /root/orbit, `git status --porcelain --untracked-files=no` must print nothing. Then run
-   `git fetch origin` and `git merge --ff-only <commit>`. If the merge is refused, stop.
-3. Read the commit production runs: `ssh root@10.66.0.4 tail -1 /root/orbit/.upgrade/history`, the second field.
-   Run `git -C /root/orbit diff --stat <that commit> <commit> -- src/apiserver/prisma/migrations/`. If it lists a
+Hard rules: other sessions share /root/orbit. Never build in it, never run a compose command in it, and never check
+out, merge, reset or stash anything there; read it and add a worktree to it only. Deploy only to root@10.66.0.4,
+never on wikova. Never edit 10.66.0.4's .env. Never print a value from any .env.
+
+1. Nothing else is releasing. `cat /tmp/orbit-upgrade.lock/pid` here and `ssh root@10.66.0.4 cat
+   /tmp/orbit-upgrade.lock/pid` there must name no live process, and `systemctl list-units 'orbit-build-*'
+   'orbit-deploy-*' --no-legend` must list none running. `df -h / /dev/shm`: at least 15G free on / and 1.5G on
+   /dev/shm.
+2. `git -C /root/orbit fetch origin` and `git -C /root/orbit cat-file -e "<commit>^{commit}"`. The commit production
+   runs, R, is the second field of `ssh root@10.66.0.4 tail -1 /root/orbit/.upgrade/history`. R must be an ancestor
+   of <commit> (`git -C /root/orbit merge-base --is-ancestor R <commit>`): otherwise this would roll production
+   back, so stop. Run `git -C /root/orbit diff --stat R <commit> -- src/apiserver/prisma/migrations/`. If it lists a
    migration that drops or renames a table or column, adds a NOT NULL column without a default, or adds a constraint
-   or trigger, stop and report the migration. This deploy hands over without a gap only for additive migrations.
-4. Start the release detached, so that neither a command timeout nor your own end cuts it short:
-   cd /root/orbit && ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 setsid nohup \
-     .claude/skills/upgrade/upgrade.sh --no-pull --prune > /var/tmp/orbit-upgrade-<commit>.log 2>&1 < /dev/null &
-   Its pid is in /tmp/orbit-upgrade.lock/pid. Wait for that pid to exit in steps shorter than 10 minutes
-   (e.g. `timeout 540 tail --pid=<pid> -f /dev/null`). Never start the release a second time.
-5. Success means the log's last lines include `✓ Release <commit> runs on root@10.66.0.4`.
-6. Hand back: the commit, the plan table and the "Replacing the apiserver and web" line from the log, and the log
-   path. On a failure, also hand back the step it failed at and the log's last 40 lines.
+   or trigger, stop and report it: this deploy hands over without a gap only for additive migrations.
+3. W=/dev/shm/wkdir-release-main-<c9>. `git -C /root/orbit worktree add --detach "$W" <commit>`. Copy the build-only
+   .env from the newest other /dev/shm/wkdir-release-*/.env (141 bytes, names PUBLIC_ORIGIN, JWT_SECRET,
+   PROVIDER_SECRET_KEY, RUNNER_LINK_SIGNING_KEY): `install -m 600 <that file> "$W/.env"`. If there is none, stop.
+4. Build and push, as a transient unit so that neither a command timeout nor your own end cuts it short:
+   systemd-run --unit orbit-build-<c9> -p WorkingDirectory="$W" env ORBIT_REGISTRY=10.66.0.1:5000 \
+     ORBIT_DEPLOY_HOST=root@10.66.0.4 "$W/.claude/skills/upgrade/upgrade.sh" --no-pull --build-only
+   It takes 10 to 15 minutes. Wait in steps shorter than 10 minutes
+   (`timeout 540 bash -c 'while systemctl is-active -q orbit-build-<c9>; do sleep 10; done'`). Read its output
+   with `journalctl -u orbit-build-<c9> --no-pager`. It must end with `✓ Release <commit> is in 10.66.0.1:5000`.
+5. Plan: `cd "$W" && ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4
+   .claude/skills/upgrade/upgrade.sh --plan <commit>`. Stop without deploying if the plan would create, start or
+   recreate postgres, db-proxy, pgbackup, nats or link-gateway, or if it renders docker-channel or
+   managed-runner-firewall. Recreating apiserver, web and wiki-worker is expected. Note the "Replacing the apiserver
+   and web" line.
+6. Deploy, the same way as step 4, as unit orbit-deploy-<c9> running
+   `"$W/.claude/skills/upgrade/upgrade.sh" --deploy <commit>` with the same env. It takes 1 to 2 minutes. Its
+   output must end with `✓ Release <commit> runs on root@10.66.0.4`.
+7. `curl -fsS https://orbitd.io/api/health`.
+8. Remove your worktree, and only yours: `git -C /root/orbit worktree remove --force "$W"`.
+9. Hand back: the commit, R (the rollback target), the plan table and its "Replacing the apiserver and web" line,
+   the health answer, and the deploy unit's last 15 lines. On a failure, also hand back the step it failed at, the
+   failing unit's last 40 lines, and whether $W is still there.
 ```
 
 The orbit-prod brief: fill in `<commit>`.
@@ -450,13 +473,16 @@ You are on 10.66.0.4, workspace orbit-prod: Orbit's production host. /root/orbit
 checkout, detached at the release it runs. Commit <commit> has just been deployed here from wikova. Check that it
 runs, and move the checkout to it. You run in a temporary worktree that is deleted when you end, so work in
 /root/orbit by absolute path. Start, stop, recreate or pull nothing, and write nothing outside /root/orbit/.git and
-the checkout's files named in step 4. Stop and report at the first step that fails.
+the checkout's files named in step 4. Stop and report at the first step that fails. Answer in English.
 
 1. `cat /tmp/orbit-upgrade.lock/pid` must name no live process; if it does, a deploy is running: stop.
 2. `tail -1 /root/orbit/.upgrade/history` must name <commit> as its second field.
 3. In /root/orbit, `docker compose ps` must show every service running, and healthy where it has a health check,
-   with no `orbit-apiserver-next` or `orbit-web-next`. Also check
-   `curl -s https://orbitd.io/dl/orbit-linux-x64.gz | gzip -dc | grep -a -c <commit>` prints 1 or more.
+   with no `orbit-apiserver-next` or `orbit-web-next`. The runner served at /dl is the newest `v*` release tag at or
+   behind the commit, not the commit itself (or, with no such tag, the commit). Check that its commit is in it:
+   git -C /root/orbit fetch --quiet origin +refs/heads/main:refs/remotes/origin/main '+refs/tags/*:refs/tags/*'
+   t="$(git -C /root/orbit describe --tags --abbrev=0 --match 'v*' <commit>)" && r="$(git -C /root/orbit rev-list -n1 "$t")" || r=<commit>
+   curl -s https://orbitd.io/dl/orbit-linux-x64.gz | gzip -dc | grep -a -c "$r"   # 1 or more
 4. Move the checkout to <commit>, touching no file the deploy shipped (running containers bind-mount some):
    cd /root/orbit
    old="$(git rev-parse HEAD)"
@@ -468,7 +494,7 @@ the checkout's files named in step 4. Stop and report at the first step that fai
    git diff --name-only -z | xargs -0 -r git checkout --
    git diff --name-only -z --diff-filter=D "$old" <commit> | xargs -0 -r rm -f --
    `git status --porcelain --untracked-files=no` must then print nothing.
-5. Hand back: the history line, `docker compose ps`, the /dl count, and `git -C /root/orbit log -1 --format='%H %s'`.
+5. Hand back: the history line, `docker compose ps`, the release tag and the /dl count, and `git -C /root/orbit log -1 --format='%H %s'`.
 ```
 
 ## Requirements

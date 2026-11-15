@@ -121,7 +121,7 @@ ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .agents/skills/up
 
 ## Production from another workspace
 
-Production spans two workspaces, each a git checkout of this repository at `/root/orbit`. **orbit-op** is wikova, where the two-stage release is built and driven from. **orbit-prod** is `10.66.0.4`, whose `/root/orbit` is the deploy directory, detached at the commit it runs. A session on another workspace runs nothing locally. Once the owner has asked for the deploy in that session, it:
+Production spans two workspaces, each a git checkout of this repository at `/root/orbit`. **orbit-op** is wikova, where the two-stage release is built and driven from, always in a fresh `/dev/shm/wkdir-release-main-<commit>` worktree, never in its shared `/root/orbit`. **orbit-prod** is `10.66.0.4`, whose `/root/orbit` is the deploy directory, detached at the commit it runs. A session on another workspace runs nothing locally. Once the owner has asked for the deploy in that session, it:
 
 1. names the commit (`git fetch origin main && git rev-parse origin/main`, unless the owner named one);
 2. calls `delegate({ workspace: "orbit-op", background: true, size: "M", ... })` with the orbit-op brief and ends its turn until Orbit wakes it with the result (a session on orbit-op deploys itself instead);
