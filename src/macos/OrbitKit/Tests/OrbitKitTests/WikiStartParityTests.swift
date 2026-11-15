@@ -869,8 +869,9 @@ final class WikiStartParityTests: XCTestCase {
         XCTAssertTrue(try native("WikiModel.swift").contains("WikiCopy.noSpaces"), "a write with no space on screen still says why")
     }
 
-    /// New wiki… (design §3.4, board 46 part 4): a row under the drawer's and the sidebar's Wiki row once there is a
-    /// wiki, and the head picker's item under its divider, each raising the one Create wiki form over the shell.
+    /// New wiki… (design §3.4, board 46 part 4; board 47): the web's sidebar row, and on every client the head picker's
+    /// item under its divider, raising the one Create wiki form over the shell. The iPhone/iPad drawer and the Mac
+    /// sidebar have no Wiki group, so they draw no New wiki… row: the head picker is the way in.
     func testNewWikiOpensTheCreateWikiForm() throws {
         let sidebar = try web("src/web/src/components/TasksSidePanel.tsx")
         assertOrder(sidebar, ["className=\"tp-item tp-wiki-new\"", "onClick={() => setCreatingWiki(true)}", "<PlusOutlined aria-hidden=\"true\" />",
@@ -880,17 +881,8 @@ final class WikiStartParityTests: XCTestCase {
                     "the web's picker")
 
         let drawer = try native("Views/CompactShell.swift")
-        assertSays(drawer, "newWiki: model.wiki?.spaces.isEmpty == false,", in: "CompactShell.swift")
-        assertSays(drawer, "case .newWiki:        newWikiRow", in: "CompactShell.swift")
-        let row = try slice(drawer, from: "private var newWikiRow: some View {", to: ".accessibilityIdentifier(\"drawer-new-wiki\")")
-        assertOrder(row, ["model.wiki?.creating = true", "Image(systemName: \"plus\")", "Text(WikiStartCopy.newWiki)", ".foregroundStyle(.secondary)"],
-                    "the drawer's row")
-        let sidebarNative = try native("Views/MainView.swift")
-        assertSays(sidebarNative, "newWiki: model.wiki?.shown == true && model.wiki?.spaces.isEmpty == false)", in: "MainView.swift")
-        assertSays(sidebarNative, "switch row.newWiki {\n                case true:  newWikiRow\n                case false: sectionRow(row)", in: "MainView.swift")
-        let macRow = try slice(sidebarNative, from: "private var newWikiRow: some View {", to: ".accessibilityIdentifier(\"sidebar-new-wiki\")")
-        assertOrder(macRow, ["model.wiki?.creating = true", "Label(WikiStartCopy.newWiki, systemImage: \"plus\")", ".foregroundStyle(.secondary)"],
-                    "the sidebar's row")
+        XCTAssertFalse(drawer.contains("WikiStartCopy.newWiki"), "the drawer draws no New wiki… row")
+        XCTAssertFalse(try native("Views/MainView.swift").contains("WikiStartCopy.newWiki"), "the Mac sidebar draws no New wiki… row")
 
         let view = try native("Views/WikiView.swift")
         let picker = try slice(view, from: "struct WikiSpacePicker: View {", to: "private let wikiHomeHeadColor")

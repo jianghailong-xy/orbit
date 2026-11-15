@@ -122,6 +122,8 @@
 - **侧栏 Wiki 组**（web `TasksSidePanel.tsx`；iOS、macOS 抽屉；Android 抽屉）：各个 wiki 的行之后、Trash 行之前，加一行 `New wiki…`。
   图标用 `PlusOutlined`（web）/ `plus`（SF Symbols）/ `Icons.Outlined.Add`，灰字，样式照 Trash 行（`tp-item tp-wiki-trash`），不带计数。
 - **wiki 页头的切换器**：列表最后、分隔线下面加一项 `New wiki…`。
+- **改（11-16，board 47）**：iPhone/iPad 抽屉、Mac 侧栏、Android 抽屉都没有 Wiki 组，只有一行 Wiki，`New wiki…` 落成了顶层导航里的一行，所以这三处不放这一行；
+  原生的页头切换器改为一个 wiki 也是菜单（勾着这个 wiki，下面 `New wiki…`、`Manage spaces`），它就是原生端建第二个 wiki 的入口。web 侧栏照上面不变。
 - 两个入口打开的都是**现有的** `WikiCreateDialog`（「下拉框按仓库分组，没有仓库的 workspace 不列」），提交照旧走 `POST /wiki/spaces`，
   一次建 space、开维护、起草 plan，成功后进新 wiki。已经有 wiki 的仓库在下拉框里灰掉，并标 `Has a wiki`（同一仓库只能有一个 space：
   `unique (owner_id, repo_url_norm)`；今天重复提交会撞这个约束、答 500，改为先查、答 409 `WIKI_SPACE_EXISTS`，
