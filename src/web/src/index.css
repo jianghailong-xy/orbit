@@ -8073,6 +8073,24 @@ button.chat-jump-start:hover {
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
+/* A delivered message's Show original / Show translation (docs/mocks/translation-user-hover): shown on
+   hover with copy and time, flipped or not; always on a touch screen. */
+.chat-user-meta > .chat-translate-foot.is-flip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-flip,
+.chat-user-meta > .chat-translate-foot.is-flip:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .chat-user-meta > .chat-translate-foot.is-flip {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .chat-user-wrap:hover .chat-user-meta > *,
 .chat-user-meta:focus-within > * {
   opacity: 1;
