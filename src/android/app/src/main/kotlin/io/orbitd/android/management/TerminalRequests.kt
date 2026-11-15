@@ -97,7 +97,7 @@ class TerminalRequestStore internal constructor(private val api: TerminalsApi, v
  * was decided, or a terminal was revoked. */
 internal const val TERMINALS_CHANGED = "terminals.changed"
 
-/** How many [TERMINALS_CHANGED] this account's stream has brought: each one reads the requests and Settings → Terminals again (iOS
+/** How many [TERMINALS_CHANGED] this account's stream has brought: each one reads the requests again (iOS
  * `ControlEventRoute.terminals`), and nothing else. */
 @Composable
 fun rememberTerminalsChanged(app: OrbitApplication, handle: SessionHandle): Long {

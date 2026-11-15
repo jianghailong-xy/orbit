@@ -6,7 +6,7 @@ public enum Terminals {
     // MARK: The approve card (board 2, marker 7)
 
     public static let approveTitle = "Approve a terminal?"
-    public static let approveDetail = "It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it in Settings → Terminals."
+    public static let approveDetail = "It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it on this machine's page in Settings."
     public static let deny = "Deny"
     public static let approve = "Approve"
 
@@ -20,6 +20,8 @@ public enum Terminals {
     public static let title = "Terminals"
     public static let hint = "Terminals where you typed orbit and approved it. Each one can start sessions on its machine and answer their approval cards until it expires."
     public static let empty = "No terminals are signed in."
+    /// The machine page's Terminals section (docs/mocks/terminals-on-machine-page/01-board.html ②).
+    public static let machineHint = "Terminals on this machine where you typed orbit and approved it. Each one can start sessions here and answer their approval cards until it expires."
     public static let revoke = "Revoke"
     public static let revokeDetail = "It stops working at once. Typing orbit there asks you to approve it again."
     public static let revoked = "Terminal revoked"

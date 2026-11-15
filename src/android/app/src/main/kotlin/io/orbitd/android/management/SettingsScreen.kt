@@ -32,7 +32,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.R
-import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.navigation.*
 import io.orbitd.android.translation.TranslationCopy
@@ -47,7 +46,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
-    notifications: @Composable () -> Unit, about: @Composable () -> Unit, terminalsChanged: Long = 0L) {
+    notifications: @Composable () -> Unit, about: @Composable () -> Unit) {
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
         "password" -> ChangePassword(api)
@@ -56,7 +55,9 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
         "sharing" -> SharingSettings(api, revision, open)
         "access-tokens" -> AccessTokensSettings(api, revision)
-        "terminals" -> TerminalsSettings(api, revision, terminalsChanged)
+        // The account-wide Terminals page is gone (docs/mocks/terminals-on-machine-page): each machine's page lists its own, so an old
+        // route to it opens Machines & models.
+        "terminals" -> MachinesAndModelsSettings(api, revision, null, open, back)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
         "admin" -> AdminSettings(api, revision, route.recordId, open, back)
         "notifications" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -66,7 +67,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         }
         // Android only: the installed version and its updates from GitHub (iOS updates through TestFlight).
         "about" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { about() }
-        else -> SettingsHome(api, revision, open, logout, deviceAlerts, terminalsChanged)
+        else -> SettingsHome(api, revision, open, logout, deviceAlerts)
     }
 }
 
@@ -81,7 +82,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
         else -> null
     } ?: MachinesAndModels.TITLE
     "sessions" -> SESSIONS; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
-    "terminals" -> Terminals.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
+    "terminals" -> MachinesAndModels.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
 /** SettingsHome.runnersValue: "3 of 4 online" — how many of the account's machines can take work right now. */
@@ -154,7 +155,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
 /** The account, then SettingsHome's groups, then Sign out and the build — iOS's Settings list. */
 @Composable
 private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, logout: () -> Unit,
-    deviceAlerts: () -> Boolean?, terminalsChanged: Long) {
+    deviceAlerts: () -> Boolean?) {
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
     val preference = rememberPreferenceWrite(api, record)
@@ -171,7 +172,6 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     val terminalRequests = rememberLiveTerminalRequests(remember(api) { TerminalRequestStore.of(api) })
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
     var accessTokens by remember(api) { mutableStateOf<String?>(null) }
-    var terminals by remember(api) { mutableStateOf<String?>(null) }
     var alerts by remember { mutableStateOf(deviceAlerts()) }
     var signingOut by remember { mutableStateOf(false) }
     var resumed by remember { mutableIntStateOf(0) }
@@ -202,11 +202,6 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             try { accessTokens = settingsAccessTokensValue(AccessTokens.tokens(accessTokenList(api.get("access-tokens")), AccessTokens.Tab.ACTIVE).size) }
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
-    }
-    // A terminal approved or revoked anywhere moves this row's count, and nothing else on the page.
-    LaunchedEffect(api, revision, resumed, terminalsChanged) {
-        try { terminals = Terminals.settingsValue(TerminalsApi(api.session, api.handle).list().size) }
-        catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }
     fun page(id: String) = open(OrbitRoute(Destination.SETTINGS, id))
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -256,7 +251,6 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsValue("Instance", R.drawable.ic_globe, instance.orEmpty())
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
             SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
-            SettingsLink(Terminals.TITLE, R.drawable.ic_terminal, terminals) { page("terminals") }
             SettingsLink("Change password", R.drawable.ic_password) { page("password") }
             if (user?.text("role") == "ADMIN") SettingsLink("Admin", R.drawable.ic_admin) { page("admin") }
         }

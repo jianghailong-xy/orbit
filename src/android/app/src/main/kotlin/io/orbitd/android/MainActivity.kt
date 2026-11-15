@@ -200,7 +200,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
             .collectAsState(null to 0L)
         val revision = if (live.first === signedIn.handle) live.second else 0L
-        // `terminals.changed`: the approve cards' requests and Settings → Terminals are read again, and nothing else (iOS `AppModel`).
+        // `terminals.changed`: the approve cards' requests are read again, and nothing else (iOS `AppModel`). A machine page's Terminals
+        // reads its own list when those requests change, and every 15 s.
         val terminalsChanged = rememberTerminalsChanged(app, signedIn.handle)
         LaunchedEffect(terminalsChanged) {
             if (terminalsChanged > 0) TerminalRequestStore.of(app.session, signedIn.handle, app.processScope).load()
@@ -459,7 +460,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     changed = { app.realtime.refreshDirectory() },
                                     workspaceDeleted = { deletedWorkspace = route.workspaceId; land("workspaces", OrbitRoute(Destination.WORKSPACES)) },
                                     deviceAlerts = { if (app.push.configured) app.push.notifications.allowed() else null },
-                                    notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) }, terminalsChanged = terminalsChanged)
+                                    notifications = { NotificationSettings(app.push) }, about = { AboutSection(app.updates) })
                                 Destination.RUNNER -> RunnerScreen(management, route.id, route.recordId, revision, ::open, { navigation = navigation.back() }) {
                                     land(it, OrbitRoute(Destination.WORKSPACE, it, it))
                                 }

@@ -1,22 +1,37 @@
 import { useEffect, useState, type JSX } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '../api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { routeId } from '../lib/idCodec';
 import {
+  MACHINE_TERMINALS_HINT,
+  REVOKE,
+  REVOKE_TERMINAL_DETAIL,
+  TERMINALS_TITLE,
   TERMINAL_REQUESTS_ANCHOR,
   TERMINAL_REQUEST_LASTS,
   TERMINALS_NEEDS_YOU,
   TERMINALS_TO_APPROVE,
   approveTerminalsTitle,
+  approvedLine,
+  expiresLine,
+  lastUsedLine,
   liveTerminalRequests,
+  machineTerminals,
+  revokeTerminalTitle,
   terminalRequestsPath,
   terminalRequestsQuery,
   terminalsNeedsYouDetail,
+  terminalsQuery,
+  type Terminal,
   type TerminalRequest,
 } from '../lib/terminals';
+import { useToast } from '../lib/toast';
 import { ago } from '../lib/watches';
-import { SettingsSection } from './settings/SettingsBlocks';
+import { SettingsCard, SettingsRow, SettingsSection } from './settings/SettingsBlocks';
 import { TerminalApproveCard } from './TerminalApproveCard';
+import { Button } from './ui/Button';
+import { Popconfirm } from './ui/Popconfirm';
 
 /*
  * Where a terminal asking to be approved is drawn (docs/mocks/waiting-on-you-removal/02-terminal-approvals.html):
@@ -77,6 +92,57 @@ export function TerminalRequestsSection({ runnerId }: { runnerId: string }): JSX
         </div>
       </SettingsSection>
     </div>
+  );
+}
+
+/**
+ * The machine page's Terminals (docs/mocks/terminals-on-machine-page/01-board.html ②③): this machine's approved
+ * terminals, newest first, each with Revoke, which asks first. Nothing at all when the machine has none. A revoked
+ * terminal leaves the list once it is read again; an approved card's terminal joins it the same way.
+ */
+export function MachineTerminalsSection({ runnerId }: { runnerId: string }): JSX.Element | null {
+  const qc = useQueryClient();
+  const message = useToast();
+  const list = useQuery(terminalsQuery());
+  const revoke = useMutation({
+    mutationFn: (terminal: Terminal) => api(`/terminals/${encodeURIComponent(terminal.id)}`, { method: 'DELETE' }),
+    onSuccess: () => message.success('Terminal revoked'),
+    onError: (e: Error) => message.error("Couldn't revoke the terminal", e.message),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['terminals'] });
+    },
+  });
+  const terminals = machineTerminals(list.data?.terminals ?? [], runnerId);
+  if (terminals.length === 0) return null;
+  const now = Date.now();
+  return (
+    <SettingsSection title={TERMINALS_TITLE} description={MACHINE_TERMINALS_HINT} className="machine-section-terminals">
+      <SettingsCard>
+        {terminals.map((terminal) => (
+          <SettingsRow
+            key={terminal.id}
+            anchor={`terminal-${terminal.id}`}
+            title={approvedLine(terminal)}
+            description={`${lastUsedLine(terminal, now)} · ${expiresLine(terminal, now)}`}
+            control={
+              <Popconfirm
+                trigger={
+                  <Button size="small" danger loading={revoke.isPending && revoke.variables?.id === terminal.id}>
+                    {REVOKE}
+                  </Button>
+                }
+                title={revokeTerminalTitle(terminal.machineName)}
+                description={REVOKE_TERMINAL_DETAIL}
+                confirmText={REVOKE}
+                danger
+                cancelText="Cancel"
+                onConfirm={() => revoke.mutate(terminal)}
+              />
+            }
+          />
+        ))}
+      </SettingsCard>
+    </SettingsSection>
   );
 }
 
