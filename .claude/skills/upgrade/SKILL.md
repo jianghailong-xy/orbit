@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing, handing the apiserver and web over without a gap; a rollback deploys an earlier commit (--deploy). Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
+description: Upgrade the Orbit Docker Compose deployment — rebuild the apiserver and web images from the current source and recreate only the services that changed (apiserver applies DB migrations on boot); an unchanged postgres is left running. Refreshing the postgres/gateway base images is opt-in via --pull-base. With ORBIT_REGISTRY set it is a two-stage release instead: build, boot-check and push here, tagged by commit, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing, handing the apiserver and web over without a gap; a rollback deploys an earlier commit (--deploy). From a session on another workspace, production is deployed through SubAgents: orbit-op builds and deploys, then orbit-prod checks the host and moves its checkout to the release. Use whenever someone wants to deploy the latest code, update/upgrade the running containers, bring a Compose deployment up to date, or roll one back.
 ---
 
 # Upgrade the Orbit stack
@@ -223,7 +223,9 @@ registry first). For each image that is not there yet:
 3. The link gateway: `docker build --provenance=false`, as a single host builds it.
 4. `docker push` of each.
 
-**Deploy stage, on the target, driven from here over ssh.** The target has no checkout and no runner. The
+**Deploy stage, on the target, driven from here over ssh.** The deploy stage needs no checkout and no runner on the
+target, and reads neither: `10.66.0.4` has both, for orbit-prod (see
+[Production from another workspace](#production-from-another-workspace)). The
 build host ships it what the deployment's Compose reads from its directory, taken from the release's commit
 with `git archive`, never from the working tree: `docker-compose.yml`, `gateway/`,
 `scripts/pg-archive-wal.sh`, `scripts/pg-backup.sh`, `src/link-gateway/nats.conf`, `deploy/runner-link/`, and
@@ -379,6 +381,95 @@ not healthy, `<name>-next` may be all that serves: the deploy stops and says to 
 which brings `<name>` up first. A `<name>-next` that has not passed its health check is never stopped, since it
 may be applying the migrations, which stopping it would cut short: the deploy stops before the gateway is pointed
 at it, and `<name>` runs on.
+
+## Production from another workspace
+
+Orbit's production spans two workspaces, each with its own git checkout of this repository at `/root/orbit`:
+
+- **orbit-op** is wikova, the build host. Its checkout is where the two-stage release is built and driven from.
+- **orbit-prod** is `10.66.0.4`, where the release runs. Its `/root/orbit` is the deploy directory. It is also a git
+  checkout, detached at the commit production runs, so that a SubAgent can run there. The deploy stage does not read
+  it as a checkout: it ships the release's files from orbit-op, and nothing is built on `10.66.0.4`. Its
+  `.git/info/exclude` keeps the host's own files out of git: `.env*` (the secrets and their backups), `.upgrade/` and
+  `docker-compose.override.yml`. `data/` is in `.gitignore`.
+
+A session on another workspace, such as orbit-develop on HPC or orbit-macos, runs nothing locally, because its checkout
+deploys nothing. It coordinates the two through cross-workspace SubAgents (docs/subagent-design.md §10): orbit-op
+builds and deploys, then orbit-prod checks production on the host itself and moves its checkout to the release. A
+session on orbit-op runs step 2's work itself, as in [Two-stage release](#two-stage-release), and still delegates step
+4 to orbit-prod. Either kind of SubAgent runs on its workspace's default engine, in a temporary worktree of that
+workspace's `/root/orbit`, which is deleted when it ends, so each brief works in `/root/orbit` by absolute path. A
+SubAgent cannot ask anyone anything, so each brief settles every choice in advance, and any case the brief does not
+cover is a stop.
+
+Deploying is the owner's decision. Delegate only when the owner asked for this deploy, in this session.
+
+1. **Name the commit.** `git fetch origin main && git rev-parse origin/main` gives the 40-character commit to deploy,
+   unless the owner named another one. Both SubAgents work on exactly that commit, even if main moves on meanwhile.
+2. **Deploy through orbit-op**, in the background, because the build takes about 12 minutes and the deploy 1 to 2
+   more: `delegate({ description: "Deploy <short commit> to production", workspace: "orbit-op", background: true,
+   size: "M", prompt: <the orbit-op brief> })`. End the turn: Orbit wakes this session with the result.
+3. A result without `✓ Release <commit> runs on root@10.66.0.4` is not a deploy. Report what it stopped at, and stop
+   there: do not delegate again before you have read why.
+4. **Check through orbit-prod**: `delegate({ description: "Check production runs <short commit>", workspace:
+   "orbit-prod", size: "S", prompt: <the orbit-prod brief> })`, in the foreground, since it takes about a minute.
+5. **Report** both results: the commit, the plan table, how the apiserver and web were replaced, the target's
+   `docker compose ps`, the history line, where orbit-prod's checkout now is, and the log path.
+
+The orbit-op brief: fill in `<commit>`. Add `--stop-then-start` or `--pull-base` to the command in step 4 only when
+the owner asked for it.
+
+```text
+You are on wikova, workspace orbit-op. Deploy Orbit commit <commit> to production (10.66.0.4) with the two-stage
+release, as .claude/skills/upgrade/SKILL.md describes under "Two-stage release". You run in a temporary worktree that
+is deleted when you end, so do all the work in /root/orbit by absolute path, and change no file in your worktree.
+Stop and report at the first step that fails. Do not retry, roll back, or run anything else on 10.66.0.4.
+
+1. Make sure no upgrade is running. If `cat /tmp/orbit-upgrade.lock/pid` here, or
+   `ssh root@10.66.0.4 cat /tmp/orbit-upgrade.lock/pid` there, names a live process, stop and report its pid.
+2. In /root/orbit, `git status --porcelain --untracked-files=no` must print nothing. Then run
+   `git fetch origin` and `git merge --ff-only <commit>`. If the merge is refused, stop.
+3. Read the commit production runs: `ssh root@10.66.0.4 tail -1 /root/orbit/.upgrade/history`, the second field.
+   Run `git -C /root/orbit diff --stat <that commit> <commit> -- src/apiserver/prisma/migrations/`. If it lists a
+   migration that drops or renames a table or column, adds a NOT NULL column without a default, or adds a constraint
+   or trigger, stop and report the migration. This deploy hands over without a gap only for additive migrations.
+4. Start the release detached, so that neither a command timeout nor your own end cuts it short:
+   cd /root/orbit && ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 setsid nohup \
+     .claude/skills/upgrade/upgrade.sh --no-pull --prune > /var/tmp/orbit-upgrade-<commit>.log 2>&1 < /dev/null &
+   Its pid is in /tmp/orbit-upgrade.lock/pid. Wait for that pid to exit in steps shorter than 10 minutes
+   (e.g. `timeout 540 tail --pid=<pid> -f /dev/null`). Never start the release a second time.
+5. Success means the log's last lines include `✓ Release <commit> runs on root@10.66.0.4`.
+6. Hand back: the commit, the plan table and the "Replacing the apiserver and web" line from the log, and the log
+   path. On a failure, also hand back the step it failed at and the log's last 40 lines.
+```
+
+The orbit-prod brief: fill in `<commit>`.
+
+```text
+You are on 10.66.0.4, workspace orbit-prod: Orbit's production host. /root/orbit is its deploy directory and a git
+checkout, detached at the release it runs. Commit <commit> has just been deployed here from wikova. Check that it
+runs, and move the checkout to it. You run in a temporary worktree that is deleted when you end, so work in
+/root/orbit by absolute path. Start, stop, recreate or pull nothing, and write nothing outside /root/orbit/.git and
+the checkout's files named in step 4. Stop and report at the first step that fails.
+
+1. `cat /tmp/orbit-upgrade.lock/pid` must name no live process; if it does, a deploy is running: stop.
+2. `tail -1 /root/orbit/.upgrade/history` must name <commit> as its second field.
+3. In /root/orbit, `docker compose ps` must show every service running, and healthy where it has a health check,
+   with no `orbit-apiserver-next` or `orbit-web-next`. Also check
+   `curl -s https://orbitd.io/dl/orbit-linux-x64.gz | gzip -dc | grep -a -c <commit>` prints 1 or more.
+4. Move the checkout to <commit>, touching no file the deploy shipped (running containers bind-mount some):
+   cd /root/orbit
+   old="$(git rev-parse HEAD)"
+   git fetch --quiet origin +refs/heads/main:refs/remotes/origin/main && git cat-file -e "<commit>^{commit}"
+   git update-ref --no-deref HEAD <commit> && git reset -q && git update-index -q --refresh
+   `git status --porcelain --untracked-files=no` now lists only files the release did not ship. If it lists
+   docker-compose.yml, or anything under gateway/, scripts/, deploy/ or src/link-gateway/ as modified (` M`), stop:
+   the deployed files are not the commit's. Otherwise bring the rest up to the commit:
+   git diff --name-only -z | xargs -0 -r git checkout --
+   git diff --name-only -z --diff-filter=D "$old" <commit> | xargs -0 -r rm -f --
+   `git status --porcelain --untracked-files=no` must then print nothing.
+5. Hand back: the history line, `docker compose ps`, the /dl count, and `git -C /root/orbit log -1 --format='%H %s'`.
+```
 
 ## Requirements
 

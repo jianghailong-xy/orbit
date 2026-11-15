@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade the Orbit Docker Compose deployment by rebuilding the apiserver and web images from current source and recreating only changed services; apiserver applies database migrations on boot and unchanged postgres stays running. Use when asked to deploy the latest Orbit code, update or upgrade the running containers, run /upgrade, or bring the Compose deployment up to date. Use --pull-base only when explicitly asked to refresh postgres or gateway base images. With ORBIT_REGISTRY set it is a two-stage release: build, boot-check and push here, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing and hands the apiserver and web over without a gap (--stop-then-start for a release whose migration the running code cannot run against); roll back with --deploy <earlier commit>.
+description: Upgrade the Orbit Docker Compose deployment by rebuilding the apiserver and web images from current source and recreating only changed services; apiserver applies database migrations on boot and unchanged postgres stays running. Use when asked to deploy the latest Orbit code, update or upgrade the running containers, run /upgrade, or bring the Compose deployment up to date. Use --pull-base only when explicitly asked to refresh postgres or gateway base images. With ORBIT_REGISTRY set it is a two-stage release: build, boot-check and push here, then pull and recreate on ORBIT_DEPLOY_HOST, which builds nothing and hands the apiserver and web over without a gap (--stop-then-start for a release whose migration the running code cannot run against); roll back with --deploy <earlier commit>. From a session on another workspace, deploy production through SubAgents on orbit-op (build and deploy) and orbit-prod (check, and move its checkout to the release).
 ---
 
 # Upgrade the Orbit stack
@@ -118,6 +118,16 @@ ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4 .agents/skills/up
 - Base images run by digest: postgres and pgbackup as `deploy/postgres-pinned.yml` pins them (PostgreSQL 16.14), db-proxy as `deploy/db-proxy.yml` does, nginx and nats as `deploy/two-stage/base-images.env` does. A target that does not list `deploy/postgres-pinned.yml` is refused.
 - Rollback: `--deploy <earlier commit>`, which builds nothing (`--plan <earlier commit>` first shows what it changes); the target's `.upgrade/history` lists what it ran. Code older than a migration the database has applied may not run on it.
 - Both hosts' Docker must trust the registry (`insecure-registries` in `/etc/docker/daemon.json` for a plain-HTTP one, applied with `systemctl reload docker`). `docker buildx du` and `docker image ls` on the target show that nothing was built there.
+
+## Production from another workspace
+
+Production spans two workspaces, each a git checkout of this repository at `/root/orbit`. **orbit-op** is wikova, where the two-stage release is built and driven from. **orbit-prod** is `10.66.0.4`, whose `/root/orbit` is the deploy directory, detached at the commit it runs. A session on another workspace runs nothing locally. Once the owner has asked for the deploy in that session, it:
+
+1. names the commit (`git fetch origin main && git rev-parse origin/main`, unless the owner named one);
+2. calls `delegate({ workspace: "orbit-op", background: true, size: "M", ... })` with the orbit-op brief and ends its turn until Orbit wakes it with the result (a session on orbit-op deploys itself instead);
+3. on `✓ Release <commit> runs on root@10.66.0.4`, calls `delegate({ workspace: "orbit-prod", size: "S", ... })` with the orbit-prod brief, which checks production on the host and moves its checkout to the release.
+
+Both briefs are in `.claude/skills/upgrade/SKILL.md`, "Production from another workspace". A result without that line is not a deploy.
 
 ## Requirements
 
