@@ -1717,7 +1717,7 @@ export class SessionsService {
       },
     });
     // Settings › Translation: the language the opening message is translated from, or null.
-    const heldFrom = opts?.translate && !dto.taskId && !wikiChat && !dto.shell && !attachmentsAlone
+    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !dto.shell && !attachmentsAlone
       && !opts.externalSender && !opts.fence && dto.prompt.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
@@ -6851,7 +6851,7 @@ export class SessionsService {
     const wikiContext = readWikiChatContext(dto.wikiContext);
     // Settings › Translation: the language this message is translated from, or null when it goes as
     // written. Words only — a `!cmd` is a command, and attachments alone carry no words.
-    const translateFrom = opts?.translate && dto.kind !== 'shell' && dto.content?.trim()
+    const translateFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
@@ -10417,7 +10417,7 @@ export class SessionsService {
     // locks taken inside the closure and writes from that read; nothing outside it moves between
     // attempts, and the runner is notified after this returns.
     // Settings › Translation on the revive: its message is laid down HELD (insertHeldOpeningLocked's rule).
-    const reviveHeldFrom = opts?.translate && dto.kind !== 'shell' && dto.content?.trim()
+    const reviveHeldFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const revived = await withTransactionRetry(this.prisma, async (tx) => {

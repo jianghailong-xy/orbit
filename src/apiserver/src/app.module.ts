@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { SessionsModule } from './sessions/sessions.module';
+import { PromptOptimizerModule } from './sessions/prompt-optimizer.module';
 import { SessionTagsModule } from './session-tags/session-tags.module';
 import { SessionFoldersModule } from './session-folders/session-folders.module';
 import { TasksModule } from './tasks/tasks.module';
@@ -62,6 +63,7 @@ import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
     UsersModule,
     WorkspacesModule,
     SessionsModule,
+    PromptOptimizerModule,
     SessionTagsModule,
     SessionFoldersModule,
     TasksModule,

@@ -332,6 +332,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /projects/:projectId/promotions/:promotionId/cancel',
   'POST /projects/:projectId/promotions/:promotionId/confirm',
   'POST /projects/:projectId/promotions/:promotionId/decline',
+  'POST /prompt-optimizations',
   'POST /providers/mine',
   'POST /providers/mine/:id/key-check',
   'POST /providers/pools',

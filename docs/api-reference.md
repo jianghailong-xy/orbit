@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 460 |
+| `user` | 461 |
 | `admin` | 28 |
 | `runner` | 197 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **720** |
+| **Total** | **721** |
 
 ## Public routes
 
@@ -231,6 +231,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/projects/:projectId/promotions/current` | path `projectId` | `ProjectPromotionController.current` |
 | `GET` | `/api/projects/:projectId/promotions/merged` | path `projectId` | `ProjectPromotionController.merged` |
 | `GET` | `/api/projects/sidebar` | — | `ProjectsController.sidebar` |
+| `POST` | `/api/prompt-optimizations` | body `PromptOptimizationDto` | `PromptOptimizerController.optimize` |
 | `GET` | `/api/providers` | — | `ProvidersController.list` |
 | `GET` | `/api/providers/mine` | — | `ProvidersController.listMine` |
 | `POST` | `/api/providers/mine` | body `CreateModelProviderDto` | `ProvidersController.createMine` |

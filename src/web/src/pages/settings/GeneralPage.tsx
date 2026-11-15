@@ -51,6 +51,8 @@ export function GeneralSettingsPage() {
   // A server without a DeepSeek key cannot translate: Translation is drawn disabled with frame 2's
   // notice, whatever the preference says.
   const translationUnavailable = me !== undefined && me.translationAvailable !== true;
+  // The same for the prompt optimizer (board docs/mocks/prompt-optimizer, frame 1b).
+  const optimizerUnavailable = me !== undefined && me.promptOptimizerAvailable !== true;
   return (
     <div className="settings-page">
       <SettingsHeader title="General" description="How new sessions start, account-wide." />
@@ -104,6 +106,27 @@ export function GeneralSettingsPage() {
               />
             }
           />
+          {/* Absent means OFF (board docs/mocks/prompt-optimizer, frame 1). Without the server's
+              DeepSeek key it is drawn disabled with frame 1b's notice, whatever the preference says. */}
+          <SettingsRow
+            anchor={S.promptOptimizer.anchor}
+            title={S.promptOptimizer.title}
+            description={S.promptOptimizer.description}
+            control={
+              <Switch
+                aria-label="Prompt optimizer"
+                checked={!optimizerUnavailable && prefs.promptOptimizer === true}
+                disabled={optimizerUnavailable}
+                onCheckedChange={(v) => save.mutate({ promptOptimizer: v })}
+                loading={save.isPending}
+              />
+            }
+          />
+          {optimizerUnavailable && (
+            <div className="settings-translation-notice" role="note">
+              This server has no DeepSeek key (<code>DEEPSEEK_API_KEY</code>), so it cannot optimize prompts.
+            </div>
+          )}
           {/* Absent means on, like the switch above. Read by every client's session list, so turning
               it off holds on the phone and the Mac too — it is one account-wide answer. */}
           <SettingsRow

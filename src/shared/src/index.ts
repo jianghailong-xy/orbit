@@ -55,6 +55,7 @@ export * from './wikiSystemModel';
 export * from './wikiChat';
 export * from './feishu';
 export * from './translation';
+export * from './prompt-optimizer';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
  *  freezes the web and macOS clients — one giant text node lays out synchronously on the
