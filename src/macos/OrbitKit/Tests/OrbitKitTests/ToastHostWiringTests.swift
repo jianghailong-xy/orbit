@@ -84,7 +84,7 @@ final class ToastHostWiringTests: XCTestCase {
         let model = code(try source("AppModel.swift"))
         XCTAssertFalse(model.contains("awaitsApproval"), "no approval toast is posted")
         XCTAssertTrue(model.contains(
-            "NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused, now: Date())"))
+            "NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused,"))
     }
 
     /// What waits for you is drawn above what passes, its diagnostic can be selected and copied, and a

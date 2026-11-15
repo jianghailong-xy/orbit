@@ -12,21 +12,11 @@ import OrbitKit
 /// where the thing is, so finding it shouldn't be the user's job. The drawer's per-agent badge stays
 /// as the quiet answer to "which workspace", and nothing else repeats this fact.
 ///
-/// IT NOW ALSO POINTS DOWN, INSIDE THE SESSION YOU ARE READING
-/// -----------------------------------------------------------
-/// The bar used to have nothing to say about the session on screen, and the reason written here was
-/// that "its own approval card already renders inline at the tail of its transcript, so a bar
-/// pointing at it would point at itself". That reason belongs to an APPROVAL: it stops the turn, so
-/// nothing can arrive below it and it cannot leave the screen. The two cards a project's ruler is
-/// decided from stop nothing — the coordinator keeps working and its messages push them up — so a
-/// question delivered forty messages ago is off-screen and unfindable, which is precisely what this
-/// bar exists to fix. A press reveals that card and opens its review when available.
-///
-/// The in-conversation question WINS when both exist. Not because it is more urgent — a session
-/// blocked elsewhere is stopped work — but because the bar can only carry one destination, this
-/// one's destination is already on screen, and the other signal is still on every list, every other
-/// console and the drawer's own badge. Leaving the conversation to find it would also lose the
-/// reader's place in the one they are in.
+/// NOT IN A CONVERSATION (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/07-console-one-capsule`)
+/// -------------------------------------------------------------------------------------------
+/// A conversation shows only what waits in it, and says that in the capsule in its nav bar
+/// (`TranscriptView.waitingCapsule`, from `ConsoleModel.waitingBelow`), where the bar used to point
+/// down into the transcript. What waits elsewhere is this bar's, on the lists and pages around them.
 ///
 /// A CAPSULE, NOT A BAND (the owner, 2026-10-21, board `docs/mocks/needs-you-capsule`)
 /// ---------------------------------------------------------------------------------
@@ -37,10 +27,8 @@ import OrbitKit
 /// do: the amber is the 30pt circle the Landing head marks with (`ProjectLandingRow.mark`), one mark
 /// per kind, and the words are two lines — what is waiting, and where — with how long it has waited.
 ///
-/// Mounted at the top of the screen it is about: a conversation's safe-area bar on iOS 26, which the
-/// transcript's scroll-edge effect runs on under as it does under the nav bar
-/// (`floatsOverTranscript`), and a top inset over the Sessions list. With nothing waiting the body is
-/// empty, which insets by zero — the bar is absent from the layout rather than present at zero height.
+/// Mounted at the top of the Sessions list and, from the shell, over pages with none of their own.
+/// With nothing waiting the body is empty — the bar is absent rather than present at zero height.
 ///
 /// FLOATING, NOT A STRIP (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`)
 /// ------------------------------------------------------------------------------------------
@@ -58,19 +46,10 @@ import OrbitKit
 /// same view over the page (`needsYouOverPage`).
 struct NeedsYouBannerView: View {
     @Environment(AppModel.self) private var model
-    /// Whether the transcript scrolls on under the bar with the system's scroll-edge effect softening
-    /// it (a conversation's safe-area bar, iOS 26). Anywhere else the rows would read through the gap
-    /// around the capsule, so it stands on the page's own colour.
-    @Environment(\.floatsOverTranscript) private var floats
     /// The session on screen, left out of the cross-session count — its own approval card already
     /// renders inline at the tail of its transcript, so a bar pointing at it would point at itself.
     /// nil from a list, which shows no one session.
     var excluding: String?
-    /// Questions in THIS conversation that stop no turn, if any. Nil from a list, and from a console
-    /// holding none.
-    var below: WaitingBelow? = nil
-    /// The console reveals this row and opens its existing review, if it has one.
-    var onOpenBelow: ((String) -> Void)? = nil
     /// Whether a project's sessions page opens in this shell's session column (an iPad's wide
     /// shell) rather than as a page of its own — where the merge into main's card is.
     var projectInColumn = false
@@ -85,23 +64,7 @@ struct NeedsYouBannerView: View {
     @State private var unfolded = false
 
     var body: some View {
-        if let below {
-            // The chevron points where the words say the card is: a card placed by its own moment
-            // can be up the conversation from a reader at the live tail, which is the ordinary case
-            // here. Unknown (nothing has reported the reader's place) keeps the old down — the
-            // press scrolls to the row either way.
-            chrome {
-                bar(text: below.text, detail: nil, since: nil, more: 0, glyph: below.glyph,
-                    chevron: below.side == .above ? "chevron.up" : "chevron.down",
-                    // "what is waiting", not "the question": the bar counts the exceptions too (an
-                    // escalation that became the owner's, a pause only they can lift), and a reader
-                    // told to look for a question finds a card reading "Escalated to you" — the same
-                    // wrong noun the line above stopped using.
-                    hint: "Shows what is waiting in this conversation") {
-                    onOpenBelow?(below.rowID)
-                }
-            }
-        } else if let banner = model.needsYouBanner(excluding: excluding) {
+        if let banner = model.needsYouBanner(excluding: excluding) {
             // Several waiting, unfolded (the owner, 2026-11-13, option B of
             // docs/mocks/needs-you-capsule/03-expand.html): one capsule per conversation, the first
             // the one the folded bar names and where the folded bar stood, carrying the ↑ that folds
@@ -132,11 +95,12 @@ struct NeedsYouBannerView: View {
                 // one waiting the press unfolds them instead, and the deck under it says so.
                 chrome(deck: banner.count > 1) {
                     bar(text: banner.text, detail: banner.detail, since: banner.since, more: banner.more,
-                        glyph: banner.glyph, chevron: nil,
+                        glyph: banner.glyph,
                         hint: several ? "Shows all \(banner.count) waiting on you" : hint(for: banner),
                         deck: banner.count > 1, arriving: banner.arriving) {
                         if several { setUnfolded(true) } else { open(banner) }
                     }
+                    .swipesAway { model.dismissNeedsYou() }
                 }
             }
         }
@@ -145,7 +109,7 @@ struct NeedsYouBannerView: View {
     /// One conversation's capsule in the unfolded stack: it opens its own.
     private func bar(_ entry: NeedsYouBanner, more: Int, fold: (() -> Void)? = nil) -> some View {
         bar(text: entry.text, detail: entry.detail, since: entry.since, more: more,
-            glyph: entry.glyph, chevron: nil, hint: hint(for: entry), fold: fold) {
+            glyph: entry.glyph, hint: hint(for: entry), fold: fold) {
             open(entry)
         }
     }
@@ -188,7 +152,7 @@ struct NeedsYouBannerView: View {
     /// shows them all; `arriving` rings it amber while it says an approval that has just come;
     /// `fold` is the ↑ on the first capsule of the unfolded stack, a press of its own.
     private func bar(text: String, detail: String?, since: String?, more: Int, glyph: NeedsYouGlyph,
-                     chevron: String?, hint: String, deck: Bool = false, arriving: Bool = false,
+                     hint: String, deck: Bool = false, arriving: Bool = false,
                      fold: (() -> Void)? = nil, action: @escaping () -> Void) -> some View {
         HStack(spacing: 0) {
             Button {
@@ -229,11 +193,6 @@ struct NeedsYouBannerView: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
-                    }
-                    if let chevron {
-                        Image(systemName: chevron)
-                            .font(.orbitLabel.weight(.semibold))
-                            .foregroundStyle(.secondary)
                     }
                 }
                 // Concentric: the circle stands in 7pt from the capsule's round end.
@@ -328,11 +287,10 @@ struct NeedsYouBannerView: View {
             .background { surface }
     }
 
-    /// Nothing under it where it floats — over the transcript, over the Sessions list (04-floating:
-    /// the rows go on behind it, under the nav bar's own soft edge) and over a page. Only a
-    /// conversation before iOS 26, where it is the inset it always was, stands on the page's colour.
+    /// Nothing under it where it floats — over the Sessions list (04-floating: the rows go on behind
+    /// it, under the nav bar's own soft edge) and over a page.
     @ViewBuilder private var surface: some View {
-        if floats || overList {
+        if overList {
             Color.clear
         } else {
             Color(uiColor: .systemBackground)
@@ -371,6 +329,45 @@ private struct NeedsYouOverPage: ViewModifier {
     }
 }
 
+/// Pushed up, the bar goes away (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/06-list-floats`):
+/// it follows the finger up and fades, and past half its height — or flicked — it is put away until
+/// something new is waiting (`AppModel.dismissNeedsYou`); short of that it springs back. A tap is
+/// still the press, and a sideways or downward drag does nothing.
+private struct SwipeAway: ViewModifier {
+    let dismiss: () -> Void
+    @State private var lift: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: lift)
+            .opacity(1 - min(0.8, Double(-lift) / 60))
+            .gesture(
+                DragGesture(minimumDistance: 10)
+                    .onChanged { value in
+                        guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                        lift = min(0, value.translation.height)
+                    }
+                    .onEnded { value in
+                        let away = value.translation.height < -22 || value.predictedEndTranslation.height < -60
+                        if away {
+                            PlatformHaptics.tap()
+                            withAnimation(.spring(duration: 0.3)) { lift = -80 } completion: {
+                                dismiss()
+                                lift = 0
+                            }
+                        } else {
+                            withAnimation(.spring(duration: 0.3)) { lift = 0 }
+                        }
+                    }
+            )
+            .accessibilityAction(named: "Dismiss") { dismiss() }
+    }
+}
+
+private extension View {
+    func swipesAway(_ dismiss: @escaping () -> Void) -> some View { modifier(SwipeAway(dismiss: dismiss)) }
+}
+
 /// How long the thing the bar names has waited — "12m", "2h" — kept current while it sits there.
 /// The words of a duration that is still running (`RelativeTime.elapsed`), not of an event.
 private struct NeedsYouAge: View {
@@ -387,7 +384,7 @@ private struct NeedsYouAge: View {
     }
 }
 
-private extension NeedsYouGlyph {
+extension NeedsYouGlyph {
     /// The SF Symbol for each mark, filled where the symbol has a fill, as the Landing head's are.
     var symbol: String {
         switch self {

@@ -205,6 +205,17 @@ public enum NeedsYouLogic {
                             glyph: first.isQuestion ? .question : .warning)
     }
 
+    /// What the conversation's own capsule says (the owner, 2026-11-15,
+    /// `docs/mocks/needs-you-capsule/07-console-one-capsule`, B): the cards waiting in it — `below`'s
+    /// rows — and then its own approvals, which wait at its tail (`approval-<id>` rows), so they lie
+    /// below wherever the reader is. Only this conversation: what waits elsewhere is the lists' to say.
+    public static func here(rows: [BelowRow], approvalIDs: [String], side: ReaderSide?) -> WaitingBelow? {
+        let approvals = approvalIDs.map { BelowRow(rowID: "approval-\($0)", isQuestion: false) }
+        guard let said = below(rows: rows + approvals, side: rows.isEmpty ? .below : side) else { return nil }
+        return WaitingBelow(count: said.count, rowID: said.rowID, text: said.text, side: said.side,
+                            glyph: rows.isEmpty ? .hand : said.glyph)
+    }
+
     /// "1 open question below" while every card below is a question — the words this bar has always
     /// used, unchanged for the case it was built for. Anything else says "2 waiting below": never a
     /// bare number (the count is the useful part here, unlike the cross-session bar, where "1" told
@@ -291,6 +302,27 @@ public enum NeedsYouLogic {
         return NeedsYouBanner(count: elsewhere.count, target: target, text: arrival.line,
                               detail: named(target.title), since: ISO8601DateFormatter().string(from: arrival.at),
                               arriving: true)
+    }
+
+    /// What a swipe on the bar puts away (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/06-list-floats`):
+    /// each conversation waiting at that moment, keyed by the instant it started waiting — its oldest
+    /// owner item's, or its last turn's. A swipe is "not now", not an answer: nothing is sent and no
+    /// session changes. Recorded from the whole set (no conversation excluded), so the bar stays put
+    /// away on every page.
+    public static func dismissalKeys(waiting: [Session]) -> Set<String> {
+        Set(waiting.map { session in
+            let since = oldestOwnerItem([session])?.item.since
+                ?? session.lastTurnAt ?? session.updatedAt ?? session.createdAt ?? ""
+            return "\(session.id)|\(since)"
+        })
+    }
+
+    /// Whether the bar stays put away: everything waiting elsewhere was already waiting when it was
+    /// swiped. Something new — another conversation, or one that stopped again — brings it back.
+    public static func isDismissed(waiting: [Session], excluding focused: String? = nil,
+                                   dismissed: Set<String>) -> Bool {
+        let keys = dismissalKeys(waiting: waiting.filter { $0.id != focused })
+        return !keys.isEmpty && keys.isSubset(of: dismissed)
     }
 
     /// At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest.
