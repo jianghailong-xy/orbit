@@ -834,8 +834,26 @@ test('a project’s integration line is recorded, defaulted, locked, read for la
       stack.receipts,
       {} as SessionAttemptService,
     );
-    assert.deepEqual(await runnerDoor.mergeSession(runner, undefined, undefined, undefined, merged,
-      { targetBranch: `project/${f.publicId}` }), { ok: true });
+    // 166ce5937 makes the agent's queued merge explicit: PENDING with polling guidance, so
+    // callers cannot mistake acceptance for a completed merge. The owner's menu keeps ok: true.
+    const answer = await runnerDoor.mergeSession(runner, undefined, undefined, undefined, merged,
+      { targetBranch: `project/${f.publicId}` });
+    const queued = await stack.db.session.findUniqueOrThrow({ where: { id: merged } });
+    assert.ok(queued.mergeOperationId);
+    assert.deepEqual(answer, {
+      ok: true,
+      outcome: 'PENDING',
+      sessionId: merged,
+      operationId: queued.mergeOperationId,
+      mergeStatus: 'pending',
+      receipt: null,
+      receiptAbsentReason: 'MERGE_STILL_RUNNING',
+      next: {
+        actionCode: 'POLL_STATE',
+        afterSeconds: 30,
+        resources: [{ type: 'SESSION', id: merged }],
+      },
+    });
     assert.deepEqual(await stack.db.session.findUniqueOrThrow({
       where: { id: merged },
       select: { mergeStatus: true, mergeTarget: true },
