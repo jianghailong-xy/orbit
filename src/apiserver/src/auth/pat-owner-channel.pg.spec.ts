@@ -212,6 +212,10 @@ test('the owner channel refuses a personal access token door by door and field b
 
   const doors: Door[] = [
     {
+      route: 'POST /owner-requests/:id/create-wiki', path: `/owner-requests/${nobody()}/create-wiki`,
+      login: 404,
+    },
+    {
       route: 'POST /owner-requests/:id/secret', path: `/owner-requests/${secretToSubmit}/secret`,
       body: { value: 'submitted-key', saveAs: 'submitted key' }, login: 200,
       observe: async () => ({ grant: await grantRow(secretToSubmit), saved: await db.accountSecret.findUnique({ where: { ownerId_label: { ownerId: userId, label: 'submitted key' } } }) }),

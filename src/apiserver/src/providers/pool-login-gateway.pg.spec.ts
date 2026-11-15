@@ -428,7 +428,10 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     // The token names its (pool, person, session) and no account at all (migration 0355).
     const minted = await db.poolLoginToken.findMany({ where: { sessionId: session } });
     assert.deepEqual(minted.map((row) => [row.poolId, row.userId]), [[pool.id, owner.id]]);
-    assert.deepEqual(Object.keys(minted[0]).filter((column) => column.includes('account')), []);
+    // ead2346f7 (migration 0800) added accountId/keyId for a SubAgent's chosen credential;
+    // a parent session's token still binds neither and follows the session's current credential.
+    assert.equal(minted[0].accountId, null);
+    assert.equal(minted[0].keyId, null);
     assert.ok(!JSON.stringify(minted).includes(token), 'the token is stored, not its hash');
     // The session's own read names no account id.
     assert.ok(!text(await sessions.get(owner.id, session)).includes(pool.accountId), 'a session read names the account id');
