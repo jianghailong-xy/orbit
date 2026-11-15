@@ -782,7 +782,8 @@ test('GET /api/schedules carries the timeline: runs under way and the last day\'
   const running = await mk(sa.id, 2 * hour, 'RUNNING');
   const changed = await mk(sa.id, 3 * hour, 'CHANGED', 'codex@0.49.0');
   const old = await mk(sa.id, 30 * hour, 'NO_CHANGE');
-  const oldRunning = await mk(sa.id, 50 * hour, 'RUNNING');
+  // One run in progress per schedule: the old one under way is the paused schedule's (a pause lets it finish).
+  const oldRunning = await mk(paused.id, 50 * hour, 'RUNNING');
   await db.scheduleFinding.create({
     data: { scheduleId: sa.id, key: 'codex@0.49.0', firstRunId: changed.id, lastSeenRunId: changed.id, notifiedAt: new Date() },
   });
@@ -798,7 +799,7 @@ test('GET /api/schedules carries the timeline: runs under way and the last day\'
   assert.ok(ids.includes(oldRunning.id), 'a run under way, however old');
   assert.ok(!ids.includes(old.id), 'an ended run older than a day is not the page\'s');
   assert.ok(!ids.includes(theirs.id), 'no other account\'s run');
-  assert.ok(answer.runs.every((r) => r.scheduleId === sa.id), 'every run is of the caller\'s rows');
+  assert.ok(answer.runs.every((r) => r.scheduleId === sa.id || r.scheduleId === paused.id), 'every run is of the caller\'s rows');
   const facts = answer.runs.find((r) => r.id === changed.id)!;
   assert.deepEqual([facts.newFinding, facts.notified], [true, true]);
   assert.deepEqual(
