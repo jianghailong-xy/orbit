@@ -198,9 +198,9 @@ final class TranslationTests: XCTestCase {
     func testTheOwnersMessageFoot() {
         let done = TurnTranslation(state: .done, from: .zhHans, original: "修一下")
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: false),
-                       [.text("Translated"), .action("Show original", .flip)])
+                       [.action("Show original", .flip)])
         XCTAssertEqual(SessionTranslation.userFoot(done, flipped: true),
-                       [.text("Sent to the agent in English"), .action("Show translation", .flip)])
+                       [.action("Show translation", .flip)])
         XCTAssertEqual(SessionTranslation.userFoot(TurnTranslation(state: .translating, from: .zhHans, original: "x"), flipped: false),
                        [.chip("Translating…")])
         XCTAssertEqual(SessionTranslation.userFoot(TurnTranslation(state: .failed, from: .zhHans, original: "x"), flipped: false),

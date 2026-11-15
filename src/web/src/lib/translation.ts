@@ -17,7 +17,6 @@ export const TRANSLATION_COPY = {
   translated: 'Translated',
   showOriginal: 'Show original',
   showTranslation: 'Show translation',
-  sentInEnglish: 'Sent to the agent in English',
   original: 'Original',
   translating: 'Translating…',
   sendFailed: "Couldn't translate, so it wasn't sent",

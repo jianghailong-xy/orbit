@@ -11,6 +11,8 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { approvalRequestEvent } from '../realtime/realtime.service';
 import { replyTranslationsSettled, translateCardNow, translateStoredEvents, type TranslationDeps } from './reply-translation';
 import { SessionsService } from './sessions.service';
+import { SessionsController } from './sessions.controller';
+import { EMPTY, firstValueFrom, take, toArray } from 'rxjs';
 
 /**
  * Settings › Translation, what the agent says (task A2), against the real schema (migration 0550) and the
@@ -134,6 +136,36 @@ scenario('a reply\'s translation is written into its run_event payload and repla
     published.filter((e) => e.type === RunEventType.TRANSLATION).map((e) => (e.payload as { of: number }).of).sort(),
     [2, 3],
   );
+});
+
+scenario('a cursor\'d stream connect sends the translations behind its cursor again, and the gap after it', async () => {
+  // A phone whose socket was suspended when a reply's live translation went out resumed past the reply
+  // and kept "Translates when the reply is done" (production session 34xw3JGbJhFUaOdGlT8Ix, 2026-11-15).
+  const sessionId = await liveSession();
+  await store(sessionId, [
+    { seq: 1, type: RunEventType.ASSISTANT, payload: { text: 'Old.', translation: { lang: 'zh-Hans', text: '旧' } } },
+    { seq: 2, type: RunEventType.TOOL_USE, payload: { id: 't1', name: 'Bash', input: {}, translation: { lang: 'zh-Hans', text: 'x' } } },
+    { seq: 3, type: RunEventType.ASSISTANT, payload: { text: 'Not yet.' } },
+    { seq: 4, type: RunEventType.ASSISTANT, payload: { text: 'Failed.', translation: { lang: 'zh-Hans', failed: true } } },
+    { seq: 5, type: RunEventType.PROMPT_SUGGESTION, payload: { text: 'Go', translation: { lang: 'zh-Hans', text: '走' } } },
+    { seq: 6, type: RunEventType.ASSISTANT, payload: { text: 'After the cursor.', translation: { lang: 'zh-Hans', text: '之后' } } },
+  ]);
+  const realtime = { streamForRun: () => EMPTY, turnPrefix: () => ({ text: '', thinking: '' }) };
+  const controller = new SessionsController({} as never, prisma as never, realtime as never, {} as never, {} as never, {} as never);
+  const out = await firstValueFrom(
+    (controller.events({ userId: ownerId } as never, sessionId, '5', undefined) as any).pipe(take(4), toArray()),
+  ) as Array<{ data: { seq: number; type: string; payload: Record<string, unknown> } }>;
+  assert.deepEqual(out.map((m) => [m.data.seq, m.data.type]), [
+    [6, RunEventType.ASSISTANT],
+    [0, RunEventType.TRANSLATION],
+    [0, RunEventType.TRANSLATION],
+    [0, RunEventType.TRANSLATION],
+  ]);
+  assert.deepEqual(out.slice(1).map((m) => m.data.payload), [
+    { of: 1, lang: 'zh-Hans', text: '旧' },
+    { of: 4, lang: 'zh-Hans', failed: true },
+    { of: 5, lang: 'zh-Hans', text: '走' },
+  ]);
 });
 
 scenario('a failed reply translation is stored as failed, and Retry writes the translation', async () => {
