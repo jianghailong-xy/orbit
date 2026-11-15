@@ -5122,11 +5122,11 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
           </div>
         ) : undefined,
       };
-    // Orbit's SubAgent (docs/subagent-design.md §6.4): the same purple card as Agent. Its tier, model, time
+    // Orbit's SubAgent (docs/subagent-design.md §6.4), named Agent on screen as on iOS and macOS: the same purple card as Agent. Its tier, model, time
     // and cost come from its run (ToolView); opened, it is the child's steps and the result — no prompt.
     case DELEGATE_TOOL:
       return {
-        label: 'SubAgent',
+        label: 'Agent',
         icon: <span className="chat-subagent-icon">✦</span>,
         tone: 'agent',
         summary: [i.type || 'general', i.description].filter(Boolean).join(' · '),
