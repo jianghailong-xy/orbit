@@ -110,6 +110,7 @@ function service(answer: ReturnType<typeof loginRow> | null, over: Record<string
     project: { findMany: async () => [] },
     // The derived landing label (0436): these rows produced no landing work.
     projectIntegrationJob: { findFirst: async () => null },
+    coordinatorHandoff: { findFirst: async () => null },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),

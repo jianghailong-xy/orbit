@@ -1,3 +1,4 @@
+import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import type { SubagentRunView } from '@orbit/shared';
 import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { checkedWorkSubdir } from './work-subdir';
@@ -4858,6 +4859,9 @@ export class SessionsService {
       lastUserFromOrbit: lastUserFromOrbitOf({ lastUserFromOrbit }),
       lastUserFromExternal: lastUserFromExternalOf({ lastUserFromExternalSource, lastUserFromExternalName }),
       sourceLanding,
+      // A coordinator's handoff (projects/coordinator-handoff.ts): `coordinatorHandoff` on the outgoing
+      // one, `coordinatorHandoffReceived` on its successor, null on every other session.
+      ...(await readSessionCoordinatorHandoffs(this.prisma, session.id)),
       ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
