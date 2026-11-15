@@ -1,6 +1,6 @@
 # Share to Orbit — design
 
-Status: proposal (2026-11-16). Board: `docs/mocks/share-to-orbit/01-board.html` (PNGs beside it).
+Status: accepted (2026-11-16): D1–D4 = A. Board: `docs/mocks/share-to-orbit/01-board.html` (PNGs beside it).
 
 ## 1. Goal
 
@@ -114,7 +114,7 @@ Share sheet ─▶ Orbit share target ─▶ picker: recent sessions + "New sess
    CI), picker UI, notification hand-off, app-side claim.
 4. **macOS Share extension**: build-dmg extension step, signing order, notarisation check, app-side claim.
 
-## 7. Open decisions (board §5)
+## 7. Decisions (board §5) — owner chose A for all four, 2026-11-16
 
 - **D1 Where the session is picked**: A, inside the share sheet (recommended), or B, the share sheet only
   stores the items and the app asks on open.
