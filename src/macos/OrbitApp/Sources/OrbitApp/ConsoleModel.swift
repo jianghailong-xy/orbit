@@ -2038,6 +2038,71 @@ final class ConsoleModel {
     /// Bumped to ask the composer to take focus (`fillFromWelcome`).
     var focusRequests = 0
 
+    // MARK: prompt optimizer (docs/prompt-optimizer-design.md, board docs/mocks/prompt-optimizer)
+
+    /// The composer's optimizer: the press in flight, the suggestion, the failure line, and what Use
+    /// put in the box (for Undo and `skipTranslation`). Every rule is `PromptOptimizerState`'s.
+    var promptOptimizer = PromptOptimizerState()
+    @ObservationIgnored private var optimizeTask: Task<Void, Never>?
+
+    /// ✦ Optimize pressed (frame 2): the draft goes to the server with this session — or, for a new
+    /// session, the workspace picked. Pressed while busy (frame 3), it cancels. Nothing in the box
+    /// changes until Use.
+    func optimizePrompt() {
+        if promptOptimizer.isOptimizing { cancelOptimizePrompt(); return }
+        let draft = composerText
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        promptOptimizer.start(draft: draft)
+        let request = PromptOptimizationRequest(draft: String(trimmed.prefix(ComposerLogic.maxPromptChars)),
+                                                sessionId: isDraft ? nil : sessionID,
+                                                workspaceId: isDraft ? draftAgent?.id : nil)
+        let api = self.api
+        optimizeTask?.cancel()
+        optimizeTask = Task { [weak self] in
+            do {
+                let result = try await api.optimizePrompt(request)
+                guard !Task.isCancelled, let self else { return }
+                self.promptOptimizer.succeeded(result)
+            } catch {
+                guard !Task.isCancelled, let self else { return }
+                self.promptOptimizer.failedNow()
+            }
+        }
+    }
+
+    /// The busy button pressed again: the press is dropped, the draft is as it was.
+    func cancelOptimizePrompt() {
+        optimizeTask?.cancel()
+        optimizeTask = nil
+        promptOptimizer.cancel()
+    }
+
+    /// Try again (frame 4's, or frame 6's failure line): the box's draft as it is now goes out again.
+    func retryOptimizePrompt() {
+        promptOptimizer.dismiss()
+        optimizePrompt()
+    }
+
+    /// × / Esc: the card (or the failure line) goes; the draft is kept.
+    func dismissOptimization() {
+        promptOptimizer.dismiss()
+    }
+
+    /// Use, or Edit, then use: the suggestion replaces the draft (attachments stay). Edit, then use
+    /// also puts the caret in the box; on a phone that is the only difference.
+    func useOptimization(edit: Bool) {
+        guard let text = promptOptimizer.use(current: composerText) else { return }
+        composerText = text
+        if edit { focusRequests += 1 }
+    }
+
+    /// Frame 5's Undo: the owner's own draft comes back.
+    func undoOptimization() {
+        guard let draft = promptOptimizer.undo(current: composerText) else { return }
+        composerText = draft
+    }
+
     /// A first message picked on the welcome card: into the composer, to be read, changed and sent
     /// there. Nothing is sent.
     func fillFromWelcome(_ example: String) {
@@ -3025,6 +3090,10 @@ final class ConsoleModel {
         // that hands the retried text to the composer, which never held it. The raw draft, so a
         // shell send comes back with its leading `!`.
         let draft = overrideText ?? composerText
+        // D2: unedited optimized English goes untranslated. Only the composer's own words can be.
+        let skipTranslation = fromComposer && promptOptimizer.skipTranslation(sending: draft)
+        // Send never waits for the optimizer: a press still out, or a card still open, goes.
+        if fromComposer { cancelOptimizePrompt(); promptOptimizer.dismiss() }
         let staged = pendingAttachments
         // What rides with this send: whatever it was handed, else the composer's own chips. A
         // retry hands in the attachments of the message it is re-sending — their bytes are on the
@@ -3076,7 +3145,9 @@ final class ConsoleModel {
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds,
-                                              queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)
+                                              queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
+                                              skipTranslation: skipTranslation)
+            if fromComposer { promptOptimizer.sent() }
             // An earlier send's "Couldn't send" is not true any more.
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             // A wiki chat's attachments went with it: its panel lets them go (`WikiChatModel.sent`).
@@ -3365,7 +3436,8 @@ final class ConsoleModel {
     /// message or is handed back the turn a lost attempt already queued, never a second one.
     private func postTurn(resuming: Bool, clientTurnId: String, text: String, shell: Bool,
                           attachmentIds: [String], queueForNextTurn: Bool = false,
-                          wikiContext: WikiChatContext? = nil) async throws -> TurnAccepted {
+                          wikiContext: WikiChatContext? = nil,
+                          skipTranslation: Bool = false) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
         // identical request, and the pills it reads stay editable while a retry waits.
         let resumeRequest = ResumeRequest(clientTurnId: clientTurnId, content: text,
@@ -3386,10 +3458,12 @@ final class ConsoleModel {
                                           // stopping this exact run, and only for this one send.
                                           stopSessionId: confirmedStopSessionID,
                                           // A wiki chat's page and selection, which revive it too.
-                                          wikiContext: wikiContext)
+                                          wikiContext: wikiContext,
+                                          skipTranslation: skipTranslation ? true : nil)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
                                                  shell: shell, attachmentIds: attachmentIds,
-                                                 queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)
+                                                 queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
+                                                 skipTranslation: skipTranslation)
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
         // rather than handing the reader a refusal about a situation that is already resolving.
         // The identical request goes back out — same `clientTurnId` — so the server either queues
@@ -3530,8 +3604,13 @@ final class ConsoleModel {
         sending = true
         defer { sending = false }
         do {
+            let skip = promptOptimizer.skipTranslation(sending: composerText)
+            cancelOptimizePrompt()
+            promptOptimizer.dismiss()
             let session = try await api.createSession(draftRequest(
-                agent, prompt: text, shell: shell, attachmentIds: attachmentIds, newWorkspace: newWorkspace))
+                agent, prompt: text, shell: shell, attachmentIds: attachmentIds, newWorkspace: newWorkspace,
+                skipTranslation: skip))
+            promptOptimizer.sent()
             composerText = ""
             pendingAttachments = []
             draftSessionCreated(session)
@@ -3579,7 +3658,7 @@ final class ConsoleModel {
     }
 
     private func draftRequest(_ agent: Agent, prompt: String, shell: Bool, attachmentIds: [String],
-                              newWorkspace: NewWorkspaceRequest?) -> CreateSessionRequest {
+                              newWorkspace: NewWorkspaceRequest?, skipTranslation: Bool = false) -> CreateSessionRequest {
         CreateSessionRequest(
             // Send the raw effort — "" (Default) included:
             // the pill is seeded from the agent's default, so an explicit Default must stick
@@ -3616,7 +3695,9 @@ final class ConsoleModel {
             // The folder page this draft was opened from, if any: the session is filed in it as
             // it is created (§3.3). Omitted for a draft from a list.
             folderId: draftFolderID,
-            newWorkspace: newWorkspace)
+            newWorkspace: newWorkspace,
+            // D2: the opening message is unedited optimized English. Only ever `true` or absent.
+            skipTranslation: skipTranslation ? true : nil)
     }
 
     private func draftSessionCreated(_ session: Session) {

@@ -141,7 +141,7 @@ final class MachineSetupWiringTests: XCTestCase {
         let request = try slice(model, from: "private func draftRequest(", to: "private func draftSessionCreated(")
         for piece in ["agentId: newWorkspace == nil ? agent.id : nil", "assignedRunnerId: newWorkspace == nil ? nil : agent.runnerId",
                       "engine: newWorkspace == nil ? draftPick?.engine : engine",
-                      "provider: newWorkspace == nil ? draftPick?.provider : provider", "newWorkspace: newWorkspace)"] {
+                      "provider: newWorkspace == nil ? draftPick?.provider : provider", "newWorkspace: newWorkspace,"] {
             XCTAssertTrue(request.contains(piece), "the create lost \(piece)")
         }
     }
