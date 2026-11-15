@@ -83,3 +83,16 @@ the outgoing session, and for the successor once there is one.
 | ⑤ Failure: reason, Try again, Hand over without a note, Keep this coordinator | `coordinatorHandoff.state === 'FAILED'`, `failureReason` → `retry` / `skip` / `cancel` |
 
 The board's copy, word for word, is `COORDINATOR_HANDOFF_COPY` in `@orbit/shared`.
+
+## Phones
+
+- **Confirm.** iOS and Android say board 03 iOS 2's words: the title, then one body,
+  `coordinatorHandoffPhoneConfirmBody` in `@orbit/shared` (OrbitKit `CoordinatorContextCopy.phoneConfirmBody`,
+  Android `CoordinatorHandoffCopy.phoneConfirmBody`). The waits are a count inside the body, none when there are none;
+  there is no Handoff note row and no wait names. Each client's copy-parity test reads its body against the shared one.
+- **Button order on iOS.** Board 03 ② draws Hand over, bold, above Cancel. The confirm is SwiftUI's system `.alert`,
+  which takes no layout axis: with two buttons that fit, UIKit sets them side by side, the `.cancel` role leading. That is
+  the accepted reading; Hand over stays the bold default action. Android's `AlertDialog` puts Cancel then Hand over in a row.
+- **A refused press.** Every client leads with `refused` ("Couldn't hand over"), as web's "Couldn't compact" does: web
+  toasts it with the server's message under it; Apple's status line and Android's toast or confirm read
+  "Couldn't hand over: <reason>".

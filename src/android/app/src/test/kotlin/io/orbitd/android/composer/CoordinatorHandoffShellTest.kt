@@ -95,15 +95,25 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         press(hasTestTag("context-action-new-coordinator"))
         await { has(inDialog("Hand over to a new coordinator?")) }
         assertFalse(has(inDialog("Context and plan usage")))
-        assertTrue(has(inDialog("This coordinator writes a handoff note, then Checkout redesign continues in a new conversation that starts from that note. This one is completed — nothing is deleted.")))
-        assertTrue(has(inDialog("Handoff note")))
-        assertTrue(has(inDialog("Written by this coordinator before it hands over. Usually under a minute.")))
-        await { has(inDialog("2 pending waits move over")) }
+        // Board 03 iOS 2's words, the iPhone's: one body, the waits a count inside it, no note row.
+        await { has(inDialog("This coordinator writes a handoff note, then the project continues in a new conversation. 2 pending waits move over. Nothing is deleted.")) }
+        assertFalse(has(inDialog("Handoff note")))
         assertFalse("the waits are a count, not their names", has(hasText("Fix login redirect", substring = true) and hasAnyAncestor(isDialog())))
         assertTrue(has(inDialog("Cancel")))
         press(hasTestTag("handoff-confirm-hand-over"))
         await { ComposerShell.calls.contains("POST projects/$project/coordinator/handoff") }
         await { !has(inDialog("Hand over to a new coordinator?")) }
+    }
+
+    @Test fun aRefusedHandOverSaysCouldntHandOverAndWhyInTheConfirm() {
+        runnerWithCompact(); coordinatorSession()
+        ComposerShell.answers["POST projects/$project/coordinator/handoff"] = { ApiResponse(409,
+            """{"message":"This project already has a handoff under way."}""".encodeToByteArray()) }
+        signIn(); openSession(); openContext()
+        press(hasTestTag("context-action-new-coordinator"))
+        await { has(inDialog("Hand over to a new coordinator?")) }
+        press(hasTestTag("handoff-confirm-hand-over"))
+        await { has(inDialog("Couldn't hand over: This project already has a handoff under way.")) }
     }
 
     @Test fun theConfirmWhileRunningSaysTheNoteComesAfterTheTurnAndHidesNoWaits() {
@@ -112,7 +122,7 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         await { has(hasTestTag("context-action-new-coordinator")) }
         assertTrue(has(hasText("Begins after this turn ends: a handoff note, then a fresh conversation."), unmerged = true))
         press(hasTestTag("context-action-new-coordinator"))
-        await { has(inDialog("After the current turn ends, this coordinator writes a handoff note, then Checkout redesign continues in a new conversation that starts from that note. This one is completed — nothing is deleted.")) }
+        await { has(inDialog("After the current turn ends, this coordinator writes a handoff note, then the project continues in a new conversation. Nothing is deleted.")) }
         await { ComposerShell.calls.contains("GET projects/$project/coordinator/pending-waits") }
         compose.waitForIdle()
         assertFalse("no waits, no row", has(hasText("pending wait", substring = true)))

@@ -20,5 +20,5 @@ export function usePreferences() {
     },
     onError: (e: Error) => message.error("Couldn't save the setting", e.message),
   });
-  return { prefs, save };
+  return { me: me.data, prefs, save };
 }

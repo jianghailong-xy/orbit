@@ -16,9 +16,11 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.auth.AuthSession
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.directory.directoryError
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -44,12 +46,13 @@ internal object CoordinatorHandoffCopy {
 
     // Board 02 (COORDINATOR_HANDOFF_COPY).
     const val CONFIRM_TITLE = "Hand over to a new coordinator?"
-    fun confirmBody(projectTitle: String) =
-        "This coordinator writes a handoff note, then $projectTitle continues in a new conversation that starts from that note. This one is completed — nothing is deleted."
-    fun confirmBodyWhileRunning(projectTitle: String) =
-        "After the current turn ends, this coordinator writes a handoff note, then $projectTitle continues in a new conversation that starts from that note. This one is completed — nothing is deleted."
-    const val NOTE_ROW_TITLE = "Handoff note"
-    const val NOTE_ROW_DETAIL = "Written by this coordinator before it hands over. Usually under a minute."
+    /** The phones' confirm body, board 03 iOS 2 (`coordinatorHandoffPhoneConfirmBody`, OrbitKit's `phoneConfirmBody`): the waits as
+     * a count only, and no count when there are none. */
+    fun phoneConfirmBody(waits: Int, running: Boolean): String {
+        val lead = if (running) "After the current turn ends, this coordinator writes a handoff note" else "This coordinator writes a handoff note"
+        val moves = if (waits > 0) " ${waitsRowTitle(waits)}." else ""
+        return "$lead, then the project continues in a new conversation.$moves Nothing is deleted."
+    }
     fun waitsRowTitle(count: Int) = if (count == 1) "1 pending wait moves over" else "$count pending waits move over"
     const val CANCEL = "Cancel"
     const val HAND_OVER = "Hand over"
@@ -67,6 +70,9 @@ internal object CoordinatorHandoffCopy {
     const val TRY_AGAIN = "Try again"
     const val HAND_OVER_WITHOUT_NOTE = "Hand over without a note"
     const val KEEP_THIS_COORDINATOR = "Keep this coordinator"
+    /** A handoff press the server refused (`refused`): web's toast title, this line's lead. */
+    const val REFUSED = "Couldn't hand over"
+    fun refusal(reason: String) = "$REFUSED: $reason"
     /** The sentence a FAILED handoff shows when the server sent none (`coordinatorHandoffFailureSentence`). */
     val FAILURE_REASONS = mapOf(
         "TURN_FAILED" to "the turn failed.",
@@ -114,9 +120,10 @@ internal object CoordinatorHandoff {
         return outgoing(detail) == null
     }
 
+    /** The line a refused handoff press leaves: the server's own message where it sent one, else what kind of failure it was. */
+    fun refusal(e: Exception) = CoordinatorHandoffCopy.refusal((e as? ApiError)?.messages?.firstOrNull() ?: directoryError(e))
+
     fun projectId(detail: JsonObject) = (detail["projectMembership"] as? JsonObject)?.text("projectId")
-    fun projectTitle(detail: JsonObject) = (detail["projectMembership"] as? JsonObject)?.text("projectTitle")?.takeIf { it.isNotEmpty() }
-        ?: detail.text("projectTitle") ?: "the project"
 
     fun outgoing(detail: JsonObject?): OutgoingHandoff? = (detail?.get("coordinatorHandoff") as? JsonObject)?.let { h ->
         val state = h.text("state") ?: return null
@@ -217,35 +224,22 @@ internal fun ContextActionRow(icon: Int, title: String, detail: String, enabled:
     }
 }
 
-/** Board 02 ①, as board 03 asks of a phone: the confirm with its two rows, the waits as a count only. */
+/** Board 02 ① as board 03 draws it for a phone (iOS 2): the title and one body, the waits a count inside it — iOS's words. */
 @Composable
-internal fun HandoverConfirm(projectTitle: String, running: Boolean, waits: List<HandoffWait>?, busy: Boolean, error: String?,
+internal fun HandoverConfirm(running: Boolean, waits: List<HandoffWait>?, busy: Boolean, error: String?,
     onHandOver: () -> Unit, onCancel: () -> Unit) {
     AlertDialog(onDismissRequest = onCancel, modifier = Modifier.testTag("handoff-confirm"),
         title = { Text(CoordinatorHandoffCopy.CONFIRM_TITLE) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (running) CoordinatorHandoffCopy.confirmBodyWhileRunning(projectTitle) else CoordinatorHandoffCopy.confirmBody(projectTitle))
-                ConfirmFact(R.drawable.ic_note, CoordinatorHandoffCopy.NOTE_ROW_TITLE, CoordinatorHandoffCopy.NOTE_ROW_DETAIL)
-                // Hidden when nothing waits, and while the count is still being read.
-                if (!waits.isNullOrEmpty()) ConfirmFact(R.drawable.ic_wait, CoordinatorHandoffCopy.waitsRowTitle(waits.size), null)
+                // No count while the waits are still being read, as when there are none.
+                Text(CoordinatorHandoffCopy.phoneConfirmBody(waits?.size ?: 0, running))
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = { TextButton(enabled = !busy, onClick = onHandOver, modifier = Modifier.testTag("handoff-confirm-hand-over")) {
             Text(CoordinatorHandoffCopy.HAND_OVER, fontWeight = FontWeight.SemiBold) } },
         dismissButton = { TextButton(onClick = onCancel) { Text(CoordinatorHandoffCopy.CANCEL) } })
-}
-
-@Composable
-private fun ConfirmFact(icon: Int, title: String, detail: String?) {
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Icon(painterResource(icon), null, Modifier.size(18.dp).padding(top = 2.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Column {
-            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-    }
 }
 
 /**

@@ -19,7 +19,7 @@ internal fun JsonObject.number(key: String) = (get(key) as? JsonPrimitive)?.long
 
 const val SENTINEL_SEQ = 9_007_199_254_740_991L
 private val liveTypes = setOf("text_delta", "thinking_delta", "tool_output", "approval_request",
-    "approval_resolved", "queued_turns_changed", "background_output", "task_progress", "resync", "ping")
+    "approval_resolved", "queued_turns_changed", "background_output", "task_progress", "translation", "resync", "ping")
 
 @Serializable
 data class RunEvent(

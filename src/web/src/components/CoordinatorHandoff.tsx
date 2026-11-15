@@ -146,7 +146,8 @@ export function CoordinatorHandoffConfirm({
       await onHandOver();
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      // The same lead as the toast a refused Skip / Cancel / Try again shows, and the phones' and the Mac's line.
+      setError(`${COPY.refused}: ${cause instanceof Error ? cause.message : String(cause)}`);
       setBusy(false);
     }
   };
