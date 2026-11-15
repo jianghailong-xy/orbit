@@ -166,6 +166,13 @@ export class UpdatePreferencesDto {
   @IsIn([...TRANSLATION_LANGUAGES])
   translationAgentLanguage?: TranslationLanguage;
 
+  /** "Show both languages": each translated message also shows the words the agent read or wrote,
+   *  in the agent language.
+   *  Display only, read by every client; absent = off. */
+  @IsOptional()
+  @IsBoolean()
+  translationBilingual?: boolean;
+
   /**
    * The provider slugs this account's SubAgents are never routed onto (docs/subagent-design.md §4.2, §6.2).
    * Absent = none blocked; the whole list is replaced on each write, so [] unblocks everything.

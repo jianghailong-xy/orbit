@@ -45,12 +45,15 @@ val LocalTranslationChanged = staticCompositionLocalOf<(AccountTranslation) -> U
 
 /** [enabled]: the owner's switch; [available]: the server can translate; [language]: the owner's; [agentLanguage]: the agents'. */
 data class AccountTranslation(val enabled: Boolean = false, val available: Boolean = false, val language: String = Translation.DEFAULT_LANGUAGE,
-    val agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE) {
+    val agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE,
+    /** "Show both languages" (`preferences.translationBilingual`, only while [enabled]): a translated message also shows the agent-language text. */
+    val bilingual: Boolean = false) {
     /** The owner's messages are being translated now: switched on, and the server able to. */
     val on: Boolean get() = enabled && available
     companion object {
         fun of(user: JsonObject?): AccountTranslation = (user?.get("preferences") as? JsonObject).let {
-            AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it), Translation.agentLanguage(it))
+            AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it), Translation.agentLanguage(it),
+                Translation.bilingual(it))
         }
     }
 }

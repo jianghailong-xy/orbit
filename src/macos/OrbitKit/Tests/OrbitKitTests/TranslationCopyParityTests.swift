@@ -65,6 +65,9 @@ final class TranslationCopyParityTests: XCTestCase {
             ("sendAsWritten", TranslationCopy.sendAsWritten),
             ("replyPending", TranslationCopy.replyPending),
             ("replyFailed", TranslationCopy.replyFailed),
+            ("sentToAgent", TranslationCopy.sentToAgent),
+            ("show", TranslationCopy.show),
+            ("lines", TranslationCopy.lines),
         ]
         for (key, words) in pairs {
             assertContains(web, "\(key): \(literal(words)),", in: Self.lib)
@@ -98,6 +101,12 @@ final class TranslationCopyParityTests: XCTestCase {
         XCTAssertEqual(web.components(separatedBy: "options={TRANSLATION_LANGUAGE_OPTIONS}").count - 1, 2,
                        "\(Self.settings): both pickers offer TRANSLATION_LANGUAGE_OPTIONS")
         assertContains(web, TranslationCopy.footnote, in: Self.settings)
+        // Show both languages (02-bilingual.png): its row has a title only, and the footer's sentence.
+        assertContains(web, "title={S.translationBilingual.title}", in: Self.settings)
+        assertContains(index, "'translationBilingual', '/settings/general', \(literal(TranslationCopy.showBothLanguages)))",
+                       in: Self.settingsIndex)
+        assertContains(web, #"aria-label="\#(TranslationCopy.showBothLanguages)""#, in: Self.settings)
+        assertContains(web, TranslationCopy.bilingualFootnote, in: Self.settings)
         // The notice names the variable in <code> on the web; the words around it are the same.
         let notice = TranslationCopy.unavailable
             .replacingOccurrences(of: "DEEPSEEK_API_KEY", with: "<code>DEEPSEEK_API_KEY</code>")
@@ -117,6 +126,21 @@ final class TranslationCopyParityTests: XCTestCase {
                        in: Self.shared)
         assertContains(shared, "DEFAULT_AGENT_LANGUAGE = '\(TranslationLanguage.agentDefault.rawValue)' satisfies TranslationLanguage",
                        in: Self.shared)
+    }
+
+    /// "Show English · N lines" and "Sent to the agent in English" are built as the web builds them,
+    /// naming the agent language, and the collapse rule's numbers are shared's.
+    func testTheCollapsedEnglishIsCountedAsTheWebCountsIt() throws {
+        let web = try source(Self.lib)
+        assertContains(web, "`${TRANSLATION_COPY.show} ${TRANSLATION_LANGUAGE_NAMES[agentLang]} · ${lines} ${TRANSLATION_COPY.lines}`", in: Self.lib)
+        assertContains(web, "`${TRANSLATION_COPY.sentToAgent} ${TRANSLATION_LANGUAGE_NAMES[agentLang]}`", in: Self.lib)
+        XCTAssertEqual(TranslationCopy.showEnglishLabel(lines: 9), "Show English · 9 lines")
+        XCTAssertEqual(TranslationCopy.showEnglishLabel(lines: 9, .ja), "Show Japanese · 9 lines")
+        XCTAssertEqual(TranslationCopy.sentToAgentLabel(.en), "Sent to the agent in English")
+        XCTAssertEqual(TranslationCopy.sentToAgentLabel(.ru), "Sent to the agent in Russian")
+        let shared = try source(Self.shared)
+        assertContains(shared, "BILINGUAL_COLLAPSE_LINES = \(BilingualEnglish.collapseLines);", in: Self.shared)
+        assertContains(shared, "BILINGUAL_LINE_CHARS = \(BilingualEnglish.lineChars);", in: Self.shared)
     }
 
     /// The composer tag is built, not written: the web drops each name's parenthesis and joins the
