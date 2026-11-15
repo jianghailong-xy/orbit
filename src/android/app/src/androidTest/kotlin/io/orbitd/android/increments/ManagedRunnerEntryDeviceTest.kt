@@ -35,13 +35,15 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         "runnerId":${if (mapped) "\"$managed\"" else "null"},"workspaceId":${if (mapped) "\"$managedWorkspace\"" else "null"},"usable":${state == "READY"},
         "reason":null,"initialProvider":${if (reported) "\"claude\"" else "null"},"firstSessionProvider":null,
         "actions":{"canEnsure":${!mapped},"canWake":true,"canRetry":false}}"""
-    private fun machine(id: String, name: String, online: Boolean, version: String = "0.1.262") = """{"id":"$id","name":"$name","displayName":"$name",
+    private fun machine(id: String, name: String, online: Boolean, version: String = "0.1.262", extra: String = "") = """{"id":"$id","name":"$name","displayName":"$name",
         "hostname":"$name","version":"$version","online":$online,"status":"${if (online) "ONLINE" else "OFFLINE"}",
         "lastHeartbeatAt":"${if (online) Instant.now() else Instant.now().minusSeconds(7_200)}","maxConcurrent":2,"activeSessions":0,
         "runsAsRoot":false,"minFreeDiskMb":null,"selfUpdate":null,"engines":[{"engine":"claude","installed":true,"auth":"yes"}],
-        "enrolledAt":"2026-09-01T00:00:00Z"}"""
+        "enrolledAt":"2026-09-01T00:00:00Z"$extra}"""
+    /** What a current runner reports beside its engines: resource readings, and Antigravity's Google sign-in. */
+    private val current = ""","capabilities":["machine-resources/v1","os:linux"],"antigravity":{"supported":true,"installed":false,"googleLogin":"available"}"""
     /** The managed runner as GET /runners lists it: before it first reports, no version, heartbeat or engines (as the server creates it). */
-    private fun managedMachine() = if (reported) machine(managed, "managed-runner", online = state == "READY")
+    private fun managedMachine() = if (reported) machine(managed, "managed-runner", online = state == "READY", extra = current)
         else """{"id":"$managed","name":"managed-runner","displayName":"managed-runner","hostname":null,"version":null,"online":false,
         "status":"OFFLINE","lastHeartbeatAt":null,"maxConcurrent":2,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"selfUpdate":null,
         "engines":null,"enrolledAt":"2026-11-15T00:00:00Z"}"""
@@ -71,6 +73,8 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         req.path == "runners" -> json(machines())
         req.path == "runners/$laptop" -> json(machine(laptop, "laptop", false))
         req.path == "runners/$managed" -> json(managedMachine())
+        req.path == "runners/$managed/resources" -> json("""{"at":"${Instant.now()}","latest":{"cpuPercent":12,"cpuCores":2,"load1":0.3,
+            "memTotalBytes":4294967296,"memAvailableBytes":3221225472},"samples":[]}""")
         req.path == "sessions/$managedSession" && req.method == "GET" -> json(sessionRow())
         req.path == "sessions/$managedSession/events/page" -> json(page(listOf(
             event(1, "user", """{"text":"Tidy the release notes"}""", turnId = "t-0"),
@@ -174,6 +178,7 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         awaitText("Managed runner ready")
         await("its engines are listed") { exists(hasText("Claude Code"), unmerged = true) }
         verify("no not-ready lines", !exists(hasText("Available once the runner is ready."), unmerged = true))
+        verify("its readings, not Update runner", !exists(hasText("predates", substring = true), unmerged = true))
         capture("08-runner-ready")
     }
 
