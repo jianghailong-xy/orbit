@@ -42,7 +42,7 @@ type recoveryReport struct {
 	Text  string           `json:"text,omitempty"`
 }
 
-// recoveryNext is the one step to take next. Type is invoke, ask_user, wait or manual. An invoke names
+// recoveryNext is the one step to take next. Type is invoke, ask_user, wait, manual or stop. An invoke names
 // either Tool and Input (MCP) or Argv and Stdin (CLI); Argv[0] is an absolute path, and Stdin is the
 // exact bytes to write to the command's standard input (null when it reads none).
 type recoveryNext struct {
@@ -61,6 +61,7 @@ const (
 	recoveryNextAskUser = "ask_user"
 	recoveryNextWait    = "wait"
 	recoveryNextManual  = "manual"
+	recoveryNextStop    = "stop"
 )
 
 // recoveryLocalRefusedCode is the code of a failure this process made before sending anything.
@@ -329,6 +330,30 @@ func renderRecoveryNext(env recoveryEnvelope, surface recoverySurface, requestID
 		return recoveryStep(recoveryNextAskUser, env, "This session stays bound to the project the answer names, and session_create is "+
 			"not available here. If that is not the project being created, ask the user: on a yes, they start a new session in "+
 			"this workspace and send childSessionPrompt as its first message. On a no, create nothing.")
+	case "REREAD_AND_DECIDE":
+		if confirm {
+			return recoveryStep(recoveryNextAskUser, env, "A person has to confirm before a changed request can pass.")
+		}
+		if n, r, ok := recoveryReadFirst(env, surface); ok {
+			return recoveryInvoke(n, env, "Read the "+strings.ToLower(r.Type)+" first and decide again against what it says now; the identical request is refused again.")
+		}
+		return recoveryStep(recoveryNextManual, env, "Re-read what the request was about and decide again; the identical request is refused again.")
+	case "READ_GRAPH_AND_REPLAN":
+		if confirm {
+			return recoveryStep(recoveryNextAskUser, env, "A person has to confirm before a changed request can pass.")
+		}
+		for _, r := range env.Resources {
+			if r.Type != "TASK" || !recoveryResourceID(r.ID) {
+				continue
+			}
+			if n, ok := surface.read("task_dependency_graph", "taskId", r.ID); ok {
+				return recoveryInvoke(n, env, "Read the dependency graph first, then write only the edges that are still missing and close no cycle.")
+			}
+			break
+		}
+		return recoveryStep(recoveryNextManual, env, "Read the dependency graph, then write only the edges that are still missing and close no cycle.")
+	case "STAND_DOWN":
+		return recoveryStep(recoveryNextStop, env, "Send this request again in no form; read the resources it names to see where the work went.")
 	case "":
 		switch {
 		case confirm || env.Actor == "USER":
@@ -344,6 +369,20 @@ func renderRecoveryNext(env recoveryEnvelope, surface recoverySurface, requestID
 		return recoveryStep(recoveryNextAskUser, env, "A person has to confirm before a changed request can pass.")
 	}
 	return recoveryStep(recoveryNextManual, env, "Change the request as the message says; it is not accepted as sent.")
+}
+
+// recoveryReadFirst is the read of the first resource the envelope names that has a reader here.
+func recoveryReadFirst(env recoveryEnvelope, surface recoverySurface) (recoveryNext, recoveryResource, bool) {
+	for _, r := range env.Resources {
+		reader, ok := recoveryReaders[r.Type]
+		if !ok || !recoveryResourceID(r.ID) {
+			continue
+		}
+		if n, ok := surface.read(reader[0], reader[1], r.ID); ok {
+			return n, r, true
+		}
+	}
+	return recoveryNext{}, recoveryResource{}, false
 }
 
 // ── MCP ────────────────────────────────────────────────────────────────────
@@ -415,7 +454,7 @@ func recoveryReportSchema() map[string]interface{} {
 		"type": "object", "required": []string{"ok", "error", "next"},
 		"properties": map[string]interface{}{
 			"ok":    map[string]interface{}{"const": false},
-			"error": map[string]interface{}{"type": "object", "required": []string{"code", "message", "effect", "retry", "actionCode", "actor", "userConfirmation", "resources"}},
+			"error": map[string]interface{}{"type": "object", "required": []string{"code", "message", "effect", "retry", "actionCode", "actor", "userConfirmation", "resources", "disposition"}},
 			"next":  map[string]interface{}{"type": "object", "required": []string{"type", "actionCode", "afterSeconds", "reason"}},
 		},
 	}

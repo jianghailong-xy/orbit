@@ -48,9 +48,10 @@ had happened. And remedies were written either as prose or as a client-side gues
 | `requiredAction` | The legacy `requiredAction`, verbatim (a token or a sentence). |
 | `userConfirmation` | `REQUIRED` when a person has to confirm before the request can pass, otherwise `NOT_REQUIRED`. |
 | `resources` | `[{type, id}]`: the rows this failure is about. |
+| `disposition` | What kind of next step is left: `AUTOMATIC`, `WAIT`, `CONFIRM_THEN_RUN`, `HUMAN` or `STOP` (§3.2). |
 
 A server states what it knows in a `recovery` block next to the legacy flat fields:
-`{effect, retryPolicy, retryAfterSeconds, actionCode, actor, userConfirmation, resources}`. Every
+`{effect, retryPolicy, retryAfterSeconds, actionCode, actor, userConfirmation, resources, disposition}`. Every
 field is optional. A stated value beats an inferred one, but the result is then held to the
 cross-field invariants (§3.1), so no combination of stated fields can advise an unsafe resend. A
 value outside its enum, or an action code that is not a token, is ignored. Older clients ignore the block, so adding it changes
@@ -150,6 +151,34 @@ means the client sent one, or the answer names one (a `REQUEST` resource).
 As a result, `SAFE` survives only on effect `NONE`, and a committed write never advises another
 write.
 
+### 3.2 Disposition
+
+After §3.1, both parsers (`dispositionOf`, `recoveryDispositionOf`) resolve one disposition from the
+final fields, by the first rule that matches (contract `disposition.rules`):
+
+1. `COMMITTED_STOPS`: effect `COMMITTED` → `STOP`.
+2. `CONFIRMATION_FIRST`: `userConfirmation` `REQUIRED` → `CONFIRM_THEN_RUN`.
+3. `STATED`: `recovery.disposition`, when it is a value of the enum.
+4. `STAND_DOWN_STOPS`: action `STAND_DOWN` → `STOP`.
+5. `RESEND_OR_VERIFY_IS_AUTOMATIC`: policy `SAFE`, `SAME_REQUEST_ID` or `VERIFY_THEN_RETRY` → `AUTOMATIC`.
+6. `A_PERSON_DECIDES`: action `AWAIT_OWNER_DECISION`, or actor `USER` → `HUMAN`.
+7. `THE_SYSTEM_MOVES`: actor `SYSTEM` → `WAIT`.
+8. `STATE_CHANGE_WITH_NO_ACTION`: policy `AFTER_STATE_CHANGE` and no action → `WAIT`.
+9. `OTHERWISE` → `AUTOMATIC`.
+
+What each one tells an agent:
+
+| Disposition | The agent |
+| --- | --- |
+| `AUTOMATIC` | Carries out the step itself: a resend the policy allows, a read, or a changed request. |
+| `WAIT` | Waits for the system (a prerequisite lands, a runner comes back), then asks again. |
+| `CONFIRM_THEN_RUN` | Asks the user to confirm. The confirmation applies the change, or lets the caller send it. |
+| `HUMAN` | Hands it to a person. Nothing it sends changes the answer until they have acted. |
+| `STOP` | Sends nothing more for this request. |
+
+Rules 1 and 2 come before a stated value, so no server can state its way past a required confirmation
+or a write that already went through.
+
 **Action semantics.** Each action in the registry declares two flags:
 
 - `automaticRetry`: carrying it out resends the identical request with nobody in between. This is
@@ -159,12 +188,12 @@ write.
   (`ANSWER_ADVICE`), writing again after a decision (`AWAIT_OWNER_DECISION`), or a handoff
   (`FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF`).
 
-Only `VERIFY_STATE` has `mayWrite: false`. A token the registry does not list counts as
+Only `VERIFY_STATE` and `STAND_DOWN` have `mayWrite: false`. A token the registry does not list counts as
 `mayWrite: true`. The contract derives `automaticRetryActionCodes` and `readOnlyActionCodes` from
 these flags. Steps 3 and 4 use the first list, and step 6 uses the second.
 
 Every envelope satisfies the checks in `invariants.holdsOnEveryEnvelope`. Both test suites check
-them on every fixture, and on all 5,940 combinations a server block can state (effect × policy ×
+them on every fixture, and on all 8,100 combinations a server block can state (effect × policy ×
 action, including one unregistered token, × confirmation × request id × status × `retryable`).
 The check reads `mayWrite` and `automaticRetry` from the contract file itself rather than from the
 parser's tables, so if the parser misclassifies an action, the check still catches it.
@@ -189,6 +218,15 @@ A 2xx response gets no default, and a `COMMITTED` effect keeps only a read-only 
 | `AFTER_STATE_CHANGE` | none |
 | `NEVER` | `FIX_REQUEST` |
 
+Four actions read first or stop, and a server states them itself:
+
+| Action | Meaning |
+| --- | --- |
+| `REREAD_AND_DECIDE` | Read the first resource that has a reader, decide again against what it says now, then write a changed request or none. The identical request is refused again. |
+| `READ_GRAPH_AND_REPLAN` | Read the dependency graph around the first `TASK`, then write only the edges that are still missing and close no cycle. |
+| `ASSIGN_AGENT` | Give the task an agent bound to a runner, then send the request again. |
+| `STAND_DOWN` | Stop. Read the resources it names to see where the work went. |
+
 The registry is in the contract. An unknown token passes through, and a client with no mapping for
 it falls back to the prose.
 
@@ -201,8 +239,8 @@ The Go transport's text is unchanged byte for byte. That covers the `refused:` o
 the same vectors. Legacy flat fields stay on every body, and `owner` and `requiredAction` are copied
 into the envelope verbatim.
 
-Not covered by v1: emitting the `recovery` block from the API. That belongs to the follow-up tasks
-built on this contract.
+The API emits the `recovery` block for the Project and Task refusals in §10. Other refusals are still
+read by inference.
 
 ## 6. Replaying under the same request id (`SAME_REQUEST_ID`)
 
@@ -301,6 +339,7 @@ follow-up), and a different payload under the same key writes nothing.
     `USER`).
   - `wait`: wait `afterSeconds`, or until the system changes the state.
   - `manual`: change the request, or check the state by hand.
+  - `stop`: send nothing more (`STAND_DOWN`).
 
   How each action code maps to a step:
 
@@ -309,6 +348,9 @@ follow-up), and a different payload under the same key writes nothing.
   | `RETRY`, `RETRY_SAME_REQUEST` | `invoke` the same call, only if this surface exposes it. `RETRY_SAME_REQUEST` also needs the call to have carried its request id. Otherwise `wait` (when there is an `afterSeconds`) or `manual`. |
   | `VERIFY_STATE` | `invoke` the reader of the first resource that has one: `TASK` → `task_get`, `SESSION` → `session_get`, `PROJECT` → `project_get`, or `orbit <type> get ID --json`. Only an id that is one safe path segment and does not start with `-` is handed on. With no reader, `manual`. |
   | `AWAIT_OWNER_DECISION` | `ask_user`. |
+  | `REREAD_AND_DECIDE` | `invoke` the reader of the first resource that has one (as `VERIFY_STATE`). `ask_user` when a confirmation is required, `manual` with no reader. |
+  | `READ_GRAPH_AND_REPLAN` | `invoke` `task_dependency_graph` (`orbit task dependency-graph ID --json`) on the first `TASK`. `ask_user` when a confirmation is required, `manual` without the capability. |
+  | `STAND_DOWN` | `stop`. |
   | none | `ask_user` when a confirmation is required or the actor is `USER`. `manual` on a `COMMITTED` write. `wait` when the actor is `SYSTEM` or there is an `afterSeconds`. Otherwise `manual`. |
   | anything else | `ask_user` when a confirmation is required, otherwise `manual`. |
 
@@ -336,7 +378,7 @@ offered again. Neither is a command whose stdin exceeded 256 KiB or was not UTF-
 Revision 2 also routes `whoami`, `api` and other flag-parsed command failures through the shared CLI
 boundary. API status errors retain their original human text while exposing the transport cause to
 the renderer. Commands without a `--json` mode and child-process passthrough commands are outside
-this JSON contract. Native API `recovery` production remains separate work.
+this JSON contract. The API states its own `recovery` block for the refusals in §10.
 
 The recovery tests include serialized MCP initialize/list/call responses validated with Ajv against
 the advertised output schema, pre-dispatch capability refusals, and real CLI subprocess failures
@@ -429,3 +471,59 @@ The chain, in order:
 
 `renderRecoveryNext` maps `CREATE_PROJECT_IN_CHILD_SESSION` to `ask_user` on every surface. Its
 reason names `session_create` when this surface exposes it, and the manual fallback when it does not.
+
+## 10. Project and Task refusals
+
+The API states the `recovery` block itself for the Project and Task refusals an agent most often meets.
+The wire contract is [`contracts/project-task-refusals.contract.json`](../contracts/project-task-refusals.contract.json),
+transcribed from `src/apiserver/src/common/refusal-recovery.ts`, which serves it. Each entry gives the
+code, its status, the doors that serve it, the stated block, and the body fields whose ids become
+`resources`. Where one code answers several rules, a legacy `requiredAction` token narrows the entry
+(`PROJECT_SCOPE_MISMATCH` re-reads the scope on `RE_DERIVE_SCOPE`, stops on `YIELD_TO_CURRENT_SCOPE`,
+and is filed at home on `FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF`).
+
+The block is attached once, at the exception boundary (`PublicIdExceptionFilter`), to any body whose
+code the table covers and that states no block of its own. Every message stays word for word what the
+door served before, so a client that matches on it keeps matching.
+
+| Code | Status | Disposition | Next step |
+| --- | --- | --- | --- |
+| `STALE_CONFIG_REVISION` | 409 | `AUTOMATIC` | `REREAD_AND_DECIDE`: `project_get`, then decide again. |
+| `PROJECT_SCOPE_MISMATCH` | 403 | `AUTOMATIC` / `STOP` | By rule, as above. |
+| `COORDINATOR_GENERATION_MOVED` | 409 | `STOP` | `STAND_DOWN`: a newer coordinator holds the scope. |
+| `UNMAPPED_PROJECT_WORK` | 403 | `HUMAN` | A person names the owning project. |
+| `PROJECT_REOPEN_REQUIRED`, `MOVE_TASK_SERVES_SETTLED_CRITERION` | 403 | `HUMAN` | The owner reopens the project. |
+| `CROSS_PROJECT_APPROVAL_REQUIRED`, `APPROVAL_PENDING`, `APPROVAL_EXPIRED` | 409 | `CONFIRM_THEN_RUN` | The owner confirms the crossing, which applies it. |
+| `APPROVAL_DENIED` | 409 | `AUTOMATIC` | File the work in the caller's own project. |
+| `APPROVAL_TARGET_MISMATCH` | 409 | `AUTOMATIC` | `FIX_REQUEST`. |
+| `PROJECT_NOT_EMPTY` | 409 | `CONFIRM_THEN_RUN` | The owner decides where the tasks go; the body names `taskCount`. |
+| `DEPENDENCY_SELF` | 400 | `AUTOMATIC` | `FIX_REQUEST`. |
+| `DEPENDENCY_CYCLE`, `DEPENDENCY_DUPLICATE` | 400, 409 | `AUTOMATIC` | `READ_GRAPH_AND_REPLAN`: `task_dependency_graph`, then recompute. |
+| `TASK_RETIRED` | 409 | `STOP` | `STAND_DOWN`; the successor is the first resource. |
+| `TASK_AGGREGATE_ONLY` | 409 | `STOP` | `STAND_DOWN`: its subtasks or verifier complete it. |
+| `TASK_PREREQUISITES_INCOMPLETE`, `TASK_PREREQUISITE_NOT_LANDED` | 400 | `WAIT` | Wait for the prerequisite. |
+| `TASK_PREREQUISITE_FAILED` | 400 | `AUTOMATIC` | `READ_GRAPH_AND_REPLAN`: a cancelled or failed prerequisite does not lift by waiting. |
+| `TASK_LIST_PAUSED`, `TASK_ASSIGNEE_NO_RUNNER`, `PROJECT_PAUSED` | 400, 409 | `HUMAN` | The owner resumes the list or project, or binds a runner. |
+| `PROJECT_NOT_STARTED` | 409 | `HUMAN` | The owner starts the project, asked by its coordinator. |
+| `TASK_NO_ASSIGNEE` | 400 | `AUTOMATIC` | `ASSIGN_AGENT`. |
+| `PROJECT_CANCELLED` | 409 | `STOP` | `STAND_DOWN`. |
+
+**Plan preflight.** `PLAN_PREFLIGHT_FAILED` (400, `POST /tasks/batch-create` and `POST /runner/tasks/batch-create`)
+answers the whole plan once. `findings` holds every refusing finding and `warnings` every warning,
+each with its own block. `summary` counts them (`refusing`, `warnings`, `byDisposition`, `byCode`). The
+top-level `recovery` is `FIX_REQUEST`, with the disposition of its most stuck finding
+(`STOP` > `HUMAN` > `CONFIRM_THEN_RUN` > `WAIT` > `AUTOMATIC`). It requires a confirmation only when that
+disposition is `CONFIRM_THEN_RUN`.
+
+**What a block never says.** `resources` are read only from id fields the throw site already put in
+the body, so no block names a row the body did not. A 404, a cross-tenant id and an authentication
+refusal have no entry: they are served exactly as before, and the same for another account's id as
+for an id that names nothing.
+
+Tests: `refusal-recovery.spec.ts` holds the table to the JSON, reads every entry back through the
+client parser as stated, and checks every scope rule against its entry. `recovery_refusals_test.go`
+renders every entry over the Go surface: a re-read is a `project_get` or `task_get`, a dependency
+refusal is `task_dependency_graph`, a delete or crossing is `ask_user`, a retired task is `stop`, a
+prerequisite is `wait`. `refusal-recovery.pg.spec.ts` serves the reachable ones from the production
+apiserver over PostgreSQL. It also shows that another account's ids, ids that name nothing and no
+credential at all get byte-identical answers, with no block and no id of the other account.

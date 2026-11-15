@@ -181,7 +181,14 @@ func TestRecoveryReportIsTheSameOverMCPAndCLIForEveryFixture(t *testing.T) {
 					!reflect.DeepEqual(cliReport.Next.Argv[1:], argv) {
 					t.Fatalf("retry: mcp %+v cli %+v", mcpReport.Next, cliReport.Next)
 				}
-			case "VERIFY_STATE":
+			case "READ_GRAPH_AND_REPLAN":
+				r := mcpReport.Error.Resources[0]
+				if r.Type != "TASK" || mcpReport.Next.Tool != "task_dependency_graph" ||
+					!reflect.DeepEqual(mcpReport.Next.Input, map[string]interface{}{"taskId": r.ID}) ||
+					!reflect.DeepEqual(cliReport.Next.Argv[1:], []string{"task", "dependency-graph", r.ID, "--json"}) {
+					t.Fatalf("graph: mcp %+v cli %+v", mcpReport.Next, cliReport.Next)
+				}
+			case "VERIFY_STATE", "REREAD_AND_DECIDE":
 				r := mcpReport.Error.Resources[0]
 				reader := recoveryReaders[r.Type]
 				if mcpReport.Next.Tool != reader[0] || !reflect.DeepEqual(mcpReport.Next.Input, map[string]interface{}{reader[1]: r.ID}) ||
@@ -353,9 +360,9 @@ func TestRecoveryNextNeverInvokesWhatIsNotExposed(t *testing.T) {
 			}
 		}
 	}
-	everything := fakeRecoverySurface{readable: map[string]bool{"task_get": true, "session_get": true, "project_get": true}, canAgain: true}
+	everything := fakeRecoverySurface{readable: map[string]bool{"task_get": true, "session_get": true, "project_get": true, "task_dependency_graph": true}, canAgain: true}
 	nothing := fakeRecoverySurface{}
-	allowed := map[string]bool{recoveryNextInvoke: true, recoveryNextAskUser: true, recoveryNextWait: true, recoveryNextManual: true}
+	allowed := map[string]bool{recoveryNextInvoke: true, recoveryNextAskUser: true, recoveryNextWait: true, recoveryNextManual: true, recoveryNextStop: true}
 	for _, env := range envs {
 		for _, sent := range []bool{false, true} {
 			full := renderRecoveryNext(env, everything, sent)
@@ -374,8 +381,11 @@ func TestRecoveryNextNeverInvokesWhatIsNotExposed(t *testing.T) {
 			}
 			action := *env.ActionCode
 			reads := full.Tool != "the_same_tool"
-			if reads && action != "VERIFY_STATE" {
+			if reads && action != "VERIFY_STATE" && action != "REREAD_AND_DECIDE" && action != "READ_GRAPH_AND_REPLAN" {
 				t.Fatalf("a read for %s", action)
+			}
+			if reads && action != "VERIFY_STATE" && env.UserConfirmation == "REQUIRED" {
+				t.Fatalf("a read-then-write step past a required confirmation: %+v", env)
 			}
 			if !reads {
 				if action != "RETRY" && action != "RETRY_SAME_REQUEST" {
