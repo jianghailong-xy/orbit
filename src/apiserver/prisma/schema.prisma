@@ -375,7 +375,7 @@ model User {
 
   /// The account's own Feishu (Lark) app, when it connected one (migration 0489).
   feishuApp        FeishuApp?
-  /// The GitHub account connected through the deployment's App, and connections in flight (migration 0870).
+  /// The GitHub account connected through the deployment's App, and connections in flight (migration 0820).
   githubConnection GithubConnection?
   githubOAuthFlows GithubOAuthFlow[]
   /// Owner-identity codes the account generated for its Feishu app and has not used yet (migration 0494).
@@ -738,7 +738,7 @@ model OAuthLoginFlow {
   @@map("oauth_login_flow")
 }
 
-/// The deployment's GitHub App (docs/github-workspace-design.md §4, migration 0870): one row, saved by an
+/// The deployment's GitHub App (docs/github-workspace-design.md §4, migration 0820): one row, saved by an
 /// administrator in Admin → Integrations. The client secret and the private key (PEM) are encrypted as a
 /// model provider's API key is (providers/provider-crypto.ts); the empty string is "none saved", and no
 /// response carries either. `slug` is what GitHub's GET /app answered at the save.
@@ -758,7 +758,7 @@ model GithubAppConfig {
   @@map("github_app_config")
 }
 
-/// The GitHub account an Orbit account connected through the App (migration 0870): at most one per
+/// The GitHub account an Orbit account connected through the App (migration 0820): at most one per
 /// account, and a GitHub account connects to one Orbit account only. Its user-to-server tokens are
 /// encrypted as GithubAppConfig's secrets are; an App whose user tokens never expire leaves the
 /// refresh token empty.
@@ -778,7 +778,7 @@ model GithubConnection {
   @@map("github_connection")
 }
 
-/// A GitHub connection in flight (migration 0870), from /integrations/github/start to its callback: one
+/// A GitHub connection in flight (migration 0820), from /integrations/github/start to its callback: one
 /// use, ten minutes. Keeps only the sha256 of its state and of the browser-binding cookie; the PKCE
 /// verifier as it is, since it is sent to GitHub with the code.
 model GithubOAuthFlow {
@@ -1492,7 +1492,7 @@ model Workspace {
   // platform without an answer) and must never be read as "full".
   workDirFreeBytes    BigInt?   @map("work_dir_free_bytes")
   workDirTotalBytes   BigInt?   @map("work_dir_total_bytes")
-  // A workspace cloned from GitHub (docs/github-workspace-design.md §4, migration 0870). All NULL for
+  // A workspace cloned from GitHub (docs/github-workspace-design.md §4, migration 0820). All NULL for
   // one that is not. The repository is named by its id, which survives a rename or a transfer.
   githubRepoId         BigInt?   @map("github_repo_id")
   githubInstallationId BigInt?   @map("github_installation_id")

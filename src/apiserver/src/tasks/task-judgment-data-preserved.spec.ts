@@ -3048,6 +3048,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0800_pool_login_token_subagent_credential',
       // 0810 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
       '0810_coordinator_handoff',
+      // 0820 adds github_app_config, github_connection and github_oauth_flow, and seven nullable workspace columns with
+      // one CHECK; no preserved rows, triggers or DONE fence change, and no row is written. Main stepped around this
+      // number (its 0830 says so), so it lands below main's 0830-0860.
+      '0820_github_app_connection',
       // 0830 adds two nullable schedule_run columns (not_before_at, held_reason) and a partial index, and widens
       // session_opened_by_check by 'SCHEDULE'; catalog-only but for the check's validating scan, `schedule_run` is none
       // of the preserved relations, no trigger, function or DONE fence changes, and no row is written.
@@ -3060,11 +3064,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0860 adds a nullable schedule_run.access_level, backfilled from schedule for started runs, and
       // workspace_permission_rule.from_schedule_run (NOT NULL with a constant default, no row marked); neither table is
       // one of the preserved relations, and no trigger, function or DONE fence changes.
-      '0860_schedule_check_only_asks',
-      // 0870 (renumbered from 0820, above main's 0830-0860) adds github_app_config, github_connection and
-      // github_oauth_flow, and seven nullable workspace columns with one CHECK; no preserved rows, triggers or DONE
-      // fence change, and no row is written.
-      '0870_github_app_connection'],
+      '0860_schedule_check_only_asks'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
