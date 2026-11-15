@@ -1650,7 +1650,7 @@ func TestMCPSessionSendAndInterruptPutTheSameRequestOnTheWire(t *testing.T) {
 	}); res["isError"] == true {
 		t.Fatalf("session_send errored: %#v", res["content"])
 	}
-	// …and without one, which is what every caller sent before: the server mints it.
+	// …and without one: the runner draws a key for the call.
 	if res := mcp.callTool("session_send", map[string]interface{}{
 		"sessionId": "child", "message": "adjust the tests",
 	}); res["isError"] == true {
@@ -1671,6 +1671,10 @@ func TestMCPSessionSendAndInterruptPutTheSameRequestOnTheWire(t *testing.T) {
 		t.Fatalf("session_interrupt errored: %#v", res["content"])
 	}
 
+	// The send that named no key carries one the runner drew for it.
+	if len(calls) > 1 {
+		takeDrawnKey(t, calls[1].body)
+	}
 	want := []call{
 		{"/api/runner/sessions/child/turns", map[string]interface{}{"message": "adjust the tests", "clientTurnId": "key-1"}},
 		{"/api/runner/sessions/child/turns", map[string]interface{}{"message": "adjust the tests"}},

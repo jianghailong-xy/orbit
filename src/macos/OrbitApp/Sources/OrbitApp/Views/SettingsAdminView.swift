@@ -33,7 +33,12 @@ struct SettingsView: View {
     @State private var recaps = true
     /// Settings › Translation: the account's switch (absent = off) and Your language.
     @State private var translation = false
+    /// Settings › Prompt optimizer: the account's switch. Absent on the server means off.
+    @State private var promptOptimizer = false
     @State private var translationLanguage: TranslationLanguage = .default
+    @State private var translationAgentLanguage: TranslationLanguage = .agentDefault
+    /// "Show both languages" (02-bilingual.png, mark A). Absent = off.
+    @State private var bilingual = false
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -123,6 +128,19 @@ struct SettingsView: View {
                 Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
                 Text(SettingsCopy.suggestedRepliesHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
+                // Prompt optimizer (board frame 1): under Suggested replies, off by default; a server
+                // without a DeepSeek key draws it disabled with frame 1b's notice.
+                Group {
+                    Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
+                    .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
+                    Text(PromptOptimizerCopy.hint)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                    if PromptOptimizer.unavailable(model.user) {
+                        Text(PromptOptimizerCopy.unavailable)
+                            .font(.orbitLabel).foregroundStyle(.orange)
+                    }
+                }
+                .disabled(PromptOptimizer.unavailable(model.user))
                 Toggle(SettingsCopy.sessionRecaps, isOn: $recaps)
                 Text(SettingsCopy.sessionRecapsHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
@@ -136,7 +154,7 @@ struct SettingsView: View {
             Section(TranslationCopy.title) {
                 Toggle(TranslationCopy.translateConversations, isOn: $translation)
                     .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
-                Text(TranslationCopy.translateConversationsHint)
+                Text(TranslationCopy.translateConversationsHint(translationAgentLanguage))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 if SessionTranslation.unavailable(model.user) {
                     Text(TranslationCopy.unavailable)
@@ -148,10 +166,18 @@ struct SettingsView: View {
                 .accessibilityIdentifier(TranslationCopy.languageIdentifier)
                 Text(TranslationCopy.yourLanguageHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
+                Picker(TranslationCopy.agentsWorkIn, selection: $translationAgentLanguage) {
+                    ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+                }
+                .accessibilityIdentifier(TranslationCopy.agentLanguageIdentifier)
                 Text(TranslationCopy.agentsWorkInHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                Text(TranslationCopy.footnote)
+                // Only while translation is on (mark A).
+                if translation {
+                    Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
+                        .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+                }
+                Text(TranslationCopy.bilingualFootnote + " " + TranslationCopy.footnote)
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
             .disabled(SessionTranslation.unavailable(model.user))
@@ -211,7 +237,12 @@ struct SettingsView: View {
         .onChange(of: promptSuggestions) { savePromptSuggestions() }
         .onChange(of: recaps) { saveRecaps() }
         .onChange(of: translation) { saveTranslation() }
+        .onChange(of: promptOptimizer) { savePromptOptimizer() }
         .onChange(of: translationLanguage) { saveTranslationLanguage() }
+        .onChange(of: translationAgentLanguage) { saveTranslationAgentLanguage() }
+        .onChange(of: bilingual) { saveBilingual() }
+        // Another client changed it: follow the account.
+        .onChange(of: model.user?.preferences?.translationBilingual) { bilingual = model.user?.preferences?.translationBilingual == true }
         .task { await model.accessTokens?.load() }
         .task { await model.runners?.load() }
         .onAppear {
@@ -228,7 +259,10 @@ struct SettingsView: View {
             promptSuggestions = p?.suggestedReplies ?? true
             recaps = p?.showRecaps ?? true
             translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+            promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true
             translationLanguage = SessionTranslation.language(p)
+            translationAgentLanguage = SessionTranslation.agentLanguage(p)
+            bilingual = p?.translationBilingual == true
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -285,15 +319,30 @@ struct SettingsView: View {
         Task { await model.savePreferences(UpdatePreferencesRequest(recaps: recaps)) }
     }
 
-    /// And for Settings › Translation's switch and language, each its own key.
+    /// And for Settings › Translation's switch and two languages, each its own key.
     private func saveTranslation() {
         guard (model.user?.preferences?.translationEnabled ?? false) != translation else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: translation)) }
     }
 
+    private func savePromptOptimizer() {
+        guard (model.user?.preferences?.promptOptimizer ?? false) != promptOptimizer else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: promptOptimizer)) }
+    }
+
+    private func saveBilingual() {
+        guard (model.user?.preferences?.translationBilingual ?? false) != bilingual else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationBilingual: bilingual)) }
+    }
+
     private func saveTranslationLanguage() {
         guard SessionTranslation.language(model.user?.preferences) != translationLanguage else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationLanguage: translationLanguage.rawValue)) }
+    }
+
+    private func saveTranslationAgentLanguage() {
+        guard SessionTranslation.agentLanguage(model.user?.preferences) != translationAgentLanguage else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationAgentLanguage: translationAgentLanguage.rawValue)) }
     }
 }
 

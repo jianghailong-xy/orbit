@@ -1,5 +1,12 @@
 package io.orbitd.android.reader
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import android.content.Context
 import androidx.compose.foundation.*
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +58,7 @@ import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
+import io.orbitd.android.composer.ManagedRunnerAsleepLine
 import io.orbitd.android.composer.SessionPendingTray
 import io.orbitd.android.cards.AnsweredQuestions
 import io.orbitd.android.cards.CardFocus
@@ -537,9 +545,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val mainCheckoutResults = remember(state.window.events) {
         state.window.events.filter { it.type == "system" }.mapNotNull { e -> MainCheckout.resultNotice(e.fields)?.let { e.seq to it } }
     }
+    // A SubAgent's finished line points back at the delegate card its run was started from, when that card is drawn.
+    val delegateCalls = remember(state.window.events) { delegateCallsByRun(state.window.events) }
+    val subagentJump: (String) -> (() -> Unit)? = { runId ->
+        delegateCalls[runId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
-        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns) {
+        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns, LocalSubagentCardJump provides subagentJump) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -574,9 +587,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // A state the capsule reads, like `offTail`: the bar keeps the content it is first handed.
         val handingOver by rememberUpdatedState(CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true)
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
-            if (handingOver) HandingOverCapsule()
-            else if (here != null && (here.side == ReaderSide.ABOVE || offTail)) WaitingCapsule(here) { showWaiting(here.rowId) }
-            else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+            // One capsule changing between them (08-motion ⑤): the old words leave upward, the new come in from below.
+            val saysWaiting = !handingOver && here != null && (here.side == ReaderSide.ABOVE || offTail)
+            AnimatedContent(handingOver to saysWaiting, transitionSpec = {
+                (slideInVertically { it / 2 } + fadeIn()) togetherWith (slideOutVertically { -it / 2 } + fadeOut()) using SizeTransform(clip = false)
+            }, label = "header-capsule") { (handing, waitingNow) ->
+                if (handing) HandingOverCapsule()
+                else if (waitingNow && here != null) WaitingCapsule(here) { showWaiting(here.rowId) }
+                else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+            }
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
@@ -846,11 +865,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 if (handoff?.state == "COMPLETED") HandedOverBanner(handoff.handedOverTo) { open(OrbitRoute(Destination.SESSION, it)) }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
-                else Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
+                else {
+                    // The session's runner is the account's managed runner, asleep: the shared composer line, and sending stays open — a
+                    // message wakes it (coordinator comment 34xSUx9zU5vQtCEYNoqwu). Not while a handoff locks the composer: sending
+                    // does not work then, and the line would say it does.
+                    ManagedRunnerAsleepLine(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceOfSession) }?.runnerId,
+                        composerLocked = handoff?.locksComposer == true)
+                    Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
                     openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) }) }
+                }
             }
         }
         }

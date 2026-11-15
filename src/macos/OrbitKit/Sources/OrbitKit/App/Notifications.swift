@@ -147,6 +147,9 @@ public enum AppIntent: Equatable, Sendable {
     /// A terminal asking to be approved (push kind `terminal-login`): where its card is — the machine page's
     /// Needs you section (docs/mocks/waiting-on-you-removal/02 ④).
     case openTerminalRequests
+    /// A scheduled task's alert (push kind `schedule`, apiserver `PushService.notifySchedule`): the run's session when
+    /// it names one, else the schedule's detail on the Scheduled page (docs/scheduled-tasks-design.md §7.3).
+    case openSchedule(scheduleID: String, sessionID: String?)
 }
 
 public enum Notifications {
@@ -161,6 +164,9 @@ public enum Notifications {
     public static let actionOwnerRequestLater = "OWNER_REQUEST_LATER"
     /// `userInfo` key naming the owner request an alert is about (apiserver `PushService.notifyOwnerRequest`).
     public static let keyOwnerRequest = "ownerRequestID"
+    /// A scheduled task's alert: its push kind, and the key naming the schedule.
+    public static let scheduleKind = "schedule"
+    public static let keySchedule = "scheduleID"
 
     /// The category the server files an owner request's alert under, one per kind
     /// (apiserver `ownerRequestPushCategory`), so each kind's first action can say what it opens.
@@ -268,6 +274,10 @@ public enum Notifications {
             return userInfo[keyProject].map { .openProject(projectID: $0) }
         }
         if userInfo[keyKind] == "terminal-login" { return .openTerminalRequests }
+        // A scheduled task's alert opens its run's session or the schedule; never the owner-request actions below.
+        if userInfo[keyKind] == scheduleKind, let schedule = userInfo[keySchedule] {
+            return .openSchedule(scheduleID: schedule, sessionID: userInfo[keySession])
+        }
         // An owner request's actions open its card or put it off; a plain tap — the alert itself or
         // its Later reminder — opens the conversation that asked, on the same card. Everything it
         // needs is the request's own id, which the app resolves to `askedBySessionId`.

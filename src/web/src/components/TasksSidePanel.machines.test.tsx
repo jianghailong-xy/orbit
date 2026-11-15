@@ -1,0 +1,179 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, useLocation } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TasksSidePanel } from './TasksSidePanel';
+
+/**
+ * The account menu's Machines row: every machine a level down with its state, each opening its Settings page,
+ * and Add a machine under them. With no machine yet the row itself adds the first.
+ */
+
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  api: vi.fn(),
+}));
+vi.mock('../lib/theme', () => ({ useThemeMode: () => ({ mode: 'system', setMode: () => {} }) }));
+const { api } = await import('../api');
+
+let container: HTMLDivElement | null = null;
+let root: Root | null = null;
+let pathname = '';
+
+function RouterProbe() {
+  pathname = useLocation().pathname;
+  return null;
+}
+
+let runners: unknown[] = [];
+
+function serve() {
+  vi.mocked(api).mockImplementation((async (path: string) => {
+    if (path === '/projects/sidebar') return [];
+    if (path === '/runners') return runners;
+    if (path === '/workspaces') return [];
+    if (path === '/sessions/counts') return [];
+    if (path === '/users/me') return { id: 'me', name: 'Me', email: 'me@example.com', role: 'MEMBER', avatarUpdatedAt: null };
+    if (path === '/wiki/spaces') return [];
+    throw new Error(`unstubbed ${path}`);
+  }) as never);
+}
+
+async function settle(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+}
+
+async function visit(path: string): Promise<void> {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  const next = createRoot(container);
+  root = next;
+  await act(async () => {
+    next.render(
+      <MemoryRouter initialEntries={[path]}>
+        <QueryClientProvider client={client}>
+          <TasksSidePanel />
+          <RouterProbe />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+  });
+  await settle();
+}
+
+async function openAccountMenu(): Promise<void> {
+  const trigger = container!.querySelector<HTMLButtonElement>('.tp-user-trigger')!;
+  await act(async () => trigger.click());
+  await settle();
+}
+
+const accountRow = (label: string) =>
+  [...document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')].find((row) =>
+    row.textContent?.startsWith(label),
+  );
+
+async function press(row: HTMLElement | undefined): Promise<void> {
+  if (!row) throw new Error('no such row');
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+  await settle();
+}
+
+beforeEach(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }));
+});
+
+afterEach(async () => {
+  if (root) {
+    const mounted = root;
+    await act(async () => mounted.unmount());
+  }
+  container?.remove();
+  container = null;
+  root = null;
+  runners = [];
+  document.body.innerHTML = '';
+  vi.unstubAllGlobals();
+  vi.mocked(api).mockReset();
+});
+
+describe('Machines in the account menu', () => {
+  it('sits under Appearance and says how many machines are online', async () => {
+    runners = [
+      { id: 'r1', name: 'mbp', displayName: 'MacBook Pro', online: true },
+      { id: 'r2', name: 'build-box', online: true },
+      { id: 'r3', name: 'old-linux', online: false },
+    ];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+
+    const labels = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu > [role="menuitem"]')]
+      .filter((row) => !row.classList.contains('tp-account-profile'))
+      .map((row) => row.textContent);
+    expect(labels).toEqual(['AppearanceSystem', 'Machines2 of 3 online', 'Settings', 'Log out']);
+    expect(accountRow('Machines')!.getAttribute('aria-haspopup')).toBe('menu');
+  });
+
+  it('lists each machine with its state, and opens its Settings page', async () => {
+    runners = [
+      { id: 'r1', name: 'mbp', displayName: 'MacBook Pro', online: true },
+      { id: 'r3', name: 'old-linux', online: false },
+    ];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    await press(accountRow('Machines'));
+    await act(async () => {
+      await vi.waitFor(() => expect(accountRow('MacBook Pro')).toBeDefined(), { timeout: 5_000, interval: 20 });
+    });
+
+    expect(accountRow('MacBook Pro')!.textContent).toBe('MacBook Pro');
+    expect(accountRow('MacBook Pro')!.querySelector('.tp-account-machine-dot')!.getAttribute('data-online')).toBe('true');
+    expect(accountRow('old-linux')!.textContent).toBe('old-linuxOffline');
+    expect(accountRow('old-linux')!.querySelector('.tp-account-machine-dot')!.getAttribute('data-online')).toBe('false');
+    expect(accountRow('Add a machine')).toBeDefined();
+
+    await press(accountRow('old-linux'));
+    expect(pathname).toBe('/settings/machines/r3');
+  });
+
+  it('reads All online when none is down', async () => {
+    runners = [{ id: 'r1', name: 'mbp', online: true }];
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    expect(accountRow('Machines')!.textContent).toBe('MachinesAll online');
+  });
+
+  it('with no machine yet, reads None and adds the first', async () => {
+    serve();
+    await visit('/projects');
+    await openAccountMenu();
+    const machines = accountRow('Machines')!;
+    expect(machines.textContent).toBe('MachinesNone');
+    expect(machines.hasAttribute('aria-haspopup')).toBe(false);
+
+    await press(machines);
+    expect(pathname).toBe('/settings/machines/new');
+  });
+});

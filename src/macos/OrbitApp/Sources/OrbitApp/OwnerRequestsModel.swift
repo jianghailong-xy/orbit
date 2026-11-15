@@ -16,6 +16,10 @@ final class OwnerRequestsModel {
     /// Every state, newest first: what a conversation draws its ended requests from.
     private(set) var all: [OwnerRequest] = []
     private(set) var savedSecrets: [AccountSecret] = []
+    /// The scheduled tasks' four kinds (failed, held, a run's approval, a run asking for more), pending: their
+    /// cards head the Scheduled page (docs/scheduled-tasks-design.md §6.4). There is no Waiting on you sheet
+    /// (docs/mocks/waiting-on-you-removal; the owner, 2026-11-16).
+    private(set) var scheduleItems: [ScheduleWaitingItem] = []
     /// Terminals asking to be approved (docs/terminal-session-design.md). Each waits ten minutes at most.
     /// Read here for the machine page's Needs you section (docs/mocks/waiting-on-you-removal/02).
     private(set) var terminalRequests: [TerminalRequest] = []
@@ -51,7 +55,9 @@ final class OwnerRequestsModel {
 
     func load() async {
         do {
-            assignIfChanged(\.open, try await api.ownerRequests(state: "open").requests)
+            let openList = try await api.ownerRequests(state: "open")
+            assignIfChanged(\.open, openList.requests)
+            assignIfChanged(\.scheduleItems, openList.scheduleItems.filter { $0.state == "PENDING" })
             assignIfChanged(\.all, try await api.ownerRequests(state: "all").requests)
             await loadTerminalRequests()
         } catch {

@@ -34,6 +34,11 @@ const setting = <K extends string>(
   description?: string,
 ): PersonalSetting & { anchor: K } => ({ anchor, path, title, description });
 
+/** The Translate conversations row's line, naming the language agents work in ("Agents work in"). */
+export function translationEnabledDescription(agentLanguage: string): string {
+  return `Agents read and write in ${agentLanguage}; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are.`;
+}
+
 export const PERSONAL_SETTINGS = {
   defaultPermissionMode: setting(
     'defaultPermissionMode',
@@ -53,6 +58,13 @@ export const PERSONAL_SETTINGS = {
     'Suggested replies',
     "When a Claude turn ends, the empty message box offers what you'd probably type next.",
   ),
+  // Board docs/mocks/prompt-optimizer frame 1: right under Suggested replies.
+  promptOptimizer: setting(
+    'promptOptimizer',
+    '/settings/general',
+    'Prompt optimizer',
+    "Show an Optimize button in the composer. DeepSeek rewrites your draft with this session's context; you review it before it replaces the draft.",
+  ),
   recaps: setting(
     'recaps',
     '/settings/general',
@@ -70,7 +82,7 @@ export const PERSONAL_SETTINGS = {
     'translationEnabled',
     '/settings/general',
     'Translate conversations',
-    'Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are.',
+    translationEnabledDescription('English'),
   ),
   translationLanguage: setting(
     'translationLanguage',
@@ -78,6 +90,7 @@ export const PERSONAL_SETTINGS = {
     'Your language',
     'What you write in, and what replies are shown in.',
   ),
+  translationBilingual: setting('translationBilingual', '/settings/general', 'Show both languages'),
   agentLanguage: setting('agentLanguage', '/settings/general', 'Agents work in', 'What the agent receives and answers in.'),
   notifySessionFinished: setting(
     'notifySessionFinished',

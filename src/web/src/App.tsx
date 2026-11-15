@@ -49,6 +49,7 @@ import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { OwnerRequestRedirect } from './pages/OwnerRequestRedirect';
+import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
@@ -314,6 +315,16 @@ export function App() {
             <Route path="providers" element={<ProvidersRedirect />} />
             <Route path="providers/*" element={<ProvidersRedirect />} />
             <Route path="admin/providers" element={<ProvidersRedirect />} />
+            {/* Scheduled tasks: a timeline with the inspector beside it, full-bleed so the inspector reaches the edge.
+                `?id=` opens one schedule, `?draft=` one draft. */}
+            <Route
+              path="scheduled"
+              element={
+                <FlushView>
+                  <ScheduledPage />
+                </FlushView>
+              }
+            />
             {/* The Waiting on you inbox is gone; its old address opens the session that filed the request. */}
             <Route path="waiting" element={<OwnerRequestRedirect />} />
             {/* Everything this account follows: watches, filed Active / Needs attention / Triggered

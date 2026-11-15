@@ -18,6 +18,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.composer.FollowManagedRunner
+import io.orbitd.android.composer.ManagedRunner
+import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
@@ -86,8 +89,8 @@ internal class MachinesAndModelsModel(private val api: ManagementApi) {
         access[pool.id]?.let { ProviderPools.withAccess(pool, it, nowMs) } ?: pool
     }
 
-    fun attention(runners: List<JsonObject>, workspaces: List<JsonObject>, nowMs: Long) =
-        MachinesAndModels.attention(runners, workspaces, memberPools(nowMs), ownPools(nowMs), nowMs)
+    fun attention(runners: List<JsonObject>, workspaces: List<JsonObject>, nowMs: Long, managedRunnerId: String? = null) =
+        MachinesAndModels.attention(runners, workspaces, memberPools(nowMs), ownPools(nowMs), nowMs, managedRunnerId)
 }
 
 /**
@@ -98,7 +101,7 @@ internal class MachinesAndModelsModel(private val api: ManagementApi) {
 @Composable
 internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, record: String? = null) {
     val model = remember(api) { MachinesAndModelsModel(api) }
-    // Terminals asking to be approved head Needs you (docs/mocks/waiting-on-you-removal/02 ①); opened from the bar or the push
+    // Terminals asking to be approved head Needs you (docs/mocks/waiting-on-you-removal/02 ①); opened from the push
     // ([record] `terminal:<id>`), the page is at its top with that card lit.
     val terminalStore = remember(api) { TerminalRequestStore.of(api) }
     val terminals = rememberLiveTerminalRequests(terminalStore)
@@ -112,6 +115,21 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
     var adding by rememberSaveable { mutableStateOf(false) }
     var removing by remember { mutableStateOf<JsonObject?>(null) }
     val notice = remember { Notice() }
+    // The account's managed runner: nothing is read without the capability (no GET managed-runner), and no section or label without a
+    // display for it (docs/managed-runner-existing-account-entry-design.md).
+    val managed = rememberManagedRunner(api, ask = true)
+    FollowManagedRunner(managed, follow = resumed && managed.shown != null)
+    var confirmingSetup by remember { mutableStateOf(false) }
+    val managedStatus = managed.shown?.status
+    val managedRunnerId = managedStatus?.runnerId?.let { id -> machines.runners.firstOrNull { ObjectId.same(it.text("id"), id) }?.text("id") }
+    val managedRow = ManagedRunner.row(managedRunnerId, managedStatus)
+    // Set up: the server's answer names the runner, whose page opens; a refusal is the server's own sentence.
+    fun setUp() = scope.launch {
+        managed.ensure()
+        managed.refusal?.let { notice.show(it); return@launch }
+        machines.load()
+        managed.shown?.status?.runnerId?.let { open(OrbitRoute(Destination.RUNNER, it)) }
+    }
     // Each list is its own read, so they are asked for side by side. A machine checks in every 30s: the machines are read again every
     // 15 s while the page is up, so where each one stands — its row, and what needs you — moves with it, as a machine's own page does.
     LaunchedEffect(model, revision, resumed) {
@@ -145,7 +163,8 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
                 }
             }
             if (model.settled || terminals.isNotEmpty()) {
-                val attention = if (model.settled) model.attention(machines.runners, machines.workspaces, now) else emptyList()
+                val attention = if (model.settled) model.attention(machines.runners, machines.workspaces, now, managedRow?.let { managedRunnerId })
+                    else emptyList()
                 if (attention.isNotEmpty() || terminals.isNotEmpty()) NeedsYouSection(attention, {
                     TerminalRequestCards(terminals, terminalStore, litTerminal, notice::show)
                 }) { item ->
@@ -157,9 +176,15 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
                     }
                 }
             }
+            managed.shown?.takeIf { it.display.ensure && it.display.kind == "setup" }?.let { shown ->
+                ManagedRunnerSection(shown.display, busy = managed.busy) {
+                    // An account with a machine or a workspace is asked first (D3); a new one sets it up at once.
+                    if (machines.runners.isNotEmpty() || machines.workspaces.isNotEmpty()) confirmingSetup = true else setUp()
+                }
+            }
             if (machines.loaded && machines.runners.isNotEmpty()) {
                 FormSection(MachinesAndModels.MACHINES, MachinesAndModels.machinesCount(machines.runners), MachinesAndModels.MACHINES_DETAIL) {
-                    MachineRows(machines, now, ::runner) { removing = it }
+                    MachineRows(machines, now, ::runner, managedStatus) { removing = it }
                 }
             }
             FormSection(footer = RunnerCopy.ADD_FOOTER) { TextButton(onClick = { adding = true }) { Text(RunnerCopy.ADD) } }
@@ -178,11 +203,37 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
                 } }) { Text(RunnerCopy.REMOVE, color = Ink.red) }
             }, dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } })
     }
+    if (confirmingSetup) ManagedRunnerSetupConfirm(onDismiss = { confirmingSetup = false }) { confirmingSetup = false; setUp() }
     if (adding) AddRunnerDialog(api, onDismiss = { adding = false }) { id ->
         adding = false
         val ws = machines.workspacesOf(id).firstOrNull()?.text("id")
         open(OrbitRoute(Destination.DRAFT, workspaceId = ws, id = if (ws == null) id else null))
     }
+}
+
+/** Machines & models' Managed runner section (board 3): the managed runner the server offers this account, and its Set up. */
+@Composable
+internal fun ManagedRunnerSection(display: ManagedRunner.Display, busy: Boolean, setUp: () -> Unit) {
+    FormSection(ManagedRunner.Entry.TITLE) {
+        Row(Modifier.fillMaxWidth().clickable(enabled = !busy, role = Role.Button, onClick = setUp).padding(vertical = 8.dp)
+            .testTag("managed-runner-entry"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("+", Modifier.clearAndSetSemantics { }, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(display.title)
+                Text(ManagedRunner.Entry.SUBTITLE, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+            }
+            TextButton(enabled = !busy, onClick = setUp) { Text(ManagedRunner.Entry.ACTION) }
+        }
+    }
+}
+
+/** The question asked before Set up on an account that already has a machine or a workspace (D3). */
+@Composable
+internal fun ManagedRunnerSetupConfirm(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag("managed-runner-confirm"),
+        title = { Text(ManagedRunner.Confirm.TITLE) }, text = { Text(ManagedRunner.Confirm.BODY) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(ManagedRunner.Confirm.CONFIRM) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(ManagedRunner.Confirm.CANCEL) } })
 }
 
 /** A line for each thing that waits on a person, in the web's words, each with its way out: a machine's record, a pool's page; the

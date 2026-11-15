@@ -226,6 +226,9 @@ struct ComposerView: View {
     @State private var slashDismissed: String?
     /// Measured height of the `/` menu's rows — the floating card is sized from this (see slashMenu).
     @State private var slashHeight: CGFloat = 0
+    /// The translation tag's drawn width, which the text keeps clear of: "Portuguese → Indonesian" is
+    /// wider than "Chinese → English".
+    @State private var translationTagWidth: CGFloat = 104
     #if os(macOS)
     @FocusState private var inputFocused: Bool
     @State private var pasteMonitor: Any?
@@ -347,6 +350,11 @@ struct ComposerView: View {
         )
     }
 
+    /// The "Chinese → English" tag shows while the account translates and the box is empty.
+    private var showsTranslationTag: Bool {
+        SessionTranslation.isOn(app.user) && console.composerText.isEmpty
+    }
+
     /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
     /// docs/prompt-suggestions-design.md §4): the transcript's own `promptSuggestion`, held to the
     /// same authoritative record the Stop morph reads.
@@ -368,6 +376,46 @@ struct ComposerView: View {
             sendable: console.sendBlockedMessage == nil && console.runnerOnline != false
                 && session?.effectiveLifecycleState == .open)
     }
+
+    /// Frame 2's ✦ Optimize: the account has it on and the box holds a draft it can improve (the
+    /// web's rules, `PromptOptimizer.showsButton`); while a press is out it stays, as the busy button.
+    private var showsOptimize: Bool {
+        console.promptOptimizer.isOptimizing
+            || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)
+    }
+
+    /// Frame 4's card: above the composer on a Mac, the body of the sheet over it on a phone.
+    private func optimizationCard(_ optimization: PromptOptimization, sheet: Bool) -> some View {
+        PromptOptimizationCard(
+            optimization: optimization,
+            basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
+            showingGloss: $console.promptOptimizer.showingGloss,
+            glossLanguage: SessionTranslation.language(app.user?.preferences),
+            sheet: sheet,
+            use: { console.useOptimization(edit: false) },
+            editThenUse: editThenUseOptimization,
+            tryAgain: { console.retryOptimizePrompt() },
+            dismiss: { console.dismissOptimization() })
+    }
+
+    /// Edit, then use: Use, with the caret in the box. On a phone the sheet goes first, so the box
+    /// takes focus once it has.
+    private func editThenUseOptimization() {
+        #if os(iOS)
+        console.useOptimization(edit: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { requestFocus() }
+        #else
+        console.useOptimization(edit: true)
+        #endif
+    }
+
+    #if os(iOS)
+    /// The phone's sheet is up while there is a suggestion; swiped down, it is dismissed (draft kept).
+    private var optimizationSheetShown: Binding<Bool> {
+        Binding(get: { console.promptOptimizer.suggestion != nil },
+                set: { if !$0 { console.dismissOptimization() } })
+    }
+    #endif
 
     /// The composer's translation tag: Settings › Sessions, where Translation is.
     private func openTranslationSettings() {
@@ -455,6 +503,20 @@ struct ComposerView: View {
                 .background(.blue.opacity(0.1), in: Capsule())
             }
 
+            // Frame 6: the press failed; the draft below is untouched.
+            if console.promptOptimizer.failed {
+                PromptOptimizationFailureLine(retry: { console.retryOptimizePrompt() },
+                                              dismiss: { console.dismissOptimization() })
+            }
+
+            // Frame 4 on a Mac: the suggestion is a card above the composer; the box is untouched
+            // until Use. A phone shows the same card as a sheet (below).
+            #if os(macOS)
+            if let optimization = console.promptOptimizer.suggestion {
+                optimizationCard(optimization, sheet: false)
+            }
+            #endif
+
             // The composer card: staged attachments, the text across the whole width, and a toolbar
             // pinned to its foot — `+` and the mode on the left; the model control, the usage gauges
             // and Send on the right (web parity: `.composer-box` / `.composer-toolbar`). The text grows
@@ -476,12 +538,15 @@ struct ComposerView: View {
                         }
                     }
                     // Settings › Translation (6A): "Chinese → English" on the box's right while the
-                    // account translates; pressed, it opens the setting.
-                    .padding(.trailing, SessionTranslation.isOn(app.user) ? 112 : 0)
+                    // account translates; pressed, it opens the setting. Like the placeholder, it shows
+                    // only while the box is empty, so typed text gets the whole width.
+                    .padding(.trailing, showsTranslationTag ? translationTagWidth + 8 : 0)
                     .overlay(alignment: .topTrailing) {
-                        if SessionTranslation.isOn(app.user) {
+                        if showsTranslationTag {
                             ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
+                                                   agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),
                                                    open: openTranslationSettings)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { translationTagWidth = $0 }
                         }
                     }
                     .onChange(of: console.slashToken) { _, new in
@@ -533,7 +598,27 @@ struct ComposerView: View {
             // Raise the card (and with it the floating `/` card) above the notices stacked over it,
             // so nothing in this stack paints across the menu.
             .zIndex(1)
+
+            // Frame 5: after Use, Undo puts the owner's own draft back, for as long as the box still
+            // holds what Use put there, and for a few seconds.
+            if console.promptOptimizer.offersUndo(current: console.composerText) {
+                PromptOptimizationUndoToast { console.undoOptimization() }
+                    .task {
+                        try? await Task.sleep(nanoseconds: 8_000_000_000)
+                        console.promptOptimizer.forgetUndo()
+                    }
+            }
         }
+        #if os(iOS)
+        // Frame 4 on a phone: the suggestion is a sheet over the composer, with the same actions.
+        .sheet(isPresented: optimizationSheetShown) {
+            if let optimization = console.promptOptimizer.suggestion {
+                optimizationCard(optimization, sheet: true)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+        }
+        #endif
         // No gutter, surface or vertical padding of its own: the enclosing `ComposerBand` owns all
         // three for every member of the stack, so this can't drift away from the bars above it.
         //
@@ -612,6 +697,11 @@ struct ComposerView: View {
                 return .handled
             }
             .onKeyPress(.escape) {
+                // Esc dismisses the optimizer's card (or its failure line); the draft is kept.
+                if console.promptOptimizer.suggestion != nil || console.promptOptimizer.failed {
+                    console.dismissOptimization()
+                    return .handled
+                }
                 if showSlash {
                     slashDismissed = console.slashToken
                     return .handled
@@ -680,6 +770,14 @@ struct ComposerView: View {
                                            ? CursorRuntime.contextUnavailable : nil,
                                        modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil,
                                        actions: contextActions)
+            }
+            // Frame 2: ✦ Optimize beside Send once there is a draft; frame 3: busy, it cancels.
+            if showsOptimize {
+                PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing) { console.optimizePrompt() }
+                    #if os(macOS)
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                    #endif
+                    .layoutPriority(1)
             }
             sendControls
         }
@@ -1974,9 +2072,25 @@ private struct GrowingTextEditor: UIViewRepresentable {
         context.coordinator.doubleTap?.isEnabled = suggestion != nil
         view.accessibilityHint = suggestion.map { "Suggested reply: \($0)." }
         view.accessibilityCustomActions = suggestion == nil ? nil : [context.coordinator.useAction]
-        // Drive focus from the binding, but never fight the field's own responder state.
-        if isEditing, !view.isFirstResponder { view.becomeFirstResponder() }
-        else if !isEditing, view.isFirstResponder { view.resignFirstResponder() }
+        // Drive focus from the binding, but never fight the field's own responder state. Not from
+        // inside this update: a responder change runs SwiftUI's own focus bookkeeping, which re-enters
+        // the graph mid-update. Called here from a background scene update (device locked with the
+        // composer focused), that kept the main thread busy until the watchdog killed the app
+        // (0x8BADF00D in -[UITextView becomeFirstResponder]). So it waits for the next turn of the
+        // main loop and for a scene in the foreground (a background one is skipped; the next update applies it).
+        if isEditing != view.isFirstResponder {
+            DispatchQueue.main.async { [weak view, weak coordinator = context.coordinator] in
+                guard let view, let coordinator else { return }
+                let editing = coordinator.parent.isEditing
+                let scene = view.window?.windowScene?.activationState
+                if editing, !view.isFirstResponder,
+                   scene == .foregroundActive || scene == .foregroundInactive {
+                    view.becomeFirstResponder()
+                } else if !editing, view.isFirstResponder {
+                    view.resignFirstResponder()
+                }
+            }
+        }
     }
 
     /// Height for the proposed width, capped at `maxLines`. `UITextView.sizeThatFits` measures the

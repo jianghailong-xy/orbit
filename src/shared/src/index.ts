@@ -30,6 +30,7 @@ export * from './openCodeKeys';
 export * from './providerEngines';
 export * from './providerTransport';
 export * from './retry';
+export * from './recovery';
 export * from './searchTerms';
 export * from './sessionCreatedTasks';
 export * from './questionRecord';
@@ -54,6 +55,7 @@ export * from './wikiSystemModel';
 export * from './wikiChat';
 export * from './feishu';
 export * from './translation';
+export * from './prompt-optimizer';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
  *  freezes the web and macOS clients — one giant text node lays out synchronously on the
@@ -71,3 +73,4 @@ export * from './taskProgressCopy';
 export * from './push';
 export * from './orbit-turn-cards';
 export * from './mainCheckoutGit';
+export * from './schedule';

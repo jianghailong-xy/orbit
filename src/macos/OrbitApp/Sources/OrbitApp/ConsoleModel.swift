@@ -1982,6 +1982,15 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
+    /// The `delegate` call a SubAgent run was started from, by the run its result names — what a
+    /// SubAgent's finished line links back to — or nil where the loaded transcript holds none.
+    func delegateCard(forRun runId: String) -> String? {
+        for case .toolCall(let card) in reducer.state.items where card.name == SubagentBlock.toolName {
+            if SubagentFinishedText.delegateRunId(card.result) == runId { return card.id }
+        }
+        return nil
+    }
+
     /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
     /// transcript appearing again later does not jump back to it.
     func recordRequestFollowed(_ request: ScrollRequest) {
@@ -2044,6 +2053,71 @@ final class ConsoleModel {
     var welcomes = false
     /// Bumped to ask the composer to take focus (`fillFromWelcome`).
     var focusRequests = 0
+
+    // MARK: prompt optimizer (docs/prompt-optimizer-design.md, board docs/mocks/prompt-optimizer)
+
+    /// The composer's optimizer: the press in flight, the suggestion, the failure line, and what Use
+    /// put in the box (for Undo and `skipTranslation`). Every rule is `PromptOptimizerState`'s.
+    var promptOptimizer = PromptOptimizerState()
+    @ObservationIgnored private var optimizeTask: Task<Void, Never>?
+
+    /// ✦ Optimize pressed (frame 2): the draft goes to the server with this session — or, for a new
+    /// session, the workspace picked. Pressed while busy (frame 3), it cancels. Nothing in the box
+    /// changes until Use.
+    func optimizePrompt() {
+        if promptOptimizer.isOptimizing { cancelOptimizePrompt(); return }
+        let draft = composerText
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        promptOptimizer.start(draft: draft)
+        let request = PromptOptimizationRequest(draft: String(trimmed.prefix(ComposerLogic.maxPromptChars)),
+                                                sessionId: isDraft ? nil : sessionID,
+                                                workspaceId: isDraft ? draftAgent?.id : nil)
+        let api = self.api
+        optimizeTask?.cancel()
+        optimizeTask = Task { [weak self] in
+            do {
+                let result = try await api.optimizePrompt(request)
+                guard !Task.isCancelled, let self else { return }
+                self.promptOptimizer.succeeded(result)
+            } catch {
+                guard !Task.isCancelled, let self else { return }
+                self.promptOptimizer.failedNow()
+            }
+        }
+    }
+
+    /// The busy button pressed again: the press is dropped, the draft is as it was.
+    func cancelOptimizePrompt() {
+        optimizeTask?.cancel()
+        optimizeTask = nil
+        promptOptimizer.cancel()
+    }
+
+    /// Try again (frame 4's, or frame 6's failure line): the box's draft as it is now goes out again.
+    func retryOptimizePrompt() {
+        promptOptimizer.dismiss()
+        optimizePrompt()
+    }
+
+    /// × / Esc: the card (or the failure line) goes; the draft is kept.
+    func dismissOptimization() {
+        promptOptimizer.dismiss()
+    }
+
+    /// Use, or Edit, then use: the suggestion replaces the draft (attachments stay). Edit, then use
+    /// also puts the caret in the box; on a phone that is the only difference.
+    func useOptimization(edit: Bool) {
+        guard let text = promptOptimizer.use(current: composerText) else { return }
+        composerText = text
+        if edit { focusRequests += 1 }
+    }
+
+    /// Frame 5's Undo: the owner's own draft comes back.
+    func undoOptimization() {
+        guard let draft = promptOptimizer.undo(current: composerText) else { return }
+        composerText = draft
+    }
 
     /// A first message picked on the welcome card: into the composer, to be read, changed and sent
     /// there. Nothing is sent.
@@ -2250,6 +2324,12 @@ final class ConsoleModel {
         contextLoaded = true
         adoptServerSnapshot(s)
         agentName = s.agent?.name
+        // A scheduled task's run: its strip, its report and the cards it asked, drawn from the schedule reads.
+        scheduleRunID = s.scheduleRunId
+        // The run's head line reads this session's own state and engine: a run's session is in none of the app's
+        // lists, so this read is the only one that has them.
+        if s.scheduleRunId != nil { scheduleRunSession = s }
+        Task { [weak self] in await self?.refreshScheduleCards(force: true) }
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
         if let aid = s.agent?.id { agentID = aid }
@@ -3040,6 +3120,10 @@ final class ConsoleModel {
         // that hands the retried text to the composer, which never held it. The raw draft, so a
         // shell send comes back with its leading `!`.
         let draft = overrideText ?? composerText
+        // D2: unedited optimized English goes untranslated. Only the composer's own words can be.
+        let skipTranslation = fromComposer && promptOptimizer.skipTranslation(sending: draft)
+        // Send never waits for the optimizer: a press still out, or a card still open, goes.
+        if fromComposer { cancelOptimizePrompt(); promptOptimizer.dismiss() }
         let staged = pendingAttachments
         // What rides with this send: whatever it was handed, else the composer's own chips. A
         // retry hands in the attachments of the message it is re-sending — their bytes are on the
@@ -3091,7 +3175,9 @@ final class ConsoleModel {
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds,
-                                              queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)
+                                              queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
+                                              skipTranslation: skipTranslation)
+            if fromComposer { promptOptimizer.sent() }
             // An earlier send's "Couldn't send" is not true any more.
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             // A wiki chat's attachments went with it: its panel lets them go (`WikiChatModel.sent`).
@@ -3380,7 +3466,8 @@ final class ConsoleModel {
     /// message or is handed back the turn a lost attempt already queued, never a second one.
     private func postTurn(resuming: Bool, clientTurnId: String, text: String, shell: Bool,
                           attachmentIds: [String], queueForNextTurn: Bool = false,
-                          wikiContext: WikiChatContext? = nil) async throws -> TurnAccepted {
+                          wikiContext: WikiChatContext? = nil,
+                          skipTranslation: Bool = false) async throws -> TurnAccepted {
         // Built once, for the same reason the endpoint is chosen once: every attempt must send the
         // identical request, and the pills it reads stay editable while a retry waits.
         let resumeRequest = ResumeRequest(clientTurnId: clientTurnId, content: text,
@@ -3401,10 +3488,12 @@ final class ConsoleModel {
                                           // stopping this exact run, and only for this one send.
                                           stopSessionId: confirmedStopSessionID,
                                           // A wiki chat's page and selection, which revive it too.
-                                          wikiContext: wikiContext)
+                                          wikiContext: wikiContext,
+                                          skipTranslation: skipTranslation ? true : nil)
         let turnRequest = ComposerLogic.makeTurn(clientTurnId: clientTurnId, text: text,
                                                  shell: shell, attachmentIds: attachmentIds,
-                                                 queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)
+                                                 queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,
+                                                 skipTranslation: skipTranslation)
         // A run that is letting go frees the task within a couple of seconds, so this waits it out
         // rather than handing the reader a refusal about a situation that is already resolving.
         // The identical request goes back out — same `clientTurnId` — so the server either queues
@@ -3545,8 +3634,13 @@ final class ConsoleModel {
         sending = true
         defer { sending = false }
         do {
+            let skip = promptOptimizer.skipTranslation(sending: composerText)
+            cancelOptimizePrompt()
+            promptOptimizer.dismiss()
             let session = try await api.createSession(draftRequest(
-                agent, prompt: text, shell: shell, attachmentIds: attachmentIds, newWorkspace: newWorkspace))
+                agent, prompt: text, shell: shell, attachmentIds: attachmentIds, newWorkspace: newWorkspace,
+                skipTranslation: skip))
+            promptOptimizer.sent()
             composerText = ""
             pendingAttachments = []
             draftSessionCreated(session)
@@ -3594,7 +3688,7 @@ final class ConsoleModel {
     }
 
     private func draftRequest(_ agent: Agent, prompt: String, shell: Bool, attachmentIds: [String],
-                              newWorkspace: NewWorkspaceRequest?) -> CreateSessionRequest {
+                              newWorkspace: NewWorkspaceRequest?, skipTranslation: Bool = false) -> CreateSessionRequest {
         CreateSessionRequest(
             // Send the raw effort — "" (Default) included:
             // the pill is seeded from the agent's default, so an explicit Default must stick
@@ -3631,7 +3725,9 @@ final class ConsoleModel {
             // The folder page this draft was opened from, if any: the session is filed in it as
             // it is created (§3.3). Omitted for a draft from a list.
             folderId: draftFolderID,
-            newWorkspace: newWorkspace)
+            newWorkspace: newWorkspace,
+            // D2: the opening message is unedited optimized English. Only ever `true` or absent.
+            skipTranslation: skipTranslation ? true : nil)
     }
 
     private func draftSessionCreated(_ session: Session) {
@@ -4599,6 +4695,11 @@ final class ConsoleModel {
             case .crossingBatch(let batchID):
                 // Answered on its card, by pressing.
                 return waiting(crossingBatch(batchID)?.isLive == true, question: false)
+            case .scheduleCard(let requestID):
+                // Create or Allow on the card itself, by pressing.
+                return waiting(scheduleCard(requestID)?.isPending == true, question: false)
+            case .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+                return nil
             }
         }
         // Oldest in the CONVERSATION first — which is not the order these were delivered in, now
@@ -5157,6 +5258,108 @@ final class ConsoleModel {
     /// The owner requests of this conversation still pending, by storage key.
     private(set) var pendingOwnerRequests: Set<String> = []
 
+    // MARK: scheduled tasks (docs/scheduled-tasks-design.md §8.1, §4, §7.4)
+
+    /// The scheduled tasks' cards this conversation asked and the changes it made, as last read.
+    private(set) var scheduleCards: SessionScheduleCardsResponse?
+    /// The scheduled task's run this session is, from its own read; nil for every other session.
+    private(set) var scheduleRunID: String?
+    /// That run and its schedule, once found; the detail for whether its finding was new and told.
+    private(set) var scheduleRun: (schedule: ScheduleView, run: ScheduleRunView)?
+    private(set) var scheduleRunDetail: ScheduleDetailResponse?
+    /// This run's session as its own read answered, for the head line's state and engine.
+    private(set) var scheduleRunSession: Session?
+    private var loadingScheduleCards = false
+    private var lastScheduleRead = Date.distantPast
+
+    func scheduleCard(_ requestID: String) -> ScheduleCard? {
+        let key = PublicID.storageKey(requestID)
+        return scheduleCards?.cards.first { PublicID.storageKey($0.id) == key }
+    }
+
+    func scheduleRecord(scheduleID: String, revision: Int) -> ScheduleChangeRecord? {
+        let key = PublicID.storageKey(scheduleID)
+        return scheduleCards?.records.first { PublicID.storageKey($0.scheduleId) == key && $0.revision == revision }
+    }
+
+    /// Read the conversation's schedule cards and records, and draw each where it happened (its `createdAt`),
+    /// in the order they happened; a run's session also gets its strip at the head and its report after its end.
+    /// Runs when the session's context loads, with the evidence reads (reconnect, a row's waiting count moving),
+    /// and after every press on one of them.
+    func refreshScheduleCards(force: Bool = false) async {
+        guard !isDraft, !loadingScheduleCards else { return }
+        if !force, Date().timeIntervalSince(lastScheduleRead) < Self.rulerReadThrottle { return }
+        lastScheduleRead = Date()
+        loadingScheduleCards = true
+        defer { loadingScheduleCards = false }
+        let read = try? await api.sessionScheduleCards(sessionID: sessionID)
+        if let read {
+            if scheduleCards != read { scheduleCards = read }
+            var said: [(at: String, kind: DeliveredDecisionCard.Kind)] = []
+            for card in read.cards {
+                said.append((at: card.createdAt, kind: DeliveredDecisionCard.Kind.scheduleCard(requestID: card.id)))
+            }
+            for record in read.records {
+                said.append((at: record.createdAt,
+                             kind: DeliveredDecisionCard.Kind.scheduleRecord(scheduleID: record.scheduleId,
+                                                                             revision: record.revision)))
+            }
+            let order: (String) -> Date = { RelativeTime.parse($0) ?? Date.distantPast }
+            for item in said.sorted(by: { order($0.at) < order($1.at) }) {
+                deliver(item.kind, placement: .at(item.at))
+            }
+        }
+        if let run = read?.run {
+            await adoptScheduleRun(run)
+        } else {
+            await findScheduleRun()
+        }
+    }
+
+    /// The run the session read named (W2): its schedule and findings from the schedule's own read.
+    private func adoptScheduleRun(_ run: ScheduleRunView) async {
+        guard let detail = try? await api.schedule(run.scheduleId) else { return }
+        scheduleRun = (detail.schedule, run)
+        scheduleRunDetail = detail
+        deliver(.scheduleRunStrip(runID: run.id), placement: .at(run.plannedAt))
+        if let ended = run.endedAt, ScheduleDisplay.runEnded(run.state) {
+            deliver(.scheduleRunReport(runID: run.id), placement: .at(ended))
+        }
+    }
+
+    /// The run this session is, found among the account's schedules, for a server whose session read names no run
+    /// (a run's session is in no list: it is reached from the schedule's history or a notification, §7.4).
+    private func findScheduleRun() async {
+        guard let runID = scheduleRunID else { return }
+        let key = PublicID.storageKey(runID)
+        var found: (ScheduleView, ScheduleRunView)?
+        if let current = scheduleRun, PublicID.storageKey(current.run.id) == key {
+            if let runs = try? await api.scheduleRuns(current.schedule.id),
+               let run = runs.first(where: { PublicID.storageKey($0.id) == key }) {
+                found = (current.schedule, run)
+            }
+        } else if let schedules = try? await api.schedules(state: "all") {
+            for schedule in schedules {
+                if let last = schedule.lastRun, PublicID.storageKey(last.id) == key {
+                    found = (schedule, last)
+                    break
+                }
+                guard let runs = try? await api.scheduleRuns(schedule.id) else { continue }
+                if let run = runs.first(where: { PublicID.storageKey($0.id) == key }) {
+                    found = (schedule, run)
+                    break
+                }
+            }
+        }
+        guard let found else { return }
+        scheduleRun = (found.0, found.1)
+        scheduleRunDetail = try? await api.schedule(found.0.id)
+        deliver(.scheduleRunStrip(runID: found.1.id), placement: .at(found.1.plannedAt))
+        if let ended = found.1.endedAt, ScheduleDisplay.runEnded(found.1.state) {
+            deliver(.scheduleRunReport(runID: found.1.id), placement: .at(ended))
+        }
+    }
+
     // MARK: cross-project requests into this project
 
     /// The project's handoffs as last read, both directions; nil while unread.
@@ -5649,6 +5852,9 @@ final class ConsoleModel {
     /// event, and there may not be one.
     func refreshEvidenceDecisions(force: Bool = false) async {
         guard !isDraft else { return }
+        // The schedule cards ride every door this read does: a card is asked or a change made while the reader
+        // is elsewhere, and only reading again finds it.
+        Task { [weak self] in await self?.refreshScheduleCards() }
         if loadingEvidence {
             if force { evidenceReadOwed = true }
             return

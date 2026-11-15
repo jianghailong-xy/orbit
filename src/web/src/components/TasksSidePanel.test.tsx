@@ -112,7 +112,8 @@ describe('TasksSidePanel nav', () => {
     // Providers became the one Infrastructure (docs/mocks/infrastructure-page), which, renamed Machines &
     // models, moved to Settings and the account menu (docs/mocks/machines-and-models, 02). Waiting on
     // you left (docs/mocks/waiting-on-you-removal): a request lights the row of the session that filed it.
-    expect(keys).toEqual(['projects', 'tasks', 'wiki']);
+    // Scheduled keeps its own entry and count.
+    expect(keys).toEqual(['projects', 'tasks', 'scheduled', 'wiki']);
     // The rows' own group head (WorkspacesHead) names them the way Projects names its rows; it is
     // no destination, so it is no TOP entry either.
     expect(source).not.toContain('tp-workspaces-head');

@@ -5,13 +5,13 @@ import { TRANSLATION_TIMEOUT_MS } from '@orbit/shared';
 import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { SessionsService } from './sessions.service';
 import { protectVerbatim, restoreVerbatim, translate, TranslationFailed, translationAvailable } from './translation';
-import { ownerTranslationLanguage } from './turn-translation';
+import { translationLanguages } from './turn-translation';
 
 /**
  * Settings › Translation, the owner's messages (task A1, @orbit/shared translation.ts): with a stubbed
- * DeepSeek, a translated message is delivered in English with the owner's words kept; a failure or the
- * 20 s timeout holds it undelivered; Retry and Send as written release it; translation off, or no
- * server key, leaves a send exactly as it was.
+ * DeepSeek, a translated message is delivered in the account's agent language (absent = English) with the
+ * owner's words kept; a failure or the 20 s timeout holds it undelivered; Retry and Send as written release
+ * it; translation off, no server key, or the owner's language the agent's, leaves a send exactly as it was.
  *
  * "Delivered" here is the turn the runner's inbox hands out: status PENDING (HELD is never leased — the
  * inbox and the claim read PENDING / IN_FLIGHT only, which turn-translation.pg.spec.ts proves on a real
@@ -212,20 +212,32 @@ test('translate fails on the 20 s timeout, on an error answer, and without a key
   await assert.rejects(translate(ORIGINAL, 'zh-Hans', 'en'), (e: unknown) => e instanceof TranslationFailed && e.reason === 'NO_KEY');
 });
 
-test('the owner preference: absent is off, a language defaults to zh-Hans, and no key means none', async () => {
+test('the owner preference: absent is off, a language defaults to zh-Hans, the agent\'s to English, and no key means none', async () => {
   const db = (preferences: unknown) => ({ user: { findUnique: async () => ({ preferences }) } });
-  assert.equal(await ownerTranslationLanguage(db({}), OWNER_ID), null);
-  assert.equal(await ownerTranslationLanguage(db({ translationEnabled: false, translationLanguage: 'ja' }), OWNER_ID), null);
-  assert.equal(await ownerTranslationLanguage(db({ translationEnabled: true }), OWNER_ID), 'zh-Hans');
-  assert.equal(await ownerTranslationLanguage(db({ translationEnabled: true, translationLanguage: 'ja' }), OWNER_ID), 'ja');
+  assert.equal(await translationLanguages(db({}), OWNER_ID), null);
+  assert.equal(await translationLanguages(db({ translationEnabled: false, translationLanguage: 'ja' }), OWNER_ID), null);
+  assert.deepEqual(await translationLanguages(db({ translationEnabled: true }), OWNER_ID), { owner: 'zh-Hans', agent: 'en' });
+  assert.deepEqual(await translationLanguages(db({ translationEnabled: true, translationLanguage: 'ja' }), OWNER_ID), { owner: 'ja', agent: 'en' });
+  assert.deepEqual(
+    await translationLanguages(db({ translationEnabled: true, translationLanguage: 'zh-Hans', translationAgentLanguage: 'ja' }), OWNER_ID),
+    { owner: 'zh-Hans', agent: 'ja' },
+  );
+  // A value outside the list reads as the default, as the owner language does.
+  assert.deepEqual(
+    await translationLanguages(db({ translationEnabled: true, translationAgentLanguage: 'klingon' }), OWNER_ID),
+    { owner: 'zh-Hans', agent: 'en' },
+  );
+  // The same language on both sides: nothing to translate.
+  assert.equal(await translationLanguages(db({ translationEnabled: true, translationLanguage: 'ja', translationAgentLanguage: 'ja' }), OWNER_ID), null);
+  assert.equal(await translationLanguages(db({ translationEnabled: true, translationLanguage: 'en' }), OWNER_ID), null);
   delete process.env.DEEPSEEK_API_KEY;
-  assert.equal(await ownerTranslationLanguage(db({ translationEnabled: true, translationLanguage: 'ja' }), OWNER_ID), null);
+  assert.equal(await translationLanguages(db({ translationEnabled: true, translationLanguage: 'ja' }), OWNER_ID), null);
 });
 
 // ── the owner's message ────────────────────────────────────────────────────────────────────────
 
 test('translated: the engine is handed the English, the owner\'s words are kept, and the session wakes', async () => {
-  stubDeepSeek([ENGLISH]);
+  const bodies = stubDeepSeek([ENGLISH]);
   const h = harness();
   const answer = await h.send();
   // The send answers at once, held: nothing is deliverable and nothing was woken yet.
@@ -246,6 +258,46 @@ test('translated: the engine is handed the English, the owner\'s words are kept,
   assert.equal(h.session.status, RunStatus.PENDING);
   assert.equal(h.wakes.queue, 1);
   assert.ok(h.wakes.turnsChanged >= 2, 'clients are told when it was held and when it was released');
+  // No agent language on the account: English, as before.
+  assert.match(bodies[0].messages.find((m) => m.role === 'system')!.content, /from Chinese \(Simplified\) into English\./);
+});
+
+test('with a Japanese agent language the engine is handed Japanese; the wire still names the owner\'s language', async () => {
+  const JAPANESE = 'Safari でログインページの Google ログインが反応しません。⟦0⟧ を確認してください';
+  const bodies = stubDeepSeek([JAPANESE]);
+  const h = harness({ preferences: { translationEnabled: true, translationLanguage: 'zh-Hans', translationAgentLanguage: 'ja' } });
+  const answer = await h.send();
+  assert.deepEqual(answer.translation, { state: 'TRANSLATING', from: 'zh-Hans', original: ORIGINAL });
+  assert.equal(h.turns[0].status, 'HELD');
+  await h.service.translationsSettled();
+  assert.match(bodies[0].messages.find((m) => m.role === 'system')!.content, /from Chinese \(Simplified\) into Japanese\./);
+  const [turn] = h.turns;
+  assert.equal(turn.status, 'PENDING');
+  assert.equal(turn.content, JAPANESE.replace('⟦0⟧', '`signInWithPopup`'));
+  assert.equal(turn.displayPrompt, ORIGINAL);
+  assert.equal(turn.translationState, 'DONE');
+  assert.equal(turn.translationLang, 'zh-Hans');
+  assert.equal(h.wakes.queue, 1);
+});
+
+test('the owner\'s language the agent\'s: the message goes as written, with no hold and no translation', async () => {
+  for (const preferences of [
+    { translationEnabled: true, translationLanguage: 'ja', translationAgentLanguage: 'ja' },
+    { translationEnabled: true, translationLanguage: 'en' },
+  ]) {
+    const bodies = stubDeepSeek([ENGLISH]);
+    const h = harness({ preferences });
+    const answer = await h.send();
+    assert.equal(answer.translation, undefined, JSON.stringify(preferences));
+    assert.equal(h.turns[0].status, 'PENDING');
+    assert.equal(h.turns[0].content, ORIGINAL);
+    assert.equal(h.turns[0].displayPrompt, null);
+    assert.equal(h.turns[0].translationState, null);
+    assert.equal(h.session.status, RunStatus.PENDING);
+    assert.equal(h.wakes.queue, 1);
+    await h.service.translationsSettled();
+    assert.equal(bodies.length, 0);
+  }
 });
 
 test('a message sent while a turn runs is released into the queue behind it, and the inbox is told', async () => {
@@ -362,5 +414,25 @@ test('a platform delivery is never translated, even with the owner\'s switch on'
   await h.service.createTurn(OWNER_ID, SESSION_ID, { clientTurnId: 'platform-1', content: ORIGINAL, intent: 'NEXT_TURN' });
   assert.equal(h.turns[0].status, 'PENDING');
   assert.equal(h.turns[0].translationState, null);
+  assert.equal(bodies.length, 0);
+});
+
+test('skipTranslation (the prompt optimizer\'s English): the send is not held, carries no translation, and DeepSeek is not asked', async () => {
+  const bodies = stubDeepSeek([ENGLISH]);
+  const h = harness();
+  const answer = await h.service.createTurn(
+    OWNER_ID, SESSION_ID,
+    { clientTurnId: 'optimized-1', content: ENGLISH_RESTORED, intent: 'NEXT_TURN', skipTranslation: true },
+    { translate: true },
+  );
+  assert.equal(answer.translation, undefined);
+  assert.equal(h.turns[0].status, 'PENDING');
+  assert.equal(h.turns[0].content, ENGLISH_RESTORED);
+  assert.equal(h.turns[0].displayPrompt, null);
+  assert.equal(h.turns[0].translationState, null);
+  assert.equal(h.turns[0].translationLang, null);
+  assert.equal(h.session.status, RunStatus.PENDING);
+  assert.equal(h.wakes.queue, 1);
+  await h.service.translationsSettled();
   assert.equal(bodies.length, 0);
 });

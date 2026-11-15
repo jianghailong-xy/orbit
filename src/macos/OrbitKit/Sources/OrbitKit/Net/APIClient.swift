@@ -728,6 +728,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "status", value: status)])
     }
 
+    /// Prompt optimizer: DeepSeek improves a composer draft (docs/prompt-optimizer-design.md). One call
+    /// per press; 409 PROMPT_OPTIMIZER_OFF, 404, 400 and 422 PROMPT_OPTIMIZATION_FAILED throw.
+    public func optimizePrompt(_ req: PromptOptimizationRequest) async throws -> PromptOptimization {
+        try await post("prompt-optimizations", body: req)
+    }
+
     /// Settings › Translation: translate a held message again (FAILED → TRANSLATING).
     public func retryTurnTranslation(sessionID: String, turnId: String) async throws -> TranslationActionResponse {
         try await postEmpty("sessions/\(sessionID)/turns/\(turnId)/translation/retry")
@@ -2316,6 +2322,109 @@ public final class APIClient: @unchecked Sendable {
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         request.timeoutInterval = 45
         return try await send(request, cancellationAware: true)
+    }
+
+    // MARK: - scheduled tasks (docs/scheduled-tasks-design.md §9.1)
+
+    /// The account's schedules, each with its last run. `state` is a comma list (`ACTIVE,PAUSED,HELD`).
+    public func schedules(state: String? = nil, workspaceID: String? = nil) async throws -> [ScheduleView] {
+        try await scheduleList(state: state, workspaceID: workspaceID).schedules
+    }
+
+    /// The list with the runs of the page's window (W2), when the server sends them.
+    public func scheduleList(state: String? = nil, workspaceID: String? = nil) async throws -> ScheduleListResponse {
+        var query: [URLQueryItem] = []
+        if let state { query.append(URLQueryItem(name: "state", value: state)) }
+        if let workspaceID { query.append(URLQueryItem(name: "workspaceId", value: workspaceID)) }
+        return try await get("schedules", query: query)
+    }
+
+    /// The inspector: the schedule, its last runs, findings, this month's use, history and pending cards.
+    public func schedule(_ id: String) async throws -> ScheduleDetailResponse {
+        try await get("schedules/\(id)")
+    }
+
+    public func scheduleRuns(_ id: String, limit: Int = 20) async throws -> [ScheduleRunView] {
+        let list: ScheduleRunsResponse = try await get("schedules/\(id)/runs",
+                                                       query: [URLQueryItem(name: "limit", value: String(limit))])
+        return list.runs
+    }
+
+    public func pauseSchedule(_ id: String) async throws -> ScheduleControlAnswer {
+        try await postEmpty("schedules/\(id)/pause")
+    }
+
+    public func resumeSchedule(_ id: String) async throws -> ScheduleControlAnswer {
+        try await postEmpty("schedules/\(id)/resume")
+    }
+
+    /// Run now: one run outside the rule, counted against the week like any other.
+    public func runScheduleNow(_ id: String) async throws -> ScheduleRunAnswer {
+        try await postEmpty("schedules/\(id)/run")
+    }
+
+    /// Undo one revision: the change line's and the history's Undo.
+    public func undoSchedule(_ id: String, revision: Int) async throws -> ScheduleUpdateAnswer {
+        try await post("schedules/\(id)/undo", body: ScheduleUndoBody(revision: revision))
+    }
+
+    public func deleteSchedule(_ id: String) async throws -> ScheduleControlAnswer {
+        try await delete("schedules/\(id)")
+    }
+
+    public func stopScheduleRun(_ runID: String) async throws -> ScheduleRunAnswer {
+        try await postEmpty("schedule-runs/\(runID)/stop")
+    }
+
+    /// The cards waiting on the owner (`state=PENDING`), across conversations.
+    public func scheduleRequests(state: String = "PENDING") async throws -> [ScheduleCard] {
+        let list: ScheduleRequestsResponse = try await get("schedule-requests",
+                                                           query: [URLQueryItem(name: "state", value: state)])
+        return list.requests
+    }
+
+    public func scheduleRequest(_ id: String) async throws -> ScheduleCard {
+        try await get("schedule-requests/\(id)")
+    }
+
+    /// Allow a card. A create card that names no zone sends `timezone` (the device's IANA zone). A card the
+    /// server withdrew instead (409 SCHEDULE_REQUEST_STALE) comes back as `.stale`: shown, never retried.
+    public func allowScheduleRequest(_ id: String, timezone: String?) async throws -> ScheduleDecisionOutcome {
+        try await decideScheduleRequest("schedule-requests/\(id)/allow", body: ScheduleAllowBody(timezone: timezone))
+    }
+
+    public func declineScheduleRequest(_ id: String) async throws -> ScheduleDecisionOutcome {
+        try await decideScheduleRequest("schedule-requests/\(id)/decline", body: ScheduleAllowBody(timezone: nil))
+    }
+
+    private func decideScheduleRequest(_ path: String, body: ScheduleAllowBody) async throws -> ScheduleDecisionOutcome {
+        do {
+            let answer: ScheduleDecisionAnswer = try await post(path, body: body)
+            return .decided(answer.card)
+        } catch let APIError.http(status, text) where status == 409 {
+            if let text, let data = text.data(using: .utf8),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               object["code"] as? String == "SCHEDULE_REQUEST_STALE" {
+                return .stale(message: object["message"] as? String ?? "")
+            }
+            throw APIError.http(status: status, body: text)
+        }
+    }
+
+    /// The draft panel's cards: the account's PENDING create cards.
+    public func scheduleDrafts() async throws -> [ScheduleCard] {
+        let list: ScheduleDraftsResponse = try await get("schedules/drafts")
+        return list.drafts
+    }
+
+    /// The quick-add line: opens an ordinary session in `workspaceID` with the sentence; its agent drafts the card.
+    public func createScheduleDraft(workspaceID: String, text: String) async throws -> ScheduleDraftAnswer {
+        try await post("schedules/drafts", body: ScheduleDraftBody(workspaceId: workspaceID, text: text))
+    }
+
+    /// The cards a conversation asked and the changes it made, drawn in it.
+    public func sessionScheduleCards(sessionID: String) async throws -> SessionScheduleCardsResponse {
+        try await get("sessions/\(sessionID)/schedule-cards")
     }
 
     // MARK: - request plumbing

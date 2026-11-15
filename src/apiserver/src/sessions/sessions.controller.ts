@@ -62,6 +62,7 @@ import { ifNoneMatchHits, isOpenListView, openListEtag } from './open-list-versi
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
+import { translationEventOf } from './reply-translation';
 
 /** ~20s data-plane keepalive (mirrors EventsController): a `ping` data frame — Nest's @Sse can't
  *  emit raw `:` comments — sent on the per-session transcript stream so an *idle* session (one
@@ -92,6 +93,21 @@ const SSE_REPLAY_CAP = 200;
  * it would have to hold in memory anyway.
  */
 const SSE_GAP_CAP = 1000;
+
+/**
+ * Settings › Translation (reply-translation.ts): how far back a cursor'd connect looks for replies
+ * translated at or before its cursor, and how many of their translations it sends again.
+ *
+ * A reply's translation reaches a client once, as a live-only `translation` event, and lands in the
+ * reply's stored payload some seconds after the reply itself. A client whose stream was down at that
+ * moment (an iPhone suspends its socket in the background) resumes after the reply's seq, so neither
+ * the replay nor the live hub ever told it, and the reply kept its "Translates when the reply is
+ * done" chip for good. So the connect sends the newest ones again; every client folds a repeat into
+ * the event it already holds. The window bounds the scan behind the cursor; a translation lands
+ * within seconds of its reply, so it is never far behind.
+ */
+const SSE_TRANSLATION_WINDOW = 500;
+const SSE_TRANSLATION_RESEND = 10;
 
 /**
  * Cap the live events held while the replay query is in flight (see `replayThenLive`). The window
@@ -1158,6 +1174,25 @@ export class SessionsController {
     return this.sessions.getEventFull(user.userId, id, Math.trunc(n));
   }
 
+  /** The live `translation` events of the newest replies translated at or before `since`, oldest
+   *  first, sent again on a cursor'd connect (SSE_TRANSLATION_WINDOW). Best-effort: a failed read
+   *  sends none rather than failing the stream. */
+  private async translationsBehind(id: string, since: number): Promise<StreamedEvent[]> {
+    const rows = await this.prisma.$queryRaw<{ seq: number; translation: unknown; turnId: string | null }[]>`
+      SELECT seq, payload->'translation' AS translation, turn_id AS "turnId"
+      FROM run_event
+      WHERE session_id = ${id}::uuid
+        AND seq <= ${since} AND seq > ${since - SSE_TRANSLATION_WINDOW}
+        AND type IN (${RunEventType.ASSISTANT}, ${RunEventType.PROMPT_SUGGESTION})
+        AND payload->'translation' IS NOT NULL
+      ORDER BY seq DESC
+      LIMIT ${SSE_TRANSLATION_RESEND}
+    `.catch(() => []);
+    return rows
+      .flatMap((row) => translationEventOf({ seq: row.seq, payload: { translation: row.translation }, turnId: row.turnId }) ?? [])
+      .reverse();
+  }
+
   /** Replays a session's persisted events, then streams live ones over SSE. `maxPayload` trims
    *  bulky tool bodies on both halves alike (see truncate-payload), so a card looks the same
    *  whether it arrived by replay or live. */
@@ -1228,7 +1263,9 @@ export class SessionsController {
             // seq 0 like the other live-only control events, and lands before the dedup that would
             // otherwise swallow the second one.
             if (rows.length > SSE_GAP_CAP) return from([resyncEvent()]);
-            return from(rows);
+            return from(this.translationsBehind(id, seqFilter.gt)).pipe(
+              concatMap((resent) => from<StreamedEvent[]>([...rows, ...resent])),
+            );
           }),
         );
         // Only the live half can contain deltas — they are broadcast-only and never persisted, so

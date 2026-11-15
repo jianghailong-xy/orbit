@@ -155,7 +155,7 @@ final class RunnerUpdateCardTests: XCTestCase {
     func testTheRunnerPageDrawsTheCard() throws {
         let view = try String(contentsOf: try repoFile("src/macos/OrbitApp/Sources/OrbitApp/Views/SkillsRunnersView.swift"),
                               encoding: .utf8)
-        XCTAssertTrue(view.contains("if let card = RunnerPageFormat.updateCard(runner, now: now) {\n                updateSection(card)\n            }"),
+        XCTAssertTrue(view.contains("if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {\n                updateSection(card)\n            }"),
                       "the runner page does not draw the Update card")
         // The turns are one row array drawn by one ForEach; each row is `updateTurnRow`'s.
         XCTAssertTrue(view.contains("ForEach(card.turns, id: \\.id) { turn in\n                updateTurnRow(turn)\n            }"),

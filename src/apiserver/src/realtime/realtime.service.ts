@@ -1472,6 +1472,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   ): Promise<Record<string, unknown> | null> {
     switch (type) {
       case ControlEventType.SESSION_CREATED:
+        // A scheduled task's run enters no list (docs/scheduled-tasks-design.md §7.4, §12.1): an open list is not
+        // told about it. It is reached from its schedule's history and its notification.
+        if ((await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource === 'SCHEDULE') {
+          return null;
+        }
+      // falls through
       case ControlEventType.SESSION_UPDATED: {
         const summary = await this.buildSessionSummary(sessionId);
         // Null when the session vanished mid-flight.

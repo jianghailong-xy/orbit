@@ -1,6 +1,7 @@
 // Settings › Translation on the web (board docs/mocks/session-translation/01-board.png). The server
 // owns the feature (@orbit/shared translation.ts); everything here only reads the fields it writes.
 import {
+  DEFAULT_AGENT_LANGUAGE,
   DEFAULT_TRANSLATION_LANGUAGE,
   isTranslationLanguage,
   TRANSLATION_LANGUAGE_NAMES,
@@ -17,7 +18,6 @@ export const TRANSLATION_COPY = {
   translated: 'Translated',
   showOriginal: 'Show original',
   showTranslation: 'Show translation',
-  sentInEnglish: 'Sent to the agent in English',
   original: 'Original',
   translating: 'Translating…',
   sendFailed: "Couldn't translate, so it wasn't sent",
@@ -25,7 +25,21 @@ export const TRANSLATION_COPY = {
   sendAsWritten: 'Send as written',
   replyPending: 'Translates when the reply is done',
   replyFailed: "Couldn't translate this reply",
+  // "Show both languages" (docs/mocks/session-translation/02-bilingual.png).
+  sentToAgent: 'Sent to the agent in',
+  show: 'Show',
+  lines: 'lines',
 } as const;
+
+/** Under the owner's bilingual message: "Sent to the agent in English", naming the agent language. */
+export function sentToAgentLabel(agentLang: TranslationLanguage): string {
+  return `${TRANSLATION_COPY.sentToAgent} ${TRANSLATION_LANGUAGE_NAMES[agentLang]}`;
+}
+
+/** The collapsed original's press (board frame 3): "Show English · 9 lines", naming the agent language. */
+export function showEnglishLabel(lines: number, agentLang: TranslationLanguage): string {
+  return `${TRANSLATION_COPY.show} ${TRANSLATION_LANGUAGE_NAMES[agentLang]} · ${lines} ${TRANSLATION_COPY.lines}`;
+}
 
 /** The language the account writes and reads in, absent = the default pick. */
 export function translationLanguageOf(me: Me | undefined): TranslationLanguage {
@@ -33,14 +47,31 @@ export function translationLanguageOf(me: Me | undefined): TranslationLanguage {
   return isTranslationLanguage(lang) ? lang : DEFAULT_TRANSLATION_LANGUAGE;
 }
 
+/** The language agents work in ("Agents work in"), absent = English. */
+export function agentLanguageOf(me: Me | undefined): TranslationLanguage {
+  const lang = me?.preferences?.translationAgentLanguage;
+  return isTranslationLanguage(lang) ? lang : DEFAULT_AGENT_LANGUAGE;
+}
+
 /** Whether the owner's messages are being translated now: switched on, and the server able to. */
 export function translationOn(me: Me | undefined): boolean {
   return me?.preferences?.translationEnabled === true && me.translationAvailable === true;
 }
 
-/** The composer tag (6A): "<Language> → English", the language without its parenthesis. */
-export function translationTag(lang: TranslationLanguage): string {
-  return `${TRANSLATION_LANGUAGE_NAMES[lang].replace(/\s*\(.*\)$/, '')} → English`;
+/** Whether translated messages also show the agent-language text the agent read or wrote ("Show both
+ *  languages"): the account's switch, drawn only while translation itself is switched on. */
+export function bilingualOn(me: Me | undefined): boolean {
+  return me?.preferences?.translationEnabled === true && me.preferences.translationBilingual === true;
+}
+
+/** A language's name without its parenthesis: "Chinese (Simplified)" → "Chinese". */
+function shortLanguageName(lang: TranslationLanguage): string {
+  return TRANSLATION_LANGUAGE_NAMES[lang].replace(/\s*\(.*\)$/, '');
+}
+
+/** The composer tag (6A): "<Language> → <Agent language>", both without their parenthesis. */
+export function translationTag(lang: TranslationLanguage, agentLang: TranslationLanguage = DEFAULT_AGENT_LANGUAGE): string {
+  return `${shortLanguageName(lang)} → ${shortLanguageName(agentLang)}`;
 }
 
 /** A `user` event's or a turn row's `translation`, when it is one. */

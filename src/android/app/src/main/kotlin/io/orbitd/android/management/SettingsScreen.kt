@@ -33,6 +33,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.TerminalsApi
+import io.orbitd.android.core.promptoptimizer.PromptOptimizer
+import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.navigation.*
 import io.orbitd.android.translation.TranslationCopy
@@ -136,6 +138,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
     val smartSelectionChanged = LocalSmartSelectionChanged.current
     val recapsChanged = LocalSessionRecapsChanged.current
     val translationChanged = LocalTranslationChanged.current
+    val promptOptimizerChanged = LocalPromptOptimizerChanged.current
     val scope = rememberCoroutineScope()
     return { key, value ->
         scope.launch {
@@ -145,7 +148,8 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
                 "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
                 "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
                 "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
-                "translationEnabled", "translationLanguage" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
+                "translationEnabled", "translationLanguage", "translationAgentLanguage", "translationBilingual" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
+                "promptOptimizer" -> promptOptimizerChanged(PromptOptimizer.isOn(record.value as? JsonObject))
             }
         }
     }
@@ -295,7 +299,7 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
                 record.ready) { preference("defaultPermissionMode", JsonPrimitive(it)) }
         }
         // Settings › Translation (docs/mocks/session-translation, frame 9): one account-wide switch, absent = off, and the language
-        // the owner writes and reads in; agents always work in English, shown and not offered.
+        // the owner writes and reads in, and the one agents work in, both picked from the one list.
         TranslationGroup(record.value as? JsonObject, record.ready) { key, value -> preference(key, value) }
         SettingsGroup(null, footer = SESSION_ORCHESTRATION_HINT) {
             SettingsSwitch("Session orchestration", on("enableOrchestration"), record.ready) { preference("enableOrchestration", JsonPrimitive(it)) }
@@ -308,6 +312,9 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
         SettingsGroup(null, footer = SUGGESTED_REPLIES_HINT) {
             SettingsSwitch(SUGGESTED_REPLIES, on("promptSuggestions"), record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
         }
+        // Prompt optimizer (docs/mocks/prompt-optimizer, frame 1): under Suggested replies, off by default; a server without a DeepSeek
+        // key draws it disabled with frame 1b's notice (iOS SessionSettings' promptOptimizerSection).
+        PromptOptimizerGroup(record.value as? JsonObject, record.ready) { preference("promptOptimizer", JsonPrimitive(it)) }
         // The server's rolling recap on a session's list row (0418). One switch for the whole account, so turning it off holds on
         // the phone and on the web at once — the moment the server has taken the change, the lists behind Settings redraw without it.
         SettingsGroup(null, footer = SESSION_RECAPS_HINT) {
@@ -381,8 +388,8 @@ private fun SettingsSwitch(title: String, checked: Boolean, enabled: Boolean, ch
 
 /**
  * The Sessions page's Translation group (board frame 9; web SettingsPage's Translation card, iOS SessionSettings' Translation
- * section): the switch with what it does under it, Your language — a bottom sheet of the seven — and Agents work in, English and
- * read-only. A server without a DeepSeek key cannot translate ([user]'s `translationAvailable`): every row is drawn disabled under
+ * section): the switch with what it does under it — naming the agent language — then Your language and Agents work in, each a
+ * bottom sheet over the one shared list (Translation.LANGUAGES). A server without a DeepSeek key cannot translate ([user]'s `translationAvailable`): every row is drawn disabled under
  * frame 2's notice, whatever the preference says. Each row is written alone the moment it moves.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -392,11 +399,13 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
     val unavailable = user != null && !Translation.available(user)
     val enabled = ready && !unavailable
     val language = Translation.language(preferences)
-    var picking by remember { mutableStateOf(false) }
-    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.FOOTER) {
+    val agentLanguage = Translation.agentLanguage(preferences)
+    // Which picker's sheet is open: the preference key it writes, or null.
+    var picking by remember { mutableStateOf<String?>(null) }
+    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.BILINGUAL_FOOTER + " " + TranslationCopy.FOOTER) {
         val on = !unavailable && Translation.enabled(preferences)
         ListItem(headlineContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS) }, colors = settingsRowColors(),
-            supportingContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS_HINT) },
+            supportingContent = { Text(TranslationCopy.translateConversationsHint(agentLanguage)) },
             trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = enabled) },
             modifier = Modifier.toggleable(value = on, enabled = enabled, role = Role.Switch) { write("translationEnabled", JsonPrimitive(it)) })
         if (unavailable) Text(TranslationCopy.UNAVAILABLE, Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth()
@@ -404,23 +413,53 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
             color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodySmall)
         ListItem(headlineContent = { Text(TranslationCopy.YOUR_LANGUAGE) }, colors = settingsRowColors(),
             supportingContent = { Text(Translation.name(language)) },
-            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = true }.alpha(if (unavailable) 0.5f else 1f))
+            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationLanguage" }.alpha(if (unavailable) 0.5f else 1f))
         ListItem(headlineContent = { Text(TranslationCopy.AGENTS_WORK_IN) }, colors = settingsRowColors(),
-            supportingContent = { Text(TranslationCopy.ENGLISH) }, modifier = Modifier.alpha(if (unavailable) 0.5f else 1f))
+            supportingContent = { Text(Translation.name(agentLanguage)) },
+            modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationAgentLanguage" }.alpha(if (unavailable) 0.5f else 1f))
+        // "Show both languages" (02-bilingual.png, mark A): only while translation is on.
+        if (on) {
+            val both = Translation.bilingual(preferences)
+            ListItem(headlineContent = { Text(TranslationCopy.SHOW_BOTH_LANGUAGES) }, colors = settingsRowColors(),
+                trailingContent = { Switch(checked = both, onCheckedChange = null, enabled = enabled) },
+                modifier = Modifier.testTag("translation-bilingual")
+                    .toggleable(value = both, enabled = enabled, role = Role.Switch) { write("translationBilingual", JsonPrimitive(it)) })
+        }
     }
-    if (picking) ModalBottomSheet(onDismissRequest = { picking = false }) {
-        Text(TranslationCopy.YOUR_LANGUAGE, Modifier.padding(horizontal = 24.dp, vertical = 8.dp).semantics { heading() },
+    val key = picking ?: return
+    val (title, current) = if (key == "translationAgentLanguage") TranslationCopy.AGENTS_WORK_IN to agentLanguage else TranslationCopy.YOUR_LANGUAGE to language
+    ModalBottomSheet(onDismissRequest = { picking = null }) {
+        Text(title, Modifier.padding(horizontal = 24.dp, vertical = 8.dp).semantics { heading() },
             style = MaterialTheme.typography.titleMedium)
-        Column(Modifier.selectableGroup().padding(bottom = 24.dp)) {
+        Column(Modifier.selectableGroup().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
             Translation.LANGUAGES.forEach { (value, name) ->
-                Row(Modifier.fillMaxWidth().selectable(value == language, role = Role.RadioButton) {
-                    picking = false
-                    if (value != language) write("translationLanguage", JsonPrimitive(value))
+                Row(Modifier.fillMaxWidth().selectable(value == current, role = Role.RadioButton) {
+                    picking = null
+                    if (value != current) write(key, JsonPrimitive(value))
                 }.padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = value == language, onClick = null)
+                    RadioButton(selected = value == current, onClick = null)
                     Text(name, Modifier.padding(start = 16.dp))
                 }
             }
         }
+    }
+}
+
+/**
+ * The Sessions page's Prompt optimizer group (board frames 1 and 1b; iOS SessionSettings' promptOptimizerSection): one account-wide
+ * switch, absent = off, with what it does as the group's footer. A server without a DeepSeek key ([user]'s `promptOptimizerAvailable`
+ * false) draws it off and disabled with the notice under it, whatever the preference says. No NEW badge.
+ */
+@Composable
+internal fun PromptOptimizerGroup(user: JsonObject?, ready: Boolean, write: (Boolean) -> Unit) {
+    val unavailable = PromptOptimizer.unavailable(user)
+    val enabled = ready && !unavailable
+    val on = !unavailable && PromptOptimizer.enabled(user?.get("preferences") as? JsonObject)
+    SettingsGroup(null, footer = PromptOptimizerCopy.HINT) {
+        ListItem(headlineContent = { Text(PromptOptimizerCopy.TITLE) }, colors = settingsRowColors(),
+            trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = enabled) },
+            modifier = Modifier.testTag("settings-prompt-optimizer").toggleable(value = on, enabled = enabled, role = Role.Switch, onValueChange = write))
+        if (unavailable) Text(PromptOptimizerCopy.UNAVAILABLE, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+            .testTag("prompt-optimizer-unavailable"), color = Ink.amber, style = MaterialTheme.typography.bodySmall)
     }
 }

@@ -2,10 +2,10 @@ import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES, type TranslationLang
 import { SettingsCard, SettingsHeader, SettingsRow, SettingsSection } from '../../components/settings';
 import { Select } from '../../components/ui/Select';
 import { Switch } from '../../components/ui/Switch';
-import { translationLanguageOf } from '../../lib/translation';
+import { agentLanguageOf, translationLanguageOf } from '../../lib/translation';
 import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../../lib/workspaceDefaults';
 import { usePreferences } from './preferences';
-import { PERSONAL_SETTINGS as S } from './settingsIndex';
+import { PERSONAL_SETTINGS as S, translationEnabledDescription } from './settingsIndex';
 
 /*
  * Each row's hint is the one line the board (docs/mocks/settings-redesign, board-2) shortens it to, kept
@@ -38,7 +38,6 @@ const TRANSLATION_LANGUAGE_OPTIONS = TRANSLATION_LANGUAGES.map((value) => ({
   value,
   label: TRANSLATION_LANGUAGE_NAMES[value],
 }));
-const AGENT_LANGUAGE_OPTIONS = [{ value: 'en', label: 'English' }];
 
 /**
  * Settings → General (board-2): how new sessions start, then whether sessions may orchestrate others.
@@ -52,6 +51,8 @@ export function GeneralSettingsPage() {
   // A server without a DeepSeek key cannot translate: Translation is drawn disabled with frame 2's
   // notice, whatever the preference says.
   const translationUnavailable = me !== undefined && me.translationAvailable !== true;
+  // The same for the prompt optimizer (board docs/mocks/prompt-optimizer, frame 1b).
+  const optimizerUnavailable = me !== undefined && me.promptOptimizerAvailable !== true;
   return (
     <div className="settings-page">
       <SettingsHeader title="General" description="How new sessions start, account-wide." />
@@ -105,6 +106,27 @@ export function GeneralSettingsPage() {
               />
             }
           />
+          {/* Absent means OFF (board docs/mocks/prompt-optimizer, frame 1). Without the server's
+              DeepSeek key it is drawn disabled with frame 1b's notice, whatever the preference says. */}
+          <SettingsRow
+            anchor={S.promptOptimizer.anchor}
+            title={S.promptOptimizer.title}
+            description={S.promptOptimizer.description}
+            control={
+              <Switch
+                aria-label="Prompt optimizer"
+                checked={!optimizerUnavailable && prefs.promptOptimizer === true}
+                disabled={optimizerUnavailable}
+                onCheckedChange={(v) => save.mutate({ promptOptimizer: v })}
+                loading={save.isPending}
+              />
+            }
+          />
+          {optimizerUnavailable && (
+            <div className="settings-translation-notice" role="note">
+              This server has no DeepSeek key (<code>DEEPSEEK_API_KEY</code>), so it cannot optimize prompts.
+            </div>
+          )}
           {/* Absent means on, like the switch above. Read by every client's session list, so turning
               it off holds on the phone and the Mac too — it is one account-wide answer. */}
           <SettingsRow
@@ -125,14 +147,14 @@ export function GeneralSettingsPage() {
       </SettingsSection>
 
       {/* Settings › Translation (docs/mocks/session-translation, frames 1 and 2): one account-wide switch,
-          absent = off, and the language the owner writes and reads in. Agents always work in English, so
-          that row is shown and not offered. */}
+          absent = off, the language the owner writes and reads in, and the language agents work in (absent =
+          English). Both pickers offer the one shared list. */}
       <SettingsSection title="Translation">
         <SettingsCard>
           <SettingsRow
             anchor={S.translationEnabled.anchor}
             title={S.translationEnabled.title}
-            description={S.translationEnabled.description}
+            description={translationEnabledDescription(TRANSLATION_LANGUAGE_NAMES[agentLanguageOf(me)])}
             control={
               <Switch
                 aria-label="Translate conversations"
@@ -170,19 +192,36 @@ export function GeneralSettingsPage() {
             title={S.agentLanguage.title}
             description={S.agentLanguage.description}
             control={
-              <Select
+              <Select<TranslationLanguage>
                 aria-label="Agents work in"
                 style={{ width: 200 }}
-                value="en"
-                options={AGENT_LANGUAGE_OPTIONS}
-                disabled
-                onValueChange={() => {}}
+                value={agentLanguageOf(me)}
+                options={TRANSLATION_LANGUAGE_OPTIONS}
+                disabled={translationUnavailable}
+                onValueChange={(v) => v !== null && save.mutate({ translationAgentLanguage: v })}
+                loading={save.isPending}
               />
             }
           />
+          {/* "Show both languages" (docs/mocks/session-translation/02-bilingual.png, mark A): only while
+              translation is on; absent = off. */}
+          {!translationUnavailable && prefs.translationEnabled === true && (
+            <SettingsRow
+              anchor={S.translationBilingual.anchor}
+              title={S.translationBilingual.title}
+              control={
+                <Switch
+                  aria-label="Show both languages"
+                  checked={prefs.translationBilingual === true}
+                  onCheckedChange={(v) => save.mutate({ translationBilingual: v })}
+                  loading={save.isPending}
+                />
+              }
+            />
+          )}
         </SettingsCard>
         <p className="settings-translation-footnote">
-          Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a
+          With both languages on, each translated message also shows the words the agent read or wrote, in the language agents work in. Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a
           conversation stays as it was.
         </p>
       </SettingsSection>

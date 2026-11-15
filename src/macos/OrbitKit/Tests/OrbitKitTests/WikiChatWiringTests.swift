@@ -243,7 +243,7 @@ final class WikiChatWiringTests: XCTestCase {
                            "let wikiContext = wikiContext ?? (fromComposer ? wikiChat?.context() : nil)",
                            "let onAccepted = onAccepted ?? (fromComposer ? wikiChat?.accepted : nil)",
                            "if isDraft { await createDraftSession(); return }",
-                           "queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)",
+                           "queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,",
                            "statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)", "onAccepted?()"],
                     "a chat's send")
         let create = try slice(console, from: "private func createDraftSession() async {", to: "let (text, shell) = ComposerLogic.parseShell(composerText)")
@@ -264,8 +264,8 @@ final class WikiChatWiringTests: XCTestCase {
                     "the create")
         let post = try slice(console, from: "private func postTurn(", to: "private func retryingTransientFailures<T>(")
         XCTAssertTrue(post.contains("stopSessionId: confirmedStopSessionID,\n"))
-        XCTAssertTrue(post.contains("wikiContext: wikiContext)\n        let turnRequest = ComposerLogic.makeTurn("))
-        XCTAssertTrue(post.contains("queueForNextTurn: queueForNextTurn, wikiContext: wikiContext)"))
+        XCTAssertTrue(post.contains("wikiContext: wikiContext,\n                                          skipTranslation: skipTranslation ? true : nil)\n        let turnRequest = ComposerLogic.makeTurn("))
+        XCTAssertTrue(post.contains("queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,"))
     }
 
     /// Runs in is a new chat's alone and holds the workspace alone — the model and the mode are the composer's

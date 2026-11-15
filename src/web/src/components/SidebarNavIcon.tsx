@@ -22,6 +22,13 @@ const glyphs = {
       <path d="M11.5 6.8h10M11.5 17.2h10" />
     </>
   ),
+  // calendar — scheduled tasks.
+  scheduled: (
+    <>
+      <rect x="3" y="4.5" width="18" height="16.5" rx="3" />
+      <path d="M3 9.5h18M8 2.5v4M16 2.5v4" />
+    </>
+  ),
   // book.closed
   wiki: (
     <>

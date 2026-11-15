@@ -12,7 +12,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
-import io.orbitd.android.cards.NeedsYouBanner
+import io.orbitd.android.cards.NeedsYouToast
 import io.orbitd.android.cards.OwnerRequestStore
 import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
@@ -39,22 +39,26 @@ import java.time.Instant
 
 /*
  * Terminals asking to be approved, where they are drawn (docs/mocks/waiting-on-you-removal/02-terminal-approvals.html, following
- * iOS): Machines & models' Needs you section holds every machine's cards, each machine's own page its own; the needs-you bar has a
- * line for them that opens that section, and so does the terminal-login push. The card and its two doors are main's, unchanged.
+ * iOS): Machines & models' Needs you section holds every machine's cards, each machine's own page its own under Terminals to approve.
+ * A new request is noticed once, as a toast (the owner, 2026-11-16, under `docs/mocks/needs-you-capsule/12-once`), whose press opens
+ * that machine's page; the terminal-login push opens the Needs you section. The card and its two doors are main's, unchanged.
  */
 
 /**
  * The terminal sign-ins waiting for this account's owner (`GET /terminals/requests`), oldest first: one store per signed-in handle,
- * read by the bar, Machines & models, a machine's page and the Settings row alike, so a decision on one is gone from all of them.
+ * read by the notices, Machines & models, a machine's page and the Settings row alike, so a decision on one is gone from all of them.
  */
 class TerminalRequestStore internal constructor(private val api: TerminalsApi, val handle: SessionHandle, private val scope: CoroutineScope) {
     private val mutable = MutableStateFlow<List<TerminalRequest>>(emptyList())
     val requests: StateFlow<List<TerminalRequest>> = mutable.asStateFlow()
+    private val answered = MutableStateFlow(false)
+    /** Whether a read has answered yet: before it, an empty list is not "nothing waits" (the notices take stock at the first one). */
+    val loaded: StateFlow<Boolean> = answered.asStateFlow()
 
     /** Read again. A server that predates terminals answers none; a failed read keeps what was drawn. */
     fun load() {
         scope.launch {
-            try { mutable.value = api.requests() }
+            try { mutable.value = api.requests(); answered.value = true }
             catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { /* The next read tries again. */ }
         }
     }
@@ -108,7 +112,7 @@ fun rememberTerminalsChanged(app: OrbitApplication, handle: SessionHandle): Long
 }
 
 /** The store's requests still answerable now, read while this is drawn — at once, and every 20 s as the web does — and drawn again
- * at the next deadline, so a card and the bar's line fold on time. */
+ * at the next deadline, so a card and its notice fold on time. */
 @Composable
 fun rememberLiveTerminalRequests(store: TerminalRequestStore): List<TerminalRequest> {
     val requests by store.requests.collectAsState()
@@ -120,9 +124,10 @@ fun rememberLiveTerminalRequests(store: TerminalRequestStore): List<TerminalRequ
     return live
 }
 
-/** The needs-you bar's line for waiting terminals (board ③), and where it and the terminal-login push land. */
+/** The notice for a terminal asking to be approved (board ③, as a toast since the owner's 2026-11-16 ruling), and where it and the
+ * terminal-login push land. */
 object TerminalNeedsYou {
-    const val hint = "Opens the terminals waiting on you"
+    const val hint = "Opens the machine's terminals to approve"
     const val APPROVED = "Terminal approved"
     const val DENIED = "Terminal denied"
 
@@ -137,24 +142,29 @@ object TerminalNeedsYou {
         return if (machines.size == 1) "${machines[0]} · ${requests.size} waiting" else machines.joinToString(", ")
     }
 
-    /** The bar's line for [requests] (oldest first), or null when none waits. It names the oldest, whose card a press lights. */
-    fun banner(requests: List<TerminalRequest>): NeedsYouBanner? {
-        val oldest = requests.firstOrNull() ?: return null
-        return NeedsYouBanner(1, JsonObject(emptyMap()), title(requests.size), detail(requests), oldest.createdAt, terminalRequest = oldest.id)
-    }
+    /** The notice for one request: "Approve a terminal", then its machine and code. One per request id ([NeedsYouToast.id]). */
+    fun toast(request: TerminalRequest) = NeedsYouToast(record(request.id), JsonObject(emptyMap()), title(1), detail(listOf(request)),
+        terminalRequest = request.id)
 
     /** The `recordId` Machines & models is opened with to light one card: the bar's oldest, or the push's own. */
     fun record(requestId: String) = "terminal:$requestId"
     fun requestOf(record: String?) = record?.takeIf { it.startsWith("terminal:") }?.removePrefix("terminal:")
 
-    /** Settings › Machines & models, on its Needs you section, [requestId]'s card lit. */
+    /** Settings › Machines & models, on its Needs you section, [requestId]'s card lit: where the terminal-login push lands. */
     fun route(requestId: String, origin: Origin = Origin.LIST) = OrbitRoute(Destination.RUNNER, recordId = record(requestId), origin = origin)
+
+    /** The machine [request] came from, on its Terminals to approve, the request's card lit: where its notice lands. */
+    fun machineRoute(request: TerminalRequest, origin: Origin = Origin.LIST) =
+        OrbitRoute(Destination.RUNNER, request.runnerId, recordId = record(request.id), origin = origin)
+
+    /** The machine page's section for its own requests (web `TERMINALS_TO_APPROVE`). */
+    const val TO_APPROVE = "Terminals to approve"
 }
 
 /**
  * A terminal asking to be approved (docs/terminal-session-design.md, board 2 marker 7), in the owner request card's frame: the machine
  * and the code its terminal shows, what approving allows, and Deny / Approve. No confirm first — comparing the code is the confirming —
- * and the card leaves once the door answers; [said] is told which, for the page's notice (board 02 ②). [lit]: opened from the bar or
+ * and the card leaves once the door answers; [said] is told which, for the page's notice (board 02 ②). [lit]: opened from its notice or
  * the push, the card's outline is lit for a moment. iOS `TerminalApproveCard`, web `TerminalApproveCard.tsx`; the words are [Terminals]'.
  */
 @Composable

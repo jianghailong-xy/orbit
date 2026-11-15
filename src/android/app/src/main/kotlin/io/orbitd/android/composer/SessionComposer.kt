@@ -60,6 +60,8 @@ import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.management.LocalPromptOptimizer
+import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
@@ -182,6 +184,15 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
         else if (imeWasUp) { imeWasUp = false; if (inputFocused) focusManager.clearFocus() }
     }
     val focusField: () -> Unit = { focus.requestFocus(); keyboard?.show() }
+    // Prompt optimizer (board docs/mocks/prompt-optimizer, frames 2–6; iOS ComposerView): ✦ Optimize beside Send while the account has
+    // it on and the box holds a draft it can improve — and, while a press is out, as the busy button that cancels it.
+    val optimizer = state.optimizer
+    val showsOptimize = optimizer.isOptimizing || PromptOptimizer.showsButton(LocalPromptOptimizer.current, field.text)
+    // Edit, then use: the box takes the caret once the sheet's window has given the focus back (A08i, as [focusRequest]).
+    var editFocus by remember { mutableIntStateOf(0) }
+    LaunchedEffect(editFocus) {
+        if (editFocus > 0) { snapshotFlow { window.isWindowFocused }.first { it }; focus.requestFocus(); keyboard?.show() }
+    }
     val useSuggestion: () -> Unit = {
         suggestion?.let {
             field = TextFieldValue(it, TextRange(it.length))
@@ -231,6 +242,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                 // The context line folds away with the page's chrome while this box holds a phone's keyboard
                 // (`foldsChrome`), as the reader's rows above do; the input and its buttons stay where they are.
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { ComposerUsage(model, state, effective, session) }
+                // Frame 6: the press failed; the draft below is untouched.
+                if (optimizer.failed) PromptOptimizationFailureLine(retry = model::retryOptimize, dismiss = model::dismissOptimization)
             SuggestionTaps(suggestion != null, inputFocused, focusField, useSuggestion) { taps ->
                 OutlinedTextField(field, onValueChange = { field = it; model.edit(it.text, it.selection.start, it.selection.end) },
                     modifier = Modifier.fillMaxWidth().focusRequester(focus).onFocusChanged { inputFocused = it.isFocused; inputFocusChanged(it.isFocused) }
@@ -256,9 +269,10 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     // Settings › Translation (6A): while it is on, the box says which way its words go — "Chinese → English" —
-                    // and the tag opens Settings › Sessions, where the switch and the language are.
-                    trailingIcon = translation.takeIf { it.on }?.let { on -> {
-                        Text(Translation.tag(on.language), Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
+                    // and the tag opens Settings › Sessions, where the switch and the language are. Like the placeholder, it
+                    // shows only while the box is empty, so typed text gets the whole width.
+                    trailingIcon = translation.takeIf { it.on && field.text.isEmpty() }?.let { on -> {
+                        Text(Translation.tag(on.language, on.agentLanguage), Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
                             .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
                             .then(if (openTranslationSettings != null) Modifier.clickable(role = Role.Button, onClick = openTranslationSettings) else Modifier)
                             .padding(horizontal = 8.dp, vertical = 2.dp),
@@ -313,6 +327,8 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort"))) {
                     models = true; model.loadCatalog()
                 }
+                // Frame 2's ✦ Optimize beside Send; frame 3's busy "Optimizing…", which cancels when pressed.
+                if (showsOptimize) PromptOptimizeButton(busy = optimizer.isOptimizing, enabled = state.loaded, press = model::optimize)
                 val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
                 // With nothing typed, Send is Stop wherever there is something to stop — a turn running, one the engine started for
                 // itself, or work left running under a parked turn (A07-20, iOS 593920cea). Steer and Queue for next turn still ask for
@@ -339,10 +355,19 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     }
                 }
             }
+            // Frame 5: after Use, Undo puts the owner's own draft back, for as long as the box still holds what Use put there, and for a
+            // few seconds.
+            if (optimizer.offersUndo(draft.text)) PromptOptimizationUndoToast(undo = model::undoOptimization, expired = model::forgetOptimizationUndo)
             // A07-19 (a): what the provider picked here will do, and when — under the box, for as long as the pick stands.
             state.switchNote?.let { Text(it, Modifier.fillMaxWidth().padding(top = 4.dp).testTag("composer-switch-note"),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
+    }
+    // Frame 4 on a phone: the suggestion is a bottom sheet over the composer; the box is untouched until Use.
+    optimizer.suggestion?.let { optimization ->
+        PromptOptimizationSheet(optimization, optimizer.basedOnEarlierDraft(draft.text), optimizer.showingGloss, translation.language,
+            toggleGloss = model::toggleOptimizationGloss, use = model::useOptimization,
+            editThenUse = { model.useOptimization(); editFocus++ }, tryAgain = model::retryOptimize, dismiss = model::dismissOptimization)
     }
     preview?.let { att ->
         val images = draft.attachments.filter { it.mime.startsWith("image/") }; val index = images.indexOfFirst { it.id == att.id }

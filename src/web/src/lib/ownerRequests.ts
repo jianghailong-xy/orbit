@@ -1,3 +1,4 @@
+import { SCHEDULE_COPY } from '@orbit/shared';
 import { useEffect, useSyncExternalStore } from 'react';
 import { formatSpan, sameResourceId } from './watches';
 
@@ -7,7 +8,12 @@ import { formatSpan, sameResourceId } from './watches';
  * server does not hold — a reminder for later.
  */
 
-export type OwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE';
+export type OwnerRequestKind =
+  | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE'
+  // A scheduled task's items, which no session can file (apiserver schedules/schedule-attention.ts).
+  | 'SCHEDULE_FAILED' | 'SCHEDULE_HELD' | 'SCHEDULE_APPROVAL' | 'SCHEDULE_WIDEN';
+/** The kinds a session files, answered on the request's own doors. */
+export type AgentRequestKind = Exclude<OwnerRequestKind, `SCHEDULE_${string}`>;
 export type OwnerRequestState = 'PENDING' | 'DONE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN';
 export type OwnerRequestListFilter = 'open' | 'done' | 'declined' | 'all';
 
@@ -71,6 +77,11 @@ export interface OwnerRequest {
   /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
   repoUrlNorm?: string | null;
   workspaceId?: string | null;
+  /** SCHEDULE_*: the schedule, run, approval card and change request the item is about. */
+  scheduleId?: string | null;
+  scheduleRunId?: string | null;
+  approvalId?: string | null;
+  scheduleChangeRequestId?: string | null;
   expiresAt: string | null;
   askedBySessionId: string;
   projectId: string | null;
@@ -93,6 +104,10 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   MANUAL_STEP: 'STEPS',
   CONFIRM: 'CONFIRM',
   WIKI_CREATE: 'WIKI',
+  SCHEDULE_FAILED: SCHEDULE_COPY.waiting.kinds.schedule,
+  SCHEDULE_HELD: SCHEDULE_COPY.waiting.kinds.schedule,
+  SCHEDULE_APPROVAL: SCHEDULE_COPY.waiting.kinds.run,
+  SCHEDULE_WIDEN: SCHEDULE_COPY.waiting.kinds.schedule,
 };
 
 const DEVICES: Readonly<Record<string, string>> = {

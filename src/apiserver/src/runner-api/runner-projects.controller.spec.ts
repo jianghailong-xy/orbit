@@ -782,7 +782,7 @@ test('a session the service refuses is not quietly downgraded to a headless crea
 // The exact header, spelled the way `publicIdHeaders` normalizes and the way every shipped runner
 // sends it. A typo here is silent: the parameter is `undefined` on every request and every
 // in-session create quietly becomes headless again.
-test('createProject reads exactly two headers: which session, and the proof it is that session', () => {
+test('createProject reads exactly three headers: which session, the proof it is that session, and the request id', () => {
   const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'createProject') as
     | Record<string, { index: number; data?: unknown }>
     | undefined;
@@ -790,9 +790,10 @@ test('createProject reads exactly two headers: which session, and the proof it i
   // The pair, and nothing else. The id says which conversation this request came from; the token
   // is what makes that claim worth anything when the body names a workspace, since a session id is
   // discoverable and this door would otherwise let any live runner place a coordinator anywhere.
+  // The request id names the create, so a repeat of it reads its receipt (create-request-receipts.ts).
   assert.deepEqual(
     headers.map((arg) => arg.data).sort(),
-    ['x-orbit-session-id', 'x-orbit-session-token'],
+    ['x-orbit-request-id', 'x-orbit-session-id', 'x-orbit-session-token'],
   );
 });
 

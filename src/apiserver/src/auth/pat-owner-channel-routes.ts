@@ -120,4 +120,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'GET /terminals/requests',
   'POST /terminals/requests/:id/approve',
   'POST /terminals/requests/:id/deny',
+  // A scheduled task's two cards (docs/scheduled-tasks-design.md §4, §9.1): Create on a create card writes the schedule
+  // and its envelope, Allow on an envelope card grows what it may do; Not now and Decline answer them. Each also refuses
+  // a request carrying an acting session, SCHEDULE_DECISION_OWNER_CHANNEL_ONLY.
+  'POST /schedule-requests/:id/allow',
+  'POST /schedule-requests/:id/decline',
 ];

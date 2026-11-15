@@ -18,6 +18,9 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// Settings › Translation: the server holds a DeepSeek key and so can translate. False: the
     /// switch is drawn disabled with the board frame 2 notice. Nil in login's user payload.
     public let translationAvailable: Bool?
+    /// Settings › Prompt optimizer: the server holds a DeepSeek key and so can optimize a draft.
+    /// False: the switch is drawn disabled with the board frame 1b notice. Nil in login's user payload.
+    public let promptOptimizerAvailable: Bool?
 }
 
 public struct LoginRequest: Codable, Sendable {
@@ -642,6 +645,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
+    /// The scheduled task's run this session is (docs/scheduled-tasks-design.md §6.3), from the session's own
+    /// read; nil for every other session. What puts the run's header over its conversation.
+    public var scheduleRunId: String? = nil
     /// The Project this Session coordinates, projected from the Project-owned pointer. Both are
     /// nil for ordinary Sessions and when talking to an older server.
     public let projectId: String?
@@ -879,6 +885,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
+        scheduleRunId = try? values.decodeIfPresent(String.self, forKey: .scheduleRunId)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
         projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)
@@ -1307,14 +1314,18 @@ public struct SessionTurnRequest: Codable, Sendable {
     /// A wiki chat's page and selection, beside the owner's words rather than in them (wiki contract
     /// `chat.turns`). Nil leaves the field out: any other session refuses one.
     public let wikiContext: WikiChatContext?
+    /// Prompt optimizer (D2): the text is the optimizer's English, sent exactly as inserted, so
+    /// Translation neither holds nor translates it. Nil leaves the key out (`PromptOptimizerState.skipTranslation`).
+    public let skipTranslation: Bool?
     public init(clientTurnId: String, content: String, kind: String = "message", attachmentIds: [String]? = nil,
-                intent: String? = nil, wikiContext: WikiChatContext? = nil) {
+                intent: String? = nil, wikiContext: WikiChatContext? = nil, skipTranslation: Bool? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind
         self.attachmentIds = attachmentIds
         self.intent = intent
         self.wikiContext = wikiContext
+        self.skipTranslation = skipTranslation
     }
 }
 
@@ -1609,6 +1620,8 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// Instead of `agentId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
     /// the transaction that creates it (docs/first-workspace-contract.md §3).
     public let newWorkspace: NewWorkspaceRequest?
+    /// Prompt optimizer (D2): the opening message is the optimizer's English, sent as inserted. Nil omits it.
+    public let skipTranslation: Bool?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 engine: String? = nil, provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
@@ -1616,7 +1629,8 @@ public struct CreateSessionRequest: Codable, Sendable {
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
                 claudeAccount: String? = nil, antigravityAccount: String? = nil, kimiAccount: String? = nil,
                 cursorAccount: String? = nil, folderId: String? = nil,
-                newWorkspace: NewWorkspaceRequest? = nil) {
+                newWorkspace: NewWorkspaceRequest? = nil, skipTranslation: Bool? = nil) {
+        self.skipTranslation = skipTranslation
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -2103,11 +2117,15 @@ public struct ResumeRequest: Codable, Sendable {
     /// A wiki chat's page and selection: a chat's next message may revive it, and carries them here as on
     /// a live one (wiki contract `chat.turns`). Nil leaves the field out.
     public let wikiContext: WikiChatContext?
+    /// Prompt optimizer (D2): a revive whose words are the optimizer's English, sent as inserted. Nil omits it.
+    public let skipTranslation: Bool?
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
-                stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil) {
+                stopSessionId: String? = nil, wikiContext: WikiChatContext? = nil,
+                skipTranslation: Bool? = nil) {
+        self.skipTranslation = skipTranslation
         self.clientTurnId = clientTurnId
         self.content = content
         self.kind = kind

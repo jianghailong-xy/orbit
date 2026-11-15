@@ -536,6 +536,9 @@ async function readOwnerRequestSignals(
     where: {
       ownerId,
       state: 'PENDING',
+      // A scheduled run's card is counted once, as the pending approval it is on the run's session; its Waiting on you
+      // item (SCHEDULE_APPROVAL, schedules/schedule-attention.ts) points at that same card and adds nothing.
+      kind: { not: 'SCHEDULE_APPROVAL' },
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
       ...(sessionIds ? { askedBySessionId: { in: [...sessionIds] } } : {}),
     },

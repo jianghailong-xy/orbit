@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Prompt optimizer — board</title>
+<style>
+@font-face { font-family: Inter; src: url('/var/tmp/landing-mock-render/fonts/Inter.ttf'); }
+/* Light :root tokens copied from src/web/src/index.css. */
+:root {
+  --bg-base:#fff; --bg-raised:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa; --bg-hover:#f5f6f7;
+  --fill-muted:#f1f1f4; --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+  --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+  --error:#cf3b35; --error-bg:#fdeceb; --error-border:#ffccc7;
+  --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+  --route-shadow:#5b2fb8;
+}
+* { box-sizing: border-box; }
+body { margin:0; padding:40px 48px 56px; font-family: Inter, -apple-system, sans-serif; color: var(--text-1); background:#eef0f3; width:1500px; }
+h1 { font-size:26px; margin:0 0 6px; }
+.lede { color:var(--text-2); font-size:14px; margin:0 0 28px; max-width:1100px; line-height:1.55; }
+.row { display:flex; gap:28px; margin-bottom:28px; align-items:flex-start; }
+.frame { background:var(--bg-base); border:1px solid var(--border); border-radius:12px; padding:20px; flex:1; min-width:0; }
+.frame-label { font-size:12px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--text-3); margin-bottom:4px; }
+.frame-title { font-size:16px; font-weight:600; margin-bottom:14px; }
+.note { font-size:12.5px; color:var(--text-2); line-height:1.5; margin-top:12px; }
+.note b { color:var(--text-1); }
+
+/* Settings rows (GeneralPage.tsx shape) */
+.settings-section-title { font-size:13px; font-weight:600; color:var(--text-2); margin:0 0 8px; }
+.settings-row { display:flex; align-items:center; gap:16px; padding:12px 14px; border:1px solid var(--border-subtle); border-radius:8px; margin-bottom:8px; }
+.settings-row-text { flex:1; }
+.settings-row-title { font-size:14px; font-weight:500; }
+.settings-row-desc { font-size:12.5px; color:var(--text-2); margin-top:2px; line-height:1.45; }
+.switch { width:36px; height:20px; border-radius:10px; background:#c9cdd4; position:relative; flex:none; }
+.switch::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; }
+.switch.on { background:var(--brand); } .switch.on::after { left:18px; }
+.switch.disabled { opacity:.45; }
+.settings-translation-notice { font-size:12.5px; color:var(--warning); background:var(--warning-bg); border:1px solid var(--warning-border); border-radius:6px; padding:7px 10px; margin:-2px 0 8px; }
+.new-badge { font-size:10.5px; font-weight:600; color:var(--brand); background:var(--brand-tint); border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:1px; }
+
+/* Composer (index.css .composer-* classes, simplified) */
+.composer { border:1px solid var(--border); border-radius:20px; background:var(--bg-raised); box-shadow:0 2px 10px rgba(0,0,0,.05); }
+.composer-field { padding:12px 23px 2px; font-size:15px; line-height:1.6; min-height:62px; white-space:pre-wrap; }
+.composer-field.dim { color:var(--text-3); }
+.composer-toolbar { display:flex; align-items:center; gap:4px; padding:4px 13px 7px; font-size:13px; color:var(--text-2); }
+.composer-attach-btn { width:28px; height:28px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-size:18px; color:var(--text-2); }
+.composer-pill { padding:3px 6px; border-radius:6px; }
+.composer-pill-spacer { flex:1; }
+.composer-send { width:30px; height:30px; border-radius:50%; background:var(--invert,#1f2329); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:15px; margin-left:4px; }
+.composer-send.off { background:#c9cdd4; }
+.composer-translation-tag { padding:1px 8px; border:1px solid var(--border); border-radius:999px; font-size:11.5px; line-height:18px; color:var(--text-2); }
+/* NEW */
+.composer-optimize { display:inline-flex; align-items:center; gap:5px; height:26px; padding:0 9px; border-radius:999px; border:1px solid var(--brand-border); color:var(--brand-strong); background:var(--brand-tint); font-size:12.5px; font-weight:500; }
+.composer-optimize .spark { font-size:12px; }
+.composer-optimize.busy { color:var(--text-2); background:var(--fill-muted); border-color:var(--border); }
+.spin { width:11px; height:11px; border:1.6px solid var(--text-4); border-top-color:var(--text-2); border-radius:50%; display:inline-block; }
+.hl { outline:2px dashed #fa8c16; outline-offset:3px; }
+
+/* NEW: the suggestion card, drawn above the composer */
+.composer-optimized { border:1px solid var(--brand-border); background:var(--bg-raised); border-radius:14px; margin:0 10px 8px; box-shadow:0 4px 18px rgba(51,112,255,.10); overflow:hidden; }
+.composer-optimized-head { display:flex; align-items:center; gap:8px; padding:9px 14px; background:var(--brand-tint); font-size:12.5px; color:var(--brand-strong); font-weight:600; }
+.composer-optimized-head .x { margin-left:auto; color:var(--text-3); font-weight:400; font-size:15px; }
+.composer-optimized-body { padding:10px 14px 4px; font-size:14px; line-height:1.6; white-space:pre-wrap; max-height:220px; overflow:hidden; }
+.composer-optimized-body .add { background:#e8f6ec; border-radius:3px; }
+.composer-optimized-ctx { padding:4px 14px 10px; font-size:12px; color:var(--text-3); }
+.composer-optimized-ctx span { display:inline-block; border:1px solid var(--border-subtle); border-radius:999px; padding:0 7px; margin:2px 4px 0 0; color:var(--text-2); }
+.composer-optimized-foot { display:flex; gap:8px; align-items:center; padding:9px 14px; border-top:1px solid var(--border-subtle); }
+.btn { font-size:13px; padding:5px 12px; border-radius:7px; border:1px solid var(--border); background:var(--bg-raised); color:var(--text-1); }
+.btn.primary { background:var(--brand); border-color:var(--brand); color:#fff; font-weight:500; }
+.btn.link { border:0; background:none; color:var(--text-2); padding:5px 6px; }
+.foot-hint { margin-left:auto; font-size:11.5px; color:var(--text-3); }
+.composer-optimize-error { margin:0 10px 8px; font-size:12.5px; color:var(--error); background:var(--error-bg); border:1px solid var(--error-border); border-radius:10px; padding:8px 12px; }
+.composer-optimize-error a { color:var(--error); font-weight:600; margin-left:6px; text-decoration:underline; }
+.toast { display:inline-block; margin-top:10px; background:#1f2329; color:#fff; font-size:12.5px; padding:7px 12px; border-radius:8px; }
+.toast u { color:#9ec0ff; margin-left:8px; }
+
+/* Decisions */
+.decisions { background:var(--bg-base); border:1px solid var(--border); border-radius:12px; padding:20px 24px; }
+.decisions h2 { font-size:17px; margin:0 0 12px; }
+.dec { border-top:1px solid var(--border-subtle); padding:12px 0; display:grid; grid-template-columns:220px 1fr; gap:16px; font-size:13px; line-height:1.55; }
+.dec:first-of-type { border-top:0; }
+.dec-q { font-weight:600; }
+.opt { margin:0 0 4px; color:var(--text-2); }
+.opt.rec { color:var(--text-1); }
+.opt.rec::before { content:'Recommended · '; color:var(--brand-strong); font-weight:600; }
+.fixed { font-size:13px; color:var(--text-2); line-height:1.6; margin:0; padding-left:18px; }
+</style>
+</head>
+<body>
+<h1>Prompt optimizer: DeepSeek improves a draft before it is sent</h1>
+<p class="lede">
+  Off by default. With <b>Settings › General › Prompt optimizer</b> on, the composer gets an <b>✦ Optimize</b> button. It sends the draft
+  and the session's context to the server, which asks DeepSeek (the server's own <code>DEEPSEEK_API_KEY</code>, as Translation and
+  Suggested replies do) for a clearer, more complete prompt. The result is shown as a suggestion; <b>nothing goes into the input box until the
+  owner presses Use</b>, and nothing is sent until they press Send. Hand-drawn from index.css tokens and the real composer class names; the
+  classes marked NEW do not exist yet. iOS, macOS and Android draw the same states (their frames follow once this board is agreed).
+</p>
+
+<div class="row">
+  <div class="frame" style="flex:0 0 560px">
+    <div class="frame-label">Frame 1 · Settings › General</div>
+    <div class="frame-title">One account-wide switch, off by default</div>
+    <div class="settings-section-title">Composer</div>
+    <div class="settings-row">
+      <div class="settings-row-text"><div class="settings-row-title">Suggested replies</div><div class="settings-row-desc">Offer the agent's guess at your next message after each turn.</div></div>
+      <div class="switch on"></div>
+    </div>
+    <div class="settings-row hl">
+      <div class="settings-row-text"><div class="settings-row-title">Prompt optimizer <span class="new-badge">NEW</span></div><div class="settings-row-desc">Show an Optimize button in the composer. DeepSeek rewrites your draft with this session's context; you review it before it replaces the draft.</div></div>
+      <div class="switch"></div>
+    </div>
+    <div class="note"><b>Frame 1b, a server without a DeepSeek key:</b> the switch is drawn disabled with the same notice Translation uses:</div>
+    <div class="settings-row" style="margin-top:8px">
+      <div class="settings-row-text"><div class="settings-row-title">Prompt optimizer</div><div class="settings-row-desc">Show an Optimize button in the composer…</div></div>
+      <div class="switch disabled"></div>
+    </div>
+    <div class="settings-translation-notice">This server has no DeepSeek key (DEEPSEEK_API_KEY), so it cannot optimize prompts.</div>
+  </div>
+
+  <div class="frame">
+    <div class="frame-label">Frame 2 · Composer, switch on</div>
+    <div class="frame-title">The button appears beside Send once there is a draft</div>
+    <div class="composer">
+      <div class="composer-field">fix the login redirect bug, it goes to the wrong page after sign in</div>
+      <div class="composer-toolbar">
+        <span class="composer-attach-btn">+</span><span class="composer-pill">Default ▾</span><span class="composer-pill">Ask ▾</span>
+        <span class="composer-pill-spacer"></span>
+        <span class="composer-pill">Opus 5.5 · high</span><span class="composer-pill">12%</span>
+        <span class="composer-optimize hl"><span class="spark">✦</span>Optimize</span>
+        <span class="composer-send">↑</span>
+      </div>
+    </div>
+    <div class="note">Hidden while the box is empty, in shell mode (<code>!</code> commands) and for a draft that is only a <code>/command</code>.
+      Shortcut <b>⌘⇧O</b> / <b>Ctrl⇧O</b>. Sending the draft unoptimized stays one press away: Send never waits for the optimizer.</div>
+
+    <div class="frame-label" style="margin-top:18px">Frame 3 · Optimizing</div>
+    <div class="composer">
+      <div class="composer-field">fix the login redirect bug, it goes to the wrong page after sign in</div>
+      <div class="composer-toolbar">
+        <span class="composer-attach-btn">+</span><span class="composer-pill">Default ▾</span><span class="composer-pill">Ask ▾</span>
+        <span class="composer-pill-spacer"></span><span class="composer-pill">Opus 5.5 · high</span>
+        <span class="composer-optimize busy"><span class="spin"></span>Optimizing…</span>
+        <span class="composer-send">↑</span>
+      </div>
+    </div>
+    <div class="note">The draft stays editable. Pressing the busy button cancels. Bounded at 20 s, like a translation.</div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="frame">
+    <div class="frame-label">Frame 4 · The suggestion (owner has not confirmed)</div>
+    <div class="frame-title">A card above the composer; the input box is untouched</div>
+    <div class="composer-optimized hl">
+      <div class="composer-optimized-head"><span>✦</span>Optimized prompt <span class="x">×</span></div>
+      <div class="composer-optimized-body">After signing in, users land on the wrong page instead of the page they started from. <span class="add">The redirect target is meant to come from the <code>returnTo</code> query parameter (the session's last turn touched <code>src/web/src/auth/LoginPage.tsx</code>).</span>
+
+1. Reproduce: open a protected page signed out, sign in, and note where you land.
+2. Find where the post-login redirect is chosen and fix it so it returns to the original page.
+3. <span class="add">Keep the existing rule that an external <code>returnTo</code> URL is refused.</span>
+4. Add a test that covers the redirect, and run the web tests.</div>
+      <div class="composer-optimized-ctx">Used: <span>this session's last 6 turns</span><span>session recap</span><span>project "Auth cleanup" goal</span><span>2 wiki entries</span></div>
+      <div class="composer-optimized-foot">
+        <span class="btn primary">Use</span><span class="btn">Edit, then use</span><span class="btn link">Try again</span>
+        <span class="foot-hint">Esc dismisses · your draft is kept</span>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="composer-field">fix the login redirect bug, it goes to the wrong page after sign in</div>
+      <div class="composer-toolbar">
+        <span class="composer-attach-btn">+</span><span class="composer-pill">Default ▾</span><span class="composer-pill">Ask ▾</span>
+        <span class="composer-pill-spacer"></span><span class="composer-pill">Opus 5.5 · high</span>
+        <span class="composer-optimize"><span class="spark">✦</span>Optimize</span><span class="composer-send">↑</span>
+      </div>
+    </div>
+    <div class="note"><b>Use</b> replaces the draft (attachments are kept). <b>Edit, then use</b> also replaces it and puts the caret at the end, which is the same thing on a
+      phone. Additions drawn from context are tinted so the owner can see what was <i>added</i> rather than reworded. If the draft was edited while
+      optimizing, the card says "Based on an earlier draft" and Use still asks nothing more: the owner can see both.</div>
+  </div>
+
+  <div class="frame" style="flex:0 0 520px">
+    <div class="frame-label">Frame 5 · After Use</div>
+    <div class="composer">
+      <div class="composer-field">After signing in, users land on the wrong page instead of the page they started from. The redirect target is meant to come from…</div>
+      <div class="composer-toolbar">
+        <span class="composer-attach-btn">+</span><span class="composer-pill-spacer"></span>
+        <span class="composer-optimize"><span class="spark">✦</span>Optimize</span><span class="composer-send">↑</span>
+      </div>
+    </div>
+    <div class="toast">Draft replaced with the optimized prompt <u>Undo</u></div>
+    <div class="note">Undo (and ⌘Z in the box) puts the owner's own draft back. Nothing is sent until they press Send.</div>
+
+    <div class="frame-label" style="margin-top:22px">Frame 6 · Failure</div>
+    <div class="composer-optimize-error">Couldn't optimize this draft. <a>Try again</a></div>
+    <div class="composer">
+      <div class="composer-field">fix the login redirect bug, it goes to the wrong page after sign in</div>
+      <div class="composer-toolbar"><span class="composer-attach-btn">+</span><span class="composer-pill-spacer"></span>
+        <span class="composer-optimize"><span class="spark">✦</span>Optimize</span><span class="composer-send">↑</span></div>
+    </div>
+    <div class="note">Timeout, no key, or a reply with nothing in it: the draft is untouched and can be sent as written.</div>
+  </div>
+</div>
+
+<div class="decisions">
+  <h2>Open decisions</h2>
+  <div class="dec"><div class="dec-q">D1 · What "project context" is sent to DeepSeek</div><div>
+    <p class="opt rec">A. The draft plus what the server already holds: the session's recap, its last few turns (bounded, ~8k tokens, the recap's budget), the Orbit project's goal and acceptance when the session belongs to one, the workspace name, and wiki entries that match the draft. One DeepSeek call, no runner round-trip.</p>
+    <p class="opt">B. A plus files from the checkout (README, CLAUDE.md, files the draft names), read through the runner. Richer, but it needs a new runner route and is slower, and it does nothing while the runner is offline.</p>
+    <p class="opt">C. The draft and the recap only. Cheapest, but it mostly rephrases.</p></div></div>
+  <div class="dec"><div class="dec-q">D2 · Language when Translation is also on</div><div>
+    <p class="opt rec">A. The optimizer replies in English and the turn is marked already-English, so Send skips the translation: one DeepSeek call in total, as you chose earlier. The card shows the English with "Show in Chinese" for reading.</p>
+    <p class="opt">B. The optimizer replies in the owner's language and Send translates it as today: two calls, but the owner reviews and edits in their own language.</p></div></div>
+  <div class="dec"><div class="dec-q">D3 · How the suggestion is drawn</div><div>
+    <p class="opt rec">A. The card above the composer (frame 4), additions tinted, the draft untouched until Use.</p>
+    <p class="opt">B. A side-by-side diff of draft and suggestion. More precise, too wide for a phone.</p></div></div>
+  <div class="dec"><div class="dec-q">Settled by your answers</div><div>
+    <ul class="fixed"><li>Composer button, preview first; the input box changes only after the owner confirms (Use).</li>
+    <li>Off by default (an account preference <code>promptOptimizer</code>, absent = off); unavailable without the server's DeepSeek key.</li>
+    <li>Every client: server, web, iOS/macOS, Android. The phone draws the card as a sheet over the composer, with the same three actions.</li></ul></div></div>
+</div>
+</body>
+</html>

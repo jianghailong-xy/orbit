@@ -4,6 +4,7 @@ import {
   CheckOutlined,
   CodeOutlined,
   DeleteOutlined,
+  DesktopOutlined,
   DisconnectOutlined,
   FolderAddOutlined,
   FolderOutlined,
@@ -55,6 +56,7 @@ import type {
   SlashCommandInfo,
   ManagedRunnerRow,
 } from '@orbit/shared';
+import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
@@ -84,6 +86,7 @@ import {
   type SidebarProject,
 } from '../lib/projectAttention';
 import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
+import { useScheduledNeedsCount } from '../lib/schedules';
 import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
@@ -169,6 +172,9 @@ const TOP: TopNavItem[] = [
   // Tasks under Projects, in the iPhone drawer's order (Projects · Tasks · Wiki). It is the way into
   // the task lists too: they are picked from the Tasks page's title, as they are on the phone.
   { key: 'tasks', icon: <SidebarNavIcon name="tasks" />, label: 'Tasks' },
+  // Scheduled tasks live here and only here: no workspace's session list carries them (owner ruling). Its count is
+  // the failing and the held schedules, the page's Needs you.
+  { key: 'scheduled', icon: <SidebarNavIcon name="scheduled" />, label: SCHEDULE_COPY.nav.scheduled },
   // The Wiki sits under Projects because it is the other thing a codebase has: Projects is the work
   // in it, and the Wiki is what the work learned. Its amber count is the proposals waiting for the
   // owner, which is the same `needs-you` pill a workspace row shows — and the same rule applies with
@@ -413,9 +419,12 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
   // While the placeholder stands, the row already active holds.
   const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
+  // A scheduled task's run belongs to its schedule, not to a workspace's list (docs/scheduled-tasks-design.md §7.4):
+  // its session lights Scheduled, and no workspace row.
+  const onScheduleRun = !!sessionId && !sessionQ.isPlaceholderData && sessionQ.data?.runSource === 'SCHEDULE';
   const activeWorkspaceId =
     openWorkspaceId ??
-    (sessionId
+    (sessionId && !onScheduleRun
       ? sessionQ.isPlaceholderData
         ? heldWorkspaceId
         : (sessionQ.data?.workspace?.id ?? null)
@@ -424,6 +433,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
 
   // The open projects, which close the rail the way they close the iPhone drawer (below).
   const projects = useQuery(openProjectsQuery());
+  const scheduledNeeds = useScheduledNeedsCount();
   const openProjects = useMemo(() => sidebarProjects(projects.data ?? []), [projects.data]);
   // A project's own page lights its row in that group rather than the Projects entry, which stands
   // for the index — the drawer's rule. A project the group does not list (a closed one) keeps the
@@ -473,6 +483,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // the pages under it (a machine's, a key's, a pool's) light nothing, as Settings lights nothing.
   const routeKey = projectPageKey
     ? projectPageKey
+    : onScheduleRun
+    ? 'scheduled'
     : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
@@ -595,6 +607,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
     return m;
   }, [runners.data]);
+
+  // The account menu's Machines row: every machine, and how many of them are online.
+  const machineList = runners.data ?? [];
+  const onlineMachines = machineList.filter((runner) => runner.online).length;
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
@@ -922,6 +938,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             title={`${t.label}${t.shortcut ? `  ${t.shortcut}` : ''}`}
           >
             <span className="tp-ico">{t.icon}</span>
+            {t.key === 'scheduled' && scheduledNeeds > 0 && (
+              <span className="tp-rail-badge needs-you" data-scheduled-count="">
+                {scheduledNeeds}
+              </span>
+            )}
             {t.key === 'wiki' && wikiWaitingCount > 0 && (
               <span
                 className="tp-rail-badge needs-you"
@@ -984,7 +1005,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
             >
               <span className="tp-ico">{t.icon}</span>
               <span className="tp-label">{t.label}</span>
-              {t.key === 'wiki' && wikiWaitingCount > 0 ? (
+              {t.key === 'scheduled' && scheduledNeeds > 0 ? (
+                <span className="tp-count needs-you" data-scheduled-count="">
+                  {scheduledNeeds}
+                </span>
+              ) : t.key === 'wiki' && wikiWaitingCount > 0 ? (
                 <span
                   className="tp-count needs-you"
                   title={wikiWaitingOnYou(wikiWaitingCount)}
@@ -1242,6 +1267,65 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 },
               })),
             },
+            // Every machine, a level down with its state, as Settings lists them: there is no one Machines page to
+            // open, so the row picks one. With none yet it is the way to add the first.
+            machineList.length > 0
+              ? {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">
+                        {onlineMachines === machineList.length
+                          ? 'All online'
+                          : `${onlineMachines} of ${machineList.length} online`}
+                      </span>
+                    </span>
+                  ),
+                  children: [
+                    ...machineList.map((runner) => {
+                      const managedRow = managedRowOf(accountManaged, runner.id);
+                      return {
+                        key: `machine-${runner.id}`,
+                        textValue: runner.displayName || runner.name,
+                        icon: (
+                          <span
+                            className="tp-account-machine-dot"
+                            data-online={managedRow ? managedRow.acceptsWork : runner.online}
+                          />
+                        ),
+                        label: (
+                          <span className="tp-account-appearance-label">
+                            <span>{runner.displayName || runner.name}</span>
+                            {(managedRow || !runner.online) && (
+                              <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
+                            )}
+                          </span>
+                        ),
+                        onSelect: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
+                      };
+                    }),
+                    { type: 'separator' as const, key: 'machines-add-separator' },
+                    {
+                      key: 'machines-add',
+                      icon: <PlusOutlined />,
+                      label: 'Add a machine',
+                      onSelect: () => navigate('/settings/machines/new'),
+                    },
+                  ],
+                }
+              : {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">None</span>
+                    </span>
+                  ),
+                  onSelect: () => navigate('/settings/machines/new'),
+                },
             {
               key: 'settings',
               icon: <SettingOutlined />,

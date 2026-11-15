@@ -87,9 +87,6 @@ struct CompactShell: View {
                 // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
                 // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
-                    // The needs-you bar over a page with none of its own, inside the sliding card
-                    // so it travels with the page it covers (see `needsYouOverPage`).
-                    .needsYouOverPage(wide: false)
                     // An opaque backing *inside* the sliding content so its translucent bars — the
                     // transcript is a `.scrollContentBackground(.hidden)` (see-through) list, with `.bar`
                     // material on the status line / worktree bar / composer — sample a surface that
@@ -417,6 +414,30 @@ private struct CompactSections: View {
             // The wiki chat on every page of this stack but Settings: its round button, its two-height sheet
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
+
+        // SCHEDULED — the timeline (board 01 ②); a row's detail is the page's own bottom panel, and a run's
+        // session is pushed over the page, so back returns to the schedule it ran for.
+        case .scheduled:
+            NavigationStack(path: $model.nav.path) {
+                ScheduledPage()
+                    .drawerToggle(open: openDrawer)
+                    .refreshable { await model.scheduled?.load() }
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .console(let sessionID, _):
+                            AgentConsolePage(sessionID: sessionID)
+                                .environment(\.opensPagesOverConsole, true)
+                        // What a console opens over itself, as on the Agents stack.
+                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
+                        case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
+                        case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
+                        case .watches:                      FollowingListView(rowNavigation: .push)
+                        case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
+                        case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)
+                        default:                            EmptyView()
+                        }
+                    }
+            }
 
         // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a
         // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a
@@ -765,11 +786,15 @@ struct NavigationDrawer: View {
                     wiki: model.wiki?.shown == true,
                     // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
                     // that the Wiki's own page is the Set up your first wiki card.
-                    newWiki: model.wiki?.spaces.isEmpty == false)) { row in
+                    newWiki: model.wiki?.spaces.isEmpty == false,
+                    // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
+                    // the server predates scheduled tasks.
+                    scheduled: model.scheduled.map { !$0.unsupported } ?? false)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
                     case .newWiki:        newWikiRow
+                    case .scheduled:      scheduledRow
                     case .section(let section): sectionRow(section)
                     case .workspacesHeader: workspacesHeader
                     case .agents:         agentsRows
@@ -796,6 +821,8 @@ struct NavigationDrawer: View {
             // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
             // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
+            // Scheduled's number — the schedules failing or held — read with the drawer like the others.
+            .task { await model.scheduled?.load() }
             // Shared with me, the rail's last group: read with the drawer, then every minute.
             .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
@@ -1075,6 +1102,39 @@ struct NavigationDrawer: View {
         .drawerRow()
     }
 
+    /// Scheduled (board 01 ①): under Tasks, with the number of schedules that need the owner — failing or held —
+    /// in red, written and said the way the Projects row writes its own, and nothing at zero.
+    private var scheduledRow: some View {
+        let selected = model.drawerDestination == .section(.scheduled)
+        let needs = model.scheduled?.needsYouCount ?? 0
+        return Button {
+            open(.section(.scheduled))
+        } label: {
+            pill(selected: selected) {
+                HStack(spacing: 12) {
+                    Image(systemName: AppSection.scheduled.systemImage)
+                        .frame(width: 24)
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
+                    Text(AppSection.scheduled.title)
+                        .fontWeight(selected ? .semibold : .regular)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    if needs > 0 {
+                        Text("\(needs)")
+                            .font(.orbitMeta.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 18, minHeight: 18)
+                            .background(Color.red, in: Circle())
+                            .accessibilityLabel("\(needs) need you")
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("drawer-scheduled")
+    }
+
     /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
     /// the shell and leaves the drawer where it is.
     private var newWikiRow: some View {
@@ -1350,14 +1410,14 @@ private extension View {
     }
 }
 
-/// The hamburger, carrying how many are waiting on you while the needs-you bar is swiped away (the
-/// owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats) — so what the bar said is not lost.
+/// The hamburger, carrying how many are waiting on you (the owner, 2026-11-15,
+/// docs/mocks/needs-you-capsule/12-once): the resident count, now that a notice of each says it once.
 private struct DrawerToggleButton: View {
     @Environment(AppModel.self) private var model
     let open: () -> Void
 
     var body: some View {
-        let waiting = model.needsYouPutAwayCount
+        let waiting = model.needsYouSessions.count
         Button(action: open) {
             Image(systemName: "line.3.horizontal")
                 .overlay(alignment: .topTrailing) {
