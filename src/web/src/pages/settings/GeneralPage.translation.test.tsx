@@ -10,7 +10,7 @@ import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES } from '@orbit/shared
 /**
  * Settings › Translation (docs/mocks/session-translation/01-board.png, frames 1 and 2), a section of
  * Settings → General: one switch for the account, absent = off, the language the owner writes and reads
- * in, and "Agents work in" fixed to English. A server without a DeepSeek key draws it all disabled with
+ * in, and the language agents work in (absent = English), both over the one shared list. A server without a DeepSeek key draws it all disabled with
  * the frame 2 notice.
  */
 
@@ -131,9 +131,10 @@ describe('Settings › Translation', () => {
     await mount(me({}));
     expect(translateSwitch().getAttribute('aria-checked')).toBe('false');
     expect(select('Your language').textContent).toContain('Chinese (Simplified)');
-    // Agents always work in English: shown, never offered.
+    // Absent agent language is English, and the picker is offered.
     expect(select('Agents work in').textContent).toContain('English');
-    expect(select('Agents work in').getAttribute('aria-disabled') ?? select('Agents work in').hasAttribute('data-disabled')).toBeTruthy();
+    expect(select('Agents work in').hasAttribute('data-disabled')).toBe(false);
+    expect(select('Agents work in').getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('turning it on and off saves translationEnabled', async () => {
@@ -158,6 +159,36 @@ describe('Settings › Translation', () => {
     expect(options).toEqual(TRANSLATION_LANGUAGES.map((code) => TRANSLATION_LANGUAGE_NAMES[code]));
   });
 
+  it('offers the same shared list for the agent language', async () => {
+    await mount(me({ translationEnabled: true }));
+    await act(async () => select('Agents work in').click());
+    await settle();
+    const options = [...document.querySelectorAll('.orbit-select-option')].map((o) => o.textContent?.trim());
+    expect(options).toEqual(TRANSLATION_LANGUAGES.map((code) => TRANSLATION_LANGUAGE_NAMES[code]));
+  });
+
+  it('picking an agent language saves translationAgentLanguage, and the row line names it', async () => {
+    await mount(me({ translationEnabled: true }));
+    await act(async () => select('Agents work in').click());
+    await settle();
+    const german = [...document.querySelectorAll<HTMLElement>('.orbit-select-option')].find(
+      (o) => o.textContent?.trim() === 'German',
+    )!;
+    await act(async () => german.click());
+    await settle();
+    expect(patches()).toEqual([{ translationAgentLanguage: 'de' }]);
+    expect(select('Agents work in').textContent).toContain('German');
+    expect(card().textContent).toContain('Agents read and write in German; you write and read in your language.');
+    expect(card().textContent).not.toContain('Agents read and write in English');
+  });
+
+  it('reads a saved non-English agent language', async () => {
+    await mount(me({ translationEnabled: true, translationLanguage: 'en', translationAgentLanguage: 'zh-Hans' }));
+    expect(select('Your language').textContent).toContain('English');
+    expect(select('Agents work in').textContent).toContain('Chinese (Simplified)');
+    expect(card().textContent).toContain('Agents read and write in Chinese (Simplified); you write and read in your language.');
+  });
+
   it('picking a language saves translationLanguage', async () => {
     await mount(me({ translationEnabled: true }));
     await act(async () => select('Your language').click());
@@ -178,6 +209,7 @@ describe('Settings › Translation', () => {
     expect(translateSwitch().getAttribute('aria-checked')).toBe('false');
     expect(translateSwitch().hasAttribute('disabled') || translateSwitch().getAttribute('aria-disabled') === 'true').toBe(true);
     expect(select('Your language').hasAttribute('data-disabled') || select('Your language').getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(select('Agents work in').hasAttribute('data-disabled') || select('Agents work in').getAttribute('aria-disabled') === 'true').toBe(true);
     await act(async () => translateSwitch().click());
     await settle();
     expect(patches()).toEqual([]);
