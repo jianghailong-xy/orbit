@@ -96,7 +96,7 @@ import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
-import { SubagentFinishedCard } from './SubagentFinishedCard';
+import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
@@ -112,7 +112,7 @@ import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
-import { parseSubagentFinished } from '../lib/subagentFinished';
+import { parseSubagentFinished, subagentFinishedOk } from '../lib/subagentFinished';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
@@ -2135,6 +2135,17 @@ function orbitTurnOf(
       category: 'watch',
       target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
     };
+  }
+  // A SubAgent's end folds like a job's news: a session running several should not read as a run of
+  // rounds the reader opened. One that did not finish stays drawn, as a failed job does.
+  const subagent = parseSubagentFinished(node.note);
+  if (subagent) {
+    if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;
+    const jobs = parseBackgroundWake(subagent.rest);
+    if (jobs?.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+    const title = subagentFinishedTitle(subagent);
+    const name = subagent.runs.length === 1 ? subagent.runs[0].description : null;
+    return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
   }
   const background = parseBackgroundWake(node.note);
   if (background) {
