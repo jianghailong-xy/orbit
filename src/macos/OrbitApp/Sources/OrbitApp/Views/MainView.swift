@@ -278,6 +278,9 @@ struct SectionSidebar: View {
             applied = now
             switch SidebarLogic.target(now) {
             case .section(let section):
+                // CRASH CONTROL for client.yml's macos-runtime-probe: a scratch branch only. Pressing
+                // the Wiki row kills the process, so the gate has a crash to fail on.
+                if section == .wiki { fatalError("runtime gate crash control: the Wiki row was pressed") }
                 model.selectedSection = section
             case .agent(let id):
                 openWorkspace(id)
