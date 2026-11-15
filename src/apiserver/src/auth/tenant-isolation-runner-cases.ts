@@ -1846,4 +1846,13 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
   'GET /runner/wake':
     'the long poll this path was is gone. It answers every caller 426 UPGRADE_REQUIRED before it reads anything, for the '
     + 'runners of 0.1.246 that still ask once as they start — runner-api.controller.ts:3571',
+  'GET /help':
+    'the help article library\'s index, read from docs/help at boot and the same for every reader; the caller, when a '
+    + 'credential comes with the request (JwtAuthGuard, help.controller.ts:26), decides only whether the admin '
+    + 'category shows, by the caller\'s own role — help.controller.ts:50, :59',
+  'GET /help/articles/:slug':
+    'one article of the bundled library by its slug, a file name and no account\'s id; an admin-only article is the '
+    + '404 of a missing one to anyone but an administrator — help.controller.ts:62, help-library.ts:181',
+  'GET /help/search':
+    'full-text search over the bundled library alone, under the index\'s visibility rule — help.controller.ts:71',
 };

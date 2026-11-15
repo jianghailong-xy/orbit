@@ -82,6 +82,8 @@ COPY contracts ./contracts
 COPY scripts/executable-acceptance-dead-man.mjs ./scripts/executable-acceptance-dead-man.mjs
 # The runner release pointer: which runners get the latest /dl release (src/runner-api/runner-release.ts).
 COPY runner-release.json ./runner-release.json
+# The help article library (src/help/help-library.ts reads it once at boot): this server's own help, images included.
+COPY docs/help ./docs/help
 
 EXPOSE 3000
 # Apply migrations, then start the API. Prisma 7 takes the connection URL from prisma.config.ts
