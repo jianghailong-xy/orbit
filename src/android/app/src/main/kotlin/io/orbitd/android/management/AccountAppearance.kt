@@ -15,6 +15,7 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.DataKind
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.ui.OrbitTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -35,6 +36,27 @@ val LocalSmartSelectionChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {
  * the server has taken the change. */
 val LocalSessionRecaps = compositionLocalOf { true }
 val LocalSessionRecapsChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
+/** The account's Settings › Translation (`preferences.translationEnabled` / `translationLanguage` / `translationAgentLanguage`, and the server's
+ * `translationAvailable`), read with the theme from the same `users/me`. While it is on, a reply still streaming is greyed with its
+ * chip and the composer carries its tag (board frames 6 and 10). Settings' switch and picker set it the moment the server has taken
+ * the change. */
+val LocalTranslation = compositionLocalOf { AccountTranslation() }
+val LocalTranslationChanged = staticCompositionLocalOf<(AccountTranslation) -> Unit> { {} }
+
+/** [enabled]: the owner's switch; [available]: the server can translate; [language]: the owner's; [agentLanguage]: the agents'. */
+data class AccountTranslation(val enabled: Boolean = false, val available: Boolean = false, val language: String = Translation.DEFAULT_LANGUAGE,
+    val agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE,
+    /** "Show both languages" (`preferences.translationBilingual`, only while [enabled]): a translated message also shows the agent-language text. */
+    val bilingual: Boolean = false) {
+    /** The owner's messages are being translated now: switched on, and the server able to. */
+    val on: Boolean get() = enabled && available
+    companion object {
+        fun of(user: JsonObject?): AccountTranslation = (user?.get("preferences") as? JsonObject).let {
+            AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it), Translation.agentLanguage(it),
+                Translation.bilingual(it))
+        }
+    }
+}
 // The account-wide model memory is retired (docs/workspace-default-model-design.md): a new session's model is its workspace's
 // `lastModel`, and nothing here reads or writes the preferences' model map, which older clients may still write.
 
@@ -58,6 +80,8 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     var appearanceVersion by remember(handle) { mutableLongStateOf(0L) }
     var smartSelectionVersion by remember(handle) { mutableLongStateOf(0L) }
     var sessionRecapsVersion by remember(handle) { mutableLongStateOf(0L) }
+    var translation by remember(handle) { mutableStateOf(AccountTranslation()) }
+    var translationVersion by remember(handle) { mutableLongStateOf(0L) }
     var restored by remember(handle) { mutableStateOf(false) }
     var resume by remember { mutableIntStateOf(0) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -76,12 +100,14 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
             val version = appearanceVersion
             val smartVersion = smartSelectionVersion
             val recapsVersion = sessionRecapsVersion
+            val translatedVersion = translationVersion
             try {
                 val user = ManagementApi(app.session, handle).get("users/me") as JsonObject
                 if (version == appearanceVersion) theme = (user["preferences"] as? JsonObject)?.text("theme") ?: "system"
                 // A read that left before the switch was pressed does not take its answer back.
                 if (smartVersion == smartSelectionVersion) smartSelection = smartModelSelection(user["preferences"] as? JsonObject)
                 if (recapsVersion == sessionRecapsVersion) sessionRecaps = sessionRecapsEnabled(user["preferences"] as? JsonObject)
+                if (translatedVersion == translationVersion) translation = AccountTranslation.of(user)
             } catch (cancel: CancellationException) { throw cancel }
             catch (_: Exception) { /* Keep this account's last known preference until the next refresh. */ }
         }
@@ -101,7 +127,8 @@ fun AccountAppearance(app: OrbitApplication, content: @Composable () -> Unit) {
     }
     CompositionLocalProvider(LocalAppearanceChanged provides { appearanceVersion++; theme = it }, LocalSmartSelection provides smartSelection,
         LocalSmartSelectionChanged provides { smartSelectionVersion++; smartSelection = it },
-        LocalSessionRecaps provides sessionRecaps, LocalSessionRecapsChanged provides { sessionRecapsVersion++; sessionRecaps = it }) {
+        LocalSessionRecaps provides sessionRecaps, LocalSessionRecapsChanged provides { sessionRecapsVersion++; sessionRecaps = it },
+        LocalTranslation provides translation, LocalTranslationChanged provides { translationVersion++; translation = it }) {
         OrbitTheme(darkTheme = dark, content = content)
     }
 }

@@ -130,6 +130,9 @@ type toolReceipt struct {
 	// Text is the tool's answer when it is not a JSON document.
 	Text   string          `json:"text,omitempty"`
 	Entity json.RawMessage `json:"entity,omitempty"`
+	// Recovery is the failed call's recovery report (recovery_render.go): what failed in the shared
+	// recovery envelope and the one step to take next.
+	Recovery *recoveryReport `json:"recovery,omitempty"`
 }
 
 type receiptApproval struct {
@@ -580,8 +583,8 @@ func (rec *callRecord) changedFields() []string {
 // refused it itself, by what it said.
 func (rec *callRecord) failure(text string) (*receiptError, string) {
 	op := rec.op
-	keyed := strings.TrimSpace(getString(rec.args, "idempotencyKey")) != ""
-	resendIsSafe := !op.Mutates || (keyed && op.Idempotency == idempotencyCallerKey)
+	// The same rule `orbit capabilities` states as retryPolicy (capability_contract.go).
+	resendIsSafe := op.resendIsSafe(op.keyedCall(rec.args))
 	if failed := rec.lastFailedRequest(); failed != nil {
 		var httpErr *transportHTTPError
 		if errors.As(failed.Err, &httpErr) {
@@ -893,12 +896,27 @@ func (rec *callRecord) structure(result map[string]interface{}) map[string]inter
 	if result == nil {
 		return result
 	}
-	if _, own := result["structuredContent"]; own {
-		return result
+	// A failed call's recovery report (withRecovery) goes inside the receipt; any other structured
+	// content is the tool's own answer and stays as it is.
+	var recovery *recoveryReport
+	if own, has := result["structuredContent"]; has {
+		report, isRecovery := own.(recoveryReport)
+		if !isRecovery {
+			return result
+		}
+		recovery = &report
+		plain := make(map[string]interface{}, len(result))
+		for key, value := range result {
+			if key != "structuredContent" {
+				plain[key] = value
+			}
+		}
+		result = plain
 	}
 	isErr := result["isError"] == true
 	text := mcpResultText(result)
 	r := rec.receipt(text, isErr)
+	r.Recovery = recovery
 	if r.Outcome == outcomeChat {
 		// The owner's words are a message to answer, so the text stays the reply word for word, which
 		// is where the clients read the words back from (ownerChatWords in @orbit/shared). The
@@ -997,6 +1015,10 @@ func toolReceiptOutputSchema() map[string]interface{} {
 			"notes":  strList,
 			"text":   str,
 			"entity": map[string]interface{}{},
+			"recovery": map[string]interface{}{
+				"type":        "object",
+				"description": "On a failed call: the recovery report — error in the shared recovery envelope and next, the one step to take (docs/recovery-contract.md).",
+			},
 		},
 		"required": []string{"receiptVersion", "ok", "outcome", "operation", "action", "entityType", "id", "status",
 			"changedFields", "approval", "idempotency"},
@@ -1017,7 +1039,7 @@ func (s *mcpServer) invokeTool(name string, args map[string]interface{}) map[str
 			if !op.answersWithReceipt() {
 				// A tool with an answer schema of its own is refused in words: a receipt would not be
 				// the document its outputSchema promises.
-				return toolResult(refusal.Error.Message, true)
+				return s.withRecovery(name, args, markTransportActivity(), toolResult(refusal.Error.Message, true))
 			}
 			return receiptResult(refusal, true)
 		}

@@ -1,0 +1,88 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .row4 { display: flex; gap: 32px; align-items: flex-start; }
+  .row4 .col { width: 440px; }
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  .cap44.fl { z-index: 16; }
+  .ph.light .cap44.fl { box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 10px 26px rgba(0,0,0,.13); }
+  .srow .s .bl { color: #0A84FF; }
+  /* iOS 26 的置顶分组标题：粗灰字，底下一层白色软边 */
+  .sticky { position: absolute; left: 0; right: 0; height: 44px; z-index: 9; padding: 10px 20px 0; font: 700 22px/28px "Inter"; color: rgba(60,60,67,.6);
+            background: linear-gradient(to bottom, rgba(255,255,255,.97) 0, rgba(255,255,255,.97) 70%, rgba(255,255,255,0) 100%); }
+  .ghost { opacity: .35; }
+  .swipe { position: absolute; z-index: 22; left: 50%; margin-left: -14px; width: 28px; display: flex; flex-direction: column; align-items: center; }
+  .swipe .dot { width: 26px; height: 26px; border-radius: 50%; background: rgba(10,132,255,.25); box-shadow: 0 0 0 2px rgba(10,132,255,.7); }
+  .swipe .tail { width: 4px; height: 46px; border-radius: 2px; background: linear-gradient(to top, rgba(10,132,255,.7), rgba(10,132,255,0)); margin-top: -2px; order: -1; }
+  .note { position: absolute; z-index: 22; font: 600 12.5px/1.35 "Inter", "Noto Sans SC"; color: #0A60D0; background: rgba(214,228,255,.95); padding: 4px 8px; border-radius: 8px; }
+  .badge2 { position: absolute; left: 50px; top: 60px; z-index: 13; min-width: 18px; height: 18px; border-radius: 9px; background: #FF9500; color: #fff; font: 700 11px/18px "Inter"; text-align: center; padding: 0 5px; box-shadow: 0 0 0 2px #fff; }
+</style>
+<body>
+<h1>needs-you 胶囊 · 会话列表也真正浮起来 + 上滑收起</h1>
+<p class="lede">owner 11-15（亮色 TestFlight 截图）：<b>为什么还是在 Today 上面？应该和会话页一样，它们两个不会是两套实现吧？</b> 胶囊是同一个视图；不同的是挂法——会话页挂成浮在转录上的 bar，列表页挂成列表顶部「留出来的一条」。列表的分组标题（Pinned / Today / …）是吸顶的，吸顶的位置就是这条的下沿，所以一滚动 Today 就钉在胶囊正下方，看着胶囊又像压在列表上。下面改成和会话页同一种挂法，并回答「能不能上滑关掉」。示意数据取自截图（orbit-develop）。</p>
+
+<h2>滚动时：Today 钉在哪</h2>
+<div class="row4" id="scroll"></div>
+
+<h2>上滑收起（新）</h2>
+<div class="row4" id="swipe"></div>
+
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const L = 'left:16px;right:16px';
+const CAP = { glyph: 'hand', title: 'orbit-develop needs you', sub: 'Android 自动更新报错', age: '5h' };
+const ROWS = [
+  { t: 'Task: Android: land the waiting row change', s: 'Background process running…', tm: 'now' },
+  { t: '单机 Ceph 部署方案设计', s: 'Running · writing ceph-plan.md', tm: '2m' },
+  { t: 'Android 自动更新报错', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '5h' },
+  { t: 'Orbit 接入 Ollama（本地模型供应商）', s: 'Completed · merged to main', tm: '6h' },
+  { t: 'GitHub workspaces P0: GitHub App config and install', s: 'Completed', tm: '7h' },
+  { t: 'Wiki 服务端执行与 System model', s: 'Completed · merged to main', tm: '8h' },
+  { t: 'Ship the 0.1.261 release', s: 'Completed · tagged v0.1.261-beta.5', tm: '9h' },
+  { t: 'Landing lease reminder skips locked rows', s: 'Completed', tm: '10h' },
+  { t: 'Owner answer replayed to a new coordinator', s: 'Completed', tm: '11h' },
+];
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-develop</div>`;
+const rows = (top, from = 0) => ROWS.slice(from).map((r, i) =>
+  `<div class="srow sep" style="top:${top + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const sticky = (top) => `<div class="sticky" style="top:${top}px">Today</div>`;
+const shell = (body, h = 600) => phone('light', `${statusBar('9:08')}${listNav}${body}<div class="home"></div>`, { h, cls: 'crop' });
+const cap = (top = 116, cls = 'fl', style = L) => capA({ ...CAP, top, style, cls });
+const note = (txt, x, y) => `<div class="note" style="left:${x}px;top:${y}px">${txt}</div>`;
+
+// 今天 · 滚动中：吸顶标题在胶囊下沿（160+6），行在它下面淡出
+const t1 = shell(`${rows(150)}${edge('light', 166, 176)}${sticky(166)}${cap()}${note('Today 钉在胶囊下沿', 236, 220)}`);
+// 改后 · 静止：和今天一样，第一行在胶囊下面
+const n0 = shell(`<div class="sticky" style="top:170px;background:none">Today</div>${rows(214)}${edge('light', 70, 118)}${cap()}`);
+// 改后 · 滚动中：吸顶标题在导航下沿（106），被胶囊盖住；行从胶囊后面、两侧过去
+const n1 = shell(`${rows(128)}${sticky(106)}${edge('light', 70, 112)}${cap()}${note('Today 钉在导航下，滑到胶囊后面', 150, 182)}`);
+document.getElementById('scroll').innerHTML = `
+<div class="col"><span class="tag now">今天 · 滚动中</span>${t1}<div class="cap"><h3>胶囊是列表顶上留出的一条</h3>列表的「顶」被下移到胶囊下沿，吸顶的 Today 就钉在那里，下面的行在它后面淡出——胶囊像一块压在列表上的板。</div></div>
+<div class="col"><span class="tag rec">改后 · 静止</span>${n0}<div class="cap"><h3>静止时不变</h3>列表开头空出胶囊的高度（一个看不见的首行），第一组标题和第一行都在胶囊下面，不被盖住。</div></div>
+<div class="col"><span class="tag rec">改后 · 滚动中（推荐）</span>${n1}<div class="cap"><h3>和会话页一样</h3>胶囊浮在列表之上，列表的「顶」回到导航下沿：Today 钉在导航下、从胶囊后面滑过，行在胶囊两侧和下方照常可见。下拉刷新的转圈照旧出在胶囊下面。</div></div>
+<div class="col"><span class="tag alt">会话页（今天就是这样）</span>${phone('light', `${statusBar('9:09')}${navCircles()}${tx(118)}${edge('light', 70, 118)}${cap()}<div class="home"></div>`, { h: 600, cls: 'crop' })}<div class="cap"><h3>对照</h3>会话页的胶囊本来就是浮层（iOS 26 的 safeAreaBar），转录从它后面过。改完两页是同一种挂法。</div></div>`;
+
+// ── 上滑收起 ──
+const s1 = shell(`${rows(214)}${edge('light', 70, 118)}${cap(104)}<div class="swipe" style="top:118px"><div class="dot"></div><div class="tail"></div></div>${note('按住胶囊往上一推', 240, 172)}`);
+const s2 = shell(`<div class="sticky" style="top:110px;background:none">Today</div>${rows(154)}${edge('light', 70, 108)}<div class="badge2">1</div>${note('胶囊收走；列表回到导航下，抽屉按钮上留个数', 120, 116)}`);
+const s3 = shell(`${rows(214)}${edge('light', 70, 118)}${capA({ glyph: 'hand', title: '2 sessions need you', sub: 'Android 自动更新报错', age: '5h', top: 116, style: L, cls: 'fl ring' })}${note('有新的一件来了 → 胶囊回来', 150, 172)}`);
+document.getElementById('swipe').innerHTML = `
+<div class="col"><span class="tag rec">上滑</span>${s1}<div class="cap"><h3>往上推就收</h3>按住胶囊向上推过一半（或快速上划），它跟手上移、淡出。轻点仍是打开，左右划不触发。</div></div>
+<div class="col"><span class="tag rec">收起后</span>${s2}<div class="cap"><h3>收到哪里</h3>胶囊不再显示，列表回到导航下面。「有东西在等你」没有丢：抽屉里各工作区的角标、列表行上的橙点今天就在；☰ 上的橙色数字是新加的（见待定 ③）。</div></div>
+<div class="col"><span class="tag rec">什么时候回来</span>${s3}<div class="cap"><h3>只为新的回来</h3>收起的是「此刻这几件」。有新的一件进来（比如又一个审批），胶囊带琥珀圈落下来；已经收起的那几件不会自己再弹出。重开 App 也不复现，直到有新的。</div></div>
+<div class="col"><span class="tag alt">不做：收起 = 处理掉</span>${phone('light', `${statusBar('9:08')}${listNav}${rows(130)}${edge('light', 70, 112)}<div class="home"></div>`, { h: 600, cls: 'crop' })}<div class="cap"><h3>不把上滑当成「已读」</h3>审批没被回答，会话还停着；上滑只是「先别挡我」，不改任何会话的状态，也不告诉服务器。</div></div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>挂法</td><td>会话列表的胶囊从顶部留白（<code>topInsetClearOfRefresh</code> 的 bands）挪到浮层：它不再占安全区，吸顶标题钉在导航下沿。iPad 的 Open/Completed/Trash 选择器照旧占一条。</td></tr>
+<tr><td>静止留位</td><td>列表最前面一个透明首行，高 = 胶囊高（+ 叠边 13）。滚动时它跟着滚走。</td></tr>
+<tr><td>下拉刷新</td><td>转圈照旧让到胶囊下面：胶囊的位置照旧报给 <code>RefreshControlPlacement</code>。</td></tr>
+<tr><td>上滑</td><td>竖直向上拖 &gt; 胶囊高的一半，或速度够快，即收起（spring 0.3s）；不够就弹回。对 VoiceOver 加一个「Dismiss」动作。收起记的是当时等待的那几件（会话 id + 各自开始等待的时间）；集合里出现新成员才重新显示。存在本机。</td></tr>
+<tr><td>两页一致</td><td>会话页的胶囊同样支持上滑收起，规则同上。Android 同样做（列表的吸顶标题本来就钉在顶上、从胶囊后面过）。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>待你定</b>：① 列表改成浮层挂法、Today 从胶囊后面滑过（推荐）；② 加上滑收起（推荐），收起后只为新的一件回来（推荐），还是隔一段时间（比如 1 小时）自己回来；③ 收起后抽屉按钮上留橙色数字（推荐），还是不留。`;
+</script>
+</body></html>

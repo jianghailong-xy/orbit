@@ -16,9 +16,21 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import io.orbitd.android.R
+import io.orbitd.android.composer.CoordinatorHandoffCopy
+import io.orbitd.android.cards.NeedsYouLogic
+import io.orbitd.android.cards.ReaderSide
+import io.orbitd.android.cards.WaitingBelow
+import io.orbitd.android.cards.drawable
 import io.orbitd.android.core.cards.InteractionCard
+import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.TranslationShown
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
@@ -78,6 +90,10 @@ internal object StickySummary {
      */
     fun isOrbits(cards: List<InteractionCard>): Boolean =
         cards.any { it.key.split(":").getOrNull(2) !in linesInAnAnswer }
+
+    /** The owner's own words, as the bubble under the bar shows them: what they typed, not the English the engine got. */
+    fun words(event: RunEvent): String =
+        TranslationShown.userWords(event.personWords(), Translation.turn(event.fields["translation"]), flipped = false)
 }
 
 /**
@@ -172,7 +188,7 @@ internal fun rememberStuckQuestion(rows: List<TranscriptRow>, list: LazyListStat
  */
 @Composable
 internal fun QuestionCapsule(row: TranscriptRow, jump: (TranscriptRow) -> Unit) {
-    val text = remember(row) { row.event.personWords() }
+    val text = remember(row) { StickySummary.words(row.event) }
     Row(Modifier.widthIn(max = 260.dp).heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
         .clickable(role = Role.Button) { jump(row) }.semantics { contentDescription = "Jump to your last question" }
         .padding(horizontal = 12.dp, vertical = 4.dp).testTag("question-capsule"),
@@ -183,3 +199,36 @@ internal fun QuestionCapsule(row: TranscriptRow, jump: (TranscriptRow) -> Unit) 
             style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
+
+/** "Handing over" in the header's capsule while the handoff locks the composer (board 04; iOS `handingOverCapsule`): the web and Mac
+ * headers' word, in the question capsule's shape. Nothing to press: the transcript's row carries the handoff's actions and its clock. */
+@Composable
+internal fun HandingOverCapsule() {
+    Box(Modifier.heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+        .padding(horizontal = 14.dp, vertical = 4.dp).testTag("handing-over-capsule"), contentAlignment = Alignment.Center) {
+        Text(CoordinatorHandoffCopy.BADGE_HANDING_OVER, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * What waits on the reader in this conversation, in the header's capsule where the question goes (iOS `waitingCapsule`; the owner,
+ * 2026-11-15, `docs/mocks/needs-you-capsule/07-console-one-capsule`): the needs-you mark, the bar's own words ("1 waiting below",
+ * "1 open question above") and the way the card lies, drawn as the "Changes committed" pill is: a bare glyph, no ring. A press shows the card.
+ */
+@Composable
+internal fun WaitingCapsule(here: WaitingBelow, show: () -> Unit) {
+    val amber = LocalOrbitColors.current.needsYou
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(Modifier.widthIn(max = 260.dp).heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+        .clickable(onClickLabel = NeedsYouLogic.belowHint, role = Role.Button, onClick = show)
+        .padding(start = 10.dp, end = 16.dp, top = 4.dp, bottom = 4.dp).testTag("waiting-capsule"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(painterResource(here.glyph.drawable), null, Modifier.size(20.dp), tint = amber)
+        Text(here.text, Modifier.weight(1f, fill = false).testTag("waiting-capsule-text"), style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Icon(painterResource(R.drawable.ic_chevron_down), null,
+            Modifier.size(12.dp).rotate(if (here.side == ReaderSide.ABOVE) 180f else 0f).testTag("waiting-capsule-chevron:${here.side ?: "NONE"}"), tint = muted)
+    }
+}
+

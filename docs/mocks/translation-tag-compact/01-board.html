@@ -1,0 +1,83 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:SC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+body{margin:0;background:#f4f4f6;font-family:Inter,SC,sans-serif;color:#1c1c1e;width:1440px;padding:28px 32px;box-sizing:border-box}
+h1{font-size:24px;margin:0 0 6px} .sub{color:#666;font-size:14px;margin-bottom:22px;line-height:1.6}
+.row{display:flex;gap:22px;margin-bottom:22px;align-items:stretch}
+.col{background:#fff;border-radius:16px;padding:18px;flex:1;box-shadow:0 1px 3px #0001}
+.col.rec{outline:3px solid #3b6cf6}
+.col h2{font-size:16px;margin:0 0 4px} .col p{font-size:13px;color:#555;line-height:1.6;margin:8px 0 0}
+.badge{display:inline-block;background:#3b6cf6;color:#fff;font-size:11px;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
+.state{font-size:12px;color:#888;margin:12px 0 5px}
+.phone{background:#000;border-radius:22px;padding:14px 16px;width:393px;box-sizing:border-box}
+.card{background:#232323;border:1px solid #3a3a3a;border-radius:26px;padding:15px 0 0;color:#fff;position:relative}
+.field{padding:0 16px 8px;font-size:17px;line-height:22px;min-height:22px;display:flex;gap:8px;align-items:flex-start}
+.field .txt{flex:1;color:#eee}.field .ph{flex:1;color:#7c7c80}
+.reserve{background:repeating-linear-gradient(45deg,#ff453a33 0 4px,transparent 4px 8px);outline:1px dashed #ff453a88;border-radius:6px}
+.tag{font-size:11px;color:#a1a1a6;background:#ffffff14;border-radius:99px;padding:3px 8px;white-space:nowrap;line-height:15px}
+.bar{display:flex;align-items:center;height:48px;padding:0 8px 8px 12px;gap:10px;font-size:15px}
+.plus{font-size:26px;color:#a1a1a6;width:28px;text-align:center;font-weight:200}
+.mode{color:#a1a1a6}.sp{flex:1}
+.model b{color:#fff;font-weight:600}.model span{color:#8e8e93;margin-left:5px}
+.gauge{width:22px;height:5px;border-radius:3px;background:#444;position:relative}.gauge:after{content:"";position:absolute;left:0;top:0;height:5px;width:14px;border-radius:3px;background:#3b6cf6}
+.ring{width:15px;height:15px;border:2.5px solid #555;border-radius:50%}
+.send{width:36px;height:36px;border-radius:50%;background:#3b6cf6;display:flex;align-items:center;justify-content:center}.send:after{content:"";width:11px;height:11px;background:#111;border-radius:2px}
+.tchip{font-size:11px;color:#a1a1a6;background:#ffffff14;border-radius:99px;padding:3px 7px;display:flex;gap:4px;align-items:center}
+.ico{font-size:12px;color:#a1a1a6;width:26px;height:26px;border-radius:50%;background:#ffffff14;display:flex;align-items:center;justify-content:center;font-weight:600}
+.note{font-size:12px;color:#c33;margin-top:6px}
+.ok{font-size:12px;color:#1a8d4a;margin-top:6px}
+.decide{background:#fff;border-radius:16px;padding:16px 20px;font-size:14px;line-height:1.8}
+.decide b{color:#3b6cf6}
+</style></head><body>
+<h1>Composer：缩小 “Chinese → English” 标记</h1>
+<div class="sub">iPhone 393pt 宽，手绘（深色，照你截图的 composer）。现在 ComposerView 给标记<b>永远</b>预留 112pt 右侧空白（红色斜线），打字时每一行都少了这一截。下面三种改法，A 为推荐。界面 copy 都是英文。</div>
+
+<div class="row">
+ <div class="col"><h2>现在</h2>
+  <div class="state">空白</div>
+  <div class="phone"><div class="card"><div class="field"><span class="ph">Message...</span><span class="tag">Chinese → English</span></div>
+   <div class="bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model"><b>Opus 5.5</b><span>Default</span></span><span class="gauge"></span><span class="ring"></span><span class="send"></span></div></div></div>
+  <div class="state">打字中（长消息）</div>
+  <div class="phone"><div class="card"><div class="field"><span class="txt">Please fix the login redirect so that it goes back to the page I was on</span><span class="reserve" style="width:104px;height:88px"></span></div>
+   <div class="bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model"><b>Opus 5.5</b><span>Default</span></span><span class="gauge"></span><span class="ring"></span><span class="send"></span></div></div></div>
+  <div class="note">输入区只有 ~217pt 可用（361 − 32 − 112），长消息多折一倍行。</div>
+ </div>
+
+ <div class="col rec"><h2>A · 缩成 “ZH → EN”，只在空白时出现<span class="badge">推荐</span></h2>
+  <div class="state">空白</div>
+  <div class="phone"><div class="card"><div class="field"><span class="ph">Message...</span><span class="tag">ZH → EN</span></div>
+   <div class="bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model"><b>Opus 5.5</b><span>Default</span></span><span class="gauge"></span><span class="ring"></span><span class="send"></span></div></div></div>
+  <div class="state">打字中（长消息）</div>
+  <div class="phone"><div class="card"><div class="field"><span class="txt">Please fix the login redirect so that it goes back to the page I was on</span></div>
+   <div class="bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model"><b>Opus 5.5</b><span>Default</span></span><span class="gauge"></span><span class="ring"></span><span class="send"></span></div></div></div>
+  <div class="ok">标记跟 placeholder 一样：一打字就让位，输入区回到满宽 329pt。标记约 58pt（原 112pt）。点它仍跳 Settings › Translation。</div>
+ </div>
+</div>
+
+<div class="row">
+ <div class="col"><h2>B · 移进工具栏：一个翻译图标</h2>
+  <div class="state">空白 / 打字中都一样</div>
+  <div class="phone"><div class="card"><div class="field"><span class="ph">Message...</span></div>
+   <div class="bar"><span class="plus">+</span><span class="mode">Auto</span><span class="ico">文A</span><span class="sp"></span><span class="model"><b>Opus 5.5</b><span>Default</span></span><span class="gauge"></span><span class="ring"></span><span class="send"></span></div></div></div>
+  <div class="phone" style="margin-top:10px"><div class="card"><div class="field"><span class="txt">Please fix the login redirect so that it goes back to the page I was on</span></div>
+   <div class="bar"><span class="plus">+</span><span class="mode">Auto</span><span class="ico">文A</span><span class="sp"></span><span class="model"><b>Opus 5.5</b><span>Default</span></span><span class="gauge"></span><span class="ring"></span><span class="send"></span></div></div></div>
+  <p>输入区永远满宽，标记永远可见。代价：图标不说明方向（要长按/点开才知道是 Chinese → English），工具栏在 393pt 机型上本来就挤，模型名长时会被压。图标为 SF Symbol <code>translate</code>。</p>
+ </div>
+ <div class="col"><h2>C · 只缩短，位置不变</h2>
+  <div class="state">空白</div>
+  <div class="phone"><div class="card"><div class="field"><span class="ph">Message...</span><span class="tag">ZH → EN</span></div>
+   <div class="bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model"><b>Opus 5.5</b><span>Default</span></span><span class="gauge"></span><span class="ring"></span><span class="send"></span></div></div></div>
+  <div class="state">打字中（长消息）</div>
+  <div class="phone"><div class="card"><div class="field"><span class="txt">Please fix the login redirect so that it goes back to the page I was on</span><span class="reserve" style="width:52px;height:66px"></span></div>
+   <div class="bar"><span class="plus">+</span><span class="mode">Auto</span><span class="sp"></span><span class="model"><b>Opus 5.5</b><span>Default</span></span><span class="gauge"></span><span class="ring"></span><span class="send"></span></div></div></div>
+  <p>改动最小，预留从 112pt 降到 ~60pt；打字时仍少一截。</p>
+ </div>
+</div>
+
+<div class="decide">
+<b>待你定 ①</b> 方案：<b>A</b>（推荐）/ B / C<br>
+<b>待你定 ②</b> 缩写写法：<b>“ZH → EN”</b>（推荐，按语言代码：JA → EN、KO → EN…）/ 保留全称 “Chinese → English” 只做“空白时才出现”<br>
+<b>待你定 ③</b> 范围：iOS + macOS + Web + Android 一起改（推荐，四端 copy parity 测试 pin 着同一个 tag 写法）/ 只改 iOS<br>
+<span style="color:#666">注：⑥ 当初定的 A 是 “Chinese → English” 纯英文 copy；②选 “ZH → EN” 会改这一条，仍是纯英文，copyLanguage.test 不受影响。</span>
+</div>
+</body></html>

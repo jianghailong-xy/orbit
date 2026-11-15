@@ -47,7 +47,7 @@ import { PoolLoginGatewayService } from '../providers/pool-login-gateway.service
 import { RunnerApiController } from './runner-api.controller';
 import { subagentPoolMember } from './session-provider-exec';
 import { RunnerSubagentsController } from './runner-subagents.controller';
-import { SubagentRunCreateDto, SubagentRunUpdateDto } from './subagent-run';
+import { SubagentRunCreateDto, SubagentRunUpdateDto, subagentRunView } from './subagent-run';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'subagent-run-spec';
@@ -184,6 +184,29 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(repeated.applied, false, 'a repeated report changes nothing');
     assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: sessionId } })).costUsd, after,
       'and adds no cost again');
+  });
+
+  await t.test("a read-only run keeps its flag, and the client's view names its engine, flag, files and description", async () => {
+    const sessionId = await parentSession();
+    const reader = await subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_01ReadOnly', type: 'explore', readonly: true, description: 'Find every caller',
+    }));
+    assert.equal(reader.decision.readonly, true, 'the decision keeps the definition\'s read-only flag');
+    const writer = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Writer', type: 'general' }));
+    assert.equal(writer.decision.readonly, undefined, 'and a writer has none');
+    await subagents.updateSubagentRun(runner, sessionId, writer.runId, update({
+      status: 'DONE', changedFiles: ['src/quota/poller.ts'], costUsd: 0.01,
+    }));
+    const rows = await prisma.subagentRun.findMany({
+      where: { sessionId }, orderBy: { createdAt: 'asc' }, include: { workspace: { select: { name: true } } },
+    });
+    const [readView, writeView] = rows.map((row) => subagentRunView(row));
+    assert.equal(readView.readonly, true);
+    assert.equal(readView.engine, 'claude', 'the engine its attempt runs on');
+    assert.equal(readView.description, 'Find every caller');
+    assert.deepEqual(readView.changedFiles, []);
+    assert.equal(writeView.readonly, false);
+    assert.deepEqual(writeView.changedFiles, ['src/quota/poller.ts']);
   });
 
   await t.test('the fifth concurrent POST is refused once four are RUNNING, and a disabled agent is refused', async () => {

@@ -297,28 +297,6 @@ class PushDeviceTest {
         pass()
     }
 
-    @Test fun foregroundNoticeOpensUnfocusedRealSessionAndDeduplicates() {
-        login()
-        assertNull(app.realtime.state.value.session)
-        val message = alert()
-        deliver(message)
-        compose.waitUntil(10_000) { app.push.notice.value?.eventId == message.getValue("eventId") }
-        compose.onNodeWithTag("notification-notice").assertIsDisplayed()
-        awaitNotifications(1)
-        assertSilent(orbitEntries().single())
-        capture("foreground-notice")
-        compose.onNode(hasText("Open") and hasAnyAncestor(hasTestTag("notification-notice"))).performClick()
-        awaitCard()
-        assertTrue(ObjectId.same(fixture.sessionId, app.realtime.state.value.session?.id))
-        compose.waitUntil(10_000) { app.push.notice.value == null }
-        deliver(message)
-        assertNull(app.push.notice.value)
-        compose.onNodeWithTag("notification-notice").assertDoesNotExist()
-        compose.onNodeWithTag("approval:a1:ALLOW").assertIsEnabled()
-        capture("foreground-notice-actionable")
-        pass()
-    }
-
     /** iOS lists every foreground alert in Notification Center; here it stays in the tray without sound
      * or heads-up. Only the focused session's own approval stays out, because its card is on screen. */
     @Test fun foregroundAlertsStayInTheTraySilentlyExceptTheFocusedApproval() {
@@ -332,20 +310,18 @@ class PushDeviceTest {
         assertSilent(orbitEntries().single())
         val approval = alert()
         deliver(approval)
-        compose.waitUntil(10_000) { app.push.notice.value?.eventId == approval.getValue("eventId") }
         awaitNotifications(2)
         orbitEntries().forEach(::assertSilent)
         background() // Leaving the app keeps both reminders in the tray.
         awaitNotifications(2)
         foreground()
-        compose.onNode(hasText("Open") and hasAnyAncestor(hasTestTag("notification-notice"))).performClick()
+        openSession()
         awaitCard()
         instrument.runOnMainSync { manager.cancelAll() }
         awaitNotifications(0)
         deliver(alert()) // A new event for the approval whose card is on screen.
         SystemClock.sleep(1_000)
         awaitNotifications(0)
-        assertNull(app.push.notice.value)
         File(evidence, "foreground-tray-result.txt").writeText("agentMessageKey=$agentMessage\n" +
             "Foreground agent message and unfocused approval stayed in the tray silently (group ${PushNotifications.SILENT_GROUP}, " +
             "GROUP_ALERT_SUMMARY) and after Home; the focused session's approval was not added.\n")

@@ -33,7 +33,9 @@ import kotlinx.serialization.json.JsonObject
 /** Resources: CPU, Memory and Disk, each its number, its detail and its last hour (RunnerResources). Polled every heartbeat while
  * the machine is online and the page is up; an offline machine shows its last reading, greyed. */
 @Composable
-internal fun RunnerResourcesSection(api: ManagementApi, runner: JsonObject, workspaces: List<JsonObject>, now: Long, online: Boolean, resumed: Boolean) {
+internal fun RunnerResourcesSection(api: ManagementApi, runner: JsonObject, workspaces: List<JsonObject>, now: Long, online: Boolean, resumed: Boolean,
+                                    /** The account's managed runner says its state (Asleep, Waking up…) where another machine says Offline. */
+                                    awayLabel: String? = null) {
     val id = runner.text("id")
     val reports = RunnerResources.reports(runner)
     var answer by remember(id) { mutableStateOf(RunnerResources.answerOf(null)) }
@@ -47,7 +49,7 @@ internal fun RunnerResourcesSection(api: ManagementApi, runner: JsonObject, work
     }
     val tiles = RunnerResources.tiles(runner, answer, RunnerPage.runnerDisk(workspaces), online)
     val endMs = RunnerResources.endMs(answer, online, now)
-    FormSection(RunnerCopy.RESOURCES, RunnerResources.header(runner, answer, online, now).first) {
+    FormSection(RunnerCopy.RESOURCES, (if (!online) awayLabel else null) ?: RunnerResources.header(runner, answer, online, now).first) {
         tiles.forEachIndexed { index, tile ->
             if (index > 0) HorizontalDivider()
             ResourceTileRow(tile, if (reports) RunnerResources.runs(answer.samples, tile.figure, endMs) else null, online)

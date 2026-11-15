@@ -302,6 +302,7 @@ export class RunnerSubagentsController {
         });
       }
       const decision = appliedDecision(route, chosen.target, passedOver);
+      if (dto.readonly) decision.readonly = true;
       // A call that asked for a workspace or capabilities and was placed here says why first (§10.1).
       if (workspaceReason) decision.reasons = [workspaceReason, ...decision.reasons];
       const { note: _note, ...target } = chosen.target;
@@ -417,6 +418,7 @@ export class RunnerSubagentsController {
         policyVersion: 'subagent-remote-v1',
         applied: true,
         workspace: workspaceChoice(pick.workspace, pick.reason),
+        ...(dto.readonly ? { readonly: true } : {}),
       };
       const row = await tx.subagentRun.create({
         data: {

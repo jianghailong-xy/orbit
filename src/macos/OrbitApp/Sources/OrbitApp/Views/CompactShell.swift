@@ -87,9 +87,6 @@ struct CompactShell: View {
                 // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
                 // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
-                    // The needs-you bar over a page with none of its own, inside the sliding card
-                    // so it travels with the page it covers (see `needsYouOverPage`).
-                    .needsYouOverPage(wide: false)
                     // An opaque backing *inside* the sliding content so its translucent bars — the
                     // transcript is a `.scrollContentBackground(.hidden)` (see-through) list, with `.bar`
                     // material on the status line / worktree bar / composer — sample a surface that
@@ -1379,13 +1376,36 @@ private extension View {
     /// shows only in the root nav bar (pushed pages keep the system back button).
     func drawerToggle(open: @escaping () -> Void) -> some View {
         toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: open) {
-                    Image(systemName: "line.3.horizontal")
-                }
-                .accessibilityLabel("Open navigation")
-            }
+            ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
         }
+    }
+}
+
+/// The hamburger, carrying how many are waiting on you (the owner, 2026-11-15,
+/// docs/mocks/needs-you-capsule/12-once): the resident count, now that a notice of each says it once.
+private struct DrawerToggleButton: View {
+    @Environment(AppModel.self) private var model
+    let open: () -> Void
+
+    var body: some View {
+        let waiting = model.needsYouSessions.count
+        Button(action: open) {
+            Image(systemName: "line.3.horizontal")
+                .overlay(alignment: .topTrailing) {
+                    if waiting > 0 {
+                        Text("\(waiting)")
+                            .font(.caption2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Color.orange, in: Capsule())
+                            .offset(x: 10, y: -10)
+                            .accessibilityHidden(true)
+                    }
+                }
+        }
+        .accessibilityLabel("Open navigation")
+        .accessibilityValue(waiting > 0 ? "\(waiting) waiting on you" : "")
     }
 }
 
