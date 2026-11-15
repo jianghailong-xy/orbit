@@ -95,6 +95,10 @@ class SubagentFinishedLineTest {
     private fun assertNotTheReadersBubble() {
         compose.onAllNodes(hasText("Orbit attached", substring = true), useUnmergedTree = true).assertCountEquals(0)
         compose.onAllNodes(hasText("<orbit-subagent-finished>", substring = true), useUnmergedTree = true).assertCountEquals(0)
+        // A line in the agent's stream, not a third speaker (owner 2026-11-16): no "Orbit" heading and no Copy message on its row.
+        compose.onAllNodes(hasText("Orbit") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodes(hasText("Copy message") and hasAnyAncestor(hasTestTag("event:9")), useUnmergedTree = true).assertCountEquals(0)
+        compose.onNodeWithTag("event:9").assert(hasAnyDescendant(hasTestTag("subagent-finished")))
     }
 
     /** The line's own words. Its row is laid out wide or stacked ([FitsOrStack]), which composes a measuring copy of the wide row too, so
@@ -115,8 +119,8 @@ class SubagentFinishedLineTest {
         assertNoProtocol()
         // Three lines of it: the clamp is shorter than the whole result.
         val clamped = compose.onNodeWithTag("subagent-finished:result").fetchSemanticsNode().size.height
-        // On a line's boundary: three of the prose's 24sp lines, at xhdpi.
-        assertEquals(3 * 48, clamped)
+        // Three of the prose's 24sp lines at xhdpi (one Text: the leading above the first line and below the last is trimmed), ending in "…".
+        assertTrue("three lines, was $clamped px", clamped in (5 * 48 / 2)..(3 * 48))
         shot("01-done")
         compose.onNodeWithTag("subagent-finished:toggle").performClick()
         compose.waitForIdle()

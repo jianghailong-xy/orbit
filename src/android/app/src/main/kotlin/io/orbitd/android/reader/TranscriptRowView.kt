@@ -97,6 +97,18 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
+    // A SubAgent's end is a line in the agent's stream (docs/mocks/subagent-finished-line; owner 2026-11-16: it must not look like
+    // something the reader sent): no "Orbit" heading, no row tint, no Copy message — its line and its result are the whole row, as on the
+    // web and iOS. Whatever else its note carried stays an attached entry under it.
+    if (event.type == "user" && cards.any { it.key.endsWith(":subagent") } && shown.personWords().isBlank()) {
+        val rest = SubagentFinished.parse(shown.fields.string("controlPlaneNote"))?.rest
+            ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            cards.forEach { TranscriptCardView(it, open, shown) }
+            rest?.let { AttachedNoteEntry(it.trim()) }
+        }
+        return
+    }
     // Settings › Translation (board frames 4–6): the owner's message as they wrote it and the agent's reply in their language, each
     // with its own flip to the English, held by the reader so a recycled row keeps its side.
     val shownOriginals = LocalShownOriginals.current
@@ -343,8 +355,6 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             } }
             // Another session's words, and what delivery attached, are its bubble's.
             else if (bubble != null) Unit
-            // A SubAgent's end carries nothing but its block, which its line already holds under "What the agent read".
-            else if (cards.any { it.key.endsWith(":subagent") } && shown.personWords().isBlank()) Unit
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
             val doors = console?.composer
             val toggle = { shownOriginals?.toggle(translationKey) ?: Unit }

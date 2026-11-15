@@ -39,11 +39,15 @@ data class SubagentFinished(
     val rest: String,
 ) {
     companion object {
-        private val block = Regex("<orbit-subagent-finished>\\n([\\s\\S]*?)\\n</orbit-subagent-finished>")
+        // The web reader's patterns (OrbitKit `SubagentFinishedText` pins the same ones; SubagentFinishedCopyParityTest holds both).
+        internal const val blockPattern = "<orbit-subagent-finished>\\n([\\s\\S]*?)\\n</orbit-subagent-finished>"
         /** `SubAgent <description> (run <id>) finished: <STATUS>` — the description may hold brackets of its own. */
-        private val head = Regex("^ {2}SubAgent (.+) \\(run (\\S+)\\) finished: (DONE|FAILED|STOPPED|INTERRUPTED)$")
+        internal const val headPattern = "^ {2}SubAgent (.+) \\(run (\\S+)\\) finished: (DONE|FAILED|STOPPED|INTERRUPTED)$"
         /** A line at the block's own indent, not inside a result. */
-        private val sentence = Regex("^ {2}(?! )(.+)$")
+        internal const val sentencePattern = "^ {2}(?! )(.+)$"
+        private val block = Regex(blockPattern)
+        private val head = Regex(headPattern)
+        private val sentence = Regex(sentencePattern)
 
         /** The SubAgent block in a control-plane note, or null for a note carrying none it can read. */
         fun parse(note: String?): SubagentFinished? {

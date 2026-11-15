@@ -10,18 +10,14 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.SubagentFinished
@@ -31,6 +27,7 @@ import io.orbitd.android.core.cards.BackgroundWakeCard
 import io.orbitd.android.reader.AgentTone
 import io.orbitd.android.reader.LocalSubagentCardJump
 import io.orbitd.android.text.MarkdownText
+import io.orbitd.android.text.markdownInline
 import io.orbitd.android.ui.LocalOrbitColors
 
 /**
@@ -147,7 +144,8 @@ private fun Runs(runs: List<SubagentFinishedRun>) {
     }
 }
 
-/** A run's result as Markdown, three lines of it until the reader asks for the rest — offered only when three lines do not hold it. */
+/** A run's result as Markdown, three lines of it ending in an ellipsis until the reader asks for the rest — offered only when three lines
+ * do not hold it (web `.sawake-result-md.is-clamped`, OrbitKit `lineLimit(previewLines)`). */
 @Composable
 private fun ResultPreview(text: String) {
     var open by rememberSaveable(text) { mutableStateOf(false) }
@@ -156,7 +154,8 @@ private fun ResultPreview(text: String) {
         Box(Modifier.testTag("subagent-finished:result")) {
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
                 if (open) MarkdownText(text)
-                else Clamped(SubagentFinishedCard.resultLines, onOverflow = { overflows = it }) { MarkdownText(text) }
+                else Text(markdownInline(text), style = MaterialTheme.typography.bodyLarge, maxLines = SubagentFinishedCard.resultLines,
+                    overflow = TextOverflow.Ellipsis, onTextLayout = { overflows = it.hasVisualOverflow })
             }
         }
         if (open || overflows) Row(Modifier.clickable(role = Role.Button) { open = !open }.testTag("subagent-finished:toggle"),
@@ -164,23 +163,6 @@ private fun ResultPreview(text: String) {
             Text(if (open) SubagentFinishedCard.showLess else SubagentFinishedCard.showFullResult, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary)
             Icon(painterResource(R.drawable.ic_chevron_down), null, Modifier.size(12.dp).rotate(if (open) 180f else 0f), tint = MaterialTheme.colorScheme.primary)
-        }
-    }
-}
-
-/** Markdown [content], cut at [lines] of its paragraphs' line height (MarkdownText draws prose in bodyLarge) — on a line's boundary —
- * and saying whether anything was cut. */
-@Composable
-private fun Clamped(lines: Int, onOverflow: (Boolean) -> Unit = {}, content: @Composable () -> Unit) {
-    val style = MaterialTheme.typography.bodyLarge
-    val cap = with(LocalDensity.current) { (style.lineHeight * lines).roundToPx() }
-    val report by rememberUpdatedState(onOverflow)
-    ProvideTextStyle(style) {
-        Layout(content, Modifier.clipToBounds()) { measurables, constraints ->
-            val placeables = measurables.map { it.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity)) }
-            val full = placeables.maxOfOrNull { it.height } ?: 0
-            report(full > cap)
-            layout(placeables.maxOfOrNull { it.width } ?: 0, minOf(full, cap)) { placeables.forEach { it.placeRelative(0, 0) } }
         }
     }
 }
