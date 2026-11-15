@@ -8,7 +8,7 @@ import type { Runner } from './TasksSidePanel';
 
 /**
  * Settings › Translation in the session page (docs/mocks/session-translation/01-board.png, frames 3–6):
- * the composer's "<Language> → English" tag that opens the setting, a message held for its translation
+ * the composer's "<Language> → <Agent language>" tag that opens the setting, a message held for its translation
  * drawn in the conversation with its chip or its failure — whose Retry and Send as written call the
  * A1 doors — and a reply swapped for its translation when the live `translation` event comes.
  */
@@ -264,6 +264,12 @@ describe('the composer tag (6A)', () => {
     preferences = { translationEnabled: true, translationLanguage: 'ja' };
     await mount();
     await waitForUi(() => expect(tag()?.textContent).toBe('Japanese → English'));
+  });
+
+  it('names the agent language the account picked, both without their parenthesis', async () => {
+    preferences = { translationEnabled: true, translationLanguage: 'en', translationAgentLanguage: 'zh-Hant' };
+    await mount();
+    await waitForUi(() => expect(tag()?.textContent).toBe('English → Chinese'));
   });
 
   it('is not there with translation off, or on a server that cannot translate', async () => {

@@ -125,3 +125,42 @@ func TestScheduledCheckOnlyRefusesEveryOrbitToolPrompt(t *testing.T) {
 		t.Errorf("outside a scheduled check, task_update outside Plan is the Plan gate's allow, got %v", answer)
 	}
 }
+
+// The two schedule operations whose owner step is a card say so in the capability document; the rest of the
+// schedule tools involve nobody.
+func TestScheduleToolInteractions(t *testing.T) {
+	for tool, want := range map[string]string{
+		"schedule_create": interactionCard, "schedule_update": interactionCard,
+		"schedule_end": interactionNone, "schedule_pause": interactionNone, "schedule_run_report": interactionNone,
+		"schedule_get": interactionNone,
+		// Still the owner's decision elsewhere: the override is the schedule tools' alone.
+		"project_request_start": interactionOwnerDecision,
+	} {
+		op := catalogOperation(tool)
+		if op == nil {
+			t.Fatalf("%s is not in the catalogue", tool)
+		}
+		if got := op.interaction(); got != want {
+			t.Errorf("%s: interaction %q, want %q", tool, got, want)
+		}
+	}
+}
+
+// Recovery's listedTools counts what tools/list lists: schedule_run_report only in a scheduled run's session.
+func TestListedToolsMatchToolsListForScheduleRunReport(t *testing.T) {
+	t.Setenv(envSubagentRunID, "")
+	for _, run := range []bool{false, true} {
+		srv := &mcpServer{scheduleRun: run}
+		_, listed := srv.listedTools()[scheduleRunReportTool]
+		resp, _ := srv.handle(&rpcRequest{JSONRPC: "2.0", ID: []byte("1"), Method: "tools/list"})
+		inList := false
+		for _, tool := range resp.Result.(map[string]interface{})["tools"].([]map[string]interface{}) {
+			if tool["name"] == scheduleRunReportTool {
+				inList = true
+			}
+		}
+		if listed != run || inList != run {
+			t.Errorf("scheduleRun=%v: listedTools has it %v, tools/list has it %v", run, listed, inList)
+		}
+	}
+}

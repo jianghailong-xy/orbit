@@ -27,11 +27,12 @@ object TranslationCopy {
     // Settings › Sessions › Translation (board frames 1, 2 and 9).
     const val TITLE = "Translation"
     const val TRANSLATE_CONVERSATIONS = "Translate conversations"
-    const val TRANSLATE_CONVERSATIONS_HINT = "Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
+    /** The switch's line, naming the language agents work in by its name ("Agents work in"; web `translationEnabledDescription`). */
+    fun translateConversationsHint(agentLanguage: String): String =
+        "Agents read and write in ${Translation.name(agentLanguage)}; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
     const val UNAVAILABLE = "This server has no DeepSeek key, so it can't translate. Whoever runs it sets DEEPSEEK_API_KEY and restarts it."
     const val YOUR_LANGUAGE = "Your language"
     const val AGENTS_WORK_IN = "Agents work in"
-    const val ENGLISH = "English"
     const val FOOTER = "Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a conversation stays as it was."
 
     // The conversation (board frames 4–6).

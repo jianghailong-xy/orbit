@@ -226,6 +226,9 @@ struct ComposerView: View {
     @State private var slashDismissed: String?
     /// Measured height of the `/` menu's rows — the floating card is sized from this (see slashMenu).
     @State private var slashHeight: CGFloat = 0
+    /// The translation tag's drawn width, which the text keeps clear of: "Portuguese → Indonesian" is
+    /// wider than "Chinese → English".
+    @State private var translationTagWidth: CGFloat = 104
     #if os(macOS)
     @FocusState private var inputFocused: Bool
     @State private var pasteMonitor: Any?
@@ -483,11 +486,13 @@ struct ComposerView: View {
                     // Settings › Translation (6A): "Chinese → English" on the box's right while the
                     // account translates; pressed, it opens the setting. Like the placeholder, it shows
                     // only while the box is empty, so typed text gets the whole width.
-                    .padding(.trailing, showsTranslationTag ? 112 : 0)
+                    .padding(.trailing, showsTranslationTag ? translationTagWidth + 8 : 0)
                     .overlay(alignment: .topTrailing) {
                         if showsTranslationTag {
                             ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
+                                                   agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),
                                                    open: openTranslationSettings)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { translationTagWidth = $0 }
                         }
                     }
                     .onChange(of: console.slashToken) { _, new in

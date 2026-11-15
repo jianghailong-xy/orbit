@@ -238,6 +238,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
+		// schedule_run_report's filter lives in listedToolDescriptors, so recovery's listedTools counts what this lists.
 		return s.ok(req.ID, map[string]interface{}{"tools": s.listedToolDescriptors()}), true
 	case "tools/call":
 		var p struct {

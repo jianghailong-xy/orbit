@@ -159,14 +159,20 @@ func orbitWaitInstructionsFor(watches bool) string {
 // while the engine's own Agent tool is always loaded and does a similar job without Orbit's routing, cost record or
 // runs on another machine, so agents called delegate only when a person asked for it. Measured 2026-11-15: 440 bytes,
 // 98 o200k tokens. ASCII like the rest of the paragraph.
+//
+// Measured 2026-11-15 in three fresh sessions asked to read production data: each one thought of "the orbit-prod
+// agent", found it with agent_list and used session_create, never delegate. So the paragraph says that workspace
+// is another agent's name, and when delegate beats session_create.
 const orbitDelegateInstructions = "Use delegate to hand a self-contained piece of work to a cheaper or stronger model " +
-	"than yours, to run it on another machine (needs: [\"os:darwin\"], or workspace), or to run an independent piece " +
-	"in the background while you go on. Prefer it to your engine's built-in subagent or Agent tool when Orbit should " +
-	"pick the model, record the cost or run the work elsewhere." + orbitDelegateClaudeCodeLoad + "\n\n"
+	"than yours, to run it on another machine (needs: [\"os:darwin\"], or workspace: another agent's name from " +
+	"agent_list), or to run an independent piece in the background while you go on. Prefer it to session_create " +
+	"when you only need that piece's result back, and to your engine's built-in subagent or Agent tool when Orbit " +
+	"should pick the model, record the cost or run the work elsewhere." + orbitDelegateClaudeCodeLoad + "\n\n"
 
 // orbitDelegateClaudeCodeLoad is the paragraph's Claude Code sentence. Cursor, which never shows mcp__orbit__*
-// names, is given the paragraph without it (cursorAgentInstructions).
-const orbitDelegateClaudeCodeLoad = " In Claude Code, load it first with ToolSearch select:mcp__orbit__delegate."
+// names, is given the paragraph without it (cursorAgentInstructions). Delegate is marked to load up front
+// (subagent.go), so this only matters for a Claude Code that still defers it.
+const orbitDelegateClaudeCodeLoad = " In Claude Code, if it is deferred, load it with ToolSearch select:mcp__orbit__delegate."
 
 // orbitDelegateInstructionsFor is that paragraph for a top-level session, and nothing for a SubAgent, which is
 // neither offered nor served delegate (mcp.go).

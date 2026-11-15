@@ -113,6 +113,7 @@ public enum SteerDelivery {
             && b.runNotice == nil && b.sessionOpening == nil
             && WatchWakeText.parse(b.text) == nil
             && BackgroundWakeText.parse(b.text) == nil && BackgroundWakeText.parse(b.note) == nil
+            && SubagentFinishedText.parse(b.text) == nil && SubagentFinishedText.parse(b.note) == nil
     }
 
     /// Whether this runtime can take a message into a running turn at all, whatever its runner
