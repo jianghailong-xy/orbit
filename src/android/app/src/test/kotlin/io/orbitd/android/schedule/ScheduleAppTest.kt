@@ -10,9 +10,12 @@ import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitLinks
 import io.orbitd.android.push.PushMessage
-import java.util.UUID
-import kotlinx.serialization.json.JsonObjectBuilder
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.Assert.*
 import org.junit.Test
@@ -25,38 +28,39 @@ import org.junit.Test
 class ScheduleAppTest {
     private val schedule = "01a0d6a9-d763-70e1-b4cf-8793e971b600"
     private val session = "01a0d6a9-d763-70e1-b4cf-8793e971b601"
-    private val request = "01a0d6a9-d763-70e1-b4cf-8793e971b602"
 
-    private fun push(payload: JsonObjectBuilder.() -> Unit): Map<String, String> = mapOf(
-        "version" to "1", "type" to "alert", "registrationKey" to "10000000-0000-4000-8000-000000000001",
-        "eventId" to UUID.randomUUID().toString(), "notificationKey" to "schedule-failed-$schedule", "sentAt" to "2026-11-14T02:41:00.000Z",
-        "payload" to buildJsonObject {
-            put("title", "Nightly pg spec sweep failed 3 runs in a row"); put("body", "The last run ended without a report. It keeps running until you pause it.")
-            put("kind", "schedule"); put("scheduleKind", "SCHEDULE_FAILED"); put("threadId", "schedule-$schedule")
-            put("scheduleID", ObjectId.toPublic(schedule))
-            payload()
-        }.toString())
-
-    @Test fun aSchedulePushNamingARunSessionOpensThatSession() {
-        val message = PushMessage.parse(push { put("sessionID", session); put("ownerRequestID", request) })
-        assertNotNull("the schedule kind is not dropped", message)
-        assertEquals(schedule, message!!.payload.scheduleId)
-        assertEquals(request, message.payload.ownerRequestId)
-        assertEquals("orbit-session:$session", message.link)
+    /** A sample of the shared fixture (src/shared/src/android-push.fixture.json), the FCM data push.service.spec pins to what
+     * `PushService.notifySchedule` really sends: a server change turns this red. */
+    private fun sample(name: String): Map<String, String> {
+        val root = generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { java.io.File(it, "src/shared/src/android-push.fixture.json").isFile }
+        val fixture = Json.parseToJsonElement(java.io.File(root, "src/shared/src/android-push.fixture.json").readText()).jsonObject
+        return fixture["samples"]!!.jsonArray.map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == name }["data"]!!
+            .jsonObject.mapValues { it.value.jsonPrimitive.content }
     }
 
-    @Test fun aSchedulePushNamingNoSessionOpensTheScheduleOnTheScheduledPage() {
-        val message = PushMessage.parse(push { })!!
-        assertEquals("orbit://schedule/$schedule", message.link)
+    @Test fun theServersFailurePushOpensTheRunsSessionOnTheNeedsYouChannel() {
+        val message = PushMessage.parse(sample("schedule-failed")) ?: throw AssertionError("the server's schedule push is dropped")
+        assertEquals("schedule", message.payload.kind)
+        assertEquals("019a0000-0000-7000-8000-000000000010", message.payload.scheduleId)
+        assertEquals("019a0000-0000-7000-8000-000000000013", message.payload.ownerRequestId)
+        assertEquals("Nightly pg spec sweep failed 3 runs in a row", message.payload.title)
+        assertEquals("orbit-session:019a0000-0000-7000-8000-000000000012", message.link)
+    }
+
+    @Test fun theServersHoldPushOpensTheScheduleOnTheScheduledPage() {
+        val message = PushMessage.parse(sample("schedule-held")) ?: throw AssertionError("the server's schedule push is dropped")
+        assertNull(message.payload.sessionId)
+        assertEquals("orbit://schedule/019a0000-0000-7000-8000-000000000010", message.link)
         val route = OrbitLinks.parse(message.link!!)!!
         assertEquals(Destination.SCHEDULED, route.destination)
-        assertEquals(schedule, route.id)
+        assertEquals("019a0000-0000-7000-8000-000000000010", route.id)
     }
 
     @Test fun aSchedulePushWithoutItsScheduleIsRefused() {
-        val data = push { }.toMutableMap()
-        data["payload"] = data.getValue("payload").replace(Regex(",\"scheduleID\":\"[^\"]+\""), "")
-        assertNull(PushMessage.parse(data))
+        val data = sample("schedule-held")
+        val payload = Json.parseToJsonElement(data.getValue("payload")).jsonObject - "scheduleID"
+        assertNull(PushMessage.parse(data + ("payload" to JsonObject(payload).toString())))
     }
 
     @Test fun aScheduleLinkInEitherSpellingLandsOnTheScheduledPage() {

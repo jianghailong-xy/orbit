@@ -29,7 +29,10 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
     private val card = "34A1SchedCreateCard001"
     private val failedItem = "34A1SchedWaitFailed001"
     private val heldItem = "34A1SchedWaitHeld00001"
-    override val ids get() = listOf(conversation, nightly, audit, docs, notes, codex, claude, cost, paused, card, failedItem, heldItem, workspace, runner)
+    private val changeChat = "34A1SchedChangeChat001"
+    private val envelopeCard = "34A1SchedEnvelopeCard1"
+    private val runSession = "34A1SchedRunSession001"
+    override val ids get() = listOf(conversation, nightly, audit, docs, notes, codex, claude, cost, paused, card, failedItem, heldItem, changeChat, envelopeCard, runSession, workspace, runner)
 
     private val zone = ZoneId.systemDefault()
     private val today get() = ZonedDateTime.now(zone).truncatedTo(ChronoUnit.DAYS)
@@ -119,6 +122,33 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
         {"id":"$heldItem","kind":"SCHEDULE_HELD","state":"PENDING","title":"Weekly dependency audit is held","why":"","scheduleId":"$audit",
          "createdAt":"${ago(60 * 24 * 4)}"}]}"""
 
+    /** Board 01 ⑤: a conversation that moved the time (a change inside the envelope, with its Undo) and asked to open PRs (a card). */
+    private fun changeDetail() = conversationDetail().replace(conversation, changeChat).replace("Codex release watch", "Codex release watch (change)")
+    private fun changeEvents() = listOf(
+        event(1, "user", """{"text":"Move it to 9 in the morning. Also, when there's a new version, open the upgrade PR directly."}""", ago(4), "t-1"),
+        event(2, "assistant", """{"text":"Done: it now runs at 09:00. Opening a PR needs more access than it has, so that part waits for you."}""", ago(3), "t-1"),
+        event(3, "turn_end", """{"subtype":"success"}""", ago(3), "t-1"),
+    )
+    private fun lines(access: String) = """{"runsIn":{"workspaceId":"$workspace","workspaceName":"apiserver","engine":"codex"},
+        "may":{"accessLevel":"$access"},"costs":{"runsPerWeek":7,"runLimitMinutes":30}}"""
+    private fun changeCards() = """{"run":null,"cards":[{"id":"$envelopeCard","kind":"UPDATE","state":"PENDING","askedBy":"SESSION",
+        "askedBySessionId":"$changeChat","scheduleId":"$codex","createdAt":"${ago(2)}","title":"Codex stable check",
+        "proposed":{"accessLevel":"OPEN_PR"},"envelope":{"widens":["ACCESS_LEVEL"],"now":${lines("CHECK_ONLY")},"asked":${lines("OPEN_PR")}}}],
+        "records":[{"scheduleId":"$codex","title":"Codex stable check","revision":4,"changedBy":"SESSION","sessionId":"$changeChat",
+          "before":{"rule":${rule("DAILY", "10:00")}},"after":{"rule":${rule("DAILY", "09:00")}},"createdAt":"${ago(3)}",
+          "undo":{"path":"/schedules/$codex/undo","body":{"revision":4}}}]}"""
+
+    /** Board 01 ⑦: a run's own session — its crumb, title, head line, strip, what it said, and its report. */
+    private val runPlanned get() = ago(12)
+    private fun runDetail() = conversationDetail().replace(conversation, runSession).replace("Codex release watch", "Codex stable check")
+        .replace("\"tags\":[]", "\"tags\":[],\"scheduleRunId\":\"r-run\",\"runSource\":\"SCHEDULE\"")
+    private fun runEvents() = listOf(
+        event(1, "assistant", """{"text":"The latest stable Codex is 0.49.0, released Nov 12. The apiserver pins 0.48.0.\n\n- Turn steering now covers tool calls\n- Fixes the sandbox path bug on macOS\n- No breaking flag changes"}""", ago(9), "t-run"),
+        event(2, "turn_end", """{"subtype":"success"}""", ago(8), "t-run"),
+    )
+    private fun runCards() = """{"run":${run("r-run", codex, runPlanned, "CHANGED", ago(11), ago(7), "Codex 0.49.0 is out (pinned 0.48.0). You were notified.",
+        session = runSession, key = "codex@0.49.0", newFinding = true, notified = true)},"cards":[],"records":[]}"""
+
     override fun sessions(view: String, project: String?) = if (view == "open") "[${conversationDetail()}]" else "[]"
 
     override fun answer(req: Req): MockResponse? = when {
@@ -132,6 +162,12 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
         req.path == "sessions/$conversation/events/page" -> json(page(events()))
         req.path == "owner-requests" && req.q("state") == "open" -> json(waitingItems())
         req.path == "owner-requests" -> json("""{"requests":[]}""")
+        req.path == "sessions/$changeChat/schedule-cards" -> json(changeCards())
+        req.path == "sessions/$changeChat" && req.method == "GET" -> json(changeDetail())
+        req.path == "sessions/$changeChat/events/page" -> json(page(changeEvents()))
+        req.path == "sessions/$runSession/schedule-cards" -> json(runCards())
+        req.path == "sessions/$runSession" && req.method == "GET" -> json(runDetail())
+        req.path == "sessions/$runSession/events/page" -> json(page(runEvents()))
         req.path.endsWith("/schedule-cards") -> json("""{"run":null,"cards":[],"records":[]}""")
         else -> null
     }
@@ -180,7 +216,8 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
         signIn()
         open("orbit-session:$conversation")
         await("the create card") { exists(hasTestTag("schedule-create-card"), unmerged = true) }
-        scrollTranscriptTo(hasTestTag("schedule-create-card"))
+        // The card is the conversation's last thing: at the tail it stands whole above the composer, buttons included.
+        atTail()
         verify("When says the rule and the zone", exists(hasText("Daily 10:00 · Asia/Shanghai"), unmerged = true))
         verify("Costs is the envelope's", exists(hasText("Up to 7 runs a week, 30 min each"), unmerged = true))
         verify("the notice is the server's", exists(hasText("You'll hear about new versions and failures only."), unmerged = true))
@@ -190,6 +227,44 @@ class ScheduledDeviceTest : IncrementDeviceTest() {
         verify("a card that names its zone sends none", bodies.first { it.first.endsWith("/allow") }.second.let { !it.contains("timezone\":\"") })
         await("the buttons go") { !exists(hasText(ScheduleCopy.Actions.notNow), unmerged = true) }
         capture("3b-created")
+    }
+
+    /** The conversation followed to its tail, as a reader who just opened it is: no jump bar, nothing under the composer's fade. */
+    private fun atTail() {
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("transcript-tail"))
+        settle()
+        await("the transcript at its tail") { !exists(hasText("Jump to latest"), unmerged = true) }
+    }
+
+    /** Board 01 ⑤ / 02 ②: the change line (with Undo) and the envelope card in the conversation that asked. */
+    @Test fun theEnvelopeCardAndItsChangeLine() = journey {
+        signIn()
+        open("orbit-session:$changeChat")
+        await("the envelope card and the change line") {
+            exists(hasTestTag("schedule-envelope-card"), unmerged = true) && exists(hasTestTag("schedule-record-line"), unmerged = true)
+        }
+        atTail()
+        verify("the card asks to open PRs", exists(hasText("Let Codex stable check open PRs?"), unmerged = true))
+        verify("Now is the brief", exists(hasText("Check only — reads and reports"), unmerged = true))
+        verify("its decline keeps check only", exists(hasText("Keep check only"), unmerged = true))
+        verify("the change line says what changed", exists(hasText(": time 10:00 → 09:00", substring = true), unmerged = true))
+        capture("5-envelope")
+    }
+
+    /** Board 01 ⑦: a run's page. */
+    @Test fun aRunsPage() = journey {
+        signIn()
+        open("orbit-session:$runSession")
+        await("the run's strip") { exists(hasTestTag("schedule-run-strip"), unmerged = true) }
+        verify("the crumb names its schedule", exists(hasTestTag("schedule-run-crumb"), unmerged = true))
+        verify("the head line says state, agent and duration", exists(hasText("Open · Codex agent · 4 min"), unmerged = true))
+        await("the report") { exists(hasTestTag("schedule-run-report"), unmerged = true) }
+        verify("the report says what it found", exists(hasText("Reported: Changed · codex@0.49.0 · you were notified"), unmerged = true))
+        compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("schedule-run-strip"))
+        settle()
+        capture("6-run-page")
+        atTail()
+        capture("6b-run-report")
     }
 
     /** Board 01 ⑥: the failed and held cards head Waiting on you, whole. */

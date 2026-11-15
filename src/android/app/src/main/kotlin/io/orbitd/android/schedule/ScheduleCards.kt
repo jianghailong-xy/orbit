@@ -208,7 +208,9 @@ fun ScheduleRecordLine(record: ScheduleChangeRecord, undo: (suspend () -> String
 @Composable
 fun ScheduleRunStrip(schedule: ScheduleView, run: ScheduleRunView, sessionState: String?, sessionEngine: String?, openSchedule: () -> Unit) {
     val zone = java.util.TimeZone.getDefault().id
-    val head = ScheduleDisplay.runHeadText(sessionState, ScheduleDisplay.runAgentName(schedule.engine, sessionEngine), run.startedAt, run.endedAt, Instant.now())
+    val head = ScheduleDisplay.runHeadText(sessionState, ScheduleDisplay.runAgentName(schedule.engine,
+        // The session's engine as the engine lists name it (OrbitKit `ProviderEngines.cliName`): "Claude Code".
+        sessionEngine?.let { io.orbitd.android.composer.ProviderEngines.ENGINE_CLI_NAMES[it] ?: it }), run.startedAt, run.endedAt, Instant.now())
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).testTag("schedule-run-strip"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.clickable(onClick = openSchedule).testTag("schedule-run-crumb"), verticalAlignment = Alignment.CenterVertically) {
             Text("‹ ", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)

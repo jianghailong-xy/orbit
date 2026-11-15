@@ -1269,3 +1269,31 @@ test('the turn-finished and needs-you switches do not touch agent messages', asy
   assert.equal((await service.notifyAgentMessage(agentInput)).delivered, true);
   assert.equal(sent.length, 1);
 });
+
+// A scheduled task's push (docs/scheduled-tasks-design.md §7.3): a failure opens the run's session, a hold the schedule, and
+// each names the Waiting on you item it filed. The shared Android fixture's `schedule-failed` and `schedule-held` samples are
+// these sends, so Android's PushMessage parses exactly what is sent (ScheduleAppTest) and fcm-transport.spec converts each
+// to the data it holds.
+test('a scheduled task pushes its failure and its hold as the shared Android fixture holds them, key for key', async () => {
+  const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../../../shared/src/android-push.fixture.json'), 'utf8'));
+  const schedule = '019a0000-0000-7000-8000-000000000010';
+  const sends = [
+    { name: 'schedule-failed', alert: { kind: 'FAILED', opens: { sessionId: '019a0000-0000-7000-8000-000000000012' },
+      ownerRequestId: '019a0000-0000-7000-8000-000000000013', title: 'Nightly pg spec sweep failed 3 runs in a row',
+      body: 'The last run ended without a report. It keeps running until you pause it.',
+      collapseId: 'schedule-failed-019a0000-0000-7000-8000-000000000011' } },
+    { name: 'schedule-held', alert: { kind: 'HELD', opens: { scheduleId: schedule },
+      ownerRequestId: '019a0000-0000-7000-8000-000000000015', title: 'Weekly dependency audit is held',
+      body: 'It could not start on Monday 09:00: the agent "auditor" in workspace web is disabled. Nothing runs until it is enabled and you resume.',
+      collapseId: 'schedule-held-019a0000-0000-7000-8000-000000000014' } },
+  ];
+  for (const { name, alert } of sends) {
+    const { service, sent } = wakeupMissedHarness();
+    await service.notifySchedule({ ownerId: 'owner-1', scheduleId: schedule, ...alert });
+    assert.equal(sent.length, 1, name);
+    const sample = fixture.samples.find((candidate: { name: string }) => candidate.name === name);
+    assert.ok(sample, `the shared Android fixture has no ${name} sample`);
+    assert.equal(JSON.stringify(sent[0].payload), JSON.stringify(sample.source), name);
+    assert.deepEqual([sample.pushType, sample.collapseId], ['alert', sent[0].collapseId], name);
+  }
+});
