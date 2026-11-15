@@ -112,20 +112,19 @@ class ProjectRowWaitingShellTest {
 
     /** The member opened from the row shows its waiting card's head — its title, header and first line — at the top of the
      * transcript, not the transcript's end. */
-    @Test fun theMemberOpensOnTheTopOfItsWaitingCard() = opensOnTheCardsTop("project-row-waiting-member-opened", capsule = false)
+    @Test fun theMemberOpensOnTheTopOfItsWaitingCard() = opensOnTheCardsTop("project-row-waiting-member-opened")
 
-    /** The same, with another session waiting too, so main's needs-you capsule floats over the transcript's top (77b704d5d): the
-     * card's head comes in below the capsule, not behind it. */
+    /** The same, with another session waiting too: since 2026-11-15 (07-console-one-capsule) a conversation carries no bar for it,
+     * so nothing floats over the card's head. */
     @Test fun theMemberOpensOnTheTopOfItsWaitingCardBelowTheFloatingCapsule() {
         ProjectShell.plainWaiting = true
-        opensOnTheCardsTop("project-row-waiting-member-opened-capsule", capsule = true)
+        opensOnTheCardsTop("project-row-waiting-member-opened-capsule")
     }
 
-    private fun opensOnTheCardsTop(name: String, capsule: Boolean) {
+    private fun opensOnTheCardsTop(name: String) {
         signIn(); openList()
         compose.onNodeWithTag(row).performClick()
         await { shows(headLine) || shows(footLine) }
-        if (capsule) await { compose.onAllNodesWithTag("needs-you-bar", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         settle()
         shot(name)
         val list = bounds(compose.onNodeWithTag("transcript-list"))
@@ -138,7 +137,8 @@ class ProjectRowWaitingShellTest {
         // Not under the needs-you capsule floating over the list's top (77b704d5d): the rows go on behind it.
         val bars = compose.onAllNodesWithTag("needs-you-bar", useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
             .filter { it.bottom > list.top && it.top < list.bottom }
-        assertEquals("the capsule floats over the transcript: $bars", capsule, bars.isNotEmpty())
+        // A conversation carries no bar for what waits elsewhere, however much does (07-console-one-capsule).
+        assertTrue("no needs-you bar over the transcript: $bars", bars.isEmpty())
         println("needs-you bars over the transcript: $bars; title $title, header $header")
         bars.forEach { bar ->
             assertTrue("the card's title is below the floating bar: $title under $bar", title.top >= bar.bottom)

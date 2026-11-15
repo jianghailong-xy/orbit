@@ -205,6 +205,17 @@ public enum NeedsYouLogic {
                             glyph: first.isQuestion ? .question : .warning)
     }
 
+    /// What the conversation's own capsule says (the owner, 2026-11-15,
+    /// `docs/mocks/needs-you-capsule/07-console-one-capsule`, B): the cards waiting in it — `below`'s
+    /// rows — and then its own approvals, which wait at its tail (`approval-<id>` rows), so they lie
+    /// below wherever the reader is. Only this conversation: what waits elsewhere is the lists' to say.
+    public static func here(rows: [BelowRow], approvalIDs: [String], side: ReaderSide?) -> WaitingBelow? {
+        let approvals = approvalIDs.map { BelowRow(rowID: "approval-\($0)", isQuestion: false) }
+        guard let said = below(rows: rows + approvals, side: rows.isEmpty ? .below : side) else { return nil }
+        return WaitingBelow(count: said.count, rowID: said.rowID, text: said.text, side: said.side,
+                            glyph: rows.isEmpty ? .hand : said.glyph)
+    }
+
     /// "1 open question below" while every card below is a question — the words this bar has always
     /// used, unchanged for the case it was built for. Anything else says "2 waiting below": never a
     /// bare number (the count is the useful part here, unlike the cross-session bar, where "1" told
