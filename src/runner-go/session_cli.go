@@ -1052,7 +1052,7 @@ func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) 
 	if err != nil {
 		return fmt.Errorf("merge session: %w", err)
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	return writeCLIRawJSON(out, withMergePendingCall(raw), *jsonOut)
 }
 
 // stringList collects a repeatable flag. One --conflict per path rather than a comma-joined

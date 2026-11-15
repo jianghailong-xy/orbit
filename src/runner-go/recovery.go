@@ -78,6 +78,8 @@ var (
 		"ANSWER_ADVICE", "AWAIT_OWNER_DECISION", "FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF",
 		"CREATE_PROJECT_IN_CHILD_SESSION",
 		"REREAD_AND_DECIDE", "READ_GRAPH_AND_REPLAN", "ASSIGN_AGENT", "STAND_DOWN",
+		"WAIT_FOR_SESSIONS", "POLL_STATE", "RETURN_TO_PARENT", "CREATE_REPLACEMENT", "AWAIT_USER_FIX",
+		"AWAIT_SYSTEM_FIX", "STOP_LOOP",
 	}
 	// "" stands for no default action.
 	recoveryDefaultActionByPolicy = map[string]string{
@@ -231,13 +233,20 @@ var recoveryActionSemantics = map[string]struct{ AutomaticRetry, MayWrite bool }
 	"READ_GRAPH_AND_REPLAN":                  {AutomaticRetry: false, MayWrite: true},
 	"ASSIGN_AGENT":                           {AutomaticRetry: false, MayWrite: true},
 	"STAND_DOWN":                             {AutomaticRetry: false, MayWrite: false},
+	"WAIT_FOR_SESSIONS":                      {AutomaticRetry: false, MayWrite: true},
+	"POLL_STATE":                             {AutomaticRetry: false, MayWrite: false},
+	"RETURN_TO_PARENT":                       {AutomaticRetry: false, MayWrite: false},
+	"CREATE_REPLACEMENT":                     {AutomaticRetry: false, MayWrite: true},
+	"AWAIT_USER_FIX":                         {AutomaticRetry: false, MayWrite: true},
+	"AWAIT_SYSTEM_FIX":                       {AutomaticRetry: false, MayWrite: true},
+	"STOP_LOOP":                              {AutomaticRetry: false, MayWrite: false},
 }
 
 // The actions that resend the identical request with nobody in between.
 var recoveryAutomaticRetryActionCodes = []string{"RETRY", "RETRY_SAME_REQUEST"}
 
-// The only actions a COMMITTED envelope may carry: they read, and never lead to another write.
-var recoveryReadOnlyActionCodes = []string{"VERIFY_STATE", "STAND_DOWN"}
+// The only actions a COMMITTED envelope may carry: they read or stop, and never lead to another write.
+var recoveryReadOnlyActionCodes = []string{"VERIFY_STATE", "STAND_DOWN", "POLL_STATE", "RETURN_TO_PARENT", "STOP_LOOP"}
 
 // The resource type that names a request id the server can read an earlier answer back by.
 const recoveryRequestIDResourceType = "REQUEST"
@@ -332,9 +341,13 @@ func recoveryDispositionOf(env recoveryEnvelope, stated string) string {
 		return stated
 	case action == "STAND_DOWN":
 		return "STOP"
+	case action == "STOP_LOOP" || action == "RETURN_TO_PARENT":
+		return "STOP"
+	case action == "WAIT_FOR_SESSIONS" || action == "POLL_STATE" || action == "AWAIT_SYSTEM_FIX":
+		return "WAIT"
 	case policy == "SAFE" || policy == "SAME_REQUEST_ID" || policy == "VERIFY_THEN_RETRY":
 		return "AUTOMATIC"
-	case action == "AWAIT_OWNER_DECISION" || env.Actor == "USER":
+	case action == "AWAIT_OWNER_DECISION" || action == "AWAIT_USER_FIX" || env.Actor == "USER":
 		return "HUMAN"
 	case env.Actor == "SYSTEM":
 		return "WAIT"

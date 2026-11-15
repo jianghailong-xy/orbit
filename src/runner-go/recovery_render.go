@@ -277,7 +277,8 @@ func recoveryInvoke(n recoveryNext, env recoveryEnvelope, reason string) recover
 }
 
 // renderRecoveryNext maps the envelope's semantic actionCode onto surface. It never offers a step that
-// writes past a required user confirmation, and never an invoke the surface cannot run.
+// writes past a required user confirmation, never an invoke the surface cannot run, and never an invoke
+// that sends a request again for a wait, a stop or a fix only a person can make.
 func renderRecoveryNext(env recoveryEnvelope, surface recoverySurface, requestIDSent bool) recoveryNext {
 	action := ""
 	if env.ActionCode != nil {
@@ -354,6 +355,23 @@ func renderRecoveryNext(env recoveryEnvelope, surface recoverySurface, requestID
 		return recoveryStep(recoveryNextManual, env, "Read the dependency graph, then write only the edges that are still missing and close no cycle.")
 	case "STAND_DOWN":
 		return recoveryStep(recoveryNextStop, env, "Send this request again in no form; read the resources it names to see where the work went.")
+	case "POLL_STATE":
+		// A wait, never an invoke: the read is for after afterSeconds, of the resource in error.resources.
+		// A wait step names no call (on any surface), so a surface with the reader and one without say the
+		// same thing.
+		return recoveryStep(recoveryNextWait, env, "The state ends by itself: wait afterSeconds, read the resource in error.resources again, and act on what it then says. Do not resend the request until it has changed.")
+	case "WAIT_FOR_SESSIONS":
+		return recoveryStep(recoveryNextWait, env, "Wait for the sessions named in error.resources to settle (await them; do not poll), then send the request once more. Never resend it on a timer.")
+	case "AWAIT_SYSTEM_FIX":
+		return recoveryStep(recoveryNextWait, env, "The platform has to recover by itself: wait afterSeconds and read the resource; ask a person if it has not recovered.")
+	case "AWAIT_USER_FIX":
+		return recoveryStep(recoveryNextAskUser, env, "A person has to fix this; it is not the caller's to change. Tell them what the message says and send nothing again until they have.")
+	case "RETURN_TO_PARENT":
+		return recoveryStep(recoveryNextStop, env, "Start nothing further down from here: do the work in this session, or hand the result back to the session above it.")
+	case "STOP_LOOP":
+		return recoveryStep(recoveryNextStop, env, "This is repeating without progress: stop sending it and end the turn.")
+	case "CREATE_REPLACEMENT":
+		return recoveryStep(recoveryNextManual, env, "This resource can never take the request again: make a new one with a self-contained brief instead of resending to it.")
 	case "":
 		switch {
 		case confirm || env.Actor == "USER":

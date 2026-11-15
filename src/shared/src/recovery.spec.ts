@@ -146,7 +146,7 @@ describe('recovery contract', () => {
       checked++;
     }
     expect(checked).toBe(SERVER_BLOCK_COMBINATIONS);
-    expect(SERVER_BLOCK_COMBINATIONS).toBe(8100);
+    expect(SERVER_BLOCK_COMBINATIONS).toBe(11880);
   });
 
   it('decides the branch from stable fields only: rewording the prose changes nothing', () => {
@@ -172,6 +172,8 @@ const DISPOSITION_RULE_IDS = [
   'CONFIRMATION_FIRST',
   'STATED',
   'STAND_DOWN_STOPS',
+  'LOOP_OR_DEPTH_STOPS',
+  'THE_STATE_MOVES',
   'RESEND_OR_VERIFY_IS_AUTOMATIC',
   'A_PERSON_DECIDES',
   'THE_SYSTEM_MOVES',
