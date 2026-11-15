@@ -275,7 +275,7 @@ final class SettingsStackWiringTests: XCTestCase {
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")
             XCTAssertTrue(page.contains(seed), "the page no longer seeds \(seed)")
         }
-        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 6,
+        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 7,
                        "every switch's write is guarded against the account's own value")
     }
 
