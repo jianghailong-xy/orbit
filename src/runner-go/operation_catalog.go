@@ -2736,7 +2736,7 @@ func buildOperationCatalog() []*operation {
 		add(gateOrchestration,
 			map[string]interface{}{
 				"name":        "session_create",
-				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status at once. To learn when it finishes its turn, call session_await with that id and end your turn instead of polling session_get, or pass wait to hold this call for a bounded time. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. Requires orchestration to be enabled for this agent. Fails with \"already has N unfinished sessions\" when this run is holding too much unfinished work at once — that is backpressure, not an error in your request: let some of the sessions you started finish, then spawn again.",
+				"description": "Spawn a new agent session to run a sub-task immediately (L3 orchestration). Returns the new session's id and status at once. To learn when it finishes its turn, call session_await with that id and end your turn instead of polling session_get, or pass wait to hold this call for a bounded time. Write `prompt` as a self-contained, executable brief (background, files, steps, acceptance) — the sub-agent has no prior context. When the user @mentions an agent in their message, pass that agent's name as `agentName` to run the sub-task under it (use agent_list to discover names); otherwise it runs under the current agent. For one self-contained piece of work on another agent's machine whose result you only need back, use delegate with workspace set to that agent's name: it runs as a SubAgent of this session and its result returns to this call. Requires orchestration to be enabled for this agent. Fails with \"already has N unfinished sessions\" when this run is holding too much unfinished work at once — that is backpressure, not an error in your request: let some of the sessions you started finish, then spawn again.",
 				"inputSchema": obj(map[string]interface{}{
 					"prompt":    promptDesc,
 					"agentId":   map[string]interface{}{"type": []string{"string", "null"}, "description": "Which agent runs it (by id); defaults to the current agent."},
@@ -2838,7 +2838,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "agent_list",
-				"description": "List this owner's agents/workspaces (id, name, workDir, runner, and the engine and provider the project last ran on: lastEngine, lastProvider). Use the list to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
+				"description": "List this owner's agents/workspaces (id, name, workDir, runner, and the engine and provider the project last ran on: lastEngine, lastProvider). Use the list to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId). For one self-contained piece of work on that agent's machine whose result you only need back, call delegate with workspace set to its name instead.",
 				"inputSchema": obj(map[string]interface{}{}),
 			},
 			map[string]interface{}{

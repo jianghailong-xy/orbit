@@ -75,15 +75,16 @@ struct TranslationFootView: View {
     }
 }
 
-/// The composer's tag (6A): "<Language> → English", pressing which opens Settings › Sessions, where
+/// The composer's tag (6A): "<Language> → <Agent language>", pressing which opens Settings › Sessions, where
 /// Translation is. Drawn only while the account translates.
 struct ComposerTranslationTag: View {
     let language: TranslationLanguage
+    let agentLanguage: TranslationLanguage
     let open: () -> Void
 
     var body: some View {
         Button(action: open) {
-            Text(language.tag)
+            Text(language.tag(to: agentLanguage))
                 .font(.orbitMeta)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8).padding(.vertical, 3)
@@ -91,7 +92,7 @@ struct ComposerTranslationTag: View {
         }
         .buttonStyle(.plain)
         .help(TranslationCopy.title)
-        .accessibilityLabel(language.tag)
+        .accessibilityLabel(language.tag(to: agentLanguage))
     }
 }
 

@@ -37,11 +37,12 @@ final class TranslationTests: XCTestCase {
     func testMeCarriesTheSwitchTheLanguageAndWhetherTheServerCanTranslate() throws {
         let me = try decode(User.self, """
         {"id":"u1","email":"a@b.c","translationAvailable":true,
-         "preferences":{"translationEnabled":true,"translationLanguage":"ja"}}
+         "preferences":{"translationEnabled":true,"translationLanguage":"ja","translationAgentLanguage":"pt"}}
         """)
         XCTAssertEqual(me.translationAvailable, true)
         XCTAssertEqual(me.preferences?.translationEnabled, true)
         XCTAssertEqual(SessionTranslation.language(me.preferences), .ja)
+        XCTAssertEqual(SessionTranslation.agentLanguage(me.preferences), .pt)
         XCTAssertTrue(SessionTranslation.isOn(me))
         XCTAssertFalse(SessionTranslation.unavailable(me))
     }
@@ -51,6 +52,7 @@ final class TranslationTests: XCTestCase {
         XCTAssertNil(me.preferences?.translationEnabled)
         XCTAssertFalse(SessionTranslation.isOn(me), "absent = off")
         XCTAssertEqual(SessionTranslation.language(me.preferences), .zhHans)
+        XCTAssertEqual(SessionTranslation.agentLanguage(me.preferences), .en, "absent agent language = English")
     }
 
     func testAServerWithoutAKeyTranslatesNothingWhateverThePreferenceSays() throws {
@@ -65,9 +67,13 @@ final class TranslationTests: XCTestCase {
     }
 
     func testAStrayValueReadsAsAbsentAndAnUnknownLanguageAsTheDefault() throws {
-        let prefs = try decode(UserPreferences.self, #"{"translationEnabled":"yes","translationLanguage":"xx"}"#)
+        let prefs = try decode(UserPreferences.self,
+                               #"{"translationEnabled":"yes","translationLanguage":"xx","translationAgentLanguage":"xx"}"#)
         XCTAssertNil(prefs.translationEnabled)
         XCTAssertEqual(SessionTranslation.language(prefs), .zhHans)
+        XCTAssertEqual(SessionTranslation.agentLanguage(prefs), .en)
+        let stray = try decode(UserPreferences.self, #"{"translationAgentLanguage":7}"#)
+        XCTAssertNil(stray.translationAgentLanguage)
     }
 
     func testTheToggleWritesOnlyItsOwnKey() throws {
@@ -82,21 +88,41 @@ final class TranslationTests: XCTestCase {
         let lang = try keys(UpdatePreferencesRequest(translationLanguage: TranslationLanguage.ko.rawValue))
         XCTAssertEqual(lang.count, 1)
         XCTAssertEqual(lang["translationLanguage"] as? String, "ko")
+        let agent = try keys(UpdatePreferencesRequest(translationAgentLanguage: TranslationLanguage.de.rawValue))
+        XCTAssertEqual(agent.count, 1)
+        XCTAssertEqual(agent["translationAgentLanguage"] as? String, "de")
     }
 
     // MARK: - The languages and the composer tag
 
-    func testTheSevenLanguagesInTheWebsOrderWithTheirNames() {
-        XCTAssertEqual(TranslationLanguage.allCases.map(\.rawValue), ["zh-Hans", "zh-Hant", "ja", "ko", "es", "fr", "de"])
-        XCTAssertEqual(TranslationLanguage.allCases.map(\.name), [
-            "Chinese (Simplified)", "Chinese (Traditional)", "Japanese", "Korean", "Spanish", "French", "German",
+    func testTheSharedListInItsOrderWithTheirNames() {
+        XCTAssertEqual(TranslationLanguage.allCases.map(\.rawValue), [
+            "en", "zh-Hans", "zh-Hant", "ja", "ko", "es", "fr", "de", "ru", "pt", "it", "nl", "ar", "hi", "tr",
+            "vi", "th", "id", "pl", "uk", "he", "sv", "cs", "da", "fi", "el", "hu", "ro", "ms", "bn",
         ])
+        XCTAssertEqual(TranslationLanguage.allCases.map(\.name), [
+            "English", "Chinese (Simplified)", "Chinese (Traditional)", "Japanese", "Korean", "Spanish", "French",
+            "German", "Russian", "Portuguese", "Italian", "Dutch", "Arabic", "Hindi", "Turkish", "Vietnamese",
+            "Thai", "Indonesian", "Polish", "Ukrainian", "Hebrew", "Swedish", "Czech", "Danish", "Finnish",
+            "Greek", "Hungarian", "Romanian", "Malay", "Bengali",
+        ])
+        XCTAssertEqual(TranslationLanguage.default, .zhHans)
+        XCTAssertEqual(TranslationLanguage.agentDefault, .en)
     }
 
-    func testTheComposerTagDropsTheParenthesis() {
-        XCTAssertEqual(TranslationLanguage.zhHans.tag, "Chinese → English")
-        XCTAssertEqual(TranslationLanguage.zhHant.tag, "Chinese → English")
-        XCTAssertEqual(TranslationLanguage.ja.tag, "Japanese → English")
+    func testTheComposerTagNamesTheAgentLanguageWithoutParentheses() {
+        XCTAssertEqual(TranslationLanguage.zhHans.tag(to: .en), "Chinese → English")
+        XCTAssertEqual(TranslationLanguage.zhHant.tag(to: .en), "Chinese → English")
+        XCTAssertEqual(TranslationLanguage.ja.tag(to: .en), "Japanese → English")
+        XCTAssertEqual(TranslationLanguage.en.tag(to: .zhHans), "English → Chinese")
+        XCTAssertEqual(TranslationLanguage.ko.tag(to: .de), "Korean → German")
+    }
+
+    func testTheSwitchsLineNamesTheAgentLanguage() {
+        XCTAssertTrue(TranslationCopy.translateConversationsHint(.en).hasPrefix("Agents read and write in English; "))
+        XCTAssertTrue(TranslationCopy.translateConversationsHint(.zhHans)
+            .hasPrefix("Agents read and write in Chinese (Simplified); you write and read in your language."))
+        XCTAssertFalse(TranslationCopy.translateConversationsHint(.ja).contains("English"))
     }
 
     func testTheComposerTagOpensSettingsOnSessions() {

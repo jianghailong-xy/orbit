@@ -76,15 +76,27 @@ final class TranslationCopyParityTests: XCTestCase {
         assertContains(web, #"<SettingsSection title="\#(TranslationCopy.title)">"#, in: Self.settings)
         // The page draws each row's title and description from settingsIndex.ts, which says their words.
         let index = try source(Self.settingsIndex)
+        // The switch's line names the agent language: built by `translationEnabledDescription`, which
+        // the row is drawn with, and the index's own entry is its English default.
+        let hint = TranslationCopy.translateConversationsHint(.en)
+        let template = "`" + hint.replacingOccurrences(of: "English", with: "${agentLanguage}") + "`"
+        assertContains(index, "translationEnabledDescription(agentLanguage: string): string { return \(template); }",
+                       in: Self.settingsIndex)
+        assertContains(index, "'translationEnabled', '/settings/general', \(literal(TranslationCopy.translateConversations)), translationEnabledDescription('English'), ",
+                       in: Self.settingsIndex)
+        assertContains(web, "description={translationEnabledDescription(TRANSLATION_LANGUAGE_NAMES[agentLanguageOf(me)])}",
+                       in: Self.settings)
         for (anchor, title, hint) in [
-            ("translationEnabled", TranslationCopy.translateConversations, TranslationCopy.translateConversationsHint),
             ("translationLanguage", TranslationCopy.yourLanguage, TranslationCopy.yourLanguageHint),
             ("agentLanguage", TranslationCopy.agentsWorkIn, TranslationCopy.agentsWorkInHint),
         ] {
             assertContains(web, "title={S.\(anchor).title} description={S.\(anchor).description}", in: Self.settings)
             assertContains(index, "'\(anchor)', '/settings/general', \(literal(title)), \(literal(hint))", in: Self.settingsIndex)
         }
-        assertContains(web, "label: '\(TranslationCopy.english)'", in: Self.settings)
+        // Both pickers over the one list.
+        assertContains(web, "aria-label=\"\(TranslationCopy.agentsWorkIn)\"", in: Self.settings)
+        XCTAssertEqual(web.components(separatedBy: "options={TRANSLATION_LANGUAGE_OPTIONS}").count - 1, 2,
+                       "\(Self.settings): both pickers offer TRANSLATION_LANGUAGE_OPTIONS")
         assertContains(web, TranslationCopy.footnote, in: Self.settings)
         // The notice names the variable in <code> on the web; the words around it are the same.
         let notice = TranslationCopy.unavailable
@@ -95,19 +107,23 @@ final class TranslationCopyParityTests: XCTestCase {
     func testTheLanguagesAreSharedsInItsOrder() throws {
         let shared = try source(Self.shared)
         let codes = TranslationLanguage.allCases.map { "'\($0.rawValue)'" }.joined(separator: ", ")
-        assertContains(shared, "TRANSLATION_LANGUAGES = [\(codes)] as const", in: Self.shared)
+        // One code a line, with a trailing comma: collapsed, "[ 'en', …, 'bn', ] as const".
+        assertContains(shared, "TRANSLATION_LANGUAGES = [ \(codes), ] as const", in: Self.shared)
         for lang in TranslationLanguage.allCases {
             let key = lang.rawValue.contains("-") ? "'\(lang.rawValue)'" : lang.rawValue
             assertContains(shared, "\(key): '\(lang.name)',", in: Self.shared)
         }
         assertContains(shared, "DEFAULT_TRANSLATION_LANGUAGE: TranslationLanguage = '\(TranslationLanguage.default.rawValue)'",
                        in: Self.shared)
+        assertContains(shared, "DEFAULT_AGENT_LANGUAGE = '\(TranslationLanguage.agentDefault.rawValue)' satisfies TranslationLanguage",
+                       in: Self.shared)
     }
 
-    /// The composer tag is built, not written: the web drops the parenthesis and adds " → English" as
-    /// `TranslationLanguage.tag` does.
+    /// The composer tag is built, not written: the web drops each name's parenthesis and joins the
+    /// two with " → " as `TranslationLanguage.tag(to:)` does.
     func testTheComposerTagIsBuiltAsTheWebBuildsIt() throws {
         let web = try source(Self.lib)
-        assertContains(web, #"replace(/\s*\(.*\)$/, '')} → English`"#, in: Self.lib)
+        assertContains(web, #"TRANSLATION_LANGUAGE_NAMES[lang].replace(/\s*\(.*\)$/, '')"#, in: Self.lib)
+        assertContains(web, "`${shortLanguageName(lang)} → ${shortLanguageName(agentLang)}`", in: Self.lib)
     }
 }
