@@ -79,21 +79,44 @@ class NeedsYouLogicTest {
         assertEquals(0, notices.more)
     }
 
-    /** A bar led by a terminal asking to be approved swipes away whole, the terminal line with it; another request id brings it back. */
-    @Test fun aSwipedBarLedByATerminalComesBackForANewTerminalRequest() {
-        val a = session("a", approvals = 1, lastTurnAt = "2026-11-15T01:00:00Z")
-        val alone = NeedsYouLogic.dismissalKeys(emptyList(), listOf("req-1"))
-        assertEquals("a terminal alone can be swiped", setOf("terminal:req-1"), alone)
-        assertTrue(NeedsYouLogic.isDismissed(emptyList(), null, alone, listOf("req-1")))
-        assertFalse("a new terminal request", NeedsYouLogic.isDismissed(emptyList(), null, alone, listOf("req-1", "req-2")))
-        assertFalse("a session waiting too is new", NeedsYouLogic.isDismissed(listOf(a), null, alone, listOf("req-1")))
+    /** A terminal asking to be approved is noticed once (the owner, 2026-11-16, under 12-once): the first look takes stock, a new
+     * request id draws "Approve a terminal" with its machine and code at the head of the column, the same id never draws a second
+     * notice — not on the next look, not after it is flicked away, not back from the background — and an answered one's goes. */
+    @Test fun aNewTerminalRequestIsNoticedOnceByItsId() {
+        fun r(id: String, machine: String = "dev-laptop", code: String = "7KQ-4MZ") = io.orbitd.android.core.cards.TerminalRequest(
+            id, userCode = code, machineName = machine, runnerId = "run-1", createdAt = "2026-11-16T10:00:00Z", expiresAt = "2026-11-16T10:10:00Z")
+        val notices = NeedsYouNotices()
+        notices.lookTerminals(listOf(r("old")))
+        assertTrue("the first look only takes stock", notices.toasts.isEmpty())
 
-        val both = NeedsYouLogic.dismissalKeys(listOf(a), listOf("req-1"))
-        assertTrue(NeedsYouLogic.isDismissed(listOf(a), null, both, listOf("req-1")))
-        assertTrue("the terminal answered: still away", NeedsYouLogic.isDismissed(listOf(a), null, both))
-        assertFalse("another terminal asks", NeedsYouLogic.isDismissed(listOf(a), null, both, listOf("req-2")))
-        // Main's swipe from before terminals led the bar: a terminal asking since is new.
-        assertFalse(NeedsYouLogic.isDismissed(listOf(a), null, NeedsYouLogic.dismissalKeys(listOf(a)), listOf("req-1")))
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        val toast = notices.toasts.single()
+        assertEquals("terminal:req-1", toast.id)
+        assertEquals("req-1", toast.terminalRequest)
+        assertEquals("Approve a terminal", toast.title)
+        assertEquals("dev-laptop · code 7KQ-4MZ", toast.line)
+        assertEquals(NeedsYouGlyph.TERMINAL, toast.glyph)
+
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        assertEquals("the same request: still one notice", 1, notices.toasts.size)
+        notices.dismiss(toast.id)
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        assertTrue("flicked away, the same id is not noticed again", notices.toasts.isEmpty())
+        notices.retake()
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        notices.lookTerminals(listOf(r("old"), r("req-1")))
+        assertTrue("nor back from the background", notices.toasts.isEmpty())
+
+        // A session waiting does not take a terminal's notice away, and a terminal's leads the column.
+        val a = session("a", approvals = 1, lastTurnAt = "2026-11-16T10:01:00Z")
+        notices.look(emptyList(), null)
+        notices.look(listOf(a), null)
+        notices.lookTerminals(listOf(r("old"), r("req-1"), r("req-2", "build-box", "R2T-9PX")))
+        assertEquals(listOf("terminal:req-2", "a|2026-11-16T10:01:00Z"), notices.toasts.map { it.id })
+        notices.look(listOf(a), null)
+        assertEquals(2, notices.toasts.size)
+        notices.lookTerminals(listOf(r("old")))
+        assertEquals("answered or expired: its notice goes", listOf("a|2026-11-16T10:01:00Z"), notices.toasts.map { it.id })
     }
 
     // banner

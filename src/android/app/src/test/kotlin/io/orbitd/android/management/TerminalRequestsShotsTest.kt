@@ -15,7 +15,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
-import io.orbitd.android.cards.NeedsYouBar
+import io.orbitd.android.cards.NeedsYouToastCard
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.TerminalRequest
 import io.orbitd.android.ui.OrbitTheme
@@ -38,7 +38,7 @@ import java.time.Instant
 /**
  * NATIVE frames of terminal approvals on a phone, against board docs/mocks/waiting-on-you-removal/02-terminal-approvals.html: Machines &
  * models with one and two requests in Needs you, the card lit as the bar's line lands on it, a machine's own page, and the needs-you
- * line for one and for several. Each frame is the production composable over the management fixture's wire. Written, with its
+ * notice for a new request and the machine page it opens. Each frame is the production composable over the management fixture's wire. Written, with its
  * semantics tree, under `TERMINAL_SHOTS_DIR` when that is set; drawn and checked either way.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -118,26 +118,30 @@ class TerminalRequestsShotsTest {
         shot("android-machine-page")
     }
 
-    @Test fun theNeedsYouLine() {
-        fun r(id: String, code: String) = TerminalRequest(id, code, "dev-laptop", fixture.RUNNER,
-            Instant.now().minusSeconds(180).toString(), Instant.now().plusSeconds(420).toString())
-        val one = TerminalNeedsYou.banner(listOf(r(first, "7KQ-4MZ")))!!
-        val two = TerminalNeedsYou.banner(listOf(r(first, "7KQ-4MZ"), r(second, "R2T-9PX")))!!
+    /** The notice (the owner, 2026-11-16: board 02 ③ as a toast under needs-you-capsule/12-once), in the toast host's column. */
+    @Test fun theTerminalNotice() {
+        val r = TerminalRequest(first, "7KQ-4MZ", "dev-laptop", fixture.RUNNER,
+            Instant.now().minusSeconds(5).toString(), Instant.now().plusSeconds(595).toString())
         show {
-            Column(Modifier.padding(vertical = 8.dp)) {
-                Text("One terminal, nothing else waiting", Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.labelMedium)
-                NeedsYouBar(one.text, TerminalNeedsYou.hint, detail = one.detail, since = one.since, glyph = one.glyph) {}
-                Text("One terminal and two sessions waiting (folded)", Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.labelMedium)
-                val folded = one.copy(count = 3)
-                NeedsYouBar(folded.text, TerminalNeedsYou.hint, detail = folded.detail, since = folded.since, glyph = folded.glyph,
-                    more = folded.more, deck = true) {}
-                Text("Two terminals on one machine", Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.labelMedium)
-                NeedsYouBar(two.text, TerminalNeedsYou.hint, detail = two.detail, since = two.since, glyph = two.glyph) {}
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                NeedsYouToastCard(TerminalNeedsYou.toast(r), dismiss = {}) {}
             }
         }
-        compose.onAllNodesWithText("Approve a terminal", useUnmergedTree = true).assertCountEquals(2)
-        compose.onNodeWithText("Approve 2 terminals", useUnmergedTree = true).assertExists()
-        compose.onNodeWithText("dev-laptop · 2 waiting", useUnmergedTree = true).assertExists()
-        shot("android-needs-you-line")
+        compose.onNodeWithTag("needs-you-toast-title", useUnmergedTree = true).assertTextEquals("Approve a terminal")
+        compose.onNodeWithTag("needs-you-toast-line", useUnmergedTree = true).assertTextEquals("dev-laptop · code 7KQ-4MZ")
+        compose.onNodeWithTag("needs-you-toast-glyph:TERMINAL", useUnmergedTree = true).assertExists()
+        shot("android-terminal-toast")
+    }
+
+    /** Where a press on the notice lands: the machine's own page, its Terminals to approve, the card lit. */
+    @Test fun theMachinePageTheNoticeOpens() {
+        fixture.terminalRequests = listOf(request(first, "7KQ-4MZ", 0))
+        val api = api()
+        val route = TerminalNeedsYou.machineRoute(TerminalRequest(first, "7KQ-4MZ", "dev-laptop", fixture.RUNNER,
+            Instant.now().toString(), Instant.now().plusSeconds(600).toString()))
+        show { RunnerScreen(api, route.id, route.recordId, 0, {}, {}, {}) }
+        awaitTag("terminal-request:$first:lit")
+        compose.onNodeWithText(TerminalNeedsYou.TO_APPROVE).assertExists()
+        shot("android-machine-page-from-toast")
     }
 }

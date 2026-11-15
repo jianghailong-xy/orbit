@@ -170,26 +170,36 @@ class TerminalRequestsTest {
         compose.onAllNodesWithTag("terminal-requests", useUnmergedTree = true).assertCountEquals(0)
     }
 
-    /** The bar's line (board ③): one names its machine and code, several on one machine count, several machines are named. */
-    @Test fun theNeedsYouLineSaysWhatWaitsAndWhere() {
+    /** The notice (board ③ as a toast, the owner 2026-11-16): one request names its machine and code; pressed, it lands on that
+     * machine's page with its card lit. The title and detail words for several stay the Settings and section words. */
+    @Test fun theNoticeSaysWhatWaitsAndWhereAndOpensItsMachine() {
         fun r(id: String, machine: String, code: String) = TerminalRequest(id, userCode = code, machineName = machine, runnerId = fixture.RUNNER,
             createdAt = "2026-11-14T10:00:00Z", expiresAt = "2026-11-14T10:10:00Z")
-        val one = TerminalNeedsYou.banner(listOf(r(first, "dev-laptop", "7KQ-4MZ")))!!
-        assertEquals("Approve a terminal", one.text)
-        assertEquals("dev-laptop · code 7KQ-4MZ", one.detail)
+        val one = TerminalNeedsYou.toast(r(first, "dev-laptop", "7KQ-4MZ"))
+        assertEquals("Approve a terminal", one.title)
+        assertEquals("dev-laptop · code 7KQ-4MZ", one.line)
+        assertEquals("terminal:$first", one.id)
         assertEquals(first, one.terminalRequest)
         assertEquals(io.orbitd.android.cards.NeedsYouGlyph.TERMINAL, one.glyph)
-        val two = TerminalNeedsYou.banner(listOf(r(first, "dev-laptop", "7KQ-4MZ"), r(second, "dev-laptop", "R2T-9PX")))!!
-        assertEquals("Approve 2 terminals", two.text)
-        assertEquals("dev-laptop · 2 waiting", two.detail)
-        assertEquals("dev-laptop, build-box", TerminalNeedsYou.banner(listOf(r(first, "dev-laptop", "7KQ-4MZ"), r(elsewhere, "build-box", "9PL")))!!.detail)
-        assertNull(TerminalNeedsYou.banner(emptyList()))
-        // With others waiting it leads and says "+N"; pressed, it lands on Machines & models, its card lit.
-        assertEquals(2, one.copy(count = 3).more)
+        assertEquals("Approve 2 terminals", TerminalNeedsYou.title(2))
+        assertEquals("dev-laptop · 2 waiting", TerminalNeedsYou.detail(listOf(r(first, "dev-laptop", "7KQ-4MZ"), r(second, "dev-laptop", "R2T-9PX"))))
+        assertEquals(OrbitRoute(Destination.RUNNER, fixture.RUNNER, recordId = "terminal:$first", origin = Origin.LIST),
+            TerminalNeedsYou.machineRoute(r(first, "dev-laptop", "7KQ-4MZ")))
         assertEquals(OrbitRoute(Destination.RUNNER, recordId = "terminal:$first", origin = Origin.LIST), TerminalNeedsYou.route(first))
     }
 
-    /** The push's link and the bar's line land on the same page and card. */
+    /** Where the notice lands: that machine's page, its Terminals to approve, the request's card lit. */
+    @Test fun theNoticeLandsOnItsMachinesTerminalsToApprove() {
+        fixture.terminalRequests = listOf(request(first))
+        val api = api()
+        val route = TerminalNeedsYou.machineRoute(TerminalRequest(first, userCode = "7KQ-4MZ", machineName = "dev-laptop",
+            runnerId = fixture.RUNNER, createdAt = "2026-11-14T10:00:00Z", expiresAt = "2026-11-14T10:10:00Z"))
+        compose.setContent { RunnerScreen(api, route.id, route.recordId, 0, {}, {}, {}) }
+        awaitTag("${card(first)}:lit")
+        awaitText(TerminalNeedsYou.TO_APPROVE)
+    }
+
+    /** The push's link lands on Machines & models' Needs you, the request's card lit. */
     @Test fun theTerminalLoginLinkLandsWhereTheLineDoes() {
         assertEquals(TerminalNeedsYou.route(first, Origin.EXTERNAL), OrbitLinks.parse("orbit://terminal-login/$first", origin = Origin.EXTERNAL))
         assertNull(OrbitLinks.parse("orbit://terminal-login/"))
