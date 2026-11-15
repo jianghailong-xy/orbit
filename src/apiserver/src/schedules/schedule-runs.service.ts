@@ -17,7 +17,9 @@
  * =============
  * A QUEUED run starts when nothing of its schedule is RUNNING or AWAITING_APPROVAL and its `notBeforeAt` (a retry's
  * wait) has passed. The start checks run first (schedule-start-check.ts); a failure HOLDS the run and the schedule,
- * which then fires nothing until it is resumed. A run that passes is marked RUNNING with the id of the session it is
+ * which then fires nothing until it is resumed. Then the weekly budget (§4): a run that is not MANUAL, on a schedule
+ * that already started `envelopeRunsPerWeek` runs planned in the 7 days before its own slot, is MISSED
+ * (OVER_BUDGET) and the schedule goes on. A run that passes is marked RUNNING with the id of the session it is
  * about to open, in the same transaction, and the session is opened after it commits with that id, `runSource =
  * SCHEDULE` and `scheduleRunId` set; its first turn is the scheduled-run block and the prompt (schedule-run-block.ts).
  *
@@ -61,13 +63,15 @@ import {
   findingCopy,
   heldCopy,
   onceMissedCopy,
+  overBudgetCopy,
+  runReasonText,
   scheduleHomeSession,
   sendAlerts,
   type ScheduleAlert,
   type ScheduleNotifier,
 } from './schedule-attention';
 import { scheduledRunTurn } from './schedule-run-block';
-import { scheduleStartCheck, type StartPlan } from './schedule-start-check';
+import { scheduleOverBudget, scheduleStartCheck, type StartPlan } from './schedule-start-check';
 import { nextDueAt, parseRule, type ScheduleRule } from './schedule-time';
 import {
   SCHEDULE_CLOCK,
@@ -418,6 +422,12 @@ export class ScheduleRunsService {
           }
           return { outcome: 'HELD', alerts };
         }
+        // §4: the envelope's runs per week bound the runs that start, not only the rule, counted on the slots they
+        // were planned for. A slot over budget is MISSED (OVER_BUDGET) and the schedule goes on; a MANUAL run is the
+        // owner's press (runNow refuses anyone else's over budget).
+        if (run.trigger !== 'MANUAL' && (await scheduleOverBudget(tx, schedule, run.plannedAt))) {
+          return { outcome: 'MISSED', alerts: await this.missOverBudget(tx, schedule, run, now) };
+        }
         const workspace = await tx.workspace.findUnique({
           where: { id: schedule.workspaceId },
           select: { runner: { select: { status: true, ...RUNNER_BEATS, managedRunner: { select: { id: true } } } } },
@@ -766,6 +776,16 @@ export class ScheduleRunsService {
           throw refusal('CONFLICT', 'SCHEDULE_HELD', `The schedule is held (${schedule.heldReason}); resume it first.`);
         }
         const now = this.clock();
+        // §8.4: only the owner's own press (the owner-interactive channel) starts over budget. A session, or a personal
+        // access token (what an agent with a shell on the runner holds), may not spend runs the owner did not allow.
+        // The run it would write is planned at now.
+        if (actor.kind !== 'OWNER' && (await scheduleOverBudget(tx, schedule, now))) {
+          throw refusal(
+            'CONFLICT',
+            'SCHEDULE_OVER_BUDGET',
+            `This schedule has already started ${schedule.envelopeRunsPerWeek} runs in the past 7 days, as many as its owner allowed; only the owner can run it now.`,
+          );
+        }
         await this.skipQueued(tx, scheduleId, now);
         return tx.scheduleRun.create({
           data: { scheduleId, scheduleRevision: schedule.revision, plannedAt: now, trigger: 'MANUAL', state: 'QUEUED' },
@@ -1080,6 +1100,37 @@ export class ScheduleRunsService {
     });
   }
 
+  /**
+   * A slot over budget: MISSED (OVER_BUDGET), never started. The owner is told once for the new reason: not again
+   * while the run before it ended the same way.
+   */
+  private async missOverBudget(tx: Tx, schedule: Schedule, run: ScheduleRun, now: Date): Promise<ScheduleAlert[]> {
+    const previous = await tx.scheduleRun.findFirst({
+      where: { scheduleId: schedule.id, id: { not: run.id }, endedAt: { not: null } },
+      orderBy: [{ endedAt: 'desc' }, { id: 'desc' }],
+      select: { state: true, failureReason: true },
+    });
+    await tx.scheduleRun.update({
+      where: { id: run.id },
+      data: { state: 'MISSED', failureReason: 'OVER_BUDGET', endedAt: now, notBeforeAt: null },
+    });
+    // A ONCE schedule's only slot follows §5.2's missed-ONCE rule: one push saying nothing else will run (fire has
+    // already ended the schedule, END_REACHED); the run list carries why.
+    const once = this.onceMissedIf(schedule, run);
+    if (once.length > 0) return once;
+    if (previous?.state === 'MISSED' && previous.failureReason === 'OVER_BUDGET') return [];
+    return [{
+      kind: 'OVER_BUDGET',
+      ownerId: schedule.ownerId,
+      scheduleId: schedule.id,
+      runId: run.id,
+      opens: { scheduleId: schedule.id },
+      ownerRequestId: null,
+      ...overBudgetCopy(schedule.title, schedule.envelopeRunsPerWeek),
+      collapseId: `schedule-over-budget-${schedule.id}`,
+    }];
+  }
+
   /** §5.2: a missed ONCE notifies, because nothing else will run. A MANUAL run is not its slot. */
   private onceMissedIf(schedule: Schedule, run: ScheduleRun): ScheduleAlert[] {
     try {
@@ -1181,7 +1232,11 @@ export class ScheduleRunsService {
    * A schedule's runs, newest first, each with where its session stands (§7.4): OPEN, COMPLETED, TRASH, or GONE when
    * the session was purged — the run is kept and still names it. Null for a run that never had one.
    */
-  async history(ownerId: string, scheduleId: string, take = 50): Promise<Array<ScheduleRun & { session: RunSessionView | null }>> {
+  async history(
+    ownerId: string,
+    scheduleId: string,
+    take = 50,
+  ): Promise<Array<ScheduleRun & { session: RunSessionView | null; reasonText: string | null }>> {
     const schedule = await this.prisma.schedule.findFirst({ where: { id: scheduleId, ownerId }, select: { id: true } });
     if (!schedule) throw refusal('NOT_FOUND', 'SCHEDULE_NOT_FOUND', 'No such schedule.');
     const list = await this.prisma.scheduleRun.findMany({
@@ -1198,7 +1253,8 @@ export class ScheduleRunsService {
       : [];
     const byId = new Map(sessions.map((s) => [s.id, s]));
     return list.map((r) => {
-      if (!r.sessionId) return { ...r, session: null };
+      const reasonText = runReasonText(r);
+      if (!r.sessionId) return { ...r, session: null, reasonText };
       const s = byId.get(r.sessionId);
       const state: RunSessionView['state'] = !s
         ? 'GONE'
@@ -1207,7 +1263,7 @@ export class ScheduleRunsService {
           : (s.completedAt ?? s.archivedAt)
             ? 'COMPLETED'
             : 'OPEN';
-      return { ...r, session: { id: r.sessionId, state } };
+      return { ...r, session: { id: r.sessionId, state }, reasonText };
     });
   }
 
