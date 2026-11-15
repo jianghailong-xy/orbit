@@ -348,10 +348,12 @@ Only a shell command can ask. The claim hands the runner, for that run only:
 
   These are the Orbit tools a `CHECK_ONLY` run on Claude Code has (each as `mcp__orbit__<name>`).
 - `disallowedTools`, added to the workspace's own: `Edit`, `Write`, `NotebookEdit`; the Orbit CLI
-  (`Bash(*/orbit *)`, `Bash('*/orbit' *)`, which the runner replaces, below); `EnterPlanMode` (Plan entered by the
-  engine itself would hold back the run's own `schedule_run_report` and `notify`: in Plan Claude Code asks about every
-  Orbit tool not marked read-only, and such a run's runner refuses every such ask); and **every other Orbit tool by
-  name**, `delegate` included (it is served beside the catalogue) (`bg_run`, `bg_kill`,
+  (`Bash(*/orbit *)`, `Bash('*/orbit' *)`, which the runner replaces, below); **every built-in tool a check does not
+  use** (`CHECK_ONLY_CLAUDE_DENIED_BUILTINS`: some act with no ask in Default and Don't Ask alike — `EnterWorktree`
+  created a git worktree, `CronCreate` scheduled a prompt, in Don't Ask `Monitor` ran `touch` and `Workflow` ran a
+  SubAgent; `EnterPlanMode` would hold back the run's own `schedule_run_report` and `notify`, since in Plan Claude Code
+  asks about every Orbit tool not marked read-only and the runner refuses each such ask; record §10.6); and **every other
+  Orbit tool by name**, `delegate` included (it is served beside the catalogue) (`bg_run`, `bg_kill`,
   `session_merge`, `task_start`, `task_update`, `session_send`, the create doors, `integration_*`, `provider_*`,
   `agent_*`, `runner_*`, `task_comment`, `file_upload`, … : `CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS`, every tool of
   `docs/operation-catalog.md`'s MCP column the allow list does not name, held to it by `schedule-access.spec.ts`, and
@@ -394,6 +396,9 @@ The runner closes what only it can, for a claim with `agent.scheduledCheckOnly` 
   `env orbit …`, a copy of the binary, `curl` with a token) is a shell command like any other: it asks, and the card
   shows the command the owner would allow. Measured (record §10): `ls ./orbit .` in a checkout holding a directory `orbit` ran unasked (the old patterns refused it), the CLI
   by its path was refused with no request, a bare `orbit …` asked.
+- **Claude Code's built-in tools.** Such a run is started with `--tools Bash,Read,Grep,Glob,WebFetch,WebSearch,
+  ToolSearch`: no other built-in is offered, including one a later Claude Code adds (the server's by-name list above
+  holds the known ones on any runner).
 - **Claude Code's own settings files.** With no `--setting-sources`, `permissions.allow` in the checkout's
   `.claude/settings.local.json` and in the user's `settings.json` ran commands unasked (measured, record §10). Such a
   run is started with `--setting-sources ''`: it loads no user, project or local settings file. The runner's own
@@ -407,8 +412,8 @@ The runner closes what only it can, for a claim with `agent.scheduledCheckOnly` 
 **Runner release, and older runners.** The runner advertises `claude-scheduled-check-only-asks/v1`, and only a run
 claimed by such a runner is handed `default` and these lists (`scheduleRunPermissionMode`, on the claim and the
 reclaim). A run claimed by any other runner runs exactly as S2b ran it: `dontAsk`, the 17 allowed tools with no
-workspace rule, and S2b's deny list (`Edit`, `Write`, `NotebookEdit`, the CLI patterns). It never asks there, and
-nothing an allow rule does not name runs; the older runner's CLI allow rules lose to the deny patterns. An allow rule
+workspace rule, and S2b's deny list (`Edit`, `Write`, `NotebookEdit`, the CLI patterns). It never asks there, every built-in a check does not use is denied by name (S2b's own `dontAsk` let `Monitor` and
+`Workflow` act, record §10.6), and nothing else an allow rule does not name runs; the older runner's CLI allow rules lose to the deny patterns. An allow rule
 in a settings file the older runner still loads (the checkout's local settings, the user's) is an allow rule there too,
 exactly as it was under S2b. The runner changes ship in the first runner release after v0.1.261-beta.8.
 

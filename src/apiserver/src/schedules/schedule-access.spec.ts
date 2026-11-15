@@ -17,7 +17,7 @@ import {
   CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS,
   checkOnlyRuleRefusal,
   CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS,
-  CHECK_ONLY_CLAUDE_UNASKED_BUILTINS,
+  CHECK_ONLY_CLAUDE_DENIED_BUILTINS,
   CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1,
   OPEN_PR_DISALLOWED_TOOLS,
   scheduleRunAllowedTools,
@@ -279,12 +279,17 @@ test('a CHECK_ONLY run on Claude Code asks only on a runner that advertises it; 
     assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, caps), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS],
       'S2b\'s allow list, no rule carried');
     assert.deepEqual(scheduleRunDisallowedTools(['X'], 'CHECK_ONLY', 'claude', caps),
-      ['X', 'Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)", ...CHECK_ONLY_CLAUDE_UNASKED_BUILTINS],
-      'S2b\'s deny list as it landed, and the built-ins that act unasked');
+      ['X', 'Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)", ...CHECK_ONLY_CLAUDE_DENIED_BUILTINS],
+      'S2b\'s deny list as it landed, and every built-in a check does not use');
   }
   assert.deepEqual([...CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS],
-    ['Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)", ...CHECK_ONLY_CLAUDE_UNASKED_BUILTINS]);
-  for (const tool of ['EnterWorktree', 'CronCreate']) assert.ok(CHECK_ONLY_CLAUDE_UNASKED_BUILTINS.includes(tool), tool);
+    ['Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)", ...CHECK_ONLY_CLAUDE_DENIED_BUILTINS]);
+  for (const tool of ['EnterWorktree', 'CronCreate', 'Monitor', 'Workflow', 'EnterPlanMode', 'Task', 'Skill']) {
+    assert.ok(CHECK_ONLY_CLAUDE_DENIED_BUILTINS.includes(tool), tool);
+  }
+  for (const tool of ['Bash', 'Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'ToolSearch']) {
+    assert.ok(!CHECK_ONLY_CLAUDE_DENIED_BUILTINS.includes(tool), `${tool} is a check's`);
+  }
   // A runner that advertises it: Default, the carried rule, and the full deny list (EnterPlanMode, every other Orbit tool).
   assert.equal(scheduleRunPermissionMode(PermissionMode.DEFAULT, 'CHECK_ONLY', 'claude', ASKS), PermissionMode.DEFAULT);
   assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, ASKS), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)']);

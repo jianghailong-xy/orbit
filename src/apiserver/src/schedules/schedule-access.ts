@@ -152,18 +152,20 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
 ];
 
 /**
- * Claude Code built-in tools that act with no permission ask, in Default and Don't Ask alike (measured on 2.1.325:
- * EnterWorktree created a git worktree, CronCreate scheduled a recurring prompt; docs/scheduled-tasks-engine-modes.md
- * §10), and their kin. A runner advertising CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 also offers such a run only the built-ins
- * a check uses (--tools); this list holds them on any runner.
+ * Every Claude Code built-in tool a check does not use, by name (2.1.325's set). Some act with no permission ask in Default
+ * and Don't Ask alike (measured, docs/scheduled-tasks-engine-modes.md §10): EnterWorktree created a git worktree,
+ * CronCreate scheduled a recurring prompt, and in Don't Ask Monitor ran `touch` and Workflow ran a SubAgent that wrote a
+ * file. EnterPlanMode among them: Plan entered by the engine itself would hold back the run's own report (in Plan Claude
+ * Code asks about every Orbit tool not marked read-only, and such a run's runner refuses each such ask). A runner
+ * advertising CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 also offers such a run only the built-ins a check uses (--tools
+ * Bash,Read,Grep,Glob,WebFetch,WebSearch,ToolSearch), which holds for a built-in a later Claude Code adds; this list
+ * holds the known ones on any runner.
  */
-export const CHECK_ONLY_CLAUDE_UNASKED_BUILTINS: readonly string[] = [
-  'EnterWorktree',
-  'ExitWorktree',
-  'CronCreate',
-  'CronDelete',
-  'ScheduleWakeup',
-  'RemoteTrigger',
+export const CHECK_ONLY_CLAUDE_DENIED_BUILTINS: readonly string[] = [
+  'Agent', 'AskUserQuestion', 'BashOutput', 'CronCreate', 'CronDelete', 'CronList', 'DesignSync', 'EnterPlanMode',
+  'EnterWorktree', 'ExitPlanMode', 'ExitWorktree', 'KillShell', 'ListAgents', 'Monitor', 'PushNotification',
+  'RemoteTrigger', 'ReportFindings', 'ScheduleWakeup', 'SendMessage', 'SendToProject', 'SendToProjectContext', 'Skill',
+  'Task', 'Workflow',
 ];
 
 /**
@@ -178,15 +180,12 @@ export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
   'NotebookEdit',
   'Bash(*/orbit *)',
   "Bash('*/orbit' *)",
-  ...CHECK_ONLY_CLAUDE_UNASKED_BUILTINS,
-  // Plan entered by the engine itself would hold back the run's own report: in Plan Claude Code asks about every Orbit
-  // tool not marked read-only, schedule_run_report and notify included, and such a run's runner refuses each such ask.
-  'EnterPlanMode',
+  ...CHECK_ONLY_CLAUDE_DENIED_BUILTINS,
   ...CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS,
 ];
 
 /**
- * S2b's deny list as it landed, plus CHECK_ONLY_CLAUDE_UNASKED_BUILTINS (narrower, never wider): what a CHECK_ONLY run on
+ * S2b's deny list as it landed, plus CHECK_ONLY_CLAUDE_DENIED_BUILTINS (narrower, never wider): what a CHECK_ONLY run on
  * Claude Code gets in Don't Ask, on a runner that does not advertise CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1. Don't Ask
  * runs nothing an allow rule does not name and asks nobody, so the Orbit tools outside the allow list need no name here.
  */
@@ -196,7 +195,7 @@ export const CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS: readonly string[] = [
   'NotebookEdit',
   'Bash(*/orbit *)',
   "Bash('*/orbit' *)",
-  ...CHECK_ONLY_CLAUDE_UNASKED_BUILTINS,
+  ...CHECK_ONLY_CLAUDE_DENIED_BUILTINS,
 ];
 
 /**

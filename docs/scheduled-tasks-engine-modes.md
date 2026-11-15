@@ -905,5 +905,68 @@ CLI asks (10.2: a bare `orbit` on PATH was a card).
 - Not measured: Claude Code's behaviour when the runner's executable path itself contains a character Claude's rule
   grammar cannot carry; such a runner keeps the server's `*/orbit *` patterns (`checkOnlyDisallowedTools`).
 
-The runner changes need the first runner release after v0.1.261-beta.8 (design §6.2 says what an older runner leaves
-open).
+The runner changes need the first runner release after v0.1.261-beta.8; a runner without them runs the check in Don't
+Ask (10.6).
+
+### 10.5 What `--setting-sources ''` takes away, and what the runner keeps (revision 3)
+
+Job `bgj_af0916d4ed3b`, first half. A private `CLAUDE_CONFIG_DIR` (a copy of the login; the host's own is not
+touched) whose `settings.json` sends https through a logging CONNECT proxy (`env.HTTPS_PROXY`) and allows `Bash(cp:*)`;
+then the same with an `apiKeyHelper` (a stand-in that logs its call and answers a key that does not authenticate).
+Prompt: `git log --oneline -1`, `cp README.md planted-user.txt`.
+
+```
+proxy-all    no --setting-sources                       proxy CONNECTs: 8 (api.anthropic.com, …)   cp RAN unasked
+proxy-none   --setting-sources ''                       proxy CONNECTs: 0 (went direct)            cp asked (card)
+proxy-kept   --setting-sources '' + the user's env
+             in the runner's --settings file            proxy CONNECTs: 7 (api.anthropic.com, …)   cp asked (card)
+helper-none  --setting-sources ''                       key helper calls: 0 (the login was used)   cp asked
+helper-kept  --setting-sources '' + apiKeyHelper
+             in the runner's --settings file            key helper calls: 13; "Invalid API key" (the stand-in's key)
+```
+
+So `--setting-sources ''` alone drops what a host sets in the user's settings to reach Anthropic: a proxy (the run
+would go out directly, not the way the runner's region check assumed, `claude_region.go`) or a credential helper. The
+runner now copies exactly the user settings' `env`, `apiKeyHelper`, `awsAuthRefresh` and `awsCredentialExport`, from
+the config dir the session's engine runs on, into its own `--settings` file (`checkOnlyUserSettings`,
+`TestScheduledCheckOnlyKeepsUserEnvAndCredentialHelpersOnly`), never `permissions` or `hooks`; the proxy and the helper
+are used again and the planted `cp` allow still is not. What a host loses for such a run: the project's and the local
+settings files entirely, and the rest of the user's (its hooks, model, plugins, status line, permissions).
+
+### 10.6 Built-in tools that act without asking (revision 3)
+
+Job `bgj_af0916d4ed3b`, second half (rev 2's argv, `default`): EnterPlanMode was not offered (denied by name), Monitor
+and Workflow asked (the stub, as the server, answered DENY), but **EnterWorktree created a git worktree and CronCreate
+scheduled a recurring prompt, with no request** — they ask nobody. Job `bgj_1d0231532c4d`, the same prompt on the
+fallback (`dontAsk` with S2b's lists): **Monitor ran `touch monitor.txt`** (the file was there afterwards),
+**Workflow ran a SubAgent** and EnterPlanMode entered Plan, all with no request; S2b's `dontAsk` never closed these.
+
+Closed twice: a runner with the capability starts such a run with `--tools Bash,Read,Grep,Glob,WebFetch,WebSearch,
+ToolSearch` (the engine then lists exactly those built-ins; a built-in a later Claude Code adds is not offered), and the
+server denies by name every other built-in 2.1.325 offers (`CHECK_ONLY_CLAUDE_DENIED_BUILTINS`: Agent, AskUserQuestion,
+BashOutput, Cron*, DesignSync, EnterPlanMode, EnterWorktree, ExitPlanMode, ExitWorktree, KillShell, ListAgents, Monitor,
+PushNotification, RemoteTrigger, ReportFindings, ScheduleWakeup, SendMessage, SendToProject*, Skill, Task, Workflow) on
+every runner, the fallback included.
+
+### 10.7 The final argv, both runners (revision 3)
+
+Kit and raw outputs of 10.5–10.7: Orbit file `s2e-claude-default-probe-kit-r3.tgz` (id 34yAmiijW5WwdZBnrkCQf, pinned).
+
+Jobs `bgj_1d0231532c4d` and `bgj_153802514732`, every card answered deny:
+
+```
+new runner (default; --setting-sources ''; --tools Bash,Read,Grep,Glob,WebFetch,WebSearch,ToolSearch)
+  INIT TOOLS (built-in): Bash, Glob, Grep, Read, ToolSearch, WebFetch, WebSearch
+  reads:  git log, ls, cat, grep, git status — ran, 0 requests
+  writes: touch, date >, rm, npm test, psql, curl -o — each a REQUEST (card), none ran; touch carried.txt (a CHECK_ONLY
+          card's rule) ran unasked
+  h6:     EnterPlanMode, EnterWorktree, Monitor, CronCreate, Workflow — "No matching deferred tools found";
+          schedule_run_report ran (reached the stub); 0 worktrees added
+old runner (no capability: dontAsk, S2b's lists and every unused built-in denied)
+  INIT TOOLS (built-in): Bash, Read, ToolSearch, WebFetch, WebSearch
+  reads:  ran, 0 requests
+  writes: touch, date >, rm, npm test, psql, curl -o, touch carried.txt — "Permission to use Bash has been denied
+          because Claude Code is running in don't ask mode", no request, none ran (no rule is carried in Don't Ask)
+  h6:     none of the five offered; schedule_run_report ran; no file, no worktree
+```
+
