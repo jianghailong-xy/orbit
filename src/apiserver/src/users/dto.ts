@@ -161,6 +161,15 @@ export class UpdatePreferencesDto {
   translationLanguage?: TranslationLanguage;
 
   /**
+   * Prompt optimizer (@orbit/shared prompt-optimizer.ts): whether the composer offers ✦ Optimize,
+   * which has DeepSeek improve the draft before it is sent. Default OFF (absent = off). Without the
+   * server's DeepSeek key it does nothing (`promptOptimizerAvailable` on `me`).
+   */
+  @IsOptional()
+  @IsBoolean()
+  promptOptimizer?: boolean;
+
+  /**
    * The provider slugs this account's SubAgents are never routed onto (docs/subagent-design.md §4.2, §6.2).
    * Absent = none blocked; the whole list is replaced on each write, so [] unblocks everything.
    */

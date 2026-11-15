@@ -266,3 +266,48 @@ scenario('translation off, or no server key: a send is written and delivered as 
   }
   assert.ok(turnsChanged > 0);
 });
+
+scenario('skipTranslation (the prompt optimizer\'s English): an opening message and a revive are not held, and carry no translation', async () => {
+  // The opening message: claimable at once, delivered as sent.
+  const created = await sessions.create(ownerId, { workspaceId, prompt: ENGLISH, skipTranslation: true } as never, { translate: true });
+  await sessions.translationsSettled();
+  // Not held, so no turn row is laid down at create: the claim seeds the opening, as it does with
+  // Translation off. A held opening would be a HELD row here.
+  const held = await prisma.conversationTurn.findMany({ where: { sessionId: created.id } });
+  assert.deepEqual(held.map((turn) => [turn.status, turn.translationState]), []);
+  // The scenarios above leave sessions running on this one runner; settle them so its capacity is free
+  // and the claim answers only whether this session's work is held.
+  await prisma.session.updateMany({
+    where: { ownerId, id: { not: created.id }, status: { in: [RunStatus.RUNNING, RunStatus.PENDING, RunStatus.AWAITING_INPUT] } },
+    data: { status: RunStatus.SUCCEEDED },
+  });
+  const claimed = await queue.claimSessionForRunner({ id: runnerId });
+  assert.equal(claimed?.sessionId, created.id, 'not held: the claim hands it out');
+  assert.equal((await dequeue(created.id)).content, ENGLISH);
+  const seeded = await prisma.conversationTurn.findMany({ where: { sessionId: created.id } });
+  assert.deepEqual(seeded.map((turn) => [turn.content, turn.translationState, turn.displayPrompt]), [[ENGLISH, null, null]]);
+
+  // A revive of an ended session: the same send without the flag is held (the control), with it not.
+  for (const skipTranslation of [false, true]) {
+    deepSeekReplies = [500];
+    const sessionId = await liveSession(RunStatus.SUCCEEDED);
+    // An ended session that ran, so it may be revived (session-state.ts deriveSessionCapabilities).
+    await prisma.session.update({ where: { id: sessionId }, data: { startedAt: new Date(), runtimeSessionId: `engine-${sessionId}` } });
+    const clientTurnId = randomUUID();
+    const answer = await sessions.resume(
+      ownerId, sessionId,
+      { clientTurnId, content: skipTranslation ? ENGLISH : ORIGINAL, ...(skipTranslation ? { skipTranslation } : {}) } as never,
+      { translate: true },
+    );
+    await sessions.translationsSettled();
+    const turn = await prisma.conversationTurn.findUniqueOrThrow({ where: { sessionId_clientTurnId: { sessionId, clientTurnId } } });
+    if (skipTranslation) {
+      assert.equal((answer as { translation?: unknown }).translation, undefined);
+      assert.notEqual(turn.status, 'HELD');
+      assert.equal(turn.translationState, null);
+      assert.equal(turn.content, ENGLISH);
+    } else {
+      assert.equal(turn.status, 'HELD', 'the control: without the flag a revive is held');
+    }
+  }
+});
