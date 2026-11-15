@@ -128,16 +128,7 @@ struct SettingsView: View {
                 // Prompt optimizer (board frame 1): under Suggested replies, off by default; a server
                 // without a DeepSeek key draws it disabled with frame 1b's notice.
                 Group {
-                    Toggle(isOn: $promptOptimizer) {
-                        HStack(spacing: 6) {
-                            Text(PromptOptimizerCopy.title)
-                            Text(PromptOptimizerCopy.new)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(Color.accentColor)
-                                .padding(.horizontal, 5).padding(.vertical, 1)
-                                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
-                        }
-                    }
+                    Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
                     .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
                     Text(PromptOptimizerCopy.hint)
                         .font(.orbitLabel).foregroundStyle(.secondary)

@@ -264,7 +264,7 @@ final class SettingsStackWiringTests: XCTestCase {
              "UpdatePreferencesRequest(translationEnabled: value)",
              "translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true"),
             // Settings › Prompt optimizer: absent is off, and a server without a key draws it off.
-            ("Toggle(isOn: $promptOptimizer)", "UpdatePreferencesRequest(promptOptimizer: value)",
+            ("Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)", "UpdatePreferencesRequest(promptOptimizer: value)",
              "promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true"),
         ] {
             XCTAssertTrue(controls.contains(toggle), "the page lost \(toggle)")

@@ -840,16 +840,7 @@ private struct SessionSettingsPage: View {
     @ViewBuilder private var promptOptimizerSection: some View {
         let unavailable = PromptOptimizer.unavailable(model.user)
         Section {
-            Toggle(isOn: $promptOptimizer) {
-                HStack(spacing: 6) {
-                    Text(PromptOptimizerCopy.title)
-                    Text(PromptOptimizerCopy.new)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
-                }
-            }
+            Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
             .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
             if unavailable {
                 Text(PromptOptimizerCopy.unavailable)

@@ -125,7 +125,6 @@ public struct PromptOptimization: Decodable, Equatable, Sendable {
 public enum PromptOptimizerCopy {
     // Settings (frames 1 and 1b)
     public static let title = "Prompt optimizer"
-    public static let new = "NEW"
     public static let hint = "Show an Optimize button in the composer. DeepSeek rewrites your draft with this session's context; you review it before it replaces the draft."
     public static let unavailable = "This server has no DeepSeek key (DEEPSEEK_API_KEY), so it cannot optimize prompts."
     /// The switch's accessibility identifier: a Mac Form draws a Toggle with no label of its own.

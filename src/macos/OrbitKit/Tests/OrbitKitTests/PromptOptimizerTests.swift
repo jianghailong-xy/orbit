@@ -294,7 +294,7 @@ final class PromptOptimizerWiringTests: XCTestCase {
         XCTAssertTrue(sheet.contains("case .promptOptimizer:\n                    promptOptimizerSection"))
         XCTAssertTrue(sheet.contains("UpdatePreferencesRequest(promptOptimizer: value)"))
         let mac = try source(app + "Views/SettingsAdminView.swift")
-        XCTAssertTrue(mac.contains("Toggle(isOn: $promptOptimizer)"))
+        XCTAssertTrue(mac.contains("Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)"))
         XCTAssertTrue(mac.contains(".disabled(PromptOptimizer.unavailable(model.user))"))
     }
 }
