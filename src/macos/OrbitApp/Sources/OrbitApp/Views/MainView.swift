@@ -104,10 +104,6 @@ struct MainView: View {
         // Stream lifecycle: start exactly the focused session's SSE and stop any other, from the
         // always-present shell so it never depends on a console view unmounting (see syncConsoleFocus).
         .onChange(of: model.focusedConsoleSessionID, initial: true) { _, _ in model.syncConsoleFocus() }
-        #if os(iOS)
-        // The needs-you bar over a section whose columns carry none (see `needsYouOverPage`).
-        .needsYouOverPage(wide: true)
-        #endif
         .toastHost()
     }
 
