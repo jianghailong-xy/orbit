@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import {
   ApiOutlined,
+  GithubOutlined,
   BellOutlined,
   BlockOutlined,
   CloudOutlined,
@@ -75,6 +76,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
 /** Integrations' rows' icons, one per connected service. */
 const INTEGRATION_ICONS: Record<(typeof INTEGRATION_PAGES)[number]['path'], ReactNode> = {
   '/settings/integrations/feishu': <ApiOutlined />,
+  '/settings/integrations/github': <GithubOutlined />,
 };
 
 /** Below this width (board-6) the nav is a page of its own at /settings, and each page opens full width. */

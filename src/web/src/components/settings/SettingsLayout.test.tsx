@@ -295,7 +295,10 @@ describe('the Settings window', () => {
       ['Access tokens', '/settings/access-tokens'],
       ['Terminals', '/settings/terminals'],
     ]);
-    expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([['Feishu', '/settings/integrations/feishu']]);
+    expect(rows('Integrations').map((r) => [r.label, r.href])).toEqual([
+      ['Feishu', '/settings/integrations/feishu'],
+      ['GitHub', '/settings/integrations/github'],
+    ]);
     expect(rows('Machines').map((r) => [r.label, r.href, r.dot])).toEqual([
       ['gpu-box', '/settings/machines/gpuBox', 'Online'],
       ['old-laptop', '/settings/machines/oldLaptop', 'Needs you'],

@@ -859,6 +859,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'GET /integrations/github/repos/:id/branches':
+    '`:id` is GitHub\'s repository id, not an Orbit object: the repository is looked up only in the caller\'s own listing, '
+    + 'read from GitHub with the caller\'s own user-to-server token (github/github-connection.service.ts:241), and '
+    + 'another account\'s repository that the caller cannot see on GitHub is answered 404 GITHUB_REPO_NOT_FOUND before '
+    + 'GitHub is asked for its branches. The census server has no GitHub; github-connection.pg.spec.ts sends it across '
+    + 'two accounts against a fake GitHub',
   // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).
   'GET /attachments/usage/weeks/:week/files':
     'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
