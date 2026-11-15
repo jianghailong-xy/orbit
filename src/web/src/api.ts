@@ -975,7 +975,8 @@ export const revokeWorkspacePermissionRule = (workspaceId: string, ruleId: strin
  *  AskUserQuestion, `answers` (question text → picked labels) rides along an allow.
  *  `rememberRules` (on an allow) auto-allows the same kinds of call for the session.
  *  `startAfterCreate` is the single-task card's Create and start, sent only when chosen, so
- *  every other answer's body is what it always was. */
+ *  every other answer's body is what it always was. `sendAsWritten` is Settings › Translation's
+ *  "Send as written" after a 422 TRANSLATION_FAILED, sent the same way. */
 export const decideApproval = (
   sessionId: string,
   approvalId: string,
@@ -984,10 +985,18 @@ export const decideApproval = (
   answers?: Record<string, string[]>,
   rememberRules?: PermissionRule[],
   startAfterCreate?: boolean,
+  sendAsWritten?: boolean,
 ) =>
   api<ApprovalInfo>(`/sessions/${sessionId}/approvals/${approvalId}/decision`, {
     method: 'POST',
-    body: { behavior, message, answers, rememberRules, ...(startAfterCreate ? { startAfterCreate: true } : {}) },
+    body: {
+      behavior,
+      message,
+      answers,
+      rememberRules,
+      ...(startAfterCreate ? { startAfterCreate: true } : {}),
+      ...(sendAsWritten ? { sendAsWritten: true } : {}),
+    },
   });
 
 /** Change a live session's model, permission mode, effort, fast mode and/or provider — mid-turn
