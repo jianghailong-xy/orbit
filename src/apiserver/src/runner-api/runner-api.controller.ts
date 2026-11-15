@@ -1,6 +1,6 @@
 import { CoordinatorHandoffService } from '../projects/coordinator-handoff.service';
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
-import { translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
+import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
@@ -7856,9 +7856,10 @@ export class RunnerApiController {
         // answers unrun: held for the retry armed above or dropped, and taken out of its loop's runs
         // (wake-turn-withdraw.ts).
         droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        // Drain queued turns so nothing can be leased after the session ends.
+        // Drain queued turns so nothing can be leased after the session ends. A turn HELD for its
+        // translation is never leased and stays as it is (DRAIN_SKIPS_HELD).
         await tx.conversationTurn.updateMany({
-          where: { sessionId, status: { not: 'ANSWERED' } },
+          where: { sessionId, status: { notIn: DRAIN_SKIPS_HELD } },
           data: { status: 'ANSWERED', answeredAt: new Date() },
         });
       }
@@ -9741,9 +9742,10 @@ export class RunnerApiController {
       // And a wakeup filed onto a `bg-wake:` turn still queued, which the drain below answers unrun: held
       // for an armed retry or dropped, and taken out of its loop's runs (wake-turn-withdraw.ts).
       const droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-      // Drain any queued turns so nothing can be leased after the session ends.
+      // Drain any queued turns so nothing can be leased after the session ends. A turn HELD for its
+      // translation is never leased and stays as it is (DRAIN_SKIPS_HELD).
       await tx.conversationTurn.updateMany({
-        where: { sessionId, status: { not: 'ANSWERED' } },
+        where: { sessionId, status: { notIn: DRAIN_SKIPS_HELD } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       // Every turn of this session has just ended, so every tool call still waiting on one is now

@@ -26,6 +26,15 @@ import { translationAvailable } from './translation';
 /** The status of a turn that must not be delivered: being translated, or its translation failed. */
 export const HELD_TURN_STATUS = 'HELD';
 
+/**
+ * What a drain that answers every turn of an ending session leaves alone: the answered turns, and a turn HELD for its
+ * translation. A held turn is never leased, so "nothing can be leased after the session ends" holds without it, and
+ * conversation_turn_translation_chk refuses ANSWERED beside TRANSLATING or FAILED: answering it failed the whole
+ * transaction, and the runner re-posted it every 2 s (production, 2026-11-15 from 22:57Z, a message whose translation
+ * had failed). Left HELD, it keeps Retry, Send as written and withdraw.
+ */
+export const DRAIN_SKIPS_HELD: string[] = ['ANSWERED', HELD_TURN_STATUS];
+
 type PreferencesDb = {
   user: { findUnique(args: { where: { id: string }; select: { preferences: true } }): PromiseLike<{ preferences: unknown } | null> };
 };
