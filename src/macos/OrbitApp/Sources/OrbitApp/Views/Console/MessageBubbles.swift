@@ -73,6 +73,8 @@ struct UserBubbleView: View {
     }
     /// "Show both languages" is on (02-bilingual.png): a delivered message also shows its English.
     private var bilingual: Bool { translationActions?.bilingual == true }
+    /// "Agents work in": the language the agent got the message in.
+    private var agentLanguage: TranslationLanguage { translationActions?.agentLanguage ?? .agentDefault }
     /// The English under the owner's words, when both languages are shown (mark C).
     private var english: String? { SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual) }
 
@@ -106,7 +108,7 @@ struct UserBubbleView: View {
                 if !bubble.text.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         typedText(shown, showsCard: showsCard)
-                        if let english { BilingualEnglishView(english: english) }
+                        if let english { BilingualEnglishView(english: english, agentLanguage: agentLanguage) }
                     }
                         .padding(.horizontal, bubbleInset(showsCard))
                         .padding(.vertical, showsCard ? 5 : 8)
@@ -384,7 +386,7 @@ struct UserBubbleView: View {
     /// written" (`SessionTranslation.userFoot`).
     @ViewBuilder
     private var translationFoot: some View {
-        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual)
+        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage)
         if !parts.isEmpty {
             TranslationFootView(parts: parts, alignment: .trailing) { action in
                 switch action {
@@ -411,9 +413,29 @@ struct AssistantBubbleView: View {
     let bubble: AssistantBubble
     /// Settings › Translation: this reply flipped to the English the agent wrote (board frame 5).
     @State private var flipped = false
+    @State private var hovering = false
     @Environment(\.translationActions) private var translationActions
-    /// "Show both languages" is on: a translated reply also shows the English the agent wrote.
+    /// "Show both languages" is on: a translated reply also shows the words the agent wrote.
     private var bilingual: Bool { translationActions?.bilingual == true }
+    /// "Agents work in": the language the agent wrote the reply in.
+    private var agentLanguage: TranslationLanguage { translationActions?.agentLanguage ?? .agentDefault }
+    @Environment(\.openURL) private var openURL
+
+    /// The in-app link the tail's "Show original" / "Show translation" opens.
+    private static let flipURL = URL(string: "orbit-translation:flip")!
+
+    /// macOS: a delivered translation's flip rides at the end of the reply's last line, shown on
+    /// hover and always while the original is on screen (docs/mocks/translation-reply-hover).
+    private var tail: MarkdownTail? {
+        #if os(macOS)
+        guard !bilingual, let translation = bubble.translation, translation.text != nil, !translation.failed else { return nil }
+        return MarkdownTail(lead: flipped ? TranslationCopy.original : TranslationCopy.translated,
+                            action: flipped ? TranslationCopy.showTranslation : TranslationCopy.showOriginal,
+                            url: Self.flipURL, shown: hovering || flipped)
+        #else
+        return nil
+        #endif
+    }
 
     /// Waiting for its translation (2A): streaming while the account translates, or settled in a
     /// translated turn before the server's `translation` event has come.
@@ -432,7 +454,8 @@ struct AssistantBubbleView: View {
             Group {
                 if bubble.isFinalized {
                     MarkdownView(source: SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,
-                                                                    flipped: flipped && !bilingual))
+                                                                    flipped: flipped && !bilingual),
+                                 tail: tail)
                 } else {
                     StreamingProse(text: bubble.displayText)
                 }
@@ -446,18 +469,31 @@ struct AssistantBubbleView: View {
             if !bubble.isFinalized { TypingDots() }
             if bubble.isFinalized,
                let english = SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual) {
-                BilingualEnglishView(english: english, collapsible: true)
+                BilingualEnglishView(english: english, agentLanguage: agentLanguage, collapsible: true)
             }
-            TranslationFootView(parts: SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,
-                                                                    bilingual: bilingual)) { action in
-                switch action {
-                case .flip: flipped.toggle()
-                case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }
-                case .retryTurn, .sendAsWritten: break
+            if tail == nil {
+                TranslationFootView(parts: SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,
+                                                                        bilingual: bilingual)) { action in
+                    switch action {
+                    case .flip: flipped.toggle()
+                    case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }
+                    case .retryTurn, .sendAsWritten: break
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        // The tail's flip arrives as a link; every other link goes on to whoever opened links before.
+        .environment(\.openURL, OpenURLAction { url in
+            if url == Self.flipURL {
+                flipped.toggle()
+            } else {
+                openURL(url)
+            }
+            return .handled
+        })
     }
 }
 

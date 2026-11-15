@@ -41,8 +41,9 @@ class TranslationBilingualTest : ComposerShellTest() {
     ).joinToString("\n")
     private val longZh = "改好了。现在弹窗在点击时同步打开：\n1. 脚本在页面加载时用 useEffect 预先加载；\n2. 点击处理不再 await，直接调用 signInWithPopup；\n3. 新增 LoginPage.safari.test.tsx 覆盖这个场景，全部测试通过。"
 
-    private fun conversation(bilingual: Boolean?) {
-        val both = if (bilingual == null) "" else ""","translationBilingual":$bilingual"""
+    private fun conversation(bilingual: Boolean?, agentLanguage: String? = null) {
+        val both = (if (bilingual == null) "" else ""","translationBilingual":$bilingual""") +
+            (if (agentLanguage == null) "" else ""","translationAgentLanguage":"$agentLanguage"""")
         ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
             "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans"$both},"translationAvailable":true}""".encodeToByteArray()) }
         fun reply(seq: Int, en: String, zh: String) = ComposerShell.obj(
@@ -80,7 +81,7 @@ class TranslationBilingualTest : ComposerShellTest() {
         await { has(text(askedZh) and row(1), unmerged = true) }
         // The owner's message: what they wrote, the English the agent got under it, and the foot that says so (mark C).
         assertTrue(has(text("does nothing in Safari") and english(1), unmerged = true))
-        assertTrue(has(text(TranslationCopy.SENT_TO_AGENT, substring = false) and row(1), unmerged = true))
+        assertTrue(has(text(TranslationCopy.sentToAgentLabel(), substring = false) and row(1), unmerged = true))
         assertFalse(has(hasTestTag("translation-action:${TranslationCopy.SHOW_ORIGINAL}"), unmerged = true))
         // A short reply: its English in full, "Translated" alone (mark D).
         assertTrue(has(text("我先看一下") and row(2), unmerged = true))
@@ -100,6 +101,16 @@ class TranslationBilingualTest : ComposerShellTest() {
         assertFalse(has(more, unmerged = true))
         assertTrue(has(text("Want me to open a pull request?") and english(3), unmerged = true))
         shot("9-bilingual-on-long-expanded")
+    }
+
+    @Test fun theBlockNamesTheLanguageAgentsWorkIn() {
+        conversation(bilingual = true, agentLanguage = "ja")
+        signIn(); openSession()
+        await { has(text(askedZh) and row(1), unmerged = true) }
+        assertTrue(has(text("Sent to the agent in Japanese", substring = false) and row(1), unmerged = true))
+        compose.onNode(hasTestTag("event:3"), useUnmergedTree = true).performScrollTo()
+        assertTrue(has(hasTestTag("translation-action:Show Japanese · 10 lines") and row(3), unmerged = true))
+        assertFalse(has(text("Show English"), unmerged = true))
     }
 
     @Test fun offIsTodaysConversation() {

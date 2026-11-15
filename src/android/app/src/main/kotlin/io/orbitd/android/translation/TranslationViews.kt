@@ -40,20 +40,22 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.management.LocalTranslation
 
 /** Settings › Translation's words, identical on Web (`TRANSLATION_COPY`, SettingsPage's Translation card) and iOS/macOS. */
 object TranslationCopy {
     // Settings › Sessions › Translation (board frames 1, 2 and 9).
     const val TITLE = "Translation"
     const val TRANSLATE_CONVERSATIONS = "Translate conversations"
-    const val TRANSLATE_CONVERSATIONS_HINT = "Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
+    /** The switch's line, naming the language agents work in by its name ("Agents work in"; web `translationEnabledDescription`). */
+    fun translateConversationsHint(agentLanguage: String): String =
+        "Agents read and write in ${Translation.name(agentLanguage)}; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
     const val UNAVAILABLE = "This server has no DeepSeek key, so it can't translate. Whoever runs it sets DEEPSEEK_API_KEY and restarts it."
     const val YOUR_LANGUAGE = "Your language"
     const val AGENTS_WORK_IN = "Agents work in"
-    const val ENGLISH = "English"
     // "Show both languages" (docs/mocks/session-translation/02-bilingual.png, marks A and B).
     const val SHOW_BOTH_LANGUAGES = "Show both languages"
-    const val BILINGUAL_FOOTER = "With both languages on, each translated message also shows the English the agent read or wrote."
+    const val BILINGUAL_FOOTER = "With both languages on, each translated message also shows the words the agent read or wrote, in the language agents work in."
     const val FOOTER = "Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a conversation stays as it was."
 
     // The conversation (board frames 4–6).
@@ -68,12 +70,16 @@ object TranslationCopy {
     const val REPLY_PENDING = "Translates when the reply is done"
     const val REPLY_FAILED = "Couldn't translate this reply"
     // Both languages in a conversation (frames 2–4).
-    const val SENT_TO_AGENT = "Sent to the agent in English"
-    const val SHOW_ENGLISH = "Show English"
+    const val SENT_TO_AGENT = "Sent to the agent in"
+    const val SHOW = "Show"
     const val LINES = "lines"
 
-    /** The collapsed English's press (frame 3): "Show English · 9 lines" (web `showEnglishLabel`). */
-    fun showEnglishLabel(lines: Int): String = "$SHOW_ENGLISH · $lines $LINES"
+    /** Under the owner's bilingual message: "Sent to the agent in English", naming the agent language (web `sentToAgentLabel`). */
+    fun sentToAgentLabel(agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE): String = "$SENT_TO_AGENT ${Translation.name(agentLanguage)}"
+
+    /** The collapsed original's press (frame 3): "Show English · 9 lines", naming the agent language (web `showEnglishLabel`). */
+    fun showEnglishLabel(lines: Int, agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE): String =
+        "$SHOW ${Translation.name(agentLanguage)} · $lines $LINES"
 }
 
 /** The English under a translated message with both languages on: null draws no block (held, failed, pending, sent as written, or off). */
@@ -104,7 +110,8 @@ internal fun inlineCode(english: String, ground: Color): AnnotatedString = build
  * which opens it in place (frame 3); per message, never kept.
  */
 @Composable
-fun BilingualEnglish(english: String, collapsible: Boolean = false, modifier: Modifier = Modifier) {
+fun BilingualEnglish(english: String, collapsible: Boolean = false, modifier: Modifier = Modifier,
+    agentLanguage: String = LocalTranslation.current.agentLanguage) {
     var open by remember(english) { mutableStateOf(false) }
     val lines = Translation.bilingualLineCount(english)
     val collapsed = collapsible && !open && lines > Translation.BILINGUAL_COLLAPSE_LINES
@@ -122,7 +129,7 @@ fun BilingualEnglish(english: String, collapsible: Boolean = false, modifier: Mo
                 drawRect(Brush.verticalGradient(0.4f to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
             } else Modifier),
             color = muted, style = MaterialTheme.typography.bodySmall, maxLines = if (collapsed) 2 else Int.MAX_VALUE)
-        if (collapsed) FootAction(TranslationCopy.showEnglishLabel(lines), muted) { open = true }
+        if (collapsed) FootAction(TranslationCopy.showEnglishLabel(lines, agentLanguage), muted) { open = true }
     }
 }
 
@@ -183,7 +190,7 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
     val muted = footColor()
     // Both languages on: the English is in the message, so there is nothing to flip to (mark C).
     if (bilingual && turn.state == Translation.TurnState.DONE) {
-        Row(modifier.testTag("translation-foot")) { Text(TranslationCopy.SENT_TO_AGENT, color = muted, style = MaterialTheme.typography.labelSmall) }
+        Row(modifier.testTag("translation-foot")) { Text(TranslationCopy.sentToAgentLabel(LocalTranslation.current.agentLanguage), color = muted, style = MaterialTheme.typography.labelSmall) }
         return
     }
     when (turn.state) {

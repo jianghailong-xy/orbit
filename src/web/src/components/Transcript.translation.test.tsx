@@ -189,6 +189,27 @@ describe("the agent's reply", () => {
     expect(container.querySelector('.chat-assistant')!.textContent).toContain(REPLY_ZH);
   });
 
+  it('puts the flip at the end of the last line, hidden until hovered unless the original shows', async () => {
+    await draw(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: REPLY_ZH })]} />);
+    const tail = () => container.querySelector('.chat-assistant p .chat-translate-foot.is-tail')!;
+    expect(tail().closest('p')!.textContent).toBe(`${REPLY_ZH}Translated·Show original`);
+    expect(tail().classList.contains('is-flipped')).toBe(false);
+    await pressReply('Show original');
+    expect(tail().closest('p')!.textContent).toBe(`${REPLY_EN}Original·Show translation`);
+    expect(tail().classList.contains('is-flipped')).toBe(true);
+  });
+
+  it('ends a closing list item; after a code block, a line of its own', async () => {
+    await draw(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: '步骤：\n\n- 构建\n- 测试' })]} />);
+    expect(container.querySelector('.chat-assistant li:last-child .chat-translate-foot.is-tail')!.closest('li')!.textContent)
+      .toBe('测试Translated·Show original');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await draw(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: '如下：\n\n```\nfail\n```' })]} />);
+    expect(container.querySelector('.chat-assistant .md-tail-block > .chat-translate-foot.is-tail')).not.toBeNull();
+    expect(container.querySelector('.chat-assistant p .chat-translate-foot')).toBeNull();
+  });
+
   it("the turn's copy button copies the reply as shown", async () => {
     await draw(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: REPLY_ZH }), ended(3)]} />);
     const copy = () => container.querySelector<HTMLButtonElement>('.chat-turn-foot .chat-copy')!;
@@ -331,6 +352,20 @@ describe('Show both languages', () => {
     await act(async () => more.click());
     expect(english().classList.contains('is-collapsed')).toBe(false);
     expect(english().textContent).toContain('Want me to open a pull request?');
+    expect(text()).not.toContain('Show English');
+  });
+
+  it('names the agent language when agents work in another one ("Agents work in")', async () => {
+    await act(async () => {
+      root.render(
+        <TranslationCtx.Provider value={{ ...actions, on: true, bilingual: true, agentLanguage: 'ja' }}>
+          <Transcript events={[user(1, done), longReply(2)]} />
+        </TranslationCtx.Provider>,
+      );
+    });
+    expect(container.querySelector('.chat-user .chat-translate-foot, .chat-user-meta .chat-translate-foot')?.textContent).toBe('Sent to the agent in Japanese');
+    expect(container.querySelector('.chat-bilingual-reply .chat-bilingual')!.getAttribute('lang')).toBe('ja');
+    button('Show Japanese · 10 lines');
     expect(text()).not.toContain('Show English');
   });
 

@@ -14,6 +14,8 @@ struct TranslationActions {
     /// "Show both languages" (02-bilingual.png): a translated message also shows its English, and its
     /// foot loses the flip. Off is today's UI.
     var bilingual: Bool = false
+    /// "Agents work in": the language that text is in, named by the foot and the collapsed press.
+    var agentLanguage: TranslationLanguage = .agentDefault
     var retryTurn: (String) -> Void
     var sendAsWritten: (String) -> Void
     var retryReply: (Int) -> Void
@@ -84,6 +86,8 @@ struct TranslationFootView: View {
 /// lines", which opens it in place (frame 3); per message and never kept.
 struct BilingualEnglishView: View {
     let english: String
+    /// The language the agent works in, which `english` is in ("Show <Language> · N lines").
+    var agentLanguage: TranslationLanguage = .agentDefault
     var collapsible = false
     var alignment: HorizontalAlignment = .leading
     @State private var open = false
@@ -110,7 +114,7 @@ struct BilingualEnglishView: View {
                 .accessibilityIdentifier("translation.english")
             if collapsed {
                 Button { open = true } label: {
-                    Text(TranslationCopy.showEnglishLabel(lines: lines)).underline()
+                    Text(TranslationCopy.showEnglishLabel(lines: lines, agentLanguage)).underline()
                 }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)
@@ -150,15 +154,16 @@ private struct DashedDivider: View {
     }
 }
 
-/// The composer's tag (6A): "<Language> → English", pressing which opens Settings › Sessions, where
+/// The composer's tag (6A): "<Language> → <Agent language>", pressing which opens Settings › Sessions, where
 /// Translation is. Drawn only while the account translates.
 struct ComposerTranslationTag: View {
     let language: TranslationLanguage
+    let agentLanguage: TranslationLanguage
     let open: () -> Void
 
     var body: some View {
         Button(action: open) {
-            Text(language.tag)
+            Text(language.tag(to: agentLanguage))
                 .font(.orbitMeta)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8).padding(.vertical, 3)
@@ -166,7 +171,7 @@ struct ComposerTranslationTag: View {
         }
         .buttonStyle(.plain)
         .help(TranslationCopy.title)
-        .accessibilityLabel(language.tag)
+        .accessibilityLabel(language.tag(to: agentLanguage))
     }
 }
 

@@ -25,7 +25,7 @@ final class TranslationWiringTests: XCTestCase {
     func testTheBubblesDrawTheFootAndTheToggle() throws {
         let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
         XCTAssertTrue(bubbles.contains("SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped && !bilingual)"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual, agentLanguage: agentLanguage)"))
         XCTAssertTrue(bubbles.contains("PlatformPasteboard.copyString(words)"), "copy hands back the words on screen")
         XCTAssertTrue(bubbles.contains("SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,"))
         XCTAssertTrue(bubbles.contains("SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,"))
@@ -40,18 +40,19 @@ final class TranslationWiringTests: XCTestCase {
         let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
         XCTAssertTrue(bubbles.contains("private var bilingual: Bool { translationActions?.bilingual == true }"))
         XCTAssertTrue(bubbles.contains("SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual)"))
-        XCTAssertTrue(bubbles.contains("if let english { BilingualEnglishView(english: english) }"))
+        XCTAssertTrue(bubbles.contains("if let english { BilingualEnglishView(english: english, agentLanguage: agentLanguage) }"))
         XCTAssertTrue(bubbles.contains("SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual)"))
-        XCTAssertTrue(bubbles.contains("BilingualEnglishView(english: english, collapsible: true)"))
+        XCTAssertTrue(bubbles.contains("BilingualEnglishView(english: english, agentLanguage: agentLanguage, collapsible: true)"))
         let views = try source(app + "Views/Console/TranslationViews.swift")
         XCTAssertTrue(views.contains("let collapsed = collapsible && !open && lines > BilingualEnglish.collapseLines"))
         XCTAssertTrue(views.contains(".lineLimit(collapsed ? 2 : nil)"))
-        XCTAssertTrue(views.contains("Text(TranslationCopy.showEnglishLabel(lines: lines))"))
+        XCTAssertTrue(views.contains("Text(TranslationCopy.showEnglishLabel(lines: lines, agentLanguage)).underline()"))
         // Inline code in the English is drawn as code, not as backticks.
         XCTAssertTrue(views.contains("Text(Self.inline(english))"))
         XCTAssertTrue(views.contains("interpretedSyntax: .inlineOnlyPreservingWhitespace"))
         let console = try source(app + "Views/Console/ConsoleView.swift")
         XCTAssertTrue(console.contains("bilingual: SessionTranslation.bilingual(appModel.user?.preferences),"))
+        XCTAssertTrue(console.contains("agentLanguage: SessionTranslation.agentLanguage(appModel.user?.preferences),"))
     }
 
     func testTheTrayDrawsAHeldMessagesFoot() throws {
@@ -83,25 +84,41 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(cards.contains("UntranslatedDecisionRow(console: console, approval: approval)"))
         let composer = try source(app + "Views/ComposerView.swift")
         XCTAssertTrue(composer.contains("ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),"))
+        XCTAssertTrue(composer.contains("agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),"))
+        let tag = try source(app + "Views/Console/TranslationViews.swift")
+        XCTAssertTrue(tag.contains("Text(language.tag(to: agentLanguage))"), "the tag names the agent language")
         XCTAssertTrue(composer.contains("app.nav.openSettings(at: .sessions)"))
     }
 
     func testSettingsHasTheRowsOnBothPlatforms() throws {
         let ios = try source(app + "Views/SettingsSheet.swift")
         XCTAssertTrue(ios.contains("Toggle(TranslationCopy.translateConversations, isOn: $translation)"))
-        XCTAssertTrue(ios.contains("TranslationLanguagePicker()"), "Your language is a pushed list")
-        XCTAssertTrue(ios.contains("LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)"))
+        XCTAssertTrue(ios.contains("TranslationLanguagePicker(side: .owner)"), "Your language is a pushed list")
+        XCTAssertTrue(ios.contains("TranslationLanguagePicker(side: .agent)"), "so is Agents work in")
+        XCTAssertTrue(ios.contains("LabeledContent(TranslationCopy.agentsWorkIn, value: SessionTranslation.agentLanguage(prefs).name)"))
+        XCTAssertTrue(ios.contains("ForEach(TranslationLanguage.allCases, id: \\.self) { lang in"), "both over the full list")
+        XCTAssertTrue(ios.contains("UpdatePreferencesRequest(translationAgentLanguage: lang.rawValue)"))
+        XCTAssertTrue(ios.contains("Text(TranslationCopy.translateConversationsHint(SessionTranslation.agentLanguage(prefs))"),
+                      "the footer names the agent language")
         XCTAssertTrue(ios.contains("Text(TranslationCopy.unavailable)"))
         XCTAssertTrue(ios.contains(".disabled(unavailable)"))
         let mac = try source(app + "Views/SettingsAdminView.swift")
         XCTAssertTrue(mac.contains("Section(TranslationCopy.title) {"))
         XCTAssertTrue(mac.contains("Toggle(TranslationCopy.translateConversations, isOn: $translation)"))
         XCTAssertTrue(mac.contains("Picker(TranslationCopy.yourLanguage, selection: $translationLanguage)"))
-        XCTAssertTrue(mac.contains("LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)"))
+        XCTAssertTrue(mac.contains("Picker(TranslationCopy.agentsWorkIn, selection: $translationAgentLanguage)"))
+        XCTAssertEqual(mac.components(separatedBy: "ForEach(TranslationLanguage.allCases, id: \\.self) { Text($0.name).tag($0) }").count - 1, 2,
+                       "both pickers over the full list")
+        XCTAssertTrue(mac.contains("UpdatePreferencesRequest(translationAgentLanguage: translationAgentLanguage.rawValue)"))
+        XCTAssertTrue(mac.contains("Text(TranslationCopy.translateConversationsHint(translationAgentLanguage))"))
+        XCTAssertTrue(mac.contains("translationAgentLanguage = SessionTranslation.agentLanguage(p)"))
+        XCTAssertFalse(mac.contains("TranslationCopy.english") || ios.contains("TranslationCopy.english"),
+                       "no fixed English")
         XCTAssertTrue(mac.contains(".disabled(SessionTranslation.unavailable(model.user))"))
         // A Mac Form's switch has no label of its own: UI tests find these two by identifier.
         XCTAssertTrue(mac.contains(".accessibilityIdentifier(TranslationCopy.toggleIdentifier)"))
         XCTAssertTrue(mac.contains(".accessibilityIdentifier(TranslationCopy.languageIdentifier)"))
+        XCTAssertTrue(mac.contains(".accessibilityIdentifier(TranslationCopy.agentLanguageIdentifier)"))
         XCTAssertTrue(ios.contains(".accessibilityIdentifier(TranslationCopy.toggleIdentifier)"))
         // Show both languages: only while translation is on, written the moment it flips, and the
         // footer's sentence on both.

@@ -24,13 +24,31 @@ import UIKit
 struct WorkspaceFolderIcon: View {
     let selected: Bool
     let offline: Bool
+    /// The account's managed runner, when this workspace runs on it (D4): Asleep is a moon, never the
+    /// heartbeat's "Runner offline" slash.
+    var managed: ManagedRunnerRow? = nil
 
     var body: some View {
         Image(systemName: "folder")
             .frame(width: 24)
             .foregroundStyle(selected ? Color.accentColor : .primary)
             .overlay(alignment: .bottomTrailing) {
-                if offline {
+                if let managed, managed.kind != .available {
+                    if managed.tone == .progress {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .padding(1)
+                            .background(.background, in: Circle())
+                            .offset(x: 4, y: 4)
+                    } else {
+                        Image(systemName: managed.asleep ? "moon.zzz.fill" : "exclamationmark.circle.fill")
+                            .font(.orbitMeta.weight(.bold))
+                            .foregroundStyle(managed.ink)
+                            .padding(1)
+                            .background(.background, in: Circle())
+                            .offset(x: 4, y: 4)
+                    }
+                } else if offline {
                     Image(systemName: "wifi.slash")
                         .font(.orbitMeta.weight(.bold))
                         .foregroundStyle(.secondary)
@@ -40,8 +58,8 @@ struct WorkspaceFolderIcon: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Runner offline")
-            .accessibilityHidden(!offline)
+            .accessibilityLabel(managed?.label ?? "Runner offline")
+            .accessibilityHidden(managed == nil && !offline)
     }
 }
 
@@ -64,13 +82,23 @@ struct WorkspaceNavigationRow: View {
     let waiting: Int
     var shortcut: Int? = nil
     var runnerOnHover: Bool = false
+    @Environment(AppModel.self) private var app
     @State private var hovering = false
 
+    /// This workspace's managed runner, when it runs on it: the shared short state (Asleep, Waking
+    /// up…, Ready…) in place of the heartbeat's Offline (D4).
+    private var managed: ManagedRunnerRow? {
+        ManagedRunnerLogic.row(runnerID: agent.runnerId, status: app.managedRunner?.status)
+    }
+
     var body: some View {
+        let managedRow = managed
+        // The heartbeat's offline reading is not said of a managed runner: its shared state is.
+        let offlineNow = offline && managedRow == nil
         let status = WorkspaceNavigationStatusLogic.resolve(
-            waiting: waiting, running: running, jobs: jobs, runnerOffline: offline)
+            waiting: waiting, running: running, jobs: jobs, runnerOffline: offlineNow)
         HStack(spacing: 12) {
-            WorkspaceFolderIcon(selected: selected, offline: offline)
+            WorkspaceFolderIcon(selected: selected, offline: offlineNow, managed: managedRow)
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
@@ -95,6 +123,12 @@ struct WorkspaceNavigationRow: View {
                 // be read as the spinner above it.
                 BreathingGlyph(systemImage: "terminal")
                     .accessibilityLabel("Background job running")
+            } else if let managedRow, managedRow.kind != .available {
+                Text(managedRow.label)
+                    .font(.orbitMeta)
+                    .foregroundStyle(managedRow.ink)
+                    .lineLimit(1)
+                    .accessibilityLabel(managedRow.detail.map { "\(managedRow.label) — \($0)" } ?? managedRow.label)
             } else if let shortcut {
                 Text("⌘\(shortcut + 1)")
                     .font(.orbitMeta).monospacedDigit()
@@ -1595,8 +1629,18 @@ struct NewSessionView: View {
                 // in the hero's place above, or in the welcome card's first step.
                 if !managedWelcome {
                     if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
-                        ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                            .padding(.bottom, .composerBandGap)
+                        if managed.display.kind == .sleeping {
+                            // Asleep is not a fault: the shared calm line, and sending wakes it.
+                            Text(ManagedRunnerCopy.Asleep.composer)
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.bottom, .composerBandGap)
+                                .accessibilityIdentifier("managed-asleep-composer")
+                        } else {
+                            ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                                .padding(.bottom, .composerBandGap)
+                        }
                     }
                 }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).

@@ -335,7 +335,7 @@ import {
 import { DshRepairCard } from './Transcript';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
-import { bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { agentLanguageOf, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
 import { TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
@@ -4520,6 +4520,7 @@ export function WorkspaceView({
   // `queued_turns_changed` either way; the answer is written into the row so the chip moves at once.
   const translationIsOn = translationOn(me.data);
   const translationBilingual = bilingualOn(me.data);
+  const translationAgentLanguage = agentLanguageOf(me.data);
   const translationActions = useMemo<TranslationActions>(() => {
     const settle = (res: TranslationActionResponse) =>
       setQueued((current) =>
@@ -4530,6 +4531,7 @@ export function WorkspaceView({
     return {
       on: translationIsOn,
       bilingual: translationBilingual,
+      agentLanguage: translationAgentLanguage,
       retryTurn: (turnId) =>
         selectedId
           ? retryTurnTranslation(selectedId, turnId).then(settle, failed("Couldn't retry the translation"))
@@ -4543,7 +4545,7 @@ export function WorkspaceView({
           ? retryReplyTranslation(selectedId, seq).catch(failed("Couldn't retry the translation"))
           : Promise.resolve(),
     };
-  }, [translationIsOn, translationBilingual, selectedId, setQueued, message]);
+  }, [translationIsOn, translationBilingual, translationAgentLanguage, selectedId, setQueued, message]);
   // Walk the pages back until the session's first message is loaded, then sit at the top.
   //
   // Scrolling up alone can't get there: each page lands with the reader's position anchored
@@ -12506,7 +12508,7 @@ export function SessionComposer({
             actions={contextActions}
           />
         )}
-        {/* Settings › Translation is on (6A): what is typed here is translated into English when it
+        {/* Settings › Translation is on (6A): what is typed here is translated into the agent language when it
             is sent, never while it is typed. The tag opens the setting. */}
         {translationIsOn && (
           <button
@@ -12515,7 +12517,7 @@ export function SessionComposer({
             title="Messages are translated before the agent gets them. Open Settings › Translation"
             onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
           >
-            {translationTag(translationLanguageOf(me.data))}
+            {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
           </button>
         )}
         {showStop ? (

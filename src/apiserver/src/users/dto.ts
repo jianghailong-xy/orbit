@@ -160,7 +160,14 @@ export class UpdatePreferencesDto {
   @IsIn([...TRANSLATION_LANGUAGES])
   translationLanguage?: TranslationLanguage;
 
-  /** "Show both languages": each translated message also shows the English the agent read or wrote.
+  /** The language agents work in ("Agents work in"): one of TRANSLATION_LANGUAGES, the same list as
+   *  the owner's. Absent = English. */
+  @IsOptional()
+  @IsIn([...TRANSLATION_LANGUAGES])
+  translationAgentLanguage?: TranslationLanguage;
+
+  /** "Show both languages": each translated message also shows the words the agent read or wrote,
+   *  in the agent language.
    *  Display only, read by every client; absent = off. */
   @IsOptional()
   @IsBoolean()

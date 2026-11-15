@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Runner } from '@prisma/client';
 import { createHmac } from 'node:crypto';
+import { sessionRefusal } from '../sessions/session-recovery';
 import { orchestrationEnabled } from '../common/orchestration-switch';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
@@ -144,8 +145,20 @@ export class RunnerOrchestrationAuthorizer {
       },
       select: { id: true, owner: { select: { preferences: true } } },
     });
-    if (!session || !orchestrationEnabled(session.owner)) {
-      throw new ForbiddenException('orchestration is not enabled for this session');
+    // One message for both, as always; the code tells them apart. A caller that is no longer a live
+    // session of this runner has nothing left to drive and stops. Orchestration switched off is the
+    // account owner's to switch on (session-recovery.ts).
+    if (!session) {
+      throw sessionRefusal('CALLER_SESSION_NOT_LIVE', 'orchestration is not enabled for this session', {
+        resources: [{ type: 'SESSION', id: sessionId }],
+        extra: { sessionId },
+      });
+    }
+    if (!orchestrationEnabled(session.owner)) {
+      throw sessionRefusal('ORCHESTRATION_DISABLED', 'orchestration is not enabled for this session', {
+        resources: [{ type: 'SESSION', id: sessionId }],
+        extra: { sessionId },
+      });
     }
     return session.id;
   }

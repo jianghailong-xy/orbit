@@ -21,21 +21,30 @@ import org.junit.Test
 class TranslationTest {
     private fun obj(json: String) = Wire.json.parseToJsonElement(json).jsonObject
 
-    @Test fun theSevenLanguagesAndTheirTagsAreTheSharedOnes() {
+    @Test fun theLanguagesAndTheirTagsAreTheSharedOnes() {
         val shared = java.io.File(generateSequence(java.io.File(System.getProperty("user.dir"))) { it.parentFile }
             .first { java.io.File(it, "src/shared/src/translation.ts").isFile }, "src/shared/src/translation.ts").readText()
-        assertEquals(listOf("zh-Hans", "zh-Hant", "ja", "ko", "es", "fr", "de"), Translation.LANGUAGES.map { it.first })
-        assertTrue(shared.contains("TRANSLATION_LANGUAGES = ['zh-Hans', 'zh-Hant', 'ja', 'ko', 'es', 'fr', 'de'] as const"))
+        // The one list both pickers offer, shared's codes in shared's order: English first, then the seven shipped before it grew.
+        val sharedCodes = Regex("TRANSLATION_LANGUAGES = \\[([^\\]]*)\\] as const").find(shared)!!.groupValues[1]
+            .split(',').map { it.trim().trim('\'') }.filter { it.isNotEmpty() }
+        assertEquals(30, sharedCodes.size)
+        assertEquals(sharedCodes, Translation.LANGUAGES.map { it.first })
+        assertEquals(listOf("en", "zh-Hans", "zh-Hant", "ja", "ko", "es", "fr", "de"), Translation.LANGUAGES.take(8).map { it.first })
         Translation.LANGUAGES.forEach { (code, name) ->
             val key = if (code.contains('-')) "'$code'" else code
             assertTrue("$code → $name is not shared's", shared.contains("$key: '$name',"))
         }
         assertTrue(shared.contains("DEFAULT_TRANSLATION_LANGUAGE: TranslationLanguage = '${Translation.DEFAULT_LANGUAGE}'"))
+        assertTrue(shared.contains("DEFAULT_AGENT_LANGUAGE = '${Translation.DEFAULT_AGENT_LANGUAGE}' satisfies TranslationLanguage"))
         assertTrue(shared.contains("TRANSLATION_FAILED_CODE = '${Translation.FAILED_CODE}'"))
         assertEquals("Chinese → English", Translation.tag("zh-Hans"))
         assertEquals("Chinese → English", Translation.tag("zh-Hant"))
         assertEquals("Japanese → English", Translation.tag("ja"))
         assertEquals("German → English", Translation.tag("de"))
+        // The tag names the agent language, both sides without their parenthesis.
+        assertEquals("Chinese → Japanese", Translation.tag("zh-Hans", "ja"))
+        assertEquals("English → Chinese", Translation.tag("en", "zh-Hant"))
+        assertEquals("Bengali → Ukrainian", Translation.tag("bn", "uk"))
     }
 
     @Test fun preferencesReadOffUnlessSwitchedOnAndTheDefaultLanguageWhenAbsent() {
@@ -46,6 +55,13 @@ class TranslationTest {
         assertEquals("zh-Hans", Translation.language(obj("""{}""")))
         assertEquals("zh-Hans", Translation.language(obj("""{"translationLanguage":"xx"}""")))
         assertEquals("ja", Translation.language(obj("""{"translationLanguage":"ja"}""")))
+        assertEquals("pt", Translation.language(obj("""{"translationLanguage":"pt"}""")))
+        // Agents work in: absent (or unknown) is English; any language of the list otherwise.
+        assertEquals("en", Translation.agentLanguage(null))
+        assertEquals("en", Translation.agentLanguage(obj("""{}""")))
+        assertEquals("en", Translation.agentLanguage(obj("""{"translationAgentLanguage":"xx"}""")))
+        assertEquals("ja", Translation.agentLanguage(obj("""{"translationAgentLanguage":"ja"}""")))
+        assertEquals("sv", Translation.agentLanguage(obj("""{"translationAgentLanguage":"sv"}""")))
         assertFalse("an older server says nothing: unable", Translation.available(obj("""{"id":"u1"}""")))
         assertFalse(Translation.available(obj("""{"translationAvailable":false}""")))
         assertTrue(Translation.available(obj("""{"translationAvailable":true}""")))
@@ -59,7 +75,7 @@ class TranslationTest {
         assertTrue(Translation.turn(obj("""{"state":"FAILED","from":"ja","original":"x"}"""))!!.held)
         assertFalse(Translation.turn(obj("""{"state":"SENT_AS_WRITTEN","from":"ja","original":"x"}"""))!!.held)
         assertNull(Translation.turn(obj("""{"state":"LOST","from":"ja","original":"x"}""")))
-        assertNull(Translation.turn(obj("""{"state":"DONE","from":"en","original":"x"}""")))
+        assertNull(Translation.turn(obj("""{"state":"DONE","from":"xx","original":"x"}""")))
         assertNull(Translation.turn(obj("""{"state":"DONE","from":"ja"}""")))
         assertNull(Translation.turn(JsonNull))
     }
@@ -68,7 +84,7 @@ class TranslationTest {
         assertEquals(Translation.Reply("zh-Hans", "找到了", false), Translation.reply(obj("""{"lang":"zh-Hans","text":"找到了"}""")))
         assertEquals(Translation.Reply("ko", null, true), Translation.reply(obj("""{"lang":"ko","failed":true}""")))
         assertNull(Translation.reply(obj("""{"lang":"ko"}""")))
-        assertNull(Translation.reply(obj("""{"lang":"en","text":"x"}""")))
+        assertNull(Translation.reply(obj("""{"lang":"xx","text":"x"}""")))
     }
 
     @Test fun aLiveTranslationFoldsIntoTheEventItTranslatesAsAReplayCarriesIt() {

@@ -5,12 +5,17 @@ import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { DEFAULT_AGENT_LANGUAGE, TRANSLATION_LANGUAGES } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersController } from './users.controller';
 
 const USER_ID = randomUUID();
 let preferences: Record<string, unknown>;
 const writes: unknown[] = [];
+let baseUrl: string;
+const account = () => ({ id: USER_ID, email: 'owner@example.test', preferences, avatar: null, passwordHash: 'scrypt-hash', identities: [] });
+/** `GET /users/me`, as every client reads the preferences back. */
+const me = () => fetch(`${baseUrl}/users/me`, { headers: { authorization: 'Bearer signed-in' } });
 
 @Module({
   controllers: [UsersController],
@@ -20,11 +25,11 @@ const writes: unknown[] = [];
     { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: USER_ID }) } },
     { provide: PrismaService, useValue: {
       user: {
-        findUnique: async () => ({ id: USER_ID, email: 'owner@example.test', preferences, avatar: null, passwordHash: 'scrypt-hash', identities: [] }),
+        findUnique: async () => account(),
         update: async (args: { where: unknown; data: { preferences: Record<string, unknown> } }) => {
           writes.push({ where: args.where, data: args.data });
           preferences = args.data.preferences;
-          return { id: USER_ID, email: 'owner@example.test', preferences, avatar: null, passwordHash: 'scrypt-hash', identities: [] };
+          return account();
         },
       },
     } },
@@ -39,6 +44,7 @@ async function boot(t: { after: (fn: () => Promise<void>) => void }) {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen(0, '127.0.0.1');
   const base = await app.getUrl();
+  baseUrl = base;
   t.after(() => app.close());
   return (body: unknown, auth = true) => fetch(`${base}/users/me/preferences`, {
     method: 'PATCH',
@@ -102,7 +108,7 @@ test('model preferences reject malformed maps and unauthenticated writes', async
   assert.deepEqual(writes, []);
 });
 
-test('Settings › Translation: the switch and the language persist, absent stays off, and a language outside the seven is refused', async (t) => {
+test('Settings › Translation: the switch and the language persist, absent stays off, and a language outside the list is refused', async (t) => {
   const originalKey = process.env.DEEPSEEK_API_KEY;
   t.after(() => {
     if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY;
@@ -123,7 +129,7 @@ test('Settings › Translation: the switch and the language persist, absent stay
   assert.equal(account.preferences.translationLanguage, 'ja');
   assert.deepEqual(writes.at(-1), { where: { id: USER_ID }, data: { preferences } });
 
-  for (const translationLanguage of ['en', 'zh', 'zh-CN', 42]) {
+  for (const translationLanguage of ['xx', 'zh', 'zh-CN', 'english', 42]) {
     const refused = await patch({ translationLanguage });
     assert.equal(refused.status, 400, await refused.text());
   }
@@ -152,7 +158,7 @@ test('Show both languages: one account preference, off when absent, read back by
   assert.equal((await me()).translationBilingual, true, 'the web turned it on: the other clients read it on');
 
   // Writing the other translation keys leaves it alone.
-  await patch({ translationEnabled: true, translationLanguage: 'ko' });
+  await patch({ translationEnabled: true, translationLanguage: 'ko', translationAgentLanguage: 'ja' });
   assert.equal((await me()).translationBilingual, true);
 
   const malformed = await patch({ translationBilingual: 'yes' });
@@ -163,6 +169,51 @@ test('Show both languages: one account preference, off when absent, read back by
   assert.equal(off.status, 200, await off.text());
   assert.equal((await me()).translationBilingual, false, 'a phone turned it off: the web reads it off');
   assert.equal(preferences.translationLanguage, 'ko');
+});
+
+test('Settings › Translation: the agent language comes from the same list, persists, reads back on me, absent is English, and an unknown code is refused', async (t) => {
+  const patch = await boot(t);
+  // One list for both pickers: English and the seven shipped codes are all in it.
+  for (const code of ['en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'es', 'fr', 'de']) {
+    assert.ok((TRANSLATION_LANGUAGES as readonly string[]).includes(code), code);
+  }
+  assert.ok(TRANSLATION_LANGUAGES.length >= 25 && TRANSLATION_LANGUAGES.length <= 35, String(TRANSLATION_LANGUAGES.length));
+
+  // Absent reads as English: an account that never chose one has no key, and the default is 'en'.
+  const before = await me();
+  assert.equal(before.status, 200, await before.clone().text());
+  const fresh = await before.json() as { preferences: Record<string, unknown> };
+  assert.equal('translationAgentLanguage' in fresh.preferences, false);
+  assert.equal(DEFAULT_AGENT_LANGUAGE, 'en');
+
+  // Accepted and persisted: a non-English agent language, and the owner's language beside it.
+  const set = await patch({ translationAgentLanguage: 'ru', translationLanguage: 'en' });
+  assert.equal(set.status, 200, await set.clone().text());
+  assert.equal((await set.json() as { preferences: Record<string, unknown> }).preferences.translationAgentLanguage, 'ru');
+  assert.deepEqual(writes.at(-1), { where: { id: USER_ID }, data: { preferences } });
+  assert.equal(preferences.translationAgentLanguage, 'ru');
+  assert.equal(preferences.translationLanguage, 'en');
+  // The same language on both sides is allowed (the server skips translating that pair).
+  const same = await patch({ translationAgentLanguage: 'en' });
+  assert.equal(same.status, 200, await same.clone().text());
+  const again = await patch({ translationAgentLanguage: 'ru' });
+  assert.equal(again.status, 200, await again.clone().text());
+
+  // Read back on me.
+  const after = await me();
+  assert.equal(after.status, 200, await after.clone().text());
+  const read = await after.json() as { preferences: Record<string, unknown> };
+  assert.equal(read.preferences.translationAgentLanguage, 'ru');
+  assert.equal(read.preferences.theme, 'dark', 'the other preferences stood');
+
+  // Anything outside the list is a 400 and changes nothing.
+  const writesBefore = writes.length;
+  for (const translationAgentLanguage of ['xx', 'english', 'ru-RU', 'zh', '', 7]) {
+    const refused = await patch({ translationAgentLanguage });
+    assert.equal(refused.status, 400, `${JSON.stringify(translationAgentLanguage)}: ${await refused.text()}`);
+  }
+  assert.equal(writes.length, writesBefore, 'a refused write wrote nothing');
+  assert.equal(preferences.translationAgentLanguage, 'ru');
 });
 
 test('me says whether the server can translate: without DEEPSEEK_API_KEY it cannot', async (t) => {

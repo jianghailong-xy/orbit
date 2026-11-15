@@ -794,7 +794,7 @@ export function ApprovalPanel({
       open={reviewOpen} onOpenChange={setReviewOpen}>
     <div ref={anchor} className="approval-card">
       {subagent !== null && (
-        <div className="approval-subagent">{subagent ? `SubAgent · ${subagent}` : 'SubAgent'}</div>
+        <div className="approval-subagent">{subagent ? `Agent · ${subagent}` : 'Agent'}</div>
       )}
       <div className="approval-head">
         {heading}

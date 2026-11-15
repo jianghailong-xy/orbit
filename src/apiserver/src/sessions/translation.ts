@@ -1,5 +1,4 @@
 import {
-  AGENT_LANGUAGE,
   TRANSLATION_LANGUAGE_NAMES,
   TRANSLATION_TIMEOUT_MS,
   type TranslationLanguage,
@@ -30,10 +29,10 @@ export class TranslationFailed extends Error {
   }
 }
 
-type LanguageCode = TranslationLanguage | typeof AGENT_LANGUAGE;
+type LanguageCode = TranslationLanguage;
 
 function languageName(code: LanguageCode): string {
-  return code === AGENT_LANGUAGE ? 'English' : TRANSLATION_LANGUAGE_NAMES[code];
+  return TRANSLATION_LANGUAGE_NAMES[code];
 }
 
 /** The token a protected span is replaced by. Private-use brackets: nothing a person types. */

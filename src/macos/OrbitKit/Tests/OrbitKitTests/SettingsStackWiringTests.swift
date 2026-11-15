@@ -155,7 +155,7 @@ final class SettingsStackWiringTests: XCTestCase {
         for frame in ["case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
                       "case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)",
                       "case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)",
-                      "case .settingsPage(let page):     SettingsPageView(page: page)",
+                      "case .settingsPage(let page):     SettingsPageView(page: page).navigationBarTitleDisplayMode(.inline)",
                       "case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)",
                       "case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)",
                       "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {

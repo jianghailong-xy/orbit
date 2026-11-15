@@ -36,22 +36,24 @@ val LocalSmartSelectionChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {
  * the server has taken the change. */
 val LocalSessionRecaps = compositionLocalOf { true }
 val LocalSessionRecapsChanged = staticCompositionLocalOf<(Boolean) -> Unit> { {} }
-/** The account's Settings › Translation (`preferences.translationEnabled` / `translationLanguage`, and the server's
+/** The account's Settings › Translation (`preferences.translationEnabled` / `translationLanguage` / `translationAgentLanguage`, and the server's
  * `translationAvailable`), read with the theme from the same `users/me`. While it is on, a reply still streaming is greyed with its
  * chip and the composer carries its tag (board frames 6 and 10). Settings' switch and picker set it the moment the server has taken
  * the change. */
 val LocalTranslation = compositionLocalOf { AccountTranslation() }
 val LocalTranslationChanged = staticCompositionLocalOf<(AccountTranslation) -> Unit> { {} }
 
-/** [enabled]: the owner's switch; [available]: the server can translate; [language]: the owner's. */
+/** [enabled]: the owner's switch; [available]: the server can translate; [language]: the owner's; [agentLanguage]: the agents'. */
 data class AccountTranslation(val enabled: Boolean = false, val available: Boolean = false, val language: String = Translation.DEFAULT_LANGUAGE,
-    /** "Show both languages" (`preferences.translationBilingual`, only while [enabled]): a translated message also shows its English. */
+    val agentLanguage: String = Translation.DEFAULT_AGENT_LANGUAGE,
+    /** "Show both languages" (`preferences.translationBilingual`, only while [enabled]): a translated message also shows the agent-language text. */
     val bilingual: Boolean = false) {
     /** The owner's messages are being translated now: switched on, and the server able to. */
     val on: Boolean get() = enabled && available
     companion object {
         fun of(user: JsonObject?): AccountTranslation = (user?.get("preferences") as? JsonObject).let {
-            AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it), Translation.bilingual(it))
+            AccountTranslation(Translation.enabled(it), Translation.available(user), Translation.language(it), Translation.agentLanguage(it),
+                Translation.bilingual(it))
         }
     }
 }

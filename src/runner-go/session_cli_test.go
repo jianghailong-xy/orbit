@@ -266,6 +266,7 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			requestCount := 0
+			var sentBody string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				requestCount++
 				if r.Method != tc.method || r.RequestURI != tc.requestURI {
@@ -295,10 +296,19 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 					var gotBody map[string]interface{}
 					if err := json.Unmarshal(bodyBytes, &gotBody); err != nil {
 						t.Errorf("decode request body %q: %v", bodyBytes, err)
-					} else if !reflect.DeepEqual(gotBody, tc.wantBody) {
-						t.Errorf("request body = %#v, want %#v", gotBody, tc.wantBody)
+					} else {
+						// A key drawn for a call that named none is the runner's (call_identity_test.go).
+						if _, named := tc.wantBody["clientTurnId"]; !named {
+							if _, drawn := gotBody["clientTurnId"]; drawn {
+								takeDrawnKey(t, gotBody)
+							}
+						}
+						if !reflect.DeepEqual(gotBody, tc.wantBody) {
+							t.Errorf("request body = %#v, want %#v", gotBody, tc.wantBody)
+						}
 					}
 				}
+				sentBody = string(bodyBytes)
 				w.Header().Set("content-type", "application/json")
 				_, _ = w.Write([]byte(`{ "operation": "` + tc.name + `", "ok": true }`))
 			}))
@@ -317,8 +327,8 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 			if requestCount != 1 {
 				t.Fatalf("request count = %d, want 1", requestCount)
 			}
-			wantOutput := `{"operation":"` + tc.name + `","ok":true}` + "\n"
-			if out.String() != wantOutput {
+			wantOutput := `{"operation":"` + tc.name + `","ok":true}`
+			if stripEchoedCallID(out.String(), sentBody) != wantOutput {
 				t.Errorf("--json output = %q, want %q", out.String(), wantOutput)
 			}
 		})
@@ -326,7 +336,8 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 }
 
 // The server decides atomically where a send lands — into the turn already running, or as the
-// session's next turn. Both headless doors hand that authoritative receipt back untouched.
+// session's next turn. Both headless doors hand that authoritative receipt back untouched, with
+// only the clientTurnId the call was sent under added in front of it.
 func TestSessionSendHandsBackTheServerPlacementUntouched(t *testing.T) {
 	for _, answer := range []struct {
 		name string
@@ -336,7 +347,10 @@ func TestSessionSendHandsBackTheServerPlacementUntouched(t *testing.T) {
 		{"next turn", `{"ok":true,"turnId":"turn-2","seq":8,"kind":"message","placement":"accepted"}`},
 	} {
 		t.Run(answer.name, func(t *testing.T) {
+			var sentBody string
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				raw, _ := io.ReadAll(r.Body)
+				sentBody = string(raw)
 				w.Header().Set("content-type", "application/json")
 				_, _ = w.Write([]byte(answer.body))
 			}))
@@ -351,8 +365,8 @@ func TestSessionSendHandsBackTheServerPlacementUntouched(t *testing.T) {
 			if err := cmdSessionCLI([]string{"send", "child", "--message", "use the other endpoint", "--json"}, strings.NewReader(""), &out); err != nil {
 				t.Fatal(err)
 			}
-			if got := out.String(); got != answer.body+"\n" {
-				t.Errorf("orbit session send --json = %q, want %q", got, answer.body+"\n")
+			if got := stripEchoedCallID(out.String(), sentBody); got == out.String() || got != answer.body {
+				t.Errorf("orbit session send --json = %q, want %q after the key it was sent under", out.String(), answer.body)
 			}
 
 			mcp := &mcpServer{
@@ -378,6 +392,9 @@ func TestSessionSendHandsBackTheServerPlacementUntouched(t *testing.T) {
 			if err := json.Unmarshal([]byte(answer.body), &want); err != nil {
 				t.Fatal(err)
 			}
+			var sent map[string]interface{}
+			_ = json.Unmarshal([]byte(sentBody), &sent)
+			want["clientTurnId"] = sent["clientTurnId"]
 			if !reflect.DeepEqual(got, want) {
 				t.Errorf("session_send result = %#v, want %#v", got, want)
 			}

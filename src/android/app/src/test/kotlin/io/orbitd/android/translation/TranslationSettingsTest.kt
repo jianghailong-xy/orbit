@@ -11,6 +11,7 @@ import io.orbitd.android.TestOrbitApplication
 import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.net.*
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.SESSION_RECAPS
 import io.orbitd.android.management.SettingsScreen
@@ -31,8 +32,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Settings › Sessions › Translation on Android (docs/mocks/session-translation/01-board.png, frames 2 and 9): the group with its switch
- * and what it does, Your language from a bottom sheet of the seven, Agents work in English and read-only; each written alone as it
- * moves; off by default; and, on a server without a DeepSeek key, all of it disabled under frame 2's notice. The real `SettingsScreen`
+ * and what it does — naming the agent language — then Your language and Agents work in, each a bottom sheet over the one shared list
+ * (absent agent language = English); each written alone as it moves; off by default; and, on a server without a DeepSeek key, all of it disabled under frame 2's notice. The real `SettingsScreen`
  * over a fake account, whose frames go under `src/android/build/evidence/session-translation-android/`.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -111,32 +112,66 @@ class TranslationSettingsTest {
         // The group, after the default permission and before the rest, as the board places it under Session defaults.
         compose.onNodeWithText(TranslationCopy.TITLE).assertIsDisplayed()
         assertTrue(top("Default permission") < top(TranslationCopy.TITLE) && top(TranslationCopy.TITLE) < top("Session orchestration"))
-        compose.onNodeWithText(TranslationCopy.TRANSLATE_CONVERSATIONS_HINT).assertIsDisplayed()
+        compose.onNodeWithText(TranslationCopy.translateConversationsHint("en")).assertIsDisplayed()
+        assertTrue(TranslationCopy.translateConversationsHint("en").startsWith("Agents read and write in English;"))
         compose.onNodeWithText(TranslationCopy.BILINGUAL_FOOTER + " " + TranslationCopy.FOOTER).assertIsDisplayed()
         // "Show both languages" is offered only while translation is on.
         compose.onAllNodesWithText(TranslationCopy.SHOW_BOTH_LANGUAGES).assertCountEquals(0)
         toggle.assertIsOff()
         compose.onNodeWithText(Translation_name_default).assertIsDisplayed()
-        compose.onNodeWithText(TranslationCopy.ENGLISH).assertIsDisplayed()
+        compose.onNodeWithText("English").assertIsDisplayed()
         compose.onAllNodesWithText(TranslationCopy.UNAVAILABLE).assertCountEquals(0)
-        // Agents work in is shown, never offered.
-        compose.onNode(hasText(TranslationCopy.AGENTS_WORK_IN) and hasClickAction()).assertDoesNotExist()
 
         toggle.performClick()
         compose.waitUntil(60_000) { writes.isNotEmpty() }
         assertEquals(buildJsonObject { put("translationEnabled", true) }, writes.single())
         compose.waitUntil(60_000) { runCatching { toggle.assertIsOn() }.isSuccess }
 
-        // Your language: a bottom sheet of the seven, one of them picked; a pick is written alone.
+        // Your language: a bottom sheet over the whole list, one of them picked; a pick is written alone.
         compose.onNode(hasText(TranslationCopy.YOUR_LANGUAGE) and hasClickAction()).performClick()
         compose.waitUntil(60_000) { compose.onAllNodesWithText("German").fetchSemanticsNodes().isNotEmpty() }
-        listOf("Chinese (Traditional)", "Japanese", "Korean", "Spanish", "French", "German").forEach { compose.onNodeWithText(it).assertExists() }
+        compose.onAllNodes(isSelectable()).assertCountEquals(Translation.LANGUAGES.size)
+        Translation.LANGUAGES.forEach { (_, name) -> compose.onNode(hasText(name) and isSelectable()).assertExists() }
         compose.onNode(hasText(Translation_name_default) and isSelectable()).assertIsSelected()
         compose.onNode(hasText("Japanese") and isSelectable()).performClick()
         compose.waitUntil(60_000) { writes.size == 2 }
         assertEquals(buildJsonObject { put("translationLanguage", "ja") }, writes[1])
         compose.waitUntil(60_000) { compose.onAllNodesWithText("Japanese").fetchSemanticsNodes().size == 1 }
         compose.onAllNodesWithText(SESSION_RECAPS).assertCountEquals(1)
+
+        // Agents work in: the same sheet over the same list, English picked while the account names none; a pick is written alone
+        // under its own key, and the switch's line then names it.
+        compose.onNode(hasText(TranslationCopy.AGENTS_WORK_IN) and hasClickAction()).performClick()
+        compose.waitUntil(60_000) { compose.onAllNodes(isSelectable()).fetchSemanticsNodes().size == Translation.LANGUAGES.size }
+        compose.onNode(isHeading() and hasText(TranslationCopy.AGENTS_WORK_IN)).assertExists()
+        Translation.LANGUAGES.forEach { (_, name) -> compose.onNode(hasText(name) and isSelectable()).assertExists() }
+        compose.onNode(hasText("English") and isSelectable()).assertIsSelected()
+        compose.onNode(hasText("Swedish") and isSelectable()).performScrollTo().performClick()
+        compose.waitUntil(60_000) { writes.size == 3 }
+        assertEquals(buildJsonObject { put("translationAgentLanguage", "sv") }, writes[2])
+        compose.waitUntil(60_000) { compose.onAllNodes(isSelectable()).fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText(TranslationCopy.translateConversationsHint("sv")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(TranslationCopy.translateConversationsHint("sv").startsWith("Agents read and write in Swedish;"))
+        compose.onNodeWithText("Swedish").assertIsDisplayed()
+        compose.onAllNodesWithText("English").assertCountEquals(0)
+        compose.onNodeWithText("Japanese").assertIsDisplayed()
+    }
+
+    @Test fun aNonEnglishAgentLanguageIsNamedByItsRowAndTheSwitchsLine() {
+        preferences = JsonObject(preferences + ("translationEnabled" to JsonPrimitive(true)) + ("translationLanguage" to JsonPrimitive("zh-Hans"))
+            + ("translationAgentLanguage" to JsonPrimitive("ja")))
+        open()
+        toggle.assertIsOn()
+        compose.onNodeWithText(TranslationCopy.translateConversationsHint("ja")).assertIsDisplayed()
+        compose.onNodeWithText(Translation_name_default).assertIsDisplayed()
+        compose.onNodeWithText("Japanese").assertIsDisplayed()
+        compose.onAllNodesWithText("English").assertCountEquals(0)
+        assertTrue(top(TranslationCopy.YOUR_LANGUAGE) < top(TranslationCopy.AGENTS_WORK_IN))
+        shot("7-settings-agent-language-japanese")
+        compose.onNode(hasText(TranslationCopy.AGENTS_WORK_IN) and hasClickAction()).performClick()
+        compose.waitUntil(60_000) { compose.onAllNodes(isSelectable()).fetchSemanticsNodes().size == Translation.LANGUAGES.size }
+        compose.onNode(hasText("Japanese") and isSelectable()).assertIsSelected()
+        assertTrue(writes.isEmpty())
     }
 
     /** "Show both languages" (docs/mocks/session-translation/02-bilingual.png, mark A): under the group's rows while translation is on,
@@ -186,6 +221,7 @@ class TranslationSettingsTest {
         // Whatever the preference says, the switch reads off and nothing can be pressed.
         toggle.assertIsOff().assertIsNotEnabled()
         compose.onNode(hasText(TranslationCopy.YOUR_LANGUAGE) and hasClickAction()).assertIsNotEnabled()
+        compose.onNode(hasText(TranslationCopy.AGENTS_WORK_IN) and hasClickAction()).assertIsNotEnabled()
         assertTrue(top(TranslationCopy.TRANSLATE_CONVERSATIONS) < top(TranslationCopy.UNAVAILABLE) && top(TranslationCopy.UNAVAILABLE) < top(TranslationCopy.YOUR_LANGUAGE))
         shot("6-settings-unavailable")
         assertTrue(writes.isEmpty())
