@@ -339,9 +339,9 @@ class ProjectMergeShellTest {
      * capsule each and the merge's capsule is the one that goes. */
     @Test fun theNeedsYouBarOpensAWaitingMergeOnItsProjectsSessionsPage() {
         ProjectShell.promotion = candidate("READY"); ProjectShell.mergeWaiting = true
+        // Over the session list: a conversation carries no bar for what waits elsewhere (07-console-one-capsule).
         signIn()
         await { exists(hasText("Plain notes") and hasClickAction()) }
-        compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
         await { exists(hasTestTag("needs-you-bar-text") and hasText("Approve merge to main"), unmerged = true) &&
             exists(hasTestTag("needs-you-bar-detail") and hasText("Launch"), unmerged = true) }
         compose.onNodeWithTag("needs-you-bar").performClick()

@@ -201,7 +201,7 @@ abstract class LandingObservationShots {
         val banner = NeedsYouLogic.banner(listOf(coordinator))!!
         show {
             Column(Modifier.padding(16.dp)) {
-                NeedsYouBar(banner.text, null, NeedsYouLogic.itemHint, detail = banner.detail, since = banner.since, more = banner.more, glyph = banner.glyph) {}
+                NeedsYouBar(banner.text, NeedsYouLogic.itemHint, detail = banner.detail, since = banner.since, more = banner.more, glyph = banner.glyph) {}
             }
         }
         shot("needs-you-bar")

@@ -15,6 +15,9 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     /// When the account's profile photo was set — the version it is fetched and cached by
     /// (`GET /users/me/avatar`). Nil while there is none, and in login's user payload.
     public let avatarUpdatedAt: String?
+    /// Settings › Translation: the server holds a DeepSeek key and so can translate. False: the
+    /// switch is drawn disabled with the board frame 2 notice. Nil in login's user payload.
+    public let translationAvailable: Bool?
 }
 
 public struct LoginRequest: Codable, Sendable {
@@ -1269,6 +1272,10 @@ public struct TurnAccepted: Codable, Sendable {
     /// sends it keeps behaving exactly as it did.
     /// Contract: `docs/session-message-routing-contract.md` §2.1.
     public let routedToSessionId: String?
+    /// Settings › Translation: the message is being translated (state TRANSLATING) before the engine
+    /// gets it. Raw, read by `TurnTranslation.parse`; absent when translation was not involved.
+    public let translation: JSONValue?
+    public var turnTranslation: TurnTranslation? { TurnTranslation.parse(translation) }
 }
 
 /// One user turn from GET /sessions/:id/turns?view=active that no transcript event draws yet: the
@@ -1400,6 +1407,10 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
     public let authoredByOrbit: Bool?
+    /// Settings › Translation: a held message (TRANSLATING / FAILED, `content` still what the owner
+    /// wrote) or a delivered one. Raw, read by `TurnTranslation.parse`.
+    public let translation: JSONValue?
+    public var turnTranslation: TurnTranslation? { TurnTranslation.parse(translation) }
     /// The session's opening prompt, listed as the accepted head until the runner echoes it — so a
     /// session no runner has claimed yet still shows its first message. Nil on every other turn, and
     /// from a server that predates the field.
@@ -1416,7 +1427,8 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
                 runQuestion: JSONValue? = nil, runNotice: JSONValue? = nil, sessionOpening: JSONValue? = nil,
                 placement: String? = nil, createdAt: String? = nil,
                 targetTurnId: String? = nil, delivery: String? = nil, deliveryCode: String? = nil,
-                deliveryReason: String? = nil, opening: Bool? = nil) {
+                deliveryReason: String? = nil, translation: JSONValue? = nil, opening: Bool? = nil) {
+        self.translation = translation
         self.turnId = turnId
         self.kind = kind
         self.placement = placement
@@ -1535,6 +1547,9 @@ public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
     public let toolName: String?
     public let status: String?
     public let input: JSONValue?
+    /// Settings › Translation (3A): what the card shows in the owner's language. Raw, read by
+    /// `ApprovalTranslation.parse`.
+    public let translation: JSONValue?
 }
 
 /// One background shell from GET /sessions/:id/background — the server's authoritative, complete
@@ -1607,9 +1622,13 @@ public struct ApprovalDecisionRequest: Codable, Sendable {
     /// also starts the new task's run. Nil leaves the key out of the JSON altogether, so every other
     /// answer, that card's own Create it included, is the body it was before the choice existed.
     public let startAfterCreate: Bool?
+    /// Settings › Translation: send the owner's own words untranslated — the Send as written of a
+    /// decision refused 422 TRANSLATION_FAILED. Nil leaves the key out.
+    public let sendAsWritten: Bool?
     public init(behavior: ApprovalBehavior, message: String? = nil,
                 answers: [String: [String]]? = nil, rememberRules: [PermissionRule]? = nil,
-                startAfterCreate: Bool? = nil) {
+                startAfterCreate: Bool? = nil, sendAsWritten: Bool? = nil) {
+        self.sendAsWritten = sendAsWritten
         self.behavior = behavior
         self.message = message
         self.answers = answers
