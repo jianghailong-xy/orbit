@@ -15,14 +15,15 @@
  * before every edit instead of allowing those in the worktree. The table this gives, and what was measured on the
  * real CLIs, is §6.2's and §12's in the design.
  *
- * Claude Code is the exception for CHECK_ONLY: it runs in Don't Ask, not Plan. Its headless Plan never
- * permission-checks Bash, so `touch` and `date > file` ran there (measured on 2.1.325); in Don't Ask its own
- * read-only check still runs `git log`, `ls`, `cat` and `grep`, and refuses every shell command that writes. Don't
- * Ask runs only what an allow rule names, so the run's allow list is short and explicit: no workspace "Always
- * allow" rule (one could cover a writing command or Edit), no `mcp__orbit__*` wildcard (`bg_run` would start a shell
- * outside Claude's check, and Plan's runner gate refused Orbit's writes before), only the Orbit tools a check needs,
- * and WebFetch/WebSearch. The Orbit CLI, which the runner allows by its absolute path for every command it offers,
- * is denied outright (docs/scheduled-tasks-engine-modes.md §7).
+ * Claude Code is the exception for CHECK_ONLY: it runs in Default, not Plan. Its headless Plan never permission-checks
+ * Bash, so `touch` and `date > file` ran there (measured on 2.1.325). In Default, with the lists below, its own
+ * read-only check still runs `git log`, `ls`, `cat` and `grep` with no ask, and every other shell command asks: the
+ * ordinary approval card, which Allow once, Always allow (a workspace rule) or Deny answers, as the owner ruled on
+ * 2026-11-15. Nothing but a shell command may ask (`checkOnlyRefusesApproval`): the file tools and the Orbit CLI are
+ * denied outright, so is every Orbit tool outside a short allow list (`bg_run` would start a shell outside Claude's
+ * check, and the runner answers Claude's prompt for an Orbit tool itself, allowing it outside Plan), and any other
+ * tool that asks is answered DENY by the server before it becomes a card. Of the workspace's "Always allow" rules
+ * only `Bash(…)` ones are carried (docs/scheduled-tasks-engine-modes.md §7, §9).
  */
 import {
   AgentProvider,
@@ -48,7 +49,7 @@ export const ACCESS_LEVEL_MODES: Readonly<Record<AccessLevel, readonly Permissio
  */
 export function scheduleRunMode(level: AccessLevel, engine: string | null | undefined): PermissionMode | null {
   const provider = engine ?? AgentProvider.CLAUDE;
-  if (claudeCheckOnly(level, provider)) return PermissionMode.DONT_ASK;
+  if (claudeCheckOnly(level, provider)) return PermissionMode.DEFAULT;
   for (const mode of ACCESS_LEVEL_MODES[level]) {
     // A mode the engine refuses at session admission is no mode at all there.
     if (provider === AgentProvider.DSH && !DSH_PERMISSION_MODES.includes(mode)) continue;
@@ -65,14 +66,14 @@ export function scheduleRunMode(level: AccessLevel, engine: string | null | unde
   return null;
 }
 
-/** Whether this is a CHECK_ONLY run on Claude Code, which runs in Don't Ask with its own tool lists. */
+/** Whether this is a CHECK_ONLY run on Claude Code, which runs in Default with its own tool lists. */
 function claudeCheckOnly(level: AccessLevel | null | undefined, provider: string | null | undefined): boolean {
   return level === 'CHECK_ONLY' && (provider ?? AgentProvider.CLAUDE) === AgentProvider.CLAUDE;
 }
 
 /**
  * Everything a CHECK_ONLY run on Claude Code may call beyond what Claude Code judges read-only by itself (Read,
- * Grep, Glob, `git log`, `ls`, …). In Don't Ask nothing else runs, so each Orbit tool here is one a check needs:
+ * Grep, Glob, `git log`, `ls`, …) without asking. Each Orbit tool here is one a check needs:
  *
  *   * the run's own schedule: report the run, read it, and change or end it, which the server already holds to the
  *     schedule the run serves and to its envelope (§8.3);
@@ -103,10 +104,50 @@ export const CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: readonly string[] = [
 ];
 
 /**
- * What a CHECK_ONLY run on Claude Code may not call, even where an allow rule names it: the file tools, and the
- * Orbit CLI. The runner allows the CLI by its absolute path for every command it offers, writes included
- * (`Bash(/usr/local/bin/orbit task update *)`, quoted and unquoted); a deny rule wins over those. The run reads
- * Orbit through the tools above instead.
+ * Every Orbit tool `orbit mcp` serves (docs/operation-catalog.md, MCP column) that CHECK_ONLY_CLAUDE_ALLOWED_TOOLS does
+ * not name. Denied by name because Claude Code asks about an Orbit tool its allow rules do not cover, and the runner
+ * answers that ask itself (runner-go mcp.go answerOrbitToolPrompt): outside Plan it allows every declared Orbit tool
+ * with no card. A deny rule is applied before the ask. schedule-access.spec.ts holds this list to the catalogue.
+ */
+export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
+  'mcp__orbit__agent_create', 'mcp__orbit__agent_delete', 'mcp__orbit__agent_list', 'mcp__orbit__agent_update',
+  'mcp__orbit__ask_owner', 'mcp__orbit__bg_kill', 'mcp__orbit__bg_list', 'mcp__orbit__bg_output',
+  'mcp__orbit__bg_run', 'mcp__orbit__criterion_check_report', 'mcp__orbit__criterion_check_start',
+  'mcp__orbit__criterion_confirm', 'mcp__orbit__criterion_confirmation_withdraw', 'mcp__orbit__file_pin',
+  'mcp__orbit__file_upload', 'mcp__orbit__integration_abandon', 'mcp__orbit__integration_observe',
+  'mcp__orbit__integration_request_promotion', 'mcp__orbit__integration_retry',
+  'mcp__orbit__integration_skip_merge_check', 'mcp__orbit__merge_receipt', 'mcp__orbit__merge_receipts',
+  'mcp__orbit__open_item_hand_over', 'mcp__orbit__open_item_resolve', 'mcp__orbit__project_blocker_resolve',
+  'mcp__orbit__project_create', 'mcp__orbit__project_crossings', 'mcp__orbit__project_delete',
+  'mcp__orbit__project_ensure_coordinator', 'mcp__orbit__project_integration_get',
+  'mcp__orbit__project_merge_evidence', 'mcp__orbit__project_request_done', 'mcp__orbit__project_request_start',
+  'mcp__orbit__project_send', 'mcp__orbit__project_update', 'mcp__orbit__provider_create',
+  'mcp__orbit__provider_delete', 'mcp__orbit__provider_list', 'mcp__orbit__provider_update',
+  'mcp__orbit__request_owner_action', 'mcp__orbit__runner_delete', 'mcp__orbit__runner_engine_install',
+  'mcp__orbit__runner_engine_install_status', 'mcp__orbit__runner_list', 'mcp__orbit__schedule_create',
+  'mcp__orbit__schedule_delete', 'mcp__orbit__schedule_pause', 'mcp__orbit__schedule_resume',
+  'mcp__orbit__schedule_run_now', 'mcp__orbit__schedule_run_stop', 'mcp__orbit__schedule_wakeup',
+  'mcp__orbit__session_await', 'mcp__orbit__session_complete', 'mcp__orbit__session_create',
+  'mcp__orbit__session_delete', 'mcp__orbit__session_end', 'mcp__orbit__session_interrupt',
+  'mcp__orbit__session_list', 'mcp__orbit__session_merge', 'mcp__orbit__session_reply', 'mcp__orbit__session_send',
+  'mcp__orbit__task_attribution', 'mcp__orbit__task_await', 'mcp__orbit__task_batch_pin', 'mcp__orbit__task_comment',
+  'mcp__orbit__task_confirmation_return', 'mcp__orbit__task_confirmation_review', 'mcp__orbit__task_create',
+  'mcp__orbit__task_create_batch', 'mcp__orbit__task_delete', 'mcp__orbit__task_dependency_add',
+  'mcp__orbit__task_dependency_graph', 'mcp__orbit__task_dependency_remove', 'mcp__orbit__task_evidence_decide',
+  'mcp__orbit__task_evidence_list', 'mcp__orbit__task_evidence_submit', 'mcp__orbit__task_labels',
+  'mcp__orbit__task_progress_report', 'mcp__orbit__task_reopen', 'mcp__orbit__task_request_confirmation',
+  'mcp__orbit__task_start', 'mcp__orbit__task_update', 'mcp__orbit__tasklist_create', 'mcp__orbit__tasklist_delete',
+  'mcp__orbit__tasklist_get', 'mcp__orbit__tasklist_list', 'mcp__orbit__tasklist_propose_dag',
+  'mcp__orbit__tasklist_update', 'mcp__orbit__watch_cancel', 'mcp__orbit__watch_create', 'mcp__orbit__watch_get',
+  'mcp__orbit__watch_list', 'mcp__orbit__watch_update', 'mcp__orbit__wiki_draft', 'mcp__orbit__wiki_note',
+  'mcp__orbit__wiki_propose', 'mcp__orbit__withdraw_owner_request',
+];
+
+/**
+ * What a CHECK_ONLY run on Claude Code may not call, even where an allow rule names it: the file tools, the Orbit CLI
+ * and the Orbit tools outside its allow list. The runner allows the CLI by its absolute path for every command it
+ * offers, writes included (`Bash(/usr/local/bin/orbit task update *)`, quoted and unquoted), and a workspace rule may
+ * name it too; a deny rule wins over both. The run reads Orbit through the allowed tools instead.
  */
 export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
   'Edit',
@@ -114,13 +155,15 @@ export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
   'NotebookEdit',
   'Bash(*/orbit *)',
   "Bash('*/orbit' *)",
+  ...CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS,
 ];
 
 /**
- * The tools the run's session may use without asking. A CHECK_ONLY run on Claude Code gets exactly
- * CHECK_ONLY_CLAUDE_ALLOWED_TOOLS: in Don't Ask an allow rule is all that runs a call the engine does not judge
- * read-only, so neither the workspace's rules nor the `mcp__orbit__*` wildcard is kept. Every other run keeps what
- * the claim computed.
+ * The tools the run's session may use without asking. A CHECK_ONLY run on Claude Code gets
+ * CHECK_ONLY_CLAUDE_ALLOWED_TOOLS and, of what the claim computed, only the workspace's `Bash(…)` rules: a shell
+ * command the owner answered Always allow to does not ask again. Neither the `mcp__orbit__*` wildcard nor a rule for
+ * any other tool (Edit, Write, an MCP tool) is kept, and a rule for the whole shell (`Bash`, `Bash(*)`) is not either:
+ * it would run every writing command unasked. Every other run keeps what the claim computed.
  */
 export function scheduleRunAllowedTools(
   base: string[],
@@ -128,7 +171,34 @@ export function scheduleRunAllowedTools(
   provider: string | null | undefined,
 ): string[] {
   if (!claudeCheckOnly(accessLevel, provider)) return base;
-  return [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS];
+  return [...new Set([...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, ...base.filter(isNarrowBashRule)])];
+}
+
+/** `Bash(git status:*)` yes; `Bash`, `Bash(*)`, `Bash(:*)`, `Edit`, `mcp__orbit__*` no. */
+function isNarrowBashRule(token: string): boolean {
+  const match = /^Bash\((.*)\)$/s.exec(token);
+  return !!match && !/^[\s*:]*$/.test(match[1]);
+}
+
+/** What the engine reads when the server refuses such a request (checkOnlyRefusesApproval). */
+export const CHECK_ONLY_REFUSED_MESSAGE =
+  'Not run: this is a check-only scheduled run, which may ask only to run a shell command. Nothing was written. '
+  + 'Read with the tools you have, and say in your report what you could not check.';
+
+/**
+ * Whether the server answers a permission request DENY at once instead of filing it as a card: a CHECK_ONLY run on
+ * Claude Code may ask only about a shell command its engine runs. Any other tool (an MCP tool, a SubAgent's question,
+ * a tool the deny list missed) and a shell command a runner-hosted job asks about (`bg_run` is the shell outside
+ * Claude's check) never become a card, a Waiting on you item or a push, so pressing a card can never grant one.
+ */
+export function checkOnlyRefusesApproval(
+  accessLevel: AccessLevel | null | undefined,
+  provider: string | null | undefined,
+  toolName: string,
+  backgroundJobId: string | null | undefined,
+): boolean {
+  if (!claudeCheckOnly(accessLevel, provider)) return false;
+  return toolName !== 'Bash' || !!backgroundJobId?.trim();
 }
 
 /**

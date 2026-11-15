@@ -559,7 +559,13 @@ import {
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
-import { scheduleRunAgentFields, scheduleRunAllowedTools, scheduleRunDisallowedTools } from '../schedules/schedule-access';
+import {
+  CHECK_ONLY_REFUSED_MESSAGE,
+  checkOnlyRefusesApproval,
+  scheduleRunAgentFields,
+  scheduleRunAllowedTools,
+  scheduleRunDisallowedTools,
+} from '../schedules/schedule-access';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -6118,16 +6124,19 @@ export class RunnerApiController {
         })
       : null;
     if (existing) return { id: existing.id, status: existing.status as ApprovalStatus };
+    // A scheduled CHECK_ONLY run on Claude Code may ask only about a shell command (schedule-access.ts): anything
+    // else it asks about is answered DENY here and never becomes a card, a Waiting on you item or a push.
+    const refused = await this.checkOnlyRunRefuses(session, dto);
     // A call this workspace has permanently allowed is answered here instead of waking a human
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
-    const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
+    const autoAllowed = existing || refused ? false : await this.standingGrantCovers(session, dto);
     // The same shape for a coordinator's task creates in its own project when nobody has started it
     // (the start card reviews them) or its Automatic is on (the coordinator decides them): none of
     // them is a question on its own (`unstarted-project-create.ts`).
     const allowedMessage = autoAllowed
       ? AUTO_ALLOWED_MESSAGE
-      : existing
+      : existing || refused
         ? null
         : await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input);
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
@@ -6172,11 +6181,12 @@ export class RunnerApiController {
       ...(allowedMessage
         ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
         : {}),
+      ...(refused ? { status: 'DENIED', decidedAt: new Date(), message: CHECK_ONLY_REFUSED_MESSAGE } : {}),
     };
     let held = false;
     let fallback: string | null = null;
     let routed: Awaited<ReturnType<typeof this.prisma.approval.create>> | null = null;
-    if (!existing && !allowedMessage && dto.toolName === 'AskUserQuestion') {
+    if (!existing && !allowedMessage && !refused && dto.toolName === 'AskUserQuestion') {
       const recipient = await questionRecipient(this.prisma, sessionId);
       if (recipient) {
         fallback = recipient.reason;
@@ -6219,7 +6229,7 @@ export class RunnerApiController {
     if (held) this.realtime.publishSessionUpdated(sessionId);
     // An already-answered approval raises no card and buzzes no phone: not interrupting is the
     // entire point of having granted it.
-    if (!existing && !allowedMessage && !held) {
+    if (!existing && !allowedMessage && !refused && !held) {
       this.realtime.publish(sessionId, approvalRequestEvent(approval, new Date().toISOString()));
       // Fire-and-forget: nudge the owner's iOS devices that a reply is needed. Not awaited so a
       // slow APNs round-trip can't delay the runner's approval-create response.
@@ -6306,6 +6316,21 @@ export class RunnerApiController {
       // The card is drawn without its pill; the question stands.
       return card as Prisma.InputJsonValue;
     }
+  }
+
+  /** Whether this session serves a scheduled CHECK_ONLY run whose engine may not ask about this call (schedule-access.ts). */
+  private async checkOnlyRunRefuses(
+    session: SessionEngineFacts & { scheduleRunId: string | null },
+    dto: ApprovalCreateRequest,
+  ): Promise<boolean> {
+    if (!session.scheduleRunId) return false;
+    const run = await this.prisma.scheduleRun.findUnique({
+      where: { id: session.scheduleRunId },
+      select: { schedule: { select: { accessLevel: true } } },
+    });
+    if (run?.schedule.accessLevel !== 'CHECK_ONLY') return false;
+    return checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName),
+      stripNul(dto.backgroundJobId ?? ''));
   }
 
   /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */
