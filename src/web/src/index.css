@@ -8241,11 +8241,6 @@ button.chat-jump-start:hover {
 .chat-bilingual-reply .chat-bilingual {
   margin-top: 2px;
 }
-/* The English is Markdown (.md sets its own 14px): a size smaller than the words above it. */
-.chat-bilingual .md {
-  font-size: 12.5px;
-  line-height: 1.55;
-}
 .chat-bilingual.is-collapsed .chat-bilingual-text {
   max-height: calc(2 * 1.55em);
   overflow: hidden;
@@ -10306,6 +10301,13 @@ button.chat-jump-start:hover {
      lines and inflate the spacing. */
   white-space: normal;
 }
+
+/* The English is Markdown (.md sets its own 14px): a size smaller than the words above it. Kept after .md itself, whose rule it narrows. */
+.chat-bilingual .md {
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
 .md > *:first-child {
   margin-top: 0;
 }
