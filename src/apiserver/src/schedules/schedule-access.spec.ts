@@ -18,7 +18,7 @@ import {
   scheduleRunDisallowedTools,
   scheduleRunMode,
 } from './schedule-access';
-import { heldReasonSentence } from './schedule-start-check';
+import { heldClause, heldCopy } from './schedule-attention';
 
 const WORKSPACE_ALLOWED = ['mcp__orbit__*', 'Bash(npm install:*)', 'Edit'];
 
@@ -83,11 +83,11 @@ test('a CHECK_ONLY run on Claude Code may not use the file tools or the Orbit CL
   assert.deepEqual(scheduleRunDisallowedTools(['X', 'Edit'], 'CHECK_ONLY', 'claude').filter((t) => t === 'Edit'), ['Edit']);
 });
 
-test('a run held because the account default is narrower says what to change', () => {
-  const sentence = heldReasonSentence('MODE_WIDER_THAN_ACCOUNT_DEFAULT');
-  assert.ok(sentence);
-  assert.match(sentence, /Set Default permission mode in Settings > General to Default, then resume the schedule\.$/);
-  assert.equal(heldReasonSentence('WORKSPACE_DELETED'), null);
+test('a run held because the account default is narrower says what to change, inside the item\'s length', () => {
+  const clause = heldClause('MODE_WIDER_THAN_ACCOUNT_DEFAULT');
+  assert.match(clause, /\(set it to Default in Settings > General\)$/);
+  const { body } = heldCopy('Codex stable check', 'MODE_WIDER_THAN_ACCOUNT_DEFAULT');
+  assert.equal(body, `It won't run until you resume it: ${clause}.`, 'not cut short by the 180-character body');
 });
 
 test('every other run keeps the claim\'s tools: CHECK_ONLY elsewhere, OPEN_PR, and a session that is no run', () => {

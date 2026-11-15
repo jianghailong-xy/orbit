@@ -17,7 +17,10 @@ export function currentPromptSuggestion(events: readonly EventLike[]): string | 
   for (let i = events.length - 1; i >= 0; i--) {
     const ev = events[i];
     if (ev.type === 'prompt_suggestion') {
-      const text = (ev.payload as { text?: unknown } | null | undefined)?.text;
+      const payload = ev.payload as { text?: unknown; translation?: { text?: unknown } } | null | undefined;
+      // Settings › Translation (3A): offered in the owner's language once the server translated it.
+      const translated = payload?.translation?.text;
+      const text = typeof translated === 'string' && translated.trim() ? translated : payload?.text;
       return typeof text === 'string' && text.trim() ? text.trim() : null;
     }
     if (ev.type === 'user' || ev.type === 'turn_end') return null;

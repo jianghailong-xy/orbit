@@ -90,6 +90,10 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
 import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.translation.LocalShownOriginals
+import io.orbitd.android.translation.ReplyTranslationFoot
+import io.orbitd.android.translation.ShownOriginals
 import io.orbitd.android.management.RunnerUpdateLater
 import io.orbitd.android.management.RunnerUpdateLaterButton
 import io.orbitd.android.management.RunnerPage
@@ -514,11 +518,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     LaunchedEffect(targetNames) { wakeNames = targetNames }
     val exchangeTree = rememberExchangeTree(app, handle, state.session?.snapshot?.detail)
+    // Settings › Translation: which messages this visit flipped to their original — never persisted (board frame 5).
+    val shownOriginals = remember(handle, route.id) { ShownOriginals() }
     // The main checkout's result lines, which a card above them reads to know it was handled.
     val mainCheckoutResults = remember(state.window.events) {
         state.window.events.filter { it.type == "system" }.mapNotNull { e -> MainCheckout.resultNotice(e.fields)?.let { e.seq to it } }
     }
-    CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
+    CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
         LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns) {
         SessionCardsReads(cards)
@@ -785,7 +791,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
-                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }) }
+                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
+                    openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) }) }
             }
         }
         }
@@ -807,8 +814,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
 private fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
     // A06-11: reasoning still being written is open and held to a few self-scrolling lines (iOS 471b2afbb).
     if (label == "Thinking") return LiveThinking(parent, text, open)
+    // Settings › Translation (2A): the agent's own reply, streaming with translation on, is the English greyed with its chip until
+    // its block completes and the translation arrives; a sub-agent's report is never translated.
+    val translating = parent.isEmpty() && LocalTranslation.current.on
     Column { Text(if (parent.isEmpty()) "$label · Live" else "Subagent · $label · Live", style = MaterialTheme.typography.labelMedium)
-        StreamingText(text, open)
+        if (translating) {
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) { StreamingText(text, open) }
+            ReplyTranslationFoot(null, pending = true, flipped = false, onFlip = {}, retry = null)
+        } else StreamingText(text, open)
     }
 }
 

@@ -333,7 +333,7 @@ test('GET /workspaces/:id says when the workspace was last used and how many con
   assert.deepEqual(read.lastActiveAt, lastActive);
   // Conversations only: not the sessions spawned from another, and not the trashed ones.
   assert.deepEqual(counted, [
-    { where: { workspaceId: 'workspace-1', sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null } },
+    { where: { workspaceId: 'workspace-1', sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null, runSource: { not: 'SCHEDULE' } } },
   ]);
 
   // A save reads the workspace back without counting.
