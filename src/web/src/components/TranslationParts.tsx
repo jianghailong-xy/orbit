@@ -132,6 +132,28 @@ export function UserTranslationFoot({
 }
 
 /**
+ * An approval card whose answer the server could not translate, so nothing was recorded (1A): the
+ * same "Couldn't translate, so it wasn't sent · Retry · Send as written" as a held message.
+ */
+export function UntranslatedDecisionFoot({
+  onRetry,
+  onSendAsWritten,
+}: {
+  onRetry: () => Promise<unknown>;
+  onSendAsWritten: () => Promise<unknown>;
+}) {
+  return (
+    <span className="chat-translate-foot is-error approval-untranslated" role="alert">
+      <span>{COPY.sendFailed}</span>
+      <Sep />
+      <FootAction label={COPY.retry} onPress={onRetry} />
+      <Sep />
+      <FootAction label={COPY.sendAsWritten} onPress={onSendAsWritten} />
+    </span>
+  );
+}
+
+/**
  * An agent reply: "Translated · Show original" ↔ "Original · Show translation"; failed (2A),
  * "Couldn't translate this reply · Retry"; still to be translated, the chip "Translates when the
  * reply is done".
