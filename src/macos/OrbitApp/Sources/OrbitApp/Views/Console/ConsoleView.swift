@@ -1289,8 +1289,14 @@ struct TranscriptView: View {
                 // One capsule up here (the owner, 2026-11-15, 07-console-one-capsule, B): what waits
                 // on the reader in this conversation takes it while its card is out of sight — above
                 // them, or anywhere once they are off the tail (at the tail the card is the tail);
-                // otherwise the question above the fold, as before.
-                if !hidesStickyQuestion, let here = console.waitingBelow,
+                // otherwise the question above the fold, as before. A coordinator handing itself over
+                // takes it over both, at the tail and off it, while the note is written and the
+                // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A).
+                if !hidesStickyQuestion,
+                   CoordinatorContextActions.locksComposer(app.session(id: console.sessionID)?.coordinatorHandoff) {
+                    handingOverCapsule
+                        .frame(maxWidth: questionWidth)
+                } else if !hidesStickyQuestion, let here = console.waitingBelow,
                    here.side == .above || !atBottom || console.detached {
                     waitingCapsule(here)
                         .frame(idealWidth: questionWidth, maxWidth: questionWidth)
@@ -1660,6 +1666,18 @@ struct TranscriptView: View {
         }
         .accessibilityLabel(here.text)
         .accessibilityHint("Shows what is waiting in this conversation")
+    }
+
+    /// "Handing over" in the nav bar's capsule while the handoff locks the composer (board 04): the
+    /// web and Mac headers' word, in the question capsule's glass. Nothing to press — the row in the
+    /// transcript carries the handoff's actions and its clock.
+    private var handingOverCapsule: some View {
+        Text(CoordinatorHandoffCopy.badgeHandingOver)
+            .font(.orbitSubtext.weight(.medium)).foregroundStyle(.secondary)
+            .lineLimit(1).truncationMode(.tail)
+            .padding(.horizontal, 14)
+            .questionGlass()
+            .accessibilityIdentifier("handing-over-capsule")
     }
 
     private func questionCapsule(_ text: String) -> some View {
