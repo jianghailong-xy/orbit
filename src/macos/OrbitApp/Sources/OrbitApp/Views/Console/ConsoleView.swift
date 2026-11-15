@@ -468,26 +468,15 @@ struct ConsoleView: View {
             bandOpened = false
         }
         #if os(iOS)
-        // "Another session needs you", below the nav bar and above the transcript. Compact only:
-        // the regular-width split keeps the session list on screen beside this console, and that
-        // list carries the bar — showing it in both columns would state one fact twice.
-        // …and, when this session is itself holding a question that does NOT stop its turn, the same
-        // bar pointing down into this transcript instead of away from it. See `NeedsYouBannerView`.
-        // While you type the bar folds away with the nav bar (`foldsChrome`), and a backdrop takes the
-        // nav bar's place behind the status bar so the transcript doesn't scroll under the clock.
-        // On iOS 26 it floats over the transcript as the composer band does at the bottom
-        // (`needsYouTop`).
+        // No needs-you bar in a conversation (the owner, 2026-11-15,
+        // docs/mocks/needs-you-capsule/07-console-one-capsule): what waits in OTHER conversations is
+        // the lists' and the drawer's to say, and what waits in this one is said by the capsule in the
+        // nav bar (`TranscriptView.waitingCapsule`). While you type the nav bar folds away
+        // (`foldsChrome`), and a backdrop takes its place behind the status bar so the transcript
+        // doesn't scroll under the clock.
         .needsYouTop {
-            if hSize == .compact {
-                let console = registry.peek(sessionID)
-                if foldsChrome(console) {
-                    Color.clear.frame(height: 0).background(.bar, ignoresSafeAreaEdges: .top)
-                } else {
-                    NeedsYouBannerView(
-                        excluding: sessionID,
-                        below: console?.waitingBelow,
-                        onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
-                }
+            if hSize == .compact, foldsChrome(registry.peek(sessionID)) {
+                Color.clear.frame(height: 0).background(.bar, ignoresSafeAreaEdges: .top)
             }
         }
         // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page
@@ -1271,10 +1260,16 @@ struct TranscriptView: View {
         // reader is following the answer to what they just asked (the owner, the same day).
         .toolbar {
             ToolbarItem(placement: .principal) {
-                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, !atBottom || console.detached,
-                   let q = stuckBubble {
-                    stickyQuestion(q, proxy: proxy)
+                // One capsule up here (the owner, 2026-11-15, 07-console-one-capsule, B): what waits
+                // on the reader in this conversation takes it while its card is out of sight — above
+                // them, or anywhere once they are off the tail (at the tail the card is the tail);
+                // otherwise the question above the fold, as before.
+                if !hidesStickyQuestion, let here = console.waitingBelow,
+                   here.side == .above || !atBottom || console.detached {
+                    waitingCapsule(here)
                         .frame(idealWidth: questionWidth, maxWidth: questionWidth)
+                } else {
+                    principalQuestion(proxy)
                 }
             }
         }
@@ -1595,6 +1590,46 @@ struct TranscriptView: View {
     /// The sticky question in the nav bar: the turn's words in a capsule between back and the ⋯ menu,
     /// their height and their glass. The line is the band's and gives way the same way, labelled by
     /// the arrow alone: the capsule has no room to say whose words they are, and needs none.
+    @ViewBuilder private func principalQuestion(_ proxy: ScrollViewProxy) -> some View {
+        if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, !atBottom || console.detached,
+           let q = stuckBubble {
+            stickyQuestion(q, proxy: proxy)
+                .frame(idealWidth: questionWidth, maxWidth: questionWidth)
+        }
+    }
+
+    /// What waits in this conversation, in the nav bar's capsule: the amber circle the needs-you bar
+    /// marks with, the bar's own words ("1 waiting below", "1 open question above") and the way the
+    /// card lies. A press scrolls to the card, as the bar's did.
+    private func waitingCapsule(_ here: WaitingBelow) -> some View {
+        CoastingButton {
+            PlatformHaptics.tap()
+            atBottom = false
+            transcriptScroll.halt()
+            console.requestScroll(to: here.rowID)
+        } label: { _ in
+            HStack(spacing: 8) {
+                Image(systemName: here.glyph.symbol)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.orange)
+                    .frame(width: 26, height: 26)
+                    .background(Color.orange.opacity(0.15), in: Circle())
+                Text(here.text)
+                    .font(.orbitSubtext.weight(.semibold)).foregroundStyle(.primary)
+                    .lineLimit(1).truncationMode(.tail)
+                Image(systemName: here.side == .above ? "chevron.up" : "chevron.down")
+                    .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            .padding(.leading, 9)
+            .padding(.trailing, 14)
+            .questionGlass()
+            .overlay(Capsule().strokeBorder(Color.orange.opacity(0.55), lineWidth: 1.2))
+            .contentShape(Capsule())
+        }
+        .accessibilityLabel(here.text)
+        .accessibilityHint("Shows what is waiting in this conversation")
+    }
+
     private func questionCapsule(_ text: String) -> some View {
         HStack(spacing: 6) {
             Text(StickySummary.arrow.trimmingCharacters(in: .whitespaces))
@@ -1754,11 +1789,10 @@ private extension View {
 
 #if os(iOS)
 private extension View {
-    /// Where the needs-you bar stands: on iOS 26 a safe-area BAR, so the transcript runs on under
-    /// its capsule and the scroll-edge effect softens what passes there, as under the nav bar above
-    /// it and the composer band below (the owner, 2026-10-16: the bottom as clear as the top; and
-    /// 2026-10-21: the bar a capsule, not a band). Before it, the inset it always was, the bar
-    /// standing on the page's colour.
+    /// The top of a conversation, under the nav bar: on iOS 26 a safe-area BAR, so the transcript
+    /// runs on under it as under the composer band below (the owner, 2026-10-16). Since 2026-11-15
+    /// (07-console-one-capsule) it holds only the backdrop that stands in for the nav bar while a
+    /// phone's composer types; the needs-you bar no longer stands here.
     @ViewBuilder func needsYouTop<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
         if #available(iOS 26.0, *) {
             let content = bar()

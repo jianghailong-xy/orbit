@@ -41,8 +41,8 @@ final class CriteriaDecisionWiringTests: XCTestCase {
     }
 
     private static let cardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift"
-    private static let bannerPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/NeedsYouBannerView.swift"
     private static let consolePath = "src/macos/OrbitApp/Sources/OrbitApp/ConsoleModel.swift"
+    private static let transcriptViewPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"
 
     /// One card's own section of the file, so a match 900 lines away cannot answer for it — a bare
     /// `contains` over a whole file is how a scan like this goes falsely green.
@@ -337,16 +337,18 @@ final class CriteriaDecisionWiringTests: XCTestCase {
     // MARK: the bar, and the cards it points at
 
     func testTheBarPointsDownIntoThisConversationWhenItHoldsAQuestion() throws {
-        let banner = try source(Self.bannerPath)
-        XCTAssertTrue(banner.contains("if let below {"),
-                      "the in-conversation question is what the bar says when there is one")
+        // Since 2026-11-15 (docs/mocks/needs-you-capsule/07-console-one-capsule) the conversation's
+        // own capsule in its nav bar says it, not the needs-you bar.
+        let banner = try source(Self.transcriptViewPath)
+        XCTAssertTrue(banner.contains("if !hidesStickyQuestion, let here = console.waitingBelow,"),
+                      "the in-conversation question is what the capsule says when there is one")
         // It points INTO this transcript, whichever way the card lies: down was the only direction
         // while every card it counted sat below the reader, and a card placed by its own moment can
         // be above one — the reader at the live tail, which is where a conversation opens
         // (`DeliveryAnchor.exception`). The word and the chevron read the same answer.
-        XCTAssertTrue(banner.contains(#"chevron: below.side == .above ? "chevron.up" : "chevron.down""#),
+        XCTAssertTrue(banner.contains(#"here.side == .above ? "chevron.up" : "chevron.down""#),
                       "and it points the way the card lies, rather than away from the conversation")
-        XCTAssertTrue(banner.contains("onOpenBelow?(below.rowID)"),
+        XCTAssertTrue(banner.contains("console.requestScroll(to: here.rowID)"),
                       "a press scrolls to the card rather than navigating anywhere")
     }
 
