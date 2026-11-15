@@ -2245,6 +2245,9 @@ final class ConsoleModel {
         agentName = s.agent?.name
         // A scheduled task's run: its strip, its report and the cards it asked, drawn from the schedule reads.
         scheduleRunID = s.scheduleRunId
+        // The run's head line reads this session's own state and engine: a run's session is in none of the app's
+        // lists, so this read is the only one that has them.
+        if s.scheduleRunId != nil { scheduleRunSession = s }
         Task { [weak self] in await self?.refreshScheduleCards(force: true) }
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
@@ -5152,6 +5155,8 @@ final class ConsoleModel {
     /// That run and its schedule, once found; the detail for whether its finding was new and told.
     private(set) var scheduleRun: (schedule: ScheduleView, run: ScheduleRunView)?
     private(set) var scheduleRunDetail: ScheduleDetailResponse?
+    /// This run's session as its own read answered, for the head line's state and engine.
+    private(set) var scheduleRunSession: Session?
     private var loadingScheduleCards = false
     private var lastScheduleRead = Date.distantPast
 

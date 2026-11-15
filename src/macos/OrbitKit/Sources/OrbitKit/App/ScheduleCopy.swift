@@ -103,6 +103,8 @@ public enum ScheduleCopy {
         public static let draft = "draft, waiting for you"
         public static let notified = "you were notified"
         public static let notNotified = "not notified"
+        public static let runningShort = "running {minutes} min"
+        public static let draftShort = "draft"
     }
     public enum Tags {
         public static let failedInARow = "Failed {count} in a row"
@@ -148,6 +150,18 @@ public enum ScheduleCopy {
         "SESSION_REFUSED": ScheduleHeldCopy(clause: "its run's session could not be opened", until: "that is fixed"),
     ]
     public static let heldWhere = " in workspace {workspace}"
+    public enum HeldShort {
+        public static let WORKSPACE_NOT_OWNED = "workspace not yours"
+        public static let WORKSPACE_DELETED = "workspace deleted"
+        public static let WORKSPACE_DISABLED = "workspace disabled"
+        public static let AGENT_MISSING = "agent missing"
+        public static let AGENT_DISABLED = "agent disabled"
+        public static let OUTSIDE_ENVELOPE = "outside what you allowed"
+        public static let ACCESS_NOT_ENFORCEABLE = "access not enforceable"
+        public static let MODE_WIDER_THAN_ACCOUNT_DEFAULT = "wider than your default mode"
+        public static let NO_REPOSITORY = "no repository"
+        public static let SESSION_REFUSED = "session refused"
+    }
     public static let endedReasons: [String: String] = [
         "DELETED": "deleted",
         "END_REACHED": "its end time passed",
@@ -379,6 +393,8 @@ public enum ScheduleCopy {
         "row.draft": ScheduleCopy.Row.draft,
         "row.notified": ScheduleCopy.Row.notified,
         "row.notNotified": ScheduleCopy.Row.notNotified,
+        "row.runningShort": ScheduleCopy.Row.runningShort,
+        "row.draftShort": ScheduleCopy.Row.draftShort,
         "tags.failedInARow": ScheduleCopy.Tags.failedInARow,
         "tags.held": ScheduleCopy.Tags.held,
         "tags.failed": ScheduleCopy.Tags.failed,
@@ -425,6 +441,16 @@ public enum ScheduleCopy {
         "heldReasons.SESSION_REFUSED.clause": ScheduleCopy.heldReasons["SESSION_REFUSED"]!.clause,
         "heldReasons.SESSION_REFUSED.until": ScheduleCopy.heldReasons["SESSION_REFUSED"]!.until,
         "heldWhere": ScheduleCopy.heldWhere,
+        "heldShort.WORKSPACE_NOT_OWNED": ScheduleCopy.HeldShort.WORKSPACE_NOT_OWNED,
+        "heldShort.WORKSPACE_DELETED": ScheduleCopy.HeldShort.WORKSPACE_DELETED,
+        "heldShort.WORKSPACE_DISABLED": ScheduleCopy.HeldShort.WORKSPACE_DISABLED,
+        "heldShort.AGENT_MISSING": ScheduleCopy.HeldShort.AGENT_MISSING,
+        "heldShort.AGENT_DISABLED": ScheduleCopy.HeldShort.AGENT_DISABLED,
+        "heldShort.OUTSIDE_ENVELOPE": ScheduleCopy.HeldShort.OUTSIDE_ENVELOPE,
+        "heldShort.ACCESS_NOT_ENFORCEABLE": ScheduleCopy.HeldShort.ACCESS_NOT_ENFORCEABLE,
+        "heldShort.MODE_WIDER_THAN_ACCOUNT_DEFAULT": ScheduleCopy.HeldShort.MODE_WIDER_THAN_ACCOUNT_DEFAULT,
+        "heldShort.NO_REPOSITORY": ScheduleCopy.HeldShort.NO_REPOSITORY,
+        "heldShort.SESSION_REFUSED": ScheduleCopy.HeldShort.SESSION_REFUSED,
         "endedReasons.DELETED": ScheduleCopy.endedReasons["DELETED"]!,
         "endedReasons.END_REACHED": ScheduleCopy.endedReasons["END_REACHED"]!,
         "endedReasons.GOAL_REACHED": ScheduleCopy.endedReasons["GOAL_REACHED"]!,

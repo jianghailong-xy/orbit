@@ -251,7 +251,9 @@
       "pausedOn": "paused {date}",
       "draft": "draft, waiting for you",
       "notified": "you were notified",
-      "notNotified": "not notified"
+      "notNotified": "not notified",
+      "runningShort": "running {minutes} min",
+      "draftShort": "draft"
     },
     "tags": {
       "failedInARow": "Failed {count} in a row",
@@ -327,6 +329,18 @@
       }
     },
     "heldWhere": " in workspace {workspace}",
+    "heldShort": {
+      "WORKSPACE_NOT_OWNED": "workspace not yours",
+      "WORKSPACE_DELETED": "workspace deleted",
+      "WORKSPACE_DISABLED": "workspace disabled",
+      "AGENT_MISSING": "agent missing",
+      "AGENT_DISABLED": "agent disabled",
+      "OUTSIDE_ENVELOPE": "outside what you allowed",
+      "ACCESS_NOT_ENFORCEABLE": "access not enforceable",
+      "MODE_WIDER_THAN_ACCOUNT_DEFAULT": "wider than your default mode",
+      "NO_REPOSITORY": "no repository",
+      "SESSION_REFUSED": "session refused"
+    },
     "endedReasons": {
       "DELETED": "deleted",
       "END_REACHED": "its end time passed",
@@ -495,7 +509,7 @@
     }
   },
   "boardPhrases": {
-    "doc": "Each phrase as a board shows it, with the input that must produce it. `board` names the frame: 1/2 is web/01-board.png, 2/2 is web/02-board.png, iOS is 02-agent-first.png.",
+    "doc": "Each phrase as a board shows it, with the input that must produce it. `board` names the frame: 1/2 is web/01-board.png, 2/2 is web/02-board.png, iOS is 02-agent-first.png. `phoneRows` are the iPhone timeline rows (iOS 01-board.png ②, ⑧), schedulePhoneRowLine.",
     "rules": [
       {
         "rule": {
@@ -830,6 +844,115 @@
         "text": "Ended: goal reached",
         "who": "Run",
         "line": "Ended Release 2.0 freeze watch: goal reached · by this run"
+      }
+    ],
+    "phoneRows": [
+      {
+        "schedule": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "02:00"
+          },
+          "workspaceName": "apiserver",
+          "accessLevel": "CHECK_ONLY",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {},
+        "text": "Daily 02:00 · apiserver",
+        "board": "iOS 01 ② Nightly pg spec sweep"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "WEEKLY",
+            "time": "09:00",
+            "weekdays": [
+              "MON"
+            ]
+          },
+          "workspaceName": "web",
+          "accessLevel": "CHECK_ONLY",
+          "state": "HELD",
+          "heldReason": "AGENT_DISABLED"
+        },
+        "opts": {},
+        "text": "Mondays 09:00 · agent disabled",
+        "board": "iOS 01 ② Weekly dependency audit"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "12:00"
+          },
+          "workspaceName": "web",
+          "accessLevel": "CHECK_ONLY",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {
+          "runningMinutes": 21
+        },
+        "text": "Daily 12:00 · web · running 21 min",
+        "board": "iOS 01 ② Docs link check"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "WEEKLY",
+            "time": "17:00",
+            "weekdays": [
+              "FRI"
+            ]
+          },
+          "workspaceName": "Orbit baseline",
+          "accessLevel": "CHECK_ONLY",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {},
+        "text": "Fridays 17:00 · Orbit baseline",
+        "board": "iOS 01 ② Release notes draft"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "DAILY",
+            "time": "09:00"
+          },
+          "workspaceName": "apiserver",
+          "accessLevel": "OPEN_PR",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {},
+        "text": "Daily 09:00 · apiserver · Open a PR",
+        "board": "iOS 01 ② Codex stable check"
+      },
+      {
+        "schedule": {
+          "rule": {
+            "kind": "WEEKLY",
+            "time": "09:00",
+            "weekdays": [
+              "MON",
+              "TUE",
+              "WED",
+              "THU",
+              "FRI"
+            ]
+          },
+          "workspaceName": "apiserver",
+          "accessLevel": "CHECK_ONLY",
+          "state": "ACTIVE",
+          "heldReason": null
+        },
+        "opts": {
+          "draft": true
+        },
+        "text": "Weekdays at 09:00 · apiserver · draft",
+        "board": "iOS 01 ⑧ Weekday issue summary"
       }
     ]
   }

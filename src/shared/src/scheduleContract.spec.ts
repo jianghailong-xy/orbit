@@ -30,6 +30,7 @@ import {
   scheduleHistoryWho,
   scheduleKeepLabel,
   scheduleMayText,
+  schedulePhoneRowLine,
   scheduleRecordText,
   scheduleRuleText,
   scheduleUsageText,
@@ -157,6 +158,14 @@ describe('board phrases', () => {
     expect(scheduleKeepLabel(e.widens, e.now)).toBe(e.keep);
     expect(scheduleEnvelopeNote(e.widens)).toBe(e.note);
     if (e.waitingBody) expect(scheduleWidenWaitingText({ ...e, reason: e.waitingReason })).toBe(e.waitingBody);
+  });
+
+  it.each(P.phoneRows.map((r: { text: string }) => [r.text, r]))('phone row %s', (_n, r: any) => {
+    expect(schedulePhoneRowLine(r.schedule, r.opts)).toBe(r.text);
+  });
+
+  it('every held reason has its few words', () => {
+    expect(Object.keys(SCHEDULE_COPY.heldShort)).toEqual([...SCHEDULE_HELD_REASONS]);
   });
 
   it.each(P.history.map((h: { text: string }) => [h.text, h]))('history %s', (_n, h: any) => {

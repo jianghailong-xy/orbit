@@ -310,6 +310,22 @@ final class ScheduleDisplayTests: XCTestCase {
         XCTAssertEqual(ScheduleDisplay.deleteTitle("Codex stable check"), "Delete “Codex stable check”?")
     }
 
+    /// A run's session opened from a push or a link is in none of the app's lists: its head line comes from the
+    /// session's own read (the console's detail), whatever the lists hold.
+    func testTheRunHeadLineFromASessionNotInAnyList() throws {
+        let json = """
+        {"id":"R9","title":"Codex stable check","status":"AWAITING_INPUT","engine":"codex","lifecycleState":"OPEN",
+         "scheduleRunId":"SR9"}
+        """
+        let session = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        XCTAssertEqual(session.scheduleRunId, "SR9")
+        let run = ScheduleRunView(id: "SR9", scheduleId: "S3", plannedAt: sh("2025-11-13T10:00"), state: "CHANGED",
+                                  startedAt: sh("2025-11-13T10:01"), endedAt: sh("2025-11-13T10:06"))
+        XCTAssertEqual(ScheduleDisplay.runHeadText(session: session, run: run, now: Self.now), "Open · Codex agent · 5 min")
+        XCTAssertEqual(ScheduleDisplay.runHeadText(session: nil, run: run, now: Self.now), "5 min",
+                       "with no read of the session yet, only what the run itself knows")
+    }
+
     /// The list's own timeline runs (W2) and a run's session's `run` decode, with the facts the list worked out.
     func testTheListsRunsAndTheSessionsRunDecode() throws {
         let list = """

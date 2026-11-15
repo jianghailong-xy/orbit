@@ -348,6 +348,27 @@ public enum ScheduleDisplay {
         return parts.joined(separator: C.separator)
     }
 
+    /// A schedule row's second line on a phone (iOS board 01 ②), one line — the shared `schedulePhoneRowLine`:
+    /// the short rule, then the workspace or (held) why in a few words, then "Open a PR" only when it may, when it
+    /// paused, how long it has been running, or that it is a draft.
+    public static func phoneRowLine(rule: ScheduleRule, workspaceName: String?, accessLevel: String, state: String,
+                                    heldReason: String?, pausedAt: Date? = nil, timezone: String? = nil,
+                                    runningMinutes: Int? = nil, draft: Bool = false) -> String {
+        var parts = [ruleText(rule, form: .short)]
+        if state == "HELD" {
+            parts.append(heldReason.flatMap { C.heldShort[$0] } ?? C.Tags.held)
+        } else {
+            if let workspaceName, !workspaceName.isEmpty { parts.append(workspaceName) }
+            if accessLevel == "OPEN_PR" { parts.append(accessCopy("OPEN_PR").label) }
+            if state == "PAUSED", let pausedAt, let timezone {
+                parts.append(fill(C.Row.pausedOn, ["date": dateText(pausedAt, timezone: timezone)]))
+            }
+        }
+        if let runningMinutes { parts.append(fill(C.Row.runningShort, ["minutes": String(runningMinutes)])) }
+        if draft { parts.append(C.Row.draftShort) }
+        return parts.joined(separator: C.separator)
+    }
+
     /// A past run's second line: "Ended without a report", "2.1.310 is out · you were notified".
     public static func runLine(state: String, summary: String?, failureReason: String?, reasonText: String?,
                                notified: Bool = false) -> String {
@@ -817,6 +838,15 @@ public enum ScheduleDisplay {
             parts.append(fill(C.RunSession.duration, ["minutes": String(minutes)]))
         }
         return parts.joined(separator: C.separator)
+    }
+
+    /// A run's session's head line from the session's own read (its detail, which every run session has, in the
+    /// app's lists or not): its lifecycle word, its engine's name as the web's ENGINE_CLI_NAMES gives it, and how long
+    /// the run took. "Open · Codex agent · 5 min".
+    public static func runHeadText(session: Session?, run: ScheduleRunView, now: Date) -> String {
+        runHeadText(state: session.map(SessionHeader.lifecycleWord(for:)),
+                    engine: session?.engine.map(ProviderEngines.cliName),
+                    startedAt: run.startedAt, endedAt: run.endedAt, now: now)
     }
 
     /// The delete question's title: "Delete “Codex stable check”?".

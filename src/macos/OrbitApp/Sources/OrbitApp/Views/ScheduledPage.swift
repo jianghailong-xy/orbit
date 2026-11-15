@@ -272,7 +272,7 @@ struct ScheduledPage: View {
                     id: "\(group.id)-\(item.id)",
                     circle: ScheduleDisplay.scheduleCircle(state: "ACTIVE", consecutiveFailures: 0, draft: true),
                     title: card.title ?? "",
-                    line: ScheduleDisplay.rowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
+                    line: ScheduleDisplay.phoneRowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
                                                   accessLevel: card.may?.accessLevel ?? "CHECK_ONLY", state: "ACTIVE",
                                                   heldReason: nil, draft: true),
                     repeats: ScheduleDisplay.ruleRepeats(rule), time: scheduleClock(at), draft: true, paused: false,
@@ -292,7 +292,7 @@ struct ScheduledPage: View {
                     circle: ScheduleDisplay.runCircle(state: run.state, newFinding: facts.newFinding),
                     title: s.title,
                     line: underWay
-                        ? ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
+                        ? ScheduleDisplay.phoneRowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
                                                   state: s.state, heldReason: s.heldReason, runningMinutes: minutes)
                         : ScheduleDisplay.runLine(state: run.state, summary: run.summary, failureReason: run.failureReason,
                                                   reasonText: run.reasonText, notified: facts.notified),
@@ -311,7 +311,7 @@ struct ScheduledPage: View {
                     id: "\(group.id)-\(item.id)",
                     circle: inNeeds || inPaused ? ScheduleDisplay.scheduleCircle(s) : .init(.open),
                     title: s.title,
-                    line: ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
+                    line: ScheduleDisplay.phoneRowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
                                                   state: s.state, heldReason: s.heldReason,
                                                   pausedAt: s.pausedAt.flatMap(ScheduleDisplay.parse)
                                                     ?? pausedAt(scheduled.detail(s.id)),
@@ -332,30 +332,34 @@ struct ScheduledPage: View {
             HStack(alignment: .top, spacing: 12) {
                 ScheduleCircleGlyph(view: row.circle).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(row.title)
-                        .font(.orbitControl)
-                        .italic(row.draft)
-                        .foregroundStyle(row.draft || row.paused ? .secondary : .primary)
+                    // The title's line carries the tag and the time at its end (board 01 ②: "Failed ×3  02:00").
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(row.title)
+                            .font(.orbitControl)
+                            .italic(row.draft)
+                            .foregroundStyle(row.draft || row.paused ? .secondary : .primary)
+                            .lineLimit(2)
+                        Spacer(minLength: 6)
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            if let tag = row.circle.tag, row.circle.circle != .done, row.circle.circle != .muted {
+                                Text(tag.text).font(.orbitMeta.weight(.semibold)).foregroundStyle(tag.tone.color)
+                            }
+                            if !row.time.isEmpty {
+                                Text(row.time).font(.orbitLabel).foregroundStyle(.secondary).monospacedDigit()
+                            }
+                        }
+                        .lineLimit(1)
+                        .fixedSize()
+                    }
+                    // One line, the phone's short grammar; the tail gives way if it must.
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         if row.repeats { Text("↻").accessibilityHidden(true) }
-                        Text(row.line)
+                        Text(row.line).truncationMode(.tail)
                     }
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(1)
                 }
-                Spacer(minLength: 8)
-                // The time, and under it the tag: beside the title it took the room the title needs.
-                VStack(alignment: .trailing, spacing: 3) {
-                    if !row.time.isEmpty {
-                        Text(row.time).font(.orbitLabel).foregroundStyle(.secondary).monospacedDigit()
-                    }
-                    if let tag = row.circle.tag, row.circle.circle != .done, row.circle.circle != .muted {
-                        Text(tag.text).font(.orbitMeta.weight(.semibold)).foregroundStyle(tag.tone.color)
-                            .lineLimit(1)
-                    }
-                }
-                .fixedSize()
             }
             .padding(.vertical, 4)
             .contentShape(Rectangle())

@@ -288,21 +288,32 @@ struct ScheduleRecordLineView: View {
     }
 }
 
-/// The head of a run's session (board 02 ④, 01 ⑦): what run this is, planned and started when, with what access.
+/// The head of a run's session (board 02 ④, 01 ⑦): the crumb back to its schedule, what run this is, its head line
+/// (state · agent · how long), and when it was planned and started with what access. Drawn from the conversation's
+/// own reads, so it is the same opened from the schedule, a push or a link.
 struct ScheduleRunStripView: View {
     @Environment(AppModel.self) private var appModel
-    let sessionID: String
+    let console: ConsoleModel
     let schedule: ScheduleView
     let run: ScheduleRunView
 
     var body: some View {
         let zone = TimeZone.current.identifier
-        let session = appModel.session(id: sessionID)
-        // "Open · Codex CLI agent · 4 min", the web's run header line (`scheduleRunHeadText`).
-        let head = ScheduleDisplay.runHeadText(state: session.map(SessionHeader.lifecycleWord(for:)),
-                                               engine: session?.engine.map(ProviderEngines.cliName),
-                                               startedAt: run.startedAt, endedAt: run.endedAt, now: Date())
+        let session = console.scheduleRunSession ?? appModel.session(id: console.sessionID)
+        let head = ScheduleDisplay.runHeadText(session: session, run: run, now: Date())
         VStack(alignment: .leading, spacing: 6) {
+            Button {
+                appModel.openSchedule(schedule.id)
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left").font(.orbitLabel.weight(.semibold))
+                    Text(schedule.title).lineLimit(1)
+                }
+                .font(.orbitSubtext)
+                .foregroundStyle(Color.scheduleAccent)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("schedule-run-crumb")
             Text(ScheduleDisplay.capitalizedRunOf(plannedAt: run.plannedAt, timezone: zone))
                 .font(.title3.weight(.bold))
             if !head.isEmpty {
@@ -393,7 +404,7 @@ struct ScheduleConsoleCard: View {
             }
         case .scheduleRunStrip:
             if let found = console.scheduleRun {
-                ScheduleRunStripView(sessionID: console.sessionID, schedule: found.schedule, run: found.run)
+                ScheduleRunStripView(console: console, schedule: found.schedule, run: found.run)
             }
         case .scheduleRunReport:
             if let found = console.scheduleRun {

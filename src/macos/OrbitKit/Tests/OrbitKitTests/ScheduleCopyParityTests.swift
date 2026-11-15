@@ -65,6 +65,7 @@ final class ScheduleCopyParityTests: XCTestCase {
         XCTAssertEqual(Set(list("runStates")), Set(ScheduleCopy.runStates.keys))
         XCTAssertEqual(Set(list("failureReasons")), Set(ScheduleCopy.failureReasons.keys))
         XCTAssertEqual(Set(list("heldReasons")), Set(ScheduleCopy.heldReasons.keys))
+        XCTAssertEqual(Set(list("heldReasons")), Set(ScheduleCopy.heldShort.keys))
         XCTAssertEqual(Set(list("endedReasons")), Set(ScheduleCopy.endedReasons.keys))
         XCTAssertEqual(Set(list("accessLevels")), Set(ScheduleCopy.access.keys))
         XCTAssertEqual(Set(list("envelopeParts")), Set(ScheduleCopy.EnvelopeCard.titles.keys))
@@ -168,6 +169,22 @@ final class ScheduleBoardPhraseTests: XCTestCase {
                                                                 ruleNow: ruleNow, ruleAsked: ruleAsked),
                                row["waitingBody"]?.stringValue, board)
             }
+        }
+    }
+
+    /// The phone's timeline rows (iOS board 01 ② ⑧): `schedulePhoneRowLine`'s phrases.
+    func testPhoneRows() throws {
+        for row in try rows("phoneRows") {
+            let s = try XCTUnwrap(object(row["schedule"]))
+            let opts = object(row["opts"]) ?? [:]
+            XCTAssertEqual(ScheduleDisplay.phoneRowLine(rule: try XCTUnwrap(ScheduleRule(json: s["rule"])),
+                                                        workspaceName: s["workspaceName"]?.stringValue,
+                                                        accessLevel: s["accessLevel"]?.stringValue ?? "CHECK_ONLY",
+                                                        state: s["state"]?.stringValue ?? "ACTIVE",
+                                                        heldReason: s["heldReason"]?.stringValue,
+                                                        runningMinutes: opts["runningMinutes"]?.intValue,
+                                                        draft: opts["draft"]?.boolValue ?? false),
+                           row["text"]?.stringValue, row["board"]?.stringValue ?? "")
         }
     }
 
