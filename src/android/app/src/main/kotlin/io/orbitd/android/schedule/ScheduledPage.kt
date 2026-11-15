@@ -350,7 +350,8 @@ private fun ScheduleDetailSheet(store: ScheduledStore, id: String, close: () -> 
     LaunchedEffect(id) { store.loadDetail(id) }
     val s = state.schedule(id)
     ModalBottomSheet(onDismissRequest = close, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.testTag("schedule-detail-panel")) {
+        containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.testTag("schedule-detail-panel")) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
