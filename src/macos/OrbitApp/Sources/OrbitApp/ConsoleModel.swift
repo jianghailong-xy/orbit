@@ -1962,6 +1962,19 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
+    /// Scroll the transcript to an Agent's block, from the session's list of Agents: its own row, or the
+    /// group it was drawn in. One the loaded window no longer holds is left where it is.
+    func revealAgent(_ toolUseID: String) {
+        let state = reducer.state
+        guard state.items.contains(where: { $0.id == toolUseID }) else { return }
+        revealedItemID = toolUseID
+        let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
+        scrollTick += 1
+        recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: toolUseID, in: rows) ?? toolUseID,
+                                      tick: scrollTick)
+    }
+
     /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
     /// transcript appearing again later does not jump back to it.
     func recordRequestFollowed(_ request: ScrollRequest) {
@@ -3806,6 +3819,27 @@ final class ConsoleModel {
     func interrupt() async {
         do { try await api.interrupt(sessionID: sessionID, stopBackgroundWork: true) }
         catch { statusMessage = "Interrupt failed" }
+    }
+
+    // MARK: coordinator handoff (docs/coordinator-handoff.md)
+
+    /// The waits a handover would move, for the confirm. A failed read is no row rather than no
+    /// confirm: the waits move either way, the row only names them.
+    func coordinatorPendingWaits(projectID: String) async -> [CoordinatorPendingWait] {
+        (try? await api.coordinatorPendingWaits(projectID)) ?? []
+    }
+
+    /// One of the handoff's presses. What it changed reaches this conversation as `session.updated`
+    /// (every transition publishes it), so the answer is read only for a refusal.
+    func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction) async {
+        do { _ = try await api.coordinatorHandoff(projectID, action) }
+        catch { statusMessage = CoordinatorHandoffCopy.refusal(APIClient.failureReason(error)) }
+    }
+
+    /// Compact: the engine's own command, sent as if typed — no confirm, and the composer's draft
+    /// stays where it is.
+    func compactConversation() async {
+        await send(overrideText: CoordinatorContextActions.compactCommand)
     }
 
     /// "Stop the current turn and send THIS instead" — one request, not a stop followed by a send

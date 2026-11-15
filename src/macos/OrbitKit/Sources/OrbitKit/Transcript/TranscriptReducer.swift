@@ -890,6 +890,10 @@ public struct TranscriptReducer: Sendable, Codable {
             // The receipt for a message written into the running turn that never made it: a steer
             // that is over, no turn of the queue's. Drawn after everything still waiting, below.
             if turn.delivery != nil { continue }
+            // The platform's ask for a coordinator's handoff note: drawn only as the handoff's own row
+            // (board 02 ②), never as a queued bubble or an accepted head (web parity:
+            // `queuedTurnsOutsideTranscript`; Android `queuedTail`, `acceptedHeads`).
+            if CoordinatorContextActions.isHandoffPrompt(turn.content) { continue }
             let incomingAttachments = turn.attachments?.map {
                 TurnAttachment(id: $0.id, mime: $0.mimeType)
             }
@@ -1564,6 +1568,15 @@ public struct TranscriptReducer: Sendable, Codable {
         // for the same block — arriving with the whole text and no open bubble to fill — would
         // then append the reply a SECOND time, in full, under the partial copy.
         if !steer { flushStreaming() }
+        // A coordinator's handoff-note turn is the platform's prompt, not the owner's words: the
+        // conversation shows the handoff's own row instead (docs/coordinator-handoff.md), and the
+        // reply that follows is drawn as usual.
+        // Matched by its turn id, or by the prompt's head when an echo comes without one (web and
+        // Android read it the same way).
+        if CoordinatorContextActions.isHandoffTurn(clientTurnId: cid) || CoordinatorContextActions.isHandoffPrompt(body) {
+            if let tid = ev.turnId { state.queued.removeAll { $0.turnId == tid } }
+            return
+        }
         // An exception item's delivery, when the control plane recorded the item's own fields beside
         // this echo (`openItemDelivery`, `OpenItemDelivery.parse`). Read off the payload rather than
         // out of the text, so a delivery that carries no card — every one stored before the payload

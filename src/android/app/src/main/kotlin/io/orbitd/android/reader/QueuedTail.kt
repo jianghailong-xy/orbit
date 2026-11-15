@@ -12,6 +12,7 @@ import io.orbitd.android.cards.OwnerAnswerLineView
 import io.orbitd.android.cards.QueuedFoot
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.WatchWakeLine
+import io.orbitd.android.composer.CoordinatorHandoff
 import io.orbitd.android.cards.dashedBorder
 import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.objects
@@ -57,7 +58,7 @@ internal data class QueuedTurn(val turnId: String?, val steer: Boolean, val even
 internal fun queuedTail(rows: List<JsonObject>, events: List<RunEvent>): List<QueuedTurn> {
     val delivered = events.filter { it.type == "user" }.mapNotNull { it.turnId }
     return rows.mapNotNull { row ->
-        if (row.isReceipt() || row.text("placement") == "accepted") return@mapNotNull null
+        if (row.isReceipt() || row.text("placement") == "accepted" || row.isHandoffNotePrompt()) return@mapNotNull null
         val turnId = row.text("turnId")
         if (turnId != null && delivered.any { ObjectId.same(it, turnId) }) return@mapNotNull null
         listedTurn(row)
@@ -110,12 +111,17 @@ private fun listedTurn(row: JsonObject): QueuedTurn {
 internal fun acceptedHeads(rows: List<JsonObject>, events: List<RunEvent>): List<RunEvent> {
     val done = events.filter { it.type == "user" || it.type == "turn_end" }.mapNotNull { it.turnId }
     return rows.mapNotNull { row ->
-        if (row.text("placement") != "accepted" || row.text("kind") == "shell" || row.isReceipt()) return@mapNotNull null
+        if (row.text("placement") != "accepted" || row.text("kind") == "shell" || row.isReceipt() || row.isHandoffNotePrompt()) return@mapNotNull null
         val turnId = row.text("turnId") ?: return@mapNotNull null
         if (done.any { ObjectId.same(it, turnId) }) return@mapNotNull null
         RunEvent("user", 0, echoPayload(row), turnId, row.text("createdAt"))
     }
 }
+
+/** The platform's turn asking a coordinator for its handoff note (board 02 ②): Orbit's, drawn only as the handoff's own row — never
+ * as a queued card or an accepted head (web `queuedTurnsOutsideTranscript`, OrbitKit `PendingTray`). The listing carries no turn key,
+ * so it is told by its first line, as the transcript tells its echo. */
+private fun JsonObject.isHandoffNotePrompt() = CoordinatorHandoff.isNotePrompt(text("content"))
 
 /** A steer's receipt that it never made it (`failed`, `unconfirmed`): over, and no turn of the tail's. */
 private fun JsonObject.isReceipt() = this["delivery"] != null && this["delivery"] != JsonNull

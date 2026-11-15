@@ -1,0 +1,67 @@
+/* Compact and Start a new coordinator (board 01) and the handoff flow (board 02). */
+
+/* ── 01: below the Context popover's gauge ── */
+.ctx-acts { border-top: 1px solid var(--border-subtle); margin: 12px -12px 0; padding: 6px 8px 0; display: flex; flex-direction: column; gap: 2px; }
+.ctx-act { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 7px 8px; border: 0; border-radius: 8px;
+  background: transparent; text-align: left; font: inherit; cursor: pointer; color: inherit; }
+.ctx-act:hover:not(:disabled), .ctx-act:focus-visible, .ctx-act.lead { background: var(--bg-hover); }
+.ctx-act:disabled { opacity: .45; cursor: default; }
+.ctx-act-ic { flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center;
+  background: var(--fill-muted); color: var(--text-2); }
+.ctx-act-ic svg { width: 15px; height: 15px; }
+.ctx-act.lead .ctx-act-ic { background: var(--brand-tint); color: var(--brand-strong); }
+.ctx-act-tx { min-width: 0; max-width: 260px; }
+.ctx-act-tx b { display: block; font-size: 13.5px; font-weight: 600; color: var(--text-1); line-height: 20px; }
+.ctx-act-tx span { display: block; font-size: 12px; color: var(--text-3); line-height: 17px; }
+.ctx-act-tx span.why { color: var(--text-2); }
+/* The gauge row takes the ring's colours (board 01 ①): amber from 75%, red from 90%. */
+.cu-pop .runner-util.danger .runner-util-fill { background: var(--error-solid); }
+
+/* ── 02-1: confirm ── */
+.handoff-confirm-body { font-size: 13px; line-height: 1.65; color: var(--text-2); margin: 0 0 12px; }
+.handoff-confirm-body b { color: var(--text-1); font-weight: 600; }
+.handoff-facts { list-style: none; margin: 0; padding: 10px 12px; background: var(--bg-subtle); border-radius: 8px;
+  font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+.handoff-facts li { display: flex; gap: 8px; }
+.handoff-facts li + li { margin-top: 6px; }
+.handoff-facts svg { flex: none; width: 14px; height: 14px; margin-top: 3px; color: var(--text-3); }
+.handoff-facts b { color: var(--text-1); font-weight: 600; }
+.handoff-facts .sub { display: block; color: var(--text-3); font-size: 12px; }
+
+/* ── 02-2 / 02-5: rows in the transcript ── */
+.handoff-sys { display: flex; gap: 8px; align-items: flex-start; padding: 9px 12px; margin: 8px 0; border-radius: 8px;
+  font-size: 12.5px; line-height: 1.6; }
+.handoff-sys > svg { flex: none; width: 15px; height: 15px; margin-top: 2px; }
+.handoff-sys.brand { background: var(--brand-tint); color: var(--brand-strong); }
+.handoff-sys.err { background: var(--error-bg); color: var(--error); }
+.handoff-sys .grow { flex: 1; min-width: 0; }
+.handoff-sys .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.handoff-spin { flex: none; width: 13px; height: 13px; margin-top: 3px; border-radius: 50%; border: 2px solid var(--brand-border);
+  border-top-color: var(--brand); animation: handoff-spin .8s linear infinite; }
+@keyframes handoff-spin { to { transform: rotate(360deg); } }
+.handoff-clock { font-variant-numeric: tabular-nums; color: var(--text-3); margin-left: 6px; }
+
+/* ── 02-3: the successor's opening ── */
+.handoff-received { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin: 4px 0 12px; }
+.handoff-card { align-self: stretch; border: 1px solid var(--border-subtle); border-radius: 10px; overflow: hidden; }
+.handoff-card-h { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-subtle); font-size: 12.5px; color: var(--text-2); }
+.handoff-card-h b { color: var(--text-1); font-weight: 600; }
+.handoff-card-h a { color: var(--brand); cursor: pointer; }
+.handoff-card-h svg { width: 14px; height: 14px; flex: none; color: var(--text-3); }
+.handoff-card-b { padding: 10px 12px; font-size: 12.5px; line-height: 1.6; color: var(--text-1); }
+.handoff-card-b h5 { margin: 8px 0 2px; font-size: 12px; font-weight: 650; color: var(--text-2); }
+.handoff-card-b section:first-child h5 { margin-top: 0; }
+.handoff-card-b ul { margin: 0; padding-left: 16px; }
+.handoff-card-plain { margin: 0; white-space: pre-wrap; }
+.handoff-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 0; border-radius: 999px;
+  font: inherit; font-size: 12px; background: var(--fill-muted); color: var(--text-2); cursor: pointer; }
+.handoff-chip svg { width: 12px; height: 12px; }
+.handoff-chip-list { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.6; max-width: 360px; }
+
+/* ── 02-4: in place of the composer ── */
+.handoff-ended { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--border-subtle);
+  border-radius: 12px; background: var(--bg-subtle); font-size: 13px; color: var(--text-2); }
+.handoff-ended .grow { flex: 1; }
+
+/* The composer's placeholder while the note is written (02-2). */
+.composer-handing-over textarea::placeholder { font-style: italic; }
