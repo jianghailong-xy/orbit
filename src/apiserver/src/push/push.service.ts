@@ -105,6 +105,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'wiki-review-mode-tiered': 'Wiki switched to Tiered',
   'wiki-maintenance-failing': 'Wiki maintenance needs attention',
   'project-orphan': 'Nobody has this',
+  schedule: 'Scheduled task',
 };
 
 /**
@@ -242,9 +243,11 @@ export class PushService {
           deletedAt: null,
           cancelRequestedAt: null,
         },
-        select: { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true },
+        select: { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true, runSource: true },
       });
       if (!session) return;
+      // A scheduled task's run rings through its Waiting on you item instead (schedules/schedule-attention.ts).
+      if (session.runSource === 'SCHEDULE') return;
       // The session's own switches (Settings → Notifications): muted silences it, and 'off' turns this alert off. There
       // is no account preference for it, so inherit keeps it on. Decided before the stretch is claimed, so a silenced
       // approval leaves `alerted_approval_at` where it was, and the next stretch still rings once the switch is back.
@@ -494,9 +497,13 @@ export class PushService {
           notificationsMuted: true,
           notifyTurnFinished: true,
           owner: { select: { preferences: true } },
+          runSource: true,
         },
       });
       if (!session) return;
+      // A scheduled task's run is not a conversation anybody waits on: what it found or how it failed is told by
+      // §7.3's rules (notifySchedule), and a run with nothing new rings nobody.
+      if (session.runSource === 'SCHEDULE') return;
       const alert = settleAlert(session);
       if (!alert) return;
       // Muted silences the session; its own 'on' or 'off' wins over the account's switch; inherit (null) reads that.
@@ -913,6 +920,49 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', `owner-request-${requestId}`);
     } catch (err) {
       this.log.warn(`owner request notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * A scheduled task's alert (docs/scheduled-tasks-design.md §7.3, schedules/schedule-attention.ts): a new finding,
+   * a failure, a hold, a run's card, a run's widen, a run ending its schedule, a missed one-off. Decided and written by
+   * the schedule's code; this only rings. The tap opens the run's session (`sessionID`) or the schedule
+   * (`scheduleID`); `ownerRequestID` names the Waiting on you item when there is one. Collapsed on the alert's own id,
+   * so a replay never stacks. Best-effort: a failure is logged, never thrown.
+   */
+  async notifySchedule(alert: {
+    kind: string;
+    ownerId: string;
+    scheduleId: string;
+    opens: { sessionId: string } | { scheduleId: string };
+    ownerRequestId: string | null;
+    title: string;
+    body: string;
+    collapseId: string;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(alert.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const sessionId = 'sessionId' in alert.opens ? alert.opens.sessionId : null;
+      const body = JSON.stringify({
+        aps: {
+          alert: { title: alert.title, body: alert.body },
+          sound: 'default',
+          'thread-id': `schedule-${alert.scheduleId}`,
+        },
+        kind: 'schedule',
+        scheduleKind: alert.kind,
+        scheduleID: alert.scheduleId,
+        ...(sessionId ? { sessionID: sessionId } : {}),
+        ...(alert.ownerRequestId ? { ownerRequestID: alert.ownerRequestId } : {}),
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: 'schedule', title: alert.title, body: alert.body, collapseId: alert.collapseId, sessionId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', alert.collapseId);
+    } catch (err) {
+      this.log.warn(`schedule notify failed: ${(err as Error).message}`);
     }
   }
 

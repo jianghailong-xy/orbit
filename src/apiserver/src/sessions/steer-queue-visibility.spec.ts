@@ -266,7 +266,8 @@ test('one ordered snapshot asks for every active row needed to classify the queu
     clientTurnId?: unknown;
   };
   assert.deepEqual([...where.kind.in].sort(), ['message', 'shell', 'steer']);
-  assert.deepEqual([...where.OR[0].status!.in].sort(), ['IN_FLIGHT', 'PENDING']);
+  // HELD: an owner's message held for translation (Settings › Translation) is listed with its chip.
+  assert.deepEqual([...where.OR[0].status!.in].sort(), ['HELD', 'IN_FLIGHT', 'PENDING']);
   assert.deepEqual(where.OR[1], {
     sendIntent: 'CURRENT_WORK',
     deliveryStatus: { in: ['FAILED', 'UNCONFIRMED'] },
