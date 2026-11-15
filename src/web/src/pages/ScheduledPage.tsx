@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type JSX, type KeyboardEvent } from 'react';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   SCHEDULE_COPY,
@@ -20,7 +20,6 @@ import {
   type ScheduleChangeRecord,
   type ScheduleCircleView,
   type ScheduleCreateCard,
-  type ScheduleDetailResponse,
   type ScheduleDraftAnswer,
   type ScheduleListRow,
   type ScheduleRunView,
@@ -41,6 +40,7 @@ import {
 import { sameResourceId } from '../lib/watches';
 import { runFindingFacts, scheduleErrorText, ScheduleCreateCardView } from '../components/ScheduleCards';
 import { Button } from '../components/ui/Button';
+import { useConfirm } from '../components/ui/ConfirmDialog';
 import { Menu } from '../components/ui/Menu';
 import { Switch } from '../components/ui/Switch';
 import '../components/Scheduled.css';
@@ -128,12 +128,6 @@ function Row({ row }: { row: RowView }): JSX.Element {
   );
 }
 
-/** When a schedule was paused: its newest revision that paused it. */
-function pausedAt(detail: ScheduleDetailResponse | undefined): Date | null {
-  const record = detail?.history.find((r) => r.after?.state === 'PAUSED');
-  return record ? new Date(record.createdAt) : null;
-}
-
 const OPEN_CIRCLE: ScheduleCircleView = { circle: 'open', mark: null, tag: null };
 
 export function ScheduledPage(): JSX.Element {
@@ -148,9 +142,9 @@ export function ScheduledPage(): JSX.Element {
   const list = useQuery(schedulesQuery(workspaceFilter));
   const drafts = useQuery(scheduleDraftsQuery());
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<WorkspaceRow[]>('/workspaces') });
+  // One read draws the whole timeline: the rows, the runs of the shown window and their findings (the list's
+  // timeline part). A schedule's detail is read only when it is opened in the inspector.
   const schedules = useMemo(() => list.data?.schedules ?? [], [list.data]);
-  const details = useQueries({ queries: schedules.map((s) => scheduleDetailQuery(s.id)) });
-  const detailOf = (id: string) => details[schedules.findIndex((s) => s.id === id)]?.data;
 
   const [pending, setPending] = useState<PendingDraft[]>([]);
   const draftCards = useMemo(
@@ -163,7 +157,8 @@ export function ScheduledPage(): JSX.Element {
     !(drafts.data?.drafts ?? []).some((card) => card.askedBySessionId && sameResourceId(card.askedBySessionId, p.sessionId)));
 
   const now = new Date();
-  const runs = details.flatMap((d) => d.data?.recentRuns ?? []);
+  const runs = list.data?.runs ?? [];
+  const placed = new Map(runs.map((run) => [run.id, run]));
   const groups = scheduleTimeline({ schedules, runs, drafts: draftCards, showPastRuns, now, timezone });
 
   const select = (next: Selection) => {
@@ -207,7 +202,7 @@ export function ScheduledPage(): JSX.Element {
     if (item.kind === 'RUN') {
       const run = item.run;
       const underWay = run.state === 'QUEUED' || run.state === 'RUNNING' || run.state === 'AWAITING_APPROVAL';
-      const facts = runFindingFacts(detailOf(schedule.id), run);
+      const facts = { newFinding: placed.get(run.id)?.newFinding ?? false, notified: placed.get(run.id)?.notified ?? false };
       const minutes = run.state === 'RUNNING' && run.startedAt
         ? Math.max(0, Math.floor((now.getTime() - Date.parse(run.startedAt)) / 60_000))
         : null;
@@ -225,7 +220,6 @@ export function ScheduledPage(): JSX.Element {
         onSelect,
       };
     }
-    const detail = detailOf(schedule.id);
     const inNeeds = group.key === 'NEEDS_YOU';
     const inPaused = group.key === 'PAUSED';
     const circle = inNeeds || inPaused ? scheduleCircle(schedule) : OPEN_CIRCLE;
@@ -234,7 +228,7 @@ export function ScheduledPage(): JSX.Element {
       key: `${group.key}:${schedule.id}`,
       circle,
       title: schedule.title,
-      line: scheduleRowLine(schedule, { pausedAt: pausedAt(detail), timezone }),
+      line: scheduleRowLine(schedule, { pausedAt: schedule.pausedAt ? new Date(schedule.pausedAt) : null, timezone }),
       repeats: scheduleRuleRepeats(schedule.rule),
       time: failing && schedule.lastRun
         ? scheduleWhenText(new Date(schedule.lastRun.plannedAt), now, timezone)
@@ -484,6 +478,16 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
     onSettled: invalidate,
   });
   const undo = useMutation({ mutationFn: undoScheduleRecord, onSettled: invalidate });
+  // Delete asks first. The menu closes on its press; the dialog is drawn here, outside the menu's popover.
+  const [confirm, confirmation] = useConfirm();
+  const askDelete = () => void confirm({
+    title: scheduleFill(C.deleteConfirm.title, { title: s.title }),
+    description: C.deleteConfirm.body,
+    confirmText: C.deleteConfirm.confirm,
+    cancelText: C.deleteConfirm.cancel,
+    danger: true,
+    onConfirm: () => control.mutateAsync('delete'),
+  });
   const error = scheduleErrorText(control.error) ?? scheduleErrorText(undo.error);
 
   const lastFacts = lastRun ? runFindingFacts(detail, lastRun) : { newFinding: false, notified: false };
@@ -536,9 +540,10 @@ function ScheduleInspector({ schedule }: { schedule: ScheduleListRow }): JSX.Ele
         <Menu
           align="end"
           trigger={<Button size="small" className="sched-more" aria-label={C.actions.delete}>{'⋯'}</Button>}
-          items={[{ key: 'delete', label: C.actions.delete, danger: true, onSelect: () => control.mutate('delete') }]}
+          items={[{ key: 'delete', label: C.actions.delete, danger: true, onSelect: askDelete }]}
         />
       </div>
+      {confirmation}
       {error ? <div className="sched-error" role="alert">{error}</div> : null}
 
       <div className="sched-section">{C.inspector.whatItDoes}</div>

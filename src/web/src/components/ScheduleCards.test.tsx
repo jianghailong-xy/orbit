@@ -6,12 +6,10 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CODEX_NOV13_RUN,
-  CODEX_RUNS,
   CODEX_TIME_RECORD,
   CREATE_CARD,
   FREEZE_ENDED_RECORD,
   FREEZE_RUN,
-  LIST_ROWS,
   MORE_OFTEN_CARD,
   OPEN_PRS_CARD,
   SCHEDULE_NOW,
@@ -44,11 +42,7 @@ function serve(extra: (path: string, method: string) => unknown = () => undefine
     const answered = extra(path, method);
     if (answered !== undefined) return answered;
     if (method !== 'GET') return {};
-    if (path === '/schedules?state=all') return { schedules: [...LIST_ROWS, { ...freezeDetail().schedule, lastRun: FREEZE_RUN }] };
     if (path === '/schedules/sch-freeze') return freezeDetail();
-    if (path === '/schedules/sch-freeze/runs?limit=50') return { runs: [FREEZE_RUN] };
-    if (path === '/schedules/sch-codex/runs?limit=50') return { runs: CODEX_RUNS };
-    if (/^\/schedules\/[^/]+\/runs\?limit=50$/.test(path)) return { runs: [] };
     const detail = /^\/schedules\/([^/?]+)$/.exec(path);
     if (detail) return scheduleDetail(detail[1]!);
     throw new Error(`unserved ${method} ${path}`);
@@ -219,8 +213,8 @@ describe('the change line (board 2/2 ② ③ ⑤)', () => {
   });
 });
 
-function RunSession({ runId, scheduleId }: { runId: string; scheduleId?: string }) {
-  const of = cards.useScheduleRunOfSession(runId, { scheduleId });
+function RunSession({ sessionId }: { sessionId: string }) {
+  const of = cards.useScheduleRunOfSession(sessionId);
   const inserts = cards.useSessionScheduleInserts(null, [], of);
   if (!of) return null;
   return (
@@ -233,10 +227,26 @@ function RunSession({ runId, scheduleId }: { runId: string; scheduleId?: string 
   );
 }
 
+/** A run from June: far older than the schedule's last 50 runs, so no page of its runs would hold it. */
+const JUNE_RUN = {
+  ...CODEX_NOV13_RUN, id: 'run-codex-jun02', plannedAt: '2025-06-02T02:00:00.000Z', startedAt: '2025-06-02T02:01:00.000Z',
+  endedAt: '2025-06-02T02:03:00.000Z', state: 'NO_CHANGE' as const, key: '0.31.0', summary: 'Still 0.31.0.', links: [],
+  sessionId: 'sess-codex-run-jun02',
+};
+
+/** The session's schedule-cards answer names its run; any scan of the account's schedules or runs is refused. */
+function serveRun(sessionId: string, run: typeof CODEX_NOV13_RUN) {
+  serve((path) => {
+    if (path === `/sessions/${sessionId}/schedule-cards`) return { run, cards: [], records: [] };
+    if (path.startsWith('/schedules?') || /\/runs(\?|$)/.test(path)) throw new Error(`scanned ${path}`);
+    return undefined;
+  });
+}
+
 describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
   it('has the crumb, the strip and the report card', async () => {
-    serve();
-    await render(<RunSession runId={CODEX_NOV13_RUN.id} scheduleId="sch-codex" />);
+    serveRun('sess-codex-run-nov13', CODEX_NOV13_RUN);
+    await render(<RunSession sessionId="sess-codex-run-nov13" />);
     expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Codex stable check › run of Nov 13');
     expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
       'Scheduled run · planned 10:00, started 10:01 · access Open a PR · this session is not in your session list',
@@ -249,12 +259,29 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     expect(crumbs).toEqual(['/scheduled', '/scheduled?id=sch-codex']);
   });
 
-  it('finds its schedule among all of them when the address does not name it', async () => {
-    serve();
-    await render(<RunSession runId={FREEZE_RUN.id} />);
-    expect(calls.some((c) => c.path === '/schedules?state=all')).toBe(true);
+  it('knows a run older than the schedule’s last 50 from the session alone, with no ?schedule= and no scan', async () => {
+    serveRun('sess-codex-run-jun02', JUNE_RUN);
+    await render(<RunSession sessionId="sess-codex-run-jun02" />);
+    expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Codex stable check › run of Jun 2');
+    expect(host.querySelector('[data-schedule-strip]')!.textContent).toBe(
+      'Scheduled run · planned 10:00, started 10:01 · access Open a PR · this session is not in your session list',
+    );
+    expect(host.querySelector('.sched-report-head')!.textContent).toBe('Reported: No change · 0.31.0');
+    expect(calls.map((c) => c.path)).toEqual(['/sessions/sess-codex-run-jun02/schedule-cards', '/schedules/sch-codex']);
+  });
+
+  it('knows a run of a schedule that has ended', async () => {
+    serveRun('sess-freeze-run', FREEZE_RUN);
+    await render(<RunSession sessionId="sess-freeze-run" />);
     expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Release 2.0 freeze watch › run of Nov 14');
     expect(host.querySelector('.sched-report-head')!.textContent).toBe('Reported: Changed · released@2.0.0 · you were notified');
+  });
+
+  it('draws nothing for a session that serves no run', async () => {
+    serve((path) => (path === '/sessions/sess-plain/schedule-cards' ? { run: null, cards: [], records: [] } : undefined));
+    await render(<RunSession sessionId="sess-plain" />);
+    expect(host.querySelector('[data-schedule-crumb]')).toBeNull();
+    expect(calls.map((c) => c.path)).toEqual(['/sessions/sess-plain/schedule-cards']);
   });
 });
 
@@ -267,7 +294,7 @@ describe('a conversation’s scheduled-task inserts', () => {
 
   it('draws the session’s cards and change lines where they happened', async () => {
     serve((path) => (path === '/sessions/sess-codex-watch/schedule-cards'
-      ? { cards: [CREATE_CARD, OPEN_PRS_CARD], records: [CODEX_TIME_RECORD] }
+      ? { run: null, cards: [CREATE_CARD, OPEN_PRS_CARD], records: [CODEX_TIME_RECORD] }
       : undefined));
     await render(<Inserts sessionId="sess-codex-watch" />);
     const drawn = [...host.querySelectorAll<HTMLElement>('[data-anchor]')].map((el) => [

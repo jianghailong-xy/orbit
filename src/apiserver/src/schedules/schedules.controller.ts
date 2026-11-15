@@ -3,7 +3,7 @@
  * on the two cards. There is deliberately NO door here that creates or changes a schedule — those go through a
  * session's `schedule_create` / `schedule_update` and its card (`schedules-rest-surface.spec.ts` holds this).
  *
- *   GET    /api/schedules                         list (not ENDED unless ?state=)
+ *   GET    /api/schedules                         list (not ENDED unless ?state=), with the page's timeline runs
  *   GET    /api/schedules/drafts                  the Scheduled page's drafts: PENDING create cards
  *   POST   /api/schedules/drafts                  the quick-add line: a sentence opens an ordinary session
  *   GET    /api/schedules/:id                     the inspector, with this month's use
@@ -94,7 +94,7 @@ export class SchedulesController {
   @Get('schedules')
   @PatScope('sessions:read', READ)
   list(@CurrentUser() user: AuthUser, @Query('state') state?: string, @Query('workspaceId', PublicIdPipe) workspaceId?: string) {
-    return this.reads.list(user.userId, { state, workspaceId });
+    return this.reads.list(user.userId, { state, workspaceId, timeline: true });
   }
 
   @Get('schedules/drafts')
