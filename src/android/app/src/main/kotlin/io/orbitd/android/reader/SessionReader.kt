@@ -1,5 +1,12 @@
 package io.orbitd.android.reader
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import android.content.Context
 import androidx.compose.foundation.*
 import androidx.compose.ui.platform.LocalContext
@@ -569,9 +576,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // A state the capsule reads, like `offTail`: the bar keeps the content it is first handed.
         val handingOver by rememberUpdatedState(CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true)
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
-            if (handingOver) HandingOverCapsule()
-            else if (here != null && (here.side == ReaderSide.ABOVE || offTail)) WaitingCapsule(here) { showWaiting(here.rowId) }
-            else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+            // One capsule changing between them (08-motion ⑤): the old words leave upward, the new come in from below.
+            val saysWaiting = !handingOver && here != null && (here.side == ReaderSide.ABOVE || offTail)
+            AnimatedContent(handingOver to saysWaiting, transitionSpec = {
+                (slideInVertically { it / 2 } + fadeIn()) togetherWith (slideOutVertically { -it / 2 } + fadeOut()) using SizeTransform(clip = false)
+            }, label = "header-capsule") { (handing, waitingNow) ->
+                if (handing) HandingOverCapsule()
+                else if (waitingNow && here != null) WaitingCapsule(here) { showWaiting(here.rowId) }
+                else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+            }
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,

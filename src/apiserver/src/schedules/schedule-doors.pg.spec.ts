@@ -783,6 +783,9 @@ test('over the weekly budget: schedule_run_now from a session and a PAT\'s run a
   const got = await tools.get(w.runner, s.id);
   const seen = got.recentRuns.find((r) => r.failureReason === 'OVER_BUDGET')!;
   assert.equal(seen.reasonText, over.reasonText, 'schedule_get carries the reason too');
+  const timeline = (await rest.list(w.user)) as unknown as { runs: Array<{ failureReason: string | null; reasonText: string | null }> };
+  const onTimeline = timeline.runs.find((r) => r.failureReason === 'OVER_BUDGET')!;
+  assert.equal(onTimeline.reasonText, over.reasonText, "the Scheduled page's timeline carries it too");
 
   const before = await db.scheduleRun.count({ where: { scheduleId: s.id } });
   await refusedWith(tools.runNow(w.runner, w.sessionId, s.id), 'SCHEDULE_OVER_BUDGET');
@@ -795,4 +798,83 @@ test('over the weekly budget: schedule_run_now from a session and a PAT\'s run a
   const started = await db.scheduleRun.findUniqueOrThrow({ where: { id: pressed.run.id } });
   assert.equal(started.state, 'RUNNING', "the owner's own press starts over budget");
   assert.ok(started.startedAt, 'and it counts as a start');
+});
+
+// -----------------------------------------------------------------------------------------------------------------
+// The Scheduled page's one read, and a run's session knowing its run (W2)
+// -----------------------------------------------------------------------------------------------------------------
+
+test('GET /api/schedules carries the timeline: runs under way and the last day\'s, their finding facts, when paused — the caller\'s rows only', { skip }, async () => {
+  const a = await world('timeline-a');
+  const b = await world('timeline-b');
+  const sa = await createdThroughCard(a);
+  const paused = await createdThroughCard(a, { title: 'Paused one' });
+  await rest.pause(a.user, paused.id, NO_SESSION);
+  const sb = await createdThroughCard(b);
+  const hour = 60 * 60_000;
+  const at = (ago: number) => new Date(Date.now() - ago);
+  const mk = (scheduleId: string, ago: number, state: 'RUNNING' | 'CHANGED' | 'NO_CHANGE', key: string | null = null) =>
+    db.scheduleRun.create({
+      data: {
+        scheduleId, scheduleRevision: 1, plannedAt: at(ago), trigger: 'SCHEDULED', state, startedAt: at(ago), key,
+        endedAt: state === 'RUNNING' ? null : at(ago - 60_000),
+      },
+    });
+  const running = await mk(sa.id, 2 * hour, 'RUNNING');
+  const changed = await mk(sa.id, 3 * hour, 'CHANGED', 'codex@0.49.0');
+  const old = await mk(sa.id, 30 * hour, 'NO_CHANGE');
+  // One run in progress per schedule: the old one under way is the paused schedule's (a pause lets it finish).
+  const oldRunning = await mk(paused.id, 50 * hour, 'RUNNING');
+  await db.scheduleFinding.create({
+    data: { scheduleId: sa.id, key: 'codex@0.49.0', firstRunId: changed.id, lastSeenRunId: changed.id, notifiedAt: new Date() },
+  });
+  const theirs = await mk(sb.id, hour, 'CHANGED');
+
+  const answer = await rest.list(a.user) as unknown as {
+    schedules: Array<{ id: string; pausedAt: string | null }>;
+    runs: Array<{ id: string; scheduleId: string; newFinding: boolean; notified: boolean }>;
+  };
+  assert.deepEqual(answer.schedules.map((s) => s.id).sort(), [sa.id, paused.id].sort(), 'only the caller\'s schedules');
+  const ids = answer.runs.map((r) => r.id);
+  assert.ok(ids.includes(running.id) && ids.includes(changed.id), 'today\'s runs');
+  assert.ok(ids.includes(oldRunning.id), 'a run under way, however old');
+  assert.ok(!ids.includes(old.id), 'an ended run older than a day is not the page\'s');
+  assert.ok(!ids.includes(theirs.id), 'no other account\'s run');
+  assert.ok(answer.runs.every((r) => r.scheduleId === sa.id || r.scheduleId === paused.id), 'every run is of the caller\'s rows');
+  const facts = answer.runs.find((r) => r.id === changed.id)!;
+  assert.deepEqual([facts.newFinding, facts.notified], [true, true]);
+  assert.deepEqual(
+    [answer.runs.find((r) => r.id === running.id)!.newFinding, answer.runs.find((r) => r.id === running.id)!.notified],
+    [false, false],
+  );
+  const pausedRow = answer.schedules.find((s) => s.id === paused.id)!;
+  const pauseRecord = await db.scheduleRevision.findFirstOrThrow({ where: { scheduleId: paused.id }, orderBy: { revision: 'desc' } });
+  assert.equal(pausedRow.pausedAt, pauseRecord.createdAt.toISOString());
+  assert.equal(answer.schedules.find((s) => s.id === sa.id)!.pausedAt, null);
+
+  // The other account reads its own and nothing of the first's.
+  const other = await rest.list(b.user) as unknown as typeof answer;
+  assert.deepEqual(other.schedules.map((s) => s.id), [sb.id]);
+  assert.deepEqual(other.runs.map((r) => r.id), [theirs.id]);
+  // The runner door (a session's schedule_list) keeps its plain answer.
+  assert.equal('runs' in (await tools.list(a.runner)), false);
+});
+
+test('a run\'s session\'s schedule-cards name its run however old; another session and another account get none', { skip }, async () => {
+  const w = await world('run-of-session');
+  const s = await createdThroughCard(w);
+  const { sessionId, runId } = await runSession(w, s.id);
+  // Older than the schedule's last 50 runs.
+  await db.scheduleRun.update({ where: { id: runId }, data: { plannedAt: new Date('2025-06-02T02:00:00Z'), state: 'NO_CHANGE', endedAt: new Date('2025-06-02T02:03:00Z') } });
+  for (let i = 0; i < 55; i += 1) {
+    await db.scheduleRun.create({
+      data: { scheduleId: s.id, scheduleRevision: 1, plannedAt: new Date(Date.now() - i * 60_000), trigger: 'MANUAL', state: 'NO_CHANGE', endedAt: new Date() },
+    });
+  }
+  const cards = await rest.sessionCards(w.user, sessionId);
+  assert.equal(cards.run?.id, runId);
+  assert.equal(cards.run?.scheduleId, s.id);
+  assert.equal((await rest.sessionCards(w.user, w.sessionId)).run, null, 'an ordinary session serves no run');
+  const b = await world('run-of-session-b');
+  await assert.rejects(rest.sessionCards(b.user, sessionId), /session not found/);
 });

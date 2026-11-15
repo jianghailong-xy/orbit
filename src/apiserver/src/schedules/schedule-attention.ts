@@ -166,7 +166,9 @@ export function heldClause(reason: string): string {
     case 'ACCESS_NOT_ENFORCEABLE':
       return 'the engine it would run on cannot enforce its access level';
     case 'MODE_WIDER_THAN_ACCOUNT_DEFAULT':
-      return "its access is wider than your account's default mode";
+      // Says what to change: Plan as the account default holds a CHECK_ONLY run on Claude Code (Don't Ask, §6.2)
+      // and every OPEN_PR run; Default holds neither.
+      return "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)";
     case 'NO_REPOSITORY':
       return 'its workspace has no repository to open a PR in';
     case 'SESSION_REFUSED':

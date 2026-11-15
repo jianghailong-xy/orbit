@@ -256,6 +256,14 @@ export const SCHEDULE_COPY = {
     allowOnce: 'Allow once',
     deny: 'Deny',
   },
+  deleteConfirm: {
+    title: 'Delete “{title}”?',
+    body:
+      'It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their '
+      + 'sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here.',
+    confirm: 'Delete',
+    cancel: 'Cancel',
+  },
   /** The decline button of an envelope card, by what it widens. */
   keep: {
     ACCESS_LEVEL: 'Keep check only',
@@ -367,6 +375,8 @@ export const SCHEDULE_COPY = {
       'Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session '
       + 'list',
     reported: 'Reported: {state}',
+    agent: '{engine} agent',
+    duration: '{minutes} min',
   },
 } as const;
 
@@ -464,11 +474,24 @@ export interface ScheduleView {
 
 export interface ScheduleListRow extends ScheduleView {
   lastRun: ScheduleRunView | null;
+  /** When a PAUSED schedule was paused (its newest revision that paused it). On the REST list only. */
+  pausedAt?: string | null;
+}
+
+/** A run as the Scheduled page places it: whether its finding was new, and whether the owner was told. */
+export interface ScheduleTimelineRun extends ScheduleRunView {
+  newFinding: boolean;
+  notified: boolean;
 }
 
 /** `GET /api/schedules?state=&workspaceId=`. */
 export interface ScheduleListResponse {
   schedules: ScheduleListRow[];
+  /**
+   * On the REST list only: the runs of the page's window, for every listed schedule — each run under way, and the
+   * ended runs planned in the last 24 hours (the viewer's today, in any zone). The page needs no other read.
+   */
+  runs?: ScheduleTimelineRun[];
 }
 
 export interface ScheduleFindingView {
@@ -641,6 +664,8 @@ export interface ScheduleDraftAnswer {
 
 /** `GET /api/sessions/:id/schedule-cards`. */
 export interface SessionScheduleCardsResponse {
+  /** A scheduled run's session (runSource SCHEDULE): the run it serves, however old; null for any other session. */
+  run: ScheduleRunView | null;
   cards: ScheduleCard[];
   records: ScheduleChangeRecord[];
 }
@@ -1475,6 +1500,25 @@ export function scheduleRunStripText(
     started: run.startedAt ? localParts(new Date(run.startedAt), timezone).time : '—',
     access: C.access[accessLevel].label,
   });
+}
+
+/**
+ * A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word, the
+ * engine it ran on, and how long the run took (until now while it runs). A part that is not known is left out.
+ */
+export function scheduleRunHeadText(input: {
+  state: string | null;
+  engine: string | null;
+  run: Pick<ScheduleRunView, 'startedAt' | 'endedAt'>;
+  now: Date;
+}): string {
+  const { run } = input;
+  const parts = [input.state, input.engine ? scheduleFill(C.runSession.agent, { engine: input.engine }) : null];
+  if (run.startedAt) {
+    const ms = (run.endedAt ? Date.parse(run.endedAt) : input.now.getTime()) - Date.parse(run.startedAt);
+    parts.push(scheduleFill(C.runSession.duration, { minutes: Math.max(1, Math.round(ms / 60_000)) }));
+  }
+  return parts.filter(Boolean).join(C.separator);
 }
 
 /** "run of Nov 13". */

@@ -373,6 +373,12 @@
       "allowOnce": "Allow once",
       "deny": "Deny"
     },
+    "deleteConfirm": {
+      "title": "Delete “{title}”?",
+      "body": "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
+    },
     "keep": {
       "ACCESS_LEVEL": "Keep check only",
       "RUNS_PER_WEEK": "Keep weekly",
@@ -486,7 +492,9 @@
       "crumb": "Scheduled",
       "runOf": "run of {date}",
       "strip": "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list",
-      "reported": "Reported: {state}"
+      "reported": "Reported: {state}",
+      "agent": "{engine} agent",
+      "duration": "{minutes} min"
     }
   },
   "boardPhrases": {

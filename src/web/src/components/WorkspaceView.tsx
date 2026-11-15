@@ -368,6 +368,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { ScheduleRunCrumb, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -503,6 +504,7 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
+  scheduleRunHeadText,
   encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
@@ -2958,7 +2960,9 @@ export function WorkspaceView({
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
   const sessions = useMemo(() => {
-    const rows = (sessionsQ.data ?? []).slice();
+    // A scheduled task's run is in no session list (owner ruling, docs/scheduled-tasks-design.md §7.4): the server
+    // leaves them out, and a row that says it is one is not drawn here either. It is reached from the schedule.
+    const rows = (sessionsQ.data ?? []).filter((row) => row.runSource !== 'SCHEDULE');
     // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
@@ -3709,6 +3713,16 @@ export function WorkspaceView({
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
   const projectIntent = composing && searchParams.get('intent') === 'project';
+  // A scheduled task's Change… lands here with the schedule named in the composer (ScheduledPage): it is changed
+  // by talking to a session, never through a form. Read from the browser's own entry (useLocation trails it), once.
+  useEffect(() => {
+    if (!composing) return;
+    const entry = window.history.state as { usr?: { composerText?: string } } | null;
+    const seed = entry?.usr?.composerText;
+    if (!seed) return;
+    setText(seed);
+    window.history.replaceState({ ...entry, usr: { ...entry.usr, composerText: undefined } }, '');
+  }, [composing]);
   const dismissProjectIntent = useCallback(() => {
     setSearchParams(
       (current) => {
@@ -5456,6 +5470,12 @@ export function WorkspaceView({
     startOwnerRequestChat,
   );
 
+  // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
+  // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
+  const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';
+  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null);
+  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);
+
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
   // still waiting are counted by the pinned strip beside the criteria proposals.
@@ -5464,8 +5484,8 @@ export function WorkspaceView({
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, questionRecords, ownerRequestCards, crossingCards.inserts, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...scheduleInserts, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, ownerRequestCards, scheduleInserts, crossingCards.inserts, blockedPromotionCard, exceptionCards],
   );
 
   // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
@@ -9339,6 +9359,14 @@ export function WorkspaceView({
     : null;
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
+    // A scheduled run's header is its run's: state · agent · how long it took (board web/run.png).
+    : selected && isScheduleRun && scheduleRun
+      ? scheduleRunHeadText({
+          state: headLifecycleWord,
+          engine: ENGINE_CLI_NAMES[selectedEngine] ?? null,
+          run: scheduleRun.run,
+          now: new Date(),
+        })
     : selected
       ? [
           headRunWord,
@@ -9856,7 +9884,7 @@ export function WorkspaceView({
   );
 
   return (
-    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
+    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}${isScheduleRun && !composing ? ' is-schedule-run' : ''}`}>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -10076,6 +10104,7 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
+            {scheduleRun && isScheduleRun && !composing && <ScheduleRunCrumb of={scheduleRun} />}
             {selected?.taskId && !composing && (
               <button
                 type="button"
@@ -10175,7 +10204,8 @@ export function WorkspaceView({
                   <GlobalOutlined /> Shared · Live
                 </button>
               )}
-              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
+              {/* A scheduled run is followed through its schedule, not by a chip of its own. */}
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && !isScheduleRun && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
             </div>
