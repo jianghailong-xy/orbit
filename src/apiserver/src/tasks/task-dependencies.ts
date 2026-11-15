@@ -608,6 +608,8 @@ export interface PrerequisiteLandingFacts {
   /** Its newest work session — §1.1's whole evidence that a task is code work — and the `repo_url`
    *  of the workspace it ran in. */
   work: { isolationStatus: string | null; branch: string | null; repoUrl?: string | null } | null;
+  /** Read with `LANDING_SERVING_WORK_SELECT.mergeReceipts`, so `taskLanding` sees sourceSha,
+   *  createdAt and detail and answers by its full rule rather than the coarser two-field one. */
   receipts: readonly LandingReceiptFacts[];
 }
 

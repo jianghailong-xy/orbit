@@ -67,7 +67,7 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(view.contains(".frame(width: 30, height: 30)"))
         XCTAssertTrue(view.contains(".background(Color.orange.opacity(0.15), in: Circle())"),
                       "`ProjectLandingRow.mark`'s own recipe")
-        let lines = try slice(view, from: "VStack(alignment: .leading, spacing: 0) {", to: "if let chevron {")
+        let lines = try slice(view, from: "VStack(alignment: .leading, spacing: 0) {", to: ".padding(.leading, 7)")
         XCTAssertFalse(lines.contains(".orange"), "never amber words")
     }
 
@@ -117,27 +117,35 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)"))
     }
 
-    /// Where the press goes elsewhere the capsule carries no chevron — the whole of it is the press;
-    /// in the conversation on screen the chevron stays, pointing the way the card lies.
-    func testOnlyTheInConversationBarPoints() throws {
+    /// The bar's press goes elsewhere, so it carries no chevron — the whole of it is the press. What
+    /// waits in the conversation on screen is said by the nav bar's capsule (07-console-one-capsule),
+    /// which points the way its card lies.
+    func testOnlyTheConversationsOwnCapsulePoints() throws {
         let view = try banner
-        XCTAssertTrue(view.contains("glyph: banner.glyph, chevron: nil,"))
-        XCTAssertTrue(view.contains(#"chevron: below.side == .above ? "chevron.up" : "chevron.down""#))
+        XCTAssertFalse(view.contains("chevron.down"), "no chevron on the bar")
+        let console = code(try source("Views/Console/ConsoleView.swift"))
+        let capsule = try slice(console, from: "private func waitingCapsule(_ here: WaitingBelow) -> some View {",
+                                to: ".accessibilityHint(")
+        XCTAssertTrue(capsule.contains(#"here.side == .above ? "chevron.up" : "chevron.down""#))
+        XCTAssertTrue(capsule.contains("console.requestScroll(to: here.rowID)"))
     }
 
-    /// On iOS 26 a conversation's bar is a safe-area BAR, so the transcript's scroll-edge effect
-    /// runs on under the capsule as it does under the composer band; the capsule then stands on
-    /// nothing. Over the session list and over a page it stands on nothing either (04-floating),
-    /// lifted by a shadow; only an older system's conversation stands it on the page's colour.
-    func testItFloatsOverTheTranscriptOnIOS26() throws {
+    /// A conversation carries no needs-you bar (07-console-one-capsule): what waits in it is the nav
+    /// bar capsule's to say — while its card is out of sight — and what waits elsewhere the lists'.
+    /// Over the session list and over a page the bar stands on nothing, lifted by a shadow.
+    func testNoBarInAConversationAndItFloatsElsewhere() throws {
         let console = code(try source("Views/Console/ConsoleView.swift"))
-        let top = try slice(console, from: "func needsYouTop<Bar: View>(", to: "\n    }\n")
-        XCTAssertTrue(top.contains("safeAreaBar(edge: .top, spacing: 0) { content.environment(\\.floatsOverTranscript, true) }"))
-        XCTAssertTrue(top.contains("safeAreaInset(edge: .top, spacing: 0, content: bar)"))
-        XCTAssertTrue(console.contains(".needsYouTop {\n            if hSize == .compact {"))
+        XCTAssertFalse(console.contains("NeedsYouBannerView("), "no bar in a conversation")
+        let principal = try slice(console, from: "ToolbarItem(placement: .principal) {", to: "principalQuestion(proxy)")
+        XCTAssertTrue(principal.contains("if !hidesStickyQuestion, let here = console.waitingBelow,"))
+        XCTAssertTrue(principal.contains("here.side == .above || !atBottom || console.detached {"),
+                      "said while its card is out of sight")
+        let model = code(try source("ConsoleModel.swift"))
+        XCTAssertTrue(model.contains("NeedsYouLogic.here(rows: rows, approvalIDs: state.pendingApprovals.map(\\.id),"),
+                      "its own approvals too")
         let view = try banner
         XCTAssertTrue(view.contains(".background { surface }"))
-        XCTAssertTrue(view.contains("if floats || overList {\n            Color.clear"))
+        XCTAssertTrue(view.contains("if overList {\n            Color.clear"))
         XCTAssertFalse(view.contains("listSoftEdge"), "no band of its own under it")
         XCTAssertTrue(view.contains(".shadow(color: .black.opacity(scheme == .dark ? 0.75 : 0.10), radius: 14, y: 10)"))
     }
@@ -160,5 +168,43 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         let rule = try slice(model, from: "func pageHasNoNeedsYouBar(wide: Bool) -> Bool {", to: "\n    }")
         XCTAssertTrue(rule.contains("return !(nav.sectionAtRoot || nav.focusedConsoleSessionID != nil)"),
                       "a phone's Sessions list and conversation carry their own")
+    }
+
+    /// Over the Sessions list it floats as it does over a conversation (the owner, 2026-11-15,
+    /// 06-list-floats.html): hung under the inset rather than in it, so the sticky section headers
+    /// pass behind it; the list's first row keeps its height clear at rest; the pull's spinner still
+    /// clears it.
+    func testOverTheListItFloatsAndAFirstRowKeepsItClear() throws {
+        let agents = code(try source("Views/AgentsView.swift"))
+        let mount = try slice(agents, from: ".topInsetClearOfRefresh {", to: "#endif")
+        let floating = try slice(mount, from: "} floating: {", to: "needsYouClearance = $0 }")
+        XCTAssertTrue(floating.contains("NeedsYouBannerView(excluding: app.selectedAgentSessionID,"))
+        XCTAssertFalse(try slice(mount, from: ".topInsetClearOfRefresh {", to: "} floating: {")
+            .contains("NeedsYouBannerView"), "not in the inset")
+        XCTAssertTrue(agents.contains("if needsYouClearance > 0 {\n                Color.clear\n                    .frame(height: needsYouClearance)"))
+        let modifier = code(try source("Views/TopInsetClearOfRefresh.swift"))
+        XCTAssertTrue(modifier.contains(".alignmentGuide(.bottom) { $0[.top] }"), "hung from the bands' lower edge")
+        XCTAssertTrue(modifier.contains("bandsBottom: bands.maxY + floatingHeight"), "the spinner clears it")
+    }
+
+    /// Pushed up, it is put away until something new is waiting; the hamburger carries the count
+    /// meanwhile, and a swipe tells the server nothing.
+    func testASwipePutsItAwayAndTheHamburgerKeepsTheCount() throws {
+        let view = try banner
+        XCTAssertTrue(view.contains(".swipesAway { model.dismissNeedsYou() }"))
+        let swipe = try slice(view, from: "private struct SwipeAway: ViewModifier {", to: "\n}\n")
+        XCTAssertTrue(swipe.contains("value.translation.height < -22 || value.predictedEndTranslation.height < -60"))
+        XCTAssertTrue(swipe.contains(".accessibilityAction(named: \"Dismiss\") { dismiss() }"))
+        let model = code(try source("AppModel.swift"))
+        let dismiss = try slice(model, from: "func dismissNeedsYou() {", to: "\n    }")
+        XCTAssertTrue(dismiss.contains("needsYouDismissed = NeedsYouLogic.dismissalKeys(waiting: needsYouSessions)"))
+        XCTAssertFalse(dismiss.contains("api") || dismiss.contains("Task {"), "nothing is sent")
+        XCTAssertTrue(model.contains("NeedsYouLogic.isDismissed(waiting: needsYouSessions, excluding: focused, dismissed: needsYouDismissed)"))
+        let arrival = try slice(model, from: "func noteNeedsYouArrival(", to: "\n    }\n")
+        XCTAssertTrue(arrival.contains("needsYouDismissed = []"), "something new brings it back")
+        let shell = code(try source("Views/CompactShell.swift"))
+        let toggle = try slice(shell, from: "private struct DrawerToggleButton: View {", to: "\n}\n")
+        XCTAssertTrue(toggle.contains("let waiting = model.needsYouPutAwayCount"))
+        XCTAssertTrue(toggle.contains(".background(Color.orange, in: Capsule())"))
     }
 }

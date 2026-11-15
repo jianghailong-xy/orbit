@@ -354,7 +354,7 @@ struct ComposerView: View {
         guard !console.isDraft else { return nil }
         let session = app.session(id: console.sessionID)
         return ComposerLogic.offeredPromptSuggestion(
-            console.state.promptSuggestion,
+            console.state.shownPromptSuggestion,
             session: session?.effectiveRunState,
             // A message on its way is a turn in flight before the record or the stream says so: the
             // suggestion it answered must not come back into the box it just left.
@@ -367,6 +367,15 @@ struct ComposerView: View {
                 || (session?.pendingApprovals ?? 0) > 0 || session?.waitingKind != nil,
             sendable: console.sendBlockedMessage == nil && console.runnerOnline != false
                 && session?.effectiveLifecycleState == .open)
+    }
+
+    /// The composer's translation tag: Settings › Sessions, where Translation is.
+    private func openTranslationSettings() {
+        #if os(iOS)
+        app.nav.openSettings(at: .sessions)
+        #else
+        app.selectedSection = .settings
+        #endif
     }
 
     /// Into the box, and the box focused: a guess is where the message starts, not a message sent.
@@ -464,6 +473,15 @@ struct ComposerView: View {
                             #else
                             PromptSuggestionLine(text: suggestion, accept: acceptSuggestion)
                             #endif
+                        }
+                    }
+                    // Settings › Translation (6A): "Chinese → English" on the box's right while the
+                    // account translates; pressed, it opens the setting.
+                    .padding(.trailing, SessionTranslation.isOn(app.user) ? 112 : 0)
+                    .overlay(alignment: .topTrailing) {
+                        if SessionTranslation.isOn(app.user) {
+                            ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
+                                                   open: openTranslationSettings)
                         }
                     }
                     .onChange(of: console.slashToken) { _, new in
@@ -848,13 +866,12 @@ struct ComposerView: View {
     }
 
     /// A Cursor CLI model's setting picked: the session's model value carries it — one back at the model's
-    /// own default is taken out of it — applied and remembered as a model pick is.
+    /// own default is taken out of it — applied as a model pick is.
     private func pickCursorSetting(_ id: String, _ value: String, pick: CursorRuntime.Pick) {
         var settings: [String: String?] = pick.parameters.mapValues { Optional($0) }
         settings[id] = value
         let model = CursorRuntime.encodeModel(pick.model, settings, row: pick.row)
         let clampedPermissionMode = console.selectModel(model)
-        app.rememberDefaultModel(model, engine: console.engine, provider: console.provider)
         let permissionMode = clampedPermissionMode ? console.permissionMode.rawValue : nil
         Task { await console.applyConfig(model: model, permissionMode: permissionMode) }
     }
@@ -1003,9 +1020,8 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
-                    // Remembered per engine and provider (`<engine>:<provider>`, contract §6.5): one
-                    // key's model on Claude Code is not its model on DeepSeek Harness.
-                    app.rememberDefaultModel(m.id, engine: console.engine, provider: console.provider)
+                    // The pick is this session's alone: no account-wide model memory is written
+                    // (docs/workspace-default-model-design.md).
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil

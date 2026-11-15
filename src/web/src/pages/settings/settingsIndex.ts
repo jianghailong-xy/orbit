@@ -65,6 +65,20 @@ export const PERSONAL_SETTINGS = {
     'Let sessions orchestrate',
     'Sessions can start and manage other sessions, and manage agents and runners, via the orbit MCP tools.',
   ),
+  // Settings › Translation (docs/mocks/session-translation, frames 1 and 2): between New sessions and Orchestration.
+  translationEnabled: setting(
+    'translationEnabled',
+    '/settings/general',
+    'Translate conversations',
+    'Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are.',
+  ),
+  translationLanguage: setting(
+    'translationLanguage',
+    '/settings/general',
+    'Your language',
+    'What you write in, and what replies are shown in.',
+  ),
+  agentLanguage: setting('agentLanguage', '/settings/general', 'Agents work in', 'What the agent receives and answers in.'),
   notifySessionFinished: setting(
     'notifySessionFinished',
     '/settings/notifications',
