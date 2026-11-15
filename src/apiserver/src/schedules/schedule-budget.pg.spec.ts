@@ -11,7 +11,10 @@
  *   4. a start that never reached its engine and was retried is one start, not four;
  *   5. a personal access token's Run now is refused over budget like a session's;
  *   6. a ONCE slot over budget follows the missed-ONCE rule;
- *   7. runs already started stay counted when the envelope is narrowed mid-week.
+ *   7. runs already started stay counted when the envelope is narrowed mid-week;
+ *   a–c. a schedule whose rule fills its envelope never trips it, whatever each start's latency (DAILY over 15 days,
+ *      WEEKLY over 4 weeks, one run 3 hours late after a runner outage, across a daylight-saving change);
+ *   e. the owner's Run now inside a full week starts, and the next automatic slot is then over budget.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/schedules/schedule-budget.pg.spec.ts
  *
@@ -94,6 +97,7 @@ after(async () => {
 
 interface World {
   ownerId: string;
+  runnerId: string;
   workspaceId: string;
   owner: ScheduleActor;
   /** An ordinary agent session of the owner, in the workspace. */
@@ -121,7 +125,7 @@ async function world(label: string): Promise<World> {
       engine: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER, permissionMode: PermissionMode.DEFAULT,
     },
   });
-  return { ownerId, workspaceId, owner: { kind: 'OWNER', ownerId }, agent: { kind: 'SESSION', ownerId, sessionId } };
+  return { ownerId, runnerId, workspaceId, owner: { kind: 'OWNER', ownerId }, agent: { kind: 'SESSION', ownerId, sessionId } };
 }
 
 async function created(w: World, over: Partial<ScheduleCreateInput>) {
@@ -434,4 +438,108 @@ test('7. narrowed mid-week: runs already started stay counted against the new, s
   const [next] = await nextSlot(s.id);
   assert.equal(next?.outcome, 'MISSED', 'the three starts count against the new budget of two');
   assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: next.runId } })).failureReason, 'OVER_BUDGET');
+});
+
+// =============================================================================================================
+// A rule that fills its envelope never trips it: the window is counted on planned slots, not on start times.
+// =============================================================================================================
+
+/** Seconds each start waits behind its slot: varied 0-90 s, with later starts earlier in their slot than seven before. */
+const JITTER = [90, 0, 45, 10, 80, 5, 60, 2, 85, 30, 0, 70, 15, 90, 1];
+
+/**
+ * Run the schedule's next `count` slots on the real path, with the clock driven: fire at the slot, start `latency`
+ * seconds later, deliver, report. `late` is a slot index whose runner is offline for three hours first (§5.2).
+ */
+async function runSlots(w: World, scheduleId: string, count: number, opts: { late?: number } = {}) {
+  const outcomes: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const s = await db.schedule.findUniqueOrThrow({ where: { id: scheduleId } });
+    at(s.nextDueAt!);
+    assert.equal(await runs.fire(scheduleId), 'FIRED');
+    if (opts.late === i) {
+      await db.runner.update({ where: { id: w.runnerId }, data: { status: RunnerStatus.OFFLINE, lastHeartbeatAt: new Date('2000-01-01T00:00:00Z') } });
+      const [waiting] = await runs.startDue(25, scheduleId);
+      assert.equal(waiting?.outcome, 'WAITING', 'the runner is offline: the run waits');
+      advance(3 * 60 * MINUTE);
+      await db.runner.update({ where: { id: w.runnerId }, data: { status: RunnerStatus.ONLINE, lastHeartbeatAt: FUTURE } });
+    } else {
+      advance(JITTER[i % JITTER.length] * 1000);
+    }
+    const [started] = await runs.startDue(25, scheduleId);
+    outcomes.push(started?.outcome ?? 'NONE');
+    if (started?.outcome !== 'STARTED') continue;
+    const run = await db.scheduleRun.findUniqueOrThrow({ where: { id: started.runId } });
+    await delivered(run.sessionId!);
+    advance(MINUTE);
+    await runs.report(w.ownerId, run.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
+  }
+  return outcomes;
+}
+
+async function noneMissed(scheduleId: string, outcomes: string[]) {
+  assert.deepEqual(outcomes.filter((o) => o !== 'STARTED'), [], `every slot starts: ${outcomes.join(' ')}`);
+  assert.equal(await db.scheduleRun.count({ where: { scheduleId, state: 'MISSED' } }), 0);
+  assert.equal(pushed.filter((a) => (a.kind as string) === 'OVER_BUDGET').length, 0, 'no over-budget push');
+}
+
+test('a. DAILY with envelope 7, 15 days, each start 0-90 s late: no slot is MISSED, no push', { skip }, async () => {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world('budget-daily-jitter');
+  const s = await created(w, { rule: daily('10:00') });
+  assert.equal(s.envelopeRunsPerWeek, 7);
+  await noneMissed(s.id, await runSlots(w, s.id, 15));
+});
+
+test('a. DAILY with envelope 7 across the spring-forward change (New York): no slot is MISSED', { skip }, async () => {
+  pushed = [];
+  at('2026-03-02T13:00:00Z');
+  const w = await world('budget-daily-dst');
+  const s = await created(w, { rule: daily('09:00'), timezone: 'America/New_York' });
+  // 2 March to 16 March: the week across 8 March is 167 hours from slot to slot.
+  await noneMissed(s.id, await runSlots(w, s.id, 15));
+});
+
+test('b. WEEKLY with envelope 1, 4 weeks, each start 0-90 s late: none missed', { skip }, async () => {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world('budget-weekly-jitter');
+  const s = await created(w, { rule: { kind: 'WEEKLY', time: '10:00', weekdays: ['MON'] } });
+  assert.equal(s.envelopeRunsPerWeek, 1);
+  // JITTER[0..3] = 90, 0, 45, 10: week 2 starts earlier in its slot than week 1 did.
+  await noneMissed(s.id, await runSlots(w, s.id, 4));
+});
+
+test('c. one run 3 hours late after a runner outage, the next day on time: none missed', { skip }, async () => {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world('budget-late');
+  const s = await created(w, { rule: daily('10:00') });
+  await noneMissed(s.id, await runSlots(w, s.id, 15, { late: 3 }));
+  const late = (await db.scheduleRun.findMany({ where: { scheduleId: s.id }, orderBy: { plannedAt: 'asc' } }))[3];
+  assert.equal(late.startedAt!.getTime() - late.plannedAt.getTime(), 3 * 60 * MINUTE, 'that run did start 3 hours late');
+});
+
+test('e. the owner\'s Run now inside a full week starts, and the next automatic slot is then over budget', { skip }, async () => {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world('budget-press-cost');
+  const s = await created(w, { rule: daily('10:00') });
+  await noneMissed(s.id, await runSlots(w, s.id, 6));
+  // The seventh day, before its slot: the owner presses Run now. Inside the budget (6 of 7), it starts.
+  at('2026-11-22T08:00:00Z');
+  const press = await runs.runNow(w.owner, s.id);
+  const pressed = await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } });
+  assert.equal(pressed.state, 'RUNNING');
+  await delivered(pressed.sessionId!);
+  advance(MINUTE);
+  await runs.report(w.ownerId, pressed.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
+  // That press was the seventh start: the day's 10:00 slot is the cost of it.
+  const [slot] = await nextSlot(s.id);
+  assert.equal(slot?.outcome, 'MISSED');
+  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: slot.runId } })).failureReason, 'OVER_BUDGET');
+  // The day after, the oldest slot has left the window: it runs again.
+  const [next] = await nextSlot(s.id);
+  assert.equal(next?.outcome, 'STARTED');
 });
