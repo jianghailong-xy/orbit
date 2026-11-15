@@ -890,6 +890,10 @@ public struct TranscriptReducer: Sendable, Codable {
             // The receipt for a message written into the running turn that never made it: a steer
             // that is over, no turn of the queue's. Drawn after everything still waiting, below.
             if turn.delivery != nil { continue }
+            // The platform's ask for a coordinator's handoff note: drawn only as the handoff's own row
+            // (board 02 ②), never as a queued bubble or an accepted head (web parity:
+            // `queuedTurnsOutsideTranscript`; Android `queuedTail`, `acceptedHeads`).
+            if CoordinatorContextActions.isHandoffPrompt(turn.content) { continue }
             let incomingAttachments = turn.attachments?.map {
                 TurnAttachment(id: $0.id, mime: $0.mimeType)
             }

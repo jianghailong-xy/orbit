@@ -344,6 +344,32 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     );
   });
 
+  it('02-2: leaves the queued note turn out of the queued tail and the tray, keeping the turns around it', async () => {
+    // Start a new coordinator confirmed while a turn runs: the platform's note turn waits behind it.
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      status: 'RUNNING', runStatus: 'RUNNING', runState: 'RUNNING',
+      coordinatorHandoff: { state: 'WRITING', startedAt: new Date().toISOString(), failureCode: null, failureReason: null, handedOverToSessionId: null },
+    });
+    vi.mocked(listQueuedTurns).mockImplementation(async () => [
+      { turnId: 'q-owner', kind: 'prompt', placement: 'queued', content: 'Also check the retries', createdAt: '2026-11-14T01:17:00Z' },
+      { turnId: 'q-note', kind: 'prompt', placement: 'queued', authoredByOrbit: true, createdAt: '2026-11-14T01:18:00Z',
+        content: 'From Orbit · handoff note\n\nThe owner is handing this project over to a new coordinator conversation.' },
+      { turnId: 'q-wake', kind: 'prompt', placement: 'queued', authoredByOrbit: true, content: 'Orbit wake: a job finished', createdAt: '2026-11-14T01:18:30Z' },
+    ] as never);
+    await mount();
+    await waitFor(() => expect(mounted().querySelector('[data-handoff-state="WRITING"]')).not.toBeNull());
+    await waitFor(() => expect(document.body.textContent).toContain('Also check the retries'));
+    expect(document.body.textContent).toContain('Orbit wake: a job finished');
+    expect(document.body.textContent).not.toContain('From Orbit · handoff note');
+    expect(document.body.textContent).not.toContain('The owner is handing this project over');
+    // Nor an empty bubble with the queue's line and a Cancel: of the two Orbit queued, only the wake has a row in the tail.
+    const tail = [...mounted().querySelectorAll('.chat-queued-meta')].map((meta) => meta.closest('[class*="chat-"]')?.parentElement?.textContent ?? '');
+    expect(tail).toHaveLength(1);
+    expect(tail[0]).toContain('Orbit wake: a job finished');
+  });
+
   it('02-2: says it is handing over once the note is in', async () => {
     detail = session({
       projectId: PROJECT,
