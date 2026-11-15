@@ -1,4 +1,4 @@
-// Renders the boards in this directory to PNG at 2x, light and dark: <board>-light.png, <board>-dark.png.
+// Renders the boards in this directory (copied from machines-and-models) to PNG at 2x, light and dark: <board>-light.png, <board>-dark.png.
 //   FONTCONFIG_FILE=<fonts.conf> node docs/mocks/cursor-engine/render.mjs [board ...]
 // No board names = every *.html here. Same toolchain as the other hand-drawn boards (headless
 // Chromium over raw CDP, the whole .m-sheet captured): CHROME defaults to Playwright's chromium-1243.
