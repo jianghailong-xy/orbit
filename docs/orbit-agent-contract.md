@@ -262,6 +262,12 @@ resume, host, upgrade, and the catalogue's own login/logout/whoami/api), `headle
 mcp, hook), `runner_local` (engine-update, status, doctor, version) and `arbitrary_command`
 (`secret exec`). `capability_contract_test.go` holds both lists to the CLI's own router.
 
+Recovery examples and the failure-injection matrix are in the
+[recovery runbook](recovery-contract.md#12-cross-surface-recovery-runbook). After a read, decide
+against current state again; a capability snapshot is discovery, not a grant that survives revocation.
+An unknown write outcome keeps its original key. A committed child with a failed wait is read back,
+not created again. A declined card stops at the owner, and a CLI call cannot override that boundary.
+
 ### 2.6 The always-on primer
 
 §0 is also the first thing every agent Orbit runs reads, as one short text: the **agent primer**

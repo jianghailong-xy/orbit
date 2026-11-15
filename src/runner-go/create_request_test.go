@@ -195,6 +195,53 @@ func TestACreateWhoseAnswerWasLostIsRepeatedUnderItsRequestIDAndCreatesOnce(t *t
 	}
 }
 
+// A connection lost before forwarding looks identical to a lost committed answer to the caller.
+// Preserve the key even though this proxy knows that the first attempt wrote nothing.
+func TestCreateFailureBeforeSubmissionRecoversUnderTheSameRequestID(t *testing.T) {
+	for _, tool := range []string{"project_create", "session_create"} {
+		t.Run(tool, func(t *testing.T) {
+			server := &receiptServer{t: t}
+			first := true
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if first {
+					first = false
+					server.hangUp(w)
+					return
+				}
+				server.ServeHTTP(w, r)
+			}))
+			defer srv.Close()
+			mcp := headlessCreateMCP(t, srv)
+			args := map[string]interface{}{"title": "Plan", "prompt": "work"}
+			failed := callCreate(mcp, tool, args)
+			if failed["isError"] != true || server.creates() != 0 || len(server.postIDs()) != 0 {
+				t.Fatalf("pre-submit failure wrote state: %+v", failed)
+			}
+			receipt := partialReceipt(t, watchToolText(t, failed))
+			if receipt.Outcome != "UNKNOWN" || receipt.RequestID == "" || receipt.Recovery.Retry.Policy != "SAME_REQUEST_ID" {
+				t.Fatalf("unsafe pre-submit recovery: %+v", receipt)
+			}
+			args["requestId"] = receipt.RequestID
+			for i := 0; i < 2; i++ {
+				result := callCreate(mcp, tool, args)
+				var answer struct {
+					ID      string `json:"id"`
+					Receipt struct {
+						RequestID string `json:"requestId"`
+					} `json:"requestReceipt"`
+				}
+				if result["isError"] == true || json.Unmarshal([]byte(watchToolText(t, result)), &answer) != nil ||
+					answer.ID != "created-1" || answer.Receipt.RequestID != receipt.RequestID {
+					t.Fatalf("same-key reconciliation failed: %+v", result)
+				}
+			}
+			if server.creates() != 1 {
+				t.Fatalf("created %d resources, want one", server.creates())
+			}
+		})
+	}
+}
+
 // Every call is its own request: two calls without a requestId are two ids, so two creates.
 func TestEachCreateCallIsANewRequest(t *testing.T) {
 	server := &receiptServer{t: t}

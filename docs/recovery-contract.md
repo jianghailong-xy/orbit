@@ -684,3 +684,90 @@ the managed runner a workspace runs on (`ManagedRunner.managementState`,
   `SESSION_RUNNER_OFFLINE` ("the system recovers it"), is refused with `MANAGED_RUNNER_FAILED`. Both
   carry `managementState` and the manager's `managedReason`. The owner repairs the runner from its
   machine page, or an operator does.
+
+## 12. Cross-surface recovery runbook
+
+Discover with the absolute Orbit binary supplied by the runner, using `capabilities --json`.
+Read both `capabilities` and `unavailableCapabilities`: an entry's `available`, `unavailableCode`,
+`retryPolicy`, `idempotencyArg` and `interaction` determine whether and how to invoke it. The shell
+allowlist comes from the same catalogue (§2.5 of the Agent contract). Discovery does not guarantee
+that a token remains valid or that state will be unchanged when the server receives a write.
+
+### 12.1 Execute argv, preserve the request
+
+For example, this Python adapter runs `task_get` using the advertised argv. Set `ORBIT_BIN` to the
+absolute executable the runner supplied and `TASK_ID` to the task being inspected. It refuses an
+unavailable entry and never turns JSON into shell source:
+
+```python
+import json
+import os
+import subprocess
+
+binary = os.environ["ORBIT_BIN"]
+doc = json.loads(subprocess.check_output([binary, "capabilities", "--json"]))
+cap = next(c for c in doc["capabilities"] if c["id"] == "task_get")
+if not cap["available"]:
+    raise SystemExit(cap["unavailableCode"])
+subprocess.run(cap["argv"] + [os.environ["TASK_ID"], "--receipt"], check=True)
+```
+
+For a rendered CLI recovery, execute its `next.argv` as an argument array and pass its `next.stdin`
+when present. For MCP use its tool and arguments. Keep every payload field and key, including
+`resumeIfEnded` and reply options. Do not reconstruct a request from the displayed prose.
+
+| Situation | Example and next step | Responsible party |
+| --- | --- | --- |
+| `ALREADY_COORDINATING` | Read the named project and explain that this session remains its coordinator. Ask once whether to open a child. On confirmation call `session_create` once with `childSessionPrompt`; do not follow it with `session_send`. On no, create nothing. | Owner confirms; caller opens the child. |
+| `SAME_REQUEST_ID` | A lost `project_create` answer names `requestId: create-42`. Replay the identical arguments with `requestId: create-42` (CLI `--request-id create-42`). The returned `requestReceipt.requestId` and resource ID identify the first result. | Caller reconciles under the original key. |
+| Task run or message replay | Repeat `task_start` with the original `triggerId` (CLI `--trigger-id`), or `session_send` with the original `clientTurnId` (CLI `--client-turn-id`). A new invocation without that key is a new operation. | Caller preserves the logical operation. |
+| Partial success | `session_create(wait)` names child S2 and `wait.outcome: GET_FAILED` or `TIMEOUT`. Call the answer's `session_get` with S2. The child already exists; never repeat the create to repair the wait. | Caller reads; system settles the child. |
+| Backpressure | `SPAWN_TREE_OUTSTANDING_LIMIT` names unsettled sessions. Wait with `session_await` when available, then reconsider. `SPAWN_TREE_RATE_LIMIT` stops the loop; its delay is not permission for timer-driven spawning. | System clears outstanding work; caller stops spawning. |
+| State changed after read | A task becomes retired or a project is paused before retry. Follow the new refusal and its resources. Do not apply the old read's plan or rotate a key to evade the refusal. | Successor/coordinator or owner, as the response states. |
+| Capability revoked | A previously available command returns `ORCHESTRATION_DISABLED` or authorization fails. Refresh discovery, preserve any uncertain operation's key, and stop invoking the unavailable operation. | Owner restores the capability; caller cannot grant it. |
+| User refuses | `APPROVAL_DECLINED` is final for this proposal. Do not switch to CLI, another credential, or a new key. A card still waiting is not refusal; `chat` means discuss and amend the proposal. | Owner decides. |
+| Manual fallback | With `session_create` unavailable, give the owner `childSessionPrompt` and ask them to open a new session in this workspace and send it there. If disabled, identify Settings → Session orchestration. Never claim that a child was created. | Owner performs the unavailable action. |
+
+### 12.2 Submission state and compatibility
+
+A JSON error's `recovery.effect` distinguishes `NONE`, `UNKNOWN` and `COMMITTED`; status alone cannot
+prove whether a write happened. A failure before the server receives a request still looks `UNKNOWN`
+to a caller that saw no answer. Keep the original key even in that case. `SAME_REQUEST_ID` is not
+permission to issue a new logical create. Without a key, `VERIFY_THEN_RETRY` requires reading state
+before deciding whether another write is needed. Re-read/retry races remain subject to server gates.
+
+`--json` keeps legacy success entity output; text success and legacy refusal text remain supported.
+`--receipt` opts into the operation receipt (`ok`, `outcome`, entity ID/status, `error.retry`). Its
+lowercase retry vocabulary (`resend`, `reread_first`, `fix_input`, `do_not_retry`, `wait`) differs from
+the uppercase recovery policy; use the structured field for the envelope being read. Only
+`ok: true` with `outcome: written` establishes an operation write. A read or dry run proves no write.
+A request receipt's `requestId` identifies the idempotent create; replaying it retrieves the recorded
+answer and `project_get`/`session_get` queries the returned resource. Task-run `triggerId` and message
+`clientTurnId` likewise bind replays to their original result, rather than inventing a generic
+receipt-get command. A partial wait result proves creation, not completion of the child.
+
+### 12.3 Failure-injection matrix
+
+These suites together cover the production API, runner transport, MCP, CLI and Agent instructions.
+Run PostgreSQL specs with `scripts/run-pg-spec.sh`, which rejects skipped/empty runs and uses an
+isolated migrated database. Keep temporary files, build outputs, caches and PGDATA on the filesystem
+authorized for the session; `TMPDIR`, `GOCACHE`, `GOMODCACHE`, `npm_config_cache` and
+`RUN_PG_SPEC_PGDATA_ROOT` control scratch placement. Run from a source copy on that filesystem when
+build outputs must also stay there. Serialize heavy work with the host's designated lock.
+
+| Injection / assertion | Suites (paths relative to the repository) |
+| --- | --- |
+| Failure before submission, lost/truncated committed answer, same-key reconciliation | `src/runner-go/create_request_test.go`; `src/runner-go/create_request_e2e_test.go` launched by `src/apiserver/src/runner-api/create-request-recovery-http.pg.spec.ts` |
+| Concurrent creates, changed payload under same key, queryable receipt and exactly one Project/Session | `src/apiserver/src/runner-api/create-request-receipts.pg.spec.ts` |
+| Wait GET failure or timeout after creation, resource read-back | `create_request_test.go`; `create-request-recovery-http.pg.spec.ts` above |
+| Concurrent/restarted Task run replay, changed state, exactly one run winner | `src/apiserver/src/tasks/task-run-winner-recovery.pg.spec.ts`; `src/runner-go/task_run_token_test.go` |
+| Concurrent/lost-answer message replay, one message and interrupt | `src/apiserver/src/sessions/client-turn-id-replay.pg.spec.ts` |
+| HTTP refusals, lifecycle transitions, user/system boundary and backpressure | `src/apiserver/src/common/refusal-recovery.pg.spec.ts`; `src/apiserver/src/runner-api/session-lifecycle-recovery-wire.spec.ts`; `src/runner-go/recovery_session_test.go` |
+| Available and unavailable capabilities, stable reasons, key/interaction attributes, actual shell authorization parity | `src/runner-go/capability_contract_test.go` |
+| MCP/CLI JSON parity, argv execution, hidden capabilities, legacy text and successful JSON | `src/runner-go/recovery_render_test.go`; `src/runner-go/recovery_test.go`; `src/shared/src/recovery.spec.ts` |
+| Child recovery, user refusal, revoked orchestration and manual fallback | `src/apiserver/src/runner-api/already-coordinating-child-chain.pg.spec.ts`; `test/already-coordinating-eval.test.mjs` |
+
+The Agent evaluator's reference adapter tests the grading contract and its negative controls; it is
+not evidence that a live model complied. Live evaluations must retain their engine trace separately.
+Database suites assert row counts and receipt/resource identity, rather than trusting an exit code
+or an error string as proof that no duplicate was written.

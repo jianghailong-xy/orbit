@@ -20,16 +20,24 @@ any `approvalDetail`), `destructive`, `idempotency` and `retry` (how a retry is 
 versioned operation catalogue, identified by `catalogVersion` and `catalogHash`; the same catalogue
 rendered for a person is the [operation catalogue](operation-catalog.md).
 
+For failures, submission uncertainty, partial success and safe replay examples, see the
+[recovery runbook](recovery-contract.md#12-cross-surface-recovery-runbook). The same rules apply to
+Agent shell calls and MCP; a CLI command never bypasses a missing capability or a refused card.
+
 ## Tasks and task lists
 
 ```bash
 orbit task list --status OPEN --json
 orbit task create --title "Check deployment" --description "Verify health and logs" --json
-orbit task update <task-id> --status DONE --json
+orbit task evidence-submit <task-id> --evidence-file evidence.json --receipt
 orbit task reopen <task-id> --json
 orbit task delete <task-id> --json
 orbit task-list create --title "Release" --json
 ```
+
+Completion follows the task's declared criterion. For an evidence task, submit an envelope with
+`claim`, recorded `checks` and `gaps`; the evaluator decides completion. A direct status update to
+`DONE` does not establish acceptance.
 
 To create a task with existing uploaded Orbit attachments, pass their IDs:
 
