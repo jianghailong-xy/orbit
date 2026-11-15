@@ -35,7 +35,7 @@ Usage:
   orbit task update [task-id] [options]
   orbit task reopen [task-id] [--json]
   orbit task delete [task-id] [--json]
-  orbit task start [task-id] [--json]
+  orbit task start [task-id] [--trigger-id ID] [--json]
   orbit task comment [task-id] (--body TEXT | --body-file -) [--json]
   orbit task request-confirmation [task-id] [--json]
   orbit task confirmation-review [task-id] (--input JSON | --input-file -) [--json]
@@ -878,9 +878,11 @@ task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 	"start": `orbit task start — run a task on its assigned agent
 
 Usage:
-  orbit task start [task-id] [--json]
+  orbit task start [task-id] [--trigger-id ID] [--json]
 
-task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+task-id defaults to ORBIT_TASK_ID inside an Orbit task session. --trigger-id only replays a start
+whose answer was lost: pass the triggerId its answer or error named. Omitted, a new one is drawn
+and printed.
 `,
 	"comment": `orbit task comment — add a comment to a task
 

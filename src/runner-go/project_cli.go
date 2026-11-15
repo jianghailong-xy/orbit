@@ -347,6 +347,7 @@ Options:
   --content-hash SHA256  sha256 of the observed CONTENT — 64 hex characters
   --source TEXT          who observed it (default MERGE_EVIDENCE_WRITER)
   --detail JSON          the raw observation: the command, its output, the blob ids
+  --detail-file -        read that JSON from stdin instead
   --json                 emit compact JSON
 
 By CONTENT, never by ` + "`git branch --contains`" + `: after a squash merge that answer is a

@@ -600,6 +600,7 @@ whose outputSchema describes their answer, and `permission_prompt`, the engine's
 | `items` / `count` | a written batch | `[{index, ref?, id, status}]` in input order, and how many were written. |
 | `notes` / `text` | when there are any | Sentences that used to travel as prose beside the document; `text` is an answer that is not JSON, and a chat's reply. |
 | `entity` | when there is one | The server's document, exactly as it answered. |
+| `recovery` | on a failed call that has one | The recovery report (docs/recovery-contract.md): `error` in the shared recovery envelope and `next`, the one step to take. |
 
 The CLI is the same mapping: `orbit … --receipt` prints this document — built by the same code from
 the same facts: the requests the command made, the card it filed and its answer, the body it sent —
