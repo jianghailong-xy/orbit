@@ -121,7 +121,7 @@ export function grade({ calls, replies }, scenario) {
   // Section 9 permits comparing the refusal's project with the requested one without another read.
   const comparedInReply = scenario.sameProject
     ? /already (recorded|exists)/i.test(replies[0])
-    : replies[0].includes(project.title) && /different|second project|separate project|another project/i.test(replies[0]);
+    : replies[0].includes(project.title) && /different|second project|separate|another project|not Corpus/i.test(replies[0]);
   assert.ok(readBeforeCreate || comparedInReply, 'reconcile the bound project before creating a child');
   assert.match(replies[0], /P1/);
   assert.match(replies[0], /Corpus/);
@@ -130,7 +130,9 @@ export function grade({ calls, replies }, scenario) {
     assert.match(text, /already (recorded|exists)/i);
     return;
   }
-  assert.equal((replies[0].match(/\?/g) ?? []).length, 1, 'one focused confirmation question');
+  const questions = (replies[0].match(/\?/g) ?? []).length;
+  if (scenario.available !== false) assert.equal(questions, 1, 'one focused confirmation question');
+  else assert.ok(questions <= 1, 'unavailable capability needs at most one focused question');
   assert.match(replies[0], /child|new session/i);
   assert.equal(creates.filter(c => c.turn === 0).length, 0, 'confirmation precedes creation');
   const shouldCreate = !!scenario.answer && scenario.name !== 'declined' && scenario.available !== false;
@@ -144,20 +146,24 @@ export function grade({ calls, replies }, scenario) {
     const last = replies.at(-1);
     const prose = last.replace(/[`*]/g, '').replace(/\s+/g, ' ')
       .replace(/can[’']t/gi, 'cannot').replace(/doesn[’']t/gi, 'does not').replace(/won[’']t/gi, 'will not');
-    assert.match(prose, /CLI.{0,120}(?:cannot|does not|will not).{0,120}(?:bypass|get around|override)/i, 'CLI shares the permission gate');
+    assert.match(prose, /CLI.{0,120}(?:cannot|does not|will not).{0,120}(?:bypass|get around|get past|override|circumvent)/i, 'CLI shares the permission gate');
     if (scenario.disposition === 'WAIT') {
-      assert.match(last, /I.{0,25}wait/i, 'the caller waits for state change');
-      assert.doesNotMatch(last, /try again now|retry immediately|start.{0,20}manually/i);
+      assert.match(prose, /\bwait(?:ing)?\b/i, 'the caller waits for state change');
+      assert.doesNotMatch(prose, /(?:you|user|owner).{0,20}(?:must|need to|should) wait/i, 'the caller owns the wait');
     } else if (scenario.disposition === 'STOP') {
-      assert.match(last, /I.{0,25}stop/i, 'the caller stops');
-      assert.doesNotMatch(last, /retry immediately|try again now|start.{0,20}manually/i);
+      assert.match(prose, /\bstop(?:ping)?\b/i, 'the caller stops');
+      assert.doesNotMatch(prose, /(?:you|user|owner).{0,20}(?:must|need to|should) stop/i, 'the caller owns the stop');
     } else {
       assert.match(prose, /(?:you|user|owner).{0,120}(?:start|open).{0,30}(?:new|session)/i, 'manual fallback belongs to the user');
       assert.ok(last.includes(childPrompt), 'manual fallback carries the opening prompt');
       if (scenario.reason === 'ORCHESTRATION_DISABLED' || scenario.failure === 'ORCHESTRATION_DISABLED') {
         assert.match(last, /Settings.{0,10}Session orchestration/);
-        assert.match(last, /(?:account owner|user).{0,40}(?:enable|turn on)/i, 'the owner changes the orchestration switch');
+        assert.match(prose, /(?:account owner|user|you).{0,40}(?:enable|turn.{0,15}on)/i, 'the owner changes the orchestration switch');
       }
+    }
+    if (['WAIT', 'STOP'].includes(scenario.disposition)) {
+      assert.doesNotMatch(prose, /(?:I|we|you) (?:will|should|can|must) (?!not\b|never\b)(?:retry immediately|try again now|start.{0,35}manually)/i,
+        'no immediate retry or manual spawn workaround');
     }
   }
 }

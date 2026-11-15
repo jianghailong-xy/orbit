@@ -123,6 +123,37 @@ test('CLI gate wording accepts contractions and get around without accepting a b
   assert.throws(() => grade(trace, scenario), /CLI shares the permission gate/);
 });
 
+test('reconciliation accepts separate from the existing project', () => {
+  const trace = valid();
+  trace.calls.shift();
+  trace.replies[0] = 'Corpus (P1) stays here. Refresh the search index is separate from Corpus. Open a child session?';
+  grade(trace, confirmed);
+});
+
+test('an unavailable capability can provide manual fallback without a redundant question', async () => {
+  const scenario = scenarios.find(s => s.name === 'orchestration-off');
+  const trace = await evaluate(referenceAgent(), 'mcp', scenario);
+  trace.replies[0] = trace.replies[0].replace('Open a child session?', 'You can start a new session manually.');
+  grade(trace, scenario);
+});
+
+test('caller wait condition can reject a manual workaround in its explanation', async () => {
+  const scenario = scenarios.find(s => s.name === 'backpressure');
+  const trace = await evaluate(referenceAgent(), 'mcp', scenario);
+  trace.replies[1] = "This is a wait condition until children finish. I won't retry immediately, and I won't have you start a session manually. "
+    + "The CLI goes through the same permission gate, so it can't get past this limit.";
+  grade(trace, scenario);
+  trace.replies[1] += ' You should start a new session manually.';
+  assert.throws(() => grade(trace, scenario), /manual spawn workaround/);
+});
+
+test('owner can turn it on is an accurate orchestration-switch responsibility', async () => {
+  const scenario = scenarios.find(s => s.name === 'orchestration-off');
+  const trace = await evaluate(referenceAgent(), 'mcp', scenario);
+  trace.replies[1] = trace.replies[1].replace('The account owner can enable Settings', 'The account owner can turn it on in Settings');
+  grade(trace, scenario);
+});
+
 test('opening prompt carries exact parameters and success receipt', () => {
   assert.deepEqual(JSON.parse(/```json\n([\s\S]*?)\n```/.exec(childPrompt)[1]), project);
   assert.match(childPrompt, /PROJECT_CREATED projectId=<id> coordinatorSessionId=<id>/);
