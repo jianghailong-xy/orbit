@@ -101,6 +101,19 @@ class TaskDetailAgentFirstTest {
         assertTrue("counted somewhere else", TaskDetailLogic.attributionNeedsCard(quiet, "Q"))
     }
 
+    /** "Runs with" reads the server's `runsWith` (web `unpinnedRuns`) for an unpinned task; a pin is the pins' to say, and an older
+     * server sends none. */
+    @Test fun runsWithIsTheServersForAnUnpinnedTask() {
+        val coordinator = json("""{"id":"T","runsWith":{"engine":"codex","provider":"codex","providerBuiltin":true,"source":"PROJECT_COORDINATOR",
+         "anchorSessionId":"C","refusal":null}}""")
+        assertEquals("codex", TaskDetailLogic.unpinnedRuns(coordinator)?.text("engine"))
+        assertEquals("WORKSPACE", TaskDetailLogic.unpinnedRuns(json("""{"id":"T","runsWith":{"engine":"claude","provider":"claude","source":"WORKSPACE"}}"""))
+            ?.text("source"))
+        assertNull("under a pin", TaskDetailLogic.unpinnedRuns(json("""{"id":"T","engine":"claude","runsWith":{"engine":"claude","source":"TASK_PIN"}}""")))
+        assertNull("an older server", TaskDetailLogic.unpinnedRuns(json("""{"id":"T"}""")))
+        assertNull("not read", TaskDetailLogic.unpinnedRuns(json("""{"id":"T","runsWith":null}""")))
+    }
+
     @Test fun theTimelineIsOldestFirst() {
         val filed = json("""{"id":"T","title":"t","status":"DONE","createdAt":"2026-11-12T09:35:00.000Z",
          "sessions":[{"id":"S","status":"SUCCEEDED","createdAt":"2026-11-12T09:42:00.000Z"},
