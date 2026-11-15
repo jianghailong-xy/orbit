@@ -96,6 +96,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// runs on Claude Code, OpenCode and DeepSeek Harness alike). Nil from an older server, and where
     /// nobody can tell; `defaultEngine(configured:)` reads it.
     public let lastEngine: String?
+    /// The model that session ran on — what a new-session draft on `lastEngine`/`lastProvider` starts
+    /// with (`AgentDefaults.newSessionModel`). Nil from an older server, and where it ran on its default.
+    public var lastModel: String? = nil
     /// @deprecated The same derived value under its old name, served for builds that predate
     /// `lastProvider`. Read `defaultProvider` instead of either.
     public let provider: String?
@@ -141,6 +144,13 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// model and effort of its tier; off (the default), routing is only recorded in shadow. Only the
     /// owner's user API writes it.
     public let modelRouting: Bool?
+    /// What smart model selection and SubAgents rank by: `cost`, `balance` or `intelligence`. Nil from an
+    /// older server reads as Cost (`SubagentSettings.OptimizeFor(stored:)`).
+    public var modelRoutingOptimizeFor: String? = nil
+    /// Whether this Agent's sessions may hand work to SubAgents (docs/subagent-design.md §7). Nil reads as on.
+    public var subagentsEnabled: Bool? = nil
+    /// How many of one session's SubAgents run at once. Nil reads as 4 (`SubagentSettings.maxRunning`).
+    public var subagentsMaxRunning: Int? = nil
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
     /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
@@ -156,12 +166,12 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let repoUrl: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, lastProvider, lastEngine, provider, model, permissionMode, effort, workDir, repoUrl
+        case id, name, lastProvider, lastEngine, lastModel, provider, model, permissionMode, effort, workDir, repoUrl
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
         case antigravityKeyAvailableByRunner
         case autoInitGit, codexAccount, claudeAccount, antigravityAccount, kimiAccount, cursorAccount
-        case enableWorktree, modelRouting
+        case enableWorktree, modelRouting, modelRoutingOptimizeFor, subagentsEnabled, subagentsMaxRunning
         case workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup, mainCheckoutActions
     }
@@ -172,6 +182,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         name = try c.decode(String.self, forKey: .name)
         lastProvider = try c.decodeIfPresent(String.self, forKey: .lastProvider)
         lastEngine = try c.decodeIfPresent(String.self, forKey: .lastEngine)
+        lastModel = try c.decodeIfPresent(String.self, forKey: .lastModel)
         provider = try c.decodeIfPresent(String.self, forKey: .provider)
         model = try c.decodeIfPresent(String.self, forKey: .model)
         permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
@@ -199,6 +210,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         cursorAccount = try c.decodeIfPresent(String.self, forKey: .cursorAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
+        modelRoutingOptimizeFor = try c.decodeIfPresent(String.self, forKey: .modelRoutingOptimizeFor)
+        subagentsEnabled = try c.decodeIfPresent(Bool.self, forKey: .subagentsEnabled)
+        subagentsMaxRunning = try c.decodeIfPresent(Int.self, forKey: .subagentsMaxRunning)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
@@ -548,6 +562,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var queuedReason: String? = nil
     public var queuedActive: Int? = nil
     public var queuedLimit: Int? = nil
+    /// Of `queuedActive`, the slots background jobs hold; beside `runner_at_capacity` only (`QueuedCapacity`).
+    public var queuedHeldByJobs: Int? = nil
     /// Beside `queuedReason` `runner_updating` only: what the update is and what it waits for.
     public var queuedRunnerUpdate: QueuedRunnerUpdate? = nil
     public let pendingApprovals: Int?
@@ -815,6 +831,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         queuedReason = try? values.decodeIfPresent(String.self, forKey: .queuedReason)
         queuedActive = try? values.decodeIfPresent(Int.self, forKey: .queuedActive)
         queuedLimit = try? values.decodeIfPresent(Int.self, forKey: .queuedLimit)
+        queuedHeldByJobs = try? values.decodeIfPresent(Int.self, forKey: .queuedHeldByJobs)
         queuedRunnerUpdate = try? values.decodeIfPresent(QueuedRunnerUpdate.self, forKey: .queuedRunnerUpdate)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)

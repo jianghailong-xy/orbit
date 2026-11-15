@@ -57,6 +57,8 @@ export const RUNNER_ABOUT = 'About This Runner';
 // MARK: Resources
 
 export const RUNNER_RESOURCES = 'Resources';
+/** A managed runner that has not reported yet (preparing, waiting): its Resources and Engines say only this. */
+export const MANAGED_RUNNER_NOT_REPORTED = 'Available once the runner is ready.';
 export const RUNNER_RESOURCES_CPU = 'CPU';
 export const RUNNER_RESOURCES_MEMORY = 'Memory';
 export const RUNNER_RESOURCES_LIVE = 'Live · every 30 s · last hour';

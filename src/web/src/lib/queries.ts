@@ -179,8 +179,6 @@ export const presetModelsQuery = () =>
 export interface UserPreferences {
   theme?: 'system' | 'light' | 'dark';
   defaultModel?: string;
-  /** Last-picked model for each provider, synced across clients. */
-  defaultModels?: Record<string, string>;
   defaultPermissionMode?: string;
   /** Account-wide default reasoning effort for a new session (last-picked-wins). '' = model
    *  default. Synced so the value carries to the iOS/macOS clients (replaces localStorage). */
@@ -206,6 +204,8 @@ export interface UserPreferences {
    *  raw last reply. Read by every client's list row; absent means on, so only opting out is ever
    *  written. */
   recaps?: boolean;
+  /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
+  subagentBlockedProviders?: string[];
 }
 
 /** How an account signs in (docs/google-sign-in-design.md §6): a password, and the Google account linked. */

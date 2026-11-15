@@ -152,6 +152,7 @@ export class WikiChat {
     } as CreateSessionDto;
     const session = await this.sessions.create(ownerId, dto, {
       credential,
+      openedBy: 'WIKI_CHAT',
       wikiChat: {
         spaceId: space.id,
         clientTurnId: input.clientTurnId,

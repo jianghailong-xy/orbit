@@ -90,7 +90,9 @@ final class UserTurnRowWiringTests: XCTestCase {
         XCTAssertTrue(console.contains("UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {"),
                       "the queued tail no longer draws its turn with the row the transcript draws it with")
         XCTAssertEqual(console.filter { $0.contains("UserTurnRow(") }.count, 2)
-        XCTAssertFalse(console.contains { $0.contains("UserBubbleView(") },
+        // The row alone draws a user turn's bubble. The owner's own words inside a tool card — the
+        // "Chat about this" reply (`owner-chat-…`) — are not a turn; nothing else in the console may be.
+        XCTAssertFalse(console.contains { $0.contains("UserBubbleView(") && !$0.contains("owner-chat-") },
                        "the console draws a user turn's bubble outside the row")
 
         let root = try path(Self.app)

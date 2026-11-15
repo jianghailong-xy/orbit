@@ -42,7 +42,6 @@ import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { drainWaitingOf } from '../common/runner-drain-waiting';
 import { postponeUntil } from './self-update-postpone';
-import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -65,6 +64,7 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { runningSessionCounts } from './runner-background-holders';
 import { runnerResourcesAnswerOf } from './runner-resources';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
@@ -145,8 +145,10 @@ export class RunnersService {
         status: true,
         maxConcurrent: true,
         version: true,
-        // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`.
+        // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`, and the
+        // sessions its background jobs hold slots for, which `activeSessions` counts while it is online.
         ...RUNNER_BEATS,
+        presence: { select: { lastBeatAt: true, backgroundJobSessionIds: true } },
         enrolledAt: true,
         position: true,
         availableCommands: true,
@@ -208,18 +210,9 @@ export class RunnersService {
       },
     });
     // How many slots each runner is currently using, so the list can show
-    // utilization (e.g. "3 / 16 running") rather than capacity alone.
-    const liveCounts = await this.prisma.session.groupBy({
-      by: ['assignedRunnerId'],
-      where: {
-        assignedRunnerId: { in: runners.map((r) => r.id) },
-        status: { in: ACTIVE_TURN_STATUSES },
-      },
-      _count: { _all: true },
-    });
-    const activeByRunner = new Map(
-      liveCounts.map((c) => [c.assignedRunnerId, c._count._all]),
-    );
+    // utilization (e.g. "3 / 16 running") rather than capacity alone: its sessions in a turn, and
+    // the ones its background jobs hold slots for (runner-background-holders.ts).
+    const activeByRunner = await runningSessionCounts(this.prisma, runners, Date.now());
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const now = Date.now();

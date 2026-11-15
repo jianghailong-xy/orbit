@@ -49,8 +49,12 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
   const cluster = installManagedRunnerAdmission(new FakeKubeCluster(profile.kubernetes.namespace), prisma, profile);
   const clock = { ms: Date.now() };
   const now = () => new Date(clock.ms);
+  // Every world in a spec file shares one database, each at a cluster key, pool and fake cluster of
+  // its own. Its managers drive that location only, as each would on a host with several: an
+  // unscoped one would also scan and admit another world's waiters — into this world's pool, on a
+  // clock and a cluster that are not theirs.
   const manager = (holder: string, delayMs = 0) =>
-    new ManagedRunnerManager(prisma, cluster.client({ delayMs }), profile, { holder, now, random: () => 0.5, log: options.log ?? quiet });
+    new ManagedRunnerManager(prisma, cluster.client({ delayMs }), profile, { holder, now, random: () => 0.5, log: options.log ?? quiet, ownLocationOnly: true });
   const primary = manager('replica-a');
   const runtime: ManagedRunnerRuntime = { available: true, profile, manager: primary, worker: new ManagedRunnerWorker(primary, 60_000, quiet) };
   const service = new ManagedRunnerService(prisma, ON, runtime);

@@ -143,6 +143,8 @@ export interface RunnerBeat {
   factsHash?: string | null;
   /** Absent over HTTP, which reconciles in full on every beat. */
   reconcileHash?: string | null;
+  /** The sessions its background jobs hold slots for (runner-background-holders.ts); absent or empty for none. */
+  backgroundJobSessionIds?: string[];
   at: Date;
 }
 
@@ -155,6 +157,7 @@ export async function recordRunnerBeat(prisma: PrismaService, beat: RunnerBeat):
     linkState: beat.linkState,
     factsHash: beat.factsHash ?? null,
     reconcileHash: beat.reconcileHash ?? null,
+    backgroundJobSessionIds: beat.backgroundJobSessionIds ?? [],
   };
   await prisma.runnerPresence.upsert({
     where: { runnerId: beat.runnerId },

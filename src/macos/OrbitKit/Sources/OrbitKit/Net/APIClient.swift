@@ -380,6 +380,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/background")
     }
 
+    /// The session's SubAgent runs, oldest first (GET /sessions/:id/subagents): what each `delegate`
+    /// call's block shows beside it — tier, model, Why, time and cost (docs/subagent-design.md §6.4).
+    public func sessionSubagents(sessionID: String) async throws -> [SubagentRunView] {
+        try await get("sessions/\(sessionID)/subagents")
+    }
+
     /// The tasks this session's agent created, as its "Tasks created here" card draws them
     /// (`SessionCreatedTasks`): rows already in the card's order, a replaced task already drawn as
     /// the one that took it over. `limit` caps `items` and nothing else — nil leaves it to the
@@ -968,6 +974,12 @@ public final class APIClient: @unchecked Sendable {
 
     public func declineOwnerRequest(_ id: String, reason: String) async throws -> OwnerRequest {
         try await post("owner-requests/\(id)/decline", body: OwnerRequestDeclineBody(reason: reason))
+    }
+
+    /// A WIKI_CREATE card's Create wiki (docs/wiki-explicit-creation-design.md §3.6): the owner's door that makes the
+    /// wiki with maintenance on and its plan's first draft asked for, and settles the card DONE.
+    public func createWikiFromOwnerRequest(_ id: String) async throws -> OwnerRequest {
+        try await postEmpty("owner-requests/\(id)/create-wiki")
     }
 
     /// A SECRET request's key, in the body and nowhere else; the answer never carries it back.
@@ -1709,6 +1721,14 @@ public final class APIClient: @unchecked Sendable {
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
     public func personalProviders() async throws -> [ConfiguredProvider] { try await get("providers/mine") }
+    /// Every provider with its models' SubAgent tiers and prices (GET /providers/subagent-tiers): the
+    /// Providers page's Model tiers table and the SubAgents settings' provider list.
+    public func subagentTiers() async throws -> SubagentTiersResponse { try await get("providers/subagent-tiers") }
+    /// Set or clear (nil) the owner's tier for one model of their own key.
+    public func setModelTier(providerID: String, model: String, tier: String?) async throws {
+        _ = try await send(makeRequest("providers/mine/\(providerID)/model-tier", method: "PATCH",
+                                       body: ProviderModelTierUpdate(model: model, tier: tier)))
+    }
 
     /// The whole DeepSeek account's balance behind one of the account's own DeepSeek keys (GET
     /// /api/providers/mine/:id/balance), read by the server with the stored key, which never comes here.

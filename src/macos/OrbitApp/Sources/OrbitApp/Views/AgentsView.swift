@@ -347,6 +347,11 @@ struct AgentPanes: View {
     let rowNavigation: SessionRowNavigation
     @State private var view: SessionView = .open
     @State private var showSettings = false
+    #if os(iOS)
+    /// The needs-you capsule's height over this list: the room the list's first row keeps for it,
+    /// so it covers nothing at rest (see `topInsetClearOfRefresh(_:floating:)`).
+    @State private var needsYouClearance: CGFloat = 0
+    #endif
     /// The row whose "Tags…" action was tapped — drives the tag picker sheet. Owned by the list (not
     /// the row's context menu) so the sheet presents reliably.
     @State private var taggingSession: Session?
@@ -411,6 +416,19 @@ struct AgentPanes: View {
         let projectRows = grouping.projectRows
         let projectMarks = grouping.projectListing.marks
         List(selection: listSelection) {
+            #if os(iOS)
+            // The needs-you capsule floats over the list (the owner, 2026-11-15,
+            // docs/mocks/needs-you-capsule/06-list-floats): this row keeps its height clear at the top,
+            // and scrolls away with the rows, which then pass behind it.
+            if needsYouClearance > 0 {
+                Color.clear
+                    .frame(height: needsYouClearance)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .accessibilityHidden(true)
+            }
+            #endif
             // Recency sections (Pinned / Today / Yesterday / 2–7 days ago / …), as web's list draws
             // them, on every platform. Bucketing is the pure, tested `SessionTimeGrouping`.
             // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
@@ -483,8 +501,9 @@ struct AgentPanes: View {
         // Regular iPad keeps the lifecycle scope visible instead of burying it in the filter menu.
         // It lives below the inline title/search chrome and stays fixed while the rows scroll. The
         // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
-        // "Another session needs you" follows it in the same inset. This remains the only instance at
-        // regular width (the console beside it stays quiet), so it excludes that visible console.
+        // "Another session needs you" floats over the list under it (`floating:`). This remains the only
+        // instance at regular width (the console beside it stays quiet), so it excludes that visible
+        // console.
         //
         // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
         // bar, in the band these sit in, and a pull drew it over the needs-you bar; the modifier
@@ -496,20 +515,22 @@ struct AgentPanes: View {
         // (it scrolls away, and a finished refresh left the list settled with it half under the
         // navigation bar).
         .topInsetClearOfRefresh {
-            VStack(spacing: 0) {
-                if listPresentation.showsPersistentScope {
-                    VStack(spacing: 0) {
-                        scopePicker
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                        Divider()
-                    }
-                    .background(.bar)
+            if listPresentation.showsPersistentScope {
+                VStack(spacing: 0) {
+                    scopePicker
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                    Divider()
                 }
-                NeedsYouBannerView(excluding: app.selectedAgentSessionID,
-                                   projectInColumn: rowNavigation == .selection,
-                                   overList: true)
+                .background(.bar)
             }
+        } floating: {
+            // Over the list, not inset above it, as it floats over a conversation: the sticky
+            // section headers pin under the nav bar and pass behind it (06-list-floats).
+            NeedsYouBannerView(excluding: app.selectedAgentSessionID,
+                               projectInColumn: rowNavigation == .selection,
+                               overList: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { needsYouClearance = $0 }
         }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
@@ -965,9 +986,11 @@ struct AgentPanes: View {
         }
         // A phone opens the coordinator's conversation, not the project's sessions page, which is
         // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page.
+        // column keeps the page. A row whose line says a member is waiting on you opens that member
+        // instead, at its card, on both (owner 2026-11-14).
         let onTap = {
-            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            switch SessionProjectSheet.rowTap(row, held: app.sessions + agents.allSessions, push: rowNavigation == .push) {
+            case .waitingMember(let member): app.openWaitingMember(member, project: address, push: rowNavigation == .push)
             case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
             case .sessions: app.openProjectSessions(address)
             }
@@ -1624,10 +1647,6 @@ struct NewSessionView: View {
             draft.adoptDraftProviderContext(
                 configuredProviders, loaded: configuredProvidersLoaded, defaultModel: model)
         }
-        .onChange(of: app.defaultModels, initial: true) { _, _ in
-            draft.adoptDraftProviderContext(
-                configuredProviders, loaded: configuredProvidersLoaded, defaultModel: defaultModel)
-        }
         // Re-resolve the effort pill when the account preference lands after the draft was built
         // (async `user` prime on a restored-token launch). The model owns the edit revision, so this
         // account-last-picked refill cannot overwrite a picker action made while it was loading.
@@ -2089,6 +2108,9 @@ struct AgentFormContent: View {
     @State private var workDir = ""
     @State private var enabled = true
     @State private var modelRouting = false
+    @State private var subagentsEnabled = true
+    @State private var optimizeFor = SubagentSettings.OptimizeFor.cost
+    @State private var subagentsMaxRunning = SubagentSettings.defaultMaxRunning
     @State private var confirmingDelete = false
 
     /// Not editable fields: an agent holds no engine or provider. This is what the project last ran
@@ -2165,6 +2187,9 @@ struct AgentFormContent: View {
                 }
             }
 
+            SubagentSettingsSection(agents: agents, enabled: $subagentsEnabled, optimizeFor: $optimizeFor,
+                                    maxRunning: $subagentsMaxRunning)
+
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
                     ForEach(env.sorted(by: { $0.key < $1.key }), id: \.key) { k, v in
@@ -2217,6 +2242,9 @@ struct AgentFormContent: View {
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
         modelRouting = agent.modelRouting ?? false
+        subagentsEnabled = agent.subagentsEnabled ?? true
+        optimizeFor = SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+        subagentsMaxRunning = SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -2233,6 +2261,9 @@ struct AgentFormContent: View {
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)
         || modelRouting != (agent.modelRouting ?? false)
+        || subagentsEnabled != (agent.subagentsEnabled ?? true)
+        || optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+        || subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -2254,7 +2285,13 @@ struct AgentFormContent: View {
             workDir: workDir.isEmpty ? nil : workDir,
             enabled: enabled,
             // Only when moved: the switch is written by the user API alone, and only by a press.
-            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil
+            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil,
+            // SubAgents: each only when moved, like the switch above.
+            modelRoutingOptimizeFor: optimizeFor != SubagentSettings.OptimizeFor(stored: agent.modelRoutingOptimizeFor)
+                ? optimizeFor.rawValue : nil,
+            subagentsEnabled: subagentsEnabled != (agent.subagentsEnabled ?? true) ? subagentsEnabled : nil,
+            subagentsMaxRunning: subagentsMaxRunning != SubagentSettings.maxRunning(agent.subagentsMaxRunning)
+                ? subagentsMaxRunning : nil
         )
         Task { await agents.save(agent.id, req) }
     }

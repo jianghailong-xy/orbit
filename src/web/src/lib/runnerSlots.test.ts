@@ -139,10 +139,10 @@ describe('why a queued session has not started', () => {
     expect(queuedLabel(undefined)).toBe('Waiting for slot');
   });
 
-  it('keeps slot wording only for the gates that really are slots', () => {
-    expect(queuedTitle({ queuedReason: 'runner_at_capacity' })).toBe('Waiting for a free slot');
-    expect(queuedTitle({ queuedReason: 'tree_at_capacity' })).toBe('Waiting for a free slot');
-    expect(queuedTitle({ queuedReason: 'batch_at_capacity' })).toBe('Waiting for a free slot');
+  it('names the full runner, run or batch, and the other gates by what they are', () => {
+    expect(queuedTitle({ queuedReason: 'runner_at_capacity' })).toBe('Runner full');
+    expect(queuedTitle({ queuedReason: 'tree_at_capacity' })).toBe('Run full');
+    expect(queuedTitle({ queuedReason: 'batch_at_capacity' })).toBe('Batch full');
     expect(queuedTitle({ queuedReason: 'runner_offline' })).toBe('Runner offline');
     expect(queuedTitle({ queuedReason: 'worktree_op_pending' })).toBe(
       'Waiting for a git operation',

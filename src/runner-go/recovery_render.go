@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -390,6 +391,11 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	}
 	if s.wikiOff {
 		tools = withoutWikiTools(tools)
+	}
+	// A SubAgent cannot hand work on again (subagent.go).
+	if os.Getenv(envSubagentRunID) == "" {
+		cwd, _ := os.Getwd()
+		tools = append(tools, delegateToolDescriptor(schemaObject, sessionSubagentDefinitions(cwd)))
 	}
 	if s.onlyTools != nil {
 		tools = onlyMCPTools(tools, s.onlyTools)

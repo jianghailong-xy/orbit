@@ -87,6 +87,9 @@ struct CompactShell: View {
                 // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
                 // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
+                    // The needs-you bar over a page with none of its own, inside the sliding card
+                    // so it travels with the page it covers (see `needsYouOverPage`).
+                    .needsYouOverPage(wide: false)
                     // An opaque backing *inside* the sliding content so its translucent bars — the
                     // transcript is a `.scrollContentBackground(.hidden)` (see-through) list, with `.bar`
                     // material on the status line / worktree bar / composer — sample a surface that
@@ -760,10 +763,14 @@ struct NavigationDrawer: View {
                 ForEach(DrawerWorkLogic.rows(
                     AppSection.workSections,
                     wiki: model.wiki?.shown == true,
+                    // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
+                    // that the Wiki's own page is the Set up your first wiki card.
+                    newWiki: model.wiki?.spaces.isEmpty == false,
                     waitingOnYou: model.ownerRequests.map { !$0.unsupported } ?? false)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
+                    case .newWiki:        newWikiRow
                     case .section(let section): sectionRow(section)
                     case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
                     case .workspacesHeader: workspacesHeader
@@ -1102,6 +1109,27 @@ struct NavigationDrawer: View {
         .drawerRow()
     }
 
+    /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
+    /// the shell and leaves the drawer where it is.
+    private var newWikiRow: some View {
+        Button {
+            model.wiki?.creating = true
+        } label: {
+            pill(selected: false) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus")
+                        .frame(width: 24)
+                    Text(WikiStartCopy.newWiki)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("drawer-new-wiki")
+    }
+
     /// The rule and the group label that set the Workspaces apart from the work above them.
     private var workspacesHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1351,13 +1379,36 @@ private extension View {
     /// shows only in the root nav bar (pushed pages keep the system back button).
     func drawerToggle(open: @escaping () -> Void) -> some View {
         toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: open) {
-                    Image(systemName: "line.3.horizontal")
-                }
-                .accessibilityLabel("Open navigation")
-            }
+            ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
         }
+    }
+}
+
+/// The hamburger, carrying how many are waiting on you while the needs-you bar is swiped away (the
+/// owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats) — so what the bar said is not lost.
+private struct DrawerToggleButton: View {
+    @Environment(AppModel.self) private var model
+    let open: () -> Void
+
+    var body: some View {
+        let waiting = model.needsYouPutAwayCount
+        Button(action: open) {
+            Image(systemName: "line.3.horizontal")
+                .overlay(alignment: .topTrailing) {
+                    if waiting > 0 {
+                        Text("\(waiting)")
+                            .font(.caption2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Color.orange, in: Capsule())
+                            .offset(x: 10, y: -10)
+                            .accessibilityHidden(true)
+                    }
+                }
+        }
+        .accessibilityLabel("Open navigation")
+        .accessibilityValue(waiting > 0 ? "\(waiting) waiting on you" : "")
     }
 }
 

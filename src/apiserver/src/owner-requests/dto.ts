@@ -54,7 +54,8 @@ export class OwnerRequestSecretSpecDto {
 /** A session filing a request (`POST /runner/owner-requests`). Per-kind rules are `normalizeOwnerRequest`'s. */
 export class FileOwnerRequestDto {
   @IsIn(OWNER_REQUEST_KINDS) kind!: OwnerRequestKind;
-  @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_TITLE) title!: string;
+  /** Every kind's but WIKI_CREATE's, whose title Orbit writes (`normalizeOwnerRequest` holds each kind to it). */
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_TITLE) title?: string;
   @IsString() @MinLength(1) @MaxLength(MAX_OWNER_REQUEST_WHY) why!: string;
   @IsOptional() @IsArray() @ArrayMaxSize(50) @IsPublicId({ each: true }) blocksTaskIds?: string[];
   @IsOptional() @IsString() @MaxLength(MAX_OWNER_REQUEST_IF_UNANSWERED) ifUnanswered?: string;

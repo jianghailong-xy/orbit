@@ -3,6 +3,9 @@ package io.orbitd.android.cards
 import android.content.ComponentName
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -63,16 +66,16 @@ class NeedsYouBarTest {
         compose.runOnIdle { assertEquals(1, pressed) }
     }
 
-    /** Several waiting (the owner's 2026-11-13 board, option B): folded, the "+N" carries a ⌄ and the press unfolds; unfolded, the
-     * first capsule's ↑ is a press of its own that folds them, apart from the capsule's own press. */
+    /** Several waiting (the owner's 2026-11-13 board, option B; floating since 11-15, 04-floating): folded, a deck under the capsule
+     * says the press unfolds; unfolded, the first capsule's ↑ is a press of its own that folds them, apart from the capsule's own press. */
     @Test fun theFoldedBarMarksItUnfoldsAndTheFirstUnfoldedCapsuleFolds() {
         var pressed = 0
         var folded = 0
         compose.setContent { OrbitTheme { Column {
-            NeedsYouBar("Question from coordinator", null, NeedsYouLogic.unfoldHint(2), more = 1, unfolds = true) { pressed++ }
+            NeedsYouBar("Question from coordinator", null, NeedsYouLogic.unfoldHint(2), more = 1, deck = true) { pressed++ }
             NeedsYouBar("Approve merge to main", null, NeedsYouLogic.itemHint, onFold = { folded++ }) { pressed++ }
         } } }
-        compose.onNodeWithTag("needs-you-bar-unfolds", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("needs-you-bar-deck", useUnmergedTree = true).assertExists()
         assertEquals("Shows all 2 waiting on you", compose.onNode(hasClickAction() and hasText("Question from coordinator"))
             .fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label)
         compose.onNodeWithTag("needs-you-bar-fold").performClick()
@@ -81,11 +84,29 @@ class NeedsYouBarTest {
         compose.runOnIdle { assertEquals(1, pressed); assertEquals(1, folded) }
     }
 
-    /** Sessions blocked on a tool call carry no "+N": the ⌄ still says the press unfolds, standing on its own. */
-    @Test fun theUnfoldChevronStandsAloneWithoutACount() {
-        compose.setContent { OrbitTheme { NeedsYouBar("4 sessions need you", null, NeedsYouLogic.unfoldHint(4), unfolds = true) {} } }
-        compose.onNodeWithTag("needs-you-bar-unfolds", useUnmergedTree = true).assertExists()
+    /** Sessions blocked on a tool call carry no "+N": the deck alone says the press unfolds, and one waiting has none. */
+    @Test fun theDeckSaysSeveralWithoutACount() {
+        var several by mutableStateOf(true)
+        compose.setContent { OrbitTheme { NeedsYouBar("4 sessions need you", null, NeedsYouLogic.unfoldHint(4), deck = several) {} } }
+        compose.onNodeWithTag("needs-you-bar-deck", useUnmergedTree = true).assertExists()
         compose.onNodeWithTag("needs-you-bar-more", useUnmergedTree = true).assertDoesNotExist()
+        several = false
+        compose.onNodeWithTag("needs-you-bar-deck", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    /** Pushed up, the bar is put away; a tap is still the press, and TalkBack has the same Dismiss (06-list-floats). */
+    @Test fun aSwipeUpPutsTheBarAwayAndATapStillOpens() {
+        var pressed = 0
+        var swiped = 0
+        compose.setContent { OrbitTheme { NeedsYouBar("4 sessions need you", null, NeedsYouLogic.unfoldHint(4), deck = true,
+            onSwipeAway = { swiped++ }) { pressed++ } } }
+        compose.onNodeWithTag("needs-you-bar").performClick()
+        compose.runOnIdle { assertEquals(1, pressed); assertEquals(0, swiped) }
+        compose.onNodeWithTag("needs-you-bar").performTouchInput { swipeUp(startY = bottom - 4f, endY = top - 200f, durationMillis = 120) }
+        compose.waitUntil(5_000) { swiped == 1 }
+        compose.runOnIdle { assertEquals(1, pressed) }
+        val actions = compose.onNodeWithTag("needs-you-bar").fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions)
+        assertEquals(listOf(NeedsYouLogic.dismissLabel), actions?.map { it.label })
     }
 
     @Test fun theThreeHintsAreIosOwn() {

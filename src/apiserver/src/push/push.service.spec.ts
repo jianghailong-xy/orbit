@@ -315,7 +315,9 @@ test('a recap too long for a notification is cut', async () => {
   assert.ok(body.endsWith('…'));
 });
 
-test('approval push initially requires a canonical Open, non-ending RUNNING session', async () => {
+// RUNNING, or with a SubAgent in flight: a running SubAgent asks after its parent's turn ended (docs/subagent-design.md
+// §5.3), and needsYouSessions then decides whether the card is one.
+test('approval push initially requires a canonical Open, non-ending RUNNING session, or one with a SubAgent running', async () => {
   const calls: any[] = [];
   const prisma = {
     session: {
@@ -331,7 +333,7 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
 
   assert.deepEqual(calls[0].where, {
     id: 's-completed',
-    status: RunStatus.RUNNING,
+    OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
     completedAt: null,
     archivedAt: null,
     deletedAt: null,
