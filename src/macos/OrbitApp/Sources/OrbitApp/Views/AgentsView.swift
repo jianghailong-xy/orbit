@@ -530,7 +530,11 @@ struct AgentPanes: View {
             NeedsYouBannerView(excluding: app.selectedAgentSessionID,
                                projectInColumn: rowNavigation == .selection,
                                overList: true)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { needsYouClearance = $0 }
+                // The room follows the card on a spring, so the rows ease up after it goes and down
+                // as it comes (08-motion ③④) rather than jumping.
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    withAnimation(.spring(duration: 0.3, bounce: 0)) { needsYouClearance = height }
+                }
         }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
