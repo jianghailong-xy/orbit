@@ -85,7 +85,7 @@ final class CoordinatorContextActionsTests: XCTestCase {
         let start = "2026-11-14T10:00:00Z"
         XCTAssertEqual(CoordinatorHandoffRow.resolve(nil), nil)
         XCTAssertEqual(CoordinatorHandoffRow.resolve(.init(state: .writing, startedAt: start)),
-                       .writing(startedAt: RelativeTime.parse(start)))
+                       .writing(startedAt: RelativeTime.parse(start), label: "Writing the handoff note"))
         XCTAssertEqual(CoordinatorHandoffRow.resolve(.init(state: .handingOver, startedAt: start)), .handingOver)
         XCTAssertEqual(CoordinatorHandoffRow.resolve(.init(state: .completed, startedAt: start,
                                                            handedOverToSessionId: "s9")),
@@ -123,6 +123,22 @@ final class CoordinatorContextActionsTests: XCTestCase {
         XCTAssertEqual(CoordinatorHandoffRow.clock(since: nil), "0:00")
     }
 
+    /// Board 02 ⑥: the engine compacts before it can write the note — the row says so, same clock.
+    func testAWritingHandoffReadsCompactingWhileTheEngineCompacts() throws {
+        let start = "2026-11-14T10:00:00Z"
+        let startedAt = try XCTUnwrap(RelativeTime.parse(start), "the timer keeps its start")
+        let writing = SessionCoordinatorHandoff(state: .writing, startedAt: start)
+        XCTAssertEqual(CoordinatorHandoffRow.resolve(writing, enginePhase: "compacting"),
+                       .writing(startedAt: startedAt, label: "Compacting…"))
+        XCTAssertEqual(CoordinatorHandoffRow.resolve(writing, enginePhase: nil),
+                       .writing(startedAt: startedAt, label: "Writing the handoff note"))
+        XCTAssertEqual(CoordinatorHandoffRow.resolve(writing, enginePhase: "warming"),
+                       .writing(startedAt: startedAt, label: "Writing the handoff note"))
+        // Only WRITING turns: handing over is handing over, whatever the engine does.
+        XCTAssertEqual(CoordinatorHandoffRow.resolve(.init(state: .handingOver, startedAt: start),
+                                                     enginePhase: "compacting"), .handingOver)
+    }
+
     func testTheNoteTurnIsNotDrawnAsTheOwnersMessage() {
         XCTAssertTrue(CoordinatorContextActions.isHandoffTurn(clientTurnId: "coordinator-handoff:v1:h1:1"))
         XCTAssertFalse(CoordinatorContextActions.isHandoffTurn(clientTurnId: "c-123"))
@@ -149,6 +165,18 @@ final class CoordinatorContextActionsTests: XCTestCase {
             {"id":"s1","status":"RUNNING","pendingApprovals":0,"coordinatorHandoff":null}
             """.utf8))
         XCTAssertNil(row.applying(cancelled).coordinatorHandoff)
+
+        // The engine phase the WRITING row reads: from the list row, kept by a summary that says
+        // nothing of it, and ended by one whose null says the compaction is over.
+        let compacting = try session("""
+            {"id":"s1","status":"RUNNING","pendingApprovals":0,"enginePhase":"compacting"}
+            """)
+        XCTAssertEqual(compacting.enginePhase, "compacting")
+        XCTAssertEqual(compacting.applying(older).enginePhase, "compacting")
+        let phaseOver = try JSONDecoder().decode(ControlSessionSummary.self, from: Data("""
+            {"id":"s1","status":"RUNNING","pendingApprovals":0,"enginePhase":null}
+            """.utf8))
+        XCTAssertNil(compacting.applying(phaseOver).enginePhase)
 
         let successor = try session("""
             {"id":"s2","status":"RUNNING","pendingApprovals":0,"projectId":"p1",

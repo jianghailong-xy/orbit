@@ -223,7 +223,7 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
             if (!isFolder) Box(Modifier.align(Alignment.BottomCenter)) { BottomSearch(list, query) { query = it } }
         }
         if (!isFolder) Box(Modifier.zIndex(1f).onSizeChanged { barHeight = it.height }) {
-            SessionNeedsYouBar(app, handle, null, list, hidden = false, below = null, onBelow = {}, open = open)
+            SessionNeedsYouBar(app, handle, null, list, open = open)
         }
     }
     // A row's menu does not wait for a read either (iOS): what the server refuses comes back in its own words. A marked member's

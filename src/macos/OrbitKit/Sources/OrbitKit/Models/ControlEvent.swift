@@ -176,6 +176,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// is where it stands now.
     public let coordinatorHandoff: SessionCoordinatorHandoff??
     public let coordinatorHandoffReceived: SessionCoordinatorHandoffReceived??
+    /// `Session.enginePhase`. Doubly optional for `retryAt`'s reason: `.some(nil)` is the server
+    /// saying the phase is over, `nil` an older one that never sends the key.
+    public let enginePhase: String??
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -253,6 +256,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         coordinatorHandoffReceived = values.contains(.coordinatorHandoffReceived)
             ? .some(try? values.decodeIfPresent(SessionCoordinatorHandoffReceived.self,
                                                 forKey: .coordinatorHandoffReceived))
+            : nil
+        enginePhase = values.contains(.enginePhase)
+            ? .some(try? values.decodeIfPresent(String.self, forKey: .enginePhase))
             : nil
     }
 }

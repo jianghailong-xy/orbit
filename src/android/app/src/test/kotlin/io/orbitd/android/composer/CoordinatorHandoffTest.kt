@@ -62,6 +62,25 @@ class CoordinatorHandoffTest {
         assertNull(CoordinatorHandoff.outgoing(coordinator()))
     }
 
+    /** Board 02 ⑥: the engine compacts before it can write the note — the row says so, and its clock keeps running. */
+    @Test fun aWritingHandoffReadsCompactingWhileTheEngineCompacts() {
+        val writing = ""","coordinatorHandoff":{"state":"WRITING","startedAt":"2026-11-14T10:00:00Z"}"""
+        val compacting = CoordinatorHandoff.outgoing(coordinator("$writing,\"enginePhase\":\"compacting\""))!!
+        assertEquals("Compacting…", CoordinatorHandoff.progressLabel(compacting))
+        assertTrue("the timer is still shown", CoordinatorHandoff.showsTimer(compacting))
+        assertEquals("0:24", CoordinatorHandoff.elapsed(compacting.startedAt, Instant.parse("2026-11-14T10:00:24Z")))
+        for (phase in listOf(""","enginePhase":null""", "")) {
+            val plain = CoordinatorHandoff.outgoing(coordinator(writing + phase))!!
+            assertEquals("Writing the handoff note", CoordinatorHandoff.progressLabel(plain))
+            assertTrue(CoordinatorHandoff.showsTimer(plain))
+        }
+        val other = CoordinatorHandoff.outgoing(coordinator("$writing,\"enginePhase\":\"warming\""))!!
+        assertEquals("a phase this build has not heard of", "Writing the handoff note", CoordinatorHandoff.progressLabel(other))
+        val handingOver = CoordinatorHandoff.outgoing(coordinator(""","coordinatorHandoff":{"state":"HANDING_OVER"},"enginePhase":"compacting""""))!!
+        assertEquals("Handing over to a new coordinator…", CoordinatorHandoff.progressLabel(handingOver))
+        assertFalse(CoordinatorHandoff.showsTimer(handingOver))
+    }
+
     @Test fun aFailureOffersItsThreeExitsButOnlyHandOverOnceTheCoordinatorIsCompleted() {
         assertEquals(listOf("Try again", "Hand over without a note", "Keep this coordinator"), CoordinatorHandoff.failureActions("TURN_FAILED"))
         assertEquals(listOf("Hand over without a note"), CoordinatorHandoff.failureActions("REPLACE_FAILED"))
