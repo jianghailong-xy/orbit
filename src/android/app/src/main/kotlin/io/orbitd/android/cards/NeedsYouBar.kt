@@ -69,24 +69,18 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.time.Instant
 
-/** Which way the bar's chevron points: where the words say the card is. Only the bar pointing into this conversation has one —
- * the cross-session bar's press goes elsewhere, which its words already say, and the whole capsule is the press. */
-enum class NeedsYouChevron { UP, DOWN }
-
 /** Whether the bar was last shown, whether it has shown yet, and its last measured height: what the list is scrolled
  * by when the bar comes or goes, so the line being read stays where it was (the sticky header's `HeaderShift`). */
 private class BarShift { var shown = false; var seen = false; var height = 0f }
 
 /**
- * The bar above a conversation's transcript (iOS `ConsoleView`'s top inset): a card waiting in THIS conversation wins —
- * its destination is already here, and leaving to find the other would lose the reader's place — and otherwise what
- * waits elsewhere, the session on screen left out of it. [below] is this conversation's answer; a press on it is
- * [onBelow] with the row to show. Folded away ([hidden]) with the rest of the chrome while a phone's composer types.
- * A session list shows no single session, so its [sessionId] is null and everything waiting is elsewhere.
+ * The bar over a session list (iOS `NeedsYouBannerView`): what waits elsewhere, the session [sessionId] left out of it. A
+ * conversation carries none since 2026-11-15 (`docs/mocks/needs-you-capsule/07-console-one-capsule`): what waits in it is its
+ * header capsule's to say (`WaitingCapsule`). A session list shows no single session, so its [sessionId] is null.
  */
 @Composable
 internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, sessionId: String?, list: LazyListState,
-    hidden: Boolean, below: WaitingBelow?, onBelow: (String) -> Unit, open: (OrbitRoute) -> Unit) {
+    open: (OrbitRoute) -> Unit) {
     val openRows by remember(app, handle) {
         app.realtime.state.map { live -> if (live.handle === handle) live.directory?.sessions?.get("open").orEmpty() else emptyList() }
             .distinctUntilChanged()
@@ -96,13 +90,13 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     // Swiped away (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/06-list-floats`): gone until something new is waiting.
     val context = LocalContext.current
     val dismissed by remember(context) { NeedsYouDismissal.keys(context) }.collectAsState()
-    val banner = if (below != null) null else remember(openRows, sessionId, trashing, dismissed) {
+    val banner = remember(openRows, sessionId, trashing, dismissed) {
         val rows = TrashingSessions.without(openRows, trashing) { it.text("id") }
         if (NeedsYouLogic.isDismissed(rows, sessionId, dismissed)) null else NeedsYouLogic.banner(rows, sessionId)
     }
     val shift = remember(list) { BarShift() }
     var unfolded by remember { mutableStateOf(false) }
-    val shown = !hidden && (below != null || banner != null)
+    val shown = banner != null
     LaunchedEffect(shift, shown) {
         if (shown == shift.shown) return@LaunchedEffect
         shift.shown = shown
@@ -112,11 +106,6 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     }
     if (!shown) return
     val measured = Modifier.onSizeChanged { shift.height = it.height.toFloat() }
-    if (below != null) {
-        NeedsYouBar(below.text, if (below.side == ReaderSide.ABOVE) NeedsYouChevron.UP else NeedsYouChevron.DOWN,
-            NeedsYouLogic.belowHint, measured, glyph = below.glyph) { onBelow(below.rowId) }
-        return
-    }
     val waiting = banner ?: return
     // One of the five owner items opens the card it names; anything else the session. Folds the bar again on the way out.
     fun go(entry: NeedsYouBanner) {
@@ -142,7 +131,7 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     } else emptyList()
     val stacked = entries.size > 1
     var top by remember { mutableStateOf(0) }
-    NeedsYouBar(waiting.text, null, when {
+    NeedsYouBar(waiting.text, when {
         several -> NeedsYouLogic.unfoldHint(waiting.count)
         waiting.ownerItem == null -> NeedsYouLogic.sessionHint
         else -> NeedsYouLogic.itemHint
@@ -156,7 +145,7 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         // At most five; the last says "+N" for the ones behind it, as the folded bar does.
         val shown = entries.take(NeedsYouLogic.unfoldedLimit)
         shown.forEachIndexed { index, entry ->
-            NeedsYouBar(entry.text, null, if (entry.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint,
+            NeedsYouBar(entry.text, if (entry.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint,
                 detail = entry.detail, since = entry.since, glyph = entry.glyph,
                 more = if (index == shown.lastIndex) entries.size - shown.size else 0,
                 onFold = if (index == 0) ({ unfolded = false }) else null) { go(entry) }
@@ -185,11 +174,9 @@ private object WholeWindow : PopupPositionProvider {
 }
 
 /**
- * The needs-you bar (iOS `NeedsYouBannerView`): a capsule under the conversation's header saying something is waiting on the
- * reader, and taking them to it. Inside a conversation holding a question that stops no turn it points into that conversation
- * ("1 open question below"); otherwise at the session — or the owner item's card — that has waited longest elsewhere. One style
- * for both: they differ in their words, their mark and their chevron only. Deliberately still — no pulse — since what it names
- * can wait for hours above a transcript somebody is reading.
+ * The needs-you bar (iOS `NeedsYouBannerView`): a capsule over the session list saying something is waiting on the reader in
+ * another session — or an owner item's card — and taking them to it; the whole capsule is the press. Deliberately still — no
+ * pulse — since what it names can wait for hours.
  *
  * A capsule, not a band (the owner, 2026-10-21, `docs/mocks/needs-you-capsule`): the amber is one 30 dp circle — the landing
  * head's (`ProjectLandingHead`) — whose mark says which kind is waiting, never a wash under the words; the words are two lines,
@@ -198,7 +185,7 @@ private object WholeWindow : PopupPositionProvider {
  * the bar, and the gap around the capsule must not show it.
  */
 @Composable
-internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, modifier: Modifier = Modifier, detail: String? = null,
+internal fun NeedsYouBar(text: String, hint: String, modifier: Modifier = Modifier, detail: String? = null,
     since: String? = null, more: Int = 0, glyph: NeedsYouGlyph = NeedsYouGlyph.QUESTION, deck: Boolean = false,
     onFold: (() -> Unit)? = null, onSwipeAway: (() -> Unit)? = null, onPress: () -> Unit) {
     val haptics = LocalHapticFeedback.current
@@ -235,10 +222,6 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
                         Text(it, Modifier.testTag("needs-you-bar-detail"), style = MaterialTheme.typography.bodySmall, color = muted,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                }
-                chevron?.let {
-                    Icon(painterResource(R.drawable.ic_chevron_down), null,
-                        Modifier.size(14.dp).rotate(if (it == NeedsYouChevron.UP) 180f else 0f).testTag("needs-you-bar-chevron:${it.name}"), tint = muted)
                 }
             }
             // The ↑ on the first capsule of the unfolded stack: a press of its own, folding them back.
@@ -349,7 +332,7 @@ private fun NeedsYouAge(since: String) {
 }
 
 /** The drawable for each mark (iOS `NeedsYouGlyph.symbol`). */
-private val NeedsYouGlyph.drawable: Int get() = when (this) {
+internal val NeedsYouGlyph.drawable: Int get() = when (this) {
     NeedsYouGlyph.MERGE -> R.drawable.ic_merge
     NeedsYouGlyph.QUESTION -> R.drawable.ic_question_bubble
     NeedsYouGlyph.WARNING -> R.drawable.ic_warning
