@@ -169,7 +169,8 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         state = "READY"
         machinesAndModels()
         await("the managed runner's row says Ready") { label("Ready") }
-        compose.onNode(hasText("managed-runner") and hasClickAction()).performClick()
+        // The row's own press (its name sits in more than one clickable node: the row and its More menu's label).
+        compose.onAllNodes(hasText("managed-runner") and hasClickAction()).onFirst().performClick()
         awaitText("Managed runner ready")
         await("its engines are listed") { exists(hasText("Claude Code"), unmerged = true) }
         verify("no not-ready lines", !exists(hasText("Available once the runner is ready."), unmerged = true))
@@ -196,7 +197,9 @@ class ManagedRunnerEntryDeviceTest : IncrementDeviceTest() {
         open("orbit-project:$project")
         await("the project page") { exists(hasTestTag("project-detail") and hasScrollAction()) }
         await("the coordinator card") { exists(hasTestTag("project-coordinator-more")) }
-        compose.onNode(hasTestTag("project-detail") and hasScrollAction()).performScrollToNode(hasTestTag("project-coordinator-more"))
+        // Let the page's reads land before scrolling: a scroll during its layout trips Compose's test harness.
+        settle()
+        compose.onNodeWithTag("project-coordinator-more").performScrollTo()
         settle()
         compose.onNodeWithTag("project-coordinator-more").performClick()
         awaitTag("project-coordinator-change")
