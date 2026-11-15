@@ -9871,7 +9871,7 @@ export class SessionsService {
       // click on an already-answered approval must not widen anything.
       if (dto.behavior === 'allow' && session.workspaceId) {
         await this.rememberForWorkspace(
-          session.workspaceId, ownerId, approvalId, dto.rememberRules, session.scheduleRunId !== null,
+          session.workspaceId, ownerId, approvalId, dto.rememberRules, !!session.scheduleRunId,
         );
       }
       this.realtime.publish(id, {
@@ -9905,7 +9905,7 @@ export class SessionsService {
         ruleContent: rule.ruleContent,
         createdById: ownerId,
         approvalId,
-        fromScheduleRun,
+        ...(fromScheduleRun ? { fromScheduleRun: true } : {}),
       })),
       skipDuplicates: true,
     });
