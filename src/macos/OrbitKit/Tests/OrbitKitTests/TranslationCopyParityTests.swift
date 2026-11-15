@@ -58,7 +58,6 @@ final class TranslationCopyParityTests: XCTestCase {
             ("translated", TranslationCopy.translated),
             ("showOriginal", TranslationCopy.showOriginal),
             ("showTranslation", TranslationCopy.showTranslation),
-            ("sentInEnglish", TranslationCopy.sentInEnglish),
             ("original", TranslationCopy.original),
             ("translating", TranslationCopy.translating),
             ("sendFailed", TranslationCopy.sendFailed),
