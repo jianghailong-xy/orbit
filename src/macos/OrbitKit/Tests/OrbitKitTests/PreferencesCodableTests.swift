@@ -164,14 +164,17 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertFalse(try jsonObject(UpdatePreferencesRequest(theme: "dark")).keys.contains("modelRouting"))
     }
 
-    func testModelPreferencesRoundTripAndRemainOptional() throws {
-        let json = #"{"preferences":{"defaultModels":{"codex":"gpt-6.1-sol","claude":"claude-sonnet-5"}},"id":"u1","email":"a@b.com"}"#
+    /// docs/workspace-default-model-design.md: the account-wide model memory is retired. A `me` that
+    /// still carries one (an older client wrote it) decodes, and no preferences PATCH this client can
+    /// build names it — a model pick writes nothing account-wide.
+    func testModelPreferencesAreNeitherReadNorWritten() throws {
+        let json = #"{"preferences":{"defaultModels":{"codex":"gpt-6.1-sol"},"defaultEffort":"high"},"id":"u1","email":"a@b.com"}"#
         let user = try JSONDecoder().decode(User.self, from: Data(json.utf8))
-        XCTAssertEqual(user.preferences?.defaultModels?["codex"], "gpt-6.1-sol")
-        let old = try JSONDecoder().decode(UserPreferences.self, from: Data("{}".utf8))
-        XCTAssertNil(old.defaultModels)
-        let patch = try jsonObject(UpdatePreferencesRequest(defaultModels: ["codex": "gpt-6.1-sol"]))
-        XCTAssertEqual(patch["defaultModels"] as? [String: String], ["codex": "gpt-6.1-sol"])
-        XCTAssertEqual(patch.count, 1)
+        XCTAssertEqual(user.preferences?.defaultEffort, "high")
+        let every = UpdatePreferencesRequest(theme: "dark", defaultModel: "m", defaultPermissionMode: "default",
+                                             defaultEffort: "high", enableOrchestration: true,
+                                             notifySessionFinished: true, notifyAgentMessage: true, modelRouting: true,
+                                             promptSuggestions: true, recaps: true)
+        XCTAssertNil(try jsonObject(every)["defaultModels"])
     }
 }

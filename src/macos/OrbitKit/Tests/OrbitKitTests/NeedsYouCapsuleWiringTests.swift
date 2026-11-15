@@ -161,4 +161,42 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(rule.contains("return !(nav.sectionAtRoot || nav.focusedConsoleSessionID != nil)"),
                       "a phone's Sessions list and conversation carry their own")
     }
+
+    /// Over the Sessions list it floats as it does over a conversation (the owner, 2026-11-15,
+    /// 06-list-floats.html): hung under the inset rather than in it, so the sticky section headers
+    /// pass behind it; the list's first row keeps its height clear at rest; the pull's spinner still
+    /// clears it.
+    func testOverTheListItFloatsAndAFirstRowKeepsItClear() throws {
+        let agents = code(try source("Views/AgentsView.swift"))
+        let mount = try slice(agents, from: ".topInsetClearOfRefresh {", to: "#endif")
+        let floating = try slice(mount, from: "} floating: {", to: "needsYouClearance = $0 }")
+        XCTAssertTrue(floating.contains("NeedsYouBannerView(excluding: app.selectedAgentSessionID,"))
+        XCTAssertFalse(try slice(mount, from: ".topInsetClearOfRefresh {", to: "} floating: {")
+            .contains("NeedsYouBannerView"), "not in the inset")
+        XCTAssertTrue(agents.contains("if needsYouClearance > 0 {\n                Color.clear\n                    .frame(height: needsYouClearance)"))
+        let modifier = code(try source("Views/TopInsetClearOfRefresh.swift"))
+        XCTAssertTrue(modifier.contains(".alignmentGuide(.bottom) { $0[.top] }"), "hung from the bands' lower edge")
+        XCTAssertTrue(modifier.contains("bandsBottom: bands.maxY + floatingHeight"), "the spinner clears it")
+    }
+
+    /// Pushed up, it is put away until something new is waiting; the hamburger carries the count
+    /// meanwhile, and a swipe tells the server nothing.
+    func testASwipePutsItAwayAndTheHamburgerKeepsTheCount() throws {
+        let view = try banner
+        XCTAssertTrue(view.contains(".swipesAway { model.dismissNeedsYou() }"))
+        let swipe = try slice(view, from: "private struct SwipeAway: ViewModifier {", to: "\n}\n")
+        XCTAssertTrue(swipe.contains("value.translation.height < -22 || value.predictedEndTranslation.height < -60"))
+        XCTAssertTrue(swipe.contains(".accessibilityAction(named: \"Dismiss\") { dismiss() }"))
+        let model = code(try source("AppModel.swift"))
+        let dismiss = try slice(model, from: "func dismissNeedsYou() {", to: "\n    }")
+        XCTAssertTrue(dismiss.contains("needsYouDismissed = NeedsYouLogic.dismissalKeys(waiting: needsYouSessions)"))
+        XCTAssertFalse(dismiss.contains("api") || dismiss.contains("Task {"), "nothing is sent")
+        XCTAssertTrue(model.contains("NeedsYouLogic.isDismissed(waiting: needsYouSessions, excluding: focused, dismissed: needsYouDismissed)"))
+        let arrival = try slice(model, from: "func noteNeedsYouArrival(", to: "\n    }\n")
+        XCTAssertTrue(arrival.contains("needsYouDismissed = []"), "something new brings it back")
+        let shell = code(try source("Views/CompactShell.swift"))
+        let toggle = try slice(shell, from: "private struct DrawerToggleButton: View {", to: "\n}\n")
+        XCTAssertTrue(toggle.contains("let waiting = model.needsYouPutAwayCount"))
+        XCTAssertTrue(toggle.contains(".background(Color.orange, in: Capsule())"))
+    }
 }
