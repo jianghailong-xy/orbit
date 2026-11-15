@@ -96,8 +96,20 @@ test('a CHECK_ONLY run on Claude Code may not use the file tools or the Orbit CL
 test('a run held because the account default is narrower says what to change, inside the item\'s length', () => {
   const clause = heldClause('MODE_WIDER_THAN_ACCOUNT_DEFAULT');
   assert.match(clause, /\(set it to Default in Settings > General\)$/);
-  const { body } = heldCopy('Codex stable check', 'MODE_WIDER_THAN_ACCOUNT_DEFAULT');
-  assert.equal(body, `It won't run until you resume it: ${clause}.`, 'not cut short by the 180-character body');
+  const { why } = heldCopy({
+    title: 'Codex stable check',
+    reason: 'MODE_WIDER_THAN_ACCOUNT_DEFAULT',
+    plannedAt: new Date('2026-11-13T02:00:00Z'),
+    agentName: null,
+    workspaceName: 'apiserver',
+    now: new Date('2026-11-13T03:00:00Z'),
+    timezone: 'Asia/Shanghai',
+  });
+  assert.equal(
+    why,
+    `It could not start on Friday 10:00: ${clause}. Nothing runs until your default mode allows it and you resume.`,
+    'the item is not cut short by the push\'s 180-character body',
+  );
 });
 
 test('every other run keeps the claim\'s tools: CHECK_ONLY elsewhere, OPEN_PR, and a session that is no run', () => {

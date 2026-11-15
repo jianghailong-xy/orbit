@@ -6,54 +6,31 @@
  *
  * The lines are English (CLAUDE.md §5) and follow the create card of §8.1: When, Runs in, May, Costs, Today, and the
  * line on what the person will hear about. Each line comes with the values it was written from, so a client may set
- * its own words.
+ * its own words. Every sentence is the boards' own, from @orbit/shared (SCHEDULE_COPY and its text functions), so the
+ * server and the clients cannot word a line two ways (schedule-copy.spec.ts).
  */
-// The Costs line has one source, shared with the clients (src/shared/src/schedule.ts).
-import { scheduleCostsText } from '@orbit/shared';
+import {
+  scheduleCostsText,
+  scheduleCreateNotice,
+  scheduleCreateWhen,
+  scheduleMayText,
+  scheduleRuleText as sharedRuleText,
+  scheduleRunsInText,
+  scheduleUsageText,
+  type ScheduleRule as SharedRule,
+} from '@orbit/shared';
 import type { Prisma, Schedule, ScheduleChangeRequest, ScheduleFinding, ScheduleRevision, ScheduleRun } from '@prisma/client';
 
-import type { AccessLevel, Envelope, EnvelopePart } from './schedule-envelope';
+import type { Envelope, EnvelopePart } from './schedule-envelope';
 import { instantOfLocal, nextDueAt, offsetAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
 
 type Tx = Prisma.TransactionClient;
 
-/** The card's *May* line per access level (§6.2). */
-export const SCHEDULE_ACCESS_LINES: Record<AccessLevel, { label: string; detail: string }> = {
-  CHECK_ONLY: { label: 'Check only', detail: 'reads and reports, edits nothing' },
-  OPEN_PR: { label: 'Open PR', detail: "edits in its own worktree and opens a PR; can't merge or deploy" },
-};
+export { scheduleMayText };
 
-/** The create card's last line: there is no notify setting (§7.3). */
-export const SCHEDULE_CARD_NOTICE = "You'll hear about new findings and failures only.";
-
-/** The line a pending create card shows where its zone will come from (§5.1). */
-export const SCHEDULE_ZONE_FROM_DEVICE = 'your time zone';
-
-const WEEKDAY_LABELS: Record<string, string> = {
-  MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat', SUN: 'Sun',
-};
-
-/** "Daily 10:00", "Weekdays 09:00", "Weekly Mon, Thu 10:00", "Once 2026-11-16 18:00". */
+/** "Daily 10:00", "Weekdays at 09:00", "Mondays 10:00", "Mon, Thu 10:00", "Once": the cards' short form. */
 export function scheduleRuleText(rule: ScheduleRule): string {
-  switch (rule.kind) {
-    case 'ONCE':
-      return `Once ${rule.at.replace('T', ' ')}`;
-    case 'DAILY':
-      return `Daily ${rule.time}`;
-    case 'WEEKLY': {
-      const days = [...rule.weekdays];
-      if (days.length === 5 && ['MON', 'TUE', 'WED', 'THU', 'FRI'].every((d) => days.includes(d as never))) {
-        return `Weekdays ${rule.time}`;
-      }
-      if (days.length === 7) return `Daily ${rule.time}`;
-      return `Weekly ${days.map((d) => WEEKDAY_LABELS[d] ?? d).join(', ')} ${rule.time}`;
-    }
-  }
-}
-
-export function scheduleMayText(level: AccessLevel): string {
-  const line = SCHEDULE_ACCESS_LINES[level];
-  return `${line.label} · ${line.detail}`;
+  return sharedRuleText(rule as SharedRule, 'short');
 }
 
 interface WorkspaceRef {
@@ -67,7 +44,7 @@ function runsInLine(workspace: WorkspaceRef, engine: string | null) {
     workspaceId: workspace.id,
     workspaceName: workspace.name,
     engine,
-    text: engine ? `${name} · ${engine}` : name,
+    text: scheduleRunsInText(name, engine),
   };
 }
 
@@ -142,6 +119,7 @@ export function scheduleCardView(request: ScheduleChangeRequest, ctx: ScheduleCa
       startAt?: string | null;
       endAt?: string | null;
       baseline?: { key: string; summary?: string | null; links?: unknown[] } | null;
+      findings?: string | null;
     };
     const rule = parseRule(p.rule);
     const firstRunAt = p.timezone
@@ -151,22 +129,19 @@ export function scheduleCardView(request: ScheduleChangeRequest, ctx: ScheduleCa
         })
       : null;
     const lines = envelopeLines(asked, ws(asked.workspaceId), engine);
+    const when = { rule, timezone: p.timezone, firstRunAt: firstRunAt?.toISOString() ?? null };
     return {
       ...base,
       title: p.title,
       readBack: p.readBack ?? p.intent,
       intent: p.intent,
-      when: {
-        rule,
-        timezone: p.timezone,
-        firstRunAt: firstRunAt?.toISOString() ?? null,
-        text: `${scheduleRuleText(rule)} · ${p.timezone ?? SCHEDULE_ZONE_FROM_DEVICE}`,
-      },
+      // A card with no zone has no first run yet, so the zone it falls back to is never read.
+      when: { ...when, text: scheduleCreateWhen({ when: when as never }, ctx.now, p.timezone ?? 'UTC').text },
       ...lines,
       today: p.baseline
         ? { key: p.baseline.key, summary: p.baseline.summary ?? null, text: p.baseline.summary ?? p.baseline.key }
         : null,
-      notice: SCHEDULE_CARD_NOTICE,
+      notice: scheduleCreateNotice(p.findings),
       envelope: null,
     };
   }
@@ -250,7 +225,7 @@ export function monthStart(now: Date, timezone: string): Date {
 }
 
 /**
- * "This month: 14 runs · 41 min" (§4): the runs that started this month in the schedule's zone and the minutes they
+ * "14 runs · 41 min" under This month (§4): the runs that started this month in the schedule's zone and the minutes they
  * took; a cost only where an engine reported one.
  */
 export async function scheduleUsageThisMonth(tx: Tx, schedule: Pick<Schedule, 'id' | 'timezone'>, now: Date) {
@@ -272,8 +247,7 @@ export async function scheduleUsageThisMonth(tx: Tx, schedule: Pick<Schedule, 'i
     runs: runs.length,
     minutes,
     costUsd: costUsd > 0 ? costUsd : null,
-    text: `This month: ${runs.length} run${runs.length === 1 ? '' : 's'} · ${minutes} min`
-      + (costUsd > 0 ? ` · $${costUsd.toFixed(2)}` : ''),
+    text: scheduleUsageText({ runs: runs.length, minutes }),
   };
 }
 
@@ -297,8 +271,44 @@ export function scheduleRunView(run: ScheduleRun) {
   };
 }
 
+/** What a schedule's view names beyond its workspace: its agent, and the engine its runs start on. */
+export interface ScheduleViewNames {
+  agents: Map<string, string>;
+  /** By the session a schedule came from. */
+  engines: Map<string, string | null>;
+}
+
+/**
+ * The agents' names and the creating sessions' engines for a set of schedules, read in two queries. The engine is the
+ * one a run starts on (schedule-start-check.ts engineOf) while that session is still in the schedule's workspace.
+ */
+export async function scheduleViewNames(
+  tx: Tx,
+  ownerId: string,
+  schedules: readonly Pick<Schedule, 'agentId' | 'createdFromSessionId' | 'workspaceId'>[],
+): Promise<ScheduleViewNames> {
+  const agentIds = [...new Set(schedules.map((s) => s.agentId).filter((id): id is string => !!id))];
+  const sessionIds = [...new Set(schedules.map((s) => s.createdFromSessionId).filter((id): id is string => !!id))];
+  const agents = agentIds.length
+    ? await tx.agent.findMany({ where: { id: { in: agentIds }, ownerId, deletedAt: null }, select: { id: true, name: true } })
+    : [];
+  const sessions = sessionIds.length
+    ? await tx.session.findMany({
+        where: { id: { in: sessionIds }, ownerId, deletedAt: null },
+        select: { id: true, engine: true, workspaceId: true },
+      })
+    : [];
+  const byId = new Map(sessions.map((r) => [r.id, r]));
+  const engines = new Map<string, string | null>();
+  for (const s of schedules) {
+    const origin = s.createdFromSessionId ? byId.get(s.createdFromSessionId) : undefined;
+    if (origin && origin.workspaceId === s.workspaceId) engines.set(origin.id, origin.engine);
+  }
+  return { agents: new Map(agents.map((a) => [a.id, a.name])), engines };
+}
+
 /** A schedule as the list shows it. */
-export function scheduleView(s: Schedule, workspaces: Map<string, string>) {
+export function scheduleView(s: Schedule, workspaces: Map<string, string>, names?: ScheduleViewNames) {
   const rule = s.rule as unknown as ScheduleRule;
   return {
     id: s.id,
@@ -311,6 +321,8 @@ export function scheduleView(s: Schedule, workspaces: Map<string, string>) {
     workspaceId: s.workspaceId,
     workspaceName: workspaces.get(s.workspaceId) ?? null,
     agentId: s.agentId,
+    agentName: (s.agentId && names?.agents.get(s.agentId)) || null,
+    engine: (s.createdFromSessionId && names?.engines.get(s.createdFromSessionId)) || null,
     accessLevel: s.accessLevel,
     may: scheduleMayText(s.accessLevel),
     runLimitMinutes: s.runLimitMinutes,

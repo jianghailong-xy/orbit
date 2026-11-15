@@ -59,6 +59,8 @@ function schedule(over: Partial<ScheduleView> & { id: string; title: string; rul
     workspaceId: ws.id,
     workspaceName: ws.name,
     agentId: null,
+    agentName: null,
+    engine: null,
     accessLevel: access,
     may: '',
     runLimitMinutes: 30,

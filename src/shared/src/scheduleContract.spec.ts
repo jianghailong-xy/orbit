@@ -24,6 +24,9 @@ import {
   scheduleAllowedText,
   scheduleChangeLineText,
   scheduleCostsParts,
+  scheduleCreateNotice,
+  scheduleFailedPush,
+  scheduleGoalReachedPushTitle,
   scheduleEnvelopeNote,
   scheduleEnvelopeSides,
   scheduleEnvelopeTitle,
@@ -120,9 +123,23 @@ describe('schedule contract', () => {
     expect(Object.keys(SCHEDULE_COPY.envelopeCard.titles).sort()).toEqual([...SCHEDULE_ENVELOPE_PARTS].sort());
   });
 
+  it('the server reads its sentences from here (src/apiserver/src/schedules/schedule-copy.spec.ts pins each)', () => {
+    const views = read('src/apiserver/src/schedules/schedule-views.ts');
+    for (const fn of ['scheduleCreateNotice', 'scheduleCreateWhen', 'scheduleMayText', 'scheduleRunsInText', 'scheduleUsageText']) {
+      expect(views, fn).toContain(`  ${fn},`);
+    }
+    const attention = read('src/apiserver/src/schedules/schedule-attention.ts');
+    for (const fn of [
+      'scheduleApprovalWaiting', 'scheduleFailedPush', 'scheduleFailedWaiting', 'scheduleHeldClause', 'scheduleHeldWaiting',
+      'scheduleWidenWaitingText', 'scheduleEnvelopeTitle', 'scheduleGoalReachedPushTitle',
+    ]) {
+      expect(attention, fn).toContain(`  ${fn},`);
+    }
+  });
+
   it('the server writes the Costs line with the shared function', () => {
     const views = read('src/apiserver/src/schedules/schedule-views.ts');
-    expect(views).toContain("import { scheduleCostsText } from '@orbit/shared';");
+    expect(views).toMatch(/import \{\n  scheduleCostsText,\n[^}]*\} from '@orbit\/shared';/);
     expect(views).not.toMatch(/function scheduleCostsText/);
   });
 });
@@ -130,6 +147,26 @@ describe('schedule contract', () => {
 describe('board phrases', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const P: any = CONTRACT.boardPhrases;
+
+  it('the pushes and the create card\'s last line', () => {
+    // 1/2 ⑤: the failure's banner.
+    expect(scheduleFailedPush({
+      title: 'Nightly pg spec sweep',
+      consecutiveFailures: 3,
+      run: { failureReason: 'NO_REPORT', reasonText: null, plannedAt: '2026-11-13T18:00:00.000Z' },
+      timezone: 'Asia/Shanghai',
+    })).toEqual({
+      title: 'Nightly pg spec sweep failed 3 runs in a row',
+      body: 'The last run ended without a report. It keeps running until you pause it.',
+    });
+    // 02-agent-first ⑤: a run that ended its own schedule.
+    expect(scheduleGoalReachedPushTitle('Release 2.0 freeze watch')).toBe('Release 2.0 freeze watch ended itself');
+    // 2/2 ①, 1/2 ④: per task.
+    expect(scheduleCreateNotice('versions')).toBe("You'll hear about new versions and failures only.");
+    expect(scheduleCreateNotice('issues')).toBe("You'll hear about new issues and failures only.");
+    expect(scheduleCreateNotice(null)).toBe(SCHEDULE_COPY.createCard.notice);
+    expect(scheduleCreateNotice('findings')).toBe(SCHEDULE_COPY.createCard.notice);
+  });
 
   it.each(P.rules.map((r: { text: string; form: string }) => [`${r.form}: ${r.text}`, r]))('rule %s', (_n, r: any) => {
     expect(scheduleRuleText(r.rule, r.form)).toBe(r.text);

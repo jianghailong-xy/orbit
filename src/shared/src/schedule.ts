@@ -205,7 +205,10 @@ export const SCHEDULE_COPY = {
       until: 'it runs on an engine that can',
     },
     MODE_WIDER_THAN_ACCOUNT_DEFAULT: {
-      clause: "its access is wider than your account's default mode",
+      // Says what to change: Plan as the account default holds a CHECK_ONLY run on Claude Code (Don't Ask, §6.2) and
+      // every OPEN_PR run; Default holds neither.
+      clause:
+        "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)",
       until: 'your default mode allows it',
     },
     NO_REPOSITORY: { clause: 'the workspace {workspace} has no repository', until: 'it has one' },
@@ -303,6 +306,8 @@ export const SCHEDULE_COPY = {
     runsInEngine: '{workspace} · {engine} agent',
     zoneFromDevice: 'your time zone',
     notice: "You'll hear about new findings and failures only.",
+    /** The notice with what this task finds ("versions", "issues"), as the boards word it per task. */
+    noticeAbout: "You'll hear about new {findings} and failures only.",
   },
   envelopeCard: {
     titles: {
@@ -343,6 +348,11 @@ export const SCHEDULE_COPY = {
     widen: {
       body: '{reason} Now: {now}. Asked: {asked}',
     },
+  },
+  /** A push's banner where it is not the Waiting on you card's own words (board 1/2 ⑤, 2/2 ④). */
+  push: {
+    failedBody: 'The last run {reason}. It keeps running until you pause it.',
+    goalReachedTitle: '{title} ended itself',
   },
   empty: {
     lead: 'Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.',
@@ -439,6 +449,10 @@ export interface ScheduleView {
   workspaceId: string;
   workspaceName: string | null;
   agentId: string | null;
+  /** The agent's name, so a hold can say 'the agent "auditor" is disabled'; null when it names none or is gone. */
+  agentName: string | null;
+  /** The engine its runs start on when the conversation it came from still names one ("codex"), else null. */
+  engine: string | null;
   accessLevel: ScheduleAccessLevel;
   may: string;
   runLimitMinutes: number;
@@ -835,6 +849,12 @@ export function scheduleRunsInText(workspaceName: string, engine: string | null)
   return engine
     ? scheduleFill(C.createCard.runsInEngine, { workspace: workspaceName, engine: scheduleEngineName(engine) })
     : workspaceName;
+}
+
+/** The create card's last line: "You'll hear about new versions and failures only." `findings` defaults to findings. */
+export function scheduleCreateNotice(findings?: string | null): string {
+  const what = findings?.trim();
+  return what ? scheduleFill(C.createCard.noticeAbout, { findings: what }) : C.createCard.notice;
 }
 
 /** The create card's When: "Daily 10:00 · Asia/Shanghai · first run tomorrow", with its parts. */
@@ -1404,6 +1424,23 @@ export function scheduleFailedWaiting(input: {
     }),
     actions: [C.actions.openRun, C.actions.pauseSchedule],
   };
+}
+
+/**
+ * A failure's push: the card's title, and "The last run ended without a report. It keeps running until you pause it."
+ */
+export function scheduleFailedPush(input: Parameters<typeof scheduleFailedWaiting>[0]): { title: string; body: string } {
+  return {
+    title: scheduleFailedWaiting(input).title,
+    body: scheduleFill(C.push.failedBody, {
+      reason: scheduleFailureClause(input.run) ?? C.failureReasons.REPORTED_FAILED,
+    }),
+  };
+}
+
+/** A run ending its own schedule: "Release 2.0 freeze watch ended itself". */
+export function scheduleGoalReachedPushTitle(title: string): string {
+  return scheduleFill(C.push.goalReachedTitle, { title });
 }
 
 /** A held schedule's card: "Weekly dependency audit is held". */

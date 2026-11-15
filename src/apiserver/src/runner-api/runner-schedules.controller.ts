@@ -69,6 +69,7 @@ export class RunnerSchedulesController {
       runLimitMinutes: dto.runLimitMinutes,
       endAt: dto.endAt ? new Date(dto.endAt) : null,
       readBack: dto.readBack ?? null,
+      findings: dto.findings ?? null,
       baseline: dto.baseline,
     });
     return this.reads.createAnswer(runner.ownerId, result);

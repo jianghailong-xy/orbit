@@ -16,6 +16,7 @@ export class ScheduleCreateDto {
   @IsOptional() @IsInt() @Min(1) runLimitMinutes?: number;
   @IsOptional() @IsDateString() endAt?: string;
   @IsOptional() @IsString() @MaxLength(500) readBack?: string;
+  @IsOptional() @IsString() @MaxLength(60) findings?: string;
   @IsOptional() @IsObject() baseline?: { key: string; summary?: string; links?: string[] };
 }
 

@@ -108,6 +108,7 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 				"intent":   str("The person's own words, verbatim. Kept as what was asked."),
 				"title":    str("A short name for the list, such as \"Codex stable check\"."),
 				"readBack": str("One sentence, in the first person, reading the schedule back to the person: \"Every day at 10:00 Beijing time I check ..., and tell you only when there is a new one.\""),
+				"findings": str("What a new finding of this task is, as a plural noun, such as \"versions\" or \"issues\": the card ends \"You'll hear about new versions and failures only.\""),
 				"prompt": str("What every run does, written for an agent that starts with no context: what to check, how to tell new " +
 					"from already seen, the key to report a finding under (such as codex@0.48.1), and when to report CHANGED."),
 				"rule":            rule,
@@ -249,7 +250,7 @@ func scheduleToolText(name string, raw json.RawMessage) string {
 
 // scheduleBodyFields are the fields each write sends, as given.
 var scheduleBodyFields = map[string][]string{
-	"schedule_create":     {"intent", "title", "readBack", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "baseline"},
+	"schedule_create":     {"intent", "title", "readBack", "findings", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "baseline"},
 	"schedule_update":     {"intent", "title", "prompt", "rule", "timezone", "accessLevel", "runLimitMinutes", "endAt", "workspaceId"},
 	scheduleRunReportTool: {"outcome", "key", "summary", "links", "note"},
 }
