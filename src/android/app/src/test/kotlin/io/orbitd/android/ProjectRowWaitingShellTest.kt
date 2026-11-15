@@ -134,19 +134,11 @@ class ProjectRowWaitingShellTest {
         assertTrue("the card's title is inside the transcript: $title in $list", title.top >= list.top && title.bottom <= list.bottom)
         assertTrue("its header too: $header in $list", header.top >= list.top && header.bottom <= list.bottom)
         assertTrue("and its command's first line: $head in $list", head.top >= list.top && head.bottom <= list.bottom)
-        // Not under the needs-you capsule floating over the list's top (77b704d5d): the rows go on behind it.
-        val bars = compose.onAllNodesWithTag("needs-you-bar", useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
-            .filter { it.bottom > list.top && it.top < list.bottom }
-        // A conversation carries no bar for what waits elsewhere, however much does (07-console-one-capsule).
-        assertTrue("no needs-you bar over the transcript: $bars", bars.isEmpty())
-        println("needs-you bars over the transcript: $bars; title $title, header $header")
-        bars.forEach { bar ->
-            assertTrue("the card's title is below the floating bar: $title under $bar", title.top >= bar.bottom)
-            assertTrue("its header too: $header under $bar", header.top >= bar.bottom)
-        }
-        // At the top of the list, not wherever it happened to come in: the card's title in the list's upper quarter, counted from
-        // under the capsule where one floats (the rows keep its height clear, so they start there).
-        val clear = bars.maxOfOrNull { it.bottom } ?: list.top
+        // A conversation carries no notice for what already waited elsewhere (07-console-one-capsule, 12-once).
+        val notices = compose.onAllNodesWithTag("needs-you-toast", useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue("no needs-you notice over the transcript: ${notices.size}", notices.isEmpty())
+        // At the top of the list, not wherever it happened to come in: the card's title in the list's upper quarter.
+        val clear = list.top
         assertTrue("the card is at the top: $title in $list, clear from $clear", title.top < clear + list.height / 4)
         assertFalse("the card's foot is below, unseen", visibleIn(list, footLine))
         assertFalse("the transcript is not at its end", atTheEnd())

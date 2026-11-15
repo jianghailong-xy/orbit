@@ -87,9 +87,6 @@ struct CompactShell: View {
                 // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
                 // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
-                    // The needs-you bar over a page with none of its own, inside the sliding card
-                    // so it travels with the page it covers (see `needsYouOverPage`).
-                    .needsYouOverPage(wide: false)
                     // An opaque backing *inside* the sliding content so its translucent bars — the
                     // transcript is a `.scrollContentBackground(.hidden)` (see-through) list, with `.bar`
                     // material on the status line / worktree bar / composer — sample a surface that
@@ -1384,14 +1381,14 @@ private extension View {
     }
 }
 
-/// The hamburger, carrying how many are waiting on you while the needs-you bar is swiped away (the
-/// owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats) — so what the bar said is not lost.
+/// The hamburger, carrying how many are waiting on you (the owner, 2026-11-15,
+/// docs/mocks/needs-you-capsule/12-once): the resident count, now that a notice of each says it once.
 private struct DrawerToggleButton: View {
     @Environment(AppModel.self) private var model
     let open: () -> Void
 
     var body: some View {
-        let waiting = model.needsYouPutAwayCount
+        let waiting = model.needsYouSessions.count
         Button(action: open) {
             Image(systemName: "line.3.horizontal")
                 .overlay(alignment: .topTrailing) {
