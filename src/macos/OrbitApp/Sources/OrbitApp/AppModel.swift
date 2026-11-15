@@ -1159,7 +1159,15 @@ final class AppModel {
         ownerRequests?.inboxPresented = false
         selectedSection = .scheduled
         nav.path = []
+        scheduled?.draftPanel = nil
         scheduled?.inspectedID = id
+    }
+
+    /// Take a run's session off the Scheduled page: on the Mac a row or a sentence chosen in the timeline puts its
+    /// panel in the right-hand column, where the run was.
+    func closeScheduleRun() {
+        guard selectedSection == .scheduled, !nav.path.isEmpty else { return }
+        nav.path = []
     }
 
     /// A run's session, over the Scheduled page: run sessions are in no list (§7.4), so the back swipe returns to
@@ -1168,14 +1176,15 @@ final class AppModel {
         settingsPresented = false
         ownerRequests?.inboxPresented = false
         scheduled?.inspectedID = nil
-        #if os(iOS)
+        scheduled?.draftPanel = nil
         selectedSection = .scheduled
-        // Pushed over the Scheduled page from the schedule's history (a list), or put there by its push.
+        // Pushed over the Scheduled page from the schedule's history (a list), or put there by its push. On the Mac
+        // the same frame is the Scheduled section's right-hand column (`ScheduledMacDetail`), with Scheduled lit in
+        // the sidebar and the timeline beside it (web board 02 ⑤): never a row of a workspace's list.
         nav.path = [.console(sessionID: sessionID, origin: .list)]
-        #else
-        // The Mac's Scheduled page is its own task (I2): until then a run's session opens as any session does.
-        route(to: .session(sessionID))
-        #endif
+        // A run's session is in no list, so its own record is read as a link's is: the console's state band and
+        // its toolbar read that record.
+        refreshUnlistedSession(sessionID, adoptingAgent: false)
     }
 
     /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.
@@ -4109,15 +4118,11 @@ final class AppModel {
             Task { await ownerRequests?.loadTerminalRequests() }
         case let .openSchedule(scheduleID, sessionID):
             // A push names the schedule and the run's session by their stored UUIDs; the app spells them base62.
-            #if os(iOS)
             if let sessionID {
                 openScheduleRun(sessionID: PublicID.toPublic(sessionID), scheduleID: PublicID.toPublic(scheduleID))
             } else {
                 openSchedule(PublicID.toPublic(scheduleID))
             }
-            #else
-            if let sessionID { route(to: .session(PublicID.toPublic(sessionID))) }
-            #endif
         }
     }
 
