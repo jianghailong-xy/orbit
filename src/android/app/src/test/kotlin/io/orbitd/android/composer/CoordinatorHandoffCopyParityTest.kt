@@ -28,8 +28,6 @@ class CoordinatorHandoffCopyParityTest {
     @Test fun everyConstantIsTheSharedOnesWordForWord() {
         listOf(
             "confirmTitle" to CoordinatorHandoffCopy.CONFIRM_TITLE,
-            "noteRowTitle" to CoordinatorHandoffCopy.NOTE_ROW_TITLE,
-            "noteRowDetail" to CoordinatorHandoffCopy.NOTE_ROW_DETAIL,
             "cancel" to CoordinatorHandoffCopy.CANCEL,
             "handOver" to CoordinatorHandoffCopy.HAND_OVER,
             "badgeHandingOver" to CoordinatorHandoffCopy.BADGE_HANDING_OVER,
@@ -48,12 +46,17 @@ class CoordinatorHandoffCopyParityTest {
     }
 
     @Test fun theTemplatesAreTheSharedOnes() {
-        assertTrue(shared.contains("`This coordinator writes a handoff note, then \${projectTitle} continues in a new conversation that starts from that note. This one is completed — nothing is deleted.`"))
-        assertEquals("This coordinator writes a handoff note, then Checkout redesign continues in a new conversation that starts from that note. This one is completed — nothing is deleted.",
-            CoordinatorHandoffCopy.confirmBody("Checkout redesign"))
-        assertTrue(shared.contains("`After the current turn ends, this coordinator writes a handoff note, then \${projectTitle} continues in a new conversation that starts from that note. This one is completed — nothing is deleted.`"))
-        assertEquals("After the current turn ends, this coordinator writes a handoff note, then Checkout redesign continues in a new conversation that starts from that note. This one is completed — nothing is deleted.",
-            CoordinatorHandoffCopy.confirmBodyWhileRunning("Checkout redesign"))
+        // The phones' confirm body (`coordinatorHandoffPhoneConfirmBody`, which OrbitKit's `phoneConfirmBody` is pinned to as well).
+        val lead = CoordinatorHandoffCopy.phoneConfirmBody(0, running = false).substringBefore(", then")
+        val runningLead = CoordinatorHandoffCopy.phoneConfirmBody(0, running = true).substringBefore(", then")
+        assertTrue(shared.contains("const lead = running ? '$runningLead' : '$lead';"))
+        assertTrue(shared.contains("const moves = waits > 0 ? ` \${COORDINATOR_HANDOFF_COPY.waitsRowTitle(waits)}.` : '';"))
+        val tail = CoordinatorHandoffCopy.phoneConfirmBody(0, running = false).removePrefix(lead).replace(" Nothing is deleted.", "\${moves} Nothing is deleted.")
+        assertTrue(shared.contains("return `\${lead}$tail`;"))
+        assertEquals("This coordinator writes a handoff note, then the project continues in a new conversation. 2 pending waits move over. Nothing is deleted.",
+            CoordinatorHandoffCopy.phoneConfirmBody(2, running = false))
+        // A refused press: web's toast title is the line's lead (double-quoted there for its apostrophe).
+        assertTrue(shared.contains("refused: \"${CoordinatorHandoffCopy.REFUSED}\","))
         assertTrue(shared.contains("(count === 1 ? '1 pending wait moves over' : `\${count} pending waits move over`)"))
         assertTrue(shared.contains("(count === 1 ? '1 wait moved here' : `\${count} waits moved here`)"))
         assertTrue(shared.contains("`The handoff note wasn't written: \${COORDINATOR_HANDOFF_FAILURE_REASONS[code]}`"))

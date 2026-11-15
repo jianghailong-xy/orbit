@@ -1,11 +1,15 @@
 package io.orbitd.android.composer
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import io.orbitd.android.core.net.ApiResponse
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
 
 /**
  * Boards 03 and 02 on the session page, over the controlled server: the context dialog's Compact and Start a new coordinator, the
@@ -73,6 +77,20 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         assertFalse(has(inDialog("Summarize earlier turns and keep going here.")))
     }
 
+    private fun noCompactWhileTheHandoff(state: String) {
+        runnerWithCompact(); coordinatorSession(handoff(state))
+        // The locked composer greys its model chip, which openSession waits on: wait for the handoff's row instead.
+        signIn(); open("orbit-session:${ComposerShell.SESSION}")
+        await { has(hasTestTag("handoff-progress")) }
+        openContext()
+        await { has(inDialog("No quota reported for this account.")) || has(inDialog("claude · claude-opus-5-5")) }
+        assertFalse(has(hasTestTag("context-action-compact")))
+        assertFalse(has(inDialog("Available when this turn ends.")))
+        assertFalse(has(hasTestTag("context-action-new-coordinator")))
+    }
+    @Test fun whileTheNoteIsWrittenTheDialogOffersNoCompact() = noCompactWhileTheHandoff("WRITING")
+    @Test fun whileItHandsOverTheDialogOffersNoCompact() = noCompactWhileTheHandoff("HANDING_OVER")
+
     @Test fun anEngineWithoutCompactShowsNoActionsInAnOrdinarySession() {
         signIn(); openSession(); openContext()
         await { has(inDialog("No quota reported for this account.")) || has(inDialog("claude · claude-opus-5-5")) }
@@ -95,15 +113,25 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         press(hasTestTag("context-action-new-coordinator"))
         await { has(inDialog("Hand over to a new coordinator?")) }
         assertFalse(has(inDialog("Context and plan usage")))
-        assertTrue(has(inDialog("This coordinator writes a handoff note, then Checkout redesign continues in a new conversation that starts from that note. This one is completed — nothing is deleted.")))
-        assertTrue(has(inDialog("Handoff note")))
-        assertTrue(has(inDialog("Written by this coordinator before it hands over. Usually under a minute.")))
-        await { has(inDialog("2 pending waits move over")) }
+        // Board 03 iOS 2's words, the iPhone's: one body, the waits a count inside it, no note row.
+        await { has(inDialog("This coordinator writes a handoff note, then the project continues in a new conversation. 2 pending waits move over. Nothing is deleted.")) }
+        assertFalse(has(inDialog("Handoff note")))
         assertFalse("the waits are a count, not their names", has(hasText("Fix login redirect", substring = true) and hasAnyAncestor(isDialog())))
         assertTrue(has(inDialog("Cancel")))
         press(hasTestTag("handoff-confirm-hand-over"))
         await { ComposerShell.calls.contains("POST projects/$project/coordinator/handoff") }
         await { !has(inDialog("Hand over to a new coordinator?")) }
+    }
+
+    @Test fun aRefusedHandOverSaysCouldntHandOverAndWhyInTheConfirm() {
+        runnerWithCompact(); coordinatorSession()
+        ComposerShell.answers["POST projects/$project/coordinator/handoff"] = { ApiResponse(409,
+            """{"message":"This project already has a handoff under way."}""".encodeToByteArray()) }
+        signIn(); openSession(); openContext()
+        press(hasTestTag("context-action-new-coordinator"))
+        await { has(inDialog("Hand over to a new coordinator?")) }
+        press(hasTestTag("handoff-confirm-hand-over"))
+        await { has(inDialog("Couldn't hand over: This project already has a handoff under way.")) }
     }
 
     @Test fun theConfirmWhileRunningSaysTheNoteComesAfterTheTurnAndHidesNoWaits() {
@@ -112,7 +140,7 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         await { has(hasTestTag("context-action-new-coordinator")) }
         assertTrue(has(hasText("Begins after this turn ends: a handoff note, then a fresh conversation."), unmerged = true))
         press(hasTestTag("context-action-new-coordinator"))
-        await { has(inDialog("After the current turn ends, this coordinator writes a handoff note, then Checkout redesign continues in a new conversation that starts from that note. This one is completed — nothing is deleted.")) }
+        await { has(inDialog("After the current turn ends, this coordinator writes a handoff note, then the project continues in a new conversation. Nothing is deleted.")) }
         await { ComposerShell.calls.contains("GET projects/$project/coordinator/pending-waits") }
         compose.waitForIdle()
         assertFalse("no waits, no row", has(hasText("pending wait", substring = true)))
@@ -156,6 +184,38 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         await { has(hasTestTag("handoff-progress")) }
         ComposerShell.session = mapOf("lifecycleState" to JsonPrimitive("COMPLETED"), handoff("COMPLETED", to = successor))
         await { has(hasTestTag("handoff-handed-over")) }
+    }
+
+    /** Board 02-2's "Handing over" header badge has no slot on Android: the session page's top bar names no session and carries no
+     * run state (A06-18, after iOS d87e5fa67 — whether it runs, the composer says), so neither "Running" nor the badge is drawn there,
+     * in any handoff state. While the note is written and the replacement runs, the composer says it instead. The page as a phone draws
+     * it is a PNG under app/build/evidence/handing-over (not committed). */
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun theSessionBarHasNoStatusSlotSoTheComposerSaysHandingOver() {
+        for (state in listOf("WRITING", "HANDING_OVER", "FAILED", null)) {
+            if (state == null) coordinatorSession(*running) else coordinatorSession(handoff(state), *running)
+            if (state == "WRITING") { signIn(); open("orbit-session:${ComposerShell.SESSION}") } else app().realtime.refreshSession()
+            await { if (state == null || state == "FAILED") has(hasTestTag("composer-input") and isEnabled())
+                else has(hasTestTag("handoff-progress")) }
+            val inBar = { text: String -> has(hasText(text) and hasAnyAncestor(hasTestTag("app-bar")), unmerged = true) }
+            assertFalse("$state: the bar draws no badge", inBar(CoordinatorHandoffCopy.BADGE_HANDING_OVER))
+            assertFalse("$state: the bar draws no run word either", inBar("Running"))
+            assertFalse("$state: the bar has no second line", has(hasTestTag("page-bar-subtitle"), unmerged = true))
+            val composerSays = has(hasText(CoordinatorHandoffCopy.HANDING_OVER), unmerged = true)
+            assertEquals("$state: the composer says it is handing over", state == "WRITING" || state == "HANDING_OVER", composerSays)
+            if (state == "WRITING" || state == "HANDING_OVER") shot(state.lowercase())
+        }
+    }
+
+    private fun shot(name: String) {
+        compose.waitForIdle()
+        val view = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        val pixels = IntArray(bitmap.width * bitmap.height).also { bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height) }
+        assertTrue("$name: the shot is blank", pixels.any { it != 0 })
+        val file = File(System.getProperty("user.dir"), "build/evidence/handing-over/$name.png").also { it.parentFile?.mkdirs() }
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        println("shot $name ${bitmap.width}x${bitmap.height} -> $file")
     }
 
     @Test fun handingOverIsTheProgressRowWithoutItsButtons() {
@@ -202,17 +262,19 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
 
     @Test fun theSuccessorOpensWithTheNoteCardAndTheWaitsThatMoved() {
         ComposerShell.session = mapOf("coordinatorHandoffReceived" to Json.parseToJsonElement("""{"handoffFromSessionId":"34HandoffPrevious00001",
-            "note":"Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nAgreed with the owner\n- Don't merge Payment retries before Friday's release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.",
+            "note":"Handing over after Friday's release.\nWhere things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nAgreed with the owner\n- Don't merge Payment retries before Friday's release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.",
             "handedOverAt":"2026-11-14T15:42:00Z","movedWaits":[{"id":"w1","label":"Waiting for \"Fix login redirect\" to be DONE","paused":false},
-            {"id":"w2","label":"Session \"Payment retries\" finishing its turn","paused":false}]}"""))
+            {"id":"w2","label":"Session \"Payment retries\" finishing its turn","paused":true}]}"""))
         signIn(); open("orbit-session:${ComposerShell.SESSION}")
         await { has(hasTestTag("handoff-note-card")) }
         for (title in CoordinatorHandoff.SECTIONS) assertTrue(title, has(hasText(title), unmerged = true))
         assertTrue(has(hasText("•  4 of 6 tasks done; Fix login redirect in review."), unmerged = true))
+        assertTrue("the line before the first heading is kept", has(hasTestTag("handoff-note-preamble") and hasText("Handing over after Friday's release."), unmerged = true))
         assertTrue(has(hasText("the previous coordinator", substring = true), unmerged = true))
         assertTrue(has(hasText("2 waits moved here"), unmerged = true))
         press(hasTestTag("handoff-waits-moved"))
         await { has(hasText("•  Waiting for \"Fix login redirect\" to be DONE"), unmerged = true) }
+        assertTrue(has(hasText("•  Session \"Payment retries\" finishing its turn (paused)"), unmerged = true))
         press(hasTestTag("handoff-note-from"))
         await { ComposerShell.calls.any { it.startsWith("GET sessions/34HandoffPrevious00001") } }
     }

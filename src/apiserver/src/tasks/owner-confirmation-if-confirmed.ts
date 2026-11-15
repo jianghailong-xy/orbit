@@ -10,6 +10,7 @@ import type {
   OwnerConfirmationStartsTask,
 } from '@orbit/shared';
 import {
+  LANDING_SERVING_WORK_SELECT,
   landingBranchesFor,
   mainBranchOf,
   taskLanding,
@@ -159,7 +160,7 @@ async function readLanding(
   const codebase = await readProjectCodebase(db, handed.projectId);
   const receipts = await db.sessionMergeReceipt.findMany({
     where: { ownerId, taskId },
-    select: { result: true, targetBranch: true },
+    select: LANDING_SERVING_WORK_SELECT.mergeReceipts.select,
   });
   return {
     landing: confirmationLanding({ deliveryMode: codebase?.deliveryMode, automatic }),
@@ -206,7 +207,7 @@ async function readBranch(
   // This run's merges, and any other door's record of a merge of this same branch for this task.
   const receipts = await db.sessionMergeReceipt.findMany({
     where: { ownerId, OR: [{ sessionId }, { taskId, sourceBranch: session.branch }] },
-    select: { result: true, targetBranch: true },
+    select: LANDING_SERVING_WORK_SELECT.mergeReceipts.select,
   });
   // The status bar's sums over the same list: a binary file reports -1 and adds no lines.
   const files: unknown[] = Array.isArray(session.changedFiles) ? session.changedFiles : [];

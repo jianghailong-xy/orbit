@@ -412,6 +412,12 @@ struct ConsoleView: View {
                 .environment(\.sessionImagePreview, sessionImagePreview(console))
                 // The workspace's background agents and workflows, for the cards that draw them.
                 .environment(\.taskActivity, taskActivity(console))
+                // Settings › Translation: what a translated message's foot can do (frames 4–6).
+                .environment(\.translationActions, TranslationActions(
+                    on: SessionTranslation.isOn(appModel.user),
+                    retryTurn: { id in Task { await console.retryTurnTranslation(id) } },
+                    sendAsWritten: { id in Task { await console.sendTurnAsWritten(id) } },
+                    retryReply: { seq in Task { await console.retryReplyTranslation(seq) } }))
                 // A task link in this conversation — prose on the Mac, a card's own button —
                 // opens over the conversation on a wide shell (owner decision 2026-11-12). With
                 // the flag false (every phone) this is the app's own door, word for word.
@@ -1566,7 +1572,9 @@ struct TranscriptView: View {
     // scroll region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
         // Only the person's question reaches here: over a round Orbit opened the bar is hidden
-        // (`StickySummary.isOrbits`), and a wake is no turn (`isAnchor`).
+        // (`StickySummary.isOrbits`), and a wake is no turn (`isAnchor`). A translated turn shows the
+        // words the person wrote, not the English the agent got (Settings › Translation).
+        let shown = SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: false)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1584,7 +1592,7 @@ struct TranscriptView: View {
             #endif
         } label: { _ in
             #if os(iOS)
-            questionCapsule(bubble.text)
+            questionCapsule(shown)
             #else
             HStack(spacing: 8) {
                 // Priority, not `fixedSize()`: the label is served first, so the line beside it is
@@ -1592,7 +1600,7 @@ struct TranscriptView: View {
                 Text(StickySummary.yourQuestion)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.tail).layoutPriority(1)
-                Text(bubble.text)
+                Text(shown)
                     .font(.orbitSubtext).foregroundStyle(.primary)
                     .lineLimit(1).truncationMode(.tail)
                 Spacer(minLength: 0)
@@ -1767,7 +1775,7 @@ struct TranscriptView: View {
             return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                 .foregroundColor(.secondary)
         }
-        let word = SessionHeader.statusWord(for: session, watching: watching, now: now, machine: console.runnerName)
+        let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
         guard subtitle.hasPrefix(word) else { return Text(subtitle).foregroundColor(.secondary) }
         let tone = SessionStatusGlyph.make(for: session, watching: watching, now: now, machine: console.runnerName).tone
         return Text(word).fontWeight(.semibold).foregroundColor(Self.statusWordColor(tone))

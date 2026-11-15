@@ -300,7 +300,6 @@ import {
   createMergeRepairSession,
   createInteractiveSession,
   createSessionFolder,
-  decideApproval,
   deleteSession,
   deleteSessionFolder,
   cleanUpWorkspaceRepo,
@@ -312,7 +311,6 @@ import {
   completeProjectSessions,
   mergeSessionToMain,
   type EventPageEvent,
-  type PermissionRule,
   pinSession,
   purgeSession,
   getSessionRetryMessage,
@@ -330,8 +328,15 @@ import {
   updateSessionConfig,
   switchSessionAccount,
   uploadAttachment,
+  retryTurnTranslation,
+  sendTurnAsWritten,
+  retryReplyTranslation,
 } from '../api';
 import { DshRepairCard } from './Transcript';
+import type { TranslationActionResponse } from '@orbit/shared';
+import { useApprovalDecisions } from '../lib/approvalDecisions';
+import { heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
   runNeverStarted,
@@ -2220,7 +2225,9 @@ function StopSquareIcon({ className }: { className?: string }) {
  * and stays in the conversation with it.
  */
 export function inPendingTray(turn: QueuedTurn): boolean {
-  return turn.delivery == null && returnsToComposer(turn);
+  // A message held for its translation is drawn in the conversation, with its chip or its failure
+  // (Settings › Translation, board frame 6) — not in the tray, which only waits for the engine.
+  return turn.delivery == null && returnsToComposer(turn) && !heldForTranslation(turn.translation);
 }
 
 /** What a tray row shows of a message's attachments: this tab's previews, else the pictures' ids. */
@@ -2267,11 +2274,14 @@ export function QueuedTurnMeta({
   deliveryCode,
   deliveryReason,
   wake,
+  translationHeld,
   held,
   onCancel,
   onPutBack,
 }: {
   placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
+  /** Held for its translation (Settings › Translation): the bubble's own foot says how it stands. */
+  translationHeld?: boolean;
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
@@ -2283,6 +2293,7 @@ export function QueuedTurnMeta({
   onCancel: () => void;
   onPutBack?: () => void;
 }) {
+  if (translationHeld) return null;
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
@@ -4503,6 +4514,34 @@ export function WorkspaceView({
     detachedNow,
     backToLatest: streamBackToLatest,
   } = stream;
+  // Settings › Translation (@orbit/shared translation.ts): what a translated conversation can do —
+  // retry a held message's translation or send it as written (1A), retry a reply's (2A) — and whether
+  // the account translates now, which greys a streaming reply. The queue is refetched on the stream's
+  // `queued_turns_changed` either way; the answer is written into the row so the chip moves at once.
+  const translationIsOn = translationOn(me.data);
+  const translationActions = useMemo<TranslationActions>(() => {
+    const settle = (res: TranslationActionResponse) =>
+      setQueued((current) =>
+        current.map((turn) => (turn.turnId === res.turnId ? { ...turn, translation: res.translation } : turn)),
+      );
+    const failed = (what: string) => (e: unknown) =>
+      message.error(what, e instanceof Error ? e.message : undefined);
+    return {
+      on: translationIsOn,
+      retryTurn: (turnId) =>
+        selectedId
+          ? retryTurnTranslation(selectedId, turnId).then(settle, failed("Couldn't retry the translation"))
+          : Promise.resolve(),
+      sendAsWritten: (turnId) =>
+        selectedId
+          ? sendTurnAsWritten(selectedId, turnId).then(settle, failed("Couldn't send the message"))
+          : Promise.resolve(),
+      retryReply: (seq) =>
+        selectedId
+          ? retryReplyTranslation(selectedId, seq).catch(failed("Couldn't retry the translation"))
+          : Promise.resolve(),
+    };
+  }, [translationIsOn, selectedId, setQueued, message]);
   // Walk the pages back until the session's first message is loaded, then sit at the top.
   //
   // Scrolling up alone can't get there: each page lands with the reader's position anchored
@@ -5626,24 +5665,7 @@ export function WorkspaceView({
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
-  const decide = async (
-    approvalId: string,
-    behavior: 'allow' | 'deny',
-    answers?: Record<string, string[]>,
-    message?: string,
-    rememberRules?: PermissionRule[],
-    startAfterCreate?: boolean,
-  ): Promise<void> => {
-    if (!selectedId) return;
-    setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
-    try {
-      await decideApproval(selectedId, approvalId, behavior, message, answers, rememberRules, startAfterCreate);
-    } catch {
-      listApprovals(selectedId)
-        .then(setApprovals)
-        .catch(() => undefined);
-    }
-  };
+  const { decide, untranslated: untranslatedDecisions } = useApprovalDecisions(selectedId, setApprovals);
 
   // If the question the composer is replying to gets answered another way (the user picks an
   // option, an SSE approval_resolved arrives, or the confirmation is settled on a phone), drop the
@@ -5767,15 +5789,17 @@ export function WorkspaceView({
           ...(vars.attachmentIds ?? []).map((id) => ({ id, mimeType: '' })),
         ];
         const queuedItem =
-          placement === 'accepted'
+          placement === 'accepted' && !res.translation
             ? undefined
             : {
                 turnId: res.turnId,
                 content,
                 shell,
-                placement,
+                // Held for its translation: on the queue, whatever its place will be once delivered.
+                placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                 ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
                 ...(attachments.length ? { attachments } : {}),
+                ...(res.translation ? { translation: res.translation } : {}),
               };
         return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
       }
@@ -5809,14 +5833,15 @@ export function WorkspaceView({
           );
           const placement = turnPlacementOf(res);
           const queuedItem =
-            placement === 'accepted'
+            placement === 'accepted' && !res.translation
               ? undefined
               : {
                   turnId: res.turnId,
                   content,
                   shell,
-                  placement,
+                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                   ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
+                  ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
@@ -5868,13 +5893,14 @@ export function WorkspaceView({
           // row-locked placement preserves a real queued/steer state here.
           const placement = turnPlacementOf(res);
           const queuedItem =
-            placement === 'accepted'
+            placement === 'accepted' && !res.translation
               ? undefined
               : {
                   turnId: res.turnId,
                   content,
                   shell,
-                  placement,
+                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
+                  ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
@@ -7437,7 +7463,7 @@ export function WorkspaceView({
       if (action !== 'cancel') setFollowHandoff(sessionId);
       if (view.handedOverToSessionId && selectedId === sessionId) navigate(sessionPath(view.handedOverToSessionId));
     },
-    onError: (e: Error) => message.error("Couldn't hand over", e.message),
+    onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
   });
   const runHandoffAction = (action: CoordinatorHandoffAction): void => {
     const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
@@ -9292,7 +9318,13 @@ export function WorkspaceView({
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
-  const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner)) : '';
+  // While a handoff note is written and the replacement runs, the outgoing coordinator's header
+  // says "Handing over" in place of the run word (board 02-2).
+  const headRunWord = !selected
+    ? ''
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.badgeHandingOver
+      : statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner));
   // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
   // session's bottom, and the label itself — one read of one helper, so the words and the ink are
   // not decided twice.
@@ -10503,6 +10535,7 @@ export function WorkspaceView({
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
+              <TranslationCtx.Provider value={translationActions}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               <ExchangeTreeCtx.Provider value={exchangeTree}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
@@ -10833,6 +10866,7 @@ export function WorkspaceView({
                 <ApprovalPanel
                   approval={a}
                   onDecide={decide}
+                  untranslated={untranslatedDecisions[a.id]}
                   active={a.id === activeApprovalId}
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
@@ -10868,6 +10902,7 @@ export function WorkspaceView({
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
                         wake={wake}
+                        translationHeld={heldForTranslation(q.translation)}
                         held={queuedHeldTag}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
                         onPutBack={
@@ -10923,6 +10958,7 @@ export function WorkspaceView({
               )}
               </ExchangeTreeCtx.Provider>
               </WatchWakeNamesCtx.Provider>
+              </TranslationCtx.Provider>
             </div>
           ) : bareMachine ? (
             // A scroller of its own, not `scrollRef`: this is no conversation, and the card is read from
@@ -11566,6 +11602,10 @@ export function SessionComposer({
   defaultSendIntent,
   contextActions,
 }: SessionComposerProps) {
+  // Settings › Translation (6A): the account's switch and language, for the composer's tag.
+  const navigate = useNavigate();
+  const me = useQuery(meQuery());
+  const translationIsOn = translationOn(me.data);
   // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
   // its auto-grow cap.
   const [composerScroll, setComposerScroll] = useState(0);
@@ -12464,6 +12504,18 @@ export function SessionComposer({
             actions={contextActions}
           />
         )}
+        {/* Settings › Translation is on (6A): what is typed here is translated into English when it
+            is sent, never while it is typed. The tag opens the setting. */}
+        {translationIsOn && (
+          <button
+            type="button"
+            className="composer-translation-tag"
+            title="Messages are translated before the agent gets them. Open Settings › Translation"
+            onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
+          >
+            {translationTag(translationLanguageOf(me.data))}
+          </button>
+        )}
         {showStop ? (
           <Button
             className="composer-send"
@@ -13032,7 +13084,8 @@ export function usePendingTray({
       return {
         key: turn.turnId,
         heading: intoTurn ? 'current' : 'next',
-        text: turn.content,
+        // Translated (Settings › Translation): the words the owner wrote, not the English delivered.
+        text: turn.translation?.original ?? turn.content,
         shell: turn.shell,
         ...trayPictures(turnImages[turn.turnId], refs),
         // Held by its runner's update or by a full runner, run or batch: the tag says which, as it does

@@ -341,6 +341,14 @@ export enum RunEventType {
   // of truth is GET /sessions/:id/turns, which focused clients re-fetch on receipt. Keeping the
   // payload empty avoids maintaining a second queued-turn wire shape on the event stream.
   QUEUED_TURNS_CHANGED = 'queued_turns_changed',
+  // Settings › Translation: an agent reply (an `assistant` text block) or a prompt_suggestion was
+  // translated into the owner's language, or its translation failed. Live-only, seq 0, like the
+  // approval nudges, so it never takes a runner-owned seq: the durable record is the
+  // `translation` key the server writes into the translated event's own payload, which every
+  // replay (/events/page, the SSE catch-up, /events/:seq/full) carries. Payload:
+  // TranslationEventPayload { of: <seq of the translated event>, lang, text } or { of, lang,
+  // failed: true } (@orbit/shared translation.ts).
+  TRANSLATION = 'translation',
   // "This stream cannot bring your window up to date in place — drop your cached window and
   // re-seed from a tail page." Never persisted. The SSE endpoint synthesizes it when a resuming
   // client's gap exceeds SSE_GAP_CAP; an apiserver hands it to its own streams of a session (never

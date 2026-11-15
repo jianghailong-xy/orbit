@@ -14,9 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
-import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.realtime.SessionState
-import io.orbitd.android.directory.directoryError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import io.orbitd.android.management.CursorCopy
@@ -123,8 +121,9 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
                     model.target?.workspaceId ?: detail.text("agentId") ?: (detail["workspace"] as? JsonObject)?.text("id"))
             }
             // Board 03: under the readings, a divider and the actions — Compact where the engine has `/compact` (greyed while a turn
-            // runs), Start a new coordinator in a project's current coordinator. Neither, no divider.
-            val compact = model.target == null && CoordinatorHandoff.compactOffered(state.catalog?.let { it.slashItems(it.engineOf(detail), detail.text("agentId")) }.orEmpty())
+            // runs), Start a new coordinator in a project's current coordinator. Neither, no divider. While a handoff has the composer
+            // locked, no Compact at all: no turn of this conversation is to come (web's `compactOffered`, OrbitKit hides the gauge).
+            val compact = model.target == null && CoordinatorHandoff.outgoing(detail)?.locksComposer != true && CoordinatorHandoff.compactOffered(state.catalog?.let { it.slashItems(it.engineOf(detail), detail.text("agentId")) }.orEmpty())
             val handOver = model.target == null && CoordinatorHandoff.startOffered(detail)
             if (compact || handOver) HorizontalDivider(Modifier.padding(vertical = 8.dp))
             if (compact) {
@@ -150,12 +149,12 @@ fun ComposerUsage(model: ComposerModel, state: ComposerState, detail: JsonObject
         var error by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
         LaunchedEffect(projectId) { waits = runCatching { api.pendingWaits(projectId) }.getOrNull() }
-        HandoverConfirm(CoordinatorHandoff.projectTitle(detail), running, waits, busy, error, onHandOver = {
+        HandoverConfirm(running, waits, busy, error, onHandOver = {
             busy = true; error = null
             scope.launch {
                 try { api.post(projectId); confirming = false }
                 catch (cancel: CancellationException) { throw cancel }
-                catch (e: Exception) { error = (e as? ApiError)?.messages?.firstOrNull() ?: directoryError(e) }
+                catch (e: Exception) { error = CoordinatorHandoff.refusal(e) }
                 finally { busy = false }
             }
         }, onCancel = { confirming = false })

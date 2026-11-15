@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * Compact and Start a new coordinator in the Context popover (board 01), and the handoff as the
@@ -135,6 +137,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION}`]}>
             <Where />
+            <ToastViewport />
             <Routes>
               <Route path="*" element={<WorkspaceView runner={runner} />} />
             </Routes>
@@ -231,6 +234,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     client = null;
     container = null;
     try {
+      await act(async () => clearToasts());
       if (mountedRoot) await act(async () => mountedRoot.unmount());
     } finally {
       if (mountedClient) {
@@ -376,6 +380,31 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(mounted().querySelector('[data-handoff-state="HANDING_OVER"]')?.textContent).toBe('Handing over to a new coordinator…'));
   });
 
+  it.each([
+    ['WRITING', true],
+    ['HANDING_OVER', true],
+    ['FAILED', false],
+    ['COMPLETED', false],
+    [null, false],
+  ] as const)('02-2: the header reads "Handing over" only while the handoff is in flight (%s)', async (state, shown) => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: state
+        ? { state, startedAt: new Date().toISOString(), failureCode: state === 'FAILED' ? 'TURN_FAILED' : null,
+          failureReason: null, handedOverToSessionId: state === 'COMPLETED' ? SUCCESSOR : null }
+        : null,
+    });
+    await mount();
+    const sub = () => mounted().querySelector('.workspace-sub')?.textContent ?? '';
+    await waitFor(() => expect(sub()).not.toBe(''));
+    if (shown) {
+      expect(sub().split(' · ')[0]).toBe('Handing over');
+    } else {
+      expect(sub()).not.toContain('Handing over');
+    }
+  });
+
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {
     detail = session({
       projectId: PROJECT,
@@ -469,5 +498,39 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     expect(document.querySelector('.handoff-confirm-body')?.textContent).toBe(
       'This coordinator writes a handoff note, then the project continues in a new conversation that starts from that note. This one is completed — nothing is deleted.',
     );
+  });
+
+  it('says "Couldn\'t hand over" and the server\'s reason when the confirm\'s press is refused', async () => {
+    detail = session({ projectId: PROJECT, projectMembership: coordinator });
+    await mount();
+    const post = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, init?: { method?: string }) =>
+      p.includes('/coordinator/handoff') && init?.method === 'POST'
+        ? Promise.reject(new Error('This project already has a handoff under way.'))
+        : post(p, init as never)) as never);
+    const rows = await contextActions();
+    await click(rows.find((r) => titleOf(r) === 'Start a new coordinator'));
+    await waitFor(() => expect(document.querySelector('.handoff-confirm')).not.toBeNull());
+    await click(button('Hand over'));
+    await waitFor(() => expect(document.querySelector('.orbit-confirm-error')?.textContent)
+      .toBe("Couldn't hand over: This project already has a handoff under way."));
+  });
+
+  it('toasts "Couldn\'t hand over" and the server\'s reason when a press on the handoff\'s row is refused', async () => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: { state: 'FAILED', startedAt: new Date().toISOString(), failureCode: 'TURN_FAILED',
+        failureReason: null, handedOverToSessionId: null },
+    });
+    await mount();
+    const post = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, init?: { method?: string }) =>
+      p.includes('/coordinator/handoff/') ? Promise.reject(new Error('The handoff already ended.')) : post(p, init as never)) as never);
+    await waitFor(() => expect(mounted().querySelector('[data-handoff-state="FAILED"]')).not.toBeNull());
+    await click(button('Keep this coordinator'));
+    await waitFor(() => expect(document.body.querySelector('.toast-viewport .toast-head')?.textContent).toBe("Couldn't hand over"));
+    expect(document.body.querySelector('.toast-viewport .toast-detail, .toast-viewport .toast-reason')?.textContent)
+      .toBe('The handoff already ended.');
   });
 });

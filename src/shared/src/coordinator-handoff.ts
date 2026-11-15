@@ -150,4 +150,16 @@ export const COORDINATOR_HANDOFF_COPY = {
   tryAgain: 'Try again',
   handOverWithoutNote: 'Hand over without a note',
   keepThisCoordinator: 'Keep this coordinator',
+  /** A handoff press the server refused: the toast's title on web, the lead of the line on the phones and the Mac. */
+  refused: "Couldn't hand over",
 } as const;
+
+/**
+ * The phones' confirm body (board 03 iOS 2), on iOS and Android alike: board 02's confirm without the note row and the
+ * wait names, the waits as a count only, and no count when there are none.
+ */
+export function coordinatorHandoffPhoneConfirmBody(waits: number, running: boolean): string {
+  const lead = running ? 'After the current turn ends, this coordinator writes a handoff note' : 'This coordinator writes a handoff note';
+  const moves = waits > 0 ? ` ${COORDINATOR_HANDOFF_COPY.waitsRowTitle(waits)}.` : '';
+  return `${lead}, then the project continues in a new conversation.${moves} Nothing is deleted.`;
+}

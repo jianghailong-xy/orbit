@@ -187,6 +187,18 @@ import { claudeRegionErrorLine } from '../lib/claudeRegion';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
+import type { ReplyTranslation, TurnTranslation } from '@orbit/shared';
+import { replyTranslationOf, turnTranslationOf } from '../lib/translation';
+import {
+  ReplyTranslationFoot,
+  ShownOriginalProvider,
+  TranslationCtx,
+  UserTranslationFoot,
+  replyTranslationKey,
+  useReplyShownOriginal,
+  useShownOriginal,
+  userTranslationKey,
+} from './TranslationParts';
 
 /** What `Markdown` accepts as `remarkPlugins`: the array `MD` builds is annotated with it so that
  *  the plugins written into its literal cannot narrow its element type and refuse the next one. */
@@ -553,6 +565,13 @@ type TextNode = {
   kind: 'user' | 'assistant' | 'thinking';
   seq: number;
   text: string;
+  // Settings › Translation (@orbit/shared translation.ts). A user message: what the owner typed and
+  // how far its translation got, `text` being the English the engine got. An agent reply: its
+  // translation into the owner's language, and — none yet in a turn whose message was translated —
+  // that one is coming (`awaitsTranslation`).
+  translation?: TurnTranslation;
+  replyTranslation?: ReplyTranslation;
+  awaitsTranslation?: boolean;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
   // one row. The duration is the one the runner stored on each block (see lib/thinkingDraft); a
   // block an older runner stored has none, and its row states its size alone.
@@ -656,7 +675,16 @@ type MarkerNode = {
 };
 // The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
 // the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
-type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
+// `replySeq` / `replyTranslation`: the reply's own event and its translation (Settings › Translation),
+// so the foot copies the version of it on screen.
+type DividerNode = {
+  kind: 'divider';
+  seq: number;
+  ts?: string;
+  reply?: string;
+  replySeq?: number;
+  replyTranslation?: ReplyTranslation;
+};
 // `repeats` counts the identical lines folded into this one (see `engineStderr`); absent or 1
 // means the line was seen once.
 type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
@@ -1240,6 +1268,11 @@ function buildTranscript(
   // Narration between tool calls is overwritten by whatever follows it, so what is left when the
   // turn ends is the answer the turn ended on.
   let turnReply: string | undefined;
+  let turnReplySeq: number | undefined;
+  let turnReplyTranslation: ReplyTranslation | undefined;
+  // Whether the turn now open was opened by a message the owner wrote with translation on: its
+  // replies are translated by the server, so one without a translation yet is waiting for it.
+  let turnTranslated = false;
   // The `turnHead` the turn now open is drawn from — the message that opened it, until its
   // `turn_end` closes it. What says how long that turn worked once the end arrives.
   let turnHead: TextNode['turnHead'];
@@ -1334,11 +1367,16 @@ function buildTranscript(
           }
           break;
         }
+        const translation = turnTranslationOf(p.translation);
+        if (!parent && !p.steer && translation) {
+          turnTranslated = translation.state === 'DONE' || translation.state === 'SENT_AS_WRITTEN';
+        }
         if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
           const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
             text,
+            ...(translation ? { translation } : {}),
             note: recorded?.note,
             itemCard,
             ownerAnswer,
@@ -1426,8 +1464,20 @@ function buildTranscript(
           else {
             const siblings = into(parent);
             agentWorked();
-            siblings.push({ kind: 'assistant', seq: ev.seq, text });
-            if (siblings === roots) turnReply = text;
+            // A sub-agent's report to its caller is never translated (parentToolUseId).
+            const replyTranslation = parent ? undefined : replyTranslationOf(p.translation);
+            siblings.push({
+              kind: 'assistant',
+              seq: ev.seq,
+              text,
+              ...(replyTranslation ? { replyTranslation } : {}),
+              ...(!parent && !replyTranslation && turnTranslated ? { awaitsTranslation: true } : {}),
+            });
+            if (siblings === roots) {
+              turnReply = text;
+              turnReplySeq = ev.seq;
+              turnReplyTranslation = replyTranslation;
+            }
           }
         }
         break;
@@ -1511,10 +1561,19 @@ function buildTranscript(
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
-            : { kind: 'divider', seq: ev.seq, ts: ev.ts, reply: turnReply },
+            : {
+                kind: 'divider',
+                seq: ev.seq,
+                ts: ev.ts,
+                reply: turnReply,
+                ...(turnReplyTranslation ? { replySeq: turnReplySeq, replyTranslation: turnReplyTranslation } : {}),
+              },
         );
         turnAccountedFor = false;
         turnReply = undefined;
+        turnReplySeq = undefined;
+        turnReplyTranslation = undefined;
+        turnTranslated = false;
         break;
       }
       case 'interrupt':
@@ -1661,6 +1720,7 @@ export const SubagentWaitingCtx = createContext<ReadonlyMap<string, string>>(new
 
 function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
+  const translating = useContext(TranslationCtx)?.on === true;
   // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
   // each time a block settles, and a reader who opened one wants the next block of the same turn
   // open too. A turn's end puts it back to folded. Read off the transcript's last `turn_end` rather
@@ -1681,7 +1741,15 @@ function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
           onToggle={() => setThinkOpen((o) => !o)}
         />
       )}
-      {drafts.text && <StreamingMessage text={drafts.text} />}
+      {drafts.text && (translating ? (
+        // Settings › Translation (2A): the English is all there is until the block completes.
+        <div className="chat-translated-reply is-pending">
+          <StreamingMessage text={drafts.text} />
+          <ReplyTranslationFoot pending flipped={false} onFlip={() => {}} />
+        </div>
+      ) : (
+        <StreamingMessage text={drafts.text} />
+      ))}
     </>
   );
 }
@@ -1877,6 +1945,7 @@ export const Transcript = memo(function Transcript({
   const body = (
     <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
       <TaskLookupCtx.Provider value={taskLookup}>
+        <ShownOriginalProvider>
         <ImagePreviewProvider>
           {head.map((insert) => (
             <Fragment key={insert.key}>{insert.element}</Fragment>
@@ -1885,6 +1954,7 @@ export const Transcript = memo(function Transcript({
           <StreamingDrafts lastTurnEnd={lastTurnEnd} />
           {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
         </ImagePreviewProvider>
+        </ShownOriginalProvider>
       </TaskLookupCtx.Provider>
     </MainCheckoutResultsCtx.Provider>
   );
@@ -2271,7 +2341,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         return (
           <SessionMessageCard
             card={node.sessionMessage}
-            text={node.text}
+            // Settings › Translation: the words in the owner's language when the turn was translated.
+            text={node.translation?.state === 'DONE' ? node.translation.original : node.text}
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
@@ -2552,7 +2623,11 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       return <UserBubble node={node} queued={queued} />;
     }
     case 'assistant':
-      return <AssistantBubble text={node.text} seq={node.seq} />;
+      return node.replyTranslation || node.awaitsTranslation ? (
+        <TranslatedReply node={node} />
+      ) : (
+        <AssistantBubble text={node.text} seq={node.seq} />
+      );
     case 'thinking':
       return <Thinking text={node.text} seq={node.seq} ms={node.thinkingMs} blocks={node.blocks} />;
     case 'tool':
@@ -3263,7 +3338,15 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // never in it (useControlPlaneNote). An event with no note is the echo as it came, however much
   // of it looks like a block. Copying and the length cap follow the typed text for the same reason:
   // neither should be measured against a block nobody wrote.
-  const typed = node.text;
+  // Settings › Translation: a delivered message shows what the owner wrote, or — flipped — the English
+  // the agent got (`node.text`). A held one has nothing but what they wrote. Copy follows the screen.
+  const translation = node.translation;
+  const [flipped, flip] = useShownOriginal(userTranslationKey(node.seq, node.turnId));
+  const typed = translation?.state === 'DONE' && !flipped ? translation.original : node.text;
+  const translationFoot =
+    translation && translation.state !== 'SENT_AS_WRITTEN' ? (
+      <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
+    ) : null;
   // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
   // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
   const noteKind = node.note ? describeNote(node.note) : '';
@@ -3321,7 +3404,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {(typed || status || note || held) && (
+      {(typed || status || note || held || translationFoot) && (
         <div className="chat-user-meta">
           {typed && (
             <button
@@ -3335,7 +3418,8 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             </button>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note || held) && <span className="chat-meta-sep">·</span>}
+          {typed && node.ts && (status || note || held || translationFoot) && <span className="chat-meta-sep">·</span>}
+          {translationFoot}
           {status}
           {held}
           {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
@@ -3391,10 +3475,14 @@ function TurnAttachments({ node }: { node: TextNode }) {
 function TurnFoot({ node }: { node: DividerNode }) {
   const [copied, setCopied] = useState(false);
   const { seq, ts, reply } = node;
+  // Settings › Translation: copy the version of the reply on screen, translated unless flipped.
+  const shownOriginal = useReplyShownOriginal(node.replySeq);
   if (!reply && !ts) return <div className="chat-turn-divider" data-seq={seq} />;
+  const shownReply =
+    node.replyTranslation?.text !== undefined && !shownOriginal ? node.replyTranslation.text : reply;
   const copy = () => {
-    if (!reply) return;
-    void copyText(reply).then((ok) => {
+    if (!shownReply) return;
+    void copyText(shownReply).then((ok) => {
       if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
@@ -4104,6 +4192,22 @@ export function AssistantBubble({
       data-seq={seq}
     >
       <MD highlight={!streaming}>{text}</MD>
+    </div>
+  );
+}
+
+// An agent reply under Settings › Translation (board frames 4–6): shown in the owner's language with
+// a per-message flip to the English the agent wrote; greyed, with its chip, until the translation
+// arrives; and with a Retry when it failed — in English, which is all there is.
+function TranslatedReply({ node }: { node: TextNode }) {
+  const [flipped, flip] = useShownOriginal(replyTranslationKey(node.seq));
+  const translation = node.replyTranslation;
+  const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
+  const pending = !translation && node.awaitsTranslation;
+  return (
+    <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
+      <AssistantBubble text={translated} seq={node.seq} />
+      <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
     </div>
   );
 }
