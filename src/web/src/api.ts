@@ -873,7 +873,7 @@ export const retryReplyTranslation = (sessionId: string, seq: number) =>
   api<ReplyTranslationRetryResponse>(`/sessions/${sessionId}/events/${seq}/translation/retry`, { method: 'POST' });
 
 /** Prompt optimizer (docs/prompt-optimizer-design.md): DeepSeek improves a composer draft. The answer is
- *  a suggestion the composer draws as a card (board frame 4); nothing changes until the owner uses it.
+ *  a suggestion the composer draws as a card (board frame 4); the box keeps the draft until the owner presses Use.
  *  Refusals: 409 PROMPT_OPTIMIZER_OFF, 404, 400, and 422 PROMPT_OPTIMIZATION_FAILED (frame 6). */
 export const optimizePrompt = (body: PromptOptimizationRequest, signal?: AbortSignal) =>
   api<PromptOptimization>('/prompt-optimizations', { method: 'POST', body, signal });
