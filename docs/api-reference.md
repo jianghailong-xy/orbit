@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 31 |
+| `public` | 34 |
 | `user` | 436 |
 | `admin` | 28 |
 | `runner` | 186 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **685** |
+| **Total** | **688** |
 
 ## Public routes
 
@@ -70,6 +70,9 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `ALL` | `/api/gw/codex` | — | `PoolGatewayController.forward` |
 | `ALL` | `/api/gw/codex/{*path}` | — | `PoolGatewayController.forward` |
 | `GET` | `/api/health` | — | `HealthController.read` |
+| `GET` | `/api/help` | — | `HelpController.index` |
+| `GET` | `/api/help/articles/:slug` | path `slug` | `HelpController.article` |
+| `GET` | `/api/help/search` | query `q` | `HelpController.search` |
 | `POST` | `/api/runner/device/poll` | body `Object` | `RunnerApiController.devicePoll` |
 | `POST` | `/api/runner/device/start` | body `Object` | `RunnerApiController.deviceStart` |
 | `POST` | `/api/runner/register` | body `Object` | `RunnerApiController.register` |
