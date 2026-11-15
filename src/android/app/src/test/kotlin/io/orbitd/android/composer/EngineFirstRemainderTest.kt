@@ -7,10 +7,11 @@ import org.junit.Test
 
 /**
  * A07-19's remainder of the engine-first work (iOS e6295abe7, 6f3083272, cef3c3f83, f93f3fe5e; OrbitKit EngineFirstClientTests
- * `testWhatTheProviderRowSays`, AgentDefaults `rememberedModel`/`livePin`/`newSessionModel`, SessionProviderChoices `keyName`; web
- * `shownProviderValue`, `rememberedModel`, `keyName`):
+ * `testWhatTheProviderRowSays`, AgentDefaults `livePin`/`newSessionModel`, SessionProviderChoices `keyName`; web
+ * `shownProviderValue`, `newSessionModelFor`, `keyName`):
  * (d) the Provider row says a sign-in by the account in use — Automatic while Orbit picks it — and OpenCode's own configuration as its
- * own sign-in; (e) a new session starts on the model last picked for its engine and credential, while the runtime still offers it;
+ * own sign-in; (e) a new session starts on its workspace's lastModel on that workspace's engine and credential, while the runtime
+ * still offers it;
  * (b) a key is named in a sentence by its vendor and its own name.
  */
 class EngineFirstRemainderTest {
@@ -81,37 +82,41 @@ class EngineFirstRemainderTest {
         assertEquals("DeepSeek", value(catalog, """{"provider":"deepseek"}""", engine = "opencode"))
     }
 
-    /** Remembered per engine and credential (`<engine>:<provider>`, contract §6.5): one key's model on Claude Code is not its model on
-     * DeepSeek Harness. What an older client remembered is read after it: a bare slug for the engine the provider runs on by default,
-     * `opencode` for OpenCode's own configuration and `opencode/<slug>` for a key on OpenCode. */
-    @Test fun theModelLastPickedIsRememberedPerEngineAndCredential() {
-        val catalog = EngineFixture.catalog()
-        val remembered = mapOf("claude:deepseek" to "deepseek-v4-flash", "dsh:deepseek" to "deepseek-v4-pro", "codex" to "gpt-5.6-sol",
-            "opencode" to "anthropic/claude-sonnet", "opencode/glm" to "orbit-glm/glm-5.2", "deepseek-2" to "deepseek-v4-flash")
-        assertEquals("deepseek-v4-flash", catalog.rememberedModel("claude", "deepseek", remembered))
-        assertEquals("deepseek-v4-pro", catalog.rememberedModel("dsh", "deepseek", remembered))
-        assertEquals("gpt-5.6-sol", catalog.rememberedModel("codex", "codex", remembered))
-        assertEquals("anthropic/claude-sonnet", catalog.rememberedModel("opencode", "opencode", remembered))
-        assertEquals("glm-5.2", catalog.rememberedModel("opencode", "glm", remembered))
-        assertEquals("a bare slug is its default engine's", "deepseek-v4-flash", catalog.rememberedModel("claude", "deepseek-2", remembered))
-        assertNull(catalog.rememberedModel("dsh", "deepseek-2", remembered))
-        assertNull("an OpenCode entry naming a key is that key's", catalog.rememberedModel("opencode", "opencode", mapOf("opencode" to "orbit-glm/glm-5.2")))
-        assertNull(catalog.rememberedModel("claude", "claude", remembered))
+    /** A workspace whose person-opened session last ran [engine] on [provider] with [model]; its deprecated `provider` alias says
+     * something else, which nothing reads. */
+    private fun last(engine: String, provider: String, model: String?) = buildJsonObject {
+        put("provider", "elsewhere"); put("lastEngine", engine); put("lastProvider", provider); model?.let { put("lastModel", it) }
     }
 
-    /** A new session starts on it while the runtime still offers it, and on the pair's default once it has retired it: OpenCode owns
-     * its own selection, a key's own list is a document rather than a live probe, a catalogue not reported retires nothing. */
-    @Test fun aNewSessionStartsOnItWhileItIsStillOffered() {
+    /** A draft's model is its workspace's `lastModel` when it runs on that workspace's lastEngine and lastProvider (docs/
+     * workspace-default-model-design.md, web `newSessionModelFor`): one key's model on Claude Code is not its model on DeepSeek
+     * Harness, and the deprecated `provider` alias is not lastProvider. */
+    @Test fun theDraftModelIsTheWorkspacesLastModelOnItsOwnEngineAndCredential() {
         val catalog = EngineFixture.catalog()
-        assertEquals("deepseek-v4-flash", catalog.newSessionModel("dsh", "deepseek", mapOf("dsh:deepseek" to "deepseek-v4-flash")))
-        assertEquals("claude-opus-5-5", catalog.newSessionModel("claude", "claude", mapOf("claude:claude" to "claude-opus-5-5")))
-        assertEquals("retired: the pair's default", "claude-opus-5-5", catalog.newSessionModel("claude", "claude", mapOf("claude:claude" to "claude-opus-4")))
-        assertNull(catalog.liveRememberedModel("claude", "claude", mapOf("claude:claude" to "claude-opus-4")))
-        assertEquals("glm-9", catalog.newSessionModel("claude", "glm", mapOf("claude:glm" to "glm-9")))
-        assertEquals("anything/at-all", catalog.newSessionModel("opencode", "opencode", mapOf("opencode:opencode" to "anything/at-all")))
-        assertEquals("nothing remembered: the pair's default", "deepseek-v4-pro", catalog.newSessionModel("dsh", "deepseek", emptyMap()))
+        val workspace = last("dsh", "deepseek", "deepseek-v4-flash")
+        assertEquals("deepseek-v4-flash", catalog.lastModel("dsh", "deepseek", workspace))
+        assertNull("another engine", catalog.lastModel("claude", "deepseek", workspace))
+        assertNull("another credential", catalog.lastModel("dsh", "deepseek-2", workspace))
+        assertNull("no lastModel yet", catalog.lastModel("dsh", "deepseek", last("dsh", "deepseek", null)))
+        assertNull("the provider alias is not lastProvider", catalog.lastModel("claude", "claude",
+            obj("""{"provider":"claude","lastEngine":"claude","lastModel":"claude-opus-5-5"}""")))
+        assertNull("no workspace", catalog.lastModel("claude", "claude", null))
+    }
+
+    /** A new session starts on it while the runtime still offers it, and on the runner's or the key's default otherwise: OpenCode owns
+     * its own selection, a key's own list is a document rather than a live probe, a catalogue not reported retires nothing. */
+    @Test fun aNewSessionStartsOnItWhileItIsStillOfferedElseOnTheDefault() {
+        val catalog = EngineFixture.catalog()
+        assertEquals("deepseek-v4-flash", catalog.newSessionModel("dsh", "deepseek", last("dsh", "deepseek", "deepseek-v4-flash")))
+        assertEquals("claude-opus-5-5", catalog.newSessionModel("claude", "claude", last("claude", "claude", "claude-opus-5-5")))
+        assertEquals("retired: the pair's default", "claude-opus-5-5", catalog.newSessionModel("claude", "claude", last("claude", "claude", "claude-opus-4")))
+        assertNull(catalog.liveLastModel("claude", "claude", last("claude", "claude", "claude-opus-4")))
+        assertEquals("glm-9", catalog.newSessionModel("claude", "glm", last("claude", "glm", "glm-9")))
+        assertEquals("anything/at-all", catalog.newSessionModel("opencode", "opencode", last("opencode", "opencode", "anything/at-all")))
+        assertEquals("no lastModel: the runner's default", "deepseek-v4-pro", catalog.newSessionModel("dsh", "deepseek", last("dsh", "deepseek", null)))
+        assertEquals("on another engine: its default", "deepseek-v4-pro", catalog.newSessionModel("dsh", "deepseek", last("claude", "deepseek", "deepseek-v4-flash")))
         val unreported = ComposerCatalog(obj("""{"id":"r","engines":[{"engine":"claude","installed":true,"auth":"yes"}]}"""), emptyList())
-        assertEquals("claude-opus-4", unreported.newSessionModel("claude", "claude", mapOf("claude:claude" to "claude-opus-4")))
+        assertEquals("claude-opus-4", unreported.newSessionModel("claude", "claude", last("claude", "claude", "claude-opus-4")))
     }
 
     /** A07-19 (b): a key as a sentence names it, `the DeepSeek key “DeepSeek 2”` — its vendor and its own name, never its slug; a custom
