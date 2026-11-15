@@ -32,6 +32,7 @@ test('a shadow decision names the model the SubAgent runs on, labelled by the ru
     reasons: ['Tier M, set by the caller', "Shadow decision: this SubAgent runs on the parent's model, claude-opus-5-5"],
     why: null, removed: [],
     costUsd: 0.21, resultSummary: 'Three callers.', workspaceName: null,
+    description: null, engine: null, readonly: false, changedFiles: [],
     createdAt: '2026-11-11T10:00:00.000Z', endedAt: '2026-11-11T10:03:12.000Z',
   });
 });
@@ -40,6 +41,22 @@ test('a remote run names its workspace: the row\'s now, else the one its decisio
   const remote = { ...base, decision: { applied: true, reasons: [], workspace: { id: 'w', name: 'orbit-macos', reason: 'Named' } } };
   assert.equal(subagentRunView({ ...remote, workspace: { name: 'orbit-mac-mini' } }).workspaceName, 'orbit-mac-mini');
   assert.equal(subagentRunView({ ...remote, workspace: null }).workspaceName, 'orbit-macos');
+});
+
+test('the engine is the last attempt\'s, else the pick\'s; read-only and changed files come through', () => {
+  const decision = { level: 'M', engine: 'claude', model: 'claude-sonnet-5-5', applied: true, reasons: [], readonly: true };
+  const moved = subagentRunView({
+    ...base, decision, changedFiles: ['quota/poller.ts'], description: 'Add backoff',
+    attempts: [{ engine: 'claude', model: 'claude-sonnet-5-5' }, { engine: 'codex', model: 'gpt-6.1-sol' }],
+  });
+  assert.equal(moved.engine, 'codex');
+  assert.equal(moved.readonly, true);
+  assert.deepEqual(moved.changedFiles, ['quota/poller.ts']);
+  assert.equal(moved.description, 'Add backoff');
+  const first = subagentRunView({ ...base, decision: { ...decision, readonly: undefined } });
+  assert.equal(first.engine, 'claude');
+  assert.equal(first.readonly, false);
+  assert.deepEqual(first.changedFiles, []);
 });
 
 test('an applied decision names its own pick; an unknown model keeps its id', () => {

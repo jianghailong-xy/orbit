@@ -100,6 +100,7 @@ struct ConsoleView: View {
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
             subagentRun: { console.subagentRuns[$0] },
+            parentEngine: appModel.session(id: console.sessionID)?.engine,
             fullPayload: { await console.fullPayload(seq: $0) })
     }
 
@@ -331,6 +332,8 @@ struct ConsoleView: View {
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
+                // Every Agent this session started: one line that opens their list.
+                AgentsBandRow(console: console)
                 WorktreeBar(console: console)
                 // Where a forked task's run took its checkout from (SR18), beside the branch the
                 // bar above names: the server's sentence, as it is.
@@ -1505,6 +1508,9 @@ struct TranscriptView: View {
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
             StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
+        case .agents(let cards):
+            // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
+            AgentGroupView(cards: cards, fullPayload: console.fullPayload)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
