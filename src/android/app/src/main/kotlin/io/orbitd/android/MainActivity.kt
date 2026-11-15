@@ -45,6 +45,13 @@ import io.orbitd.android.reader.GuestSessionPage
 import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastHost
+import io.orbitd.android.toast.ToastTone
+import io.orbitd.android.composer.DraftTarget
+import io.orbitd.android.share.ShareCopy
+import io.orbitd.android.share.ShareHandoff
+import io.orbitd.android.share.ShareIntents
+import io.orbitd.android.share.ShareTarget
+import io.orbitd.android.share.deliverShare
 import io.orbitd.android.tasks.TasksScreen
 import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectsScreen
@@ -91,6 +98,8 @@ import kotlinx.serialization.encodeToString
 class MainActivity : ComponentActivity() {
     private lateinit var auth: AuthViewModel
     private var incoming by mutableStateOf<Pair<Long, String>?>(null)
+    /** What ShareActivity handed over, until the shell has put it in its composer. */
+    private var share by mutableStateOf<ShareHandoff?>(null)
     private var linkSequence = 0L
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,7 +111,7 @@ class MainActivity : ComponentActivity() {
             AccountAppearance(application as OrbitApplication) {
                 UpdatePromptHost((application as OrbitApplication).updates) {
                     PushNoticeHost((application as OrbitApplication).push) {
-                        OrbitShell(auth, application as OrbitApplication, incoming) { address ->
+                        OrbitShell(auth, application as OrbitApplication, incoming, share, { share = null }) { address ->
                             auth.continueWithGoogle(address) { url -> openInSignInBrowser(this@MainActivity, url) }
                         }
                     }
@@ -122,6 +131,7 @@ class MainActivity : ComponentActivity() {
     private fun acceptIntent(intent: Intent) {
         // `orbit://auth/google`, from GoogleSignInRedirectActivity; any other address is not Google's answer.
         intent.data?.let { auth.handleGoogleCallback(it.toString()) }
+        ShareIntents.receive(intent)?.let { share = it }
         if (intent.action == Intent.ACTION_VIEW) intent.dataString?.let {
             // A notification's tap carries the notification's tag as the intent's identifier (PushNotifications.show).
             LastPageMarks.delivered(it, intent.identifier != null)
@@ -132,7 +142,8 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?, continueWithGoogle: (String) -> Unit) {
+private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pair<Long, String>?, share: ShareHandoff?, shareTaken: () -> Unit,
+    continueWithGoogle: (String) -> Unit) {
     val authState by auth.state.collectAsState()
     val authMessage by auth.message.collectAsState()
     val googleBusy by auth.googleBusy.collectAsState()
@@ -238,6 +249,25 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 firstOnline != null -> select(machineDraftDestination(firstOnline), OrbitRoute(Destination.DRAFT, id = firstOnline, origin = origin))
                 else -> open(OrbitRoute(Destination.RUNNER, origin = origin))
             }
+        }
+        // Share to Orbit (docs/share-to-orbit-design.md §3.2, §4): once the directory says which sessions are open, the picked one opens
+        // with the items staged in its composer — or, deleted or ended meanwhile, a new-session draft in its workspace, with a toast why.
+        LaunchedEffect(share, data.ready, data.error) {
+            val handoff = share ?: return@LaunchedEffect
+            if (!data.ready && data.error == null) return@LaunchedEffect
+            shareTaken()
+            val landing = if (!data.ready) handoff.target
+                else handoff.landing { id -> data.sessions["open"].orEmpty().any { ObjectId.same(it.id, id) } }
+            if (landing != handoff.target) OrbitToasts.show(ShareCopy.SESSION_GONE, detail = ShareCopy.SESSION_GONE_DETAIL, tone = ToastTone.WARNING)
+            val model = when (landing) {
+                is ShareTarget.Session -> app.composer(signedIn.handle, landing.id)
+                is ShareTarget.NewSession -> DraftTarget(landing.workspaceId).let { app.composer(signedIn.handle, it.key, it) }
+            }
+            open(when (landing) {
+                is ShareTarget.Session -> OrbitRoute(Destination.SESSION, landing.id, origin = Origin.EXTERNAL)
+                is ShareTarget.NewSession -> OrbitRoute(Destination.DRAFT, workspaceId = landing.workspaceId, origin = Origin.EXTERNAL)
+            })
+            app.processScope.launch { deliverShare(app, model, handoff) }
         }
         // Rule 10 & 11: with no workspaces, an online machine lands on its new session page; if all machines are offline, lands on Machines & models.
         LaunchedEffect(route, data.ready, data.workspaces.isEmpty(), data.effectiveRunnerRows.isNotEmpty(), firstOnline, navigation.canGoBack, navigation.pending) {
