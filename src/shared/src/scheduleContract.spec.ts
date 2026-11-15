@@ -159,6 +159,13 @@ describe('board phrases', () => {
       title: 'Nightly pg spec sweep failed 3 runs in a row',
       body: 'The last run ended without a report. It keeps running until you pause it.',
     });
+    // A reported failure says what the run reported.
+    expect(scheduleFailedPush({
+      title: 'Codex stable check',
+      consecutiveFailures: 1,
+      run: { failureReason: 'REPORTED_FAILED', reasonText: null, summary: 'The releases page returned 503.', plannedAt: '2026-11-14T02:00:00.000Z' },
+      timezone: 'Asia/Shanghai',
+    }).body).toBe('The last run reported a failure: The releases page returned 503. It keeps running until you pause it.');
     // 02-agent-first ⑤: a run that ended its own schedule.
     expect(scheduleGoalReachedPushTitle('Release 2.0 freeze watch')).toBe('Release 2.0 freeze watch ended itself');
     // 2/2 ①, 1/2 ④: per task.

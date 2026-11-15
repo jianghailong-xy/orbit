@@ -192,6 +192,10 @@ export const SCHEDULE_COPY = {
     CANCELLED_BY_OWNER: 'was stopped by you',
     OVER_BUDGET: 'was over what you allowed this week',
   },
+  /** A failure that reported what went wrong says it, in the failure card and its push (one line, 120 characters). */
+  failureReasonsWithSummary: {
+    REPORTED_FAILED: 'reported a failure: {summary}',
+  },
   /** Why a schedule is held, as a clause; `until` is what has to change before Resume. */
   heldReasons: {
     WORKSPACE_NOT_OWNED: { clause: 'the workspace {workspace} is no longer yours', until: 'it is yours again' },
@@ -1430,11 +1434,28 @@ export interface ScheduleWaitingText {
   actions: string[];
 }
 
+const SUMMARY_MAX = 120;
+
+/**
+ * The failure clause a failure card and its push say: a REPORTED_FAILED run's own summary, one line of at most 120
+ * characters with no closing full stop ("reported a failure: The releases page returned 503"), else the reason's.
+ */
+function failedWaitingClause(run: Pick<ScheduleRunView, 'failureReason' | 'reasonText'> & { summary?: string | null }): string {
+  const template = run.reasonText ? undefined
+    : (C.failureReasonsWithSummary as Record<string, string>)[String(run.failureReason)];
+  const flat = run.summary?.replace(/\s+/g, ' ').trim().replace(/[.。]+$/, '') ?? '';
+  if (template && flat) {
+    const summary = flat.length <= SUMMARY_MAX ? flat : `${flat.slice(0, SUMMARY_MAX - 1).trimEnd()}…`;
+    return scheduleFill(template, { summary });
+  }
+  return scheduleFailureClause(run) ?? C.failureReasons.REPORTED_FAILED;
+}
+
 /** A failed schedule's card: "Nightly pg spec sweep failed 3 runs in a row". */
 export function scheduleFailedWaiting(input: {
   title: string;
   consecutiveFailures: number;
-  run: Pick<ScheduleRunView, 'failureReason' | 'reasonText' | 'plannedAt'>;
+  run: Pick<ScheduleRunView, 'failureReason' | 'reasonText' | 'plannedAt'> & { summary?: string | null };
   timezone: string;
 }): ScheduleWaitingText {
   const at = new Date(input.run.plannedAt);
@@ -1444,7 +1465,7 @@ export function scheduleFailedWaiting(input: {
       : scheduleFill(C.waiting.failed.title, { title: input.title }),
     kind: C.waiting.kinds.schedule,
     body: scheduleFill(C.waiting.failed.body, {
-      reason: scheduleFailureClause(input.run) ?? C.failureReasons.REPORTED_FAILED,
+      reason: failedWaitingClause(input.run),
       when: `${scheduleDateText(at, input.timezone)}, ${localParts(at, input.timezone).time}`,
     }),
     actions: [C.actions.openRun, C.actions.pauseSchedule],
@@ -1458,7 +1479,7 @@ export function scheduleFailedPush(input: Parameters<typeof scheduleFailedWaitin
   return {
     title: scheduleFailedWaiting(input).title,
     body: scheduleFill(C.push.failedBody, {
-      reason: scheduleFailureClause(input.run) ?? C.failureReasons.REPORTED_FAILED,
+      reason: failedWaitingClause(input.run),
     }),
   };
 }

@@ -119,6 +119,37 @@ test('(c, d) a failure: "failed 3 runs in a row", "ended without a report", in t
   );
 });
 
+test('a reported failure says what the run reported, in one line of at most 120 characters', () => {
+  const base = {
+    title: 'Codex stable check',
+    consecutiveFailures: 1,
+    failureReason: 'REPORTED_FAILED',
+    plannedAt: new Date('2026-11-14T02:00:00Z'), // Nov 14, 10:00 in Shanghai
+    timezone: TZ,
+  };
+  const copy = failedCopy({ ...base, summary: 'The releases page returned 503.' });
+  assert.equal(copy.title, 'Codex stable check failed');
+  assert.equal(copy.body, 'The last run reported a failure: The releases page returned 503. It keeps running until you pause it.');
+  assert.equal(
+    copy.why,
+    'The last run reported a failure: The releases page returned 503 (Nov 14, 10:00). It keeps running on schedule until '
+    + 'you pause it. Open the run to see where it stopped, or ask a session to fix the prompt.',
+  );
+  const run = { failureReason: 'REPORTED_FAILED', reasonText: null, summary: 'The releases page returned 503.', plannedAt: base.plannedAt.toISOString() };
+  const shared = { title: base.title, consecutiveFailures: 1, run, timezone: TZ };
+  assert.equal(copy.body, scheduleFailedPush(shared).body);
+  assert.equal(copy.why, scheduleFailedWaiting(shared).body);
+  assert.ok(copy.why.includes(SCHEDULE_COPY.failureReasonsWithSummary.REPORTED_FAILED.replace('{summary}', 'The releases page returned 503')));
+  // A long summary is one line of 120 characters.
+  const long = failedCopy({ ...base, summary: `Line one\n${'x'.repeat(200)}` }).why;
+  const said = long.slice('The last run reported a failure: '.length, long.indexOf(' (Nov 14'));
+  assert.equal(said.length, 120);
+  assert.ok(said.startsWith('Line one x') && said.endsWith('…'));
+  // With no summary, and for every other reason, the board's own clause.
+  assert.match(failedCopy({ ...base, summary: null }).why, /^The last run reported a failure \(Nov 14, 10:00\)\. /);
+  assert.match(failedCopy({ ...base, failureReason: 'NO_REPORT', summary: 'ignored' }).why, /^The last run ended without a report \(/);
+});
+
 test('(c, e) a hold: "is held", naming the agent and its workspace', () => {
   const input = {
     title: 'Weekly dependency audit',

@@ -284,6 +284,9 @@
       "CANCELLED_BY_OWNER": "was stopped by you",
       "OVER_BUDGET": "was over what you allowed this week"
     },
+    "failureReasonsWithSummary": {
+      "REPORTED_FAILED": "reported a failure: {summary}"
+    },
     "heldReasons": {
       "WORKSPACE_NOT_OWNED": {
         "clause": "the workspace {workspace} is no longer yours",

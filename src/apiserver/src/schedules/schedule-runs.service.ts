@@ -1006,6 +1006,7 @@ export class ScheduleRunsService {
       title: schedule.title,
       consecutiveFailures: failure.consecutiveFailures,
       failureReason: failure.reason,
+      summary: failure.summary,
       plannedAt: run.plannedAt,
       timezone: schedule.timezone,
     });

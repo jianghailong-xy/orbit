@@ -131,13 +131,20 @@ export function failedCopy(input: {
   title: string;
   consecutiveFailures: number;
   failureReason: string;
+  /** What the run reported; a REPORTED_FAILED item and push say it. */
+  summary?: string | null;
   plannedAt: Date;
   timezone: string;
 }): ScheduleCopy {
   const waiting = {
     title: input.title,
     consecutiveFailures: input.consecutiveFailures,
-    run: { failureReason: input.failureReason, reasonText: null, plannedAt: input.plannedAt.toISOString() },
+    run: {
+      failureReason: input.failureReason,
+      reasonText: null,
+      summary: input.summary ?? null,
+      plannedAt: input.plannedAt.toISOString(),
+    },
     timezone: input.timezone,
   };
   const push = scheduleFailedPush(waiting);

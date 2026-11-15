@@ -288,7 +288,12 @@ test('§7.3 FAILED: push and Waiting on you; the third in a row says "failed 3 r
   assert.equal(pushed[0].ownerRequestId, pending[0].id, 'the push announces the item');
   assert.deepEqual(pushed[0].opens, { sessionId: one.sessionId });
   assert.doesNotMatch(pushed[0].title, /in a row/);
-  assert.match(pushed[0].body, /^The last run reported a failure\. It keeps running until you pause it\.$/);
+  assert.equal(
+    pushed[0].body,
+    'The last run reported a failure: The releases page returned 503. It keeps running until you pause it.',
+    'the push says what the run reported',
+  );
+  assert.match(pending[0].why, /^The last run reported a failure: The releases page returned 503 \(Nov \d+, \d\d:\d\d\)\. /);
   assert.equal((await db.session.findUniqueOrThrow({ where: { id: one.sessionId } })).completedAt, null, 'a FAILED run\'s session stays open');
 
   // The second fails without a report (its turn settled idle), the third past its limit.
