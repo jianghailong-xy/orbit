@@ -3490,6 +3490,10 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
       )}
       {(typed || status || note || held || translationFoot) && (
         <div className="chat-user-meta">
+          {/* A delivered translation's flip opens the row; copy and the time stay together at its
+              end (docs/mocks/translation-user-hover). */}
+          {flipFoot && translationFoot}
+          {flipFoot && typed && <span className="chat-meta-sep">·</span>}
           {typed && (
             <button
               type="button"
@@ -3501,10 +3505,6 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
               {copied ? <CheckOutlined /> : <CopyOutlined />}
             </button>
           )}
-          {/* A delivered translation's flip sits before the time, which ends the row
-              (docs/mocks/translation-user-hover). */}
-          {flipFoot && translationFoot}
-          {flipFoot && typed && node.ts && <span className="chat-meta-sep">·</span>}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
           {typed && node.ts && (status || note || held || (!flipFoot && translationFoot)) && (
             <span className="chat-meta-sep">·</span>

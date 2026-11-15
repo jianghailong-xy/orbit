@@ -2072,9 +2072,25 @@ private struct GrowingTextEditor: UIViewRepresentable {
         context.coordinator.doubleTap?.isEnabled = suggestion != nil
         view.accessibilityHint = suggestion.map { "Suggested reply: \($0)." }
         view.accessibilityCustomActions = suggestion == nil ? nil : [context.coordinator.useAction]
-        // Drive focus from the binding, but never fight the field's own responder state.
-        if isEditing, !view.isFirstResponder { view.becomeFirstResponder() }
-        else if !isEditing, view.isFirstResponder { view.resignFirstResponder() }
+        // Drive focus from the binding, but never fight the field's own responder state. Not from
+        // inside this update: a responder change runs SwiftUI's own focus bookkeeping, which re-enters
+        // the graph mid-update. Called here from a background scene update (device locked with the
+        // composer focused), that kept the main thread busy until the watchdog killed the app
+        // (0x8BADF00D in -[UITextView becomeFirstResponder]). So it waits for the next turn of the
+        // main loop and for a scene in the foreground (a background one is skipped; the next update applies it).
+        if isEditing != view.isFirstResponder {
+            DispatchQueue.main.async { [weak view, weak coordinator = context.coordinator] in
+                guard let view, let coordinator else { return }
+                let editing = coordinator.parent.isEditing
+                let scene = view.window?.windowScene?.activationState
+                if editing, !view.isFirstResponder,
+                   scene == .foregroundActive || scene == .foregroundInactive {
+                    view.becomeFirstResponder()
+                } else if !editing, view.isFirstResponder {
+                    view.resignFirstResponder()
+                }
+            }
+        }
     }
 
     /// Height for the proposed width, capped at `maxLines`. `UITextView.sizeThatFits` measures the

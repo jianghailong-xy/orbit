@@ -131,6 +131,14 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             return
         }
     }
+    // A turn nobody typed, carrying only a block this reader cannot read yet (a quiet job's wake was one, before it had its line): the
+    // note alone — no heading, no tint, no Copy message — never an empty row in the reader's name (OrbitKit `drawsNoteAlone`).
+    val loneNote = shown.fields.string("controlPlaneNote")
+    if (event.type == "user" && cards.isEmpty() && shown.fields["sessionMessage"] !is JsonObject &&
+        BackgroundWakeCard.drawsNoteAlone(shown.personWords(), (shown.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty(), loneNote, queued = false)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key)) { AttachedNoteEntry(loneNote!!.trim()) }
+        return
+    }
     // Settings › Translation (board frames 4–6): the owner's message as they wrote it and the agent's reply in their language, each
     // with its own flip to the English, held by the reader so a recycled row keeps its side.
     val shownOriginals = LocalShownOriginals.current

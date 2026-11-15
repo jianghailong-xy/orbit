@@ -230,6 +230,52 @@ private enum Fixture {
             bgj_3a1af2b50428｜job｜bash upgrade.sh｜completed｜退出码 0｜输出 /root/.orbit/runs/01a07c80/bgj_3a1af2b50428.output
         </background-jobs>
         """
+
+    // MARK: a quiet job's wake
+
+    // Built the way `buildBackgroundStallBlock` builds them, line for line the blocks web's
+    // `backgroundWake.fixtures.ts` holds (EN_STALL, EN_STALL_SILENT, EN_TWO_STALLS). The stall wake
+    // shipped in English (721ae19fc, 2026-11-15), so there is no older wording to read.
+
+    static let stallHead = "  A background job you started with bg_run is still running and has written nothing for as long as you asked to be told about; the control plane opened this turn for it:"
+    static let stallFoot = """
+          The control plane recorded this for you; the user did not say it. The job has not ended: read its output with mcp__orbit__bg_output by id (pass sinceOffset to read only what is new), stop it with mcp__orbit__bg_kill, or leave it running.
+          One silence wakes you once: you are woken again only if the job writes something and then goes quiet as long again.
+        """
+
+    static let enStall = [
+        "<background-job-stall>", stallHead,
+        "    bgj_28a9b17fe75c｜job｜./scripts/rebuild-index.sh --workers 6｜Nightly index rebuild (6 workers)",
+        "      gone quiet｜still running｜running for 15m 2s when this was sent",
+        "      no new output for 15m 0s｜last output at 2026-09-15T17:59:00Z",
+        "      output /root/.orbit/runs/4f50733a/bgj_28a9b17fe75c.output｜this covers bytes 0–21",
+        "      output tail:",
+        "        entries=32 workers=6",
+        stallFoot, "</background-job-stall>",
+    ].joined(separator: "\n")
+
+    static let enStallSilent = [
+        "<background-job-stall>", stallHead,
+        "    bgj_5c03e1aa90d2｜job｜pg_dump orbit > /backup/orbit.sql",
+        "      gone quiet｜still running｜running for 30m 0s when this was sent",
+        "      no output at all｜it has written nothing in the 30m 0s since it started",
+        "      output /root/.orbit/runs/4f50733a/bgj_5c03e1aa90d2.output｜this covers bytes 0–0",
+        "      (no output)",
+        stallFoot, "</background-job-stall>",
+    ].joined(separator: "\n")
+
+    static let enTwoStalls = [
+        "<background-job-stall>", stallHead,
+        "    bgj_28a9b17fe75c｜job｜./scripts/rebuild-index.sh --workers 6｜Nightly index rebuild (6 workers)",
+        "      gone quiet｜still running｜running for 15m 2s when this was sent",
+        "      no new output for 15m 0s｜last output at 2026-09-15T17:59:00Z",
+        "      output /root/.orbit/runs/4f50733a/bgj_28a9b17fe75c.output｜this covers bytes 0–21",
+        "    bgj_91b7c2e0d4f1｜job｜npm run e2e -- --project=staging｜E2E suite against staging",
+        "      gone quiet｜still running｜running for 1h 2m 5s when this was sent",
+        "      no new output for 10m 0s｜last output at 2026-09-15T18:04:00Z",
+        "      output /root/.orbit/runs/4f50733a/bgj_91b7c2e0d4f1.output｜this covers bytes 0–3481",
+        stallFoot, "</background-job-stall>",
+    ].joined(separator: "\n")
 }
 
 final class BackgroundWakeTests: XCTestCase {
@@ -637,5 +683,82 @@ final class BackgroundWakeTests: XCTestCase {
         XCTAssertEqual(BackgroundWakeCard.wakeupMeta(
             ScheduledWakeup(askedAt: nil, delaySeconds: nil, dueAt: nil, reason: nil, prompt: ""),
             now: now), "")
+    }
+    // MARK: a quiet job's wake
+
+    /// A job still running that has written nothing for a while: how long it ran, how long it has been
+    /// quiet, when it last wrote. It used to draw as an empty bubble under "Orbit attached: context".
+    func testReadsAJobGoneQuiet() throws {
+        let wake = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enStall))
+        XCTAssertEqual(wake.jobs, [BackgroundWakeJob(
+            id: "bgj_28a9b17fe75c", kind: "job", command: "./scripts/rebuild-index.sh --workers 6",
+            description: "Nightly index rebuild (6 workers)", status: "running", ended: false,
+            exitCode: nil, killReason: nil,
+            outputPath: "/root/.orbit/runs/4f50733a/bgj_28a9b17fe75c.output",
+            outputFrom: 0, outputTo: 21, outputTail: "entries=32 workers=6",
+            stall: BackgroundJobStall(runningForMs: 15 * 60_000 + 2000, quietForMs: 15 * 60_000,
+                                      lastOutputAt: "2026-09-15T17:59:00Z", wroteNothing: false))])
+        XCTAssertEqual(wake.text, Fixture.enStall)
+        XCTAssertEqual(wake.rest, "")
+        XCTAssertTrue(BackgroundWakeText.carriesWake(Fixture.enStall))
+    }
+
+    func testCountsTheWholeRunAsQuietForAJobThatNeverWroteAnything() throws {
+        let job = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enStallSilent)?.jobs.first)
+        XCTAssertNil(job.description)
+        XCTAssertEqual(job.outputTail, "")
+        XCTAssertEqual(job.stall, BackgroundJobStall(runningForMs: 30 * 60_000, quietForMs: 30 * 60_000,
+                                                     lastOutputAt: nil, wroteNothing: true))
+    }
+
+    func testReadsAStallBesideAFinishedJobEachAsWhatItIs() throws {
+        let wake = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enDone + "\n\n" + Fixture.enStall))
+        XCTAssertEqual(wake.jobs.map(\.ended), [true, false])
+        XCTAssertEqual(wake.jobs.map { $0.stall != nil }, [false, true])
+        XCTAssertEqual(wake.rest, "")
+    }
+
+    /// The same words as the web line (docs/mocks/background-job-stall-line, option A): the grey clock,
+    /// "Background job went quiet", "quiet 15m", and the row in the fold.
+    func testTheLineSaysAJobWentQuietAndForHowLong() throws {
+        let wake = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enStall))
+        XCTAssertTrue(BackgroundWakeCard.isPending(wake))
+        XCTAssertEqual(BackgroundWakeCard.title(wake), "Background job went quiet")
+        XCTAssertEqual(BackgroundWakeCard.lineName(wake), "Nightly index rebuild (6 workers)")
+        XCTAssertEqual(BackgroundWakeCard.lineStatus(wake), "quiet 15m")
+        let stall = try XCTUnwrap(wake.jobs.first?.stall)
+        XCTAssertEqual(BackgroundWakeCard.stallLine(stall, now: now), "Still running · 15m in · last wrote 15m ago")
+
+        let silent = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enStallSilent))
+        XCTAssertEqual(BackgroundWakeCard.lineStatus(silent), "quiet 30m")
+        XCTAssertEqual(BackgroundWakeCard.stallLine(try XCTUnwrap(silent.jobs.first?.stall), now: now),
+                       "Still running · 30m in · has written nothing yet")
+
+        let two = try XCTUnwrap(BackgroundWakeText.parse(Fixture.enTwoStalls))
+        XCTAssertEqual(BackgroundWakeCard.title(two), "2 background jobs went quiet")
+        XCTAssertNil(BackgroundWakeCard.lineStatus(two))
+        XCTAssertEqual(two.jobs.compactMap(BackgroundWakeCard.status), ["quiet 15m", "quiet 10m"])
+        XCTAssertEqual(two.jobs.last?.stall?.runningForMs, 3_600_000 + 2 * 60_000 + 5000)
+    }
+
+    /// A turn with no words, no files and a note this client cannot read is the note alone — never an
+    /// empty bubble — and heads no round for the sticky bar.
+    func testATurnThatIsOnlyANoteDrawsNoBubble() {
+        let note = "<orbit-future-block>\n  Something a later server sends.\n</orbit-future-block>"
+        XCTAssertTrue(BackgroundWakeCard.drawsNoteAlone(text: "", hasAttachments: false, note: note, queued: false))
+        XCTAssertFalse(BackgroundWakeCard.drawsNoteAlone(text: "hi", hasAttachments: false, note: note, queued: false))
+        XCTAssertFalse(BackgroundWakeCard.drawsNoteAlone(text: "", hasAttachments: true, note: note, queued: false))
+        XCTAssertFalse(BackgroundWakeCard.drawsNoteAlone(text: "", hasAttachments: false, note: note, queued: true))
+        XCTAssertFalse(BackgroundWakeCard.drawsNoteAlone(text: "", hasAttachments: false, note: nil, queued: false))
+        XCTAssertFalse(StickySummary.isAnchor(text: "", note: note))
+        XCTAssertTrue(StickySummary.isAnchor(text: "", note: note, hasAttachments: true))
+        XCTAssertTrue(StickySummary.isAnchor(text: "a question", note: note))
+    }
+
+    func testReadsTheBlocksDurationsAndNothingElse() {
+        XCTAssertEqual(BackgroundWakeText.durationMs("2h 5m 0s"), 2 * 3_600_000 + 5 * 60_000)
+        XCTAssertEqual(BackgroundWakeText.durationMs("45s"), 45_000)
+        XCTAssertNil(BackgroundWakeText.durationMs("15 minutes"))
+        XCTAssertNil(BackgroundWakeText.durationMs(nil))
     }
 }
