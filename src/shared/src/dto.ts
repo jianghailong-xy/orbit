@@ -2464,6 +2464,8 @@ export interface SubagentDecision {
   moves?: string[];
   /** The workspace a remote SubAgent runs on (§10.1) and why it was chosen. Absent for one on the parent's machine. */
   workspace?: SubagentWorkspaceChoice;
+  /** The definition's read-only flag, as the start sent it, which the block marks `Read-only`. Absent on older rows. */
+  readonly?: boolean;
 }
 
 /** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
@@ -2551,6 +2553,15 @@ export interface SubagentRunView {
   resultSummary: string | null;
   /** The workspace a remote SubAgent ran on, which the block names as `on <workspace>`; null on the parent's machine. */
   workspaceName: string | null;
+  /** The `delegate` call's description, which the session's list of Agents names each run by. Null on older rows. */
+  description: string | null;
+  /** The engine it runs on now (`claude`, `codex`, …): its last attempt's, else the pick's. Null on a shadow row,
+   *  which runs on the parent's engine, and when no candidate was left. */
+  engine: string | null;
+  /** The definition is read-only: the child could read the repository but not write it. */
+  readonly: boolean;
+  /** Paths the child's edit tools wrote, as the runner collected them; empty while it runs and for a read-only run. */
+  changedFiles: string[];
   createdAt: string;
   endedAt: string | null;
 }
@@ -2797,6 +2808,9 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only for the session of a scheduled task's run (`Session.scheduleRunId`, docs/scheduled-
+   *  tasks-design.md §7.1). Injected as ORBIT_SCHEDULE_RUN=1 so `orbit mcp` lists schedule_run_report. */
+  scheduleRun?: boolean;
   /** How many spawn links sit above this session (a root is 0), injected as
    *  ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
    *  nested wait always finishes inside the wait that is waiting on it. */
@@ -3270,6 +3284,8 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */
+  scheduleRun?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
   orchestrationToken?: string;
   /** The SOURCE snapshot, cf. ClaimedSession.source. On reclaim it is read, never re-derived

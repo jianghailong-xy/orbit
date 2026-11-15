@@ -189,7 +189,7 @@ public struct ToolDisplay: Equatable, Sendable {
         // and its description; the type, tier, model and duration sit on the grey second line below
         // (see `SubagentBlock`), because a phone has no room for web's trailing meta.
         case SubagentBlock.toolName:
-            return ToolDisplay(label: "SubAgent", symbol: "sparkle", tone: .agent,
+            return ToolDisplay(label: SubagentBlock.label, symbol: "sparkle", tone: .agent,
                                summary: input["description"]?.stringValue, summaryMono: false,
                                path: nil, meta: nil, body: .none, autoOpen: false)
 

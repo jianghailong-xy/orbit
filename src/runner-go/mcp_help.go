@@ -31,6 +31,7 @@ var mcpHelpObjects = []struct {
 	{objectBackgroundJob, "background jobs"},
 	{objectPermission, "engine permission prompts"},
 	{objectMergeReceipt, "merge receipts"},
+	{objectSchedule, "scheduled tasks"},
 }
 
 // mcpHelpRuntimes is every engine the runner runs a session on, in `orbit doctor`'s order.

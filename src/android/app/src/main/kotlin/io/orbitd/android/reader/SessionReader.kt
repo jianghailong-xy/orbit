@@ -40,7 +40,12 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.perf.OrbitPerf
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
+import io.orbitd.android.composer.CoordinatorHandoff
+import io.orbitd.android.composer.CoordinatorHandoffApi
 import io.orbitd.android.composer.CreatedWorkspaceLine
+import io.orbitd.android.composer.HandedOverBanner
+import io.orbitd.android.composer.HandoffNoteCard
+import io.orbitd.android.composer.HandoffStatus
 import io.orbitd.android.composer.CreatedWorkspaceLineView
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
@@ -136,7 +141,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // receipt in the queue's listing settles one no runner will speak for. Only a window at the live tail can see how they came out.
     val listedTurns = state.session?.snapshot?.queuedTurns.orEmpty()
     val atTail = state.window.newerAfter == null
-    val rows = remember(state.window.events, listedTurns, atTail) { Steps.group(transcriptRows(state.window.events, listedTurns, holdsSteers = atTail)) }
+    // The platform's turn asking a coordinator for its handoff note is Orbit's, not the owner's: the conversation shows only its progress
+    // row and the note (board 02 ②).
+    val rows = remember(state.window.events, listedTurns, atTail) { Steps.group(transcriptRows(state.window.events.filterNot {
+        it.type == "user" && CoordinatorHandoff.isNotePrompt(it.fields.string("text")) }, listedTurns, holdsSteers = atTail)) }
     // What the list draws: the same rows with the turns Orbit opened folded into a line each, runs of them together (ExchangeFold).
     // Every other reading of the conversation keeps [rows], which hold each event. A watch's line names its target as the wake's own
     // line does, once the names below are known.
@@ -556,8 +564,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // reader in THIS conversation takes it while its card is out of sight — above them, or anywhere once they are off the tail
         // (at the tail the card is the tail); otherwise the question. What waits elsewhere is not said here; the lists say it.
         val here = NeedsYouLogic.here(belowRows, approvalRows, readerSide)
+        // A coordinator handing itself over takes the capsule over both, at the tail and off it, while the note is written and the
+        // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A; iOS `handingOverCapsule`).
+        // A state the capsule reads, like `offTail`: the bar keeps the content it is first handed.
+        val handingOver by rememberUpdatedState(CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true)
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
-            if (here != null && (here.side == ReaderSide.ABOVE || offTail)) WaitingCapsule(here) { showWaiting(here.rowId) }
+            if (handingOver) HandingOverCapsule()
+            else if (here != null && (here.side == ReaderSide.ABOVE || offTail)) WaitingCapsule(here) { showWaiting(here.rowId) }
             else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
@@ -621,6 +634,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                             ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
+                    }
+                    // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
+                    val receivedHandoff = CoordinatorHandoff.received(detail)
+                    if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") {
+                        HandoffNoteCard(receivedHandoff) { open(OrbitRoute(Destination.SESSION, it)) }
                     }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
                         item(key = "created-workspace") {
@@ -786,9 +804,32 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // The landing this conversation's work fed, at the session's own bottom (owner 2026-10-19, board v4 06 e).
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SourceLandingChip(queuedDetail ?: detail) {
                     open(OrbitRoute(Destination.SESSION, it)) } }
+                // Board 02 ② and ⑤: the coordinator's handoff while it is written, and when it failed, right above the composer.
+                val handoff = CoordinatorHandoff.outgoing(detail)
+                // Its next state comes after the note turn has ended, when nothing else reads a session that is not live: read it
+                // again while the handoff is in hand, so FAILED, the banner and the way to the successor arrive without a press.
+                val latestDetail by rememberUpdatedState(detail)
+                val following = CoordinatorHandoff.keepsReading(detail)
+                LaunchedEffect(route.id, following) {
+                    if (following) CoordinatorHandoff.follow({ latestDetail }) { app.realtime.refreshSession() }
+                }
+                val handoffProject = detail?.let(CoordinatorHandoff::projectId)
+                val handoffApi = remember(handle) { CoordinatorHandoffApi(app.session, handle) }
+                var handoffBusy by remember(handle, route.id) { mutableStateOf(false) }
+                HandoffStatus(handoff, busy = handoffBusy, act = { action ->
+                    if (handoffProject != null) scope.launch {
+                        handoffBusy = true
+                        try { handoffApi.post(handoffProject, action) }
+                        catch (cancel: CancellationException) { throw cancel }
+                        catch (e: Exception) { OrbitToasts.show(CoordinatorHandoff.refusal(e), tone = ToastTone.ERROR) }
+                        finally { handoffBusy = false; app.realtime.refreshSession() }
+                    }
+                })
+                // Board 02 ④: a coordinator that handed over says so where its composer was, with the way to its successor.
+                if (handoff?.state == "COMPLETED") HandedOverBanner(handoff.handedOverTo) { open(OrbitRoute(Destination.SESSION, it)) }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
-                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
+                else Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
                     openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },

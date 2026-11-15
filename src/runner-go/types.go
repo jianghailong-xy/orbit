@@ -1433,6 +1433,9 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// ScheduleRun is set for the session of a scheduled task's run (Session.scheduleRunId); injected as
+	// ORBIT_SCHEDULE_RUN=1, which lists schedule_run_report in its `orbit mcp` (schedule_tools.go).
+	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// SpawnDepth is how many spawn links sit above this session (a root is 0), injected as
 	// ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
 	// nested wait always settles inside the wait that is waiting on it.
@@ -1687,6 +1690,8 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// ScheduleRun, cf. ClaimedSession.ScheduleRun.
+	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.
 	OrchestrationToken string `json:"orchestrationToken,omitempty"`
 	// Branch is the session's worktree branch, cf. ClaimedSession.Branch.

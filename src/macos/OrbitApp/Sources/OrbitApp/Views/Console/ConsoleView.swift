@@ -100,6 +100,7 @@ struct ConsoleView: View {
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
             subagentRun: { console.subagentRuns[$0] },
+            parentEngine: appModel.session(id: console.sessionID)?.engine,
             fullPayload: { await console.fullPayload(seq: $0) })
     }
 
@@ -331,6 +332,8 @@ struct ConsoleView: View {
                 // The tasks this session's agent created, beside the code the bar below
                 // carries — the session's two kinds of output, together.
                 CreatedTasksCard(console: console)
+                // Every Agent this session started: one line that opens their list.
+                AgentsBandRow(console: console)
                 WorktreeBar(console: console)
                 // Where a forked task's run took its checkout from (SR18), beside the branch the
                 // bar above names: the server's sentence, as it is.
@@ -348,7 +351,25 @@ struct ConsoleView: View {
             // The landing this conversation's work fed, at the session's own bottom (owner
             // 2026-10-19, board v4 06 e): absent from a session that produced no landing work.
             SourceLandingChip(console: console)
-            ComposerView(console: console)
+            // A coordinator handing itself over (board 02): the note being written, the handover, or
+            // its failure above the composer; the composer locked while it runs; and once it is done,
+            // the way to the successor in the composer's place.
+            let handoffSession = appModel.session(id: console.sessionID)
+            let handoff = handoffSession?.coordinatorHandoff
+            let handoffRow = CoordinatorHandoffRow.resolve(handoff, enginePhase: handoffSession?.enginePhase)
+            if let handoffRow {
+                if case .completed = handoffRow {} else {
+                    CoordinatorHandoffStatusView(row: handoffRow) { handoffPress(console, $0) }
+                        .padding(.bottom, .composerBandGap)
+                }
+            }
+            if case .completed(let successor)? = handoffRow {
+                CoordinatorHandedOverBanner { appModel.route(to: .session(successor)) }
+            } else if CoordinatorContextActions.locksComposer(handoff) {
+                CoordinatorHandoffLockedComposer()
+            } else {
+                ComposerView(console: console)
+            }
             // What the provider pick standing in the composer will do, and WHEN — the
             // part that matters, because a run keeps its provider for its whole life.
             // In flow under the composer, and it stays for as long as the pick does.
@@ -358,6 +379,14 @@ struct ConsoleView: View {
                     .padding(.top, 4)
             }
         }
+    }
+
+    /// A press on the handoff's row: Skip the note, Cancel handover, or a failure's way out. The
+    /// project is the one this conversation coordinates — or, once it no longer does, belongs to.
+    private func handoffPress(_ console: ConsoleModel, _ action: CoordinatorHandoffAction) {
+        let session = appModel.session(id: console.sessionID)
+        guard let projectID = session?.projectId ?? session?.projectMembership?.projectId else { return }
+        Task { await console.coordinatorHandoff(projectID: projectID, action) }
     }
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
@@ -1263,8 +1292,14 @@ struct TranscriptView: View {
                 // One capsule up here (the owner, 2026-11-15, 07-console-one-capsule, B): what waits
                 // on the reader in this conversation takes it while its card is out of sight — above
                 // them, or anywhere once they are off the tail (at the tail the card is the tail);
-                // otherwise the question above the fold, as before.
-                if !hidesStickyQuestion, let here = console.waitingBelow,
+                // otherwise the question above the fold, as before. A coordinator handing itself over
+                // takes it over both, at the tail and off it, while the note is written and the
+                // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A).
+                if !hidesStickyQuestion,
+                   CoordinatorContextActions.locksComposer(app.session(id: console.sessionID)?.coordinatorHandoff) {
+                    handingOverCapsule
+                        .frame(maxWidth: questionWidth)
+                } else if !hidesStickyQuestion, let here = console.waitingBelow,
                    here.side == .above || !atBottom || console.detached {
                     waitingCapsule(here)
                         .frame(idealWidth: questionWidth, maxWidth: questionWidth)
@@ -1353,6 +1388,7 @@ struct TranscriptView: View {
                              clocks: console.receiptClocks,
                              recap: recapCard,
                              watchName: watchWakeName,
+                             handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
                              createdWorkspace: console.createdWorkspaceLine)
     }
 
@@ -1435,6 +1471,11 @@ struct TranscriptView: View {
         case .createdWorkspace(let line):
             // No `AnchorRow`: what the conversation made is no "Your question".
             CreatedWorkspaceLineView(line: line, console: console)
+        case .handoffReceived(let received):
+            // The note this coordinator opened with, linking back to the one that wrote it.
+            CoordinatorHandoffNoteCardView(received: received) {
+                app.route(to: .session(received.handoffFromSessionId))
+            }
         case .loadOlder:
             // List laziness keeps this un-materialized — and the fetch un-fired — while the user
             // stays at the tail.
@@ -1454,6 +1495,9 @@ struct TranscriptView: View {
             // No `AnchorRow`: a steps line is never the "Your question" the sticky header names,
             // so it has no business moving that anchor.
             StepsRowView(items: items, live: console.state.status == .running, fullPayload: console.fullPayload)
+        case .agents(let cards):
+            // No `AnchorRow`, for the steps line's reason: a group of Agents is no "Your question".
+            AgentGroupView(cards: cards, fullPayload: console.fullPayload)
         case .exchanges(let turns):
             // No `AnchorRow`, for the steps line's reason: a fold over turns Orbit opened is no
             // "Your question". Opened, it draws each turn's rows through this same function.
@@ -1630,6 +1674,18 @@ struct TranscriptView: View {
         .accessibilityHint("Shows what is waiting in this conversation")
     }
 
+    /// "Handing over" in the nav bar's capsule while the handoff locks the composer (board 04): the
+    /// web and Mac headers' word, in the question capsule's glass. Nothing to press — the row in the
+    /// transcript carries the handoff's actions and its clock.
+    private var handingOverCapsule: some View {
+        Text(CoordinatorHandoffCopy.badgeHandingOver)
+            .font(.orbitSubtext.weight(.medium)).foregroundStyle(.secondary)
+            .lineLimit(1).truncationMode(.tail)
+            .padding(.horizontal, 14)
+            .questionGlass()
+            .accessibilityIdentifier("handing-over-capsule")
+    }
+
     private func questionCapsule(_ text: String) -> some View {
         HStack(spacing: 6) {
             Text(StickySummary.arrow.trimmingCharacters(in: .whitespaces))
@@ -1743,7 +1799,7 @@ struct TranscriptView: View {
             return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                 .foregroundColor(.secondary)
         }
-        let word = SessionHeader.statusWord(for: session, watching: watching, now: now, machine: console.runnerName)
+        let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
         guard subtitle.hasPrefix(word) else { return Text(subtitle).foregroundColor(.secondary) }
         let tone = SessionStatusGlyph.make(for: session, watching: watching, now: now, machine: console.runnerName).tone
         return Text(word).fontWeight(.semibold).foregroundColor(Self.statusWordColor(tone))
