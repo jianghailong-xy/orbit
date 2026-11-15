@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 34 |
-| `user` | 447 |
+| `user` | 449 |
 | `admin` | 28 |
 | `runner` | 187 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **700** |
+| **Total** | **702** |
 
 ## Public routes
 
@@ -139,6 +139,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/guest-sessions/:id/turns/:turnId` | path `id`, `turnId` | `GuestSessionsController.cancelTurn` |
 | `POST` | `/api/guest-sessions/:id/turns/:turnId/steer` | path `id`, `turnId` | `GuestSessionsController.steerTurn` |
 | `POST` | `/api/help/ask` | body `Object` | `HelpAskController.create` |
+| `POST` | `/api/help/ask/:id/admin` | body `Object`; path `id` | `HelpAskController.askAdmin` |
+| `GET` | `/api/help/ask/:id/stuck` | path `id` | `HelpAskController.stuck` |
 | `GET` | `/api/help/ask/choices` | — | `HelpAskController.choices` |
 | `GET` | `/api/help/ask/sessions` | — | `HelpAskController.list` |
 | `DELETE` | `/api/integrations/feishu` | — | `FeishuController.remove` |

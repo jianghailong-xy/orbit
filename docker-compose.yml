@@ -282,6 +282,9 @@ services:
       # Welcome and HeartbeatAck, assigned from these two manifests as GET /api/runner/release assigns it. Read at most once
       # a minute, for at most 2 s; while it cannot be read, no release is stated and runners ask that route over HTTPS.
       RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"
+      # The GitHub repository (owner/repo) this build was released from: where Help → Still stuck → Report on GitHub
+      # opens a new issue. Empty is Orbit's own.
+      ORBIT_RELEASE_REPOSITORY: "${ORBIT_RELEASE_REPOSITORY:-}"
       # Orbit Files (docs/orbit-files-design.md §2.10): where attachment bytes are kept, one copy per content, named by
       # its sha256; Postgres keeps only what describes each file. local (the default) is ./data/files, mounted below.
       # s3 is an S3-compatible bucket, addressed path-style at the endpoint, and needs the bucket and key pair below;

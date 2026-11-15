@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
+import { TasksModule } from '../tasks/tasks.module';
 import { HelpAsk } from './help-ask';
 import { HelpAskController } from './help-ask.controller';
 import { HelpAskRunnerFence, HelpAskSessions, RunnerHelpAskController } from './help-ask-reads';
@@ -10,7 +11,7 @@ import { HelpAskRunnerFence, HelpAskSessions, RunnerHelpAskController } from './
  * an Ask's tools to its four reads on every runner door.
  */
 @Module({
-  imports: [SessionsModule],
+  imports: [SessionsModule, TasksModule],
   controllers: [HelpAskController, RunnerHelpAskController],
   providers: [HelpAsk, HelpAskSessions, HelpAskRunnerFence],
 })

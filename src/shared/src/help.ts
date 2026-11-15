@@ -136,7 +136,8 @@ export interface HelpAskCreateBody {
   page?: HelpAskPage | null;
 }
 
-export type HelpAskOutcome = 'working' | 'answered' | 'failed';
+/** `with-admin`: the person pressed Still stuck → Ask your admin, and an admin has the question as a task. */
+export type HelpAskOutcome = 'working' | 'answered' | 'failed' | 'with-admin';
 
 /** One row of /help → Your questions (board 02 ④). */
 export interface HelpAskRow {
@@ -151,11 +152,57 @@ export interface HelpAskRow {
   runner: string | null;
   engine: string | null;
   model: string | null;
+  /** The admin this question was sent to (Still stuck → Ask your admin), or null. */
+  sentTo: string | null;
 }
 
 /** GET /api/help/ask/sessions. */
 export interface HelpAskList {
   questions: HelpAskRow[];
+}
+
+// ── Still stuck (board 02 ② right frame, side note 5) ───────────────────────────────────────────────────────────
+
+/** Where the release this instance runs came from, when the server is not told otherwise (ORBIT_RELEASE_REPOSITORY). */
+export const ORBIT_RELEASE_REPOSITORY_DEFAULT = 'jianghailong-xy/orbit';
+
+/** The machine an Ask ran on, as a GitHub report states it. */
+export interface HelpAskReportMachine {
+  name: string;
+  runnerVersion: string | null;
+  /** GOOS as the runner reports it: `linux`, `darwin`, `windows`; null for a runner that has not said. */
+  os: string | null;
+  lastHeartbeatAt: string | null;
+}
+
+/** GET /api/help/ask/:id/stuck: what the Still stuck card offers for this Ask. */
+export interface HelpAskStuck {
+  /** The admin Ask your admin sends to; null when the caller is an admin, or the instance has no other admin. */
+  admin: { name: string } | null;
+  /** Already sent: to whom, and when. */
+  sentToAdmin: { adminName: string; at: string } | null;
+  report: {
+    /** `owner/repo` on GitHub: where the instance's release came from. */
+    repository: string;
+    machine: HelpAskReportMachine | null;
+    /**
+     * Words a report must not carry because they name the person's code: their workspaces' names, folders and
+     * repositories. Never shown; the report builder takes them out.
+     */
+    privateNames: string[];
+  };
+}
+
+/** POST /api/help/ask/:id/admin: the conversation, as the person saw it. */
+export interface HelpAskAdminBody {
+  exchanges: { question: string; answer: string }[];
+}
+
+/** POST /api/help/ask/:id/admin's answer: the admin's task. */
+export interface HelpAskAdminResult {
+  taskId: string;
+  adminName: string;
+  at: string;
 }
 
 /** The engine's name as the picker shows it. */

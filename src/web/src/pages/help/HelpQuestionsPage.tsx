@@ -9,7 +9,12 @@ import { openHelpDrawer } from '../../lib/help/openHelpDrawer';
 import { routeId } from '../../lib/idCodec';
 import { useDocumentTitle } from './useDocumentTitle';
 
-const OUTCOME: Record<HelpAskOutcome, string> = { answered: 'Answered', working: 'Working', failed: 'Did not finish' };
+const OUTCOME: Record<HelpAskOutcome, string> = {
+  answered: 'Answered',
+  working: 'Working',
+  failed: 'Did not finish',
+  'with-admin': 'With your admin',
+};
 
 /** "Today 13:02", "Nov 12": when a question was asked, as the board writes it. */
 export function askedAt(iso: string, now = new Date()): string {
@@ -24,9 +29,10 @@ export function askedAt(iso: string, now = new Date()): string {
   });
 }
 
-/** One row's second line: when, where it was asked from, how it ended, what it cost. */
+/** One row's second line: when, where it was asked from, how it ended (or who it was sent to), what it cost. */
 export function questionLine(row: HelpAskRow, now = new Date()): string {
-  return [askedAt(row.createdAt, now), row.origin ? `from ${row.origin}` : null, OUTCOME[row.outcome].toLowerCase(), `$${row.costUsd.toFixed(2)}`]
+  const ended = row.sentTo ? `sent to ${row.sentTo}` : OUTCOME[row.outcome].toLowerCase();
+  return [askedAt(row.createdAt, now), row.origin ? `from ${row.origin}` : null, ended, `$${row.costUsd.toFixed(2)}`]
     .filter(Boolean)
     .join(' · ');
 }

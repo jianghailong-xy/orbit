@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { defaultUrlTransform, type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ArrowUpOutlined, CheckOutlined, CloseOutlined, DownOutlined, FileTextOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
+import { ArrowUpOutlined, CheckOutlined, CloseOutlined, DownOutlined, EditOutlined, ExportOutlined, FileTextOutlined, GithubOutlined, LeftOutlined, PlusOutlined, RightOutlined } from '@ant-design/icons';
 import { helpAskEngineLabel, type HelpAskChoices, type HelpAskPage, type HelpArticleMeta } from '@orbit/shared';
 import { sendTurn } from '../../api';
 import Markdown from '../Markdown';
@@ -27,6 +27,15 @@ import {
   type AskSource,
 } from '../../lib/help/helpAsk';
 import { useHelpAccount } from '../../lib/help/useHelpAccount';
+import {
+  answerText,
+  askYourAdmin,
+  helpAskStuckQuery,
+  REPORT_NOT_INCLUDED,
+  reportBody,
+  reportIssueUrl,
+  reportTitle,
+} from '../../lib/help/stillStuck';
 import { useVisibleHelpErrors } from '../../lib/help/useVisibleHelpErrors';
 import { sessionQuery } from '../../lib/queries';
 import { isSessionLive, isSessionTerminal, sessionRunStatusOf } from '../../lib/sessionState';
@@ -289,6 +298,7 @@ function AskComposer({
   sending,
   chip,
   onSend,
+  inputRef,
 }: {
   placeholder: string;
   initial?: string;
@@ -296,6 +306,8 @@ function AskComposer({
   sending: boolean;
   chip: { label: string; icon?: ReactNode; onRemove: () => void } | null;
   onSend: (text: string) => void | Promise<void>;
+  /** The question box, for Still stuck → Tell it what's still wrong to put the cursor in. */
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
 }) {
   const [text, setText] = useState(initial);
   useEffect(() => setText(initial), [initial]);
@@ -322,6 +334,7 @@ function AskComposer({
         </span>
       )}
       <textarea
+        ref={inputRef}
         aria-label={placeholder}
         placeholder={placeholder}
         value={text}
@@ -368,6 +381,7 @@ export function AskConversation({
   const toast = useToast();
   const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
+  const composer = useRef<HTMLTextAreaElement>(null);
   const machine = choices?.machines.find((m) => m.id === row?.assignedRunnerId)?.name;
   const engine = row?.engine ? helpAskEngineLabel(row.engine) : null;
   const meta = [machine, [engine, row?.model ? claudeModelName(row.model) : null].filter(Boolean).join(' · '), typeof row?.costUsd === 'number' ? `$${row.costUsd.toFixed(2)}` : null]
@@ -410,12 +424,19 @@ export function AskConversation({
             working={i === exchanges.length - 1 && working}
             last={i === exchanges.length - 1}
             onOpenArticle={onOpenArticle}
+            stillStuck={
+              <StillStuck
+                sessionId={sessionId}
+                exchanges={exchanges}
+                onTellIt={() => composer.current?.focus()}
+              />
+            }
           />
         ))}
         {exchanges.length === 0 && <div className="help-ask-working">Starting on {machine ?? 'your machine'}…</div>}
         <div ref={bottom} />
       </div>
-      <AskComposer placeholder="Ask a follow-up" disabled={working} sending={sending} chip={null} onSend={followUp} />
+      <AskComposer placeholder="Ask a follow-up" disabled={working} sending={sending} chip={null} onSend={followUp} inputRef={composer} />
     </div>
   );
 }
@@ -426,12 +447,15 @@ function Exchange({
   working,
   last,
   onOpenArticle,
+  stillStuck,
 }: {
   exchange: AskExchange;
   streaming: string;
   working: boolean;
   last: boolean;
   onOpenArticle: (slug: string, path: string) => void;
+  /** The Still stuck card, shown under the last answer once it is answered No. */
+  stillStuck: ReactNode;
 }) {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [verdict, setVerdict] = useState<'yes' | 'no' | null>(null);
@@ -471,8 +495,133 @@ function Exchange({
           <button type="button" aria-pressed={verdict === 'no'} onClick={() => setVerdict('no')}>No</button>
         </div>
       )}
-      {/* The Still stuck card (retry, ask your admin, report on GitHub) is its own task; this is where it goes. */}
-      {last && verdict === 'no' && <div className="help-ask-still-stuck" data-help-still-stuck-slot />}
+      {last && !working && verdict === 'no' && stillStuck}
+    </div>
+  );
+}
+
+declare const __APP_VERSION__: string;
+
+/** Two letters for the admin's mark: "Alex Li" → "AL". */
+const initialsOf = (name: string) =>
+  name.trim().split(/\s+/u).slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('') || '?';
+
+/**
+ * Still stuck (board 02 ② right frame, side note 5): under an answer the person said No to. Tell it what's still
+ * wrong puts the cursor in this Ask's own composer; Ask your admin — to a person who is not an admin — sends the
+ * conversation to an admin as a task in their list; Report on GitHub shows exactly what a report carries, then opens
+ * a new issue with it on the repository this Orbit was released from.
+ */
+function StillStuck({
+  sessionId,
+  exchanges,
+  onTellIt,
+}: {
+  sessionId: string;
+  exchanges: readonly AskExchange[];
+  onTellIt: () => void;
+}) {
+  const stuck = useQuery(helpAskStuckQuery(sessionId));
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [sent, setSent] = useState<{ adminName: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const data = stuck.data;
+  const withAdmin = sent ?? data?.sentToAdmin ?? null;
+  const conversation = exchanges.map((ex) => ({ question: ex.question, answer: ex.answer }));
+  const body = data
+    ? reportBody({
+        orbitVersion: __APP_VERSION__,
+        client: 'web',
+        machine: data.report.machine,
+        exchanges: conversation,
+        privateNames: data.report.privateNames,
+      })
+    : '';
+  const sendToAdmin = async () => {
+    if (sending || withAdmin) return;
+    setSending(true);
+    try {
+      const made = await askYourAdmin(sessionId, {
+        exchanges: conversation.map((ex) => ({ question: ex.question, answer: answerText(ex.answer) })),
+      });
+      setSent({ adminName: made.adminName });
+      void qc.invalidateQueries({ queryKey: ['help', 'ask', 'stuck', sessionId] });
+      void qc.invalidateQueries({ queryKey: ['sessions', 'help-ask'] });
+    } catch (error) {
+      toast.error((error as Error).message || 'The question could not be sent to your admin.');
+    } finally {
+      setSending(false);
+    }
+  };
+  const openIssue = () => {
+    if (!data) return;
+    const url = reportIssueUrl(data.report.repository, reportTitle(exchanges[0]?.question ?? 'Ask', data.report.privateNames), body);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+  return (
+    <div className="help-ask-still-stuck" data-help-still-stuck>
+      <div className="help-ask-stuck-card">
+        <div className="help-ask-stuck-head">
+          <div className="help-ask-stuck-title">Still stuck?</div>
+          <div className="help-ask-stuck-sub">Say what's still wrong and the agent tries again, or hand it to a person.</div>
+        </div>
+        <button type="button" className="help-ask-stuck-row" data-help-stuck="retry" onClick={onTellIt}>
+          <span className="help-ask-stuck-icon" aria-hidden><EditOutlined /></span>
+          <span className="help-ask-stuck-text"><span>Tell it what's still wrong</span></span>
+          <RightOutlined className="help-ask-stuck-chevron" />
+        </button>
+        {data?.admin && (
+          <button
+            type="button"
+            className="help-ask-stuck-row"
+            data-help-stuck="admin"
+            disabled={sending || !!withAdmin}
+            onClick={() => void sendToAdmin()}
+          >
+            <span className="help-ask-stuck-icon is-person" aria-hidden>{initialsOf(withAdmin?.adminName ?? data.admin.name)}</span>
+            <span className="help-ask-stuck-text">
+              <span>Ask your admin</span>
+              <span className="help-ask-stuck-note">
+                {withAdmin
+                  ? `Sent to ${withAdmin.adminName}. It is in their tasks.`
+                  : sending
+                    ? `Sending to ${data.admin.name}…`
+                    : `${data.admin.name} · sends this chat as a task`}
+              </span>
+            </span>
+            {withAdmin ? <CheckOutlined className="help-ask-stuck-chevron" /> : <RightOutlined className="help-ask-stuck-chevron" />}
+          </button>
+        )}
+        <button
+          type="button"
+          className="help-ask-stuck-row"
+          data-help-stuck="github"
+          aria-expanded={reviewing}
+          disabled={!data}
+          onClick={() => setReviewing((r) => !r)}
+        >
+          <span className="help-ask-stuck-icon is-github" aria-hidden><GithubOutlined /></span>
+          <span className="help-ask-stuck-text">
+            <span>Report on GitHub</span>
+            <span className="help-ask-stuck-note">Opens a prefilled issue. You review it first.</span>
+          </span>
+          <ExportOutlined className="help-ask-stuck-chevron" />
+        </button>
+      </div>
+      {reviewing && data && (
+        <div className="help-ask-report" data-help-report>
+          <div className="help-ask-report-heading">What a report includes</div>
+          <pre className="help-ask-report-body" data-help-report-body>{body}</pre>
+          <div className="help-ask-report-foot">
+            <span>{REPORT_NOT_INCLUDED}.</span>
+            <button type="button" className="help-ask-primary" onClick={openIssue}>
+              Open on GitHub <ExportOutlined />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

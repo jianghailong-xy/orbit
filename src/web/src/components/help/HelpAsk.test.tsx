@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { HelpAskChoices, HelpArticleMeta, HelpIndex } from '@orbit/shared';
+import type { HelpAskChoices, HelpAskStuck, HelpArticleMeta, HelpIndex } from '@orbit/shared';
 import { HelpDrawerProvider, useHelpDrawer } from '../../lib/helpDrawer';
 import { HELP_ERROR_ATTR } from '../../lib/help/drawerArticles';
 import type { RunEvent } from '../../lib/useSessionStream';
@@ -58,6 +58,16 @@ const MIA = { id: 'r-mia', name: 'mia-macbook', online: true, supported: true, e
 const BUILD = { id: 'r-build', name: 'build-box', online: false, supported: true, engines: [claude] };
 
 let choices: HelpAskChoices = { machines: [], remembered: null };
+const STUCK: HelpAskStuck = {
+  admin: { name: 'Alex Li' },
+  sentToAdmin: null,
+  report: {
+    repository: 'jianghailong-xy/orbit',
+    machine: { name: 'mia-macbook', runnerVersion: '0.1.255', os: 'darwin', lastHeartbeatAt: new Date(Date.now() - 3 * 60_000).toISOString() },
+    privateNames: ['payments-api'],
+  },
+};
+let stuck: HelpAskStuck = STUCK;
 let posts: Array<{ url: string; body: unknown }> = [];
 let container: HTMLDivElement;
 let root: Root | null = null;
@@ -68,6 +78,7 @@ beforeEach(() => {
   // Signed in, as the drawer always is: link buttons resolve for the reader's account.
   localStorage.setItem('orbit_token', 'tok');
   posts = [];
+  stuck = STUCK;
   streamed.events = [];
   streamed.idle = true;
   streamed.streamingText = '';
@@ -96,7 +107,13 @@ beforeEach(() => {
                     ? [200, [{ id: 'r-build', name: 'build-box', lastHeartbeatAt: null }]]
                     : url === '/api/workspaces'
                       ? [200, []]
-                      : [404, { statusCode: 404, message: `Cannot GET ${url}` }];
+                      : url === '/api/help/ask/s-ask/stuck'
+                        ? [200, stuck]
+                        : url === '/api/help/ask/s-ask/admin' && init?.method === 'POST'
+                          ? [201, { taskId: 't-admin', adminName: 'Alex Li', at: '2026-11-16T12:00:00.000Z' }]
+                          : url === '/api/sessions/s-ask/turns' && init?.method === 'POST'
+                            ? [201, { id: 'turn-2' }]
+                            : [404, { statusCode: 404, message: `Cannot GET ${url}` }];
       return new Response(JSON.stringify(answer[1]), { status: answer[0], headers: { 'content-type': 'application/json' } });
     }),
   );
@@ -295,9 +312,9 @@ describe('an answer (board 02 ②)', () => {
     expect(open.textContent).toBe('Open build-box ›');
     expect(open.dataset.orbitLink).toBe('orbit:/settings/machines/r-build');
 
-    expect(pane().querySelector('[data-help-still-stuck-slot]')).toBeNull();
+    expect(pane().querySelector('[data-help-still-stuck]')).toBeNull();
     await click(button('No')!);
-    expect(pane().querySelector('[data-help-still-stuck-slot]')).not.toBeNull();
+    expect(pane().querySelector('[data-help-still-stuck]')).not.toBeNull();
 
     await click([...pane().querySelectorAll<HTMLElement>('.help-ask-answer-body .help-ask-cite')][2]);
     expect(where().tab).toBe('articles');
@@ -314,5 +331,128 @@ describe('an answer (board 02 ②)', () => {
     expect(pane().querySelector('.help-ask-answer-body')!.textContent).toBe('They are under Paused sessions.');
     await click(pane().querySelector<HTMLElement>('.help-ask-button')!);
     expect(where().path).toBe('/sessions');
+  });
+});
+
+describe('Still stuck (board 02 ② right frame, side note 5)', () => {
+  const ANSWERED: RunEvent[] = [
+    { seq: 1, type: 'user', payload: { text: 'Why is payments-api offline?' } },
+    {
+      seq: 2,
+      type: 'assistant',
+      payload: {
+        text: [
+          'mia-macbook went to sleep [1]. Your key OPENAI_API_KEY=sk-proj-Ab12Cd34Ef56Gh78Ij90Kl12 is fine.',
+          '',
+          'Sources:',
+          '[1] [A machine shows Offline](orbit:/help/machines-and-engines/a-machine-shows-offline)',
+        ].join('\n'),
+      },
+    },
+  ];
+  const stuckCard = () => pane().querySelector<HTMLElement>('[data-help-still-stuck]');
+  const row = (which: string) => pane().querySelector<HTMLButtonElement>(`[data-help-stuck="${which}"]`);
+
+  async function answeredNo() {
+    choices = { machines: [MIA], remembered: null };
+    streamed.events = ANSWERED;
+    await mount('/', { tab: 'ask', askSession: 's-ask' });
+    expect(stuckCard()).toBeNull();
+    await click(button('No')!);
+    expect(stuckCard()).not.toBeNull();
+  }
+
+  it('offers the three ways out, in the board\'s words', async () => {
+    await answeredNo();
+    expect(stuckCard()!.textContent).toContain('Still stuck?');
+    expect(stuckCard()!.textContent).toContain("Say what's still wrong and the agent tries again, or hand it to a person.");
+    expect(row('retry')!.textContent).toContain("Tell it what's still wrong");
+    expect(row('admin')!.textContent).toContain('Ask your admin');
+    expect(row('admin')!.textContent).toContain('Alex Li · sends this chat as a task');
+    expect(row('github')!.textContent).toContain('Report on GitHub');
+    expect(row('github')!.textContent).toContain('Opens a prefilled issue. You review it first.');
+  });
+
+  it("Tell it what's still wrong puts the cursor in this Ask's composer, and the follow-up is a turn of the same session", async () => {
+    await answeredNo();
+    await click(row('retry')!);
+    const box = pane().querySelector<HTMLTextAreaElement>('textarea[aria-label="Ask a follow-up"]')!;
+    expect(document.activeElement).toBe(box);
+    expect(pane().dataset.helpAskSession).toBe('s-ask');
+
+    await act(async () => {
+      const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+      set.call(box, 'It is awake and still shows Offline.');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(button('Send')!);
+    // A turn of this session (sendTurn's door, whichever of its routes it takes), and nothing else.
+    expect(posts).toHaveLength(1);
+    expect(posts[0].url.startsWith('/api/sessions/s-ask/turns')).toBe(true);
+    expect(posts[0].body).toEqual(expect.objectContaining({ content: 'It is awake and still shows Offline.' }));
+    // No new Ask was made: the follow-up went to the session already open.
+    expect(posts.some((p) => p.url === '/api/help/ask')).toBe(false);
+    expect(pane().dataset.helpAskSession).toBe('s-ask');
+  });
+
+  it('Ask your admin is not offered to an admin (the server names no admin for one)', async () => {
+    stuck = { ...STUCK, admin: null };
+    await answeredNo();
+    expect(row('retry')).not.toBeNull();
+    expect(row('github')).not.toBeNull();
+    expect(row('admin')).toBeNull();
+    expect(stuckCard()!.textContent).not.toContain('Ask your admin');
+  });
+
+  it('Ask your admin sends the conversation to the admin as a task, and says so', async () => {
+    await answeredNo();
+    await click(row('admin')!);
+    expect(posts).toEqual([{
+      url: '/api/help/ask/s-ask/admin',
+      body: {
+        exchanges: [{
+          question: 'Why is payments-api offline?',
+          answer: 'mia-macbook went to sleep [1]. Your key OPENAI_API_KEY=sk-proj-Ab12Cd34Ef56Gh78Ij90Kl12 is fine.',
+        }],
+      },
+    }]);
+    expect(row('admin')!.textContent).toContain('Sent to Alex Li. It is in their tasks.');
+    expect(row('admin')!.disabled).toBe(true);
+    // Nothing of the removed Waiting on you inbox: no /waiting route is asked for or gone to.
+    const asked = (fetch as unknown as { mock: { calls: [string][] } }).mock.calls.map(([u]) => u);
+    expect(asked.some((u) => u.includes('waiting'))).toBe(false);
+    expect(where().path).toBe('/');
+  });
+
+  it('already sent, it says so and is not sent again', async () => {
+    stuck = { ...STUCK, sentToAdmin: { adminName: 'Alex Li', at: '2026-11-15T10:00:00.000Z' } };
+    await answeredNo();
+    expect(row('admin')!.textContent).toContain('Sent to Alex Li.');
+    expect(row('admin')!.disabled).toBe(true);
+  });
+
+  it('Report on GitHub shows exactly what the report carries first, then opens it prefilled on the release repository', async () => {
+    const opened: string[] = [];
+    vi.stubGlobal('open', (url: string) => { opened.push(url); return null; });
+    await answeredNo();
+    await click(row('github')!);
+    expect(opened).toEqual([]);
+    const shown = pane().querySelector('[data-help-report-body]')!.textContent!;
+    expect(pane().querySelector('[data-help-report]')!.textContent).toContain('What a report includes');
+    expect(pane().querySelector('[data-help-report]')!.textContent).toContain('Not included: repository names, file contents, keys');
+    expect(shown).toMatch(/^Orbit \S+ · web$/mu);
+    expect(shown).toContain('Machine: runner 0.1.255 · macOS');
+    expect(shown).toContain('Last heartbeat: 3m ago');
+    expect(shown).toContain('Why is [name removed] offline?');
+    expect(shown).toContain('mia-macbook went to sleep [1].');
+    expect(shown).not.toContain('payments-api');
+    expect(shown).not.toContain('sk-proj-');
+
+    await click(button('Open on GitHub')!);
+    expect(opened).toHaveLength(1);
+    const url = new URL(opened[0]);
+    expect(`${url.origin}${url.pathname}`).toBe('https://github.com/jianghailong-xy/orbit/issues/new');
+    expect(url.searchParams.get('body')).toBe(shown);
+    expect(url.searchParams.get('title')).toBe('Help: Why is [name removed] offline?');
   });
 });

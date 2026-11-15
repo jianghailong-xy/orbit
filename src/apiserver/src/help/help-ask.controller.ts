@@ -1,5 +1,5 @@
-import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import type { HelpAskChoices, HelpAskList } from '@orbit/shared';
+import { BadRequestException, Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import type { HelpAskAdminBody, HelpAskAdminResult, HelpAskChoices, HelpAskList, HelpAskStuck } from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatScope } from '../auth/pat-scope.decorator';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
@@ -38,5 +38,19 @@ export class HelpAskController {
   @Get('sessions')
   list(@CurrentUser() user: AuthUser): Promise<HelpAskList> {
     return this.ask.list(user.userId);
+  }
+
+  /** Still stuck (board 02 ② right frame): who Ask your admin sends to, and what a GitHub report carries. */
+  @PatScope('sessions:read', { workspaceConfinable: false })
+  @Get(':id/stuck')
+  stuck(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string): Promise<HelpAskStuck> {
+    return this.ask.stuck(user.userId, id);
+  }
+
+  /** Still stuck → Ask your admin: the conversation, as a task in an admin's own list. */
+  @PatScope('sessions:write', { workspaceConfinable: false })
+  @Post(':id/admin')
+  askAdmin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() body: HelpAskAdminBody): Promise<HelpAskAdminResult> {
+    return this.ask.askAdmin(user.userId, id, body);
   }
 }

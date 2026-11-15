@@ -467,6 +467,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // The signed-in user a Google LINK flow would link to (`oauth_login_flow`, migration 0391).
   'linkUserId',
   'actorId',
+  // The admin an Ask was sent to (`help_ask_admin_request`, migration 0860).
+  'adminId',
   'mentions',
   // Wire-only aggregates: no column of their own, but they carry the same ids in request and
   // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
