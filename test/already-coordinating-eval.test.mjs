@@ -113,6 +113,16 @@ for (const [name, text] of [
   });
 }
 
+test('CLI gate wording accepts contractions and get around without accepting a bypass', async () => {
+  const scenario = scenarios.find(s => s.name === 'capability-missing');
+  const trace = await evaluate(referenceAgent(), 'mcp', scenario);
+  trace.replies[1] = `You have two options:\n1. Open it yourself.\nStart a new session with ${childPrompt}\n`
+    + "The Orbit CLI uses the same server permission gate and can't get around it either.";
+  grade(trace, scenario);
+  trace.replies[1] = trace.replies[1].replace("can't get around", 'can bypass');
+  assert.throws(() => grade(trace, scenario), /CLI shares the permission gate/);
+});
+
 test('opening prompt carries exact parameters and success receipt', () => {
   assert.deepEqual(JSON.parse(/```json\n([\s\S]*?)\n```/.exec(childPrompt)[1]), project);
   assert.match(childPrompt, /PROJECT_CREATED projectId=<id> coordinatorSessionId=<id>/);
