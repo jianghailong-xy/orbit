@@ -36,13 +36,17 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { PushService } from '../push/push.service';
-import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { factsSql, wikiSessionsOfSpace } from '../wiki/wiki-maintenance';
 import { lastActiveByWorkspace, workspaceSessionCount } from '../workspaces/workspace-usage';
-import { CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, CHECK_ONLY_REFUSED_MESSAGE } from './schedule-access';
+import {
+  CHECK_ONLY_CLAUDE_ALLOWED_TOOLS,
+  CHECK_ONLY_REFUSED_MESSAGE,
+  scheduleRunAllowedTools,
+  scheduleRunDisallowedTools,
+} from './schedule-access';
 import type { ScheduleAlert, ScheduleNotifier } from './schedule-attention';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
@@ -526,20 +530,28 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   assert.equal(await runs.reconcileRun(run.id), 'RUNNING');
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Same.' });
 
-  // The next run's claim, as the queue hands it to the runner.
+  // The next run's claim: the same rows and the same expressions both claim paths use (QueueService.buildSession and
+  // the reclaim in RunnerApiController; schedule-access.spec.ts pins them in their source).
   const next = await nextRun(schedule.id);
-  const queue = new QueueService(db as unknown as PrismaService, new Proxy({}, { get: () => () => undefined }) as never);
-  let claimed: Awaited<ReturnType<QueueService['claimSessionForRunner']>> = null;
-  for (let i = 0; i < 10 && claimed?.sessionId !== next.sessionId; i++) {
-    claimed = await queue.claimSessionForRunner({ id: w.runnerId } as never);
-    if (!claimed) break;
-  }
-  assert.equal(claimed?.sessionId, next.sessionId, 'the next run is claimed');
-  assert.equal(claimed!.agent.permissionMode, PermissionMode.DEFAULT);
-  assert.deepEqual(claimed!.agent.allowedTools, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)'],
+  const dispatched = await db.session.findUniqueOrThrow({
+    where: { id: next.sessionId },
+    include: {
+      workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+      scheduleRun: { select: { schedule: { select: { accessLevel: true } } } },
+    },
+  });
+  assert.equal(dispatched.workspaceId, w.workspaceId, 'the next run is a session of the same workspace');
+  assert.equal(dispatched.permissionMode, PermissionMode.DEFAULT);
+  const provider = dispatched.provider ?? 'claude';
+  const level = dispatched.scheduleRun?.schedule.accessLevel;
+  const allowed = scheduleRunAllowedTools(
+    dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, dispatched.workspace!.permissionRules), level, provider,
+  );
+  assert.deepEqual(allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)'],
     'the run\'s allow list and the workspace\'s narrow Bash rule; not Edit, bg_run, the whole shell or mcp__orbit__*');
+  const denied = scheduleRunDisallowedTools((dispatched.workspace!.disallowedTools as string[] | null) ?? [], level, provider);
   for (const tool of ['Edit', 'Write', 'NotebookEdit', 'mcp__orbit__bg_run', 'mcp__orbit__task_update', 'mcp__orbit__session_merge', 'Bash(*/orbit *)']) {
-    assert.ok(claimed!.agent.disallowedTools?.includes(tool), `${tool} is denied`);
+    assert.ok(denied.includes(tool), `${tool} is denied`);
   }
 });
 
