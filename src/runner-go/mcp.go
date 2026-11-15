@@ -2877,6 +2877,11 @@ func (s *mcpServer) answerOrbitToolPrompt(args map[string]interface{}) (map[stri
 	if !ours {
 		return nil, false
 	}
+	// A scheduled CHECK_ONLY run: an Orbit tool its allow rules do not cover is refused, whatever the catalogue says
+	// of it, and asks nobody (schedule_check_only.go).
+	if scheduledCheckOnlyFromEnv() {
+		return toolResult(denyJSON(checkOnlyOrbitToolRefusal), false), true
+	}
 	if entry, declared := planGateTable()[tool]; !declared || !entry.mcp {
 		return nil, false
 	}

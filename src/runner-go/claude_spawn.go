@@ -63,7 +63,12 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	// reaches for them, but those entries are session-local todos that never reach
 	// Orbit's DB — so the tasks never appear in the UI. Always disable the built-in
 	// family so task work is forced through the orbit MCP server.
-	if disallowed := withBuiltinTaskToolsDisallowed(a.DisallowedTools); len(disallowed) > 0 {
+	configuredDisallowed := a.DisallowedTools
+	if a.ScheduledCheckOnly {
+		// A scheduled CHECK_ONLY run: the Orbit CLI denied by this runner's own path (schedule_check_only.go).
+		configuredDisallowed = checkOnlyDisallowedTools(configuredDisallowed, orbitExe)
+	}
+	if disallowed := withBuiltinTaskToolsDisallowed(configuredDisallowed); len(disallowed) > 0 {
 		args = append(args, "--disallowedTools", strings.Join(disallowed, ","))
 	}
 	// Always pass an --mcp-config: merge the agent's configured servers with the
@@ -112,6 +117,11 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	// background shells working exactly as before.
 	if path, err := writeClaudeSettings(scratchDir, orbitExe, a.FastMode); err == nil && path != "" {
 		args = append(args, "--settings", path)
+	}
+	// A scheduled CHECK_ONLY run loads no settings file of its own: permissions.allow in the checkout's or the
+	// user's settings would run commands unasked (schedule_check_only.go). The --settings file above still applies.
+	if a.ScheduledCheckOnly {
+		args = append(args, "--setting-sources", "")
 	}
 	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they
 	// stay out of git (see writeUpload). Add it as an explicit working dir so claude can read
@@ -229,6 +239,7 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
 		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
+		envScheduledCheckOnly+"="+scheduledCheckOnlyEnv(job.Agent.ScheduledCheckOnly),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
 	)
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a

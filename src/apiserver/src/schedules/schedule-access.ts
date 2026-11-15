@@ -27,6 +27,7 @@
  */
 import {
   AgentProvider,
+  bashCommandRules,
   CURSOR_PERMISSION_MODES,
   DSH_PERMISSION_MODES,
   PermissionMode,
@@ -159,25 +160,67 @@ export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
 ];
 
 /**
+ * The level a run's session is held to: the one the run started with (`schedule_run.access_level`, migration 0850),
+ * so moving the schedule to OPEN_PR, or deleting it, while a check runs does not widen that check. The schedule's own
+ * level only for a run started before 0850 recorded it.
+ */
+export function runAccessLevel(
+  run: { accessLevel: AccessLevel | null; schedule?: { accessLevel: AccessLevel } | null } | null | undefined,
+): AccessLevel | null {
+  return run ? run.accessLevel ?? run.schedule?.accessLevel ?? null : null;
+}
+
+/** A workspace rule as the claim reads it: the stored row, with where it came from. */
+export type CarriedRule = { toolName: string; ruleContent: string; fromScheduleRun?: boolean };
+
+/**
  * The tools the run's session may use without asking. A CHECK_ONLY run on Claude Code gets
- * CHECK_ONLY_CLAUDE_ALLOWED_TOOLS and, of what the claim computed, only the workspace's `Bash(…)` rules: a shell
- * command the owner answered Always allow to does not ask again. Neither the `mcp__orbit__*` wildcard nor a rule for
- * any other tool (Edit, Write, an MCP tool) is kept, and a rule for the whole shell (`Bash`, `Bash(*)`) is not either:
- * it would run every writing command unasked. Every other run keeps what the claim computed.
+ * CHECK_ONLY_CLAUDE_ALLOWED_TOOLS and, of the workspace's rules, only the narrow `Bash(…)` rules written by answering
+ * Always allow on a scheduled run's card (`fromScheduleRun`): a shell command the owner allowed for a scheduled check
+ * does not ask again. Not the rules a person's interactive sessions wrote (`Bash(python:*)`, `Bash(git:*)` would run
+ * writing commands unasked), not a rule for any other tool, not the `mcp__orbit__*` wildcard, and not a rule for the
+ * whole shell (`Bash`, `Bash(*)`). Every other run keeps what the claim computed.
  */
 export function scheduleRunAllowedTools(
   base: string[],
   accessLevel: AccessLevel | null | undefined,
   provider: string | null | undefined,
+  rules: readonly CarriedRule[] = [],
 ): string[] {
   if (!claudeCheckOnly(accessLevel, provider)) return base;
-  return [...new Set([...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, ...base.filter(isNarrowBashRule)])];
+  const carried = rules
+    .filter((rule) => rule.fromScheduleRun === true && rule.toolName === 'Bash' && !/^[\s*:]*$/.test(rule.ruleContent))
+    .map((rule) => `Bash(${rule.ruleContent})`)
+    // Only what the claim already put on the list, so a rule its normalization dropped is not carried here either.
+    .filter((token) => base.includes(token));
+  return [...new Set([...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, ...carried])];
 }
 
-/** `Bash(git status:*)` yes; `Bash`, `Bash(*)`, `Bash(:*)`, `Edit`, `mcp__orbit__*` no. */
-function isNarrowBashRule(token: string): boolean {
-  const match = /^Bash\((.*)\)$/s.exec(token);
-  return !!match && !/^[\s*:]*$/.test(match[1]);
+/** Refused when Always allow on a scheduled check's card names a rule that card's command does not give. */
+export const SCHEDULE_CHECK_ONLY_RULE_REFUSED = 'SCHEDULE_CHECK_ONLY_RULE_REFUSED';
+
+/**
+ * The rules Always allow on a CHECK_ONLY run's card may write: the card's own command's prefixes
+ * (`bashCommandRules`, what the card says "Always allow covers"). Anything else a client sends is refused with
+ * SCHEDULE_CHECK_ONLY_RULE_REFUSED: a rule for another command, another tool, or the whole shell.
+ */
+export function checkOnlyRuleRefusal(
+  card: { toolName: string; input: unknown },
+  rules: readonly { toolName: string; ruleContent?: string }[],
+): string | null {
+  const command = typeof (card.input as { command?: unknown } | null)?.command === 'string'
+    ? (card.input as { command: string }).command
+    : '';
+  const given = card.toolName === 'Bash' ? bashCommandRules(command) : [];
+  for (const rule of rules) {
+    const ok = rule.toolName === 'Bash' && given.some((g) => g.ruleContent === (rule.ruleContent ?? ''));
+    if (!ok) {
+      return `Always allow on a scheduled check's card covers only this card's command (${
+        given.map((g) => `Bash(${g.ruleContent})`).join(', ') || 'nothing'
+      }); ${rule.toolName}${rule.ruleContent ? `(${rule.ruleContent})` : ''} is not it. Nothing was written.`;
+    }
+  }
+  return null;
 }
 
 /** What the engine reads when the server refuses such a request (checkOnlyRefusesApproval). */

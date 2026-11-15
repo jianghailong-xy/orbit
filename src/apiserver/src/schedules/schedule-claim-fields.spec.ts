@@ -26,12 +26,12 @@ test('the claim and the reclaim both spread scheduleRunAgentFields from the sess
   ] as const) {
     const source = readFileSync(join(root, file), 'utf8');
     assert.ok(
-      source.includes(`...scheduleRunAgentFields(${row}.scheduleRun?.schedule.accessLevel)`),
+      source.includes(`...scheduleRunAgentFields(runAccessLevel(${row}.scheduleRun))`),
       `${file} must carry scheduledCheckOnly for a CHECK_ONLY run's session`,
     );
     assert.ok(
-      source.includes('scheduleRun: { select: { schedule: { select: { accessLevel: true } } } }'),
-      `${file} must read the session's schedule access level`,
+      source.includes('scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } }'),
+      `${file} must read the level the session's run started with`,
     );
   }
 });

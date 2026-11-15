@@ -44,6 +44,9 @@ import { lastActiveByWorkspace, workspaceSessionCount } from '../workspaces/work
 import {
   CHECK_ONLY_CLAUDE_ALLOWED_TOOLS,
   CHECK_ONLY_REFUSED_MESSAGE,
+  runAccessLevel,
+  SCHEDULE_CHECK_ONLY_RULE_REFUSED,
+  scheduleRunAgentFields,
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from './schedule-access';
@@ -514,45 +517,122 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   assert.deepEqual((await pendingItems(schedule.id)).map((i) => i.approvalId), [bash.id], 'no item for any of them');
   assert.equal(alertsOf(schedule.id).filter((a) => a.kind === 'AWAITING_APPROVAL').length, 1);
 
-  // Always allow on the shell command's card: the workspace rule. The workspace also holds rules for other tools.
+  // The workspace already holds rules a person's interactive sessions wrote, and rules for other tools.
   await db.workspacePermissionRule.createMany({
     data: [
       { workspaceId: w.workspaceId, toolName: 'Edit', ruleContent: '' },
       { workspaceId: w.workspaceId, toolName: 'mcp__orbit__bg_run', ruleContent: '' },
       { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: '' },
+      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'python:*' },
+      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'npm test:*' },
     ],
   });
+  // H5: Always allow on this card writes only this card's command's rule. Anything else is refused by name, and the
+  // card is not decided.
+  for (const rule of [
+    { toolName: 'Bash', ruleContent: 'python:*' },
+    { toolName: 'Bash', ruleContent: '' },
+    { toolName: 'Edit', ruleContent: '' },
+    { toolName: 'mcp__orbit__bg_run', ruleContent: '' },
+  ]) {
+    await assert.rejects(
+      sessionsService.decideApproval(w.ownerId, sessionId, bash.id, { behavior: 'allow', rememberRules: [rule] }),
+      (e: { getResponse?: () => { code?: string } }) => e.getResponse?.().code === SCHEDULE_CHECK_ONLY_RULE_REFUSED,
+      JSON.stringify(rule),
+    );
+  }
+  assert.equal((await db.approval.findUniqueOrThrow({ where: { id: bash.id } })).status, 'PENDING', 'a refused answer decides nothing');
   await sessionsService.decideApproval(w.ownerId, sessionId, bash.id, {
     behavior: 'allow',
     rememberRules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }],
   });
-  assert.ok(await db.workspacePermissionRule.findFirst({ where: { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'npm test:*' } }));
+  // H1: the rule is now marked as a scheduled card's (an interactive session had written the same row first); the
+  // interactive python:* is not.
+  const marked = await db.workspacePermissionRule.findMany({ where: { workspaceId: w.workspaceId, toolName: 'Bash' } });
+  assert.deepEqual(
+    marked.map((r) => [r.ruleContent, r.fromScheduleRun]).sort(),
+    [['', false], ['npm test:*', true], ['python:*', false]],
+  );
   assert.equal(await runs.reconcileRun(run.id), 'RUNNING');
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Same.' });
 
   // The next run's claim: the same rows and the same expressions both claim paths use (QueueService.buildSession and
   // the reclaim in RunnerApiController; schedule-access.spec.ts pins them in their source).
   const next = await nextRun(schedule.id);
+  const lists = await claimLists(next.sessionId);
+  assert.equal(lists.permissionMode, PermissionMode.DEFAULT);
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)'],
+    'the run\'s allow list and the rule a scheduled card wrote; not python:*, Edit, bg_run, the whole shell or mcp__orbit__*');
+  for (const tool of ['Edit', 'Write', 'NotebookEdit', 'mcp__orbit__bg_run', 'mcp__orbit__task_update', 'mcp__orbit__session_merge', 'Bash(*/orbit *)']) {
+    assert.ok(lists.denied.includes(tool), `${tool} is denied`);
+  }
+  assert.deepEqual(lists.agentFields, { scheduledCheckOnly: true });
+});
+
+/** What both claim paths hand the runner for a session: its mode, allow and deny lists and schedule fields. */
+async function claimLists(sessionId: string) {
   const dispatched = await db.session.findUniqueOrThrow({
-    where: { id: next.sessionId },
+    where: { id: sessionId },
     include: {
       workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
-      scheduleRun: { select: { schedule: { select: { accessLevel: true } } } },
+      scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
     },
   });
-  assert.equal(dispatched.workspaceId, w.workspaceId, 'the next run is a session of the same workspace');
-  assert.equal(dispatched.permissionMode, PermissionMode.DEFAULT);
   const provider = dispatched.provider ?? 'claude';
-  const level = dispatched.scheduleRun?.schedule.accessLevel;
-  const allowed = scheduleRunAllowedTools(
-    dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, dispatched.workspace!.permissionRules), level, provider,
-  );
-  assert.deepEqual(allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)'],
-    'the run\'s allow list and the workspace\'s narrow Bash rule; not Edit, bg_run, the whole shell or mcp__orbit__*');
-  const denied = scheduleRunDisallowedTools((dispatched.workspace!.disallowedTools as string[] | null) ?? [], level, provider);
-  for (const tool of ['Edit', 'Write', 'NotebookEdit', 'mcp__orbit__bg_run', 'mcp__orbit__task_update', 'mcp__orbit__session_merge', 'Bash(*/orbit *)']) {
-    assert.ok(denied.includes(tool), `${tool} is denied`);
-  }
+  const level = runAccessLevel(dispatched.scheduleRun);
+  const rules = dispatched.workspace?.permissionRules ?? [];
+  return {
+    permissionMode: dispatched.permissionMode,
+    level,
+    allowed: scheduleRunAllowedTools(dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, rules), level, provider, rules),
+    denied: scheduleRunDisallowedTools((dispatched.workspace?.disallowedTools as string[] | null) ?? [], level, provider),
+    agentFields: scheduleRunAgentFields(level),
+  };
+}
+
+test('§6.2 S2e H6: a check is held to the level it started with when the schedule moves to OPEN_PR or is deleted mid-run', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('s2e-started-level');
+  const { schedule } = await created(w);
+  const { run, sessionId } = await nextRun(schedule.id);
+  await heldByRunner(w, sessionId);
+  assert.equal((await runOf(run.id)).accessLevel, 'CHECK_ONLY', 'the run records the level it started with');
+  const door = approvalDoor();
+  const ask = (toolName: string, extra: Record<string, string> = {}) =>
+    door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, sessionId,
+      { toolName, input: { file_path: 'x' }, toolUseId: `tu-${randomUUID()}`, ...extra } as never);
+
+  // The schedule is moved to OPEN_PR while the check runs: the check is still a check.
+  await db.schedule.update({ where: { id: schedule.id }, data: { accessLevel: 'OPEN_PR', envelopeAccessLevel: 'OPEN_PR' } });
+  assert.equal((await ask('Edit')).status, 'DENIED', 'no card for Edit');
+  assert.equal((await ask('mcp__orbit__bg_run')).status, 'DENIED');
+  let lists = await claimLists(sessionId);
+  assert.equal(lists.level, 'CHECK_ONLY');
+  assert.ok(!lists.allowed.includes('mcp__orbit__*'), 'a reclaim does not hand back the Orbit wildcard');
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
+
+  // A SubAgent of the run asks under its session: its Edit is refused the same way.
+  const sub = await db.subagentRun.create({ data: {
+    ownerId: w.ownerId, sessionId, toolUseId: 'toolu_sub', type: 'general', definitionSource: 'builtin', decision: {},
+    targetRunnerId: w.runnerId,
+  } });
+  const subEdit = await ask('Edit', { subagentRunId: sub.id });
+  assert.equal(subEdit.status, 'DENIED', 'a SubAgent of a check gets no card for Edit');
+  assert.equal((await db.approval.findUniqueOrThrow({ where: { id: subEdit.id } })).subagentRunId, sub.id);
+
+  // The schedule is deleted while the check runs: its session is not an ordinary session on reclaim.
+  await schedules.remove(w.owner, schedule.id);
+  assert.equal((await scheduleOf(schedule.id)).state, 'ENDED');
+  const linked = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { scheduleRunId: true } });
+  assert.equal(linked.scheduleRunId, run.id, 'the session still names its run');
+  lists = await claimLists(sessionId);
+  assert.equal(lists.level, 'CHECK_ONLY');
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
+  assert.deepEqual(lists.agentFields, { scheduledCheckOnly: true });
+  assert.equal((await ask('Write')).status, 'DENIED');
+  assert.equal(door.published.length, 0, 'no card was announced');
+  assert.equal(door.pushed.length, 0, 'and nothing was pushed');
 });
 
 test('§6.2 S2e: an ordinary session and an OPEN_PR run ask as before: an Edit or bg_run request is a card', { skip }, async () => {

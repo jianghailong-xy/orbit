@@ -562,6 +562,7 @@ import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../
 import {
   CHECK_ONLY_REFUSED_MESSAGE,
   checkOnlyRefusesApproval,
+  runAccessLevel,
   scheduleRunAgentFields,
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
@@ -4036,7 +4037,7 @@ export class RunnerApiController {
         // not start re-asking about calls this workspace already approved permanently.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
         // A scheduled task's run: its level decides the tools it may and may not call (§6.2, schedule-access.ts).
-        scheduleRun: { select: { schedule: { select: { accessLevel: true } } } },
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
         task: {
           select: {
             codeless: true,
@@ -4253,18 +4254,20 @@ export class RunnerApiController {
         model: runnerModel,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
+        // A scheduled run is held to the level it started with (runAccessLevel, design §6.2).
         allowedTools: scheduleRunAllowedTools(
           dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
-          s.scheduleRun?.schedule.accessLevel,
+          runAccessLevel(s.scheduleRun),
           provider,
+          workspace?.permissionRules ?? [],
         ),
         disallowedTools: scheduleRunDisallowedTools(
           (workspace?.disallowedTools as string[] | null) ?? [],
-          s.scheduleRun?.schedule.accessLevel,
+          runAccessLevel(s.scheduleRun),
           provider,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
-        ...scheduleRunAgentFields(s.scheduleRun?.schedule.accessLevel),
+        ...scheduleRunAgentFields(runAccessLevel(s.scheduleRun)),
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
@@ -6324,11 +6327,13 @@ export class RunnerApiController {
     dto: ApprovalCreateRequest,
   ): Promise<boolean> {
     if (!session.scheduleRunId) return false;
+    // The level the run started with, not the schedule's now: moving the schedule to OPEN_PR, or deleting it, mid-run
+    // does not open this check to cards for other tools (runAccessLevel).
     const run = await this.prisma.scheduleRun.findUnique({
       where: { id: session.scheduleRunId },
-      select: { schedule: { select: { accessLevel: true } } },
+      select: { accessLevel: true, schedule: { select: { accessLevel: true } } },
     });
-    if (run?.schedule.accessLevel !== 'CHECK_ONLY') return false;
+    if (runAccessLevel(run) !== 'CHECK_ONLY') return false;
     return checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName),
       stripNul(dto.backgroundJobId ?? ''));
   }

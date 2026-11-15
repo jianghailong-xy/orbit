@@ -454,7 +454,8 @@ export class ScheduleRunsService {
         const prompt = await this.firstTurn(tx, schedule, run, now);
         await tx.scheduleRun.update({
           where: { id: runId },
-          data: { state: 'RUNNING', startedAt: now, sessionId, notBeforeAt: null },
+          // The level the run starts with is the one its session is held to (schedule-access.ts runAccessLevel).
+          data: { state: 'RUNNING', startedAt: now, sessionId, notBeforeAt: null, accessLevel: schedule.accessLevel },
         });
         return { outcome: 'STARTED', open: this.openInput(schedule, run, sessionId, prompt, check.plan) };
       },
