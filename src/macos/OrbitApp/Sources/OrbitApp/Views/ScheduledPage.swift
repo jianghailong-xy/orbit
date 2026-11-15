@@ -1,11 +1,11 @@
-#if os(iOS)
 import SwiftUI
 import OrbitKit
 
 // The Scheduled page on a phone (docs/mocks/scheduled-tasks/01-board.png ② ③ ⑧, 02-agent-first.png ③): a timeline
 // in the manner of Reminders' Scheduled list — grouped by the day each schedule next runs, the circle its state — a
 // detail panel from the bottom for a row, and a line at the end that takes one sentence. The page is the web's
-// (`ScheduledPage.tsx`) in behaviour; every word and rule is OrbitKit's.
+// (`ScheduledPage.tsx`) in behaviour; every word and rule is OrbitKit's. The Mac draws the same rows, detail and
+// draft panel in its own columns (ScheduledMacPage.swift, the web board docs/mocks/scheduled-tasks/web/01-board.png).
 
 private typealias SC = ScheduleCopy
 
@@ -59,7 +59,26 @@ struct ScheduleCircleGlyph: View {
     }
 }
 
-private extension ScheduleDisplay.TagTone {
+extension Color {
+    /// The detail panel's ground and its blocks': the grouped greys on a phone, the window's and a control's on a Mac.
+    static var schedulePanelFill: Color {
+        #if os(iOS)
+        Color(uiColor: .systemGroupedBackground)
+        #else
+        Color(nsColor: .windowBackgroundColor)
+        #endif
+    }
+
+    static var scheduleCardFill: Color {
+        #if os(iOS)
+        Color(uiColor: .secondarySystemGroupedBackground)
+        #else
+        Color(nsColor: .controlBackgroundColor)
+        #endif
+    }
+}
+
+extension ScheduleDisplay.TagTone {
     var color: Color {
         switch self {
         case .new: return .green
@@ -71,13 +90,13 @@ private extension ScheduleDisplay.TagTone {
 }
 
 /// "02:00": a row's time column, 24-hour, in the viewer's zone.
-private func scheduleClock(_ iso: String?) -> String {
+func scheduleClock(_ iso: String?) -> String {
     guard let iso, let at = ScheduleDisplay.parse(iso) else { return "" }
     return ScheduleDisplay.localParts(at, timezone: TimeZone.current.identifier).time
 }
 
 /// One row of the timeline.
-private struct ScheduleRowModel: Identifiable {
+struct ScheduleRowModel: Identifiable {
     let id: String
     let circle: ScheduleDisplay.CircleView
     let title: String
@@ -86,9 +105,113 @@ private struct ScheduleRowModel: Identifiable {
     let time: String
     let draft: Bool
     let paused: Bool
+    /// The schedule this row opens, for the Mac's selected row; nil for a draft.
+    var scheduleID: String? = nil
     let open: () -> Void
 }
 
+/// The timeline's rows, the web's `rowOf`: one builder for the phone and the Mac. `wide` is the Mac's (and the
+/// web's) long row line, `scheduleRowLine`, and a failing row's time with its day; the phone keeps its short line.
+enum ScheduleTimelineRows {
+    @MainActor
+    static func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel, now: Date,
+                     wide: Bool) -> [ScheduleRowModel] {
+        group.items.map { item -> ScheduleRowModel in
+            switch item {
+            case .draft(let card, let at):
+                let rule = card.when?.rule ?? .daily(time: "")
+                let accessLevel = card.may?.accessLevel ?? "CHECK_ONLY"
+                return ScheduleRowModel(
+                    id: "\(group.id)-\(item.id)",
+                    circle: ScheduleDisplay.scheduleCircle(state: "ACTIVE", consecutiveFailures: 0, draft: true),
+                    title: card.title ?? "",
+                    line: wide
+                        ? ScheduleDisplay.rowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
+                                                  accessLevel: accessLevel, state: "ACTIVE", heldReason: nil, draft: true)
+                        : ScheduleDisplay.phoneRowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
+                                                       accessLevel: accessLevel, state: "ACTIVE", heldReason: nil,
+                                                       draft: true),
+                    repeats: ScheduleDisplay.ruleRepeats(rule), time: scheduleClock(at), draft: true, paused: false,
+                    open: {
+                        scheduled.inspectedID = nil
+                        scheduled.draftPanel = ScheduledModel.DraftPanel(sessionID: card.askedBySessionId ?? card.id,
+                                                                         typed: card.intent ?? "")
+                    })
+            case .run(let s, let run, _):
+                let underWay = ["QUEUED", "RUNNING", "AWAITING_APPROVAL"].contains(run.state)
+                let facts = ScheduleDisplay.runFindingFacts(run, findings: scheduled.detail(s.id)?.findings ?? [])
+                var minutes: Int?
+                if run.state == "RUNNING", let started = run.startedAt.flatMap(ScheduleDisplay.parse) {
+                    minutes = max(0, Int(now.timeIntervalSince(started) / 60))
+                }
+                let line: String
+                if !underWay {
+                    line = ScheduleDisplay.runLine(state: run.state, summary: run.summary, failureReason: run.failureReason,
+                                                   reasonText: run.reasonText, notified: facts.notified)
+                } else if wide {
+                    line = ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
+                                                   state: s.state, heldReason: s.heldReason, agentName: s.agentName,
+                                                   runningMinutes: minutes)
+                } else {
+                    line = ScheduleDisplay.phoneRowLine(rule: s.rule, workspaceName: s.workspaceName,
+                                                        accessLevel: s.accessLevel, state: s.state,
+                                                        heldReason: s.heldReason, runningMinutes: minutes)
+                }
+                return ScheduleRowModel(
+                    id: "\(group.id)-\(item.id)",
+                    circle: ScheduleDisplay.runCircle(state: run.state, newFinding: facts.newFinding),
+                    title: s.title,
+                    line: line,
+                    repeats: underWay && ScheduleDisplay.ruleRepeats(s.rule), time: scheduleClock(run.plannedAt),
+                    // A past run is drawn faint, as the web's `is-past` row.
+                    draft: false, paused: wide && !underWay, scheduleID: wide ? nil : s.id,
+                    open: { Self.select(s.id, scheduled) })
+            case .schedule(let s, let at):
+                let inNeeds = group.key == .needsYou
+                let inPaused = group.key == .paused
+                let failing = inNeeds && s.state == "ACTIVE" && s.lastRun != nil
+                let time: String
+                if failing, let last = s.lastRun?.plannedAt {
+                    // The web says when it last failed with its day ("Today 02:00"); the phone has room for the clock.
+                    time = wide
+                        ? ScheduleDisplay.parse(last).map { ScheduleDisplay.whenText($0, now: now, timezone: scheduled.timezone) } ?? ""
+                        : scheduleClock(last)
+                }
+                else if let at, !inNeeds && !inPaused { time = scheduleClock(at) }
+                else { time = "" }
+                let pausedAt = s.pausedAt.flatMap(ScheduleDisplay.parse) ?? Self.pausedAt(scheduled.detail(s.id))
+                return ScheduleRowModel(
+                    id: "\(group.id)-\(item.id)",
+                    circle: inNeeds || inPaused ? ScheduleDisplay.scheduleCircle(s) : .init(.open),
+                    title: s.title,
+                    line: wide
+                        ? ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
+                                                  state: s.state, heldReason: s.heldReason, agentName: s.agentName,
+                                                  pausedAt: pausedAt, timezone: scheduled.timezone)
+                        : ScheduleDisplay.phoneRowLine(rule: s.rule, workspaceName: s.workspaceName,
+                                                       accessLevel: s.accessLevel, state: s.state,
+                                                       heldReason: s.heldReason, pausedAt: pausedAt,
+                                                       timezone: scheduled.timezone),
+                    repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
+                    scheduleID: s.id,
+                    open: { Self.select(s.id, scheduled) })
+            }
+        }
+    }
+
+    @MainActor
+    private static func select(_ id: String, _ scheduled: ScheduledModel) {
+        scheduled.draftPanel = nil
+        scheduled.inspectedID = id
+    }
+
+    /// When a schedule was paused: its newest revision that paused it.
+    private static func pausedAt(_ detail: ScheduleDetailResponse?) -> Date? {
+        detail?.history.first { $0.after["state"]?.stringValue == "PAUSED" }.flatMap { ScheduleDisplay.parse($0.createdAt) }
+    }
+}
+
+#if os(iOS)
 struct ScheduledPage: View {
     @Environment(AppModel.self) private var model
     @State private var typed = ""
@@ -264,67 +387,7 @@ struct ScheduledPage: View {
 
     private func rows(_ group: ScheduleDisplay.TimelineGroup, scheduled: ScheduledModel,
                       now: Date) -> [ScheduleRowModel] {
-        group.items.map { item -> ScheduleRowModel in
-            switch item {
-            case .draft(let card, let at):
-                let rule = card.when?.rule ?? .daily(time: "")
-                return ScheduleRowModel(
-                    id: "\(group.id)-\(item.id)",
-                    circle: ScheduleDisplay.scheduleCircle(state: "ACTIVE", consecutiveFailures: 0, draft: true),
-                    title: card.title ?? "",
-                    line: ScheduleDisplay.phoneRowLine(rule: rule, workspaceName: card.runsIn?.workspaceName,
-                                                  accessLevel: card.may?.accessLevel ?? "CHECK_ONLY", state: "ACTIVE",
-                                                  heldReason: nil, draft: true),
-                    repeats: ScheduleDisplay.ruleRepeats(rule), time: scheduleClock(at), draft: true, paused: false,
-                    open: {
-                        scheduled.draftPanel = ScheduledModel.DraftPanel(sessionID: card.askedBySessionId ?? card.id,
-                                                                         typed: card.intent ?? "")
-                    })
-            case .run(let s, let run, _):
-                let underWay = ["QUEUED", "RUNNING", "AWAITING_APPROVAL"].contains(run.state)
-                let facts = ScheduleDisplay.runFindingFacts(run, findings: scheduled.detail(s.id)?.findings ?? [])
-                var minutes: Int?
-                if run.state == "RUNNING", let started = run.startedAt.flatMap(ScheduleDisplay.parse) {
-                    minutes = max(0, Int(now.timeIntervalSince(started) / 60))
-                }
-                return ScheduleRowModel(
-                    id: "\(group.id)-\(item.id)",
-                    circle: ScheduleDisplay.runCircle(state: run.state, newFinding: facts.newFinding),
-                    title: s.title,
-                    line: underWay
-                        ? ScheduleDisplay.phoneRowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
-                                                  state: s.state, heldReason: s.heldReason, runningMinutes: minutes)
-                        : ScheduleDisplay.runLine(state: run.state, summary: run.summary, failureReason: run.failureReason,
-                                                  reasonText: run.reasonText, notified: facts.notified),
-                    repeats: underWay && ScheduleDisplay.ruleRepeats(s.rule), time: scheduleClock(run.plannedAt),
-                    draft: false, paused: false,
-                    open: { scheduled.inspectedID = s.id })
-            case .schedule(let s, let at):
-                let inNeeds = group.key == .needsYou
-                let inPaused = group.key == .paused
-                let failing = inNeeds && s.state == "ACTIVE" && s.lastRun != nil
-                let time: String
-                if failing, let last = s.lastRun?.plannedAt { time = scheduleClock(last) }
-                else if let at, !inNeeds && !inPaused { time = scheduleClock(at) }
-                else { time = "" }
-                return ScheduleRowModel(
-                    id: "\(group.id)-\(item.id)",
-                    circle: inNeeds || inPaused ? ScheduleDisplay.scheduleCircle(s) : .init(.open),
-                    title: s.title,
-                    line: ScheduleDisplay.phoneRowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
-                                                  state: s.state, heldReason: s.heldReason,
-                                                  pausedAt: s.pausedAt.flatMap(ScheduleDisplay.parse)
-                                                    ?? pausedAt(scheduled.detail(s.id)),
-                                                  timezone: scheduled.timezone),
-                    repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
-                    open: { scheduled.inspectedID = s.id })
-            }
-        }
-    }
-
-    /// When a schedule was paused: its newest revision that paused it.
-    private func pausedAt(_ detail: ScheduleDetailResponse?) -> Date? {
-        detail?.history.first { $0.after["state"]?.stringValue == "PAUSED" }.flatMap { ScheduleDisplay.parse($0.createdAt) }
+        ScheduleTimelineRows.rows(group, scheduled: scheduled, now: now, wide: false)
     }
 
     private func rowView(_ row: ScheduleRowModel) -> some View {
@@ -412,6 +475,8 @@ struct ScheduledPage: View {
     }
 }
 
+#endif
+
 // MARK: - The detail panel (board 01 ③, 02 ③)
 
 /// A schedule's detail, from the bottom: what it does and was asked, notes for the next run, this month's use and
@@ -423,6 +488,7 @@ struct ScheduleDetailPanel: View {
     @State private var busy = false
 
     var body: some View {
+        #if os(iOS)
         NavigationStack {
             Group {
                 if let scheduled = model.scheduled, let s = scheduled.schedule(scheduleID) {
@@ -446,9 +512,33 @@ struct ScheduleDetailPanel: View {
             }
             .navigationBarTitleDisplayMode(.inline)
         }
-        .task { await model.scheduled?.loadDetail(scheduleID) }
+        .modifier(ScheduleDeleteQuestion(scheduleID: scheduleID, asking: $confirmingDelete))
+        #else
+        // The Mac's right-hand panel (web board 01 ②): no bar of its own — the doors carry ⋯ beside Change…, as
+        // the web's inspector does, and the panel closes when another row or nothing is chosen.
+        Group {
+            if let scheduled = model.scheduled, let s = scheduled.schedule(scheduleID) {
+                panel(scheduled, s, scheduled.detail(scheduleID))
+            } else {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .modifier(ScheduleDeleteQuestion(scheduleID: scheduleID, asking: $confirmingDelete))
+        #endif
+    }
+}
+
+/// Delete asks first (web `SCHEDULE_COPY.deleteConfirm`), on both the phone's panel and the Mac's.
+private struct ScheduleDeleteQuestion: ViewModifier {
+    @Environment(AppModel.self) private var model
+    let scheduleID: String
+    @Binding var asking: Bool
+
+    func body(content: Content) -> some View {
+        content
+        .task(id: scheduleID) { await model.scheduled?.loadDetail(scheduleID) }
         .orbitConfirmation(ScheduleDisplay.deleteTitle(model.scheduled?.schedule(scheduleID)?.title ?? ""),
-                           isPresented: $confirmingDelete) {
+                           isPresented: $asking) {
             Button(SC.DeleteConfirm.confirm, role: .destructive) {
                 Task { @MainActor in await model.scheduled?.delete(scheduleID) }
             }
@@ -457,7 +547,9 @@ struct ScheduleDetailPanel: View {
             Text(SC.DeleteConfirm.body)
         }
     }
+}
 
+extension ScheduleDetailPanel {
     private func panel(_ scheduled: ScheduledModel, _ s: ScheduleView, _ detail: ScheduleDetailResponse?) -> some View {
         let zone = scheduled.timezone
         let now = Date()
@@ -507,6 +599,20 @@ struct ScheduleDetailPanel: View {
                         scheduled.inspectedID = nil
                         model.openChangeConversation(for: s)
                     }
+                    #if os(macOS)
+                    // The web inspector's ⋯ beside Change…: Delete, which asks first.
+                    Menu {
+                        Button(SC.Actions.delete, role: .destructive) { confirmingDelete = true }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .padding(.horizontal, 10).padding(.vertical, 9)
+                    .background(Color.scheduleCardFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityLabel("More")
+                    #endif
                 }
                 .disabled(busy)
                 if let error = scheduled.errorText {
@@ -541,7 +647,7 @@ struct ScheduleDetailPanel: View {
             }
             .padding(16)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .background(Color.schedulePanelFill)
         .accessibilityIdentifier("schedule-detail-panel")
     }
 
@@ -555,7 +661,7 @@ struct ScheduleDetailPanel: View {
         } label: {
             Text(title).font(.orbitControl.weight(.medium)).frame(maxWidth: .infinity).padding(.vertical, 9)
                 .foregroundStyle(prominent ? Color.white : Color.accentColor)
-                .background(prominent ? Color.accentColor : Color(uiColor: .secondarySystemGroupedBackground),
+                .background(prominent ? Color.accentColor : Color.scheduleCardFill,
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -566,8 +672,7 @@ struct ScheduleDetailPanel: View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .background(Color(uiColor: .secondarySystemGroupedBackground),
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(Color.scheduleCardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
@@ -704,7 +809,13 @@ struct ScheduleDraftPanel: View {
                 }
                 Button(SC.Actions.openConversation) {
                     scheduled?.draftPanel = nil
+                    #if os(iOS)
                     model.openScheduleRun(sessionID: panel.sessionID, scheduleID: nil)
+                    #else
+                    // The conversation the line opened is the owner's own, listed in its workspace (board 01 ④ 5):
+                    // the Mac opens it there, as the web does.
+                    model.route(to: .session(panel.sessionID))
+                    #endif
                 }
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(Color.accentColor)
@@ -721,4 +832,3 @@ struct ScheduleDraftPanel: View {
         .accessibilityIdentifier("schedule-draft-panel")
     }
 }
-#endif
