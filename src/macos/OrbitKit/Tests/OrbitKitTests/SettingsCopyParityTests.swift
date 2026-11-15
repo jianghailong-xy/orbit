@@ -23,6 +23,9 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let notifications = "src/web/src/pages/settings/NotificationsPage.tsx"
     private static let appearance = "src/web/src/pages/settings/AppearancePage.tsx"
     private static let profile = "src/web/src/pages/ProfilePage.tsx"
+    /// Since the profile-change-password-dialog landing, the form is its own dialog, opened from the
+    /// Password row of Profile's Sign-in methods.
+    private static let passwordDialog = "src/web/src/components/ChangePasswordDialog.tsx"
     private static let sharedLinks = "src/web/src/pages/SharedLinksPage.tsx"
     private static let accessTokens = "src/web/src/pages/AccessTokensPage.tsx"
     private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
@@ -85,8 +88,9 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.settingsIndex)
         assertSays(index, "{ path: '/settings/access-tokens', label: '\(SettingsHome.title(.accessTokens))' },",
                    in: Self.settingsIndex)
-        assertSays(try web(Self.profile), "<Card title=\"\(SettingsHome.title(.changePassword))\">",
-                   in: Self.profile)
+        // The Change password row opens a dialog whose title is the row's name.
+        assertSays(try web(Self.passwordDialog), "export const CHANGE_PASSWORD = '\(SettingsHome.title(.changePassword))';",
+                   in: Self.passwordDialog)
     }
 
     /// The account's two alert switches, with the web Notifications page's titles and its
@@ -160,16 +164,20 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "export const NAME_CAPTION = '\(SettingsCopy.nameCaption)';", in: Self.profile)
     }
 
-    /// Change password: the web Profile page's form.
+    /// Change password: the web's dialog, opened from Profile → Sign-in methods → Password.
     func testThePasswordFormSaysWhatTheProfilePageSays() throws {
-        let page = try web(Self.profile)
+        let dialog = try web(Self.passwordDialog)
         for label in [SettingsCopy.currentPassword, SettingsCopy.newPassword, SettingsCopy.confirmPassword] {
-            assertSays(page, "label=\"\(label)\"", in: Self.profile)
+            assertSays(dialog, "label=\"\(label)\"", in: Self.passwordDialog)
         }
-        assertSays(page, "? null : '\(SettingsCopy.passwordRule)'", in: Self.profile)
-        assertSays(page, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.profile)
-        assertSays(page, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.profile)
-        assertSays(page, "> \(SettingsCopy.changePassword) </Button>", in: Self.profile)
+        // The rule is the dialog's own constant, drawn as the field's hint while it has no error.
+        assertSays(dialog, "export const NEW_PASSWORD_RULE = '\(SettingsCopy.passwordRule)';", in: Self.passwordDialog)
+        assertSays(dialog, "extra={form.errors.newPassword?.length ? undefined : NEW_PASSWORD_RULE}",
+                   in: Self.passwordDialog)
+        assertSays(dialog, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.passwordDialog)
+        assertSays(dialog, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.passwordDialog)
+        assertSays(dialog, "export const CHANGE_PASSWORD = '\(SettingsCopy.changePassword)';", in: Self.passwordDialog)
+        assertSays(dialog, "> {CHANGE_PASSWORD} </Button>", in: Self.passwordDialog)
     }
 
     /// Shared links: the web page's tabs, lines and words.
@@ -198,6 +206,10 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "count === 1 ? '\(SharedLinksList.turnedOff(1))' : `${count} links turned off`",
                    in: Self.sharedLinks)
         XCTAssertEqual(SharedLinksList.turnedOff(7), "7 links turned off")
+        // The row's ⋯ (board 13): the web's words for its two items, and its name.
+        assertSays(page, "label: '\(SharedLinksList.settings)'", in: Self.sharedLinks)
+        assertSays(page, "label: '\(SharedLinksList.turnOffMenu)'", in: Self.sharedLinks)
+        assertSays(page, "aria-label={`More for ${link.root.title}`}", in: Self.sharedLinks)
     }
 
     /// Access tokens: the web page's tabs and words, the table's lines, and how `lib/accessTokens.ts`

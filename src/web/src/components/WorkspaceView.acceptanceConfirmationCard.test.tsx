@@ -452,6 +452,8 @@ beforeEach(() => {
     if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
     if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
     if (path === '/providers' || path === '/providers/pools' || path === '/providers/shared-pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true') return reply([]);
+    // The session list's Needs you row reads the terminals asking to be approved: none here.
+    if (path === '/terminals/requests') return reply({ requests: [] });
     if (path.startsWith('/owner-requests')) return reply({ requests: [] });
     unstubbed.push(path);
     return reply([]);
@@ -1120,14 +1122,17 @@ describe('where the card is mounted', () => {
    * turn. The other three each name a door (`decide`, `ownerDecision.mutate`); a send through this
    * branch that grew one would have this card answering a call that nobody made. The project
    * settlement card's press was the other kind on this branch until 2026-09-25; it now sends its
-   * own turn from its own handler, with no armed reply and nothing typed, so this branch is the
-   * plan change's alone.
+   * own turn from its own handler, with no armed reply and nothing typed. Since 2026-11-14 the
+   * branch also sends a talked-about owner request (848d2fffe), which is the same ordinary turn
+   * with a request in front instead of a plan, so it is shared with that kind and nothing else.
    */
   it('sends a plan change as an ordinary turn carrying the plan, through no door', () => {
     const source = workspaceView();
     // The whole line: the disarm effect above carries the same kind and ends in `return;`, and this
     // is the branch that sends.
-    const at = source.indexOf("if (replyTo.target.kind === 'planChange') {");
+    const at = source.indexOf(
+      "if (replyTo.target.kind === 'planChange' || replyTo.target.kind === 'ownerRequest') {",
+    );
     expect(at, 'nothing in onSend handles an armed plan change').toBeGreaterThan(-1);
     // To the end of the branch: the `return` that leaves onSend's replyTo block.
     const branch = source.slice(at, source.indexOf('\n      }', at));

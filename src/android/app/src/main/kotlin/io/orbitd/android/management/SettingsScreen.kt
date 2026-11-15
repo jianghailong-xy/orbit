@@ -27,6 +27,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.R
+import io.orbitd.android.core.cards.TerminalsApi
 import io.orbitd.android.navigation.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -39,15 +40,16 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 @Composable
 fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: (OrbitRoute) -> Unit, back: () -> Unit,
     logout: () -> Unit, changed: () -> Unit, workspaceDeleted: () -> Unit, deviceAlerts: () -> Boolean?,
-    notifications: @Composable () -> Unit, about: @Composable () -> Unit) {
+    notifications: @Composable () -> Unit, about: @Composable () -> Unit, terminalsChanged: Long = 0L) {
     when (route.id) {
         "profile" -> EditProfile(api, revision, back)
         "password" -> ChangePassword(api)
         "machines-and-models" -> MachinesAndModelsSettings(api, revision, route.recordId, open, back)
         "sessions" -> SessionSettingsPage(api, revision)
         "workspace" -> WorkspaceSettings(api, route.workspaceId, revision, back, workspaceDeleted, changed)
-        "sharing" -> SharingSettings(api, revision)
+        "sharing" -> SharingSettings(api, revision, open)
         "access-tokens" -> AccessTokensSettings(api, revision)
+        "terminals" -> TerminalsSettings(api, revision, terminalsChanged)
         "share" -> route.recordId?.split(':', limit = 2)?.takeIf { it.size == 2 }?.let { (kind, id) -> ShareResourceSettings(api, revision, kind, id) }
         "admin" -> AdminSettings(api, revision, route.recordId, open, back)
         "notifications" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -57,7 +59,7 @@ fun SettingsScreen(api: ManagementApi, route: OrbitRoute, revision: Long, open: 
         }
         // Android only: the installed version and its updates from GitHub (iOS updates through TestFlight).
         "about" -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) { about() }
-        else -> SettingsHome(api, revision, open, logout, deviceAlerts)
+        else -> SettingsHome(api, revision, open, logout, deviceAlerts, terminalsChanged)
     }
 }
 
@@ -72,7 +74,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
         else -> null
     } ?: MachinesAndModels.TITLE
     "sessions" -> SESSIONS; "workspace" -> "Workspace settings"; "sharing" -> "Shared links"; "access-tokens" -> AccessTokens.TITLE
-    "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
+    "terminals" -> Terminals.TITLE; "admin" -> "Admin"; "notifications" -> "Notifications"; "about" -> "About"; else -> "Settings"
 }
 
 /** SettingsHome.runnersValue: "3 of 4 online" — how many of the account's machines can take work right now. */
@@ -89,7 +91,7 @@ internal const val SESSIONS = "Sessions"
 
 /** SettingsCopy's hints for the Sessions page's other rows, each its row's footer there, in the web Settings page's words. */
 internal const val DEFAULT_PERMISSION_HINT = "The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
-internal const val SESSION_ORCHESTRATION_HINT = "Sessions in every workspace can spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused."
+internal const val SESSION_ORCHESTRATION_HINT = "Sessions in every workspace can start and manage other sessions, and manage your agents and runners, through the orbit MCP tools and CLI: create, change and delete agents, install engines on runners and delete them. Off → those tools are hidden and refused."
 internal const val SUGGESTED_REPLIES = "Suggested replies"
 internal const val SUGGESTED_REPLIES_HINT = "When a Claude turn ends, the empty message box offers what you'd probably type next. Each suggestion is one more request on that session's Claude account."
 
@@ -143,7 +145,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
 /** The account, then SettingsHome's groups, then Sign out and the build — iOS's Settings list. */
 @Composable
 private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, logout: () -> Unit,
-    deviceAlerts: () -> Boolean?) {
+    deviceAlerts: () -> Boolean?, terminalsChanged: Long) {
     val record = remember(api) { PersonalRecord { api.get("users/me") } }
     PersonalRecordLifecycle(record, revision)
     val preference = rememberPreferenceWrite(api, record)
@@ -157,8 +159,10 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
     // Read with the machines: a machine with no coding CLI signed in needs you unless a workspace there runs on a key.
     var workspaces by remember(api) { mutableStateOf<List<JsonObject>>(emptyList()) }
     val machinesAndModels = remember(api) { MachinesAndModelsModel(api) }
+    val terminalRequests = rememberLiveTerminalRequests(remember(api) { TerminalRequestStore.of(api) })
     var sharedLinks by remember(api) { mutableStateOf<String?>(null) }
     var accessTokens by remember(api) { mutableStateOf<String?>(null) }
+    var terminals by remember(api) { mutableStateOf<String?>(null) }
     var alerts by remember { mutableStateOf(deviceAlerts()) }
     var signingOut by remember { mutableStateOf(false) }
     var resumed by remember { mutableIntStateOf(0) }
@@ -190,6 +194,11 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             catch (e: CancellationException) { throw e } catch (_: Exception) { }
         }
     }
+    // A terminal approved or revoked anywhere moves this row's count, and nothing else on the page.
+    LaunchedEffect(api, revision, resumed, terminalsChanged) {
+        try { terminals = Terminals.settingsValue(TerminalsApi(api.session, api.handle).list().size) }
+        catch (e: CancellationException) { throw e } catch (_: Exception) { }
+    }
     fun page(id: String) = open(OrbitRoute(Destination.SETTINGS, id))
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
         val name = user?.text("name")?.ifBlank { null } ?: user?.text("email").orEmpty()
@@ -220,7 +229,8 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
         // First, as on iOS: the one row that says what needs you (docs/mocks/ios-settings-order). No header: the one row says the
         // group's name (iOS SettingsHome.header, docs/mocks/machines-and-models ⑥-2).
         SettingsGroup(null, footer = MachinesAndModels.SUBTITLE) {
-            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, System.currentTimeMillis()).size } ?: 0
+            // Terminals asking to be approved count with them (docs/mocks/waiting-on-you-removal/02 ①).
+            val needsYou = runners?.let { machinesAndModels.attention(it, workspaces, System.currentTimeMillis()).size + terminalRequests.size } ?: 0
             // What needs a person is said in amber, as the mock's row says it.
             SettingsLink(MachinesAndModels.TITLE, R.drawable.ic_runner, runners?.let { MachinesAndModels.settingsValue(needsYou, it) },
                 valueColor = if (needsYou > 0) Ink.amber else null) { page("machines-and-models") }
@@ -237,6 +247,7 @@ private fun SettingsHome(api: ManagementApi, revision: Long, open: (OrbitRoute) 
             SettingsValue("Instance", R.drawable.ic_globe, instance.orEmpty())
             SettingsLink("Shared links", R.drawable.ic_link, sharedLinks) { page("sharing") }
             SettingsLink(AccessTokens.TITLE, R.drawable.ic_key, accessTokens) { page("access-tokens") }
+            SettingsLink(Terminals.TITLE, R.drawable.ic_terminal, terminals) { page("terminals") }
             SettingsLink("Change password", R.drawable.ic_password) { page("password") }
             if (user?.text("role") == "ADMIN") SettingsLink("Admin", R.drawable.ic_admin) { page("admin") }
         }

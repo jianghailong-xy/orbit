@@ -15,6 +15,7 @@ public enum OwnerRequests {
         case .secret:     return "SECRET"
         case .manualStep: return "STEPS"
         case .confirm:    return "CONFIRM"
+        case .wikiCreate: return "WIKI"
         }
     }
 
@@ -25,6 +26,7 @@ public enum OwnerRequests {
         case .secret:     return "Provide key"
         case .manualStep: return "Mark done"
         case .confirm:    return "Confirm"
+        case .wikiCreate: return "Create wiki"
         }
     }
 
@@ -93,6 +95,20 @@ public enum OwnerRequests {
     public static let addNote = "Add a note (optional)"
     public static let ownAnswer = "Or type your own answer…"
 
+    // MARK: Chat about this
+
+    /// A request talked about rather than answered: the next send is an ordinary turn to the session
+    /// that asked, with the request named in front of the typed words. Nothing is resolved. The web's
+    /// `OWNER_REQUEST_CHAT_PREFIX`, `OWNER_REQUEST_CHAT_PLACEHOLDER` and `ownerRequestChatContext`.
+    public static let chatPrefix = "About your request: "
+    public static let chatPlaceholder = "Ask about this request…"
+
+    /// What rides in front of the owner's words: which request, and that it is still open.
+    public static func chatContext(_ request: OwnerRequest) -> String {
+        "The owner pressed Chat about this on your request “\(request.title)” (owner request \(request.id)). "
+            + "It is still open: not marked done and not declined. Their message:"
+    }
+
     public static func usingSaved(_ label: String) -> String { "Using saved “\(label)”" }
     public static func useSaved(_ label: String) -> String { "Use saved “\(label)”" }
     public static func verifyHint(_ hint: String) -> String { "How to check: \(hint)" }
@@ -132,7 +148,7 @@ public enum OwnerRequests {
         switch request.kind {
         case .secret:   return draft.body != nil
         case .decision: return option != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case .manualStep, .confirm: return true
+        case .manualStep, .confirm, .wikiCreate: return true
         }
     }
 
@@ -173,6 +189,7 @@ public enum OwnerRequests {
             if let label { return words.map { "\(label): “\($0)”" } ?? label }
             return words.map { "“\($0)”" } ?? "Answered"
         }
+        if request.kind == .wikiCreate { return WikiStartCopy.created(request.answer?.name) }
         return request.kind == .confirm ? "Confirmed" : "Marked done"
     }
 

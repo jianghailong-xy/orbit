@@ -1273,11 +1273,11 @@ private fun LazyListScope.tasksSection(state: ProjectPageState, doc: JsonObject,
 }
 
 /** Work asked across this project's line, in either direction — the account owner's to answer, and nobody else's (iOS
- * `crossingsSection`, web's `ProjectCrossingsCard.tsx`): drawn once the project is an end of a crossing, or when the read failed
- * with nothing to show. */
+ * `crossingsSection`, web's `ProjectCrossingsCard.tsx`): drawn once the project is an end of a crossing no coordinator conversation
+ * answers, or when the read failed with nothing to show. */
 private fun LazyListScope.crossingsSection(state: ProjectPageState, connected: Boolean, asking: Pair<String, Boolean>?,
     refused: Pair<String, ProjectCrossings.Refusal>?, ask: (JsonObject, Boolean) -> Unit, cancel: () -> Unit, answer: (JsonObject, Boolean) -> Unit) {
-    val rows = state.crossings
+    val rows = state.crossings?.let(ProjectCrossings::pageRows)
     if (!rows.isNullOrEmpty()) {
         item(key = "crossings-head") { SectionHead(ProjectCrossings.title, ProjectCrossings.waiting(ProjectCrossings.waitingCount(rows)), Modifier.testTag("crossings-head")) }
         items(ProjectCrossings.ordered(rows), key = { "crossing:${it.text("id")}" }) { row ->

@@ -302,21 +302,27 @@ func TestHandoffWithoutATargetProjectIsRefusedBeforeTheRequest(t *testing.T) {
 		assertRefused(t, err.Error(), len(*raws))
 	})
 
-	// --no-project is a detach, not a destination: R4 refuses work under no goal, and no approval
-	// exists that could make "nowhere" the far side of a crossing.
-	t.Run("cli update cannot cross into no project", func(t *testing.T) {
+	// --no-project with --handoff-reason is a request to be taken out of every project: "nowhere"
+	// is a destination the server files as a MOVE_TASK and the account owner confirms. The
+	// declaration has to reach it.
+	t.Run("cli update asks to leave every project", func(t *testing.T) {
 		srv, raws := captureRawWriteBodies(t)
 		configureCLITestRunner(t, srv.URL)
 
 		var out bytes.Buffer
-		err := cmdTaskCLI([]string{
+		if err := cmdTaskCLI([]string{
 			"update", "task-1", "--no-project",
-			"--handoff-reason", "it belongs nowhere", "--json",
-		}, strings.NewReader(""), &out)
-		if err == nil {
-			t.Fatal("a crossing into no project was accepted")
+			"--handoff-reason", "it belongs to no goal", "--json",
+		}, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("a request to leave every project was refused: %v", err)
 		}
-		assertRefused(t, err.Error(), len(*raws))
+		if len(*raws) != 1 {
+			t.Fatalf("requests = %d", len(*raws))
+		}
+		raw := string((*raws)[0])
+		if !strings.Contains(raw, `"projectId":null`) || !strings.Contains(raw, `"handoff":{"reason":"it belongs to no goal"}`) {
+			t.Fatalf("the request did not reach the wire as asked: %s", raw)
+		}
 	})
 
 	// A blank reason is an unset shell variable, not a silent declaration: the flag's whole payload
@@ -367,14 +373,6 @@ func TestHandoffWithoutATargetProjectIsRefusedBeforeTheRequest(t *testing.T) {
 				"handoff": map[string]interface{}{"reason": "it belongs over there"},
 			},
 		},
-		{
-			name: "mcp task_update into no project",
-			tool: "task_update",
-			args: map[string]interface{}{
-				"taskId": "t1", "projectId": nil,
-				"handoff": map[string]interface{}{"reason": "it belongs nowhere"},
-			},
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			srv, raws := captureRawWriteBodies(t)
@@ -392,6 +390,25 @@ func TestHandoffWithoutATargetProjectIsRefusedBeforeTheRequest(t *testing.T) {
 			assertRefused(t, text, len(*raws))
 		})
 	}
+
+	t.Run("mcp task_update asks to leave every project", func(t *testing.T) {
+		srv, raws := captureRawWriteBodies(t)
+		mcp := &mcpServer{agentID: "agent-1", t: NewTransport(srv.URL, "tok")}
+
+		res := mcp.callTool("task_update", map[string]interface{}{
+			"taskId": "t1", "projectId": nil,
+			"handoff": map[string]interface{}{"reason": "it belongs to no goal"},
+		})
+		if res["isError"] == true {
+			t.Fatalf("a request to leave every project was refused: %#v", res["content"])
+		}
+		if len(*raws) != 1 {
+			t.Fatalf("requests = %d", len(*raws))
+		}
+		if raw := string((*raws)[0]); !strings.Contains(raw, `"projectId":null`) || !strings.Contains(raw, `"handoff"`) {
+			t.Fatalf("the request did not reach the wire as asked: %s", raw)
+		}
+	})
 
 	// The other half of the same rule: a null `handoff` is how a caller with no absent value spells
 	// "no crossing here", and it must not be read as a declaration this client then refuses.

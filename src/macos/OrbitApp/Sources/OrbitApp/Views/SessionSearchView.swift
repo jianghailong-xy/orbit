@@ -63,9 +63,11 @@ struct SessionSearchView: View {
         // renders and the palette opens with no way to type into it.
         NavigationStack {
             VStack(spacing: 0) {
-                List(hits) { hit in
-                    Button { open(hit) } label: { SessionSearchRow(hit: hit, query: shownQuery) }
-                        .buttonStyle(.plain)
+                List {
+                    ForEach(hits) { hit in
+                        Button { open(hit) } label: { SessionSearchRow(hit: hit, query: shownQuery) }
+                            .buttonStyle(.plain)
+                    }
                 }
                 .overlay {
                     if hits.isEmpty && !loading {

@@ -238,6 +238,26 @@ class ManagementPanelTest {
         assertTrue(listed.size >= 2)
     }
 
+    /** Board 13 (web's row buttons): a press on an active link's row opens its share page, a copy icon stays out, and the rest is
+     * in its ⋯, Turn off… last — which still asks first. */
+    @Test fun aSharedLinksRowOpensItsSharePageAndKeepsTheRestInItsMore() {
+        val api = api()
+        val opened = mutableListOf<OrbitRoute>()
+        compose.setContent { SharingSettings(api, revision) { opened += it } }
+        await("Fixture session")
+        compose.onNode(hasContentDescription("Copy Link") and hasClickAction()).assertExists()
+        compose.onAllNodes(hasText("Turn off") and hasClickAction()).assertCountEquals(0)
+        compose.onNodeWithText("Fixture session").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("share" to "SESSION:${fixture.SESSION}"), opened.map { it.id to it.recordId })
+        compose.onNode(hasContentDescription("More for Fixture session") and hasClickAction()).performClick()
+        await("Turn off…")
+        assertEquals(listOf("Copy Link", "Share Link…", "Settings…", "Turn off…"),
+            listOf("Copy Link", "Share Link…", "Settings…", "Turn off…").filter { compose.onAllNodes(hasText(it) and hasAnyAncestor(isPopup())).fetchSemanticsNodes().isNotEmpty() })
+        compose.onNode(hasText("Turn off…") and hasAnyAncestor(isPopup())).performClick()
+        await("Turn off this link?")
+    }
+
     /** A page that hosts the panel (a task's or a project's ⋯ → Share…) hears the server's answer to each read and change,
      * in the shape its menu reads: what the menu then says is what the server last said. */
     @Test fun theSharePanelReportsEachAnswerInTheShapeTheMenuReads() {
@@ -264,19 +284,18 @@ class ManagementPanelTest {
     @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun atTwiceTheFontSizeNoButtonOrChipBreaksItsWords() {
         val api = api()
         fixture.poolLabel = "Team Codex for the whole studio"
-        var page by mutableStateOf("links")
+        var page by mutableStateOf("share")
         compose.setContent {
             CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, fontScale = 2f)) {
                 when (page) {
-                    "links" -> SharingSettings(api, revision)
+                    // Shared links' rows carry no worded button since board 13 (an icon, a ⋯): only the panel's are measured.
                     "share" -> ShareResourcePanel(api, revision, "SESSION", fixture.SESSION)
                     else -> MachinesAndModelsSettings(api, revision, null, {}, {})
                 }
             }
         }
         val broken = mutableListOf<String>()
-        await("Turn off"); listOf("Copy Link", "Share Link…", "Turn off").forEach { broken += lines(it) }
-        page = "share"; await("Tool calls and output"); listOf("Copy Link", "Share Link…").forEach { broken += lines(it) }
+        await("Tool calls and output"); listOf("Copy Link", "Share Link…").forEach { broken += lines(it) }
         page = "machines-and-models"; await("SHARED"); broken += lines("SHARED")
         assertEquals("Broken across lines at 200%", emptyList<String>(), broken)
     }

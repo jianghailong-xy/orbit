@@ -13,7 +13,10 @@ enum class Destination { WORKSPACES, WORKSPACE, FOLDER, SEARCH, SESSION, DRAFT, 
      *  `SESSION` (reader/LandingSessionPage.kt's `SessionDestination`). */
     LANDINGS,
     WIKI_BROWSE, WIKI_INDEX, WIKI_ARTICLE, WIKI_DOC, WIKI_REVIEW, WIKI_SETTINGS, WIKI_RUN, WIKI_JOB, WIKI_PLAN, WIKI_PLAN_DOC, WIKI_PLAN_SECTION,
-    WIKI_ACTIVITY, WIKI_TRASH }
+    WIKI_ACTIVITY, WIKI_TRASH,
+    /** A session someone shared with this account (docs/session-guests-design.md §4): `id` the session, drawn as the guest view. A
+     *  Shared with me row opens it; a session link the owner's read answers 404 for draws the same view through `SESSION`. */
+    GUEST_SESSION }
 enum class Origin { DRAWER, LIST, SEARCH, LINK, EXTERNAL }
 
 /** Object and source travel together; the preceding frame is the actual return destination. */
@@ -123,6 +126,9 @@ val OrbitRoute.waitsForDirectory get() = destination == Destination.PROJECT_SESS
  * spellings of its id are one destination. */
 fun projectDestination(id: String) = "project:${ObjectId.canonical(id) ?: id}"
 
+/** The destination of a drawer Shared with me row (OrbitKit `SidebarSelection.guestSession`). */
+fun guestDestination(id: String) = "guest:${ObjectId.canonical(id) ?: id}"
+
 /** The destination of a drawer Set up <machine> row (iOS `DrawerDestination.machineDraft`). */
 fun machineDraftDestination(id: String) = "setup:${ObjectId.canonical(id) ?: id}"
 
@@ -192,8 +198,14 @@ object OrbitLinks {
             kind = references[scheme.removePrefix("orbit-")]
             id = if (kind == Destination.SESSION) uri.schemeSpecificPart.substringBefore('?') else uri.schemeSpecificPart
         } else if (scheme == "orbit") {
-            kind = deepLinks[uri.host?.lowercase()]
             val parts = uri.path.orEmpty().trim('/').split('/')
+            // `orbit://terminal-login/<id>`, a terminal asking to be approved: Settings › Machines & models, on its Needs you section,
+            // that request's card lit (docs/mocks/waiting-on-you-removal/02 ④). One answered or expired opens the page all the same.
+            if (uri.host.equals("terminal-login", ignoreCase = true)) {
+                val request = parts.singleOrNull()?.takeIf { it.isNotEmpty() }?.let(ObjectId::canonical) ?: return null
+                return OrbitRoute(Destination.RUNNER, recordId = "terminal:$request", origin = origin)
+            }
+            kind = deepLinks[uri.host?.lowercase()]
             if (parts.size == 1) id = parts.first()
         } else if (scheme in setOf("https", "http") && server != null && uri.userInfo == null) {
             val base = URI(server)

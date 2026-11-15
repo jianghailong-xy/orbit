@@ -326,6 +326,12 @@ final class AppModel {
     /// blocked rows, not the list.
     private(set) var needsYouSessions: [Session] = []
     private(set) var agentNeedsYou: [String: Int] = [:]
+    /// An approval that has just reached this device with the app open (iOS): the needs-you bar says
+    /// it for its first seconds (`NeedsYouLogic.arriving`) — the one surface for it since the owner's
+    /// 2026-11-15 board `docs/mocks/needs-you-capsule/05-one-surface`, where the app used to put up an
+    /// amber card of its own beside the bar. Cleared again once those seconds have passed, which is
+    /// the body pass that puts the bar back to the count.
+    private(set) var needsYouArrival: NeedsYouArrival?
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
@@ -448,6 +454,13 @@ final class AppModel {
     private var sessionsLoadPending = false
     private var sessionsLoadSucceeded = false
     private var sessionsLoadGeneration = 0
+    /// Whether the Open list on screen is known to be the server's since a cold launch or a return
+    /// from the background, and what the line under the iPhone list's workspace name says about it
+    /// (`OpenListFreshness`; docs/mocks/ios-launch-updating). `openListStatus` is what is drawn; the
+    /// task redraws it when the clock alone moves it.
+    @ObservationIgnored private var openListFreshness = OpenListFreshness()
+    private(set) var openListStatus: OpenListFreshness.Status?
+    @ObservationIgnored private var openListStatusTask: Task<Void, Never>?
     /// How a poll reads the Open list: the delta against the last list fetched where the server has
     /// it, else the tagged full read that comes back as an empty 304 when nothing changed. Told
     /// whenever `sessions` is written any other way (an event folded in), so an "unchanged" answer
@@ -501,6 +514,8 @@ final class AppModel {
     /// Every personal access token the account has issued: Settings → Access tokens, and the count
     /// on its row.
     private(set) var accessTokens: AccessTokensModel?
+    /// Settings → Terminals: the terminals approved on this account, with Revoke.
+    private(set) var terminals: TerminalsModel?
     /// The shared pools the account is in: Machines & models' Account pools, and each pool's page.
     private(set) var sharedPools: SharedPoolsModel?
     /// The account's watches: Following, the console's Watching card, and every session's row and header.
@@ -582,6 +597,7 @@ final class AppModel {
         admin = AdminModel(baseURL: url, tokenStore: tokenStore)
         sharedLinks = SharedLinksModel(baseURL: url, tokenStore: tokenStore)
         accessTokens = AccessTokensModel(baseURL: url, tokenStore: tokenStore)
+        terminals = TerminalsModel(baseURL: url, tokenStore: tokenStore)
         sharedPools = SharedPoolsModel(baseURL: url, tokenStore: tokenStore)
         let managedRunnerModel = ManagedRunnerModel(baseURL: url, tokenStore: tokenStore)
         // A managed runner set up from Machines & models brings its runner and default workspace with it.
@@ -938,6 +954,7 @@ final class AppModel {
         }
         signedIn = false
         machineSetups = [:]
+        sharedWithMe = []
         sessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
@@ -955,6 +972,8 @@ final class AppModel {
         openListFromLaunchSnapshot = false
         openListAnswered = false
         openListIsReaderBase = false
+        openListFreshness = OpenListFreshness()
+        redrawOpenListStatus()
         eventWrittenRows = []
         menuSummary = .empty
         updateDockBadge(nil)
@@ -988,15 +1007,15 @@ final class AppModel {
         notifications.configure()
         notifications.onIntent = { [weak self] intent in self?.handle(intent) }
         #if os(iOS)
-        // An approval that arrives while you're in the app shows as Orbit's own card rather than a
-        // system banner (see `NotificationManager.willPresent`). A `.warning`, so it stays until
-        // it's dealt with — that's the whole point of it, and it's what a banner's persistence in
-        // Notification Center was doing before. Tapping it opens the session it's blocking on.
-        // The push names the session by its stored UUID; the card takes the lists' spelling, or its
-        // title lookup and the needs-you check that takes it down both miss the row.
+        // An approval that arrives while you're in the app is said by the needs-you bar rather than
+        // a system banner (see `NotificationManager.willPresent`): for its first seconds the bar
+        // carries the push's line and an amber ring, then goes back to the count, and it stays until
+        // the last thing waiting is dealt with. It used to be an amber card of its own beside the bar
+        // — one fact in two shapes (the owner, 2026-11-15, docs/mocks/needs-you-capsule/05). The
+        // push names the session by its stored UUID; the bar finds it among the needs-you rows by
+        // the lists' spelling, or it would never find it.
         notifications.onForegroundApproval = { [weak self] sessionID, line in
-            self?.showToast(line, sessionID: PublicID.toPublic(sessionID), tone: .warning,
-                            icon: "bell.badge.fill", awaitsApproval: true)
+            self?.noteNeedsYouArrival(sessionID: PublicID.toPublic(sessionID), line: line)
         }
         #endif
         #if os(macOS)
@@ -1072,6 +1091,7 @@ final class AppModel {
     /// and while that read fails (offline), the floors wait too.
     func startPolling() {
         guard pollTask == nil else { return }
+        beginOpenListRound()
         startControlPlane()
         // The always-mounted drawer or sidebar performs the initial Workspace + Runner load. Start the
         // lightweight refresh one interval later instead of duplicating that request.
@@ -1083,7 +1103,7 @@ final class AppModel {
             // A restored-token launch sets `signedIn` in `init` without going through `login()`, so
             // `user` is nil or the launch snapshot's copy — read it once so the account footer shows
             // the real name and the preferences are this run's. A failed read keeps what is there.
-            if let self, let me = try? await self.api?.me() { self.user = me }
+            if let self, let me = try? await self.api?.me() { self.assignIfChanged(\.user, me) }
             while !Task.isCancelled {
                 guard let self else { return }
                 await poll.tick(at: Date(), visible: self.appVisible, live: self.controlPlaneLive)
@@ -1198,6 +1218,7 @@ final class AppModel {
     /// (the watchdog would catch it, but a relaunch is immediate). No-op when signed out.
     func kickControlPlane() {
         guard controlTask != nil else { return }
+        beginOpenListRound()
         controlTask?.cancel()
         controlTask = nil
         controlPlaneLive = false
@@ -1387,6 +1408,13 @@ final class AppModel {
             wiki?.nudge()
             // A card made, replaced or pressed, or its rewrite moving (contract `chat.realtime`).
             wikiChat?.nudge()
+        // A terminal asked to be approved, a request was decided, or a terminal was revoked: the approve card's
+        // requests and Settings → Terminals are read again, and nothing else.
+        case .terminals:
+            Task {
+                await ownerRequests?.loadTerminalRequests()
+                await terminals?.load()
+            }
         // A folder was created, renamed or deleted, here or on another device: re-read the library
         // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
         // and nothing else, and a session moved between folders is a `session.updated` of its own,
@@ -1698,6 +1726,11 @@ final class AppModel {
     /// once a fetch that started after it has finished: true when that fetch adopted a list.
     @discardableResult
     func loadSessions() async -> Bool {
+        let freshnessRound = openListFreshness.round
+        defer {
+            openListFreshness.finish(round: freshnessRound, ok: sessionsLoadSucceeded, at: Date())
+            redrawOpenListStatus()
+        }
         sessionsLoadPending = true
         if sessionsLoadTask == nil {
             let generation = sessionsLoadGeneration
@@ -1711,6 +1744,32 @@ final class AppModel {
         }
         await sessionsLoadTask?.value
         return sessionsLoadSucceeded
+    }
+
+    /// The Open list in hand may be stale from now: the previous run's (a cold launch) or from
+    /// before a trip to the background. The read that answers is the poll's or the reconnect's own.
+    private func beginOpenListRound() {
+        openListFreshness.begin(at: Date())
+        redrawOpenListStatus()
+    }
+
+    /// "Offline · Tap to retry": read the Open list now.
+    func retryOpenList() {
+        beginOpenListRound()
+        Task { await loadSessions() }
+    }
+
+    private func redrawOpenListStatus() {
+        let now = Date()
+        let status = openListFreshness.status(at: now)
+        if status != openListStatus { openListStatus = status }
+        openListStatusTask?.cancel()
+        guard let next = openListFreshness.nextChange(after: now) else { openListStatusTask = nil; return }
+        openListStatusTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, next.timeIntervalSinceNow) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.redrawOpenListStatus()
+        }
     }
 
     private func fetchOpenSessions() async -> Bool {
@@ -1822,10 +1881,6 @@ final class AppModel {
             lastNeedsYou = needsYou
             // A server banner's thread id is the session's stored UUID; `needsYou` is list-spelled.
             NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains(PublicID.toPublic($0)) })
-            // The foreground card standing in for one of those banners has to come down with them.
-            // It's persistent by design, so an approval answered on web or macOS would otherwise
-            // leave a card asking for something that's already been decided.
-            toasts.clearApprovals(stillWaiting: needsYou)
         }
     }
     #endif
@@ -2065,6 +2120,45 @@ final class AppModel {
         nav.openMachineDraft(runnerID: runnerID)
     }
 
+    // MARK: Shared with me — the sessions other people invited this account to reply in
+    // (docs/session-guests-design.md §4; web SharedWithMe.tsx)
+
+    /// The rows of the sidebar's / drawer's Shared with me group, newest invitation first. No group is
+    /// drawn while it is empty (`SharedWithMe.showsGroup`).
+    private(set) var sharedWithMe: [GuestSessionSummary] = []
+
+    /// The shared session whose guest view the Agents stack shows, if any.
+    var guestSessionID: String? { selectedSection == .agents ? nav.guestSessionOnTop : nil }
+
+    /// Read Shared with me once.
+    func loadSharedWithMe() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        guard let sessions = try? await api.guestSessions(),
+              apiGeneration == generation, self.api === api else { return }
+        if sessions != sharedWithMe { sharedWithMe = sessions }
+    }
+
+    /// Read Shared with me now and every minute while the app is seen: a session can be shared with
+    /// you, or stop being, at any time. Bound to the rail's lifetime (`.task`).
+    func followSharedWithMe() async {
+        while !Task.isCancelled {
+            await loadSharedWithMe()
+            await VisibilityGate.app.pause(SharedWithMe.refreshInterval)
+        }
+    }
+
+    /// Open a shared session's guest view: the Shared with me row's own page, over nothing.
+    func openGuestSession(_ id: String) {
+        settingsPresented = false
+        closeTaskOverPage()
+        selectedSection = .agents
+        nav.openGuestSession(PublicID.toPublic(id))
+    }
+
+    /// The client the guest view reads and writes through — this account's, as every other read.
+    var guestDoor: APIClient? { api }
+
     /// Start a session on a machine, whatever it holds: its first workspace's draft once it has one.
     func startSession(onMachine runnerID: String) {
         if let workspace = agents?.firstWorkspace(onRunner: runnerID) {
@@ -2193,7 +2287,29 @@ final class AppModel {
     /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
     /// the Open list, which `applySessionSnapshot` already narrowed.
     func needsYouBanner(excluding focused: String?) -> NeedsYouBanner? {
-        NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+        NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused, now: Date())
+            ?? NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+    }
+
+    #if os(iOS)
+    /// Whether the page on screen has no needs-you bar of its own, so the shell carries one over it
+    /// (`needsYouOverPage`, the owner, 2026-11-15, 05-one-surface). The bar is the Sessions list's
+    /// and a phone's conversation's; a wide shell keeps the list beside whatever Agents shows.
+    func pageHasNoNeedsYouBar(wide: Bool) -> Bool {
+        guard selectedSection == .agents else { return true }
+        if wide { return false }
+        return !(nav.sectionAtRoot || nav.focusedConsoleSessionID != nil)
+    }
+    #endif
+
+    /// An approval push that landed while the app is in front: the bar says it for its first seconds.
+    func noteNeedsYouArrival(sessionID: String, line: String) {
+        let arrival = NeedsYouArrival(sessionID: sessionID, line: line, at: Date())
+        needsYouArrival = arrival
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(NeedsYouLogic.arrivalSeconds * 1_000_000_000))
+            if self?.needsYouArrival == arrival { self?.needsYouArrival = nil }
+        }
     }
 
     /// The banner unfolded: one line per waiting conversation, the first the one the banner names.
@@ -2466,12 +2582,11 @@ final class AppModel {
     func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
                    sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
                    icon: String? = nil, canUndo: Bool = false, undo: (@MainActor () -> Void)? = nil,
-                   awaitsApproval: Bool = false,
                    mergeConflict: ToastMergeConflict? = nil,
                    key: String? = nil, inProgress: Bool = false) {
         let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
         let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
-                             sessionID: sessionID, canUndo: canUndo || undo != nil, awaitsApproval: awaitsApproval,
+                             sessionID: sessionID, canUndo: canUndo || undo != nil,
                              key: key, inProgress: inProgress, mergeConflict: mergeConflict)
         guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
         if let undo { toastUndo = (id, undo) }
@@ -2951,6 +3066,7 @@ final class AppModel {
     private(set) var projectSessionsConfirmedAt: String?
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
+    var projectSessionsColumnDestination: SessionProjectAddress? { nav.projectSessionsColumnDestination }
 
     func openProjectSessions(_ address: SessionProjectAddress) {
         nav.enterProjectSessions(address)
@@ -2986,6 +3102,8 @@ final class AppModel {
             openProjectSessions(projectID, inColumn: inColumn)
         case .machine(let runnerID):
             openMachineDraft(runnerID)
+        case .guestSession(let sessionID):
+            openGuestSession(sessionID)
         }
     }
 
@@ -3009,7 +3127,7 @@ final class AppModel {
         }
         let address = SessionProjectAddress(projectID: projectID, agentID: agentID, view: .open)
         if inColumn {
-            nav.enterProjectSessions(address)
+            nav.enterProjectSessions(address, asDestination: true)
         } else {
             nav.path = [.sessionProject(address, asDestination: true)]
         }
@@ -3245,15 +3363,18 @@ final class AppModel {
         }
     }
 
-    // MARK: session folders (docs/session-folders-move-design.md §3–4)
-
-    #if os(iOS)
-    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
-    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
-    func openProjectMemberFromSheet(_ session: Session) {
-        sessionDetails.store(session)
-        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
+    /// A project row whose line says a member is waiting on you (owner 2026-11-14,
+    /// `SessionProjectSheet.RowTap.waitingMember`): that member's conversation, opened at the top of
+    /// its waiting card rather than at the transcript's end. A phone pushes it over the list, as it
+    /// pushes the coordinator; a column shell opens the project's page in its session column and
+    /// selects the member beside it, as the web desktop does.
+    func openWaitingMember(_ session: Session, project: SessionProjectAddress, push: Bool) {
+        consoleRegistry?.model(for: session.id, agentID: session.agent?.id ?? session.agentId).focusWaitingCard()
+        if !push { openProjectSessions(project) }
+        openProjectMember(session, push: push)
     }
+
+    // MARK: session folders (docs/session-folders-move-design.md §3–4)
 
     /// The project's session count, read by both the project sessions button and the page's
     /// "Project · N sessions" (`SessionProjectSheet.sessionCount`). Nil until the page's read has
@@ -3263,6 +3384,14 @@ final class AppModel {
             projectID: projectID,
             page: projectSessionsAddress.map { ($0.projectID, projectSessions) },
             answered: projectSessionsReadAt != nil)
+    }
+
+    #if os(iOS)
+    /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
+    /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
+    func openProjectMemberFromSheet(_ session: Session) {
+        sessionDetails.store(session)
+        nav.switchConsole(to: .console(sessionID: session.id, origin: .list))
     }
 
     /// The sessions page a conversation's project sessions button reads and opens
@@ -3789,6 +3918,15 @@ final class AppModel {
                 self.selectedAgentID = resolved.agent?.id ?? resolved.agentId
             } catch APIError.http(let status, _) where status == 404 {
                 guard self.apiGeneration == generation, self.api === api else { return }
+                // No session of yours: it may be one somebody shared with you. The web asks the guest
+                // door before saying not-found (WorkspaceConsole, D9), and so does this.
+                if (try? await api.guestSession(id, limit: 1)) != nil {
+                    guard self.apiGeneration == generation, self.api === api else { return }
+                    self.consoleRegistry?.discardMissing(id)
+                    self.nav.replaceConsoleWithGuest(id)
+                    return
+                }
+                guard self.apiGeneration == generation, self.api === api else { return }
                 self.discardMissingSession(id)
             } catch APIError.unauthorized {
                 guard self.apiGeneration == generation, self.api === api else { return }
@@ -3927,6 +4065,10 @@ final class AppModel {
             openOwnerRequest(id)
         case .snoozeOwnerRequest(let id):
             ownerRequests?.snooze(id, for: OwnerRequests.laterSeconds)
+        case .openTerminalRequests:
+            // The inbox it opened is gone; the machine page's Needs you section that takes its place
+            // is the macOS + iOS task's (docs/mocks/waiting-on-you-removal/02). Until then: read again.
+            Task { await ownerRequests?.loadTerminalRequests() }
         }
     }
 

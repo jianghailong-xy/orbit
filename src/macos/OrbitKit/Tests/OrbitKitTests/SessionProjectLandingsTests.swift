@@ -280,6 +280,58 @@ final class SessionProjectLandingsTests: XCTestCase {
     func testTheSourceLabelIsNothingAtAllForAConversationThatFedNoLanding() {
         XCTAssertNil(SessionProjectLandings.sourceLabel(nil))
     }
+
+    // MARK: - the source session's landing on its worktree card (docs/mocks/session-landing-slot-ios)
+
+    private let member = SessionProjectMembership(projectId: "p1", projectTitle: "Wiki chat",
+                                                  projectStatus: .open, role: .task)
+
+    func testTheCardSaysAQueuedLandingStillAndNamesTheProjectNotItsBranch() {
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source { $0.state = "QUEUED"; $0.phase = nil },
+                                                         membership: member),
+                       SourceLandingSlot(kind: .queued, text: "Queued to land", into: "into Wiki chat"))
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source(), membership: member),
+                       SourceLandingSlot(kind: .running, text: "Landing · checking", into: "into Wiki chat"))
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source(), membership: nil)?.into,
+                       "into project/p1")
+        XCTAssertTrue(SessionProjectLandings.sourceSlot(source(), membership: member)?.isRow == true)
+    }
+
+    func testTheCardSaysWhatStoppedALandingAndNeverOffersAMergeForIt() {
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source { $0.state = "CHECK_FAILED" }, membership: member),
+                       SourceLandingSlot(kind: .stopped, text: "Landing stopped · checks failed"))
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source { $0.state = "CONFLICT" }, membership: member)?.text,
+                       "Landing stopped · conflict")
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source { $0.state = "ERROR" }, membership: member)?.kind,
+                       .stopped)
+    }
+
+    func testASettledLandingIsTheBranchRowsChip() {
+        let landed = SessionProjectLandings.sourceSlot(source { $0.settledAs = "LANDED" }, membership: member)
+        XCTAssertEqual(landed, SourceLandingSlot(kind: .landed, text: "✓ In Wiki chat"))
+        XCTAssertEqual(landed?.isRow, false)
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source {
+            $0.subject = "PROMOTION"; $0.settledAs = "MERGED"
+        }, membership: member), SourceLandingSlot(kind: .landed, text: "✓ In main"))
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source { $0.settledAs = "NOTHING_TO_LAND" }, membership: member),
+                       SourceLandingSlot(kind: .quiet, text: "Nothing to land"))
+        XCTAssertEqual(SessionProjectLandings.sourceSlot(source { $0.settledAs = "DECLINED" }, membership: member),
+                       SourceLandingSlot(kind: .quiet, text: "Landing · declined"))
+        XCTAssertNil(SessionProjectLandings.sourceSlot(nil, membership: member))
+    }
+
+    func testTheProjectsOwnLineIsNamedByItsTitleInEitherIdSpelling() {
+        let uuid = "01a1d81a-ce0f-772a-b297-21a8ce568652"
+        let byUUID = SessionProjectMembership(projectId: uuid, projectTitle: "Wiki chat",
+                                              projectStatus: .open, role: .task)
+        XCTAssertEqual(SessionProjectLandings.targetName("project/\(PublicID.toPublic(uuid))", membership: byUUID),
+                       "Wiki chat")
+        XCTAssertEqual(SessionProjectLandings.targetName("refs/heads/project/\(uuid)", membership: byUUID),
+                       "Wiki chat")
+        XCTAssertEqual(SessionProjectLandings.targetName("main", membership: byUUID), "main")
+        XCTAssertEqual(SessionProjectLandings.targetName("project/other", membership: byUUID), "project/other")
+        XCTAssertEqual(SessionProjectLandings.targetName("project/p1", membership: nil), "project/p1")
+    }
 }
 
 /// The X-E5 owner card (§4.6 revision 23, board v4 06): its heading counts the claim's silence, its

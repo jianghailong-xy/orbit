@@ -52,6 +52,7 @@ final class TaskMovesTests: XCTestCase {
             ("SECRET", "Key needed"),
             ("MANUAL_STEP", "Steps for you"),
             ("CONFIRM", "Confirm for you"),
+            ("WIKI_CREATE", "Create wiki"),
         ]
         for (kind, word) in cases {
             let row = try decodeSession("""

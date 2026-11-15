@@ -80,8 +80,20 @@ export interface ProjectCrossingRow {
   /** Null on a MOVE_TASK that takes the task out of its project, filed under none. */
   toProjectId: string | null;
   toProjectPublicId?: string | null;
-  fromProject?: { title: string; status: AttributionProjectStatus } | null;
-  toProject?: { title: string; status: AttributionProjectStatus } | null;
+  /** `coordinatorSessionId`: the source's live coordinator conversation, which draws a move out of
+   *  every project (`toProjectId` null) as a decision card. Absent from an older server. */
+  fromProject?: {
+    title: string;
+    status: AttributionProjectStatus;
+    coordinatorSessionId?: string | null;
+  } | null;
+  /** `coordinatorSessionId`: the target's live coordinator conversation, which draws this row as a
+   *  decision card. Null when it has none or it is in Trash; absent from an older server. */
+  toProject?: {
+    title: string;
+    status: AttributionProjectStatus;
+    coordinatorSessionId?: string | null;
+  } | null;
   kind: string;
   subjectTaskId: string | null;
   subjectTaskPublicId?: string;
@@ -89,11 +101,12 @@ export interface ProjectCrossingRow {
    *  and for a subject since deleted; absent from a server older than the move request. */
   subjectTask?: { id: string; publicId?: string; title: string } | null;
   /** MOVE_TASK: the target project's criterion the request names. `text` is null once that
-   *  criterion has been deleted. Null when the request names none. */
-  requestedCriterion?: { key: string; text: string | null } | null;
+   *  criterion has been deleted. Null when the request names none. `ordinal` is its 1-based
+   *  position in the target project's criteria; null once deleted, absent from an older server. */
+  requestedCriterion?: { key: string; text: string | null; ordinal?: number | null } | null;
   /** MOVE_TASK: the source project's criterion the task declares today, which the move takes back.
-   *  Null when it declares none of the source project's. */
-  withdrawnCriterion?: { key: string; text: string } | null;
+   *  Null when it declares none of the source project's. `ordinal` as above, in the source's list. */
+  withdrawnCriterion?: { key: string; text: string; ordinal?: number | null } | null;
   crossingKey: string;
   state: CrossingState;
   title: string;

@@ -56,6 +56,7 @@ import {
 } from './project-promotion';
 
 import { readDerivedProjectDoneReading } from './project-done-derived';
+import { taskLanding } from './project-criterion-landing';
 
 const logger = new Logger('ProjectPromotion');
 
@@ -314,13 +315,19 @@ export class ProjectPromotionService {
       select: {
         id: true,
         mergeReceipts: {
-          where: { result: { in: ['MERGED', 'ALREADY_MERGED'] }, targetBranch: input.upstreamBranch },
-          take: 1,
-          select: { id: true },
+          where: {
+            result: { in: ['MERGED', 'ALREADY_MERGED'] },
+            targetBranch: { in: [input.integrationBranch, input.upstreamBranch] },
+          },
+          select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true },
         },
       },
     });
-    return tasks.filter((task) => task.mergeReceipts.length === 0).map((task) => task.id);
+    // The same fold `integration.state` and a criterion's landing read, so a rework landed on the
+    // line after its earlier revision reached the upstream is carried again (F1-4, 2026-11-08).
+    const branches = { upstream: [input.upstreamBranch], integration: [input.integrationBranch] };
+    return tasks.filter((task) => taskLanding(task.mergeReceipts, branches) !== 'ON_UPSTREAM')
+      .map((task) => task.id);
   }
 
   // ── the owner's doors (M-F3) ──────────────────────────────────────────────────────────────────

@@ -198,6 +198,7 @@ func TestUpdateRunFailedReadsTheVerdictOffTheLines(t *testing.T) {
 	for _, line := range []string{
 		"OpenCode — update failed: npm error code EACCES",
 		"OpenCode — update timed out after 5m0s",
+		"Claude Code — installed but does not run: signal: killed",
 	} {
 		if !updateRunFailed([]string{"Claude Code — already up to date (2.1.221)", line}) {
 			t.Errorf("a run containing %q should be reported as failed", line)

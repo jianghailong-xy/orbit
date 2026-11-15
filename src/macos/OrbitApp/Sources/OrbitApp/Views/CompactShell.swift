@@ -87,6 +87,9 @@ struct CompactShell: View {
                 // full-screen frame — painting over the drawer and stealing its taps, so drawer rows
                 // couldn't switch sections.
                 CompactSections(openDrawer: openDrawer)
+                    // The needs-you bar over a page with none of its own, inside the sliding card
+                    // so it travels with the page it covers (see `needsYouOverPage`).
+                    .needsYouOverPage(wide: false)
                     // An opaque backing *inside* the sliding content so its translucent bars — the
                     // transcript is a `.scrollContentBackground(.hidden)` (see-through) list, with `.bar`
                     // material on the status line / worktree bar / composer — sample a surface that
@@ -305,6 +308,14 @@ private struct CompactSections: View {
                             // A machine's own new session page: the page of its Set up row, so it
                             // leads like the session list it stands in for — the drawer's hamburger,
                             // not a back button (board 03).
+                            // A shared session's guest view: its Shared with me row's own page, so it
+                            // leads like the list it stands in for — the drawer's hamburger, not back.
+                            case .guestSession(let sessionID):
+                                GuestSessionView(sessionID: sessionID)
+                                    .id(sessionID)
+                                    .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
+                                    .navigationBarBackButtonHidden()
+                                    .drawerToggle(open: openDrawer)
                             case .machineDraft(let runnerID):
                                 MachineDraftPage(runnerID: runnerID)
                                     .background { SwipeBackGestureToggle(enabled: !model.atDestinationRoot) }
@@ -747,21 +758,25 @@ struct NavigationDrawer: View {
                 // from them by a rule; the open projects themselves close it, where the task lists
                 // and Recents used to be. Machines & models lives under Settings, Settings is the action bar's
                 // gear below, Admin sits inside Settings, and Following has no row (see its section).
-                ForEach(AppSection.workSections) { section in
-                    if section == .projects {
-                        projectsRow
-                    } else if section == .wiki {
-                        // No row at all for an account the server has not switched the wiki on for
-                        // (WIKI_DISABLED), as the web sidebar draws none: a row that led to a refusal
-                        // would be worse than none.
-                        if model.wiki?.shown == true { wikiRow }
-                    } else {
-                        sectionRow(section)
+                // The rows are one array (`DrawerWorkLogic`), drawn by one ForEach: an `if` or a
+                // second ForEach under it is the shape the source list's reload aborted on.
+                ForEach(DrawerWorkLogic.rows(
+                    AppSection.workSections,
+                    wiki: model.wiki?.shown == true,
+                    // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
+                    // that the Wiki's own page is the Set up your first wiki card.
+                    newWiki: model.wiki?.spaces.isEmpty == false)) { row in
+                    switch row {
+                    case .projects:       projectsRow
+                    case .wiki:           wikiRow
+                    case .newWiki:        newWikiRow
+                    case .section(let section): sectionRow(section)
+                    case .workspacesHeader: workspacesHeader
+                    case .agents:         agentsRows
+                    case .openProjects:   projectRows
+                    case .sharedWithMe:   sharedWithMeRows
                     }
                 }
-                workspacesHeader
-                agentsRows
-                projectRows
             }
             .listStyle(.plain)
             // Let each row's own padding set its height and let the drawer background show through, so
@@ -781,6 +796,8 @@ struct NavigationDrawer: View {
             // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
             // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
+            // Shared with me, the rail's last group: read with the drawer, then every minute.
+            .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
             // divider, so the list keeps the full drawer height and rows slide under the buttons. The
             // matching bottom scroll margin lets the last row still be scrolled clear of them.
@@ -1058,6 +1075,27 @@ struct NavigationDrawer: View {
         .drawerRow()
     }
 
+    /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
+    /// the shell and leaves the drawer where it is.
+    private var newWikiRow: some View {
+        Button {
+            model.wiki?.creating = true
+        } label: {
+            pill(selected: false) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus")
+                        .frame(width: 24)
+                    Text(WikiStartCopy.newWiki)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("drawer-new-wiki")
+    }
+
     /// The rule and the group label that set the Workspaces apart from the work above them.
     private var workspacesHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1119,6 +1157,51 @@ struct NavigationDrawer: View {
                     case .idle:
                         EmptyView()
                     }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+    }
+
+    // MARK: Shared with me
+
+    /// The sessions other people invited this account to reply in (docs/session-guests-design.md §4),
+    /// closing the rail. No group while there is none.
+    @ViewBuilder
+    private var sharedWithMeRows: some View {
+        let shared = model.sharedWithMe
+        if SharedWithMe.showsGroup(shared) {
+            drawerGroupLabel(GuestCopy.sharedWithMe, count: shared.count)
+            ForEach(shared) { session in
+                sharedWithMeRow(session)
+            }
+        }
+    }
+
+    /// The session's title, who shared it and how it stands; selected while its guest view is showing.
+    private func sharedWithMeRow(_ session: GuestSessionSummary) -> some View {
+        let selected = model.drawerDestination == .guestSession(sessionID: session.id)
+        return Button {
+            open(.guestSession(sessionID: session.id))
+        } label: {
+            pill(selected: selected) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(SharedWithMe.title(session))
+                            .lineLimit(1)
+                            .fontWeight(selected ? .semibold : .regular)
+                            .foregroundStyle(.primary)
+                        Text(SharedWithMe.subtitle(session))
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    Text(SharedWithMe.ago(session))
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
         }

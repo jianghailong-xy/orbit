@@ -77,6 +77,17 @@ func (s engineSpec) loginHint() string {
 	return s.loginCmd() + "   (headless: " + s.loginHeadless + ")"
 }
 
+// codexInstallAlt is the by-hand install offered when `npm install -g @openai/codex` fails —
+// usually because npm itself is missing, so the alternative must need neither npm nor, off
+// macOS, brew. OpenAI's own standalone installer (README: "Mac or Linux install script")
+// puts a release binary in ~/.local/bin.
+func codexInstallAlt(goos string) string {
+	if goos == "darwin" {
+		return "brew install codex   (macOS)"
+	}
+	return "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+}
+
 var engineSpecs = []engineSpec{
 	{
 		name:          "Claude Code",
@@ -98,7 +109,7 @@ var engineSpecs = []engineSpec{
 		// never execs (root: standalone ~/.local/bin wins over the npm global), and failing
 		// with EACCES when the service user doesn't own that prefix.
 		updateCmd:  "codex update",
-		installAlt: "brew install codex   (macOS)",
+		installAlt: codexInstallAlt(runtime.GOOS),
 		// npm is where `codex update` reads its own newest version from, standalone install or not.
 		latestURL:   "https://registry.npmjs.org/@openai/codex/latest",
 		latestField: "version",

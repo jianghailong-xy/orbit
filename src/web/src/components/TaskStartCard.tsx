@@ -74,13 +74,12 @@ export function TaskStartCard({
   const projectHref = projectPublic ? `/projects/${encodeURIComponent(projectPublic)}` : null;
   return (
     <div className="tsc-wrap">
-      {/* The sticky bar at the top of the transcript names this turn off these two attributes, the
-          way it names every other card that is nobody's message. */}
+      {/* `data-orbit-round`: Orbit opened this round, so the sticky bar at the top of the transcript
+          hides over it rather than naming a message nobody typed (WorkspaceView). */}
       <div
         className={`tsc${queued ? ' is-queued' : ''}`}
         data-seq={seq}
-        data-sticky-label={TASK_START_LABEL}
-        data-sticky-text={card.title}
+        data-orbit-round
       >
         <div className="tsc-head">
           <span className="tsc-mark"><PlayCircleFilled /></span>

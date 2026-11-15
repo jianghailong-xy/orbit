@@ -100,6 +100,8 @@ type agyApprovalPolicy struct {
 	AllowedTools    []string `json:"allowedTools,omitempty"`
 	DisallowedTools []string `json:"disallowedTools,omitempty"`
 	AnswerWithinMs  int64    `json:"answerWithinMs"`
+	// SubagentRunID is set when this agy runs as a SubAgent: its cards name the run (subagentApprovalBody).
+	SubagentRunID string `json:"subagentRunId,omitempty"`
 }
 
 // agyHookInput is the PreToolUse payload agy writes on the hook's stdin (contract §5.4). Unlike the
@@ -495,6 +497,10 @@ func askAntigravityApproval(policy *agyApprovalPolicy, in *agyHookInput) agyHook
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), within)
 	defer cancel()
+	if policy.SubagentRunID != "" {
+		// The hook is a process of its own, so the run comes from the policy rather than the runner's context.
+		ctx = withSubagentApprovals(ctx, policy.SubagentRunID)
+	}
 	name, input := agyApprovalSubject(in.ToolCall.Name, in.ToolCall.Args)
 	toolUseID := ""
 	if in.StepIdx != nil && in.ConversationID != "" {
@@ -593,6 +599,7 @@ func installAntigravityApprovalGate(ctx context.Context, job *ClaimedSession, ex
 		AllowedTools:    job.Agent.AllowedTools,
 		DisallowedTools: job.Agent.DisallowedTools,
 		AnswerWithinMs:  agyApprovalAnswerWithin(timeout).Milliseconds(),
+		SubagentRunID:   strings.TrimSpace(job.Agent.Env[envSubagentRunID]),
 	}
 	body, err := json.MarshalIndent(policy, "", "  ")
 	if err != nil {

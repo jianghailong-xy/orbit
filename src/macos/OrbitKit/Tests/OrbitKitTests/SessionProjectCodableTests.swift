@@ -220,7 +220,7 @@ final class SessionProjectRefreshWiringTests: XCTestCase {
         XCTAssertTrue(app[nudge.upperBound...].prefix(120).contains("projects?.nudge()"))
         let model = try appSource("ProjectsModel.swift")
         XCTAssertTrue(model.contains("async let sidebarRead = api.sidebarProjects()"))
-        XCTAssertTrue(model.contains("if let list = try? await sidebarRead, list != sidebarProjects { sidebarProjects = list }"))
+        XCTAssertTrue(model.contains("if let list = try? await sidebarRead { assignIfChanged(\\.sidebarProjects, list) }"))
         XCTAssertTrue(model.contains("2_000_000_000"))
     }
 

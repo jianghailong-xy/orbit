@@ -136,6 +136,7 @@ struct RootView: View {
             if model.signedIn {
                 MainView()
                     .sessionSearchSheet(model)
+                    .wikiCreateHost(model)
             } else {
                 LoginView()
             }

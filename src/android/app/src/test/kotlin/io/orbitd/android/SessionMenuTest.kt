@@ -28,8 +28,8 @@ import org.robolectric.annotation.Config
 /** A05-3 (iOS d2858a5e8): the session page's ⋯ in the bar replaces its Share button — Share… / Copy Link; Rename… /
  * Pin / Move… / Tags…; Open Task or Open Project for a session one of them runs; Complete Session or Move to Open; Move
  * to Trash. A trashed session offers only Move to Open and, asked first, Delete Permanently; what would stop a live run
- * says so. Android's own Session details (A06-18: the session's name under the bar opened it until that row went) heads
- * the Open Task / Open Project group, and comes first in a trashed session's. */
+ * says so. Settings (docs/mocks/session-settings ⑤) follows Tags…, and comes first in a trashed session's; it took in what
+ * Android's own Session details showed, and that item is gone. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = NavShellApplication::class, qualifiers = "w411dp-h891dp")
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -48,7 +48,7 @@ class SessionMenuTest {
         NavShell.ended = setOf(NavShell.SESSION)
         signIn(); open("orbit-session:${NavShell.SESSION}")
         menu()
-        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Open Task", "Complete Session",
+        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Settings", "Open Task", "Complete Session",
             "Move to Trash"), items())
         assertTrue("an ended run has nothing to stop", compose.onAllNodes(hasText("Stops the current run")).fetchSemanticsNodes().isEmpty())
         compose.onAllNodesWithContentDescription("Share session").assertCountEquals(0)
@@ -57,7 +57,7 @@ class SessionMenuTest {
     @Test fun aSessionInNoTaskOrProjectHasNoOpenItem() {
         signIn(); open("orbit-session:${NavShell.PLAIN}")
         menu()
-        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Complete Session", "Move to Trash"), items())
+        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Settings", "Complete Session", "Move to Trash"), items())
     }
 
     @Test fun whatWouldStopALiveRunSaysSo() {
@@ -82,7 +82,7 @@ class SessionMenuTest {
         NavShell.lifecycle = NavShell.lifecycle + (NavShell.SESSION to "COMPLETED")
         signIn(); open("orbit-session:${NavShell.SESSION}")
         menu()
-        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Open Task", "Move to Open",
+        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Settings", "Open Task", "Move to Open",
             "Move to Trash"), items())
     }
 
@@ -90,21 +90,52 @@ class SessionMenuTest {
         NavShell.lifecycle = NavShell.lifecycle + (NavShell.SESSION to "TRASH")
         signIn(); open("orbit-session:${NavShell.SESSION}")
         menu()
-        assertEquals(listOf("Session details", "Move to Open", "Delete Permanently"), items())
+        assertEquals(listOf("Settings", "Move to Open", "Delete Permanently"), items())
         item("Delete Permanently").performClick()
         compose.onNodeWithText("Delete permanently?").assertExists()
         compose.onNodeWithText("This session and its full transcript will be permanently deleted. This can't be undone.").assertExists()
         assertTrue("nothing is deleted before it is confirmed", NavShell.calls.none { it.startsWith("DELETE") })
     }
 
-    /** A06-18: the details the session's name under the bar used to open, from the ⋯ now. */
-    @Test fun sessionDetailsOpensFromTheMenu() {
-        signIn(); open("orbit-session:${NavShell.SESSION}")
+    /** ⑥-⑦: Settings opens a whole page — Session, Environment, Notifications, Info — and what Session details showed (worktree
+     * and git, the diff, background work) is a page down from Info. */
+    @Test fun settingsOpensTheFullPageWithFourGroupsAndTheFormerDetailsUnderInfo() {
+        signIn(); open("orbit-session:${NavShell.PLAIN}")
         menu()
-        item("Session details").performClick()
-        await { compose.onAllNodesWithTag("session-details").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Close session details").performClick()
-        await { compose.onAllNodesWithTag("session-details").fetchSemanticsNodes().isEmpty() }
+        item("Settings").performClick()
+        await { compose.onAllNodesWithTag("session-settings").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Session settings").assertExists()
+        listOf("Session", "Labels", "Public link", "Environment", "Working directory", "Compact at", "Variables", "Restart",
+            "Notifications", "When a turn finishes", "When it needs you", "Mute this session",
+            "Info", "Engine", "Claude Code 2.4.1", "Tokens", "1.82M", "in 1.71M · out 108K · cache 1.52M", "Cost", "$4.37", "23 turns",
+            "Session ID", "Worktree and background jobs").forEach { text ->
+            compose.onNodeWithTag("session-settings").performScrollToNode(hasText(text))
+            compose.onNode(hasText(text) and hasAnyAncestor(hasTestTag("session-settings"))).assertExists()
+        }
+        compose.onNodeWithText("Worktree and background jobs").performClick()
+        await { compose.onAllNodesWithTag("session-work").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Worktree / Git").assertExists()
+        compose.onNodeWithText("View changed files and diff").assertExists()
+        compose.onNodeWithTag("session-work").performScrollToNode(hasText("Background work"))
+        compose.onNodeWithContentDescription("Back to settings").performClick()
+        await { compose.onAllNodesWithTag("session-settings").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("Close settings").performClick()
+        await { compose.onAllNodesWithTag("session-settings").fetchSemanticsNodes().isEmpty() }
+    }
+
+    /** No Save: a switch is sent as it is pressed, and Restart goes to the engine. */
+    @Test fun settingsSaveAtOnce() {
+        signIn(); open("orbit-session:${NavShell.PLAIN}")
+        menu()
+        item("Settings").performClick()
+        await { compose.onAllNodesWithTag("session-settings").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("session-settings").performScrollToNode(hasText("Restart"))
+        compose.onNode(hasText("Restart") and hasClickAction()).performClick()
+        await { NavShell.calls.any { it == "POST sessions/${NavShell.PLAIN}/restart" } }
+        compose.onNodeWithTag("session-settings").performScrollToNode(hasText("Mute this session"))
+        compose.onNodeWithText("Mute this session").performClick()
+        await { NavShell.calls.any { it == "PATCH sessions/${NavShell.PLAIN}/settings" } }
+        await { NavShell.muted }
     }
 
     @Test fun openTaskOpensTheTaskOverTheSession() {

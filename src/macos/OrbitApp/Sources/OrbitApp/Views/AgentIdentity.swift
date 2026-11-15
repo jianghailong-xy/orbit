@@ -249,14 +249,51 @@ struct SoftEdgeLayer: View {
 /// Static workspace name for the iOS session list and new-session navigation bars.
 /// `.fixedSize()` keeps iOS 26's leading toolbar slot from compressing even short names. The list
 /// also hides this item's shared background so the drawer button keeps its own glass circle.
+///
+/// The session list passes `status`: a line under the name while the Open list on screen is not yet
+/// known to be the server's (`AppModel.openListStatus`; docs/mocks/ios-launch-updating). `empty`
+/// says the list has no rows to be stale yet, and `retry` is what the Offline line's tap does.
 struct WorkspaceTitle: View {
     let name: String
+    var status: OpenListFreshness.Status? = nil
+    var empty = false
+    var retry: () -> Void = {}
 
     var body: some View {
-        Text(name)
-            .font(.barTitle).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail)
-            .fixedSize()
-            .accessibilityLabel("Workspace: \(name)")
+        VStack(alignment: .leading, spacing: 1) {
+            Text(name)
+                .font(.barTitle).foregroundStyle(.primary).lineLimit(1).truncationMode(.tail)
+                .accessibilityLabel("Workspace: \(name)")
+            if let status {
+                statusLine(status).transition(.opacity)
+            }
+        }
+        .fixedSize()
+        .animation(.easeOut(duration: 0.2), value: status)
+    }
+
+    @ViewBuilder
+    private func statusLine(_ status: OpenListFreshness.Status) -> some View {
+        switch status {
+        case .updating, .connecting:
+            HStack(spacing: 4) {
+                ProgressView().controlSize(.mini)
+                Text(status == .connecting ? "Connecting…" : empty ? "Loading sessions…" : "Updating…")
+            }
+            .font(.orbitMeta).foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        case .offline:
+            Button(action: retry) {
+                HStack(spacing: 4) {
+                    Circle().fill(Color.orange).frame(width: 6, height: 6)
+                    Text("Offline · Tap to retry")
+                }
+                .font(.orbitMeta).foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Offline. Showing the saved list")
+            .accessibilityHint("Reads the session list again")
+        }
     }
 }
 
@@ -318,32 +355,11 @@ struct AgentSwitchSheet: View {
 
     var body: some View {
         NavigationStack {
-            List(agents) { agent in
-                Button {
-                    // Dismiss first, then switch: the switch rebuilds the presenting NewSessionView
-                    // (its `.id(agent.id)` changes), so tearing the sheet down ourselves first avoids
-                    // dismissing through a view that's already gone.
-                    dismiss()
-                    if agent.id != currentID { onSelect(agent.id) }
-                } label: {
-                    HStack(spacing: 12) {
-                        ProviderMark(provider: agent.defaultProvider, size: 38)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(agent.name).foregroundStyle(.primary).lineLimit(1)
-                            Text(SessionProviderChoices.engineVia(
-                                engine: agent.defaultEngine(configured: configuredProviders),
-                                provider: agent.defaultProvider, configured: configuredProviders))
-                                .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        Spacer(minLength: 8)
-                        if agent.id == currentID {
-                            Image(systemName: "checkmark")
-                                .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
-                        }
-                    }
-                    .contentShape(Rectangle())
+            List {
+                ForEach(agents) { agent in
+                    AgentSwitchRow(agent: agent, currentID: currentID,
+                                   configuredProviders: configuredProviders, onSelect: onSelect)
                 }
-                .buttonStyle(.plain)
             }
             .navigationTitle("Switch agent")
             #if os(iOS)
@@ -358,5 +374,43 @@ struct AgentSwitchSheet: View {
         #if os(iOS)
         .presentationDetents([.medium, .large])
         #endif
+    }
+}
+
+/// One agent in the switch sheet: its name, what a session in it starts on, and a checkmark when it
+/// is the one composing now.
+private struct AgentSwitchRow: View {
+    let agent: Agent
+    let currentID: String
+    let configuredProviders: [ConfiguredProvider]
+    let onSelect: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Button {
+            // Dismiss first, then switch: the switch rebuilds the presenting NewSessionView
+            // (its `.id(agent.id)` changes), so tearing the sheet down ourselves first avoids
+            // dismissing through a view that's already gone.
+            dismiss()
+            if agent.id != currentID { onSelect(agent.id) }
+        } label: {
+            HStack(spacing: 12) {
+                ProviderMark(provider: agent.defaultProvider, size: 38)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(agent.name).foregroundStyle(.primary).lineLimit(1)
+                    Text(SessionProviderChoices.engineVia(
+                        engine: agent.defaultEngine(configured: configuredProviders),
+                        provider: agent.defaultProvider, configured: configuredProviders))
+                        .font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                if agent.id == currentID {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }

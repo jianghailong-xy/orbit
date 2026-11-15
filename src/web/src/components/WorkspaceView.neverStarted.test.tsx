@@ -444,14 +444,16 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     expect(installs[0][1]).toMatchObject({ method: 'POST', body: { engine: 'cursor' } });
   });
 
-  it('keeps the ordinary queued note, and no card, for a follow-up merely waiting for a slot', async () => {
+  it('draws no card for a follow-up merely waiting for a slot: the last message says the runner is full', async () => {
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: TALKED_EVENTS, hasMore: false } as never);
     await mount({ ...TALKED_SESSION, status: 'PENDING', error: null }, false);
     await afterHistory();
 
     expect(card()).toBeNull();
-    // The note the page has always drawn for this wait, naming the gate the server reported.
-    expect(mounted().querySelector('.chat-slot-wait')?.textContent).toContain('This session starts as soon as a slot frees up.');
+    // A full runner is said where a runner's update is (docs/mocks/queued-card-runner-full ②): on the
+    // foot row of the reader's last message when nothing else waits, in place of the one-line note.
+    expect(mounted().querySelector('.chat-slot-wait')).toBeNull();
+    expect(mounted().querySelector('.chat-runner-updating')?.textContent).toBe('Queued·runner full');
   });
 
   it('draws no card under a turn that is running', async () => {

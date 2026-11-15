@@ -157,6 +157,12 @@ describe('sessionLine', () => {
       text: 'Record as done…',
       tone: 'approval',
     });
+    // An owner request says its kind's own word, never "Waiting on you".
+    const request = { ownerRequestId: 'r1', kind: 'MANUAL_STEP' as const, title: 'Sign in', since: '2026-11-14T00:00:00Z' };
+    expect(sessionLine({ ...parked, waitingKind: 'OWNER_REQUEST', ownerRequests: [request] }, true)).toEqual({
+      text: 'Steps for you',
+      tone: 'approval',
+    });
   });
 
   it('surfaces live state before any reply preview', () => {
@@ -533,10 +539,10 @@ describe('sessionLine names the gate holding a queued session', () => {
     });
   });
 
-  it('keeps slot wording when a slot really is what is missing', () => {
+  it('says the runner is full when a slot really is what is missing', () => {
     expect(
       sessionLine({ status: 'PENDING', queuedReason: 'runner_at_capacity' }, true),
-    ).toEqual({ text: 'Waiting for slot', tone: 'queued' });
+    ).toEqual({ text: 'Runner full', tone: 'queued' });
   });
 });
 

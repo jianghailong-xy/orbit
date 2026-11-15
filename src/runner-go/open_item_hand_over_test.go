@@ -35,8 +35,8 @@ func TestOpenItemHandOverMCPDescriptorIsCoordinatorOnlyAndCLIExempt(t *testing.T
 			}
 		}
 	}
-	if reason, ok := cliParityExemptTools["open_item_hand_over"]; !ok || reason == "" {
-		t.Fatal("open_item_hand_over must be explicitly CLI/MCP parity-exempt")
+	if op := catalogOperation("open_item_hand_over"); op == nil || op.CLIExempt == "" {
+		t.Fatal("open_item_hand_over must be explicitly CLI/MCP parity-exempt in the operation catalogue")
 	}
 }
 

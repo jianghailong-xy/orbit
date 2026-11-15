@@ -6,6 +6,7 @@ import type {
   MergeRecovery,
   MergeRecoveryAction,
   SessionGuestPerson,
+  SubagentRunView,
 } from '@orbit/shared';
 import type {
   BgShell,
@@ -32,6 +33,10 @@ import type {
   OrbitMessageFrom,
   SessionReplyCard,
   SessionMoveTargets,
+  SessionRestartResponse,
+  SessionSettings,
+  SessionSettingsPatch,
+  SessionUsage,
   SessionRequestView,
   SessionProjectMembership,
   SessionTurnIntent,
@@ -460,6 +465,10 @@ export const readDirProbe = (runnerId: string, path: string, signal?: AbortSigna
 export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
   api<BgShell[]>(`/sessions/${id}/background`);
 
+/** The session's SubAgent runs, oldest first: what each `delegate` block shows beside its call. */
+export const getSessionSubagents = (id: string): Promise<SubagentRunView[]> =>
+  api<SubagentRunView[]>(`/sessions/${id}/subagents`);
+
 // ── Interactive sessions (Route B) ──
 
 /** Start a long-lived interactive session. Pick a workspace (its machine + project dir
@@ -698,6 +707,10 @@ export const fetchAttachmentObjectUrl = async (id: string): Promise<string> => {
 export const setAttachmentPinned = (id: string, pinned: boolean): Promise<EvidenceFilePinAnswer> =>
   api<EvidenceFilePinAnswer>(`/attachments/${encodeURIComponent(id)}/pin`, { method: pinned ? 'PUT' : 'DELETE' });
 
+/** Delete a file everywhere this account keeps it, from Settings → Storage. 409 while evidence or a session holds it. */
+export const deleteAttachmentEverywhere = (id: string): Promise<void> =>
+  api<void>(`/attachments/${encodeURIComponent(id)}/everywhere`, { method: 'DELETE' });
+
 export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactPath: string): Promise<string> => {
   const res = await authedFetch(
     `/api/sessions/${encodeURIComponent(sessionId)}/artifacts?path=${encodeURIComponent(artifactPath)}`,
@@ -822,6 +835,9 @@ export interface ActiveSessionTurn extends TurnCards {
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
+  /** The session's opening prompt, listed until the runner echoes it: the same message a tab that
+   *  created the session drew itself (`initial:<session>`). */
+  opening?: true;
 }
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
@@ -890,6 +906,9 @@ export interface ApprovalInfo {
    *  it names (`shared/dto.ts`): the reader that outlives the turn, and what the local
    *  "is this still a question" predicate below reads against `Session.runningBgShells`. */
   backgroundJobId?: string;
+  /** The SubAgent run that asked this under the session (`shared/dto.ts`); its `toolUseId` is then the child's
+   *  call as the transcript writes it. */
+  subagentRunId?: string;
   status: 'PENDING' | 'ALLOWED' | 'DENIED';
   message?: string;
   createdAt: string;
@@ -968,6 +987,14 @@ export const updateSessionConfig = (
  *  on its next resume. */
 export const switchSessionAccount = (sessionId: string, account: string) =>
   api(`/sessions/${sessionId}/account`, { method: 'PATCH', body: { account } });
+
+/** Settings drawer: write the session's own variables (the whole map) or its notification choices. */
+export const patchSessionSettings = (sessionId: string, patch: SessionSettingsPatch) =>
+  api<SessionSettings>(`/sessions/${sessionId}/settings`, { method: 'PATCH', body: patch });
+
+/** Settings drawer: reload the live engine with the session's env, after the running turn if there is one. */
+export const restartSession = (sessionId: string) =>
+  api<SessionRestartResponse>(`/sessions/${sessionId}/restart`, { method: 'POST' });
 
 /** Rename a session's display title. Works on any session (live or ended) and never
  *  touches the runner — purely a metadata update. */
@@ -2008,6 +2035,10 @@ export interface SessionDetail {
   /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
   mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
+  /** When the merge operation now pending was requested. */
+  mergeRequestedAt?: string | null;
+  /** The runner this session runs on, as far as the merge slot names it. */
+  assignedRunner?: { name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the
   // workspace/runner default. Shown on the merged ✓ chip and used by Retry merge.
@@ -2043,6 +2074,12 @@ export interface SessionDetail {
   // "Shared · Live" and the menu's "Live link"; the Share dialog reads the link itself (getShareLink).
   shareToken?: string | null;
   sharedAt?: string | null;
+  /** The Settings drawer's own fields (docs/mocks/session-settings). Optional: an older server sends none. */
+  settings?: SessionSettings;
+  usage?: SessionUsage;
+  engineVersion?: string | null;
+  /** The engine's own id for the conversation (Claude's session id, Codex's thread id). */
+  runtimeSessionId?: string | null;
   completedAt?: string | null;
   /** Legacy API timestamp retained during rolling upgrades. */
   archivedAt?: string | null;

@@ -124,6 +124,8 @@ export class WorkspacesService {
         modelRouting: dto.modelRouting ?? false,
         modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor ?? 'cost',
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
+        subagentsEnabled: dto.subagentsEnabled ?? true,
+        subagentsMaxRunning: dto.subagentsMaxRunning ?? 4,
       },
     });
     if (workspace.workDir && workspace.runnerId) this.realtime?.markRunnerChanged(workspace.runnerId);
@@ -189,10 +191,13 @@ export class WorkspacesService {
     };
   }
 
-  /** `only`: the workspaces a token confined to them may see (`workspaceConfinement`). */
-  async list(ownerId: string, only?: readonly string[]) {
+  /**
+   * `only`: the workspaces a token confined to them may see (`workspaceConfinement`). `onRunner`: one machine's
+   * workspaces, what a TERMINAL credential reads (`terminalRunnerOf`).
+   */
+  async list(ownerId: string, only?: readonly string[], onRunner?: string) {
     const workspaces = await this.prisma.workspace.findMany({
-      where: { ownerId, deletedAt: null, ...(only ? { id: { in: [...only] } } : {}) },
+      where: { ownerId, deletedAt: null, ...(only ? { id: { in: [...only] } } : {}), ...(onRunner ? { runnerId: onRunner } : {}) },
       // Custom drag order first; never-reordered workspaces (position NULL) sort last by
       // creation time, so newly added workspaces append below the arranged ones.
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
@@ -355,6 +360,8 @@ export class WorkspacesService {
       modelRouting: dto.modelRouting,
       modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor,
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
+      subagentsEnabled: dto.subagentsEnabled,
+      subagentsMaxRunning: dto.subagentsMaxRunning,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

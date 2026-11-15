@@ -364,7 +364,7 @@ describe('Activity', () => {
       categories: [],
     } satisfies WikiDocsDirectory);
     const html = wiki('/wiki/orbit/activity', cache);
-    const order = ['<h1 class="page-title">Wiki</h1>', '<div class="wk-home-state">35 documents · 5 written</div>', 'class="wk-search"', 'class="wk-crumb wk-crumb--back"'].map(
+    const order = ['<h1 class="page-title wk-name-title">', '<div class="wk-home-state">35 documents · 5 written</div>', 'class="wk-search"', 'class="wk-crumb wk-crumb--back"'].map(
       (needle) => at(html, needle),
     );
     expect(order).toEqual([...order].sort((a, b) => a - b));

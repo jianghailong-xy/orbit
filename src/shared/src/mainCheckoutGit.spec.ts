@@ -17,6 +17,10 @@ import {
   mainCheckoutCardSubtitle,
   mainCheckoutCardTitle,
   mainCheckoutCommitButton,
+  mainCheckoutDefaultCommitMessage,
+  mainCheckoutDiscardBody,
+  mainCheckoutDiscardButton,
+  mainCheckoutDiscardTitle,
   mainCheckoutMoveHint,
   mainCheckoutResultLine,
   mainCheckoutReviewAndCommit,
@@ -67,6 +71,7 @@ const fixture = JSON.parse(readFileSync(path.join(__dirname, 'main-checkout-git.
   command: MainCheckoutActionCommand;
   changedNotice: MainCheckoutChangedNotice;
   results: FixtureResult[];
+  defaultCommitMessages: { cases: Array<{ files: MainCheckoutFile[]; message: string }> };
   cardHandled: {
     copy: Record<string, string>;
     healthLagSeconds: number;
@@ -132,11 +137,12 @@ describe('main checkout Git contract', () => {
     expect(fixture.requests.map((r) => r.kind)).toEqual([...MAIN_CHECKOUT_ACTION_KINDS]);
     const fields = (r: MainCheckoutActionRequest) => Object.keys(r).sort();
     const base = ['fingerprint', 'kind', 'requestId', 'root'];
-    const [move, commit, push, rescue] = fixture.requests;
+    const [move, commit, push, rescue, discard] = fixture.requests;
     expect(fields(move)).toEqual([...base, 'files', 'targetSessionId'].sort());
     expect(fields(commit)).toEqual([...base, 'files', 'message'].sort());
     expect(fields(push)).toEqual(base);
     expect(fields(rescue)).toEqual(base);
+    expect(fields(discard)).toEqual([...base, 'files'].sort());
     expect(Date.parse(fixture.command.expiresAt)).toBeGreaterThan(Date.parse(fixture.command.requestedAt));
   });
 
@@ -209,6 +215,18 @@ describe('main checkout Git contract', () => {
     );
     expect(WORKTREE_ISOLATION_DIALOG_COPY.unchanged).toBe(
       'Nothing in the checkout is changed. Sessions already running keep working in the main checkout until they end.',
+    );
+  });
+
+  it('names a commit after its files', () => {
+    for (const c of fixture.defaultCommitMessages.cases) expect(mainCheckoutDefaultCommitMessage(c.files)).toBe(c.message);
+  });
+
+  it('asks before a discard, saying where the copy goes', () => {
+    expect(mainCheckoutDiscardButton(2)).toBe('Discard 2 files');
+    expect(mainCheckoutDiscardTitle(1)).toBe('Discard 1 file?');
+    expect(mainCheckoutDiscardBody(2, 'main')).toBe(
+      'They go back to the last commit on main; new files are deleted. A copy of the main checkout is saved on orbit/rescue-… first.',
     );
   });
 

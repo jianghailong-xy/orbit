@@ -13,10 +13,14 @@ NO_CACHE=0
 PRUNE=0
 PULL_BASE=0
 ALLOW_DIRTY=0
+TWO_STAGE_MODE=""
+TWO_STAGE_COMMIT=""
+STOP_THEN_START=0
 
 usage() {
   cat <<'EOF'
 Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
+       ORBIT_REGISTRY=<host:port> ORBIT_DEPLOY_HOST=<ssh destination> upgrade.sh [--build-only | --deploy <commit> | --plan <commit>] [--stop-then-start] [...]
 
   --no-pull    deploy the checkout as it is. By default a checkout on main is
                fast-forwarded first (git pull --ff-only), so origin's main ships
@@ -30,6 +34,23 @@ Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--a
                build anyway when the checkout has uncommitted changes (they are
                baked into the image and exist in no commit)
   -h, --help   show this help
+
+With ORBIT_REGISTRY set, the upgrade is a two-stage release (SKILL.md, "Two-stage
+release"): this host builds, boot-checks and pushes the images, tagged by commit,
+and ORBIT_DEPLOY_HOST (in ORBIT_DEPLOY_DIR, default /root/orbit) pulls them over
+ssh and recreates what changed, building nothing.
+  --build-only build, check and push the release of this checkout; deploy nothing
+  --deploy <commit>
+               deploy a release already in the registry, building nothing: a
+               rollback is the deploy of an earlier release
+  --plan <commit>
+               print what --deploy <commit> would change on the target, and
+               change nothing there
+  --stop-then-start
+               stop the running apiserver and web before their replacements
+               start, as releases did before they were handed over without a
+               gap: for a release whose migration the running release's code
+               cannot run against (502 until each new one is healthy)
 EOF
 }
 
@@ -42,11 +63,23 @@ while [ $# -gt 0 ]; do
     --no-cache)  NO_CACHE=1 ;;
     --prune)     PRUNE=1 ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
+    --build-only) TWO_STAGE_MODE=build ;;
+    --stop-then-start) STOP_THEN_START=1 ;;
+    --deploy|--plan)
+      if [ $# -lt 2 ]; then echo "$1 needs the commit of the release to deploy" >&2; usage >&2; exit 2; fi
+      TWO_STAGE_MODE="${1#--}"; TWO_STAGE_COMMIT="$2"; shift ;;
     -h|--help)   usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
 done
+if { [ -n "$TWO_STAGE_MODE" ] || [ "$STOP_THEN_START" -eq 1 ]; } && [ -z "${ORBIT_REGISTRY:-}" ]; then
+  echo "error: --build-only, --deploy, --plan and --stop-then-start belong to the two-stage release, which ORBIT_REGISTRY turns on" >&2
+  echo "       (SKILL.md, \"Two-stage release\")" >&2
+  exit 2
+fi
+# A deploy or its plan builds nothing, so there is nothing to pull for it unless asked.
+if { [ "$TWO_STAGE_MODE" = deploy ] || [ "$TWO_STAGE_MODE" = plan ]; } && [ "$GIT_PULL" = auto ]; then GIT_PULL=0; fi
 
 # Run from the repo root, where docker-compose.yml lives.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -518,7 +551,8 @@ deployment_preflight() {
     exit 1
   fi
 }
-deployment_preflight
+# A two-stage release recreates nothing on this host: its deploy stage makes the same check where the deployment runs.
+[ -n "${ORBIT_REGISTRY:-}" ] || deployment_preflight
 
 # pgbackup is in neither list of services below, and `up` alone would not do for it: Compose bind-mounts its script as a
 # single file, so a new checkout replaces the file under a running container, which keeps the one it started on, and
@@ -640,6 +674,46 @@ fi
 # its build arguments. Keep an explicit caller value for reproducible retries of a pinned build.
 DEPLOY_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 export ORBIT_SOURCE_SHA="${ORBIT_SOURCE_SHA:-$DEPLOY_SHA}"
+
+# The downloadable runner is a release's, not this checkout's (docs/release-process.md, "Runner binaries come from
+# the release tag"). /dl serves the runner built from the newest release tag behind HEAD, so a runner's version always
+# names the tag it was cut from, and a deploy between two releases publishes that release again rather than new
+# runner code under its number. The tag's tree goes to .runner-release/, which src/web/Dockerfile builds the binaries
+# from. A checkout with no release tag behind it (a fork, a shallow clone) builds the runner from itself, as before.
+RUNNER_RELEASE_DIR="$REPO_ROOT/.runner-release"
+rm -rf "$RUNNER_RELEASE_DIR"
+RUNNER_RELEASE_TAG="$(git -C "$REPO_ROOT" describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)"
+if [ -n "$RUNNER_RELEASE_TAG" ]; then
+  mkdir -p "$RUNNER_RELEASE_DIR"
+  git -C "$REPO_ROOT" archive "$RUNNER_RELEASE_TAG" src/runner-go package.json scripts contracts/runner-write-protocol.json |
+    tar -x -C "$RUNNER_RELEASE_DIR"
+  export ORBIT_RUNNER_SOURCE=.runner-release
+  ORBIT_RUNNER_SOURCE_SHA="$(git -C "$REPO_ROOT" rev-parse "$RUNNER_RELEASE_TAG^{commit}")"
+  export ORBIT_RUNNER_SOURCE_SHA
+  echo "==> The downloadable runner is release $RUNNER_RELEASE_TAG ($ORBIT_RUNNER_SOURCE_SHA)"
+else
+  echo "warning: no release tag (v*) behind HEAD — the downloadable runner is built from this checkout" >&2
+fi
+
+# ── Two-stage release: this section is the same in both copies of /upgrade's script ─────────────────────────────────
+# With ORBIT_REGISTRY set, this host builds and the deployment runs on ORBIT_DEPLOY_HOST (SKILL.md, "Two-stage
+# release"): deploy/two-stage/release.sh builds, boots and pushes the images here, tagged by commit, and drives the
+# deploy stage there over ssh, which pulls them and recreates what changed. Nothing after this section runs: this
+# host's own containers, its .env and its runner link are left as they are. Without ORBIT_REGISTRY, nothing here runs.
+if [ -n "${ORBIT_REGISTRY:-}" ]; then
+  TWO_STAGE_ARGS=()
+  case "$TWO_STAGE_MODE" in
+    build) TWO_STAGE_ARGS+=(--build-only) ;;
+    deploy|plan) TWO_STAGE_ARGS+=("--$TWO_STAGE_MODE" "$TWO_STAGE_COMMIT") ;;
+  esac
+  if [ "$NO_CACHE" -eq 1 ]; then TWO_STAGE_ARGS+=(--no-cache); fi
+  if [ "$PULL_BASE" -eq 1 ]; then TWO_STAGE_ARGS+=(--pull-base); fi
+  if [ "$PRUNE" -eq 1 ]; then TWO_STAGE_ARGS+=(--prune); fi
+  if [ "$STOP_THEN_START" -eq 1 ]; then TWO_STAGE_ARGS+=(--stop-then-start); fi
+  bash "$REPO_ROOT/deploy/two-stage/release.sh" ${TWO_STAGE_ARGS[@]+"${TWO_STAGE_ARGS[@]}"}
+  exit 0
+fi
+# ── end of the two-stage release's section ─────────────────────────────────────────────────────────────────────────
 
 # The runner link (the section above). A build that needs it demands its lines before Compose can render anything, so a
 # deployment with none gets them first; any other waits until what can stop this run before anything is built has had its say.

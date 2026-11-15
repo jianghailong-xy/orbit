@@ -30,6 +30,7 @@ import {
   accountPoolRuntime,
   adminOnlyProviderRefusal,
   builtinSessionEngine,
+  engineBaseEnv,
   ENGINE_INCOMPATIBLE_ERROR_LIKE,
   engineIncompatibleMessage,
   isBuiltinProvider,
@@ -117,6 +118,7 @@ import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../m
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
+import { openingTurnId } from '../sessions/orbit-authored-turn';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -789,6 +791,7 @@ export class QueueService {
     kimiAccountPinned: boolean;
     cursorAccount: string | null;
     cursorAccountPinned: boolean;
+    env: unknown;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
     assignedRunner: (AccountRunner & { accountNames: unknown; capabilities: string[] }) | null;
   }): Promise<WorkspaceAccountChoices> {
@@ -810,7 +813,8 @@ export class QueueService {
       session.assignedRunnerId!,
       engine,
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
-      workspace,
+      // The account a directory variable names is read off the env the engine starts on (engineBaseEnv).
+      workspace && { ...workspace, env: engineBaseEnv(workspace.env as Record<string, string> | null, session.env) },
       runner,
       new Date(),
     );
@@ -940,6 +944,8 @@ export class QueueService {
         });
         const turn = await tx.conversationTurn.create({
           data: {
+            // The id the active view listed the opening under while no runner had it (`openingTurnId`).
+            id: openingTurnId(session.id),
             sessionId: session.id,
             seq: (last?.seq ?? 0) + 1,
             clientTurnId: seedClientTurnId,
@@ -1031,6 +1037,8 @@ export class QueueService {
         workspaceModel: workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: workspace?.env as Record<string, string> | null,
+        // The session's own env (Settings panel), laid over the workspace's.
+        sessionEnv: session.env,
         // The account picked for this session, else its workspace's (accountsForClaim).
         codexAccount: accounts.codexAccount,
         claudeAccount: accounts.claudeAccount,
@@ -1067,6 +1075,13 @@ export class QueueService {
       }
     }
     const provider = exec.provider;
+    // The engine this claim starts is handed the session's env as it stands now (exec.env): the
+    // Settings panel owes no restart for it (sessionSettingsOf). Only while the env is still the one
+    // read: a PATCH landing since then is not in this engine, and stays owed.
+    await this.prisma.session.updateMany({
+      where: { id: session.id, envChangedAt: session.envChangedAt },
+      data: { envAppliedAt: new Date() },
+    });
     // What the runner is handed as the model: the session's own id, except an OpenCode session on a
     // key, which names it the way OpenCode selects it (resolveProviderExec `runnerModel`).
     const runnerModel = exec.runnerModel ?? exec.model;
@@ -1128,6 +1143,9 @@ export class QueueService {
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,
+      // The folder below workDir a no-worktree session runs in (POST /sessions `workSubdir`); the runner refuses
+      // one that is missing or leaves workDir. Only when set, so every other claim keeps the shape it had.
+      ...(session.workSubdir ? { workSubdir: session.workSubdir } : {}),
       // A codeless task's run with no branch yet (design §3, B2): a detached checkout, and the branch to
       // make only if the run changes something — or, for a runner too old for that, the branch up front.
       ...codelessClaimFields(session, workspace, session.assignedRunner?.capabilities),

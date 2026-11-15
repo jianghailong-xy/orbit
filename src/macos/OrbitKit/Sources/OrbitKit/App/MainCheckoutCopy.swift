@@ -21,11 +21,11 @@ public enum MainCheckoutCopy {
     public static let review = "Review"
     public static let reviewAndCommitShort = "Review and commit…"
     public static let reviewMainCheckout = "Review main checkout"
-    public static let commitMessagePlaceholder = "Commit message"
     public static let notShown = "Not shown: files your .gitignore ignores. Untracked files are included."
     public static let targetOpenedFrom = "The session you opened this from"
     public static let targetBusy = "Working now — available when this turn ends"
     public static let cleanUpCheckout = "Clean up checkout"
+    public static let discard = "Discard"
     /// A handled card's muted line, in place of its Move hint (`MAIN_CHECKOUT_CARD_HANDLED_COPY`).
     public static let cardHandledResult = "Handled — see the result below"
     public static let cardHandledGone = "These changes are no longer in the main checkout"
@@ -91,6 +91,26 @@ public enum MainCheckoutCopy {
     public static func commitButton(chosen: Int, branch: String) -> String { "Commit \(filesCount(chosen)) to \(branch)" }
 
     public static func uncommitted(_ n: Int) -> String { "\(n) uncommitted" }
+
+    /// A commit's message (`mainCheckoutDefaultCommitMessage`): the sheet has no box to type one in, so it is named
+    /// after the chosen files — base names, and Add or Remove when every file was added or deleted.
+    public static func defaultCommitMessage(_ files: [MainCheckoutFile]) -> String {
+        func all(_ status: String) -> Bool { !files.isEmpty && files.allSatisfy { $0.status == status } }
+        let verb = all("A") ? "Add" : all("D") ? "Remove" : "Update"
+        let names = files.map { $0.path.split(separator: "/", omittingEmptySubsequences: false).last.map(String.init) ?? $0.path }
+        if names.count <= 3 { return "\(verb) \(namePaths(names))" }
+        let more = names.count - 3
+        return "\(verb) \(names.prefix(3).joined(separator: ", ")) and \(more) more \(more == 1 ? "file" : "files")"
+    }
+
+    public static func discardButton(chosen: Int) -> String { "Discard \(filesCount(chosen))" }
+
+    public static func discardTitle(chosen: Int) -> String { "Discard \(filesCount(chosen))?" }
+
+    public static func discardBody(chosen: Int, branch: String) -> String {
+        "\(chosen == 1 ? "It goes" : "They go") back to the last commit on \(branch); new files are deleted. "
+            + "A copy of the main checkout is saved on orbit/rescue-… first."
+    }
 
     /// "3 uncommitted files", "Clean · 1 commit not pushed", or both.
     public static func barStatus(fileCount: Int, ahead: Int) -> String {
@@ -160,6 +180,7 @@ public enum MainCheckoutCopy {
         case .commit: return "Nothing committed"
         case .push: return "Nothing pushed"
         case .rescue: return "Nothing saved"
+        case .discard: return "Nothing discarded"
         }
     }
 
@@ -228,6 +249,11 @@ public enum MainCheckoutCopy {
                 return line(.ok, "Saved \(n) to \(r.rescueBranch ?? "")",
                             " and returned the main checkout to \(shortSha(r.head)). Ignored files were left alone.",
                             Link(action: .openInNewSession, label: "Open in a new session"))
+            case .discard:
+                let after = (r.remaining ?? 0) > 0
+                    ? " The main checkout still has \(uncommittedFiles(r.remaining ?? 0, other: true))."
+                    : " The main checkout is clean again."
+                return line(.ok, "Discarded \(n) from the main checkout.", "\(after) A copy of what it held is on \(r.rescueBranch ?? "").")
             }
         }
 
@@ -278,6 +304,12 @@ public enum MainCheckoutCopy {
             return line(.refused, "\(none):",
                         " Orbit couldn't save the main checkout to a rescue branch first\(quoted(r.gitMessage)). The main checkout was left as it was.")
         case "ACTION_FAILED":
+            // A Discard that failed part way: every chosen file is on its rescue branch.
+            if let rescue = r.rescueBranch, !rescue.isEmpty {
+                return line(.refused, "\(none):",
+                            " git couldn't \(gitVerb(r.kind))\(quoted(r.gitMessage)). A copy of what the main checkout held is on \(rescue).",
+                            reviewAgain)
+            }
             return line(.refused, "\(none):",
                         " git couldn't \(gitVerb(r.kind))\(quoted(r.gitMessage)). The main checkout was left as it was.")
         case "ACTION_IN_FLIGHT":
@@ -410,7 +442,7 @@ public struct MainCheckoutCard: Equatable, Sendable {
                                cardAgeSeconds: Double?) -> MainCheckoutCardHandled? {
         let took = laterResults.contains { r in
             r.root == notice.root && r.status == "done"
-                && (r.kind == .rescue || (r.kind == .move && (r.fileCount ?? 0) >= notice.files.count))
+                && (r.kind == .rescue || ((r.kind == .move || r.kind == .discard) && (r.fileCount ?? 0) >= notice.files.count))
         }
         if took { return .result }
         guard let cardAgeSeconds, cardAgeSeconds >= MainCheckoutCopy.cardHealthLagSeconds else { return nil }
@@ -458,8 +490,10 @@ public enum MainCheckoutCardHandled: String, Equatable, Sendable {
 public struct MainCheckoutSelection: Equatable, Sendable {
     public private(set) var chosen: Set<String>
     public let all: [String]
+    private let files: [MainCheckoutFile]
 
     public init(files: [MainCheckoutFile]) {
+        self.files = files
         all = files.map(\.path)
         chosen = Set(all)
     }
@@ -471,12 +505,13 @@ public struct MainCheckoutSelection: Equatable, Sendable {
     /// The chosen paths in the snapshot's order (what the request sends).
     public var paths: [String] { all.filter(chosen.contains) }
 
-    /// Commit needs a file and a non-blank message; Move needs a file.
-    public func canCommit(message: String) -> Bool {
-        !chosen.isEmpty && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    /// Commit, Move and Discard need a file. Commit asks for no message: it is sent with `defaultMessage`.
+    public var canCommit: Bool { !chosen.isEmpty }
 
     public var canMove: Bool { !chosen.isEmpty }
+
+    /// The message a commit is sent with: named after the chosen files.
+    public var defaultMessage: String { MainCheckoutCopy.defaultCommitMessage(files.filter { chosen.contains($0.path) }) }
 }
 
 /// Board 04: what turning worktree isolation on or off asks first, if anything. The switch itself

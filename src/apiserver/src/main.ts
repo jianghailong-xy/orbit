@@ -1,9 +1,11 @@
 import 'reflect-metadata';
-import { ValidationPipe } from '@nestjs/common';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { Logger, ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { drainable, type DrainableServer, DRAIN_MS, endStreams, LINGER_MS, STOP_MS } from './common/graceful-stop';
 import { holdIdleConnections } from './common/idle-connections';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
@@ -29,6 +31,12 @@ BigInt.prototype.toJSON = function () {
 };
 
 async function bootstrap() {
+  // Listened for from the start, so that a SIGTERM during boot is not lost: as PID 1, node ignores a signal it has no
+  // handler for. The stop waits for boot to finish first (common/graceful-stop.ts).
+  let started: (ready: { app: INestApplication; listeners: DrainableServer[] }) => void = () => undefined;
+  const ready = new Promise<{ app: INestApplication; listeners: DrainableServer[] }>((resolve) => (started = resolve));
+  stopOnSignals(ready);
+
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
 
@@ -91,14 +99,53 @@ async function bootstrap() {
   const port = Number(config.get('PORT') ?? 3000);
   // Idle connections are held longer than any caller holds them (common/idle-connections.ts).
   holdIdleConnections(app.getHttpServer());
+  const listeners = [drainable(app.getHttpServer())];
   await app.listen(port);
   // eslint-disable-next-line no-console
   console.log(`orbit control plane listening on :${port}`);
   // The link gateway's own door to the same routes, when the runner link is on (runner-link-call.ts).
-  await listenForRunnerLinkCalls(app, {
+  const linkServer = await listenForRunnerLinkCalls(app, {
     port: config.get<string>('RUNNER_LINK_INTERNAL_PORT'),
     host: config.get<string>('RUNNER_LINK_INTERNAL_HOST'),
   });
+  if (linkServer) listeners.push(drainable(linkServer));
+  started({ app, listeners });
+}
+
+/**
+ * On SIGTERM (`docker stop`) or SIGINT, the stop common/graceful-stop.ts describes: both listeners stop accepting,
+ * the streams end, what is in flight is answered for up to DRAIN_MS, then Nest's shutdown hooks close the rest. It
+ * exits 0 once stopped and LINGER_MS has passed, and 1 if it has not stopped within STOP_MS. A second signal changes
+ * nothing.
+ */
+function stopOnSignals(ready: Promise<{ app: INestApplication; listeners: DrainableServer[] }>): void {
+  const log = new Logger('Stop');
+  let stopping = false;
+  const stop = async (signal: string) => {
+    if (stopping) return;
+    stopping = true;
+    const began = Date.now();
+    setTimeout(() => {
+      log.error(`${signal}: not stopped after ${STOP_MS} ms; exiting`);
+      process.exit(1);
+    }, STOP_MS).unref();
+    const { app, listeners } = await ready;
+    const inFlight = listeners.reduce((n, l) => n + l.inFlight(), 0);
+    log.log(`${signal}: stopping; no new connections, ${inFlight} request(s) in flight, streams ending`);
+    const drained = Promise.all(listeners.map((l) => l.drain(began + DRAIN_MS)));
+    endStreams();
+    const cut = (await drained).reduce((n, c) => n + c, 0);
+    log.log(
+      `listeners closed after ${Date.now() - began} ms` +
+        (cut > 0 ? `; ${cut} request(s) still unanswered after ${DRAIN_MS} ms were cut` : '; every request answered'),
+    );
+    await app.close();
+    log.log(`stopped in ${Date.now() - began} ms`);
+    // Refusing connections rather than gone, for the callers still sending here (graceful-stop.ts, step 6).
+    await sleep(Math.max(0, began + LINGER_MS - Date.now()));
+    process.exit(0);
+  };
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void stop(signal));
 }
 
 void bootstrap();

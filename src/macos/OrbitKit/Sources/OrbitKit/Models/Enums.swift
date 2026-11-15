@@ -220,6 +220,7 @@ public enum SessionOwnerRequestKind: String, Codable, Sendable {
     case secret = "SECRET"
     case manualStep = "MANUAL_STEP"
     case confirm = "CONFIRM"
+    case wikiCreate = "WIKI_CREATE"
     /// Forward-compatibility floor.
     case unknown = "UNKNOWN"
 
@@ -237,6 +238,7 @@ public enum SessionOwnerRequestKind: String, Codable, Sendable {
         case .secret:     return "Key needed"
         case .manualStep: return "Steps for you"
         case .confirm:    return "Confirm for you"
+        case .wikiCreate: return "Create wiki"
         case .unknown:    return nil
         }
     }

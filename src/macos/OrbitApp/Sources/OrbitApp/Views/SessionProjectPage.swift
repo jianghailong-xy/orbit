@@ -454,6 +454,16 @@ struct SessionProjectPage: View {
         })
     }
 
+    /// One recency section of the member sessions. The section is the row the page's ForEach draws,
+    /// so that closure holds no second ForEach of its own.
+    @ViewBuilder private func projectTimeSection(_ section: ProjectTimelineSection) -> some View {
+        Section {
+            ForEach(section.sessions) { session in sessionRow(session) }
+        } header: {
+            Text(section.title).textCase(nil)
+        }
+    }
+
     var body: some View {
         List(selection: selection) {
             firstCard
@@ -477,11 +487,7 @@ struct SessionProjectPage: View {
                 Section(SessionLandingsCopy.title) { landingsRow(landingsSummary) }
             }
             ForEach(timeSections) { section in
-                Section {
-                    ForEach(section.sessions) { session in sessionRow(session) }
-                } header: {
-                    Text(section.title).textCase(nil)
-                }
+                projectTimeSection(section)
             }
         }
         .listStyle(.plain)
@@ -517,12 +523,14 @@ struct SessionProjectPage: View {
             }
         }
         .toolbar {
+            #if os(iOS)
             if leaveSheet != nil {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { leaveSheet?({}) } label: { Image(systemName: "xmark") }
                         .accessibilityLabel("Close")
                 }
             }
+            #endif
             if rowNavigation == .selection {
                 ToolbarItem(placement: backPlacement) {
                     Button { app.leaveProjectSessions(address.projectID) } label: {
@@ -896,11 +904,13 @@ struct SessionProjectPage: View {
     /// A member: pushed over a phone's page, selected in the iPad's column, and in the sheet the
     /// conversation the sheet was opened over gives its place to it (`openProjectMemberFromSheet`).
     private func openMember(_ session: Session) {
+        #if os(iOS)
         if leaveSheet != nil {
             go { app.openProjectMemberFromSheet(session) }
-        } else {
-            app.openProjectMember(session, push: rowNavigation == .push)
+            return
         }
+        #endif
+        app.openProjectMember(session, push: rowNavigation == .push)
     }
 
     private var openProjectButton: some View {

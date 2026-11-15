@@ -134,7 +134,7 @@ struct CodexPoolPageView: View {
 
     // MARK: blocks
 
-    /// What the pool is — Codex's mark, "Codex pool", SHARED once anybody but its owner can use it — whose
+    /// What the pool is — Codex's mark, "Codex pool", Shared once anybody but its owner can use it — whose
     /// it is and how many of its accounts or keys can run, and the press that puts one in, where the reader
     /// has one.
     private var head: some View {

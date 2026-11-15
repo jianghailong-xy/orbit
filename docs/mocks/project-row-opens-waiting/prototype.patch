@@ -1,0 +1,19 @@
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index 11dfef2cd..cb2e238b8 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -9268,9 +9268,11 @@ export function WorkspaceView({
+                 setMenuOpenId(null);
+                 // A phone opens the coordinator's conversation itself, with no push into the project's
+                 // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
+-                if (isMobile && coordinator) navigateWithPaneSlide('push', () =>
+-                  navigate(sessionPath(coordinator.id), { state: stampFromList() }));
+-                else enterProjectSessions(s.projectId, coordinator?.id);
++                // A row whose second line says a session is waiting on you opens that session.
++                const opens = s.line.tone === 'approval' && s.target.kind === 'session' ? s.target.id : coordinator?.id;
++                if (isMobile && opens) navigateWithPaneSlide('push', () =>
++                  navigate(sessionPath(opens), { state: stampFromList() }));
++                else enterProjectSessions(s.projectId, opens);
+               }}
+               menuOpen={menuOpenId === s.id}
+               onMenuOpenChange={(open) => { setMenuOpenId(open ? s.id : null); if (open) setSwipeOpen(null); }}

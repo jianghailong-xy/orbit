@@ -60,13 +60,16 @@ var defaultServer = "https://orbitd.io"
 var usage = `orbit — register a machine and run coding-agent tasks for an Orbit control plane
 
 Usage:
+  orbit                             In a terminal: talk to a new session in this folder (Orbit terminal client)
+  orbit --engine E [--model M]      The same, on that engine and model
+  orbit --pick                      The same, choosing the engine and model from a list first
   orbit register [options]          Register this machine + install the service (approve in the browser)
   orbit run                         Start the runner loop in the foreground
   orbit unregister [--yes]          Remove this runner: delete it server-side, stop the service, drop local config
   orbit status                      Show this directory's runner and its control-plane status
   orbit doctor                      Check the coding-engine CLIs, sign-in, and service PATH
   orbit engine-update               Update the coding-engine CLIs now (the periodic check, on demand)
-  orbit resume [session-id]         Resume a session in its engine's CLI
+  orbit resume [session-id]         Reopen a session in the Orbit terminal client (--engine-cli: its engine's CLI)
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
   orbit project <command>           Manage an Orbit project's durable context
@@ -83,6 +86,7 @@ Usage:
   orbit login [--with-token]        Act as yourself: approve a personal access token in the browser
   orbit logout [--keep-token]       Revoke that token and forget it
   orbit whoami [--json]             Show who the CLI acts as, and why
+  orbit terminal login|logout       Approve this terminal in the Orbit app (remembered 30 days), or sign it out
   orbit api [-X METHOD] PATH        Call the Orbit REST API as yourself
   orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit host setup --server URL     Set this machine up for runners (root, once per host)
@@ -90,6 +94,12 @@ Usage:
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
 Run 'orbit <command> --help' for command-specific options.
+
+Every command in 'orbit capabilities' also takes --receipt: it prints, in place of its output, the
+receipt the MCP tool of the same operation returns — one JSON document with ok, outcome, the
+entity's id and status, the changed fields, the approval outcome and, on a failure, the error code
+and whether a resend is safe — and exits non-zero exactly when ok is false. --json still prints the
+entity document alone, which is the receipt's entity.
 
 The runner uses each coding engine's local configuration and credentials
 (Claude Code, Codex, Kimi Code, OpenCode, Antigravity). Run 'orbit doctor' for
@@ -105,7 +115,8 @@ Env:
 
 // Per-command help, shown for `orbit <cmd> --help|-h` and `orbit help <cmd>`.
 var cmdHelp = map[string]string{
-	"secret": secretHelp,
+	"secret":   secretHelp,
+	"terminal": terminalHelp,
 	"register": `orbit register — register this machine and install the background service
 
 Usage:
@@ -173,21 +184,26 @@ best-effort sign-in check, and whether the background service's PATH can see it 
 with the exact install/sign-in command for anything that's missing. Exits non-zero
 when no engine is installed.
 `,
-	"resume": `orbit resume — resume a session in this terminal
+	"resume": `orbit resume — reopen a session in this terminal
 
 Usage:
   orbit resume [session-id]
+  orbit resume --engine-cli <session-id>
 
-Resumes the given session in its original engine's CLI and original work directory.
-The session ID is the one shown in the web UI URL (e.g. /sessions/<id>). If omitted,
-lists sessions available on this machine.
+Opens the Orbit terminal client on the given session, whatever engine it runs on: its
+transcript, a composer, approval cards answered with a key, and slash commands. The
+session keeps running on its machine when you leave (Ctrl-D or /exit). The session ID
+is the one shown in the web UI URL (e.g. /sessions/<id>). If omitted, lists sessions
+available on this machine.
 
-The engine is the one the session runs on, which never changes: this machine's own
+--engine-cli resumes the session in its original engine's CLI and original work
+directory instead. The engine is the one the session runs on, which never changes: this machine's own
 record of the run, or for a session that never ran here the engine the control plane
-reports for it. A DeepSeek Harness session is not opened here — Orbit drives Harness
-over ACP, the Harness it installs has no terminal interface, and the session's
-DeepSeek key reaches it only with each run Orbit dispatches — so it is refused,
-saying how to continue it instead.
+reports for it. DeepSeek Harness and Cursor sessions have no engine CLI to open here —
+Orbit drives Harness over ACP, the Harness it installs has no terminal interface, and
+the session's DeepSeek key reaches it only with each run Orbit dispatches — so
+--engine-cli refuses them, saying how to continue instead. Without the flag they open
+in the Orbit terminal client like every other session.
 `,
 	"upgrade": `orbit upgrade — force-reinstall the latest orbit binary
 
@@ -235,7 +251,9 @@ Usage:
 
 Shows the commands available through this binary. --json emits a stable,
 machine-readable document including argument schemas from the built-in Orbit MCP
-server. Session commands appear only inside an orchestration-enabled agent session.
+server. The session, agent and runner commands, and project send and
+ensure-coordinator, appear only inside an agent session whose account has Session
+orchestration on: that one switch grants managing sessions, agents and runners alike.
 `,
 	"hostd": `orbit hostd — serve the machine broker on /run/orbit/host.sock
 
@@ -256,16 +274,8 @@ Options:
                            quiet, and name the socket on stderr. For watching a broker
                            you started by hand.
 `,
-	"mcp": `orbit mcp — run the Task/TaskList MCP server (stdio)
-
-Usage:
-  orbit mcp
-
-Speaks the Model Context Protocol over stdin/stdout so a Claude Code session can
-manage Orbit Tasks. The runner injects this server into each session via --mcp-config;
-it is not meant to be run by hand. It reads the runner credential from config.json and
-the session context (ORBIT_SESSION_ID / ORBIT_AGENT_ID / ORBIT_TASK_ID) from the env.
-`,
+	// "mcp" is not here: its help is built from the runtime and operation tables when it is asked
+	// for (mcpHelp), so that it says what the server is today.
 }
 
 // Command families that print their own per-action help, so `orbit <family> <action> --help` has
@@ -291,6 +301,9 @@ func ownsLeafHelp(cmd string) bool { return leafHelpFamilies[cmd] }
 
 // helpFor returns the help text for a subcommand, or the global usage as a fallback.
 func helpFor(cmd string) string {
+	if cmd == "mcp" {
+		return mcpHelp()
+	}
 	if h, ok := cmdHelp[cmd]; ok {
 		return h
 	}
@@ -321,29 +334,53 @@ func main() {
 		_ = os.Setenv("PATH", runnerEnginePath(home, os.Getenv("PATH")))
 	}
 
-	args := os.Args[1:]
+	if err := runOrbitCLI(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// runOrbitCLI routes one command line and returns the error rather than exiting, so a test can
+// execute exactly the argv `orbit capabilities` advertises. main keeps the exit code and the one
+// place the message is printed; the per-family prefix is part of the returned error so the text on
+// stderr is the one a person has always seen.
+func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
+	// `--receipt` on any catalogued command prints its receipt instead of its output (cli_receipt.go).
+	if rest, asked := takeReceiptFlag(args); asked {
+		return runCLIReceipt(rest, in, out, errW)
+	}
 	cmd := ""
 	if len(args) > 0 {
 		cmd = args[0]
 	}
 	_, bools := parseFlags(args)
 
-	// Top-level help: `orbit`, `orbit help [cmd]`, `orbit --help`, `orbit -h`.
-	if cmd == "" || cmd == "help" || cmd == "--help" || cmd == "-h" {
+	// Bare `orbit` (and `orbit --engine E --model M`, `orbit --pick`): on a terminal, the Orbit TUI on a new
+	// session in the cwd's workspace; anywhere else, the help text, exit 0 (terminal_bare.go).
+	if isBareOrbit(args) {
+		os.Exit(cmdBareOrbit(args, stdioIsTerminal(), os.Stdout, os.Stderr))
+	}
+	// Top-level help: `orbit help [cmd]`, `orbit --help`, `orbit -h`.
+	if cmd == "help" || cmd == "--help" || cmd == "-h" {
 		if len(args) > 1 {
-			fmt.Print(helpFor(args[1]))
-		} else {
-			fmt.Print(usage)
+			_, err := fmt.Fprint(out, helpFor(args[1]))
+			return err
 		}
-		return
+		_, err := fmt.Fprint(out, usage)
+		return err
 	}
 	// Per-subcommand help: `orbit <cmd> --help|-h` prints that command's help
 	// instead of running it.
 	// Nested resource commands own their leaf help (for example
 	// `orbit task create --help`). Other commands keep the flat help behavior.
 	if !ownsLeafHelp(cmd) && wantsHelp(args[1:]) {
-		fmt.Print(helpFor(cmd))
-		return
+		_, err := fmt.Fprint(out, helpFor(cmd))
+		return err
+	}
+	// A session in Plan mode changes nothing until the plan is approved: a command Plan refuses says so before it
+	// files or writes anything, in the words the MCP tool uses (plan_gate.go).
+	if err := cliPlanRefusal(args, sessionPermissionMode); err != nil {
+		return err
 	}
 
 	switch cmd {
@@ -360,114 +397,106 @@ func main() {
 	case "resume":
 		cmdResume(args[1:])
 	case "task":
-		if err := cmdTaskCLI(args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit task:", err)
-			os.Exit(1)
+		if err := cmdTaskCLI(args[1:], in, out); err != nil {
+			return fmt.Errorf("orbit task: %w", err)
 		}
 	case "task-list":
-		if err := cmdTaskListCLI(args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit task-list:", err)
-			os.Exit(1)
+		if err := cmdTaskListCLI(args[1:], in, out); err != nil {
+			return fmt.Errorf("orbit task-list: %w", err)
 		}
 	case "project":
-		if err := cmdProjectCLI(args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit project:", err)
-			os.Exit(1)
+		if err := cmdProjectCLI(args[1:], in, out); err != nil {
+			return fmt.Errorf("orbit project: %w", err)
 		}
 	case "session":
-		if err := cmdSessionCLI(args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit session:", err)
-			os.Exit(1)
+		if err := cmdSessionCLI(args[1:], in, out); err != nil {
+			return fmt.Errorf("orbit session: %w", err)
 		}
 	case "agent":
-		if err := cmdAgentCLI(args[1:], os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit agent:", err)
-			os.Exit(1)
+		if err := cmdAgentCLI(args[1:], out); err != nil {
+			return fmt.Errorf("orbit agent: %w", err)
 		}
 	case "runner":
-		if err := cmdRunnerCLI(args[1:], os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit runner:", err)
-			os.Exit(1)
+		if err := cmdRunnerCLI(args[1:], out); err != nil {
+			return fmt.Errorf("orbit runner: %w", err)
 		}
 	case "provider":
-		if err := cmdProviderCLI(args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit provider:", err)
-			os.Exit(1)
+		if err := cmdProviderCLI(args[1:], in, out); err != nil {
+			return fmt.Errorf("orbit provider: %w", err)
 		}
 	case "notify":
-		if err := cmdNotifyCLI(args[1:], os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit notify:", err)
-			os.Exit(1)
+		if err := cmdNotifyCLI(args[1:], out); err != nil {
+			return fmt.Errorf("orbit notify: %w", err)
 		}
 	case "watch":
-		if err := cmdWatchCLI(args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit watch:", err)
-			os.Exit(1)
+		if err := cmdWatchCLI(args[1:], in, out); err != nil {
+			return fmt.Errorf("orbit watch: %w", err)
 		}
 	case "wiki":
-		if err := cmdWikiCLI(args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit wiki:", err)
-			os.Exit(1)
+		if err := cmdWikiCLI(args[1:], in, out); err != nil {
+			return fmt.Errorf("orbit wiki: %w", err)
 		}
 	case "file":
-		if err := cmdFileCLI(args[1:], os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit file:", err)
-			os.Exit(1)
+		if err := cmdFileCLI(args[1:], out); err != nil {
+			return fmt.Errorf("orbit file: %w", err)
 		}
 	case "token":
-		if err := cmdTokenCLI(args[1:], os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit token:", err)
-			os.Exit(1)
+		if err := cmdTokenCLI(args[1:], out); err != nil {
+			return fmt.Errorf("orbit token: %w", err)
 		}
 	case "login":
-		if err := cmdLoginCLI(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit login:", err)
+		if err := cmdLoginCLI(args[1:], in, out, errW); err != nil {
+			return fmt.Errorf("orbit login: %w", err)
+		}
+	case "terminal":
+		if err := cmdTerminalCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit terminal:", err)
 			os.Exit(1)
 		}
 	case "logout":
-		if err := cmdLogoutCLI(args[1:], os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit logout:", err)
-			os.Exit(1)
+		if err := cmdLogoutCLI(args[1:], out, errW); err != nil {
+			return fmt.Errorf("orbit logout: %w", err)
 		}
 	case "whoami":
-		if err := cmdWhoamiCLI(args[1:], os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit whoami:", err)
-			os.Exit(1)
+		if err := cmdWhoamiCLI(args[1:], out, errW); err != nil {
+			return fmt.Errorf("orbit whoami: %w", err)
 		}
 	case "api":
-		if err := cmdAPICLI(args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit api:", err)
-			os.Exit(1)
+		if err := cmdAPICLI(args[1:], in, out, errW); err != nil {
+			return fmt.Errorf("orbit api: %w", err)
 		}
 	case "capabilities":
-		if err := cmdCapabilitiesCLI(args[1:], os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit capabilities:", err)
-			os.Exit(1)
+		if err := cmdCapabilitiesCLI(args[1:], out); err != nil {
+			return fmt.Errorf("orbit capabilities: %w", err)
 		}
 	case "host":
-		if err := cmdHostCLI(args[1:], os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit host:", err)
-			os.Exit(1)
+		if err := cmdHostCLI(args[1:], out); err != nil {
+			return fmt.Errorf("orbit host: %w", err)
 		}
 	case "hostd":
-		if err := cmdHostd(hostdConfig{}, hostdSystemDefaults(), bools["foreground"], os.Stderr); err != nil {
-			fmt.Fprintln(os.Stderr, "orbit hostd:", err)
-			os.Exit(1)
+		if err := cmdHostd(hostdConfig{}, hostdSystemDefaults(), bools["foreground"], errW); err != nil {
+			return fmt.Errorf("orbit hostd: %w", err)
 		}
 	case "upgrade":
 		cmdUpgrade()
 	case "engine-update":
 		cmdEngineUpdate()
 	case "mcp":
+		// `orbit mcp help` is a person asking, not an engine: the server would sit reading stdin.
+		if len(args) > 1 && args[1] == "help" {
+			_, err := fmt.Fprint(out, helpFor("mcp"))
+			return err
+		}
 		cmdMcp()
 	case "hook":
 		cmdHook(args[1:])
 	case "version", "--version", "-v":
-		fmt.Println(version)
+		fmt.Fprintln(out, version)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n%s", cmd, usage)
-		os.Exit(1)
+		return fmt.Errorf("unknown command: %s\n\n%s", cmd, usage)
 	}
+	return nil
+
 }
 
 // registerCommand is `orbit register` as typed: args is the command and its arguments. Under
@@ -972,19 +1001,88 @@ func cmdStatus() {
 		st = "online"
 	}
 	fmt.Printf("status:  %s (last heartbeat %s)\n", st, ago)
-	if len(me.Agents) > 0 {
-		fmt.Println("agents:")
-		for _, a := range me.Agents {
-			dir := a.WorkDir
-			if dir == "" {
-				dir = "—"
-			}
-			fmt.Printf("  • %s → %s\n", a.Name, dir)
+	printStatusAgents(os.Stdout, me.Agents)
+}
+
+// printStatusAgents lists the runner's workspaces and, under each, what its unattended work starts on
+// as the server's dispatch resolves it — the same answer the task page's "Runs with" shows.
+func printStatusAgents(w io.Writer, agents []RunnerAgent) {
+	if len(agents) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "agents:")
+	for _, a := range agents {
+		dir := a.WorkDir
+		if dir == "" {
+			dir = "—"
+		}
+		fmt.Fprintf(w, "  • %s → %s\n", a.Name, dir)
+		if a.RunsWith != nil {
+			fmt.Fprintf(w, "      runs with: %s\n", runsWithLine(*a.RunsWith))
+		}
+		for _, p := range a.Projects {
+			fmt.Fprintf(w, "      project %q: %s\n", p.Title, runsWithLine(p.RunsWith))
 		}
 	}
 }
 
+// runsWithLine is "engine · provider (where it came from)", and why such a start would be refused.
+func runsWithLine(r RunsWith) string {
+	text := func(v *string) string {
+		if v == nil || *v == "" {
+			return "—"
+		}
+		return *v
+	}
+	from := map[string]string{
+		"TASK_PIN":            "the task's pin",
+		"PROJECT_COORDINATOR": "the project's coordinator session",
+		"WORKSPACE":           "the newest session a person opened here",
+		"DEFAULT":             "the default",
+	}[r.Source]
+	if from == "" {
+		from = r.Source
+	}
+	line := fmt.Sprintf("%s · %s (%s)", text(r.Engine), text(r.Provider), from)
+	if r.Refusal != nil && *r.Refusal != "" {
+		line += " — a start would be refused: " + *r.Refusal
+	}
+	return line
+}
+
+// cmdResume is `orbit resume`. With a session id it opens the Orbit TUI on that session, whatever
+// engine it runs on (docs/terminal-session-design.md D8); `--engine-cli` keeps the engine's own CLI
+// (cmdResumeEngineCLI). With no id it lists this machine's sessions, as it always has.
 func cmdResume(args []string) {
+	engineCLI, rest := resumeArgs(args)
+	if engineCLI || len(rest) == 0 || rest[0] == "" {
+		cmdResumeEngineCLI(rest)
+		return
+	}
+	if err := resumeOpenTUI(publicID(decodeSessionID(rest[0])), os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, "orbit resume:", err)
+		os.Exit(1)
+	}
+}
+
+// resumeOpenTUI is what `orbit resume <id>` opens: a variable so the dispatch tests can see it chosen.
+var resumeOpenTUI = openSessionTUI
+
+// resumeArgs takes `--engine-cli` out of the arguments, wherever it stands.
+func resumeArgs(args []string) (engineCLI bool, rest []string) {
+	for _, a := range args {
+		if a == "--engine-cli" {
+			engineCLI = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	return engineCLI, rest
+}
+
+// cmdResumeEngineCLI is `orbit resume --engine-cli`: the session's own engine CLI in its recorded work
+// directory, the behaviour `orbit resume` had before the TUI.
+func cmdResumeEngineCLI(args []string) {
 	runs := runsDir()
 
 	// No session ID: list sessions available on this machine.
@@ -1007,7 +1105,7 @@ func cmdResume(args []string) {
 				fmt.Printf("  %s\n", id)
 			}
 		}
-		fmt.Println("\nRun:  orbit resume <session-id>")
+		fmt.Println("\nRun:  orbit resume <session-id>  (or orbit resume --engine-cli <session-id> for the engine's own CLI)")
 		return
 	}
 

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>12 completed sessions stay shared</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="share.css">
+<style>
+ .lrow { grid-template-columns: 26px minmax(0, 1fr) 170px 70px 110px 230px; }
+ .lrow.flag { background: #fffaf0; border-color: var(--warning-border); }
+ .banner2 { display:flex; align-items:center; gap:10px; background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 8px; padding: 9px 12px; font-size: 13px; margin: 4px 0 10px; }
+ .banner2 b { font-weight: 600; }
+ .quiet { display:flex; align-items:center; gap:12px; font-size: 13px; color: var(--text-2); padding: 2px 2px 10px; }
+ .quiet b { color: var(--text-1); font-weight: 600; }
+ .lnk2 { color: var(--brand); }
+ .qfilter { font-size: 12.5px; border: 1px solid var(--border); border-radius: 999px; padding: 0 10px !important; height: 24px; align-self: center; color: var(--text-2); }
+ .qfilter.on { border-color: var(--brand); color: var(--brand-strong); background: var(--brand-tint); }
+ .ftabs .qfilter b { background: transparent; padding: 0; }
+ .frame { border: 1px solid #dde0e6; border-radius: 10px; background: #fff; padding: 18px 22px; position: relative; }
+ .side { display:flex; flex-direction:column; gap: 22px; } .side .dlg { width: 360px; }
+ .dlg { border: 1px solid #dde0e6; border-radius: 10px; background: #fff; padding: 14px 16px; font-size: 13px; }
+ .dlg h4 { margin: 0 0 10px; font-size: 14px; }
+ .seg { display:flex; border:1px solid var(--border); border-radius: 6px; overflow:hidden; margin-top: 6px; }
+ .seg span { flex:1; text-align:center; padding: 4px 0; font-size: 12.5px; border-left: 1px solid var(--border); }
+ .seg span:first-child { border-left: 0; background: var(--brand-tint); color: var(--brand-strong); font-weight: 600; }
+ .m-k.rec { background: #e8f7ec; color: var(--success); }
+ .why { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin: 0 0 22px; }
+ .why > div { background:#fff; border:1px solid #dde0e6; border-radius:10px; padding: 12px 14px; font-size: 12.5px; line-height: 1.7; color:#3f4652; }
+ .why h3 { margin: 0 0 4px; font-size: 13.5px; color: var(--text-1); }
+ .why q { color: var(--text-1); font-weight: 600; }
+ table.cmp { width:100%; border-collapse: collapse; font-size: 12.5px; background:#fff; border-radius: 8px; overflow:hidden; }
+ table.cmp th, table.cmp td { border-bottom: 1px solid var(--border-subtle); padding: 7px 10px; text-align:left; vertical-align: top; }
+ table.cmp th { background: #f5f6f8; font-weight: 600; color: var(--text-2); }
+ table.cmp td:first-child { color: var(--text-2); white-space: nowrap; }
+ .bad { color: var(--error); } .good { color: var(--success); }
+ code { font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; background: #eef0f3; padding: 0 4px; border-radius: 3px; }
+</style></head>
+<body class="m"><div class="m-sheet" id="sheet">
+<h1 class="m-h1">12 · 会话做完了，链接照样该开着：Shared links 只当清单，不催你关</h1>
+<p class="m-sub">现在 Active 41 条，横幅点名其中 22 条，理由是「会话完成超过 30 天」。可分享本来就是所有者自己的决定，会话做完不会让这个决定失效。这张图先讲为什么这个条件不对，再给出两种改法，供你选。</p>
+
+<div class="why">
+ <div><h3>① 完成说明内容定了，不说明链接被忘了</h3>完成的会话不再变，访客看到的正是你当时同意公开的内容。会话还 Open、继续往下跑时，链接才会不断冒出新的工具输出。所以按「完成」来报警，等于把风险最小的那批链接当成了风险最大的。</div>
+ <div><h3>② 你已经授过权，不该再问一遍</h3>你说过：<q>「人已经授过的权，不该再问第二遍」</q>。分享时有 <b>Expires</b>（Never / 1 / 7 / 30 days），想限时就在那儿选。你选了 Never，页面过了 30 天又来问，是在推翻你自己的选择。</div>
+ <div><h3>③ 一直亮着的警告，最后谁都不看</h3><code>docs/project-maturity.md:63</code> 写的是 <q>Calm, precise … honest about boundaries</q>。现在一半以上的链接都会被点名，横幅又关不掉，正常使用也天天挂着黄条。「一键关掉这 22 条」还会顺手关掉仍然有人在看的链接（下图 ②）。</div>
+</div>
+
+<div class="m-stage">
+ <div class="m-stage-l"><span class="m-k">今天</span> Settings → Shared links（横幅按「会话完成超过 30 天」点名）</div>
+ <div class="frame"><h1 class="page-title">Shared links</h1>
+<div class="a-hint" style="font-size:13px">Everything you’ve made viewable by link. Anyone who has one of these links can open what it includes — no sign-in.</div>
+<div class="ftabs"><span class="on">Active <b>41</b></span><span>Paused <b>0</b></span><span>Ended <b>1</b></span></div>
+<div class="banner2 m-mark"><span class="m-n">1</span><span>⚠</span><span><b>22 links are for sessions completed more than 30 days ago.</b> They still open for anyone who has them.</span><span class="btn sm" style="margin-left:auto">Turn off these 22</span></div><div class="lrow head"><span></span><span>Shared item</span><span>Includes</span><span>Updates</span><span>Views</span><span></span></div><div class="m-mark" style="display:block"><span class="m-n">2</span><div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Fix the runner reconnect loop</div><div class="sub">Session · Completed Nov 13</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">9 · 18h ago<div class="muted">since Nov 13</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Austin runner offline</div><div class="sub">Session · Open</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">1 · 6d ago<div class="muted">since Nov 8</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">What the cards mean and when they show</div><div class="sub">Session · Completed Nov 14</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">1 · 6d ago<div class="muted">since Nov 7</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow flag"><span class="ico s">S</span><div style="min-width:0"><div class="ti">macOS: stop and start the runner</div><div class="sub">Session · Completed Oct 1</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">9 · 2d ago<div class="muted">since Sep 28</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Loading state after a message is sent</div><div class="sub">Session · Open</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">2 · 35d ago<div class="muted">since Oct 10</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow flag"><span class="ico s">S</span><div style="min-width:0"><div class="ti">Track down a production data issue</div><div class="sub">Session · Completed Oct 2</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Sep 30</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div></div></div>
+</div>
+
+<div class="m-stage">
+ <div class="m-stage-l"><span class="m-k rec">A · 推荐</span> 去掉横幅。页面只当一份清单，要不要限时，分享的时候就定了</div>
+ <div class="side">
+  <div class="frame"><h1 class="page-title">Shared links</h1>
+<div class="a-hint" style="font-size:13px">Everything you’ve made viewable by link. Anyone who has one of these links can open what it includes — no sign-in.</div>
+<div class="ftabs"><span class="on">Active <b>41</b></span><span>Paused <b>0</b></span><span>Ended <b>1</b></span></div>
+<div class="lrow head"><span></span><span>Shared item</span><span>Includes</span><span>Updates</span><span>Views</span><span></span></div><div class="m-mark" style="display:block"><span class="m-n">4</span><div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Fix the runner reconnect loop</div><div class="sub">Session · Completed Nov 13</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">9 · 18h ago<div class="muted">since Nov 13</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Austin runner offline</div><div class="sub">Session · Open</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">1 · 6d ago<div class="muted">since Nov 8</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">What the cards mean and when they show</div><div class="sub">Session · Completed Nov 14</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">1 · 6d ago<div class="muted">since Nov 7</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">macOS: stop and start the runner</div><div class="sub">Session · Completed Oct 1</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">9 · 2d ago<div class="muted">since Sep 28</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Loading state after a message is sent</div><div class="sub">Session · Open</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">2 · 35d ago<div class="muted">since Oct 10</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Track down a production data issue</div><div class="sub">Session · Completed Oct 2</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Sep 30</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div></div></div>
+  <div class="dlg m-mark"><span class="m-n">5</span><h4>Share… 对话框（已有，不改）</h4>
+   <div class="a-hint">Expires</div>
+   <div class="seg"><span>Never</span><span>1 day</span><span>7 days</span><span>30 days</span></div>
+   <div class="a-hint" style="margin-top:12px">想让链接自己失效，就在这儿选。到期后它会出现在 Ended 里，那里有 Share again。</div>
+  </div>
+ </div>
+</div>
+
+<div class="m-stage">
+ <div class="m-stage-l"><span class="m-k">B · 备选</span> 如果还想留个整理的入口：按「30 天没人打开」筛选，不用警告色，不放在页面顶上</div>
+ <div class="frame"><h1 class="page-title">Shared links</h1>
+<div class="a-hint" style="font-size:13px">Everything you’ve made viewable by link. Anyone who has one of these links can open what it includes — no sign-in.</div>
+<div class="ftabs"><span class="on">Active <b>41</b></span><span>Paused <b>0</b></span><span>Ended <b>1</b></span><span class="qfilter on m-mark" style="margin-left:auto"><span class="m-n">6</span>Not opened in 30 days <b>7</b></span></div>
+<div class="quiet"><span><b>7 links</b> haven’t been opened in 30 days.</span><span class="lnk2">Show all links</span><span class="btn sm" style="margin-left:auto">Turn off these 7…</span></div><div class="lrow head"><span></span><span>Shared item</span><span>Includes</span><span>Updates</span><span>Views</span><span></span></div><div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Loading state after a message is sent</div><div class="sub">Session · Open</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">2 · 35d ago<div class="muted">since Oct 10</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div>
+<div class="lrow "><span class="ico s">S</span><div style="min-width:0"><div class="ti">Track down a production data issue</div><div class="sub">Session · Completed Oct 2</div></div>
+<div><span class="chipx">Messages</span><span class="chipx">Tool output</span></div><div class="tiny">Live</div><div class="tiny">—<div class="muted">since Sep 30</div></div>
+<div class="acts2"><span class="btn sm"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy</span><span class="btn sm">Settings</span><span class="btn sm text danger">Turn off</span></div></div></div>
+ <p class="m-cap">示意：筛选后只画了 7 条里的 2 条。</p>
+</div>
+
+<div class="m-stage">
+ <div class="m-stage-l"><span class="m-k">规则对比</span></div>
+ <table class="cmp">
+  <tr><th></th><th>今天</th><th>A · 去掉</th><th>B · 30 天没人打开</th></tr>
+  <tr><td>按什么挑</td><td class="bad">会话完成超过 30 天（只看会话）</td><td>不挑</td><td>开着的链接里，最近一次打开（从没打开过就看创建时间）早于 30 天前；会话、任务、项目、wiki 都算</td></tr>
+  <tr><td>长什么样</td><td class="bad">琥珀色警告条，关不掉</td><td>—</td><td>tab 行右边一个普通筛选胶囊，带数字；不点它，列表不变</td></tr>
+  <tr><td>批量关闭</td><td class="bad">在 Active 页顶上一键关，会关掉仍有人在看的链接</td><td>只能逐条 Turn off</td><td>只在筛选后的视图里出现，带确认；里面全是没人打开的链接</td></tr>
+  <tr><td>Open 的会话</td><td>从不提醒（其实它还在往外冒新内容）</td><td>不提醒：Live 是你分享时就选好的</td><td>按有没有人看算，不看会话状态</td></tr>
+  <tr><td>要不要新数据</td><td>—</td><td>不要</td><td>不要：<code>share_link.last_viewed_at</code>、<code>created_at</code> 已经有了，列表也已经返回</td></tr>
+ </table>
+</div>
+
+<ul class="m-notes">
+ <li><span class="m-n">1</span><span><b>点名的条件不对。</b>只要会话完成超过 30 天，链接就被算进来，你自己选的 Never、最近有没有人打开，都不看。</span></li>
+ <li><span class="m-n">2</span><span><b>会误伤。</b>「macOS: stop and start the runner」完成于 Oct 1，两天前还有人打开。按一下「Turn off these 22」，它就跟着关了。手里有链接的人打开会看到 404，你这边也不会收到任何提示。「Austin runner offline」还开着、还在继续往外冒内容，横幅却不管它。</span></li>
+ <li><span class="m-n">4</span><span><b>A：行内信息已经够用。</b>每行都写着状态（Completed Nov 13 / Open）、打开次数、最近一次是什么时候、从哪天开始分享。要不要关，所有者看这一行自己就能判断，页面不用替他下结论。</span></li>
+ <li><span class="m-n">5</span><span><b>A：限时放在分享的那一刻。</b>Expires 已经有了。这样所有者只需要表态一次，之后不会再被问。</span></li>
+ <li><span class="m-n">6</span><span><b>B：拿「没人在用」当信号，不拿「做完了」当信号。</b>它是一个默认关着的筛选，不是提醒。30 天的阈值可以再调。</span></li>
+ <li><span class="m-n">·</span><span><b>改到的文件（A）。</b><code>src/web/src/pages/SharedLinksPage.tsx</code> 去掉横幅；<code>src/web/src/lib/shareLinks.ts</code> 删掉 <code>staleSessionLinks</code>；<code>SharedLinksPage.test.tsx</code> 去掉两条横幅用例，加一条「完成很久的会话链接不会被点名」；<code>index.css</code> 删掉 <code>.shared-links-banner*</code>；<code>docs/share-links-design.md</code> 删掉 §8「提示条」，§5 的批量关闭举例改掉。批量关闭接口 <code>POST /share-links/turn-off</code> 留着。iOS / macOS / Android 没有这条横幅，不用改。</span></li>
+ <li><span class="m-n">?</span><span><b>待你定：</b>A 还是 B？我推荐 A。B 是在 A 的基础上再加一个筛选，什么时候真的需要清理，再加也来得及。</span></li>
+</ul>
+</div></body></html>

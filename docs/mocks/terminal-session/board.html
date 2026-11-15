@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>在终端里直接敲 orbit 开会话 · 设计板（已定）</title>
+<style>
+  body { margin: 0; background: #f4f4f6; font: 15px/1.55 "Inter", "Noto Sans SC", "WenQuanYi Zen Hei", sans-serif; color: #1d1d1f; }
+  .b-part { width: 1400px; margin: 0 auto; padding: 36px 44px 40px; box-sizing: border-box; background: #fff; border-bottom: 1px solid #e3e3e8; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 0 0 14px; }
+  h3 { font-size: 16px; margin: 0 0 8px; }
+  .b-sub { color: #6e6e73; margin: 0 0 22px; }
+  .b-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .b-cols-w { display: grid; grid-template-columns: 1.35fr 1fr; gap: 28px; }
+  .b-cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 22px; }
+  .b-term { background: #1e1e22; color: #e6e6e6; border-radius: 10px; font: 13px/1.55 "DejaVu Sans Mono", "WenQuanYi Zen Hei Mono", monospace; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.18); }
+  .b-term .bar { background: #34343a; padding: 6px 12px; color: #a1a1a6; font-size: 12px; }
+  .b-term .bar i { display: inline-block; width: 10px; height: 10px; border-radius: 5px; margin-right: 5px; vertical-align: -1px; }
+  .b-term pre { margin: 0; padding: 12px 14px; white-space: pre-wrap; font: inherit; }
+  .p { color: #7ee787; } .d { color: #8b8b93; } .y { color: #f2cc60; } .c { color: #79c0ff; } .r { color: #ff7b72; } .bd { font-weight: 700; color: #fff; }
+  .t-card { display: block; border: 1px solid #f2cc60; border-radius: 6px; padding: 4px 12px; margin: 4px 0; }
+  .t-in { display: block; border: 1px solid #5a5a63; border-radius: 6px; padding: 3px 12px; margin: 4px 0 0; }
+  .b-ui { border: 1px solid #d1d1d6; border-radius: 12px; background: #fff; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.08); font-size: 14px; }
+  .b-ui .hd { padding: 9px 14px; border-bottom: 1px solid #e5e5ea; font-weight: 600; }
+  .b-sheet { margin: 14px; border: 1px solid #d1d1d6; border-radius: 14px; padding: 14px 16px; background: #fafafc; }
+  .b-sheet .t { font-weight: 600; margin-bottom: 4px; }
+  .b-sheet .s { color: #6e6e73; font-size: 13px; margin-bottom: 12px; }
+  .b-btns { display: flex; gap: 10px; }
+  .b-btn { flex: 1; text-align: center; padding: 7px 0; border-radius: 10px; background: #e9e9ee; color: #0a64d6; font-weight: 500; }
+  .b-btn.pri { background: #0a84ff; color: #fff; }
+  .b-n { display: inline-block; min-width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 11px; background: #ff3b30; color: #fff; font-size: 13px; font-weight: 700; margin-right: 6px; font-family: "Inter", sans-serif; }
+  .b-notes { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 28px; font-size: 14px; }
+  .b-notes p { margin: 0; }
+  .b-mono { font-family: "DejaVu Sans Mono", monospace; font-size: 12.5px; }
+  .b-lane { display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr 40px 1fr; align-items: center; margin: 8px 0 6px; }
+  .b-node { border: 1px solid #d1d1d6; border-radius: 10px; padding: 10px 12px; font-size: 14px; background: #fafafc; min-height: 92px; }
+  .b-node.new { border: 2px dashed #34a853; background: #f1fbf3; }
+  .b-node.chg { border: 2px dashed #ff9f0a; background: #fff8ec; }
+  .b-node b { display: block; margin-bottom: 4px; }
+  .b-ar { text-align: center; color: #8e8e93; font-size: 20px; }
+  .b-legend span { display: inline-block; margin-right: 18px; font-size: 13px; }
+  .b-legend i { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid #e0e0e5; padding: 8px 10px; vertical-align: top; text-align: left; }
+  th { background: #f6f6f8; }
+  td.rec { background: #f1fbf3; }
+  td.done { color: #8e8e93; }
+  .b-tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 8px; background: #34a853; color: #fff; margin-left: 6px; }
+  .b-tag.g { background: #8e8e93; }
+  .b-warn { border-left: 4px solid #ff9f0a; background: #fff8ec; padding: 10px 14px; border-radius: 6px; margin-top: 16px; font-size: 14px; }
+  ol.b-steps { margin: 0; padding-left: 22px; } ol.b-steps li { margin: 7px 0; }
+  .g6 { color: #6e6e73; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>在终端里直接敲 <span class="b-mono" style="font-size:24px">orbit</span> 开会话 · 已定</h1>
+  <p class="b-sub">已拍板：D1 = B（Orbit 自己的终端客户端）· 审批卡在终端里直接批 · D2′ / D8 / D9 按建议 · D7 = 记住终端 30 天。终端里的文字是产品文案，用英文。</p>
+  <div class="b-cols-w">
+    <div>
+      <h3>② 建议：终端就是又一个 Orbit 客户端</h3>
+      <div class="b-term"><div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>~/code/shop-api</div><pre><span class="p">~/code/shop-api $</span> orbit
+<span class="c">◆ Orbit</span> <span class="d">shop-api · dev-laptop · Claude Code · Opus 5.5 · auto</span>      <span class="b-n">1</span>
+
+<span class="bd">› add rate limiting to the /login route</span>                    <span class="b-n">2</span>
+
+I'll look at the login handler first.
+<span class="d">▸ Read src/routes/login.ts</span>
+<span class="d">▸ Edit src/routes/login.ts</span>  <span class="p">+12</span> <span class="r">−1</span>
+<span class="d">  │</span> <span class="p">+ import { rateLimit } from '../lib/rate-limit';</span>
+<span class="d">  │</span> <span class="p">+ router.post('/login', rateLimit({ max: 5 }), …</span>
+
+<span class="bd">› also add a test</span>  <span class="d">· from iPhone</span>                             <span class="b-n">3</span>
+
+<span class="t-card"><span class="y">Approval</span>  Run a command                                       <span class="b-n">4</span>
+<span class="bd">npm test -- login</span>
+<span class="c">[y]</span> Allow once   <span class="c">[a]</span> Always allow npm test   <span class="c">[n]</span> Deny</span><span class="t-in"><span class="d">›</span> <span class="d">█  Message…</span></span><span class="d">  esc interrupt · / commands · ctrl-d leave (session keeps running)</span>    <span class="b-n">5</span></pre></div>
+    </div>
+    <div>
+      <h3>① 今天</h3>
+      <div class="b-term"><pre><span class="p">~/code/shop-api $</span> orbit
+orbit — register a machine and run coding-agent
+tasks for an Orbit control plane
+
+Usage:
+  orbit register [options]  …
+  …（还有 30 行帮助）</pre></div>
+      <div class="b-notes" style="grid-template-columns:1fr">
+        <p><span class="b-n">1</span>一行灰色状态：workspace · 机器 · 引擎 · 模型 · 权限模式。会话跑在本机 runner 上，<b>任何引擎都行</b>（含 DeepSeek Harness、Cursor），因为终端本身不跑引擎。</p>
+        <p><span class="b-n">2</span>转录内容来自和网页同一条事件流（SSE），工具调用默认折叠，改动显示 diff。</p>
+        <p><span class="b-n">3</span>手机和终端可以同时发消息，和两个 App 窗口一样；不是本终端发的消息，旁边灰字标出来源。</p>
+        <p><span class="b-n">4</span>审批卡在终端里按键就批。凭据怎么防同机 agent 冒用，见 ④。</p>
+        <p><span class="b-n">5</span>Esc 打断当前这一轮；Ctrl-D 离开终端，<b>会话继续在 runner 上跑</b>（D9）。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>③ 这台机器第一次敲 orbit：手机上点一下，记住这个终端 30 天（D7）</h2>
+  <div class="b-cols">
+    <div>
+      <div class="b-term"><pre><span class="p">~/code/shop-api $</span> orbit
+<span class="c">◆ Orbit</span> Approve this terminal in the Orbit app on your phone.   <span class="b-n">6</span>
+  Terminal on dev-laptop · code 7KQ-4MZ
+  <span class="d">Waiting… (ctrl-c to cancel)</span></pre></div>
+      <div style="height:16px"></div>
+      <div class="b-term"><pre><span class="p">~/scratch/demo $</span> orbit
+<span class="c">◆ Orbit</span> ~/scratch/demo is not in a workspace on dev-laptop.   <span class="b-n">8</span>
+  Add it as a workspace? [Y/n] <span class="d">█</span></pre></div>
+    </div>
+    <div class="b-ui">
+      <div class="hd">Orbit</div>
+      <div class="b-sheet">
+        <div class="t">Approve a terminal?</div>
+        <div class="s">Terminal on dev-laptop · code 7KQ-4MZ<br>It can start sessions in your workspaces on this machine and answer their approval cards for 30 days. You can revoke it in Settings → Terminals.</div>
+        <div class="b-btns"><div class="b-btn">Deny</div><div class="b-btn pri">Approve</div></div>
+      </div>
+      <div class="b-notes" style="grid-template-columns:1fr; margin:6px 16px 14px">
+        <p><span class="b-n">7</span>审批卡复用 App 现有的确认卡样式；校验码和终端里显示的对得上才点 Approve。这是 owner 渠道的操作，令牌和 runner 都发不了。</p>
+      </div>
+    </div>
+  </div>
+  <div class="b-notes">
+    <p><span class="b-n">6</span>每台机器第一次点一下，之后 30 天不用再点（D7 = B）。凭据存系统钥匙串；没有钥匙串的 Linux 存成 <span class="b-mono">0600</span> 文件。</p>
+    <p><span class="b-n">8</span>当前目录不在 workspace 里：回车就建。现有的 <span class="b-mono">POST /sessions</span> 已经支持 <span class="b-mono">newWorkspace: { workDir }</span>，不用新路由。</p>
+  </div>
+  <h2 style="margin-top:28px">离开与重新打开</h2>
+  <div class="b-cols3">
+    <div><div class="b-term"><pre><span class="d">›</span> <span class="d">(ctrl-d)</span>
+<span class="c">◆ Orbit</span> Left the session; it keeps
+  running on dev-laptop.
+  Reopen: orbit resume 3xK9pQ2mW
+<span class="p">~/code/shop-api $</span> <span class="d">█</span></pre></div></div>
+    <div><div class="b-term"><pre><span class="p">~ $</span> orbit resume 3xK9pQ2mW
+<span class="c">◆ Orbit</span> <span class="d">shop-api · dev-laptop · Codex</span>
+<span class="d">  (transcript so far…)</span>
+<span class="t-in"><span class="d">› █</span></span></pre></div><p class="g6" style="font-size:13px">D8：<span class="b-mono">orbit resume</span> 改成打开这个终端客户端，所有引擎都能开；原来直接开引擎 CLI 的行为改为 <span class="b-mono">--engine-cli</span>。</p></div>
+    <div><div class="b-term"><pre><span class="p">~/code/shop-api $</span> orbit
+<span class="r">✗</span> No runner is registered on this
+  machine, so a session cannot run in
+  this folder. Run `orbit register`
+  first.</pre></div><p class="g6" style="font-size:13px">D4 定了"改动落在当前目录"，所以必须用本机 runner。</p></div>
+  </div>
+</section>
+
+<section class="b-part" id="part-3">
+  <h2>④ 架构：终端走网页同一套路由；新增的是终端凭据</h2>
+  <div class="b-legend"><span><i style="border:2px dashed #34a853;background:#f1fbf3"></i>新增</span><span><i style="border:2px dashed #ff9f0a;background:#fff8ec"></i>改动</span><span><i style="background:#fafafc;border:1px solid #d1d1d6"></i>现有，不动</span></div>
+  <div class="b-lane" style="margin-top:14px">
+    <div class="b-node new"><b>orbit TUI（Go，在 orbit 二进制里）</b>转录、输入框、审批按键、Esc 打断。新依赖 bubbletea。</div>
+    <div class="b-ar">⇄</div>
+    <div class="b-node chg"><b>apiserver 用户路由</b><span class="b-mono">POST /sessions</span> · <span class="b-mono">/events</span>(SSE) · <span class="b-mono">/turns</span> · <span class="b-mono">/interrupt</span> · <span class="b-mono">/approvals/:id/decision</span>。改动：认 TERMINAL 凭据；建会话可单次关掉 worktree。</div>
+    <div class="b-ar">⇄</div>
+    <div class="b-node"><b>本机 runner</b>照常领会话、跑引擎，和从 App 建的会话完全一样。</div>
+    <div class="b-ar">⇄</div>
+    <div class="b-node"><b>任意引擎</b>Claude Code · Codex · Kimi · OpenCode · DeepSeek Harness · Cursor</div>
+  </div>
+  <p class="g6" style="font-size:14px;margin:6px 0 18px">手机 / 网页连的是同一个 apiserver、同一个会话 —— 不需要"终端占用"，所以第 1 轮的 D6 不再需要。</p>
+  <h3>终端凭据（credential_kind = TERMINAL）：在终端里批审批，权限收窄到这台机器</h3>
+  <table>
+    <tr><th style="width:42%">限制</th><th>防的是什么</th></tr>
+    <tr><td>只能由 owner 在 App 里点 Approve 签发（owner 渠道），令牌和 runner 都发不了</td><td>agent 给自己签一个</td></tr>
+    <tr><td>只绑定这台机器（它的 runner）和这台机器上的会话，别处的会话一律拒绝</td><td>凭据被拷走后拿去批别处的会话</td></tr>
+    <tr><td>存系统钥匙串（没有钥匙串时存 <span class="b-mono">0600</span> 文件），不进环境变量</td><td>从 <span class="b-mono">env</span> 或公开可读的文件里读到</td></tr>
+    <tr><td>30 天过期；App 设置 → Terminals 里列出来，可以撤销</td><td>泄露了也没人发现、一直能用</td></tr>
+    <tr><td>只放开：建 / 开会话、发消息、打断、读事件、批审批卡。证据裁决、验收标准、启动 / 完成项目等仍然拒绝</td><td>终端权限扩大成 owner 的全部权限</td></tr>
+        <tr><td>每次回答都记 <span class="b-mono">credential_kind = TERMINAL</span> + 机器名</td><td>事后查不到是谁批的</td></tr>
+  </table>
+  <div class="b-warn">
+    <b>你接受的风险（D7 = B）：</b>和终端同一个系统用户的 agent，能读到存下来的凭据，直接调用审批路由批准它自己在这台机器上的请求。activity 里看得到，也可以撤销。runner 用独立用户安装（hostd）时，agent 碰不到你的钥匙串和家目录。<br>
+    <span class="b-mono">human-only-authority.md</span> 加一行 TERMINAL：<b>只</b>放开审批卡，证据裁决、验收标准、启动 / 完成项目等仍然拒绝。
+  </div>
+</section>
+
+<section class="b-part" id="part-4">
+  <h2>决定汇总（2026-11-12）</h2>
+  <table>
+    <tr><th style="width:52px"></th><th style="width:240px">问题</th><th>决定</th></tr>
+    <tr><td>D1</td><td>终端里跑什么</td><td>Orbit 自己的终端客户端，走 REST API（方案 B）</td></tr>
+    <tr><td>D2′</td><td>终端用什么凭据</td><td>全部用终端凭据；不新做 runner 路由</td></tr>
+    <tr><td>D3</td><td>目录不在 workspace 里</td><td>问 [Y/n] 后新建</td></tr>
+    <tr><td>D4</td><td>改动落在哪里</td><td>当前目录本身，不建 worktree</td></tr>
+    <tr><td>D5</td><td>命令名</td><td>在 TTY 里只敲 <span class="b-mono">orbit</span></td></tr>
+    <tr><td>D6</td><td>终端开着时手机发消息</td><td>作废：手机和终端都能直接发</td></tr>
+    <tr><td>审批</td><td>审批卡在哪里批</td><td>终端里直接批（TERMINAL 凭据）</td></tr>
+    <tr><td>D7</td><td>终端授权多久</td><td>记住 30 天，存系统钥匙串，只有第一次要点</td></tr>
+    <tr><td>D8</td><td><span class="b-mono">orbit resume &lt;id&gt;</span></td><td>改成打开终端客户端；原行为改为 <span class="b-mono">--engine-cli</span></td></tr>
+    <tr><td>D9</td><td>一轮没跑完就离开</td><td>会话继续跑</td></tr>
+  </table>
+  <h2 style="margin-top:28px">落地（按代价排）</h2>
+  <ol class="b-steps">
+    <li><b>终端凭据</b>：复用 <span class="b-mono">pat-device-login</span> 的设备登录流程；App 里显示带机器名和校验码的授权卡；钥匙串存储；设置 → Terminals 可撤销；TERMINAL 凭据只放开会话、发消息、打断、事件流和审批这几类操作；记录 activity；<span class="b-mono">human-only-authority.md</span> 加一行。</li>
+    <li><b>TUI v1</b>：建会话或打开已有会话；转录（正文、折叠的工具调用、diff）；输入框；Esc 打断；审批卡 y / a / n。</li>
+    <li><b>按目录找 workspace</b>：在本机 runner 上查；不在时问 [Y/n]，走 <span class="b-mono">newWorkspace</span> 新建；<span class="b-mono">POST /sessions</span> 加一个单次关掉 worktree 的字段。</li>
+    <li><b><span class="b-mono">orbit resume</span></b> 改成打开 TUI（D8）。</li>
+    <li><b>TUI v2</b>：斜杠命令、附件（粘贴文件路径）、插话（steer）的送达状态、引擎 / 模型选择。</li>
+  </ol>
+</section>
+
+</body>
+</html>

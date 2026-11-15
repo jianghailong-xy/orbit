@@ -141,6 +141,7 @@ export interface Tenant {
     agentId: string;
     workspaceId: string;
     attachmentId: string;
+    storedFileId: string;
     projectId: string;
     providerId: string;
     poolId: string;
@@ -273,6 +274,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /attachments/:id': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
   'PUT /attachments/:id/pin': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
   'DELETE /attachments/:id/pin': { request: (of) => ({ params: { id: of.spare.attachmentId } }) },
+  'GET /attachments/usage/projects/:id/files': { request: (of) => ({ params: { id: of.projectId } }) },
+  'GET /attachments/usage/tasks/:id/files': { request: (of) => ({ params: { id: of.taskId } }) },
+  'DELETE /attachments/:id/everywhere': { request: (of) => ({ params: { id: of.spare.storedFileId } }) },
 
   // ── projects ─────────────────────────────────────────────────────────────────────────────────
   'GET /projects/:id': { request: (of) => ({ params: { id: of.projectId } }) },
@@ -446,6 +450,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // The account's own key is no Cursor key: it is answered that, which no key of anybody else's is.
   'POST /providers/mine/:id/key-check': { request: (of) => ({ params: { id: of.providerId } }) },
   'PATCH /providers/mine/:id': { request: (of) => ({ params: { id: of.providerId }, body: { label: 'renamed by the census' } }) },
+  'PATCH /providers/mine/:id/model-tier': {
+    request: (of) => ({ params: { id: of.providerId }, body: { model: 'tiered-by-the-census', tier: 'M' } }),
+  },
   'DELETE /providers/mine/:id': { request: (of) => ({ params: { id: of.spare.providerId } }) },
   'GET /providers/pools/:id': { request: (of) => ({ params: { id: of.poolId } }) },
   'DELETE /providers/pools/:id': { request: (of) => ({ params: { id: of.spare.poolId } }) },
@@ -504,6 +511,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /runners/:id': { request: (of) => ({ params: { id: of.runnerId } }) },
   'PATCH /runners/:id': { request: (of) => ({ params: { id: of.runnerId }, body: { displayName: 'renamed by the census' } }) },
   'DELETE /runners/:id': { request: (of) => ({ params: { id: of.spare.runnerId } }) },
+  // A machine's CPU, memory and disk: A's runner is not B's to read.
+  'GET /runners/:id/resources': { request: (of) => ({ params: { id: of.runnerId } }) },
   // What a machine's finished sessions left behind holding uncommitted work. A's runner is not
   // B's to read, and one of A's sessions is not a checkout B may ask the diff of.
   'GET /runners/:id/abandoned-checkouts': { request: (of) => ({ params: { id: of.runnerId } }) },
@@ -518,6 +527,12 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
   'POST /runners/:id/accounts/:engine/default/restore': {
+    request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
+  },
+  'POST /runners/:id/attention/:kind/fix': {
+    request: (of) => ({ params: { id: of.runnerId, kind: 'installFailed' }, body: { engine: 'codex' } }),
+  },
+  'POST /runners/:id/engines/:engine/update-warning/dismiss': {
     request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
   },
   'PATCH /runners/:id/accounts/:engine/:account': {
@@ -591,6 +606,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId }, body: turn('turn') }) },
   'POST /sessions/:id/turns/current-work-routing': { request: (of) => ({ params: { id: of.sessionId }, body: turn('routed') }) },
   'GET /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // A session's SubAgent runs (docs/subagent-design.md §6.4): B on A's session is 404 (SessionsService.listSubagentRuns).
+  'GET /sessions/:id/subagents': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/turns/:turnId': {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
@@ -607,6 +624,8 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /sessions/:id/guests/:userId': { request: (of) => ({ params: { id: of.sessionId, userId: of.spare.guestUserId } }) },
   'PATCH /sessions/:id/config': { request: (of) => ({ params: { id: of.sessionId }, body: { effort: 'low' } }) },
   'PATCH /sessions/:id/account': { request: (of) => ({ params: { id: of.sessionId }, body: { account: 'automatic' } }) },
+  'PATCH /sessions/:id/settings': { request: (of) => ({ params: { id: of.sessionId }, body: { muted: true } }) },
+  'POST /sessions/:id/restart': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/interrupt': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
   'POST /sessions/:id/end': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/merge': { request: (of) => ({ params: { id: of.sessionId }, body: {} }) },
@@ -847,6 +866,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).
+  'GET /attachments/usage/weeks/:week/files':
+    'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
   // ── main checkout (0534) ──
   'GET /workspaces/:id/main-checkout':
     'the workspace is read by (id, the caller, not deleted) before anything else, so another account\'s id answers 404 and nothing is queued (workspaces/main-checkout.service.ts:535); main-checkout.pg.spec.ts "actions are the owner\'s" sends it',
@@ -879,6 +901,12 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   'POST /projects/:id/criteria/:criterionId/confirmations': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); project-criterion-confirmation.spec.ts reads the door',
   'POST /projects/:id/criteria/:criterionId/confirmations/withdraw': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244), and the UPDATE is keyed by that definition id',
   'POST /projects/:id/criteria/:criterionId/checks': 'the criterion is read by (id, the project, the caller as the project\'s owner) before anything is read or written, so another account\'s project or criterion answers 404 (projects/project-criterion-confirmation.service.ts:244); the check task is then filed through TasksService.create under the same owner',
+  'POST /terminals/requests/:id/approve':
+    'the sign-in is read by (id, the caller) and nothing else, 404 for another account\'s id (terminals/terminal-login.service.ts:236), and the write is a compare-and-set on (id, the caller, PENDING) (terminals/terminal-login.service.ts:136); terminal-credential.pg.spec.ts (b) sends another account\'s',
+  'POST /terminals/requests/:id/deny':
+    'the same read and compare-and-set as approve (terminals/terminal-login.service.ts:236, :136); terminal-credential.pg.spec.ts (b) sends another account\'s',
+  'DELETE /terminals/:id':
+    'written by (id, the caller, not revoked) and read back by (id, the caller), 404 when that finds nothing (terminals/terminal-login.service.ts:162); terminal-credential.pg.spec.ts (e) sends another account\'s',
   'GET /owner-requests/:id':
     'the request is read by (id, the caller) and nothing else, so another account\'s id answers 404 (owner-requests/owner-requests.service.ts:193); owner-requests.pg.spec.ts (f) sends it',
   'POST /owner-requests/:id/done':
@@ -893,6 +921,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
     'written by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:404); owner-secrets.pg.spec.ts (h) sends another account\'s',
   'DELETE /account-secrets/:id':
     'deleted by (id, the caller) only, and 404 when that matched nothing (owner-requests/owner-secrets.service.ts:412); owner-secrets.pg.spec.ts (h) sends another account\'s',
+  'POST /owner-requests/:id/create-wiki':
+    'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:306); the wiki is made under the caller\'s account through wiki.createSpace from that row\'s repository and workspace, never from the body, and the card is settled by a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:521)',
   'POST /owner-requests/:id/decline':
     'read by (id, the caller) first, 404 for another account\'s id (owner-requests/owner-requests.service.ts:193), and the write is a compare-and-set on (id, the caller, PENDING) (owner-requests/owner-requests.service.ts:270)',
   'POST /admin/managed-runners/:id/volume-switch':

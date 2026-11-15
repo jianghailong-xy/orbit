@@ -58,6 +58,11 @@ type HeartbeatRequest struct {
 	// older runners omit both fields and retain the legacy heartbeat behavior.
 	LeaseOwner           string   `json:"leaseOwner,omitempty"`
 	SupervisedSessionIDs []string `json:"supervisedSessionIds,omitempty"`
+	// BackgroundJobSessionIDs are the sessions that occupy a slot of IdleCapacity's count only
+	// through runner-hosted background jobs of their own (sessionPool.admissionOccupancy): no turn
+	// runs, yet the runner takes no work in their place. The control plane counts them as running.
+	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
+	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its
@@ -103,6 +108,9 @@ type HeartbeatRequest struct {
 	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
 	// NULL means "not reported", and a non-root runner has to be able to say so.
 	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
+	// Resources is the machine's CPU, memory and disk now (machine_resources.go), sent on every beat
+	// by a runner that declares machine-resources/v1.
+	Resources *MachineResources `json:"resources,omitempty"`
 	// SelfUpdate is where this runner's updates of itself stand (selfUpdateReport). Sent on every
 	// beat once the startup update has looked, so the control plane can tell a runner too old to
 	// report it — which omits it — from one that reports.
@@ -519,6 +527,11 @@ type HeartbeatResponse struct {
 	// response until the control plane records a check made at or after it. Nil on older control
 	// planes and whenever nobody is asking.
 	RegionCheckRequest *ClaudeRegionCheckRequest `json:"regionCheckRequest,omitempty"`
+	// Remote SubAgent runs this runner is the target of (docs/subagent-design.md §10.2, §10.3): the ones to claim,
+	// and the ones to stop because their parent session stopped them or ended (subagent_remote.go). Absent when
+	// there are none, and from older control planes.
+	RemoteSubagentRuns []string `json:"remoteSubagentRuns,omitempty"`
+	StopSubagentRunIDs []string `json:"stopSubagentRunIds,omitempty"`
 	// The snapshots this runner's open forked tasks start from (docs/task-fork-from-session-design.md
 	// §2.6): the keep-alive refs whose snapshot is not listed are this runner's to delete (forkRefGC). A
 	// POINTER because only a present list states anything: absent (an older control plane, a quiet link
@@ -1315,6 +1328,26 @@ type RunnerAgent struct {
 	Provider string `json:"provider,omitempty"`
 	AgentKey string `json:"agentKey,omitempty"`
 	WorkDir  string `json:"workDir,omitempty"`
+	// What the workspace's unattended work starts on, as dispatch resolves it (apiserver
+	// SessionsService.taskRunsWith): RunsWith for a task outside any project, Projects for an unpinned
+	// task of each open project with open work here. Absent from an older apiserver.
+	RunsWith *RunsWith         `json:"runsWith,omitempty"`
+	Projects []RunsWithProject `json:"projects,omitempty"`
+}
+
+// RunsWith is the apiserver's TaskRunsWith (workspaces/start-anchor.ts).
+type RunsWith struct {
+	Engine          *string `json:"engine"`
+	Provider        *string `json:"provider"`
+	Source          string  `json:"source"`
+	AnchorSessionID *string `json:"anchorSessionId"`
+	Refusal         *string `json:"refusal"`
+}
+
+type RunsWithProject struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	RunsWith RunsWith `json:"runsWith"`
 }
 
 type AgentExecConfig struct {
@@ -1352,6 +1385,10 @@ type ClaimedSession struct {
 	// liveMode is the session's permission mode as the goroutines serving its socket read it
 	// (background_gate.go); nil until that service starts.
 	liveMode *sessionLiveMode
+	// readonlySubagent marks a read-only SubAgent's child claim (subagentChildJob). Its permission mode is plan,
+	// which every engine keeps; Codex alone reads this too, since its plan mode refuses every command and a shell
+	// is the only way Codex reads a repository (codexPermissionMode).
+	readonlySubagent bool
 	// WorkDir is the coding engine's cwd for this session, from the session's agent.
 	WorkDir          string `json:"workDir,omitempty"`
 	SessionUUID      string `json:"sessionUuid"`
@@ -1417,6 +1454,10 @@ type ClaimedSession struct {
 	// CreateWorkDir: Orbit made this workspace in a new folder, which the runner makes before the
 	// engine starts — only inside its own repos root (create_workdir.go). Absent otherwise.
 	CreateWorkDir bool `json:"createWorkDir,omitempty"`
+	// WorkSubdir is the folder below WorkDir a session with no branch runs in (POST /sessions workSubdir, what
+	// `orbit` in a subfolder sends): relative and normalized. The engine starts in WorkDir/WorkSubdir, and not at
+	// all when that folder is missing or, symlinks followed, lies outside WorkDir (work_subdir.go). Empty: WorkDir.
+	WorkSubdir string `json:"workSubdir,omitempty"`
 	// MergeTarget is the branch this session's work merges INTO (its recorded target, else its
 	// agent's default) — the same branch the UI's Merge button names. Seeds branchMergedInto so
 	// the "already merged" chip judges that branch instead of main. Empty → auto-detect.
@@ -1652,6 +1693,8 @@ type ReclaimSession struct {
 	AutoInitGit bool `json:"autoInitGit,omitempty"`
 	// CreateWorkDir, cf. ClaimedSession.CreateWorkDir.
 	CreateWorkDir bool `json:"createWorkDir,omitempty"`
+	// WorkSubdir, cf. ClaimedSession.WorkSubdir.
+	WorkSubdir string `json:"workSubdir,omitempty"`
 	// MergeTarget, cf. ClaimedSession.MergeTarget.
 	MergeTarget string `json:"mergeTarget,omitempty"`
 	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session

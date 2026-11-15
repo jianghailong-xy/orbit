@@ -130,20 +130,29 @@ export interface HandoffRow {
  * there, and which of the source project's criteria it stops serving.
  */
 export interface HandoffListRow extends HandoffRow {
-  fromProject: { title: string; status: string };
-  /** null for a move out of every project. */
-  toProject: { title: string; status: string } | null;
+  /** `coordinatorSessionId` as on `toProject`, for the source end: it draws a move out of every
+   *  project (`toProject` null) as a decision card, since that move has no target to be drawn in. */
+  fromProject: { title: string; status: string; coordinatorSessionId: string | null };
+  /** null for a move out of every project. `coordinatorSessionId` is the conversation that draws
+   *  this row as a decision card, null when the target has none or its coordinator is in Trash:
+   *  a row with one is answered there, and the project pages leave it out
+   *  (docs/mocks/crossings-page-only-uncovered). */
+  toProject: { title: string; status: string; coordinatorSessionId: string | null } | null;
   /** The task a MOVE_TASK moves, or a DEPEND_ON_TASK waits on, as it reads now. Null for a filing,
    *  and for a subject that has since been deleted. */
   subjectTask: { id: string; title: string } | null;
   /** The session that asked, by title. Null once it is gone: the row keeps its id regardless. */
   requestedBySession: { id: string; title: string } | null;
   /** MOVE_TASK: the target project's criterion the request names, with its words now. `text` is
-   *  null when that criterion has since been deleted. Null when the request names none. */
-  requestedCriterion: { key: string; text: string | null } | null;
+   *  null when that criterion has since been deleted. Null when the request names none.
+   *  `ordinal` is its 1-based position in that project's `acceptanceCriteriaItems` as they read
+   *  now — what a card calls it ("Criterion 4"), since the key is an opaque id. Null when the
+   *  criterion is gone. */
+  requestedCriterion: { key: string; text: string | null; ordinal: number | null } | null;
   /** MOVE_TASK: the source project's criterion the task declares today, which the move takes
-   *  back. Null when it declares none, or none of the source project's. */
-  withdrawnCriterion: { key: string; text: string } | null;
+   *  back. Null when it declares none, or none of the source project's. `ordinal` as above, in
+   *  the source project's list. */
+  withdrawnCriterion: { key: string; text: string; ordinal: number | null } | null;
 }
 
 /**
@@ -272,7 +281,8 @@ export interface TaskMoveBatch {
   /** Oldest request first. */
   since: Date;
   decidedAt: Date | null;
-  /** Whether this session asked for these moves, coordinates the project they go into, or both. */
+  /** Whether this session asked for these moves, coordinates the project that answers them — the
+   *  one they go into, or for a move out of every project the one they leave — or both. */
   drawnAs: Array<'REQUESTER' | 'TARGET_COORDINATOR'>;
   moves: HandoffListRow[];
 }
@@ -288,11 +298,38 @@ export interface HandoffSignalAnnouncer {
   sessionsReturnedToOpen?(sessionIds: string[]): void;
 }
 
+/** What `crossingCardSessionId` reads of a crossing. */
+export const CARD_SESSION_SELECT = {
+  toProjectId: true,
+  toProject: { select: { coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+  fromProject: { select: { coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+} as const;
+
+type CardEnd = { coordinatorSessionId: string | null; coordinatorSession: { deletedAt: Date | null } | null };
+
+/**
+ * The conversation that draws a crossing as a decision card (`CrossingDecisionCard`): the target
+ * project's coordinator, or — for a task asked to be taken out of every project, which has no
+ * target — the source project's. Null when that project has no coordinator or it is in Trash, the
+ * same rule `list` applies to the `coordinatorSessionId` the project pages read.
+ */
+export function crossingCardSessionId(row: {
+  toProjectId: string | null;
+  toProject: CardEnd | null;
+  fromProject: CardEnd;
+}): string | null {
+  const end = row.toProjectId ? row.toProject : row.fromProject;
+  if (!end || end.coordinatorSession?.deletedAt) return null;
+  return end.coordinatorSessionId;
+}
+
 @Injectable()
 export class ProjectHandoffService {
   private readonly log = new Logger(ProjectHandoffService.name);
   private moveApplier?: HandoffMoveApplier;
   private announcer?: HandoffSignalAnnouncer;
+
+  private changeListener?: (change: { id: string; ownerId: string; filed: boolean }) => void;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -308,23 +345,22 @@ export class ProjectHandoffService {
 
   /**
    * A MOVE_TASK question was filed or answered: the two rows that count it — the session that asked
-   * and the target project's coordinator (`owner-decision-signal.ts`, `MOVE_REQUEST`) — re-read
+   * and the coordinator that draws its card (`owner-decision-signal.ts`, `MOVE_REQUEST`) — re-read
    * what waits on the owner. After the commit, and never a reason for the write to fail.
    */
   private async announceMove(
     ownerId: string,
-    row: Pick<HandoffRow, 'kind' | 'requestedBySessionId' | 'toProjectId'>,
+    row: Pick<HandoffRow, 'kind' | 'requestedBySessionId' | 'fromProjectId' | 'toProjectId'>,
   ): Promise<void> {
     const announcer = this.announcer;
     if (!announcer || row.kind !== 'MOVE_TASK') return;
     try {
-      // A move out of every project has no target, so no coordinator draws it.
-      const target = row.toProjectId
-        ? await this.prisma.project.findFirst({
-            where: { id: row.toProjectId, ownerId },
-            select: { coordinatorSessionId: true },
-          })
-        : null;
+      // The conversation that draws the card: the target's coordinator, or for a move out of every
+      // project (no target) the source's (`crossingCardSessionId`).
+      const target = await this.prisma.project.findFirst({
+        where: { id: row.toProjectId ?? row.fromProjectId, ownerId },
+        select: { coordinatorSessionId: true },
+      });
       announcer.ownerSignalChanged(ownerId, [
         row.requestedBySessionId,
         ...(target?.coordinatorSessionId ? [target.coordinatorSessionId] : []),
@@ -341,17 +377,16 @@ export class ProjectHandoffService {
    */
   private async returnMoveSessionsToOpen(
     ownerId: string,
-    row: Pick<HandoffRow, 'kind' | 'requestedBySessionId' | 'toProjectId'>,
+    row: Pick<HandoffRow, 'kind' | 'requestedBySessionId' | 'fromProjectId' | 'toProjectId'>,
   ): Promise<void> {
     if (row.kind !== 'MOVE_TASK') return;
     try {
-      // A move out of every project has no target, so no coordinator draws it.
-      const target = row.toProjectId
-        ? await this.prisma.project.findFirst({
-            where: { id: row.toProjectId, ownerId },
-            select: { coordinatorSessionId: true },
-          })
-        : null;
+      // The conversation that draws the card: the target's coordinator, or for a move out of every
+      // project (no target) the source's (`crossingCardSessionId`).
+      const target = await this.prisma.project.findFirst({
+        where: { id: row.toProjectId ?? row.fromProjectId, ownerId },
+        select: { coordinatorSessionId: true },
+      });
       const moved = await returnSessionsToOpen(
         this.prisma, ownerId, [row.requestedBySessionId, target?.coordinatorSessionId], this.log,
       );
@@ -359,6 +394,28 @@ export class ProjectHandoffService {
     } catch (error) {
       this.log.warn(`could not bring a task move's sessions back to Open: ${(error as Error).message}`);
     }
+  }
+
+  /**
+   * Told of every question this service files (`filed`, after its transaction commits) and every
+   * answer it records: the `TasksService` over this instance binds itself here to push a new
+   * question to the owner and to redraw the conversation that shows its card. Bound rather than injected for the reason the move applier
+   * is: this module imports nothing it does not have to.
+   */
+  bindChangeListener(listener: (change: { id: string; ownerId: string; filed: boolean }) => void): void {
+    this.changeListener = listener;
+  }
+
+  /**
+   * The open conversation that draws this crossing as a decision card, or null when none does
+   * (see `crossingCardSessionId`).
+   */
+  async cardSessionOf(ownerId: string, handoffId: string): Promise<string | null> {
+    const row = await this.prisma.projectHandoffApproval.findFirst({
+      where: { id: handoffId, ownerId },
+      select: CARD_SESSION_SELECT,
+    });
+    return row ? crossingCardSessionId(row) : null;
   }
 
   /** The canonical authority tuple of a declaration, as everything below spells it. */
@@ -729,7 +786,10 @@ export class ProjectHandoffService {
       }
       return { ...filed, filed: inserted === 1 };
     }, loggedRetry(this.log, 'projectHandoff.declare'));
+    // A question somebody has to answer, filed by this call: tell them, once. One already standing
+    // was told when it was filed, and one a policy answered asks nobody.
     if (answer.filed && answer.row.state === 'PENDING') {
+      this.changeListener?.({ id: answer.row.id, ownerId: answer.row.ownerId, filed: true });
       await this.returnMoveSessionsToOpen(ownerId, answer.row);
       await this.announceMove(ownerId, answer.row);
     }
@@ -996,14 +1056,60 @@ export class ProjectHandoffService {
       // the row: `title` is the plan's own title, bound into the digest the approval authorises.
       select: {
         ...HANDOFF_SELECT,
-        fromProject: { select: { title: true, status: true } },
-        toProject: { select: { title: true, status: true } },
+        fromProject: {
+          select: {
+            title: true,
+            status: true,
+            coordinatorSessionId: true,
+            coordinatorSession: { select: { deletedAt: true } },
+          },
+        },
+        toProject: {
+          select: {
+            title: true,
+            status: true,
+            coordinatorSessionId: true,
+            coordinatorSession: { select: { deletedAt: true } },
+          },
+        },
       },
       orderBy: { requestedAt: 'desc' },
       take: Math.min(Math.max(options.limit ?? 100, 1), 200),
     })) as unknown as Array<Omit<HandoffListRow,
-      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion'>>;
-    return this.withRequestDetail(ownerId, rows);
+      'subjectTask' | 'requestedBySession' | 'requestedCriterion' | 'withdrawnCriterion' | 'toProject'
+      | 'fromProject'> & {
+      fromProject: {
+        title: string;
+        status: string;
+        coordinatorSessionId: string | null;
+        coordinatorSession: { deletedAt: Date | null } | null;
+      };
+      toProject: {
+        title: string;
+        status: string;
+        coordinatorSessionId: string | null;
+        coordinatorSession: { deletedAt: Date | null } | null;
+      } | null;
+    }>;
+    // A coordinator in Trash draws no card (the web skips a trashed conversation's cards), so the
+    // row counts as having no conversation to be answered in.
+    return this.withRequestDetail(ownerId, rows.map(({ fromProject, toProject, ...row }) => ({
+      ...row,
+      fromProject: {
+        title: fromProject.title,
+        status: fromProject.status,
+        coordinatorSessionId: fromProject.coordinatorSession?.deletedAt
+          ? null
+          : fromProject.coordinatorSessionId,
+      },
+      toProject: toProject && {
+        title: toProject.title,
+        status: toProject.status,
+        coordinatorSessionId: toProject.coordinatorSession?.deletedAt
+          ? null
+          : toProject.coordinatorSessionId,
+      },
+    })));
   }
 
   /**
@@ -1048,6 +1154,24 @@ export class ProjectHandoffService {
           select: { id: true, projectId: true, text: true },
         })
       : [];
+    // The position a criterion holds in its project's list, which is what a person calls it.
+    // Counted over the list as it stands rather than read off the stored `ordinal`, so a gap left
+    // by an edit can never make the card name a criterion that is not there.
+    const criterionProjectIds = ids(criteria.map((criterion) => criterion.projectId));
+    const siblings = criterionProjectIds.length
+      ? await this.prisma.projectAcceptanceCriterionDefinition.findMany({
+          where: { projectId: { in: criterionProjectIds }, project: { ownerId } },
+          select: { id: true, projectId: true },
+          orderBy: [{ projectId: 'asc' }, { ordinal: 'asc' }],
+        })
+      : [];
+    const positionById = new Map<string, number>();
+    const countByProject = new Map<string, number>();
+    for (const sibling of siblings) {
+      const position = (countByProject.get(sibling.projectId) ?? 0) + 1;
+      countByProject.set(sibling.projectId, position);
+      positionById.set(sibling.id, position);
+    }
     const subjectById = new Map(subjects.map((task) => [task.id, task]));
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
     const criterionById = new Map(criteria.map((criterion) => [criterion.id, criterion]));
@@ -1070,10 +1194,15 @@ export class ProjectHandoffService {
           ? {
               key: criterionKeyOf(row.requestedCriterionDefinitionId),
               text: requested?.text.trim() ?? null,
+              ordinal: requested ? positionById.get(requested.id) ?? null : null,
             }
           : null,
         withdrawnCriterion: declared && declared.projectId === row.fromProjectId
-          ? { key: criterionKeyOf(declared.id), text: declared.text.trim() }
+          ? {
+              key: criterionKeyOf(declared.id),
+              text: declared.text.trim(),
+              ordinal: positionById.get(declared.id) ?? null,
+            }
           : null,
       };
     });
@@ -1103,6 +1232,20 @@ export class ProjectHandoffService {
    * answered through, recorded with the move.
    */
   async decide(
+    ownerId: string,
+    userId: string,
+    id: string,
+    decision: 'APPROVE' | 'DENY',
+    now: Date,
+    credential?: AuthCredential,
+  ): Promise<HandoffAnswer> {
+    const answer = await this.decideOnce(ownerId, userId, id, decision, now, credential);
+    // The conversation that drew the card redraws its row: the question it was waiting on is gone.
+    this.changeListener?.({ id: answer.row.id, ownerId, filed: false });
+    return answer;
+  }
+
+  private async decideOnce(
     ownerId: string,
     userId: string,
     id: string,
@@ -1174,6 +1317,8 @@ export class ProjectHandoffService {
       OR: [
         { requestedBySessionId: sessionId },
         ...(coordinated.size ? [{ toProjectId: { in: [...coordinated] } }] : []),
+        // A move out of every project has no target: its source's coordinator answers it.
+        ...(coordinated.size ? [{ toProjectId: null, fromProjectId: { in: [...coordinated] } }] : []),
       ],
     };
     const select = {
@@ -1214,7 +1359,7 @@ export class ProjectHandoffService {
           decidedAt: row.state === 'PENDING' ? null : row.decidedAt,
           drawnAs: [
             ...(row.requestedBySessionId === sessionId ? ['REQUESTER' as const] : []),
-            ...(row.toProjectId && coordinated.has(row.toProjectId) ? ['TARGET_COORDINATOR' as const] : []),
+            ...(coordinated.has(row.toProjectId ?? row.fromProjectId) ? ['TARGET_COORDINATOR' as const] : []),
           ],
           moves: [],
         };
@@ -1337,6 +1482,7 @@ export class ProjectHandoffService {
         fromProjectId: true,
         toProjectId: true,
         toProject: { select: { coordinatorSessionId: true } },
+        fromProject: { select: { coordinatorSessionId: true } },
       },
     });
     if (rows.length !== ids.length) throw new NotFoundException('handoff approval not found');
@@ -1345,10 +1491,13 @@ export class ProjectHandoffService {
       if (row.kind !== 'MOVE_TASK') {
         throw new BadRequestException(`handoff approval ${uuidToBase62(row.id)} is not a task move`);
       }
-      if (row.requestedBySessionId !== sessionId && row.toProject?.coordinatorSessionId !== sessionId) {
+      // The coordinator that draws the card: the target's, or for a move out of every project the
+      // source's (`crossingCardSessionId`).
+      const card = row.toProjectId ? row.toProject?.coordinatorSessionId : row.fromProject.coordinatorSessionId;
+      if (row.requestedBySessionId !== sessionId && card !== sessionId) {
         throw new BadRequestException(
           `the move ${uuidToBase62(row.id)} is not drawn in this session — it neither asked for it `
-          + 'nor coordinates the project it goes into',
+          + 'nor coordinates the project that answers it',
         );
       }
       if (

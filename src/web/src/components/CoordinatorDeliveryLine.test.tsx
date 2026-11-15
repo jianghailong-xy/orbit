@@ -15,7 +15,6 @@ import {
   COORDINATOR_DELIVERY_SENTENCES,
   COORDINATOR_DELIVERY_SENT_TO_SESSION,
   COORDINATOR_DELIVERY_SESSION_TOLD,
-  COORDINATOR_DELIVERY_STICKY_LABEL,
   coordinatorDeliverySentence,
   parseCoordinatorDelivery,
 } from '../lib/coordinatorDelivery';
@@ -150,13 +149,11 @@ describe('a fact told to this session', () => {
     expect(container.querySelector('.coordinator-delivery-sent')?.classList.contains('owner-answer-text')).toBe(false);
   });
 
-  it('is the anchor the sticky bar names once it is scrolled past: From Orbit, and its sentence', async () => {
+  it('heads a round Orbit opened, which the sticky bar hides over rather than naming', async () => {
     await mount([told(CARD)]);
-    const anchor = container.querySelector<HTMLElement>('[data-sticky-label]');
-    expect(anchor, 'no sticky anchor').not.toBeNull();
-    expect(anchor!.getAttribute('data-sticky-label')).toBe(COORDINATOR_DELIVERY_STICKY_LABEL);
-    expect(COORDINATOR_DELIVERY_STICKY_LABEL).toBe('From Orbit');
-    expect(anchor!.getAttribute('data-sticky-text')).toBe(`Evidence revision 1 submitted: ${TITLE}`);
+    const anchor = container.querySelector<HTMLElement>('[data-orbit-round]');
+    expect(anchor, 'no round marker').not.toBeNull();
+    expect(anchor!.classList.contains('coordinator-delivery')).toBe(true);
     expect(anchor!.getAttribute('data-seq')).toBe('7');
     expect(anchor!.classList.contains('is-queued')).toBe(false);
   });
@@ -184,7 +181,7 @@ describe('a fact told to this session', () => {
       expect(parseCoordinatorDelivery({ coordinatorDelivery: card }), card.kind).toEqual(card);
       await remount([told(card)]);
       expect(said(), card.kind).toBe(says);
-      expect(container.querySelector('[data-sticky-text]')?.getAttribute('data-sticky-text'), card.kind).toBe(says);
+      expect(container.querySelector('[data-orbit-round]'), card.kind).not.toBeNull();
       expect(container.querySelector('.chat-user'), card.kind).toBeNull();
       expect(container.querySelector('a.coordinator-delivery-task') !== null, `${card.kind}: Its task`).toBe(card.task !== null);
     }
@@ -206,8 +203,9 @@ describe('a fact told to this session', () => {
   });
 
   it('keeps what delivery appended inside the line’s fold, as Orbit’s — never in a bubble', async () => {
-    const role = '<orbit_project_coordinator_context>\nYou coordinate this project.\n</orbit_project_coordinator_context>';
-    await mount([told(CARD, { text: `${TOLD}\n\n${role}`, controlPlaneNote: `\n\n${role}` })]);
+    // A block that names itself: a coordinator's role or the jobs inventory draw no entry (owner, 2026-11-14).
+    const board = '<list-conditions list="3Hq9fVbYmP2kQhZ8aNcW4x" title="FineWeb">\n  Quota held dispatch\n</list-conditions>';
+    await mount([told(CARD, { text: `${TOLD}\n\n${board}`, controlPlaneNote: `\n\n${board}` })]);
     await act(async () => line()!.click());
 
     expect(container.querySelector('.coordinator-delivery .owner-answer-told pre')?.textContent).toBe(TOLD);
@@ -269,10 +267,8 @@ describe('a fact told to this session', () => {
       expect(COORDINATOR_DELIVERY_SESSION_TOLD).toBe('What this session was told');
       expect(container.textContent).not.toContain('What the coordinator was told');
       expect(container.querySelector('.coordinator-delivery .owner-answer-told pre')?.textContent).toBe(REPLY);
-      // The sticky bar, the words and the rest of the line are what they were.
-      const anchor = container.querySelector<HTMLElement>('[data-sticky-label]');
-      expect(anchor?.getAttribute('data-sticky-label')).toBe('From Orbit');
-      expect(anchor?.getAttribute('data-sticky-text')).toBe('Criteria proposal rejected');
+      // The round marker, the words and the rest of the line are what they were.
+      expect(container.querySelector('[data-orbit-round]')).not.toBeNull();
       expect(container.querySelector('.chat-user'), 'drawn as the owner’s bubble').toBeNull();
     });
 

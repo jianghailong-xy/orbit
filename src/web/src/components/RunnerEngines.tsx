@@ -14,11 +14,14 @@ import {
   type PlanUsageSnapshot,
   type RunnerAccountRemoveState,
   type RunnerEngineAccount,
+  type ReportedEngine,
   type RunnerEngineHealth,
   type RunnerInstallState,
   type RunnerRemovedDefault,
 } from '@orbit/shared';
 import { api } from '../api';
+import { agentFixView, installFixTarget } from '../lib/agentFix';
+import { AgentFixButton, AgentFixLine } from './AgentFix';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
 import { Badge } from './ui/Badge';
@@ -69,6 +72,7 @@ import {
   RUNNER_ENGINE_NO_QUOTA_LIMIT,
   RUNNER_ENGINE_NO_READING,
   RUNNER_ENGINE_RENEW,
+  RUNNER_ENGINE_UPDATE_DISMISS,
   runnerEngineAccountsUnchecked,
   runnerEngineCouldntCheckAccounts,
   runnerEngineCouldntCheckNote,
@@ -85,7 +89,14 @@ import {
 } from '../lib/runnerAccountCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
-import { ago, engineVersionNumber, updateNoteOf, webShowsEngine } from '../lib/runnerEngines';
+import {
+  ago,
+  ENGINE_UPDATE_WARNING_DISMISSED,
+  engineUpdateDismissedFor,
+  engineVersionNumber,
+  updateNoteOf,
+  webShowsEngine,
+} from '../lib/runnerEngines';
 import { ENGINE_PRESET, ENGINE_SLUGS } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { DshRunnerStatus } from './DshRunnerStatus';
@@ -154,6 +165,23 @@ export function useOpenAccounts() {
         : writeExpanded(open ? [...prev, group] : prev.filter((x) => x !== group), OPEN_ACCOUNTS_KEY),
     );
   return [openAccounts, foldAccounts] as const;
+}
+
+/**
+ * Dismiss this runner's update warning for `engine` until its next release: the server records the
+ * engine's current update.latest (runner.engineUpdateDismissals), and every client hides both the
+ * Needs Attention card and the row's panel while that is still the latest. Shared by the card and the
+ * row, so either one hides both.
+ */
+export function useDismissEngineUpdateWarning(runnerId: string) {
+  const qc = useQueryClient();
+  const message = useToast();
+  return useMutation({
+    mutationFn: (engine: ReportedEngine) =>
+      api(`/runners/${runnerId}/engines/${engine}/update-warning/dismiss`, { method: 'POST' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error("Couldn't dismiss the warning", e.message),
+  });
 }
 
 /** What one row is saying. The install relay outranks the probe: it is newer than the last
@@ -643,6 +671,8 @@ function EngineRow({
     mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
   });
+  // Fix with an agent on this row's Install failed panel: where it would run, or why it can't.
+  const installFixView = kind === 'install-failed' ? agentFixView(runner.agentFix, installFixTarget(engine), 'panel') : null;
 
   // Only one runtime's quota is this engine's; the others belong to the other rows. Antigravity's
   // comes with its engine's health, folded in beside the rest.
@@ -699,8 +729,11 @@ function EngineRow({
   // An offline machine isn't updating anything, and the header already says so — repeating it
   // per row as a warning would put three alarms on one fact the user has already read. Cursor CLI's
   // build is the one Orbit pins, which its note says.
-  const note = kind === 'missing' || (cursorBlocked && !health?.installed) ? null : updateNoteOf(health?.update, undefined, engine === 'cursor');
+  const note = kind === 'missing' || (cursorBlocked && !health?.installed)
+    ? null
+    : updateNoteOf(health?.update, undefined, engine === 'cursor', engineUpdateDismissedFor(runner, engine));
   const warn = note?.tone === 'warn' && !offline;
+  const dismissWarning = useDismissEngineUpdateWarning(runner.id);
 
   const action = () => {
     if (antigravity?.supported === false) return null;
@@ -798,7 +831,10 @@ function EngineRow({
           owner, which error — is one pointer away instead of gone. Absent for a healthy
           engine, which has nothing further to say. */}
       {note && (
-        <span className={`re-upd${warn ? ' warn' : ''}`} title={health?.update?.message}>
+        <span
+          className={`re-upd${warn ? ' warn' : ''}${note.text.endsWith(ENGINE_UPDATE_WARNING_DISMISSED) ? ' dismissed' : ''}`}
+          title={health?.update?.message}
+        >
           {/* Folded, the head shares its width with a status and a quota, so the note takes a line
               of its own (.re-grp.folded) rather than leave half of itself on the next. */}
           {columns ? note.text : <>{' '}· {note.text}</>}
@@ -1005,11 +1041,17 @@ function EngineRow({
               Orbit ran <code className="re-cmd">{runner.install.command}</code>
             </div>
           )}
-          <div className="re-panel-hint">
+          {/* Fix with an agent, before Dismiss; the row's Retry stays where it is (lib/agentFix.ts). */}
+          <div className="re-panel-hint agent-fix-row">
+            {installFixView?.state !== 'fixing' && (
+              <AgentFixButton view={installFixView} target={installFixTarget(engine)} runnerId={runner.id} />
+            )}
+            {installFixView?.state === 'fixing' && <AgentFixLine view={installFixView} />}
             <button className="re-link" type="button" onClick={() => dismissInstall.mutate()}>
               Dismiss
             </button>
           </div>
+          {installFixView?.state !== 'fixing' && <AgentFixLine view={installFixView} />}
         </div>
       )}
       {/* Drifted, and not for a reason this page can name. The machine's own words are the only
@@ -1026,6 +1068,20 @@ function EngineRow({
               engines is already above, and the link would only lead back to it. */}
           <div className="re-panel-hint">
             Orbit tries every 30 min.
+            {/* Until the next release: only a warning against a known latest has one to wait for. */}
+            {health?.update?.latest && (
+              <>
+                {' '}
+                <button
+                  className="re-link"
+                  type="button"
+                  disabled={dismissWarning.isPending}
+                  onClick={() => dismissWarning.mutate(engine)}
+                >
+                  {RUNNER_ENGINE_UPDATE_DISMISS}
+                </button>
+              </>
+            )}
             {!machinePage && (
               <>
                 {' '}

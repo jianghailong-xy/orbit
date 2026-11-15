@@ -73,6 +73,27 @@ export function runnerActiveTurns(runnerIdSql: Prisma.Sql): Prisma.Sql {
   )`;
 }
 
+/**
+ * Sessions on a runner that run no turn but hold one of its slots through a background job: open,
+ * not RUNNING, and named by the runner's last beat (runner_presence.background_job_session_ids,
+ * migration 0780; runners/runner-background-holders.ts). The runner itself admits against turns
+ * plus these (src/runner-go/session_pool.go), so a count of turns alone reads a full machine as
+ * having room. Only the queued explanation reads it; the server's own claim gate counts turns,
+ * and the runner holds back its claims by itself. Ask it only of a runner known to be online: a
+ * stale presence row still names the holders of its last beat.
+ */
+export function runnerBackgroundHeldSessions(runnerIdSql: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`(
+    SELECT count(*) FROM "session" held
+    WHERE held."assigned_runner_id" = ${runnerIdSql}
+      AND held."status" IN ('PENDING', 'AWAITING_INPUT', 'INTERRUPTED')
+      AND held.id = ANY(
+        SELECT unnest(p."background_job_session_ids") FROM "runner_presence" p
+         WHERE p."runner_id" = ${runnerIdSql}
+      )
+  )`;
+}
+
 /** Active turns already held by a batch run. Same active-turn semantics, user-chosen cap. */
 export function batchActiveTurns(sessionAlias: string): Prisma.Sql {
   const s = Prisma.raw(sessionAlias);

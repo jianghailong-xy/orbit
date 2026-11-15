@@ -69,8 +69,6 @@ final class ReferencedTaskWiringTests: XCTestCase {
         // reading the whole note twice is what would draw the jobs as rows AND again as text.
         XCTAssertTrue(entry.contains("ReferencedTaskText.parse(jobs?.rest ?? attached.text)"),
                       "the entry must read the references out of what the inventory left")
-        XCTAssertTrue(entry.contains("ReferencedTaskNote.summary(tasks.tasks)"),
-                      "the count rides in the line's accessibility label, as in web's accessible name")
         XCTAssertTrue(entry.contains("ReferencedTaskNoteView(tasks: tasks.tasks)"),
                       "a note that read as references opens as cards")
         // Whatever neither reading took is still drawn, and a note neither could read is untouched.

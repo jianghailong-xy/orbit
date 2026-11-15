@@ -204,6 +204,15 @@
   color: var(--text-3);
   font-size: 12px;
 }
+/* WIKI_CREATE's decline stands at the end of the row, as Remind me later does on the other kinds (board 46 part 3). */
+.owner-request-not-here {
+  margin-left: auto;
+}
+.owner-request-offline {
+  margin-left: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .owner-request-link:disabled,
 .owner-request-later:disabled {
   cursor: not-allowed;
@@ -328,4 +337,39 @@
   .owner-request-later {
     margin-left: 0;
   }
+}
+
+/* Terminals asking to be approved (TerminalApproveCard), on their machine's page (TerminalRequests.tsx): one card
+   per request, oldest first. Opened from the Needs you row, the oldest card's outline is lit for a moment. */
+.machine-terminal-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.machine-terminal-cards .owner-request-card {
+  margin: 0;
+}
+.owner-request-card.is-lit {
+  animation: terminal-request-lit 2s ease-out;
+}
+@keyframes terminal-request-lit {
+  0%,
+  60% {
+    border-color: var(--warning-solid);
+    box-shadow: 0 0 0 3px var(--warning-bg);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .owner-request-card.is-lit {
+    animation: none;
+    border-color: var(--warning-solid);
+  }
+}
+/* The session list's Needs you row (TerminalsNeedsYouRow): the Landings row's circle, in the needs-you amber. */
+.session-project-landing-mark.terminal-needs-you-mark {
+  background: var(--warning-bg);
+  color: var(--warning-solid);
 }

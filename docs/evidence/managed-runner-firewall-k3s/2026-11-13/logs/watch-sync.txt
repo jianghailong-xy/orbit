@@ -1,0 +1,16 @@
+{"start": "22:33:13", "seconds": 420.0, "every": 0.5}
+{"target": "tcp 10.42.0.2:53", "attempts": 88, "EHOSTUNREACH": 1, "TIMEOUT": 87}
+{"target": "tcp 10.42.0.3:53", "attempts": 88, "EHOSTUNREACH": 1, "TIMEOUT": 87}
+{"target": "tcp 10.42.0.4:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.42.0.5:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.42.0.6:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.42.0.3:8181", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.43.0.10:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "udp 10.43.0.10:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "udp 10.42.0.3:53", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 10.43.0.1:443", "attempts": 88, "TIMEOUT": 88}
+{"target": "tcp 172.31.92.20:30053", "attempts": 88, "EHOSTUNREACH": 35, "TIMEOUT": 53}
+{"target": "tcp 172.31.92.20:6443", "attempts": 88, "EHOSTUNREACH": 35, "TIMEOUT": 53}
+{"target": "tcp 10.42.0.1:10250", "attempts": 88, "EHOSTUNREACH": 18, "TIMEOUT": 70}
+{"end": "22:40:16", "reached": 0}
+watch exit 0

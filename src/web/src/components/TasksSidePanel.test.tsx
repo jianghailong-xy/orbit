@@ -138,10 +138,11 @@ describe('TasksSidePanel nav', () => {
     expect(handleNavActivation({ key: ' ', preventDefault: () => { prevented += 1; } },
       () => { opened += 1; })).toBe(false);
     // The two surfaces, and a wiki's row in the group under them. The Wiki group has no Trash row: Trash opens from
-    // Wiki settings (docs/mocks/wiki-trash/02-trash-entry), so no row here is a button.
+    // Wiki settings (docs/mocks/wiki-trash/02-trash-entry). Its one button is New wiki…, which opens the Create wiki form
+    // where the reader is (docs/wiki-explicit-creation-design.md §3.4).
     expect(source.match(/role="link"/g)).toHaveLength(3);
-    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(3);
-    expect(source.match(/role="button"\s+tabIndex=\{0\}/g)).toBeNull();
+    expect(source.match(/tabIndex=\{0\}/g)).toHaveLength(4);
+    expect(source.match(/role="button"\s+tabIndex=\{0\}/g)).toHaveLength(1);
     expect(source.match(/aria-current=\{sel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
     expect(source.match(/aria-current=\{railSel === t\.key \? 'page' : undefined\}/g)).toHaveLength(1);
   });
@@ -257,6 +258,16 @@ describe('TasksSidePanel workspace rows', () => {
     expect(html).toContain('tp-workspace-runner');
     expect(html).toContain('wikova');
     expect(html).not.toContain('inset');
+  });
+
+  // Board docs/mocks/workspace-runner-label E1: with a pointer the machine shows on the hovered row only.
+  it('shows the machine only on the hovered row, and on every row of a touch screen', () => {
+    const block = styles.match(/@media \(hover: hover\) and \(min-width: 961px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+    expect(block).toContain(
+      '.tp-item:not(:hover):not(.menu-open) .tp-workspace-separator,\n' +
+        '  .app-shell .app-nav:not(.collapsed) .tp-item:not(:hover):not(.menu-open) .tp-workspace-runner {\n    display: none;',
+    );
+    expect(block).toMatch(/\.tp-workspace-runner \{\n {4}flex: none;\n {4}max-width: 60%;/);
   });
 
   it('puts a folder in the shared first-level icon column and keeps the collapsed rail unchanged', () => {

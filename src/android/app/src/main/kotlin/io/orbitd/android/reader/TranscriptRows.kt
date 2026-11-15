@@ -2,6 +2,7 @@ package io.orbitd.android.reader
 
 import androidx.compose.runtime.Immutable
 import io.orbitd.android.core.cards.ClaudeRegion
+import io.orbitd.android.core.cards.OwnerChatReply
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
@@ -10,6 +11,14 @@ internal fun JsonObject.string(key: String) = (get(key) as? JsonPrimitive)?.cont
 internal fun RunEvent.toolId() = fields.string("toolUseId") ?: fields.string("tool_use_id") ?: fields.string("id")
 internal fun RunEvent.parent() = fields.string("parentToolUseId")
 internal fun RunEvent.body() = fields.string("text") ?: contentText(fields["content"]) ?: fields.string("message") ?: fields.string("result").orEmpty()
+
+/** The owner's words when [row] is one of Orbit's own calls they answered with "Chat about this" (OwnerChatReply). */
+internal fun ownerChatWords(row: TranscriptRow): String? {
+    val result = row.result ?: return null
+    val isError = result.fields.string("isError") == "true" || result.fields.string("is_error") == "true"
+    return OwnerChatReply.words(row.event.fields.string("name") ?: row.event.fields.string("toolName"),
+        contentText(result.fields["content"]) ?: result.fields.string("result"), isError)
+}
 
 internal fun contentText(value: JsonElement?): String? = when (value) {
     null, JsonNull -> null

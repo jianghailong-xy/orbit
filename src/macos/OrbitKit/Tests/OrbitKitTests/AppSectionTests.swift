@@ -36,6 +36,24 @@ final class AppSectionTests: XCTestCase {
         }
     }
 
+    /// The drawer rail's rows are one array: the work (the Wiki only when the server has it on), then
+    /// the Workspaces header and the rows under it. No Waiting on you row: a request is drawn in the
+    /// session that asked.
+    func testDrawerRowsCarryTheWikiAnswerAsData() {
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: true),
+                       [.projects, .section(.tasks), .wiki, .workspacesHeader,
+                        .agents, .openProjects, .sharedWithMe])
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: false),
+                       [.projects, .section(.tasks), .workspacesHeader, .agents, .openProjects,
+                        .sharedWithMe])
+        // New wiki… is a row of its own under the Wiki row once there is a wiki, and never without the Wiki row.
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: true, newWiki: true),
+                       [.projects, .section(.tasks), .wiki, .newWiki, .workspacesHeader, .agents, .openProjects,
+                        .sharedWithMe])
+        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: false, newWiki: true),
+                       [.projects, .section(.tasks), .workspacesHeader, .agents, .openProjects, .sharedWithMe])
+    }
+
     /// Routing/notifications must land in the right section so the shell follows a deep link. There's
     /// no aggregate Active view anymore — home and an individual session both land in Agents.
     func testRouteMapsToSection() {

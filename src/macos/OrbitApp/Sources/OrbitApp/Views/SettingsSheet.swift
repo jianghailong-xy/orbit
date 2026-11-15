@@ -80,6 +80,7 @@ private struct SettingsPageView: View {
         case .notifications:  NotificationSettingsPage()
         case .sharedLinks:    SharedLinksSettingsPage()
         case .accessTokens:   AccessTokensSettingsPage()
+        case .terminals:      TerminalsSettingsPage()
         case .changePassword: ChangePasswordPage()
         case .admin:          AdminUsersView(rowNavigation: .push)
         }
@@ -160,6 +161,7 @@ struct SettingsHomeView: View {
         }
         .task { await model.sharedLinks?.load() }
         .task { await model.accessTokens?.load() }
+        .task { await model.terminals?.load() }
         // Back from the system's Settings, where the card sends you: say what it is now.
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
@@ -244,7 +246,7 @@ struct SettingsHomeView: View {
                     }
                 } label: { label }
             }
-        case .sessions, .notifications, .sharedLinks, .accessTokens, .changePassword, .admin:
+        case .sessions, .notifications, .sharedLinks, .accessTokens, .terminals, .changePassword, .admin:
             if let page = SettingsHome.page(row) {
                 NavigationLink(value: NavNode.settingsPage(page)) {
                     LabeledContent { if let value = value(of: row) { Text(value) } } label: { label }
@@ -269,6 +271,8 @@ struct SettingsHomeView: View {
             return model.sharedLinks?.activeCount.map(SettingsHome.sharedLinksValue)
         case .accessTokens:
             return model.accessTokens?.activeCount.map(SettingsHome.accessTokensValue)
+        case .terminals:
+            return model.terminals?.count.map { Terminals.settingsValue(count: $0) }
         default:
             return nil
         }
@@ -1119,6 +1123,7 @@ private struct SharedLinksSettingsPage: View {
 
     @State private var tab: SharedLinksList.Tab = .active
     @State private var pendingTurnOff: OrbitKit.ShareLink?
+    @State private var sharing: OrbitKit.ShareLink?
     @State private var notice: String?
 
     var body: some View {
@@ -1162,6 +1167,13 @@ private struct SharedLinksSettingsPage: View {
         .navigationTitle(SharedLinksList.title)
         .task { await model.sharedLinks?.load() }
         .refreshable { await model.sharedLinks?.load() }
+        // A row's press and its ⋯ → Settings… open the link's own Share panel; what changed there is
+        // read back when it closes.
+        .sheet(item: $sharing, onDismiss: { Task { await model.sharedLinks?.load() } }) { link in
+            if let base = model.baseURL {
+                ShareSheet(kind: link.kind, rootID: link.root.id, baseURL: base, tokenStore: model.tokenStore)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let notice {
                 Text(notice)
@@ -1180,7 +1192,58 @@ private struct SharedLinksSettingsPage: View {
         Binding(get: { pendingTurnOff != nil }, set: { if !$0 { pendingTurnOff = nil } })
     }
 
+    /// One link (docs/mocks/share-links/13-row-buttons, web's row): a press opens an active link's
+    /// Share panel; a borderless copy button stays out; the rest is in its ⋯ and its long-press menu,
+    /// Turn off… last. A swipe still turns it off.
     private func row(_ link: OrbitKit.ShareLink) -> some View {
+        let url = link.state == .active ? model.baseURL.map { SharedLinksList.publicURL(link, base: $0) } : nil
+        return HStack(spacing: 12) {
+            if SharedLinksList.opens(link) {
+                Button { sharing = link } label: { words(link) }
+                    .buttonStyle(.plain)
+            } else {
+                words(link)
+            }
+            if let url {
+                Button { copy(url) } label: {
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(SharePanelCopy.copyLink)
+            }
+            if SharedLinksList.canTurnOff(link) {
+                Menu { menuItems(link, url: url) } label: {
+                    Image(systemName: "ellipsis")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(SharedLinksList.moreLabel(link))
+            }
+        }
+        .padding(.vertical, 2)
+        .swipeActions(edge: .trailing) {
+            if SharedLinksList.canTurnOff(link) {
+                Button(SharePanelCopy.turnOff, role: .destructive) { pendingTurnOff = link }
+            }
+        }
+        .contextMenu { menuItems(link, url: url) }
+        // On the link's own row — the swipe, the ⋯ and the long-press menu all raise it — so the panel opens
+        // against that row rather than at the top of the page.
+        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
+                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
+            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(SharePanelCopy.turnOffDetail)
+        }
+    }
+
+    private func words(_ link: OrbitKit.ShareLink) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(link.root.title ?? SharedLinksList.kindWord(link.kind))
                 .lineLimit(2)
@@ -1191,40 +1254,36 @@ private struct SharedLinksSettingsPage: View {
                 .font(.orbitListSubtitle)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
-        .swipeActions(edge: .trailing) {
-            if SharedLinksList.canTurnOff(link) {
-                Button(SharePanelCopy.turnOff, role: .destructive) { pendingTurnOff = link }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    /// The ⋯ and the long-press menu alike: an active link's Copy Link, Share Link… and Settings…,
+    /// then Turn off… for any link that can still be ended.
+    @ViewBuilder
+    private func menuItems(_ link: OrbitKit.ShareLink, url: URL?) -> some View {
+        if let url {
+            Button { copy(url) } label: {
+                Label(SharePanelCopy.copyLink, systemImage: "doc.on.doc")
+            }
+            SwiftUI.ShareLink(item: url) {
+                Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
+            }
+            Button { sharing = link } label: {
+                Label(SharedLinksList.settings, systemImage: "slider.horizontal.3")
             }
         }
-        .contextMenu {
-            if link.state == .active, let base = model.baseURL {
-                let url = SharedLinksList.publicURL(link, base: base)
-                Button {
-                    UIPasteboard.general.url = url
-                    show(SharePanelCopy.linkCopied)
-                } label: {
-                    Label(SharePanelCopy.copyLink, systemImage: "doc.on.doc")
-                }
-                SwiftUI.ShareLink(item: url) {
-                    Label(SharePanelCopy.shareLink, systemImage: "square.and.arrow.up")
-                }
-            }
-            if SharedLinksList.canTurnOff(link) {
-                Button(role: .destructive) { pendingTurnOff = link } label: {
-                    Label(SharePanelCopy.turnOff, systemImage: "xmark.circle")
-                }
+        if SharedLinksList.canTurnOff(link) {
+            if url != nil { Divider() }
+            Button(role: .destructive) { pendingTurnOff = link } label: {
+                Label(SharedLinksList.turnOffMenu, systemImage: "xmark.circle")
             }
         }
-        // On the link's own row — the swipe and the long-press menu both raise it — so the panel opens
-        // against that row rather than at the top of the page.
-        .orbitConfirmation({ _ in SharePanelCopy.turnOffTitle },
-                           isPresented: turnOffAsked, presenting: pendingTurnOff) { link in
-            Button(SharePanelCopy.turnOff, role: .destructive) { Task { await turnOff(link) } }
-            Button(SharePanelCopy.cancel, role: .cancel) {}
-        } message: { _ in
-            Text(SharePanelCopy.turnOffDetail)
-        }
+    }
+
+    private func copy(_ url: URL) {
+        UIPasteboard.general.url = url
+        show(SharePanelCopy.linkCopied)
     }
 
     private func turnOff(_ link: OrbitKit.ShareLink) async {
@@ -1347,6 +1406,111 @@ private struct AccessTokensSettingsPage: View {
             show(AccessTokensList.notRevoked(reason))
         } else {
             show(AccessTokensList.revoked)
+        }
+    }
+
+    /// A line over the list's foot for a moment — the app's toast lives under this sheet.
+    private func show(_ text: String) {
+        notice = text
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if notice == text { notice = nil }
+        }
+    }
+}
+// MARK: - Terminals
+
+/// Settings → Terminals (docs/terminal-session-design.md, "The terminal credential"): every live terminal — its
+/// machine, when it was approved, last used and when it expires — each with Revoke, which asks first. A revoked
+/// terminal leaves the list. Web parity: `TerminalsPage.tsx`; the words are OrbitKit's `Terminals`.
+private struct TerminalsSettingsPage: View {
+    @Environment(AppModel.self) private var model
+
+    @State private var pendingRevoke: Terminal?
+    @State private var notice: String?
+
+    var body: some View {
+        let terminals = model.terminals?.terminals ?? []
+        List {
+            Section {
+                switch LoadFailureLogic.presentation(model.terminals?.loadState ?? ListLoadState(),
+                                                     isEmpty: terminals.isEmpty) {
+                case .loading:
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                case .failed:
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(model.terminals?.errorText ?? Terminals.couldNotLoad)
+                            .foregroundStyle(.secondary)
+                        Button(SharePanelCopy.retry) { Task { await model.terminals?.load() } }
+                    }
+                case .empty, .content:
+                    if terminals.isEmpty {
+                        Text(Terminals.empty).foregroundStyle(.secondary)
+                    }
+                    ForEach(terminals) { terminal in
+                        row(terminal)
+                    }
+                }
+            } footer: {
+                Text(Terminals.hint)
+            }
+        }
+        .navigationTitle(Terminals.title)
+        .task { await model.terminals?.load() }
+        .refreshable { await model.terminals?.load() }
+        .orbitConfirmation(Terminals.revokeTitle, isPresented: revokeAsked,
+                           presenting: pendingRevoke) { terminal in
+            Button(Terminals.revoke, role: .destructive) { Task { await revoke(terminal) } }
+            Button(SharePanelCopy.cancel, role: .cancel) {}
+        } message: { _ in
+            Text(Terminals.revokeDetail)
+        }
+        .overlay(alignment: .bottom) {
+            if let notice {
+                Text(notice)
+                    .font(.orbitListSubtitle.weight(.semibold))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: notice)
+    }
+
+    private var revokeAsked: Binding<Bool> {
+        Binding(get: { pendingRevoke != nil }, set: { if !$0 { pendingRevoke = nil } })
+    }
+
+    private func row(_ terminal: Terminal) -> some View {
+        let now = Date()
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(terminal.machineName)
+                ForEach([Terminals.approvedLine(terminal), Terminals.lastUsedLine(terminal, now: now),
+                         Terminals.expiresLine(terminal, now: now)], id: \.self) { line in
+                    Text(line).font(.orbitListSubtitle).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            Button(Terminals.revoke, role: .destructive) { pendingRevoke = terminal }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.terminals?.revokingID == terminal.id)
+                .accessibilityIdentifier("terminal-revoke-\(terminal.id)")
+        }
+        .padding(.vertical, 2)
+        .opacity(model.terminals?.revokingID == terminal.id ? 0.5 : 1)
+    }
+
+    private func revoke(_ terminal: Terminal) async {
+        guard let terminals = model.terminals else { return }
+        if let reason = await terminals.revoke(terminal) {
+            show(Terminals.notRevoked(reason))
+        } else {
+            show(Terminals.revoked)
         }
     }
 

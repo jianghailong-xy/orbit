@@ -316,6 +316,19 @@ describe('project entry typography', () => {
       /\.session-project-row\s+\.session-title\b/u.test(selector) && /\bfont-weight\s*:/u.test(body));
     expect(overrides, '项目条目标题与会话行同一字重（owner 10-04）').toHaveLength(0);
   });
+
+  it('shows keyboard focus as the row tint, not a ring the list edge or the kebab fade would cut', () => {
+    const css = fromRepo('src/index.css', 'src/web/src/index.css').replace(/\/\*[\s\S]*?\*\//gu, '');
+    const rule = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
+      /^\.session-project-row:focus-visible\s*$/u.test(selector.trim()));
+    expect(rule?.[2]).toMatch(/outline\s*:\s*none/u);
+    expect(rule?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
+    expect(rule?.[2]).toMatch(/--session-menu-surface\s*:\s*var\(--bg-hover\)/u);
+    const folder = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/gu)].find(([, selector]) =>
+      /^\.session-folder-row:focus-visible\s*$/u.test(selector.trim()));
+    expect(folder?.[2], 'folder rows show focus the same way').toMatch(/outline\s*:\s*none/u);
+    expect(folder?.[2]).toMatch(/background\s*:\s*var\(--bg-hover\)/u);
+  });
 });
 
 describe('project entries in the session list', { timeout: 60_000 }, () => {
@@ -751,7 +764,8 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     await mount();
     expect(titles()).toEqual(['Loose conversation', 'Project Alpha']);
     await press('ArrowDown');
-    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}`));
+    // Wider than a phone the arrow keys onto a project row open its column beside the coordinator (ab5802271).
+    await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${encodeId(PROJECT_ID)}`));
   });
 
   it('stays on a folder’s page when the arrow keys open a coordinator with a question for the owner', async () => {

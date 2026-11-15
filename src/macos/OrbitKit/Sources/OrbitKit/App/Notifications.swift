@@ -144,6 +144,9 @@ public enum AppIntent: Equatable, Sendable {
     case openOwnerRequest(requestID: String)
     /// An owner request's "Later": put off for `OwnerRequests.laterSeconds`, on this device only.
     case snoozeOwnerRequest(requestID: String)
+    /// A terminal asking to be approved (push kind `terminal-login`): where its card is — the machine page's
+    /// Needs you section (docs/mocks/waiting-on-you-removal/02 ④).
+    case openTerminalRequests
 }
 
 public enum Notifications {
@@ -172,6 +175,7 @@ public enum Notifications {
         case .decision:   return "Answer"
         case .manualStep: return "Mark done"
         case .confirm:    return "Review"
+        case .wikiCreate: return "Review"
         }
     }
 
@@ -210,6 +214,9 @@ public enum Notifications {
     public static let runnerUpdatingKind = "runner-updating"
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
+    /// An agent asking to take a task out of its project. A tap opens the conversation that draws
+    /// the decision card when the payload names one, and the project otherwise.
+    public static let crossingRequestKind = "crossing-request"
 
     public static func content(for event: NotificationEvent) -> NotificationContent {
         switch event {
@@ -254,6 +261,13 @@ public enum Notifications {
         if userInfo[keyKind] == "project-done", let project = userInfo[keyProject] {
             return .openProject(projectID: project)
         }
+        // A crossing request opens the conversation that draws its card; a source with no
+        // coordinator conversation leaves only the project itself to open.
+        if userInfo[keyKind] == crossingRequestKind {
+            if let sid = userInfo[keySession] { return .open(.session(sid)) }
+            return userInfo[keyProject].map { .openProject(projectID: $0) }
+        }
+        if userInfo[keyKind] == "terminal-login" { return .openTerminalRequests }
         // An owner request's actions open its card or put it off; a plain tap — the alert itself or
         // its Later reminder — opens the conversation that asked, on the same card. Everything it
         // needs is the request's own id, which the app resolves to `askedBySessionId`.

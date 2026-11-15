@@ -51,18 +51,22 @@ import {
   MAX_API_ERROR_RETRIES,
   parseQuotaResetAt,
   isAsyncAgentLaunchAck,
+  delegateLaunchReceipt,
   progressBadge,
   QUESTION_RECORD_COPY,
   questionAnswerLine,
   questionLead,
   questionOutcome,
   questionReplyLine,
+  ownerChatWords,
   workflowLaunchReceipt,
   workflowTitle,
   type AskedQuestion,
   type QuestionOutcome,
+  type SubagentRunView,
   type TaskProgress,
 } from '@orbit/shared';
+import { DELEGATE_TOOL, delegateResultText, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import {
@@ -157,8 +161,8 @@ import type { ExternalMessageFrom, SessionMessageCard as SessionMessage, Session
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
 import { SessionReplyCards } from './SessionReplyCard';
-import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
-import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
+import { parseBackgroundJobs } from '../lib/backgroundJobs';
+import { parseReferencedTasks } from '../lib/referencedTask';
 import { parseWikiContext } from '../lib/wikiContext';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
@@ -1643,6 +1647,14 @@ export const TaskActivityCtx = createContext<TaskActivity>({ live: EMPTY_LIVE_TA
 type TaskLookup = { progress: (id: string) => TaskProgress | null; running: (id: string) => boolean };
 const TaskLookupCtx = createContext<TaskLookup>({ progress: () => null, running: () => false });
 
+/** The session's SubAgent runs by `delegate` call (lib/subagentRuns.ts). Empty where nothing reads them: a
+ *  share page, an export. */
+export const SubagentRunsCtx = createContext<ReadonlyMap<string, SubagentRunView>>(new Map());
+
+/** What each SubAgent is waiting for a person to approve, by its `delegate` call: the action of the card it asked
+ *  in the parent's approval area (docs/subagent-design.md §5.3). Empty where no card can be answered. */
+export const SubagentWaitingCtx = createContext<ReadonlyMap<string, string>>(new Map());
+
 function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
   // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
@@ -1792,12 +1804,14 @@ export const Transcript = memo(function Transcript({
   // progress frame re-renders those and nothing else.
   const activity = useContext(TaskActivityCtx);
   const ended = useMemo(() => endedTaskProgress(events), [events]);
+  // A SubAgent runs for as long as its run says so: a background one's call answered at once.
+  const subagentRuns = useContext(SubagentRunsCtx);
   const taskLookup = useMemo<TaskLookup>(
     () => ({
       progress: (id) => activity.live.get(id) ?? ended.get(id) ?? null,
-      running: (id) => activity.running.has(id),
+      running: (id) => activity.running.has(id) || subagentRuns.get(id)?.status === 'RUNNING',
     }),
-    [activity, ended],
+    [activity, ended, subagentRuns],
   );
   // Where each insert goes: after the last top-level card at or before its seq, keyed by that
   // card's seq. Whichever half of the split holds the card draws it, so nothing is drawn twice,
@@ -2163,7 +2177,26 @@ function isGroupableTool(node: Node, chat = false): node is ToolNode {
     node.name !== 'mcp__orbit__task_create_batch' &&
     node.name !== 'mcp__orbit__task_create' &&
     node.name !== 'mcp__orbit__project_create' &&
-    !isBackgroundTaskCall(node.name)
+    !isBackgroundTaskCall(node.name) &&
+    !ownerChatReplyOf(node)
+  );
+}
+
+// The owner's words when they answered one of Orbit's own asks with "Chat about this": the runner
+// hands them to the agent as the call's result (`ownerChatWords`), and the conversation draws them as
+// the message they are, under the call (OwnerChatBubble), rather than inside its folded result.
+function ownerChatReplyOf(node: ToolNode): string | null {
+  if (!node.name.startsWith('mcp__orbit__') || !node.result || node.result.isError) return null;
+  return ownerChatWords(resultText(node.result.content));
+}
+
+function OwnerChatBubble({ words }: { words: string }) {
+  return (
+    <div className="chat-user-wrap">
+      <div className="chat-msg chat-user">
+        <MD breaks>{words}</MD>
+      </div>
+    </div>
   );
 }
 
@@ -2293,7 +2326,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // The turn Orbit sends a session whose turn the owner's Update Now cut (D4): Orbit's words, written
       // for the agent, so one Orbit line rather than a bubble in the reader's name (owner rule 10-27).
       if (isRunnerUpdateResume(node.text)) {
-        // What delivery appended — the background jobs that ended while the runner was away — rides under it.
+        // What delivery appended rides under it — but not the background jobs that ended while the runner
+        // was away, which name nothing (describeNote) and so draw no line.
         return (
           <>
             <div className="chat-note runner-update-resume" data-seq={seq} title={node.text}>{RUNNER_UPDATE_RESUME_NOTE}</div>
@@ -4109,10 +4143,10 @@ function useThrottled(value: string, ms: number): string {
 // click rather than carried in a tooltip, which a touch screen cannot reach.
 //
 // The line is in the voice of the time under a message and says what is attached, nothing more:
-// "⊕ Orbit attached: background jobs", ⊖ once it is open. What the person typed is what the eye
-// should land on (owner, 2026-10-27; docs/mocks/attached-context-note), so how the block stands —
-// "1 running, 1 failed" — is the line's tooltip and accessible name, and the opened rows say it
-// job by job.
+// "⊕ Orbit attached: list conditions", ⊖ once it is open. What the person typed is what the eye
+// should land on (owner, 2026-10-27; docs/mocks/attached-context-note). A coordinator's role, the
+// background-jobs inventory and a `#`-reference draw no line of their own (owner, 2026-11-14):
+// describeNote leaves them unnamed, though the fold still opens to them beside a named block.
 //
 // The line and what it opens to come back apart because a person's bubble places them apart: the
 // line ends the meta row under the bubble and the rows go under that row (UserBubble). Everywhere
@@ -4129,11 +4163,11 @@ function useControlPlaneNote(note: { kind: string; text: string } | null): { lin
   const jobs = useMemo(() => parseBackgroundJobs(text), [text]);
   const tasks = useMemo(() => parseReferencedTasks(jobs ? jobs.rest : text), [text, jobs]);
   const wiki = useMemo(() => parseWikiContext(tasks ? tasks.rest : jobs ? jobs.rest : text), [text, jobs, tasks]);
-  if (!note) return null;
+  // A note that names nothing (describeNote) draws no line.
+  if (!note?.kind) return null;
   const { kind } = note;
   const rest = wiki ? wiki.rest : tasks ? tasks.rest : jobs ? jobs.rest : text;
-  const baseLabel = `⊕ Orbit attached: ${kind}`;
-  const label = `${baseLabel}${tasks ? ` · ${summarizeReferencedTasks(tasks.tasks)}` : ''}${jobs ? ` · ${summarizeBackgroundJobs(jobs)}` : ''}`;
+  const label = `⊕ Orbit attached: ${kind}`;
   return {
     line: (
       <button
@@ -4161,10 +4195,11 @@ function useControlPlaneNote(note: { kind: string; text: string } | null): { lin
 /** The note where it stands on its own — at the foot of a card that is Orbit's, not under a bubble. */
 function ControlPlaneNote({ kind, text }: { kind: string; text: string }) {
   const note = useControlPlaneNote({ kind, text });
+  if (!note) return null;
   return (
     <div className="chat-injected">
-      {note?.line}
-      {note?.opened}
+      {note.line}
+      {note.opened}
     </div>
   );
 }
@@ -4233,9 +4268,10 @@ function resultRepeatsBody(node: ToolNode): boolean {
   return !!batchTasks(node);
 }
 
-/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow. */
+/** The runtime's calls whose work outlives them: a sub-agent (Agent; Task before 2.x), a Workflow — and
+ *  Orbit's own SubAgent (`delegate`). */
 function isBackgroundTaskCall(name: string): boolean {
-  return name === 'Agent' || name === 'Task' || name === 'Workflow';
+  return name === 'Agent' || name === 'Task' || name === 'Workflow' || name === DELEGATE_TOOL;
 }
 
 /**
@@ -4248,6 +4284,7 @@ function isLaunchReceipt(node: ToolNode): boolean {
   const content = node.result?.content;
   if (!content || node.result?.isError) return false;
   if (node.name === 'Workflow') return !!workflowLaunchReceipt(content);
+  if (node.name === DELEGATE_TOOL) return !!delegateLaunchReceipt(content);
   return (node.name === 'Agent' || node.name === 'Task') && isAsyncAgentLaunchAck(content);
 }
 
@@ -4292,7 +4329,9 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
   // fail to parse and render nothing — it needs the whole result regardless of the fold. So does a
   // question's record.
-  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall;
+  // So does the owner's chat reply to a card, whose words are the end of the result.
+  const chatReply = ownerChatReplyOf(node) !== null;
+  const needsWholeResult = node.name === 'mcp__orbit__session_create' || isQuestion || draftCall || chatReply;
   const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
@@ -4304,6 +4343,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // How a question ended lives only in the result text ("The user answered: …"), so the card reads
   // it back (`questionOutcome`, the same reader the native client is held to).
   const answer = node.result ? resultText(resultContent) : '';
+  const ownerWords = chatReply ? ownerChatWords(answer) : null;
   const questions = useMemo(() => (isQuestion ? askedQuestions(input) : []), [isQuestion, input]);
   const outcome = useMemo(
     () => (questions.length ? questionOutcome(questions, answer, !!node.result?.isError) : null),
@@ -4324,11 +4364,20 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // events are appended, and a refetched payload is held in state), so this holds the computed
   // body/icon — and the <Diff>/<MD>/<KeyVals> elements inside it — stable instead of rebuilding
   // on each append.
-  const { label, summary, summaryMono, body, icon, tone, path, meta } = useMemo(
+  const { label, summary, summaryMono, body, icon, tone, path, meta: toolMeta, tag } = useMemo(
     () => describeTool(node.name, input, isShell, outcome),
     [node.name, input, isShell, outcome],
   );
-  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent';
+  // A SubAgent's tier, model, time and cost, and its Why, come from its run rather than its call.
+  const isDelegate = node.name === DELEGATE_TOOL;
+  const run = useContext(SubagentRunsCtx).get(node.id);
+  const meta = isDelegate ? subagentMeta(run) ?? undefined : toolMeta;
+  const why = isDelegate ? subagentWhy(run) : null;
+  const waitingFor = useContext(SubagentWaitingCtx).get(node.id);
+  const waitingLine = isDelegate && waitingFor ? (
+    <div className="chat-subagent-waiting">Waiting for approval · {waitingFor}</div>
+  ) : null;
+  const isSubWorkspace = node.name === 'Task' || node.name === 'Agent' || isDelegate;
   const isBackgroundTask = isBackgroundTaskCall(node.name);
   const launchReceipt = isLaunchReceipt(node);
   // A workflow is named by its launch receipt once that lands — see describeTool.
@@ -4356,94 +4405,104 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     if (node.result.truncated && !fullResult) return null;
   }
   return (
-    <div
-      data-seq={node.seq}
-      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
-        hasDetail && open ? ' is-open' : ''
-      }`}
-    >
+    <>
       <div
-        className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
-        onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
+        data-seq={node.seq}
+        className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
+          hasDetail && open ? ' is-open' : ''
+        }`}
       >
-        {/* Keep the disclosure column stable even before a result gives a no-input tool something
-            to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
-        <span className="chat-tool-caret">
-          {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
-        </span>
-        <span className="chat-tool-icon">{icon}</span>
-        <span className="chat-tool-name">{label}</span>
-        {p ? (
-          <span className="chat-tool-summary mono chat-path" title={path}>
-            <b className="chat-path-file">{p.base}</b>
-            {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+        <div
+          className={`chat-tool-row${hasDetail ? '' : ' no-detail'}`}
+          onClick={hasDetail ? () => setManualOpen((prev) => !(prev ?? defaultOpen)) : undefined}
+        >
+          {/* Keep the disclosure column stable even before a result gives a no-input tool something
+              to expand. The empty slot preserves alignment without suggesting the row is clickable. */}
+          <span className="chat-tool-caret">
+            {hasDetail ? (open ? <DownOutlined /> : <RightOutlined />) : null}
           </span>
-        ) : (
-          title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
+          <span className="chat-tool-icon">{icon}</span>
+          <span className="chat-tool-name">{label}</span>
+          {p ? (
+            <span className="chat-tool-summary mono chat-path" title={path}>
+              <b className="chat-path-file">{p.base}</b>
+              {p.dir && <span className="chat-path-dir">{p.dir}</span>}
+            </span>
+          ) : (
+            title && <span className={`chat-tool-summary${summaryMono ? ' mono' : ''}`}>{title}</span>
+          )}
+          {tag && <span className="chat-tool-tag">{tag}</span>}
+          {isBackgroundTask ? (
+            <TaskBadgeAndStatus node={node} live={live} meta={meta} />
+          ) : outcome?.kind === 'replied' ? (
+            // The engine files "Chat about this" as the call's error; it is the person's reply.
+            <MessageFilled className="chat-tool-status replied" />
+          ) : (
+            <>
+              {meta && <span className="chat-tool-meta">{meta}</span>}
+              <ToolStatus node={node} live={live} />
+            </>
+          )}
+        </div>
+        {isBackgroundTask && !(hasDetail && open) && (waitingLine ?? <SubagentLiveLine node={node} live={live} />)}
+        {questions.length > 0 && !(hasDetail && open) && (
+          <QuestionFolded
+            questions={questions}
+            outcome={outcome}
+            onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
+          />
         )}
-        {isBackgroundTask ? (
-          <TaskBadgeAndStatus node={node} live={live} meta={meta} />
-        ) : outcome?.kind === 'replied' ? (
-          // The engine files "Chat about this" as the call's error; it is the person's reply.
-          <MessageFilled className="chat-tool-status replied" />
-        ) : (
-          <>
-            {meta && <span className="chat-tool-meta">{meta}</span>}
-            <ToolStatus node={node} live={live} />
-          </>
+        {hasDetail && open && (
+          <div className="chat-tool-detail">
+            {why && <SubagentWhy why={why} run={run} />}
+            {/* A failed call is opened to find out why, and the input is rarely the answer — a
+                heredoc alone clamps to sixteen lines, which is enough to push the reason off the
+                bottom of the card. Put the error first when there is one; everywhere else the
+                call still reads input-then-output. */}
+            {node.result?.isError && !outcome && (
+              <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
+            )}
+            {node.name === 'Workflow' && (
+              <WorkflowProgressDetail
+                node={node}
+                live={live}
+                // Before a runner that reports progress, a workflow's receipt is still all there is.
+                // An agent's ack is internal metadata; its own transcript below says what it did.
+                fallback={
+                  launchReceipt && node.name === 'Workflow' ? (
+                    <ToolResult seq={node.seq} content={resultContent} compact />
+                  ) : null
+                }
+              />
+            )}
+            {body && (node.name === 'Workflow' ? (
+              <details className="chat-workflow-source" open={exp ? true : undefined}>
+                <summary>Workflow source</summary>
+                <div className="chat-tool-body">{body}</div>
+              </details>
+            ) : <div className="chat-tool-body">{body}</div>)}
+            {node.name !== 'Workflow' && (node.children.length > 0 || waitingLine) && (
+              <div className="chat-subagent">
+                <NodeList nodes={node.children} live={live} />
+                {waitingLine}
+              </div>
+            )}
+            {/* A sub-agent's totals close its transcript rather than open it. */}
+            {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
+            {/* A question's result, once read, is only the replay above said again. */}
+            {isDelegate
+              ? node.result && !node.result.isError && (
+                  <DelegateResult content={resultContent} run={run} seq={node.seq} steps={node.children} />
+                )
+              : node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
+                  <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
+                )}
+            {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
+          </div>
         )}
       </div>
-      {isBackgroundTask && !(hasDetail && open) && <SubagentLiveLine node={node} live={live} />}
-      {questions.length > 0 && !(hasDetail && open) && (
-        <QuestionFolded
-          questions={questions}
-          outcome={outcome}
-          onOpen={() => setManualOpen((prev) => !(prev ?? defaultOpen))}
-        />
-      )}
-      {hasDetail && open && (
-        <div className="chat-tool-detail">
-          {/* A failed call is opened to find out why, and the input is rarely the answer — a
-              heredoc alone clamps to sixteen lines, which is enough to push the reason off the
-              bottom of the card. Put the error first when there is one; everywhere else the
-              call still reads input-then-output. */}
-          {node.result?.isError && !outcome && (
-            <ToolResult seq={node.seq} content={resultContent} isError compact markdown={isSubWorkspace} />
-          )}
-          {node.name === 'Workflow' && (
-            <WorkflowProgressDetail
-              node={node}
-              live={live}
-              // Before a runner that reports progress, a workflow's receipt is still all there is.
-              // An agent's ack is internal metadata; its own transcript below says what it did.
-              fallback={
-                launchReceipt && node.name === 'Workflow' ? (
-                  <ToolResult seq={node.seq} content={resultContent} compact />
-                ) : null
-              }
-            />
-          )}
-          {body && (node.name === 'Workflow' ? (
-            <details className="chat-workflow-source" open={exp ? true : undefined}>
-              <summary>Workflow source</summary>
-              <div className="chat-tool-body">{body}</div>
-            </details>
-          ) : <div className="chat-tool-body">{body}</div>)}
-          {node.name !== 'Workflow' && node.children.length > 0 && (
-            <div className="chat-subagent">
-              <NodeList nodes={node.children} live={live} />
-            </div>
-          )}
-          {/* A sub-agent's totals close its transcript rather than open it. */}
-          {isBackgroundTask && node.name !== 'Workflow' && <TaskProgressDetail id={node.id} />}
-          {/* A question's result, once read, is only the replay above said again. */}
-          {node.result && !node.result.isError && !hideResult && !launchReceipt && !outcome && (
-            <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
-          )}
-          {!node.result && isShell && <LiveShellOutput toolUseId={node.id} seq={node.seq} />}
-        </div>
-      )}
-    </div>
+      {ownerWords && <OwnerChatBubble words={ownerWords} />}
+    </>
   );
 }
 
@@ -4620,6 +4679,51 @@ function TaskBadgeAndStatus({ node, live, meta }: { node: ToolNode; live?: boole
 
 /** A running background task's folded card: what its sub-agent is on right now — the last thing
     its relayed transcript did. Native parity: ToolCards.swift's `liveActivity`. */
+/**
+ * A SubAgent's grey Why: one line of clauses, at most two at a 900 px transcript. The router's full reasons and
+ * every candidate it removed are behind it — in its tooltip, and in the list `Details` opens.
+ */
+function SubagentWhy({ why, run }: { why: string; run: SubagentRunView | undefined }) {
+  const [open, setOpen] = useState(false);
+  const { reasons, removed } = subagentWhyDetails(run);
+  const more = reasons.length > 0 || removed.length > 0;
+  const tooltip = more
+    ? [...reasons, ...(removed.length ? ['Removed:', ...removed.map((line) => `- ${line}`)] : [])].join('\n')
+    : undefined;
+  return (
+    <>
+      <div className="chat-subagent-why" title={tooltip}>
+        <b>Why</b> · {why}
+        {more && (
+          <button
+            type="button"
+            className="chat-subagent-why-more"
+            aria-expanded={open}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+          >
+            {open ? 'Hide' : 'Details'}
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="chat-subagent-why-list">
+          {reasons.map((line, i) => (
+            <li key={`r${i}`}>{line}</li>
+          ))}
+          {removed.map((line, i) => (
+            <li key={`x${i}`} className="chat-subagent-why-removed">
+              Removed · {line}
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
   const lookup = useContext(TaskLookupCtx);
   if (!lookup.running(node.id) && !(live && !node.result)) return null;
@@ -4637,6 +4741,15 @@ function SubagentLiveLine({ node, live }: { node: ToolNode; live?: boolean }) {
     if (text) return <div className="chat-tool-live">{text}</div>;
   }
   return null;
+}
+
+/** What a SubAgent handed back, as Markdown: its call's result, or a background run's once it ended — unless
+ *  the child's own last message, drawn just above it, already says it word for word. */
+function DelegateResult({ content, run, seq, steps }: { content: unknown; run?: SubagentRunView; seq: number; steps: Node[] }) {
+  const text = delegateResultText(content, run);
+  const last = steps[steps.length - 1];
+  if (!text || (last?.kind === 'assistant' && last.text.trim() === text.trim())) return null;
+  return <ToolResult seq={seq} content={text} compact markdown />;
 }
 
 /** What a background workflow's (or agent's) card opens to: its agents by phase and the totals. */
@@ -4706,6 +4819,7 @@ type ToolDesc = {
   tone?: Tone; // colour family for the icon chip + card left rail
   path?: string; // a file path → rendered as bold filename + dimmed parent dir
   meta?: string; // small trailing badge (line range, edit count)
+  tag?: string; // a word set apart after the summary (a SubAgent's `Background`)
 };
 
 // Codex's shell calls carry no `description`, and it wraps every one of them as
@@ -4842,6 +4956,16 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
             <MD>{String(i.prompt)}</MD>
           </div>
         ) : undefined,
+      };
+    // Orbit's SubAgent (docs/subagent-design.md §6.4): the same purple card as Agent. Its tier, model, time
+    // and cost come from its run (ToolView); opened, it is the child's steps and the result — no prompt.
+    case DELEGATE_TOOL:
+      return {
+        label: 'SubAgent',
+        icon: <span className="chat-subagent-icon">✦</span>,
+        tone: 'agent',
+        summary: [i.type || 'general', i.description].filter(Boolean).join(' · '),
+        tag: i.background === true ? 'Background' : undefined,
       };
     case 'Workflow':
       // A team of agents the runtime runs in the background. Named by the script's own meta

@@ -899,6 +899,40 @@ func TestUpdateEngineSkipsTheCommandWhenAlreadyCurrent(t *testing.T) {
 	}
 }
 
+// An npm-installed Codex with no npm on the service PATH: `codex update` says only "os error 2".
+// The record must say what to install instead, and stay quiet when npm is there after all.
+func TestUpdateEngineNamesTheMissingPackageManager(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerCodex)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho 'codex-cli 0.159.2'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"version":"0.169.0"}`))
+	}))
+	defer feed.Close()
+	spec := engineSpec{
+		name: "Codex", bin: providerCodex, latestURL: feed.URL, latestField: "version",
+		updateCmd: "echo 'Updating Codex via `npm install -g @openai/codex`...'; echo 'Error: No such file or directory (os error 2)' >&2; exit 1",
+	}
+
+	rec, _ := updateEngine(context.Background(), spec, dir, nil)
+	want := "0.159.2 → 0.169.0: Codex updates itself with npm, and npm isn't on this runner's PATH. " +
+		"Install npm on this machine (on Debian or Ubuntu: `sudo apt install npm`), then press Update Engines Now."
+	if rec.Status != updateFailed || rec.Message != want {
+		t.Fatalf("record = %+v, want message %q", rec, want)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "npm"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = updateEngine(context.Background(), spec, dir, nil)
+	if !strings.HasSuffix(rec.Message, "Error: No such file or directory (os error 2)") {
+		t.Fatalf("with npm on PATH the message = %q, want codex's own words", rec.Message)
+	}
+}
+
 // The counterpart: a machine that is behind still runs its updater, and what it reports names the
 // version it was reaching for. "Update timed out" is unactionable; "2.1.226 → 2.1.228" is not.
 func TestUpdateEngineNamesTheVersionItWasFetching(t *testing.T) {
@@ -1401,5 +1435,61 @@ func TestEngineUpdateRefreshesTheCatalogBeforeASlowEngineFinishes(t *testing.T) 
 			default:
 			}
 		})
+	}
+}
+
+// The report prints the number, not the CLI's whole --version line: "2.1.323 (Claude Code)" put
+// the engine's name in twice, and a probe that didn't answer left "already up to date ()".
+func TestUpdateEngineReportLinesPrintVersionNumbers(t *testing.T) {
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.229"))
+	}))
+	defer feed.Close()
+	for _, c := range []struct {
+		name, stub, updateCmd, want string
+	}{
+		{"already current", "echo '2.1.229 (Claude Code)'", "exit 1",
+			"Claude Code — already up to date (2.1.229)"},
+		{"updater moved nothing", "echo '2.1.228 (Claude Code)'", "true",
+			"Claude Code — already up to date (2.1.228)"},
+		{"version unreadable", "exit 1", "true",
+			"Claude Code — updater finished, but its version couldn't be read"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("ORBIT_HOME", t.TempDir())
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, providerClaude), []byte("#!/bin/sh\n"+c.stub+"\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			_, line := updateEngine(context.Background(), engineSpec{
+				name: "Claude Code", bin: providerClaude, updateCmd: c.updateCmd, latestURL: feed.URL,
+			}, dir, nil)
+			if line != c.want {
+				t.Fatalf("line = %q, want %q", line, c.want)
+			}
+		})
+	}
+}
+
+func TestUpdateEngineUpdatedLinePrintsVersionNumbers(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	dir := t.TempDir()
+	stub := filepath.Join(dir, providerClaude)
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\necho '2.1.228 (Claude Code)'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("2.1.229"))
+	}))
+	defer feed.Close()
+	// The "update" rewrites the stub to answer with the new version.
+	update := "printf '#!/bin/sh\\necho \"2.1.229 (Claude Code)\"\\n' > " + stub
+
+	_, line := updateEngine(context.Background(), engineSpec{
+		name: "Claude Code", bin: providerClaude, updateCmd: update, latestURL: feed.URL,
+	}, dir, nil)
+
+	if want := "Claude Code updated 2.1.228 → 2.1.229"; line != want {
+		t.Fatalf("line = %q, want %q", line, want)
 	}
 }

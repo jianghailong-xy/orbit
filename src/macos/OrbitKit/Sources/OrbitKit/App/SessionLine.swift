@@ -78,6 +78,8 @@ public struct SessionLine: Equatable, Sendable {
             // A runner draining for its update is the one queue word in the warning colour (board 5,
             // web `sessionLine`): it can last hours, and only the owner can shorten it.
             if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
+            // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
+            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.title(s), tone: .queued) }
             return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still

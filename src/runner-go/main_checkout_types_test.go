@@ -87,7 +87,7 @@ func TestMainCheckoutContractNames(t *testing.T) {
 	if limit != mainCheckoutFileLimit {
 		t.Errorf("file limit %d, fixture %d", mainCheckoutFileLimit, limit)
 	}
-	if want := []string{mainCheckoutMove, mainCheckoutCommit, mainCheckoutPush, mainCheckoutRescue}; !reflect.DeepEqual(kinds, want) {
+	if want := []string{mainCheckoutMove, mainCheckoutCommit, mainCheckoutPush, mainCheckoutRescue, mainCheckoutDiscard}; !reflect.DeepEqual(kinds, want) {
 		t.Errorf("kinds %v, fixture %v", want, kinds)
 	}
 	if !reflect.DeepEqual(codes, mainCheckoutRefusalCodes) {

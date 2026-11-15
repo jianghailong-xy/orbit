@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import io.orbitd.android.directory.QueuedCapacity
 import io.orbitd.android.directory.QueuedGate
 import io.orbitd.android.directory.RunnerUpdating
 import io.orbitd.android.directory.RunnerUpdatingPart
@@ -68,6 +69,8 @@ internal fun RunnerUpdatingQueued(gate: QueuedGate, machine: String?, openSessio
 /**
  * The foot row under the message the update holds (board 2 ⑤; web `RunnerUpdatingTag`): `Queued · runner updating`, in the meta
  * voice, the reason dotted-underlined because a press opens why — the update's account and, on its own line, how long it has waited.
+ * A full runner, run or batch is drawn the same way in [QueuedCapacity]'s words, `Queued · runner full` (web `CapacityHeldTag`,
+ * docs/mocks/queued-card-runner-full), with nothing to press in its popover.
  */
 @Composable
 internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Modifier = Modifier, now: Instant = rememberMinuteNow(),
@@ -75,10 +78,11 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val style = MaterialTheme.typography.labelSmall
     var open by remember { mutableStateOf(false) }
+    val full = QueuedCapacity.isCapacityHeld(gate)
     Row(modifier.testTag("runner-updating-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(RunnerUpdating.QUEUED, style = style, color = secondary)
         Text("·", style = style, color = secondary)
-        Text(RunnerUpdating.runnerUpdatingTag(gate), Modifier.clickable(role = Role.Button) { open = true }
+        Text(if (full) QueuedCapacity.tag(gate) else RunnerUpdating.runnerUpdatingTag(gate), Modifier.clickable(role = Role.Button) { open = true }
             .drawBehind {
                 val y = size.height - 1.dp.toPx()
                 drawLine(secondary, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx(),
@@ -88,11 +92,13 @@ internal fun RunnerUpdatingFoot(gate: QueuedGate, machine: String?, modifier: Mo
     if (open) Dialog({ open = false }) {
         Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 320.dp).testTag("runner-updating-pop")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(RunnerUpdating.runnerUpdatingTitle(gate), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                val waited = RunnerUpdating.runnerUpdatingWaited(gate, now)
-                Text(RunnerUpdating.runnerUpdatingMessageText(gate, machine) + (waited?.let { "\n$it." } ?: ""),
+                Text(if (full) QueuedCapacity.title(gate) else RunnerUpdating.runnerUpdatingTitle(gate),
+                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                val waited = if (full) QueuedCapacity.waited(gate, now) else RunnerUpdating.runnerUpdatingWaited(gate, now)
+                val said = if (full) QueuedCapacity.messageText(gate, machine) else RunnerUpdating.runnerUpdatingMessageText(gate, machine)
+                Text(said + (waited?.let { "\n$it." } ?: ""),
                     Modifier.testTag("runner-updating-pop:text"), style = MaterialTheme.typography.bodyMedium)
-                later?.invoke()
+                if (!full) later?.invoke()
             }
         }
     }

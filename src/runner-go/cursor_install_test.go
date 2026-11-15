@@ -87,9 +87,9 @@ func runFakeCursorAgent(dir string) int {
 	fakeCursorWriteState(dir, args)
 	switch {
 	case len(args) > 0 && (args[0] == "--version" || args[0] == "-v"):
-		// A build slow to say its version, as one on a loaded machine is.
+		// A build slow to say its version, as one on a loaded machine is: until the test lets it go.
 		if mode, _ := os.ReadFile(filepath.Join(dir, "version-mode")); strings.TrimSpace(string(mode)) == "slow" {
-			time.Sleep(2 * time.Second)
+			fakeCursorHeld(dir)
 		}
 		version := os.Getenv(fakeCursorVersionEnv)
 		if version == "" {
@@ -193,6 +193,15 @@ func fakeCursorWriteState(dir string, args []string) {
 	}
 }
 
+// fakeCursorHeld holds the fake CLI until the test writes "let-go" in dir, or 60 s pass.
+func fakeCursorHeld(dir string) {
+	for end := time.Now().Add(60 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		if _, err := os.Stat(filepath.Join(dir, "let-go")); err == nil {
+			return
+		}
+	}
+}
+
 // fakeCursorModels is `agent models` (§9): exit 0 with a credential that works; the measured wording
 // for a network it cannot reach; an authentication refusal otherwise.
 func fakeCursorModels(dir string) int {
@@ -209,7 +218,7 @@ func fakeCursorModels(dir string) int {
 		return 1
 	case "hang":
 		// A Cursor API that never answers: the CLI waits on it until something stops it.
-		time.Sleep(60 * time.Second)
+		fakeCursorHeld(dir)
 		return 1
 	case "invalid-key":
 		// A key Cursor refuses, as P0a recorded it (failure-shapes-without-prompt), colours and all.

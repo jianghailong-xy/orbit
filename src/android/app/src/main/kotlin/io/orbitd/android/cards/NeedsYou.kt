@@ -20,19 +20,23 @@ data class OwnerItem(val itemId: String, val kind: String, val title: String, va
  * 2026-10-21, `docs/mocks/needs-you-capsule`): [text] is what is waiting, [detail] where — the project an owner item
  * stops, or the conversation a press opens — and [since] since when, the ISO instant the bar's age is read from. */
 data class NeedsYouBanner(val count: Int, val target: JsonObject, val text: String, val detail: String? = null,
-    val since: String? = null, val ownerItem: OwnerItem? = null) {
-    /** The mark the bar draws: the owner item's kind, or the raised hand of a blocked tool call. */
-    val glyph: NeedsYouGlyph get() = ownerItem?.let { NeedsYouGlyph.of(it.kind) } ?: NeedsYouGlyph.HAND
-    /** How many other conversations wait behind the one the bar names — its "+2"; none when the first line is itself the
+    val since: String? = null, val ownerItem: OwnerItem? = null,
+    /** Terminals asking to be approved (board waiting-on-you-removal 02 ③): the oldest one's request, whose card a press lights on
+     * Machines & models. [target] is then no conversation. */
+    val terminalRequest: String? = null) {
+    /** The mark the bar draws: a terminal's, the owner item's kind, or the raised hand of a blocked tool call. */
+    val glyph: NeedsYouGlyph get() = if (terminalRequest != null) NeedsYouGlyph.TERMINAL
+        else ownerItem?.let { NeedsYouGlyph.of(it.kind) } ?: NeedsYouGlyph.HAND
+    /** How many other things wait behind the one the bar names — its "+2"; none when the first line is itself the
      * count ("2 sessions need you"). */
-    val more: Int get() = if (ownerItem == null) 0 else maxOf(0, count - 1)
+    val more: Int get() = if (ownerItem == null && terminalRequest == null) 0 else maxOf(0, count - 1)
 }
 
 /** Which mark the needs-you bar draws in its circle (OrbitKit `NeedsYouGlyph`): one per owner item kind — work that landed without
  * the owner's confirmation wearing the merge's, since a merge into main is what it is about — the raised hand for a blocked tool call;
  * in the conversation on screen, a question's or an exception's, by the card a press goes to. */
 enum class NeedsYouGlyph {
-    MERGE, QUESTION, WARNING, PAUSE, HAND;
+    MERGE, QUESTION, WARNING, PAUSE, HAND, TERMINAL;
 
     companion object {
         fun of(kind: String) = when (kind) {

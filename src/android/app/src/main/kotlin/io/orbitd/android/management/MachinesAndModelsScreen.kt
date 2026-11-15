@@ -96,8 +96,15 @@ internal class MachinesAndModelsModel(private val api: ManagementApi) {
  * stays in the app: an engine is signed in on its page, a machine on its record, a pool on its page, a DeepSeek key on its page.
  */
 @Composable
-internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit) {
+internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (OrbitRoute) -> Unit, record: String? = null) {
     val model = remember(api) { MachinesAndModelsModel(api) }
+    // Terminals asking to be approved head Needs you (docs/mocks/waiting-on-you-removal/02 ①); opened from the bar or the push
+    // ([record] `terminal:<id>`), the page is at its top with that card lit.
+    val terminalStore = remember(api) { TerminalRequestStore.of(api) }
+    val terminals = rememberLiveTerminalRequests(terminalStore)
+    val litTerminal = TerminalNeedsYou.requestOf(record)
+    val scroll = rememberScrollState()
+    LaunchedEffect(litTerminal) { if (litTerminal != null) scroll.animateScrollTo(0) }
     val machines = model.machines
     val resumed = rememberResumed()
     val now = rememberNow()
@@ -119,7 +126,7 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
     fun runner(id: String) = open(OrbitRoute(Destination.RUNNER, id))
     fun page(record: String) = open(OrbitRoute(Destination.SETTINGS, "machines-and-models", recordId = record))
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal = 16.dp, vertical = 8.dp)) {
             when {
                 !machines.loaded && machines.failed -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -137,9 +144,11 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
                     }
                 }
             }
-            if (model.settled) {
-                val attention = model.attention(machines.runners, machines.workspaces, now)
-                if (attention.isNotEmpty()) NeedsYouSection(attention) { item ->
+            if (model.settled || terminals.isNotEmpty()) {
+                val attention = if (model.settled) model.attention(machines.runners, machines.workspaces, now) else emptyList()
+                if (attention.isNotEmpty() || terminals.isNotEmpty()) NeedsYouSection(attention, {
+                    TerminalRequestCards(terminals, terminalStore, litTerminal, notice::show)
+                }) { item ->
                     when (val kind = item.kind) {
                         is MachinesAndModels.Kind.Offline -> runner(kind.runnerId)
                         is MachinesAndModels.Kind.NoCliSignedIn -> runner(kind.runnerId)
@@ -156,6 +165,7 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
             FormSection(footer = RunnerCopy.ADD_FOOTER) { TextButton(onClick = { adding = true }) { Text(RunnerCopy.ADD) } }
             PoolsSection(model.memberPools(now), model.ownPools(now), now, ::page)
             KeysSection(model, ::page)
+            ModelTiersSection(api, revision)
             Spacer(Modifier.height(48.dp))
         }
         notice.Host(Modifier.align(Alignment.BottomCenter))
@@ -175,10 +185,14 @@ internal fun MachinesAndModelsPage(api: ManagementApi, revision: Long, open: (Or
     }
 }
 
-/** A line for each thing that waits on a person, in the web's words, each with its way out: a machine's record, a pool's page. */
+/** A line for each thing that waits on a person, in the web's words, each with its way out: a machine's record, a pool's page; the
+ * terminals asking to be approved above them, as their cards. */
 @Composable
-private fun NeedsYouSection(items: List<MachinesAndModels.Attention>, open: (MachinesAndModels.Attention) -> Unit) {
+private fun NeedsYouSection(items: List<MachinesAndModels.Attention>, terminals: @Composable () -> Unit,
+    open: (MachinesAndModels.Attention) -> Unit) {
     FormSection(MachinesAndModels.NEEDS_YOU) {
+        // Terminals first: a request lives ten minutes. Each is the whole card, its own way out.
+        terminals()
         items.forEachIndexed { index, item ->
             if (index > 0) HorizontalDivider()
             Row(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("needs-you:${item.id}"), verticalAlignment = Alignment.CenterVertically,

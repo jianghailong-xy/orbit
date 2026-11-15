@@ -12,6 +12,9 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /owner-requests/:id/secret',
   'POST /owner-requests/:id/secret/cancel',
   'POST /owner-requests/:id/secret/revoke',
+  // The owner's Create wiki on a WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): making a wiki is the
+  // owner's own act, as POST /wiki/spaces is; it also refuses an acting session, WIKI_OWNER_CHANNEL_ONLY.
+  'POST /owner-requests/:id/create-wiki',
   'GET /account-secrets',
   'PUT /account-secrets/:id',
   'DELETE /account-secrets/:id',
@@ -111,4 +114,10 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /integrations/feishu/chats/confirm',
   'PATCH /integrations/feishu/chats/:id',
   'DELETE /integrations/feishu/chats/:id',
+  // A terminal asking to be approved (docs/terminal-session-design.md, "The terminal credential"): approving mints a
+  // credential that answers this machine's approval cards for 30 days, so the card, its Approve and its Deny are the
+  // owner's own, signed in to the app — never a token's, a runner's or another terminal's.
+  'GET /terminals/requests',
+  'POST /terminals/requests/:id/approve',
+  'POST /terminals/requests/:id/deny',
 ];

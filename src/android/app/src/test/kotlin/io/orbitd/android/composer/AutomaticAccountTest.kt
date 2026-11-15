@@ -41,8 +41,8 @@ class AutomaticAccountTest : ComposerShellTest() {
         compose.onNodeWithTag("engine:codex").performClick()
         await { has(hasText("Codex ⌄")) }
         openModelMenu()
-        assertEquals(listOf("Signed in on Fixture runner", "✓ Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%",
-            "Expired account\nNot signed in, sign in →"), providerRows())
+        assertEquals(listOf("Signed in on Fixture runner", "✓ Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%"),
+            providerRows())
         compose.onNodeWithContentDescription("Automatic: starts on the Codex account whose quota resets soonest, and switches when it hits its limit")
             .assertExists()
         compose.onNode(hasText("Second account", substring = true) and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
@@ -62,8 +62,8 @@ class AutomaticAccountTest : ComposerShellTest() {
         twoAccountRunner(capabilities = "\"codex-account-move/v1\"")
         ComposerShell.session = mapOf("provider" to JsonPrimitive("codex"), "model" to JsonPrimitive("gpt-6"))
         signIn(); openSession(); openModelMenu()
-        assertEquals(listOf("Signed in on Fixture runner", "✓ Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%",
-            "Expired account\nNot signed in, sign in →"), providerRows())
+        assertEquals(listOf("Signed in on Fixture runner", "✓ Automatic\nSwitches to soonest reset", "Default\n5h 23%", "Second account\n5h 95%"),
+            providerRows())
         compose.onNodeWithTag("composer-provider-value").assertTextEquals("Automatic")
         compose.onNode(hasText("✓ Automatic") and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
         await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/account") != null }
@@ -77,8 +77,8 @@ class AutomaticAccountTest : ComposerShellTest() {
             "codexAccount" to JsonPrimitive("1a2b3c4d"), "codexAccountPinned" to JsonPrimitive(true))
         signIn(); openSession(); openModelMenu()
         compose.onNodeWithTag("composer-provider-value").assertTextEquals("Second account")
-        assertEquals(listOf("Signed in on Fixture runner", "Automatic\nSwitches to soonest reset", "Default\n5h 23%", "✓ Second account\n5h 95%",
-            "Expired account\nNot signed in, sign in →"), providerRows())
+        assertEquals(listOf("Signed in on Fixture runner", "Automatic\nSwitches to soonest reset", "Default\n5h 23%", "✓ Second account\n5h 95%"),
+            providerRows())
     }
 
     @Test fun withoutTheRunnersMoveASessionsEngineIsOneRow() {

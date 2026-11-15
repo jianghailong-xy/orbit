@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expiryText, resolutionTurnLabel, snoozeChoices } from './ownerRequests';
+import { expiryText, ownerRequestChatContext, resolutionTurnLabel, snoozeChoices } from './ownerRequests';
 
 const NOW = Date.parse('2026-11-09T12:00:00.000Z');
 const HOUR = 3_600_000;
@@ -42,5 +42,14 @@ describe('deadlines', () => {
     expect(keys(null)).toEqual(['1h', '4h', '1d']);
     expect(keys(2)).toEqual(['1h']);
     expect(keys(0.5)).toEqual([]);
+  });
+});
+
+describe('ownerRequestChatContext', () => {
+  it('names the request and says it is still open, ahead of the owner’s words', () => {
+    expect(ownerRequestChatContext({ id: '34uabc', title: 'Register the package name' })).toBe(
+      'The owner pressed Chat about this on your request “Register the package name” (owner request 34uabc). '
+        + 'It is still open: not marked done and not declined. Their message:',
+    );
   });
 });

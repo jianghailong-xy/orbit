@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { useLiveTerminalRequests } from '../TerminalRequests';
+import { routeId } from '../../lib/idCodec';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -23,6 +25,7 @@ import {
   BellOutlined,
   BlockOutlined,
   CloudOutlined,
+  CodeOutlined,
   DatabaseOutlined,
   FolderOutlined,
   HddOutlined,
@@ -36,7 +39,10 @@ import {
   SunOutlined,
   UserOutlined,
 } from '@ant-design/icons';
+import { MANAGED_RUNNER_COPY, type ManagedRunnerRow } from '@orbit/shared';
 import { api } from '../../api';
+import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
+import { Spinner } from '../ui/Spinner';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../../lib/providerAdmin';
 import { providerPoolsQuery } from '../../lib/providerPools';
@@ -65,6 +71,7 @@ const PERSONAL_ICONS: Record<(typeof PERSONAL_PAGES)[number]['path'], ReactNode>
   '/settings/storage': <DatabaseOutlined />,
   '/settings/shared-links': <LinkOutlined />,
   '/settings/access-tokens': <KeyOutlined />,
+  '/settings/terminals': <CodeOutlined />,
 };
 
 /** Integrations' rows' icons, one per connected service. */
@@ -209,13 +216,20 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   const latestVersion = latestRunnerVersion(useQuery(publishedRunnerVersionQuery()).data, runners);
   const providers = useQuery({ queryKey: PROVIDERS_LIST_KEY, queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE) });
   const pools = useQuery(providerPoolsQuery());
+  // The account's managed runner (docs/managed-runner-existing-account-entry-design.md): an entry while the
+  // server offers one, then its own machine row in the shared state words. Nothing is read with the feature off.
+  const { managed } = useManagedRunner();
+  const managedRowFor = (runner: Runner): ManagedRunnerRow | null => managedRowOf(managed, runner.id);
   const nowMs = Date.now();
   // The keys page is every key, or one vendor's (/settings/providers/:vendor); not a key's own pages.
   const { pathname } = useLocation();
   const keysPage = /^\/settings\/providers(\/(?!(new|keys|pools)(\/|$))[^/]+)?\/?$/.test(pathname);
 
+  // A terminal on a machine asking to be approved lights that machine's dot (docs/mocks/waiting-on-you-removal/02 ①).
+  const terminalRequests = useLiveTerminalRequests();
   const stateOf = (runner: Runner): MachineState => {
     if (runnerIsOffline(runner, nowMs)) return 'offline';
+    if (terminalRequests.some((request) => routeId(request.runnerId) === routeId(runner.id))) return 'attention';
     const items = runnerAttention({
       runner,
       workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),
@@ -234,7 +248,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
   };
 
   // New workspace starts by picking its machine; with no machine at all, registering one comes first.
-  const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/runners/register');
+  const addWorkspace = () => navigate(runners.length > 0 ? '/settings/workspaces/new' : '/settings/machines/new');
 
   return (
     <nav className="settings-nav autohide-scrollbar" aria-label="Settings">
@@ -268,10 +282,23 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
 
         <NavGroup
           title="Machines"
-          add={{ label: 'Register a machine', onClick: () => navigate('/runners/register') }}
-          empty={runners.length === 0}
+          add={{ label: 'Register a machine', onClick: () => navigate('/settings/machines/new') }}
+          empty={runners.length === 0 && !managed?.display.ensure}
         >
-          <MachineRows runners={runners} stateOf={stateOf} />
+          {managed?.display.ensure && (
+            <NavRow
+              to="/settings/machines/managed"
+              icon={<PlusOutlined />}
+              label={MANAGED_RUNNER_COPY.entry.title}
+              trailing={<span className="settings-nav-meta">{MANAGED_RUNNER_COPY.entry.action}</span>}
+            />
+          )}
+          {runners.length === 0 ? (
+            // With no machine at all, the group is the one way to register one, as Providers does.
+            <NavRow to="/settings/machines/new" icon={<PlusOutlined />} label="Register a machine" />
+          ) : (
+            <MachineRows runners={runners} stateOf={stateOf} managedRowOf={managedRowFor} />
+          )}
         </NavGroup>
 
         <NavGroup
@@ -412,7 +439,15 @@ function Marked({ text, query }: { text: string; query: string }) {
  * Space or Enter and moves with the arrows. The new order shows at once and goes back if the server
  * refuses it. A press that never moves stays a click, and opens the machine's page.
  */
-function MachineRows({ runners, stateOf }: { runners: Runner[]; stateOf: (runner: Runner) => MachineState }) {
+function MachineRows({
+  runners,
+  stateOf,
+  managedRowOf,
+}: {
+  runners: Runner[];
+  stateOf: (runner: Runner) => MachineState;
+  managedRowOf: (runner: Runner) => ManagedRunnerRow | null;
+}) {
   const qc = useQueryClient();
   const message = useToast();
   const reorderMut = useMutation({
@@ -458,14 +493,31 @@ function MachineRows({ runners, stateOf }: { runners: Runner[]; stateOf: (runner
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
       <SortableContext items={runners.map((runner) => runner.id)} strategy={verticalListSortingStrategy}>
         {runners.map((runner) => (
-          <MachineRow key={runner.id} runner={runner} state={stateOf(runner)} dragDisabled={reorderMut.isPending} />
+          <MachineRow
+            key={runner.id}
+            runner={runner}
+            state={stateOf(runner)}
+            managedRow={managedRowOf(runner)}
+            dragDisabled={reorderMut.isPending}
+          />
         ))}
       </SortableContext>
     </DndContext>
   );
 }
 
-function MachineRow({ runner, state, dragDisabled }: { runner: Runner; state: MachineState; dragDisabled: boolean }) {
+function MachineRow({
+  runner,
+  state,
+  managedRow,
+  dragDisabled,
+}: {
+  runner: Runner;
+  state: MachineState;
+  /** The account's managed runner: its shared short label in place of Online/Offline (D4). */
+  managedRow: ManagedRunnerRow | null;
+  dragDisabled: boolean;
+}) {
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: runner.id, disabled: dragDisabled });
   const name = runnerName(runner);
@@ -503,12 +555,16 @@ function MachineRow({ runner, state, dragDisabled }: { runner: Runner; state: Ma
         icon={<HddOutlined />}
         label={name}
         trailing={
-          <span
-            className={`settings-dot settings-dot--${state}`}
-            role="img"
-            aria-label={MACHINE_STATE_LABEL[state]}
-            title={MACHINE_STATE_LABEL[state]}
-          />
+          managedRow ? (
+            <ManagedRowState row={managedRow} />
+          ) : (
+            <span
+              className={`settings-dot settings-dot--${state}`}
+              role="img"
+              aria-label={MACHINE_STATE_LABEL[state]}
+              title={MACHINE_STATE_LABEL[state]}
+            />
+          )
         }
       />
       <button
@@ -526,6 +582,27 @@ function MachineRow({ runner, state, dragDisabled }: { runner: Runner; state: Ma
     </div>
   );
 }
+
+/** The managed runner's state on its machine row: a spinner while it moves, else a dot, and the short label. */
+export function ManagedRowState({ row }: { row: ManagedRunnerRow }) {
+  return (
+    <span className="settings-managed-state" data-kind={row.kind} title={row.detail ?? row.label}>
+      {row.tone === 'progress' ? (
+        <Spinner size="small" aria-hidden />
+      ) : (
+        <span className={`settings-dot settings-dot--${MANAGED_DOT[row.tone]}`} aria-hidden />
+      )}
+      <span className="settings-nav-meta">{row.label}</span>
+    </span>
+  );
+}
+
+const MANAGED_DOT: Record<ManagedRunnerRow['tone'], MachineState> = {
+  ready: 'online',
+  progress: 'online',
+  idle: 'offline',
+  attention: 'attention',
+};
 
 /**
  * The Workspaces group's rows: every workspace, most recently used first, each with its machine in

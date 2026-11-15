@@ -30,6 +30,8 @@ import SwiftUI
 // orbitHeroGlyph   decorative hero/brand glyphs (login logo)         44 (static)           44
 // orbitGraphTitle  a task-graph mark's title (fixed-size box)        12 semi (static)      12 semi
 // orbitGraphMeta   a task-graph mark's status line, fold legend      10.5 (static)         10.5
+// orbitFigure      a machine page Resources tile's reading (`38`)    .title semi  28       28 semi
+// orbitFigureUnit  the `%` beside it                                 .callout med 16       16 med
 //
 // Rule of thumb when adding UI: reading text → prose family; tappable words → orbitLabel or
 // larger; monospaced content → the mono family; only true glance-metadata may use orbitMeta.
@@ -57,6 +59,8 @@ extension Font {
     // whole (fit to width, pinch in full screen) rather than one mark's words growing out of it.
     static let orbitGraphTitle: Font = .system(size: 12, weight: .semibold)
     static let orbitGraphMeta: Font = .system(size: 10.5)
+    static let orbitFigure: Font = .title.weight(.semibold)
+    static let orbitFigureUnit: Font = .callout.weight(.medium)
 
     static func orbitHeading(_ level: Int) -> Font {
         // .headline is 17pt semibold — same size as orbitProse, so an h3/h4 distinguishes itself
@@ -85,6 +89,8 @@ extension Font {
     static let orbitHeroGlyph: Font = .system(size: 44)
     static let orbitGraphTitle: Font = .system(size: 12, weight: .semibold)
     static let orbitGraphMeta: Font = .system(size: 10.5)
+    static let orbitFigure: Font = .system(size: 28, weight: .semibold)
+    static let orbitFigureUnit: Font = .system(size: 16, weight: .medium)
 
     static func orbitHeading(_ level: Int) -> Font {
         // The pre-token fixed ramp, kept verbatim: a notch above the 14pt macOS prose so an h4

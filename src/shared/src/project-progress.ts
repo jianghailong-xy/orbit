@@ -1967,7 +1967,7 @@ export type SessionWaitingKind =
  * that asked for them and on the target project's coordinator (`taskMoves`). A group is one
  * session's moves from one project into another; the row counts groups but says the moves.
  */
-export type SessionOwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM';
+export type SessionOwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE';
 
 /** One open owner request on the session that asked it, oldest first. */
 export interface SessionOwnerRequest<Instant = string> {
@@ -2000,6 +2000,8 @@ export const OWNER_REQUEST_ROW_WORDS: Readonly<Record<SessionOwnerRequestKind, s
   SECRET: 'Key needed',
   MANUAL_STEP: 'Steps for you',
   CONFIRM: 'Confirm for you',
+  // An agent asking for a wiki (4424f65ed): the card's own action, "Create wiki".
+  WIKI_CREATE: 'Create wiki',
 };
 
 /** The row's word for `moves` waiting task moves. */

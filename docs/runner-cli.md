@@ -12,6 +12,14 @@ The document also names the binary itself: `cliVersion` and `sourceSha`, the com
 or `dev-local` for a build that named none. `orbit status` prints both on its first line once a runner is
 registered.
 
+Each capability also carries the operation's contract: `object` and `intent` (what it acts on and the
+question it answers), `risk`, `approval` (`none`, `card` or `owner`, with the card's `approvalKey` and
+any `approvalDetail`), `destructive`, `idempotency` and `retry` (how a retry is made safe),
+`successEvidence` and `returns` (what proves it worked and what it hands back), `nextStep`, and
+`availability` (how the MCP and CLI surfaces reach it). The whole document is projected from one
+versioned operation catalogue, identified by `catalogVersion` and `catalogHash`; the same catalogue
+rendered for a person is the [operation catalogue](operation-catalog.md).
+
 ## Tasks and task lists
 
 ```bash
@@ -35,8 +43,37 @@ into the new task's inputs, preserving the originals. Batch task JSON and the MC
 and `task_create_batch` accept the optional `attachmentIds` array on each task.
 
 Inside a task-backed Orbit session, task commands may omit the task ID and use `ORBIT_TASK_ID`. In-session
-CLI mutations are attributed to the current agent and session. Headless mutations that use only a runner
-credential fall back to the runner owner.
+CLI mutations are attributed to the current agent and session. Creating a task or a batch, and applying a
+DAG restructure, are carded by caller: on the machine credential they need that session and its answered
+card, and a headless process must act as the account owner with `ORBIT_USER_TOKEN` (or `orbit login`),
+which writes through the user route and is recorded as the person. Other headless mutations that use only
+a runner credential fall back to the runner owner.
+
+### Receipts, strict input and retries
+
+`--json` prints the entity a command answered with. `--receipt`, accepted by every command in
+`orbit capabilities`, prints instead the receipt the MCP tool of the same operation returns
+([agent contract §6.3](orbit-agent-contract.md)): one JSON document with `ok`, `outcome`, the entity's
+`id` and `status`, the `changedFields`, the `approval` outcome, the `idempotency` used and, when `ok` is
+false, an `error` with its code and a `retry` rule. It is printed on stdout for a failure too, and the
+exit status is 0 exactly when `ok` is true. A card the owner answered with "Chat about this" is
+`outcome: chat`, not a refusal: no `error`, their words in `approval.message`, and the reply in `text`.
+Nothing was written, so the exit status is non-zero, and the reply is also the command's error.
+
+```bash
+orbit task create --title "Rotate the staging key" --completion-criterion EVIDENCE_JUDGMENT \
+  --acceptance-criteria "the old key is revoked" --idempotency-key rotate-staging-key --receipt | jq -r .id
+```
+
+`--idempotency-key` makes a create safe to send again: the same key — after a timeout, or in a later
+turn — answers with the task the first send wrote, and the same key with a different title or
+description is refused. `orbit task create-batch --idempotency-key` keys a whole plan. A create without
+a key is sent once; if its answer is lost, read the tasks back before sending it again.
+
+A `--tasks` document is judged against `task_create_batch`'s schema before anything is asked or sent:
+an unknown field in an item, a wrong type, a missing title or `completionCriterion`, and an item that sets
+both of `startNow`/`runAt`, `parentTaskId`/`parentRef` or `verifiesTaskId`/`verifiesRef` are refused,
+naming the item and the field.
 
 ### Reviewing a confirmation request
 
@@ -108,8 +145,10 @@ Creating sessions and using lifecycle operations requires a live caller session 
 Session orchestration on (one switch for every workspace, on unless the owner turns it off in Settings). The
 runner receives a short-lived, session-bound proof. Every request rechecks the live session assignment and that
 switch, so ending, deleting, reassigning, or turning orchestration off revokes access without waiting for proof
-expiry. When orchestration is on, `orbit agent list`, `agent create`, and `agent update` expose the same
-agent-management surface to the CLI. Only a human can switch orchestration.
+expiry. The same switch grants managing the account's agents and runners, not only its sessions: with it on,
+`orbit agent list|create|update|delete` and `orbit runner list|install|install-status|delete` (MCP `agent_*`,
+`runner_*`), and `orbit project send` and `ensure-coordinator`, are offered beside the session commands, and with
+it off all of them are hidden and refused. Only a human can switch orchestration.
 
 ### Permission modes, shell commands and background jobs
 
@@ -120,7 +159,7 @@ asks and whichever way the request reaches the runner.
 
 | Mode | `bg_run` | Claude Code's `Bash` and `Monitor` |
 | --- | --- | --- |
-| Plan | Refused, with what to do instead | A card for each command; the Auto classifier is off in Plan |
+| Plan | Refused, with what to do instead | A card for each command not already allowed; the Auto classifier is off in Plan |
 | Default, Accept Edits | A card showing what would run: allow once, always allow, or reject | A card for each command not already allowed |
 | Don't Ask | Refused, with what to do instead | Refused unless already allowed |
 | Auto | Started | Run without asking |
@@ -144,7 +183,8 @@ asks and whichever way the request reaches the runner.
 - **Other engines' own shell tools** follow each engine's own rules for the mode. Codex does not enforce Don't Ask on
   its shell tool: it runs commands there without asking, although a job is refused.
 - **A question for a person is not a job.** A call that files a card and waits for the answer, such as `task_create`,
-  works in every mode, on the engines whose tool calls have a deadline too.
+  works in every mode but Plan, which refuses the write itself (below), on the engines whose tool calls have a
+  deadline too.
 
 An upgrade changes two things people may notice. Background jobs now follow this table on every engine; before, a job
 started in nearly any mode. And Claude Code in Default and Accept Edits now asks before each `Bash` command that is not
@@ -153,6 +193,30 @@ unattended has to move to Auto.
 
 This protects against an agent acting ahead of a person, not against a hostile process on the machine. See
 [Security notes](#security-notes).
+
+### Orbit's own calls in each mode
+
+Orbit's own MCP tools and `orbit` commands never put an engine's own prompt in front of the owner, in any mode:
+every session may call them. Claude Code is given the `mcp__orbit__*` allow rule and a rule for each `orbit` command
+the session is offered; on Codex the runner consents to each Orbit tool by its name, and the tools' annotations
+tell Codex that Orbit's reads need no consent at all. What a call may then do is Orbit's to say:
+
+- **A write that needs the owner files its own card**, in every mode: `task_create`, a batch, a project, a
+  provider, an agent change.
+- **Plan reads, waits and asks the owner, and refuses every other write**, on every engine and through the MCP
+  tools and the CLI alike, with what to do instead and nothing written. Reads (`task_get`, `project_get`,
+  `task_dependency_graph`), waits (`task_await`, watches), lines and questions for the owner (`notify`,
+  `request_owner_action`) and previews (`orbit task create-batch --dry-run`, `orbit task-list propose-dag` without
+  `--apply`) still run. The mode is the session's live one, read from the runner at each call: an owner's switch,
+  and Claude Code leaving Plan once a plan is approved, count from the next call. A session that cannot read its
+  mode makes no Orbit write, in any mode, and says why: restarting the session or its runner gives it back.
+- **Outside Plan, a schedule and a dependency edge need no card**: `task_update` with `runAt`, and
+  `task_dependency_add` / `task_dependency_remove`, start recorded work no sooner than `task_start` does, which needs
+  no card once the work is recorded.
+
+The whole matrix, per engine, surface and mode, is [the permission matrix](permission-matrix.md). Codex is handed no
+allowlist, so an `orbit` command in its shell is asked about like any other command; Orbit's MCP tools are its way
+in.
 
 ### Installing an engine on a runner
 

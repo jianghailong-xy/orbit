@@ -356,7 +356,6 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(SessionProviderChoices.providers(for: "codex", sources: sources).first { $0.slug == "codex" }?.accounts, [
             AccountChoice(id: "default", label: "Default", quota: "5h 100%", nearLimit: true),
             AccountChoice(id: pro, label: "kxugfvukxczwl@mail.com", quota: "Weekly 0%"),
-            AccountChoice(id: "c0ffee42", label: "Account c0ffee42", unavailable: "Not signed in"),
         ])
         XCTAssertNil(SessionProviderChoices.providers(for: "claude", sources: sources).first { $0.slug == "claude" }?.accounts)
         // One account, or an engine that cannot run, lists none.

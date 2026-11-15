@@ -98,13 +98,13 @@ test('unit L4: a session asks for a task to be moved, and only asks', { skip, co
     return id;
   }
 
-  async function insertCriterion(projectId: string, text: string): Promise<string> {
+  async function insertCriterion(projectId: string, text: string, ordinal = 1): Promise<string> {
     const id = randomUUID();
     await admin.query(
       `INSERT INTO "project_acceptance_criterion_definition"
          ("id","project_id","ordinal","text","verification_method","content_hash","created_at","updated_at")
-       VALUES ($1,$2,1,$3,'a pg spec',$4,now(),now())`,
-      [id, projectId, text, createHash('sha256').update(text).digest('hex')],
+       VALUES ($1,$2,$5,$3,'a pg spec',$4,now(),now())`,
+      [id, projectId, text, createHash('sha256').update(text).digest('hex'), ordinal],
     );
     return id;
   }
@@ -563,6 +563,14 @@ test('unit L4: a session asks for a task to be moved, and only asks', { skip, co
 
   await t.test('the crossings list shows a person what they are answering', async () => {
     const w = await seed('card');
+    // B's criterion is third in B's list, and the stored ordinals have gaps: the card names it by
+    // its position in the list ("Criterion 3"), never by the stored number or the opaque key.
+    await admin.query(
+      `UPDATE "project_acceptance_criterion_definition" SET "ordinal" = 9 WHERE "id" = $1::uuid`,
+      [w.criterionB]);
+    await insertCriterion(w.projectB, 'card: B first', 2);
+    await insertCriterion(w.projectB, 'card: B second', 5);
+    await insertCriterion(w.projectB, 'card: B after it', 12);
     // A filing beside the move, so the list is read with both shapes in it.
     await refusalOf(() => tasks.create(w.ownerId, {
       title: 'card: new work for B', projectId: w.projectB, handoff: { reason: 'it serves B' },
@@ -576,12 +584,19 @@ test('unit L4: a session asks for a task to be moved, and only asks', { skip, co
       assert.deepEqual(move.subjectTask, { id: w.task, title: w.taskTitle });
       assert.equal(move.fromProjectId, w.projectA);
       assert.equal(move.toProjectId, w.projectB);
-      assert.deepEqual(move.fromProject, { title: 'card project A', status: 'OPEN' });
-      assert.deepEqual(move.toProject, { title: 'card project B', status: 'OPEN' });
+      // The source's coordinator is named too; it draws only a move out of every project, which
+      // this is not, so the page reads the target's for this row.
+      assert.deepEqual(move.fromProject,
+        { title: 'card project A', status: 'OPEN', coordinatorSessionId: w.coordA });
+      // The target's coordinator draws this row as a decision card, so the pages leave it out
+      // (docs/mocks/crossings-page-only-uncovered).
+      assert.deepEqual(move.toProject,
+        { title: 'card project B', status: 'OPEN', coordinatorSessionId: w.coordB });
       assert.deepEqual(move.requestedCriterion,
-        { key: criterionKeyOf(w.criterionB), text: 'card: what B wants' });
+        { key: criterionKeyOf(w.criterionB), text: 'card: what B wants', ordinal: 3 },
+        'the requested criterion carries its 1-based position in the target project\'s list');
       assert.deepEqual(move.withdrawnCriterion,
-        { key: criterionKeyOf(w.criterionA), text: 'card: what A wants' },
+        { key: criterionKeyOf(w.criterionA), text: 'card: what A wants', ordinal: 1 },
         'the criterion of the source the move takes back');
       assert.equal(move.requestedBySessionId, w.coordB);
       assert.deepEqual(move.requestedBySession, { id: w.coordB, title: 'card: coordinator of B' });
@@ -601,5 +616,24 @@ test('unit L4: a session asks for a task to be moved, and only asks', { skip, co
         }
       }
     }
+    // GET /sessions/:id/task-moves reads the same row with the same number.
+    const moves = (await handoffs.listMovesForSession(w.ownerId, w.coordB))
+      .flatMap((batch) => batch.moves);
+    assert.equal(moves.length, 1, 'the asking session draws its move');
+    assert.deepEqual(moves[0].requestedCriterion,
+      { key: criterionKeyOf(w.criterionB), text: 'card: what B wants', ordinal: 3 });
+    // A criterion that has since been deleted has neither words nor a number.
+    await admin.query(`DELETE FROM "project_acceptance_criterion_definition" WHERE "id" = $1::uuid`,
+      [w.criterionB]);
+    const gone = (await handoffs.listForProject(w.ownerId, w.projectB))
+      .find((row) => row.kind === 'MOVE_TASK')!;
+    assert.deepEqual(gone.requestedCriterion,
+      { key: criterionKeyOf(w.criterionB), text: null, ordinal: null });
+    // A coordinator in Trash draws no card: the row reads as having no conversation to answer it.
+    await admin.query('UPDATE "session" SET "deleted_at" = now() WHERE "id" = $1::uuid', [w.coordB]);
+    const trashed = (await handoffs.listForProject(w.ownerId, w.projectA))
+      .find((row) => row.kind === 'MOVE_TASK')!;
+    assert.deepEqual(trashed.toProject,
+      { title: 'card project B', status: 'OPEN', coordinatorSessionId: null });
   });
 });

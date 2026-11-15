@@ -32,10 +32,12 @@ import type { Request, Response } from 'express';
 import { plainToInstance } from 'class-transformer';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { isStopping, pauseUnlessStopping } from '../common/graceful-stop';
 import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
+import { reloadCarriesEnv } from '../sessions/session-settings';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -100,6 +102,7 @@ import {
   parseQuotaResetAt,
   usageLimitResetsAt,
   workflowLaunchReceipt,
+  delegateLaunchReceipt,
   type PlanUsage,
   PermissionMode,
   QuestionAnswers,
@@ -181,6 +184,7 @@ import {
   type SessionMessageFrom,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
+import type { TaskRunsWith } from '../workspaces/start-anchor';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
@@ -213,7 +217,7 @@ import {
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { QueueService } from '../queue/queue.service';
-import { approvalRequestEvent, RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
+import { approvalRequestEvent, RealtimeService, type RestatedSeqs } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
@@ -240,6 +244,8 @@ import {
   stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
+import { fileSubagentWake, interruptOrphanedSubagentRuns } from './subagent-wake';
+import { remoteSubagentHeartbeat } from './subagent-remote';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -336,6 +342,7 @@ import {
   settleUnrunSessionRequests,
 } from '../sessions/session-request';
 import { readTurnCards } from '../sessions/turn-cards';
+import { sentFromOf } from '../sessions/turn-sender-client';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -371,6 +378,7 @@ import {
   withProjectStarted,
   withSessionMessage,
   withExternalSender,
+  withSentFrom,
   withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
@@ -508,6 +516,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { sessionProviderExec } from './session-provider-exec';
 import { gatewayBooksSpend, withKeyGatewayToken } from '../providers/key-gateway';
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
@@ -539,6 +548,8 @@ import {
   recordRunnerBeat,
   runnerLastBeatAt,
 } from '../runners/runner-presence';
+import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
+import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -640,6 +651,8 @@ interface IngestOutcome {
   events: NormalizedRunEvent[];
   durable: NormalizedRunEvent[];
   alreadyStored: number;
+  /** The range of the batch's replayable seqs an earlier delivery stored, announced again (RestatedSeqs); null when none. */
+  restated: RestatedSeqs | null;
   /** The batch's events not stored because their seq holds another event, and the door they came by. */
   seqConflicts: RunEventSeqConflict[];
   door: RunEventDoor;
@@ -979,17 +992,24 @@ interface RepairCheckAfter {
   parentSessionId: string | null;
   /** This session's own recovery: a repair turn's check has been waiting for this session's turn to end. */
   owesCheck: boolean;
+  /** A merge this session asked for of itself during its turn (SessionsService.mergeAfterOwnTurn): queued
+   *  when the turn that ended succeeded, dropped when it did not; null when none was asked for. */
+  merge: 'QUEUE' | 'DROP' | null;
 }
 // Read off the session row the settle locked. Only a repair session (startMergeRepair's server-owned
 // source) triggers one — an ordinary child of the same parent, a task's run or anything else does not —
 // and only for a turn that ended, which a finalize says only of a session it found running one.
 function repairCheckAfter(
-  session: { source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null },
+  session: {
+    source: string; parentSessionId: string | null; mergeRepairTurnEndedAt: Date | null; mergeAfterTurnAt: Date | null;
+  },
   turnEnded = true,
+  turnSucceeded = true,
 ): RepairCheckAfter {
   return {
     parentSessionId: turnEnded && session.source === 'merge-repair' ? session.parentSessionId : null,
     owesCheck: session.mergeRepairTurnEndedAt != null,
+    merge: session.mergeAfterTurnAt == null ? null : turnSucceeded ? 'QUEUE' : 'DROP',
   };
 }
 // Tool-permission approvals: `orbit mcp`'s permission tool, which holds no link, blocks on this
@@ -999,8 +1019,9 @@ const APPROVAL_POLL_INTERVAL_MS = 1_500;
 // Spread over which quota retries are scattered past their reset. See retryPlanFor.
 const QUOTA_RETRY_JITTER_MS = 60_000;
 // The runtime tools whose call starts work that outlives it — see subStarted in the events ingest.
-// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them.
-const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow']);
+// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them; and
+// Orbit's own SubAgent (docs/subagent-design.md §6.2), whatever engine the parent runs.
+const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow', 'mcp__orbit__delegate']);
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
 // entity-ID validation separate from the stricter runner-generated lease UUID
@@ -1782,6 +1803,7 @@ export class RunnerApiController {
     @CurrentRunner()
     runner: {
       id: string;
+      ownerId: string;
       name: string;
       status: string;
       lastHeartbeatAt: Date | null;
@@ -1816,6 +1838,7 @@ export class RunnerApiController {
       workspaces,
       await lastProviderByWorkspace(this.prisma, workspaces.map((a) => a.id)),
     );
+    const runsWith = await this.workspaceRunsWith(runner.ownerId, workspaces.map((a) => a.id));
     return {
       id: runner.id,
       name: runner.name,
@@ -1831,8 +1854,54 @@ export class RunnerApiController {
         provider: a.provider,
         agentKey: a.agentKey ?? undefined,
         workDir: a.workDir ?? undefined,
+        ...runsWith.get(a.id),
       })),
     };
+  }
+
+  /**
+   * What `orbit status` says each workspace's unattended work starts on, by the resolution dispatch
+   * makes (SessionsService.taskRunsWith), so the two cannot disagree: `runsWith` for a task outside any
+   * project, and per open project with open work assigned here, what an unpinned task of it runs on —
+   * read off one such task with its pins set aside. Absent when it could not be read: a status line,
+   * never a reason to fail the call.
+   */
+  private async workspaceRunsWith(
+    ownerId: string,
+    workspaceIds: string[],
+  ): Promise<Map<string, { runsWith: TaskRunsWith; projects: Array<{ id: string; title: string; runsWith: TaskRunsWith }> }>> {
+    const out = new Map<string, { runsWith: TaskRunsWith; projects: Array<{ id: string; title: string; runsWith: TaskRunsWith }> }>();
+    const sessions = this.sessions;
+    if (!sessions || workspaceIds.length === 0) return out;
+    try {
+      const open = await this.prisma.task.findMany({
+        where: {
+          ownerId,
+          assigneeId: { in: workspaceIds },
+          status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+          project: { status: 'OPEN' },
+        },
+        distinct: ['assigneeId', 'projectId'],
+        select: { id: true, assigneeId: true, project: { select: { id: true, title: true } } },
+        orderBy: [{ assigneeId: 'asc' }, { projectId: 'asc' }],
+        take: 200,
+      });
+      for (const workspaceId of workspaceIds) {
+        const projects = [];
+        for (const row of open) {
+          if (row.assigneeId !== workspaceId || !row.project) continue;
+          projects.push({
+            id: row.project.id,
+            title: row.project.title,
+            runsWith: await sessions.taskRunsWith(ownerId, { id: row.id, workspaceId }),
+          });
+        }
+        out.set(workspaceId, { runsWith: await sessions.taskRunsWith(ownerId, { workspaceId }), projects });
+      }
+    } catch (e) {
+      this.logger.warn(`runner status: runsWith not read: ${(e as Error)?.message ?? e}`);
+    }
+    return out;
   }
 
   /** `orbit unregister` — the runner deletes itself from the control plane. */
@@ -1948,6 +2017,8 @@ export class RunnerApiController {
         namedSessionIds: named,
         supervisedSessionIds: supervised,
         planUsageDigest: digests.facts.planUsage ?? null,
+        resources: sanitizeRunnerResources(dto?.resources),
+        backgroundJobSessionIds: sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
       });
     } catch (error) {
       // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
@@ -2195,13 +2266,25 @@ export class RunnerApiController {
     // node holding the connection (X-Orbit-Link-Gateway-Id). A link beat the beat statement recorded is
     // not recorded twice.
     if (!linkBeat) {
+      // Advisory like the reading below: a read that fails keeps none, and the list counts turns alone until the next beat.
+      const backgroundJobSessionIds = await ownBackgroundJobSessionIds(
+        this.prisma, runner.id, sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
+      ).catch(() => []);
       await recordRunnerBeat(this.prisma, {
         runnerId: runner.id,
         processId: heartbeatLeaseOwner,
         gatewayId: link?.gatewayId ?? null,
         linkState: link ? 'LINK' : 'HTTP',
+        backgroundJobSessionIds,
         at: beatAt,
       }).catch(beatLost);
+      // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
+      const resources = sanitizeRunnerResources(dto?.resources);
+      if (resources) {
+        await recordRunnerResources(this.prisma, runner.id, resources).catch((error) =>
+          this.logger.warn(`runner ${runner.id}: resources not recorded this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`),
+        );
+      }
     }
     // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
     // like the relays below: a read that fails hands out this beat's work as usual, and the instance,
@@ -2316,6 +2399,15 @@ export class RunnerApiController {
       if (claimed.length > 0) wikiRepoOps = claimed;
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: repository operations skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
+    // Remote SubAgent runs this runner is the target of (docs/subagent-design.md §10.2, §10.3): the ones to claim —
+    // none to a draining process, whose successor takes them — and the claimed ones whose parent stopped or ended.
+    // Reads only, on its own try: a failure costs this beat's lists, and the next beat lists them again.
+    let remoteSubagents: Awaited<ReturnType<typeof remoteSubagentHeartbeat>> = { remoteSubagentRuns: [], stopSubagentRunIds: [] };
+    try {
+      remoteSubagents = await remoteSubagentHeartbeat(this.prisma, runner.id);
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: remote SubAgent runs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
@@ -2659,6 +2751,9 @@ export class RunnerApiController {
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
+      // Present only while this runner has remote SubAgent runs to claim or to stop.
+      ...(!draining && remoteSubagents.remoteSubagentRuns.length > 0 ? { remoteSubagentRuns: remoteSubagents.remoteSubagentRuns } : {}),
+      ...(remoteSubagents.stopSubagentRunIds.length > 0 ? { stopSubagentRunIds: remoteSubagents.stopSubagentRunIds } : {}),
       ...(mainCheckoutRequests ? { mainCheckoutRequests } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
@@ -4070,6 +4165,7 @@ export class RunnerApiController {
           workspaceModel: workspace?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
+          sessionEnv: s.env,
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
@@ -4209,6 +4305,8 @@ export class RunnerApiController {
         agent: workspaceCfg,
         workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
+        // cf. the claim path: the folder below workDir a no-worktree session runs in.
+        ...(s.workSubdir ? { workSubdir: s.workSubdir } : {}),
         // cf. the claim path: a codeless run with no branch yet goes back to its detached checkout.
         ...codelessClaimFields(s, workspace, runner.capabilities),
         autoInitGit: workspace?.autoInitGit ?? undefined,
@@ -4378,7 +4476,9 @@ export class RunnerApiController {
         throw new ConflictException('session is no longer open');
       }
       const currentOwner = owned[0].inboxLeaseOwner;
-      if (currentOwner === leaseOwner) return { status: owned[0].status, orphanedApprovals: [] };
+      if (currentOwner === leaseOwner) {
+        return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[] };
+      }
       if (
         pendingWorktreeOperationMayBeExecuting(
           owned[0].mergeStatus,
@@ -4461,8 +4561,23 @@ export class RunnerApiController {
       const orphanedApprovals = currentOwner
         ? await reapApprovalsOfReplacedSupervisor(tx, sessionId)
         : [];
-      return { status: owned[0].status, orphanedApprovals };
+      // The SubAgents the predecessor hosted went with it, as its background shells did, and none of them will
+      // report an end: each still RUNNING ends INTERRUPTED here, owing the parent a wake that says why
+      // (subagent-wake.ts), filed once this commits. A predecessor that stopped in good order reported them
+      // itself, and none is left RUNNING.
+      const interruptedSubagents = currentOwner ? await interruptOrphanedSubagentRuns(tx, sessionId) : [];
+      return { status: owned[0].status, orphanedApprovals, interruptedSubagents };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
+    if (taken.interruptedSubagents.length > 0 && this.sessions) {
+      for (const runId of taken.interruptedSubagents) {
+        try {
+          await fileSubagentWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          // The wake sweep files it on its next pass.
+          this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
     // After commit, and one frame per card: a client holds these from the `approval_request` it was
     // sent live, and nothing it can see changes at a takeover, so without this the card it is
     // drawing stays answerable-looking until the session is next opened from scratch.
@@ -5891,8 +6006,9 @@ export class RunnerApiController {
   }
 
   /**
-   * The environment a `reload` re-spawns with, for the one reload that needs it: a provider switch
-   * (see SessionsService.updateConfig). Every other reload — model, permission mode, effort — runs
+   * The environment a `reload` re-spawns with, for the reloads that need it (reloadCarriesEnv): a
+   * provider switch (see SessionsService.updateConfig), and a Settings restart, which re-spawns on the
+   * same provider with the session's env as it stands (SessionsService.restart). Every other reload — model, permission mode, effort — runs
    * on the environment the engine already has, and returns undefined so the runner leaves its
    * process alone beyond the flags.
    *
@@ -5917,114 +6033,38 @@ export class RunnerApiController {
     sessionId: string,
     content: string | null,
   ): Promise<{ env?: Record<string, string>; refusal?: string }> {
-    let declared: unknown;
-    try {
-      declared = (JSON.parse(content ?? '{}') as { provider?: unknown }).provider;
-    } catch {
-      return {};
-    }
-    if (typeof declared !== 'string' || !declared) return {};
-    const session = await tx.session.findUnique({
-      where: { id: sessionId },
-      select: {
-        id: true,
-        ownerId: true,
-        model: true,
-        provider: true,
-        providerBuiltin: true,
-        engine: true,
-        poolMemberProviderId: true,
-        poolKeyId: true,
-        poolCodexAccountId: true,
-        usesRuntimeDefaultModel: true,
-        codexAccount: true,
-        claudeAccount: true,
-        antigravityAccount: true,
-        kimiAccount: true,
-        cursorAccount: true,
-        workspace: {
-          select: {
-            model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
-            cursorAccount: true,
-          },
-        },
-        assignedRunner: {
-          select: {
-            runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
-            planUsage: true,
-          },
-        },
-      },
+    if (!reloadCarriesEnv(content)) return {};
+    const resolved = await sessionProviderExec(tx, this.queue, sessionId);
+    if (!resolved.exec) return resolved.refusal ? { refusal: resolved.refusal } : {};
+    // The engine this reload re-spawns runs on the session's env as read here, so the Settings panel
+    // owes no restart for it (sessionSettingsOf) — only while the env is still the one read, as on the
+    // claim (QueueService): a PATCH since then is not in this engine, and stays owed. Stamped as the
+    // reload is handed out, which is the runner's acknowledgement of a control turn (dequeueTurn).
+    await tx.session.updateMany({
+      where: { id: sessionId, envChangedAt: resolved.envChangedAt ?? null },
+      data: { envAppliedAt: new Date() },
     });
-    if (!session) return {};
-    // The claim's words for a credential nothing holds: a member's session on a shared provider is told
-    // only an admin can run it, any other to check the configuration — asked of the slug the credential
-    // names, which on OpenCode is the key its model names.
-    const unavailable = async (customRow: unknown): Promise<string> => {
-      const slug = !isBuiltinProvider(session.provider, session.providerBuiltin)
-        ? session.provider
-        : session.provider === AgentProvider.OPENCODE ? openCodeKeyOf(session.model)?.slug : undefined;
-      return !customRow && slug && (await adminOnlyProviderRefusal(tx, session.ownerId, slug))
-        ? ADMIN_ONLY_PROVIDER_ERROR
-        : PROVIDER_UNAVAILABLE_ERROR;
-    };
-    // The environment is built for the engine the session runs on — the one it was spawned with and
-    // is re-spawned with now — from wherever its credential now comes from: a switch moves the
-    // credential, never the engine.
-    const engine = await sessionEngine(tx, session);
-    if (!engine) return { refusal: await unavailable(null) };
-    // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
-    // session's default DeepSeek key when its workspace holds no key itself.
-    // Claude Code on an OpenAI key re-spawns on a token minted for this reload, as the claim mints one.
-    const keyRow = await withKeyGatewayToken(tx, session, engine, await dispatchKeyRow(tx, session, session.workspace?.env));
-    const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
-      ? keyRow
-      : (keyRow ??
-        (await this.queue.resolveLoginPool(tx, session, session.provider!, false, engine)) ??
-        (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
-        (await this.queue.resolveSharedPool(tx, session, session.provider!)));
-    // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
-    // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
-    const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
-      && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
-    let exec: ReturnType<typeof resolveProviderExec>;
-    try {
-      exec = resolveProviderExec({
-        engine,
-        declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
-        declaredProviderBuiltin: poolFallback || session.providerBuiltin,
-        customRow,
-        openCodeKeys:
-          session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
-            ? await openCodeKeyRows(tx, session.ownerId)
-            : undefined,
-        sessionModel: session.model,
-        usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
-        runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
-        workspaceModel: session.workspace?.model,
-        modelCatalog: session.assignedRunner?.modelCatalog,
-        workspaceEnv: session.workspace?.env as Record<string, string> | null,
-        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-        claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
-        antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
-        kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
-        cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
-        runner: session.assignedRunner,
-      });
-    } catch (error) {
-      // Every refusal it makes is of the credential: gone, disabled, on a runtime no engine speaks, or
-      // one this session's engine cannot run — which last the claim and the reclaim say in its own words.
-      if (!(error instanceof BadRequestException)) throw error;
-      const refusal = error.getResponse() as { code?: string; message?: string };
-      return {
-        refusal: refusal.code === 'PROVIDER_ENGINE_INCOMPATIBLE' && refusal.message
-          ? refusal.message
-          : await unavailable(customRow),
-      };
-    }
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
     // previous provider's variables must still go, which an empty map is how the runner is told.
-    return { env: exec.env ?? {} };
+    return { env: resolved.exec.env ?? {} };
+  }
+
+  /** The SubAgent run a card names, when it is one of this session's; 404 for any other id. */
+  private async subagentRunOfSession(sessionId: string, raw: string | undefined): Promise<string | null> {
+    const given = stripNul(raw ?? '').trim();
+    if (given === '') return null;
+    // The route's pipe has decoded a base62 id already; a caller that skips it (a spec) may hand either spelling.
+    let runId: string | null = null;
+    try {
+      runId = toUuid(given);
+    } catch {
+      runId = null;
+    }
+    const run = runId
+      ? await this.prisma.subagentRun.findFirst({ where: { id: runId, sessionId }, select: { id: true } })
+      : null;
+    if (!run) throw new NotFoundException('SubAgent run not found');
+    return run.id;
   }
 
   /**
@@ -6038,9 +6078,9 @@ export class RunnerApiController {
   async createApproval(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() dto: ApprovalCreateRequest,
+    @Body(PublicIdPipe.forFields('subagentRunId')) dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const session = await this.assertSessionOrSubagentTarget(sessionId, runner, dto.subagentRunId);
     // Stripped before the lookup, not only before the write, so a retry finds the row the first
     // call created: the idempotency key and the column it was stored in have to agree.
     const toolUseId = stripNul(dto.toolUseId);
@@ -6083,6 +6123,10 @@ export class RunnerApiController {
     // and an in-turn MCP call has none (`sessions/abandoned-approvals.ts` reads it back against the
     // jobs the runner says are still up).
     const backgroundJobId = stripNul(dto.backgroundJobId ?? '').trim();
+    // The third reader: a SubAgent's child engine, asking under its parent's session (docs/subagent-design.md
+    // §5.3). It outlives the parent's turn and calls, so the card names its run, which has to be one of this
+    // session's: anything else names nothing here.
+    const subagentRunId = await this.subagentRunOfSession(sessionId, dto.subagentRunId);
     const approvalData = {
       sessionId,
       // Stripped for the same reason the event batch is (see strip-nul): a tool argument is
@@ -6098,6 +6142,7 @@ export class RunnerApiController {
       toolUseId: toolUseId || null,
       turnId: openingTurn?.id ?? null,
       backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
+      subagentRunId,
       ...(allowedMessage
         ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
         : {}),
@@ -6283,7 +6328,8 @@ export class RunnerApiController {
     /** A link call reads the decision once and answers (wait=0): a hint says when there is one. */
     @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<ApprovalDecisionResponse> {
-    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const card = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId }, select: { subagentRunId: true } });
+    await this.assertSessionOrSubagentTarget(sessionId, runner, card?.subagentRunId ?? undefined);
     const deadline = Date.now() + (link ? 0 : APPROVAL_LONG_POLL_MS);
     for (;;) {
       const a = await this.prisma.approval.findFirst({
@@ -6313,8 +6359,9 @@ export class RunnerApiController {
           ...(a.startAfterCreate ? { startAfterCreate: true } : {}),
         };
       }
-      if (Date.now() >= deadline) return { id: a.id, status: 'PENDING' };
-      await new Promise((r) => setTimeout(r, APPROVAL_POLL_INTERVAL_MS));
+      // A stopping apiserver answers at once, as when the window elapses: the reader asks again, of another apiserver.
+      if (Date.now() >= deadline || isStopping()) return { id: a.id, status: 'PENDING' };
+      await pauseUnlessStopping(APPROVAL_POLL_INTERVAL_MS);
     }
   }
 
@@ -6619,6 +6666,8 @@ export class RunnerApiController {
           source: true,
           parentSessionId: true,
           mergeRepairTurnEndedAt: true,
+          // And whether this session asked to merge itself during the turn that just ended.
+          mergeAfterTurnAt: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -7795,7 +7844,7 @@ export class RunnerApiController {
         requestsClosed: [...stoppedRequestsClosed, ...requestsClosed],
         reviewToDeliver,
         reviewsAbandoned,
-        repairCheck: repairCheckAfter(current),
+        repairCheck: repairCheckAfter(current, true, dto.status === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
       };
@@ -8068,6 +8117,16 @@ export class RunnerApiController {
    * queued is logged — the owner's Check again is still there.
    */
   private async checkRecoveryAfterTurn(sessionId: string, check: RepairCheckAfter, endedAt: Date): Promise<void> {
+    // First the merge this session asked for of itself during the turn: it is what the session wanted
+    // done, and a recovery check queued ahead of it would leave it nothing to queue.
+    if (check.merge) {
+      try {
+        await this.sessions?.mergeAfterOwnTurn(sessionId, check.merge === 'QUEUE');
+      } catch (error) {
+        this.logger.warn(`the merge ${sessionId} asked for during its turn was not queued: `
+          + `${error instanceof Error ? error.message : error}`);
+      }
+    }
     const checks: Array<[string, Date | null]> = [];
     if (check.parentSessionId) checks.push([check.parentSessionId, endedAt]);
     if (check.owesCheck) checks.push([sessionId, null]);
@@ -8194,8 +8253,13 @@ export class RunnerApiController {
    *     (writeCallSessions), and their run_event rows in one statement once every batch is derived. Alone a batch
    *     issues one or more of each, and in a merged call each one was a round trip the transaction waited on the
    *     apiserver's event loop for: task C2b measured 72% of a merged transaction's time spent so;
-   *   - the other replicas' notice of each batch, sent by the transaction itself, so they hear of each batch once, at
-   *     its commit (§6.7).
+   *   - the other replicas' notice of each batch, every one of them in one statement of its own once the transaction
+   *     has committed, and before the call is answered (§6.7). Sent by the transaction, a NOTIFY made its COMMIT take
+   *     PostgreSQL's one notification-queue lock and hold it through its WAL flush, so every merged call committed one
+   *     at a time, and one that queued past LINK_CALL_LOCK_TIMEOUT_MS rolled back at its COMMIT and sent every batch
+   *     alone (task C2b). A process that dies between the commit and the notice never answers the call; the gateway
+   *     then sends the call again, to another apiserver (it is idempotent), or fails each batch to its runner, which
+   *     sends it again: either way an ingest finds the batch's seqs stored and announces them again (restated).
    *
    * A batch the call cannot take as the events route would is answered `sendAlone`, and so is one whose ingest fails:
    * the transaction is run again without it, at most LINK_CALL_RERUNS times, and past that every batch left is sent
@@ -8352,21 +8416,6 @@ export class RunnerApiController {
       if (runEvents) {
         await callWrite(() => chunkedCreateMany((data) => tx.runEvent.createMany({ data, skipDuplicates: true }), runEvents as never[]));
       }
-      // The other replicas hear of each batch once, at this commit, of what was stored while the session is open: what
-      // publishBatch tells them after an ingest of its own.
-      const notices = ingested.flatMap(({ batch, outcome }) => {
-        if (!OPEN.includes(outcome.session.status)) return [];
-        const notice = runEventBatchNotice(
-          instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted,
-        );
-        return notice ? [notice] : [];
-      });
-      if (notices.length > 0) {
-        await tx.$executeRaw`
-          SELECT pg_notify(n.channel, n.payload)
-            FROM unnest(${notices.map((n) => n.channel)}::text[], ${notices.map((n) => n.payload)}::text[]) AS n(channel, payload)
-        `;
-      }
       return { ingested, lockedAt };
     };
     let heldMs = 0;
@@ -8376,9 +8425,24 @@ export class RunnerApiController {
           transaction: { timeout: LINK_CALL_TRANSACTION_TIMEOUT_MS, maxWait: LINK_CALL_TRANSACTION_TIMEOUT_MS },
         }));
         heldMs = committed.lockedAt === null ? 0 : Math.round(performance.now() - committed.lockedAt);
+        // The other replicas hear of each batch once it has committed, of what was stored while the session is open:
+        // what publishBatch tells them after an ingest of its own, every batch's in one statement, before the call is
+        // answered. One that fails fails the call, once the rest is announced: every batch is then forwarded alone,
+        // finds its seqs stored, and is announced again (restated).
+        const told = this.realtime.sendNotices(committed.ingested.flatMap(({ batch, outcome }) => (
+          OPEN.includes(outcome.session.status)
+            ? this.realtime.batchNotices(batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)), outcome.engineStarted, outcome.restated)
+            : []
+        ))).then(() => null, (error: unknown) => error);
         for (const { batch, outcome, coordinator } of committed.ingested) {
           await this.announceIngest(batch.sessionId, outcome, { coordinator });
           results[batch.index] = await this.linkCallAnswer(batch, outcome);
+        }
+        const untold = await told;
+        if (untold !== null) {
+          this.logger.error(`a merged runner link call of ${committed.ingested.length} batches committed, and the other apiservers could not be `
+            + `told of it (${(untold as Error)?.message ?? String(untold)}); failing the call, so that every batch is sent alone and announced again`);
+          throw untold;
         }
         break;
       } catch (error) {
@@ -8480,6 +8544,14 @@ export class RunnerApiController {
       // taken whole, as it always was.
       const stored = merged ? merged.stored : link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
       const events = stored.size > 0 ? batch.filter((e) => !stored.has(e.seq)) : batch;
+      // What of the batch an earlier delivery stored and the replicas read back: announced again, as its delivery may
+      // not have lived to announce it (RestatedSeqs).
+      const restatedSeqs = stored.size > 0
+        ? batch.filter((e) => stored.has(e.seq) && !NON_REPLAYABLE_EVENT_TYPES.includes(e.type) && !isNoiseSystemEvent(e)).map((e) => e.seq)
+        : [];
+      const restated = restatedSeqs.length > 0
+        ? { from: Math.min(...restatedSeqs), to: Math.max(...restatedSeqs) }
+        : null;
       const tombstones = link ? link.tombstones.filter((t) => !stored.has(t.seq)) : [];
       // What was left out is the same event sent again, or another at its seq, which nothing will store: that one is
       // logged and counted once the batch commits (run-event-seq-conflicts.ts). Over HTTPS it is found by the insert.
@@ -8551,6 +8623,7 @@ export class RunnerApiController {
             select: {
               id: true, content: true, clientTurnId: true, senderSessionId: true,
               externalSenderSource: true, externalSenderName: true,
+              senderClient: true, senderClientDetail: true,
             },
           })
         : [];
@@ -8597,6 +8670,11 @@ export class RunnerApiController {
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);
+        const sentTurn = e.turnId ? userTurnById.get(e.turnId) : undefined;
+        e.payload = withSentFrom(
+          e.payload,
+          sentTurn ? sentFromOf(sentTurn, cards?.sessionMessage, cards?.externalSender) : null,
+        );
       }
       // A move between account-pool members is said on the first engine start after it — the first
       // event from a process holding the new member's key. It rides on the runner's own event
@@ -9019,7 +9097,10 @@ export class RunnerApiController {
             e.type === RunEventType.TOOL_RESULT &&
             !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
             !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content) &&
-            !workflowLaunchReceipt((e.payload as { content?: unknown }).content),
+            !workflowLaunchReceipt((e.payload as { content?: unknown }).content) &&
+            // A background SubAgent's `{ runId, status: "running" }`: it runs on, and its terminal
+            // background_task clears it.
+            !delegateLaunchReceipt((e.payload as { content?: unknown }).content),
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
@@ -9047,10 +9128,21 @@ export class RunnerApiController {
       // would be a second row. Only a report carrying a `kind` counts — that is what marks a
       // runner-hosted job, as background-jobs-context.ts reads it too — because an engine's own
       // shell carries none, and that shell died with its engine.
+      // A SubAgent still running, reported again behind a `resumed` handshake (runner-go subagent.go
+      // announceSubagents): its delegate call goes back into the running SubAgents, never the job sets.
+      const subRunning = events
+        .filter((e) => {
+          if (e.type !== RunEventType.BACKGROUND_TASK) return false;
+          const { status, subagentRunId } = e.payload as { status?: unknown; subagentRunId?: unknown };
+          return status === 'running' && typeof subagentRunId === 'string' && subagentRunId !== '';
+        })
+        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+        .filter(Boolean);
       const bgRunningReports = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, kind } = e.payload as { status?: unknown; kind?: unknown };
+          const { status, kind, subagentRunId } = e.payload as { status?: unknown; kind?: unknown; subagentRunId?: unknown };
+          if (typeof subagentRunId === 'string' && subagentRunId !== '') return false;
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
         .map((e) => {
@@ -9106,6 +9198,7 @@ export class RunnerApiController {
       // Same fold, narrower set: a shell an engine launched is in `shells` and never here.
       for (const id of bgJobRunning) if (!jobs.includes(id)) jobs = [...jobs, id];
       for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
+      for (const id of subRunning) if (!subagents.includes(id)) subagents = [...subagents, id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
       // removing from the set that doesn't hold it is a no-op, so clear from both.
       for (const id of bgEnded) {
@@ -9173,7 +9266,7 @@ export class RunnerApiController {
       }
       return {
         session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size,
-        seqConflicts, door: link ? 'link' : 'https', engineStarted,
+        restated, seqConflicts, door: link ? 'link' : 'https', engineStarted,
       };
     };
     return ingest.call(this);
@@ -9181,7 +9274,7 @@ export class RunnerApiController {
 
   /**
    * What is announced of a batch once its ingest has committed (ingestEvents). For a batch of a merged link call
-   * (`merged`, ingestLinkEventCall) the other replicas have already heard of it, in the call's transaction, so its
+   * (`merged`, ingestLinkEventCall) the call tells the other replicas of every batch in one statement, so its
    * events go to this replica's streams alone; and the spend fuse is asked only for a session the call found
    * coordinating a project.
    */
@@ -9192,6 +9285,8 @@ export class RunnerApiController {
   ): Promise<void> {
     // What the attempt that committed stored: the whole batch, or for a link batch what was not already stored.
     const { events, durable } = eventOutcome;
+    /** Alone: the other replicas' notice of the batch, null once sent, or why it could not be (publishBatch). */
+    let told: Promise<unknown> | undefined;
     if (eventOutcome.seqConflicts.length > 0) {
       // Each of them is an event nothing will store, acknowledged with the batch (run-event-seq-conflicts.ts).
       const { seqConflicts, door } = eventOutcome;
@@ -9230,14 +9325,25 @@ export class RunnerApiController {
       // client, so spending a frame on it only costs the reader bandwidth. The replay paths
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
       // as one batch: the other replicas hear of it once, not once per event (publishBatch). A merged
-      // call's notice went with its transaction (ingestLinkEventCall), so only this replica is left.
+      // call tells them itself (ingestLinkEventCall), so only this replica is left. Alone, the batch is
+      // answered once they have heard: a notice that could not be sent fails the answer once the rest is
+      // announced, and the batch sent again finds its seqs stored and announces them again (restated).
       // A batch that ended the starting state is followed by a session_updated: the clients read that
       // state off the session row, and no event the engine sends re-reads it (controlTypeFor), so the
       // "Getting the session ready" notice stayed up over the engine's tool calls until a list's
       // one-minute safety read.
       const published = events.filter((e) => !isNoiseSystemEvent(e));
-      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted);
-      else this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted);
+      if (merged) this.realtime.publishBatchHere(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+      else {
+        told = (async () => {
+          try {
+            await this.realtime.publishBatch(sessionId, published, eventOutcome.engineStarted, eventOutcome.restated);
+            return null;
+          } catch (error) {
+            return error;
+          }
+        })();
+      }
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
@@ -9257,6 +9363,12 @@ export class RunnerApiController {
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
       if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
+    }
+    const untold = await told;
+    if (untold) {
+      this.logger.error(`session ${sessionId}: a batch committed, and the other apiservers could not be told of it `
+        + `(${(untold as Error)?.message ?? String(untold)}); failing its answer, so that it is sent again and announced again`);
+      throw untold;
     }
   }
 
@@ -9612,7 +9724,8 @@ export class RunnerApiController {
         currentWorkTerminalized,
         // A session the runner finalizes while it runs a turn ends that turn here — completed, failed or
         // stopped — rather than at a turn-complete; one already parked has had its turn's end settled.
-        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING),
+        repairCheck: repairCheckAfter(current, current.status === RunStatus.RUNNING,
+          effectiveStatus === RunStatus.SUCCEEDED),
         droppedWakeups,
         checksSettled,
       };
@@ -11032,6 +11145,32 @@ export class RunnerApiController {
       select: { sessionKind: true },
     });
     if (landing) assertEngineSessionRow(landing);
+  }
+
+  /**
+   * A card's door: the runner hosting the session, or — for a card a remote SubAgent's child asks under its parent
+   * (docs/subagent-design.md §10.3) — the run's target runner, for a run of this session and this account only.
+   */
+  private async assertSessionOrSubagentTarget(sessionId: string, runner: { id: string }, subagentRunId?: string) {
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    let runId: string | null = null;
+    try {
+      runId = subagentRunId ? toUuid(stripNul(subagentRunId).trim()) : null;
+    } catch {
+      runId = null;
+    }
+    if (runId && ownerId) {
+      const run = await this.prisma.subagentRun.findFirst({
+        where: { id: runId, sessionId, ownerId, targetRunnerId: runner.id },
+        select: { id: true },
+      });
+      const session = run ? await this.prisma.session.findUnique({ where: { id: sessionId } }) : null;
+      if (session && session.ownerId === ownerId) {
+        assertEngineSessionRow(session);
+        return session;
+      }
+    }
+    return this.assertSessionOwnership(sessionId, runner.id, ownerId);
   }
 
   private async assertSessionOwnership(sessionId: string, runnerId: string, ownerId?: string) {
