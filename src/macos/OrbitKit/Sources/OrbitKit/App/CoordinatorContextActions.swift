@@ -101,6 +101,14 @@ public enum CoordinatorContextActions {
         clientTurnId?.hasPrefix(handoffTurnPrefix) == true
     }
 
+    /// The note turn's first line (`COORDINATOR_HANDOFF_PROMPT_HEAD`). A listed turn carries no
+    /// `clientTurnId`, so the queue tells the platform's prompt by this line and draws no row for it.
+    public static let handoffPromptHead = "From Orbit · handoff note"
+
+    public static func isHandoffPrompt(_ text: String?) -> Bool {
+        text?.hasPrefix(handoffPromptHead) == true
+    }
+
     /// Compact is offered only where the session's engine lists `compact` among its slash assets — so
     /// not on Codex (no registry) and not on Cursor, which lists none by that name.
     public static func offersCompact(slashItems: [SlashCommandInfo], engine: String?) -> Bool {

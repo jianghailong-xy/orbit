@@ -1,3 +1,5 @@
+import { COORDINATOR_HANDOFF_PROMPT_HEAD } from '@orbit/shared';
+
 import type { TurnCards } from '../api';
 import { parseBackgroundWake } from './backgroundWake';
 
@@ -65,6 +67,7 @@ interface QueuedTurnLike {
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
+  content?: string;
 }
 
 const terminalDeliveryForEvent = (event: UserTurnEvent): string | null => {
@@ -305,6 +308,10 @@ export function queuedTurnsOutsideTranscript<T extends QueuedTurnLike>(
     return turnId ? [turnId] : [];
   }));
   return queued.filter((turn) => {
+    // The platform's ask for a coordinator's handoff note is drawn only as the handoff's own row
+    // (board 02 ②), as Transcript leaves out its echo: never a queued card, not even an empty one
+    // with the queue's line and a Cancel. The listing carries no turn key, so its first line tells it.
+    if (turn.content?.startsWith(COORDINATOR_HANDOFF_PROMPT_HEAD)) return false;
     // A live steer has its own authored USER event and must never disappear merely because the
     // target event was already in the transcript before it was sent.
     // A durable terminal receipt sharing a USER's turnId is merged into that existing bubble by
