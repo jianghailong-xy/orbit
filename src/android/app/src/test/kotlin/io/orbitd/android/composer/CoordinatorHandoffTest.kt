@@ -157,4 +157,21 @@ class CoordinatorHandoffTest {
         assertEquals("2 pending waits move over", CoordinatorHandoffCopy.waitsRowTitle(2))
         assertEquals("1 pending wait moves over", CoordinatorHandoffCopy.waitsRowTitle(1))
     }
+
+    /** Board 03 iOS 2's body, word for word as OrbitKit's `phoneConfirmBody` pins it: the waits a count, none when there are none. */
+    @Test fun thePhoneConfirmBodyIsIOSs() {
+        assertEquals("This coordinator writes a handoff note, then the project continues in a new conversation. 2 pending waits move over. Nothing is deleted.",
+            CoordinatorHandoffCopy.phoneConfirmBody(2, running = false))
+        assertEquals("This coordinator writes a handoff note, then the project continues in a new conversation. Nothing is deleted.",
+            CoordinatorHandoffCopy.phoneConfirmBody(0, running = false))
+        assertTrue(CoordinatorHandoffCopy.phoneConfirmBody(1, running = true).startsWith("After the current turn ends, this coordinator writes a handoff note"))
+    }
+
+    /** A refused press reads web's toast title, then the server's message, else what kind of failure it was. */
+    @Test fun aRefusedPressSaysCouldntHandOver() {
+        assertEquals("Couldn't hand over: This project already has a handoff under way.", CoordinatorHandoff.refusal(
+            io.orbitd.android.core.net.ApiError.parse(409, """{"message":"This project already has a handoff under way."}""".encodeToByteArray())))
+        assertEquals("Couldn't hand over: Can't reach Orbit. Check your connection and try again.",
+            CoordinatorHandoff.refusal(io.orbitd.android.core.net.NetworkException()))
+    }
 }

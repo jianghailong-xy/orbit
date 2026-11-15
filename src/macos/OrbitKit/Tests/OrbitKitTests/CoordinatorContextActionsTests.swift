@@ -220,6 +220,13 @@ final class CoordinatorContextActionsTests: XCTestCase {
         XCTAssertTrue(CoordinatorContextCopy.phoneConfirmBody(waits: 1, running: true)
             .hasPrefix("After the current turn ends, this coordinator writes a handoff note"))
     }
+
+    /// A refused press reads web's toast title, then why (`APIClient.failureReason`).
+    func testARefusedPressSaysCouldntHandOver() {
+        XCTAssertEqual(CoordinatorHandoffCopy.refused, "Couldn't hand over")
+        XCTAssertEqual(CoordinatorHandoffCopy.refusal("the connection dropped"),
+                       "Couldn't hand over: the connection dropped.")
+    }
 }
 
 final class CoordinatorHandoffTranscriptTests: XCTestCase {

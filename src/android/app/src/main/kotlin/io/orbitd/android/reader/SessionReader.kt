@@ -812,7 +812,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         handoffBusy = true
                         try { handoffApi.post(handoffProject, action) }
                         catch (cancel: CancellationException) { throw cancel }
-                        catch (e: Exception) { OrbitToasts.show(io.orbitd.android.directory.directoryError(e), tone = ToastTone.ERROR) }
+                        catch (e: Exception) { OrbitToasts.show(CoordinatorHandoff.refusal(e), tone = ToastTone.ERROR) }
                         finally { handoffBusy = false; app.realtime.refreshSession() }
                     }
                 })

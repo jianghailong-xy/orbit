@@ -74,6 +74,25 @@ final class CoordinatorContextCopyParityTests: XCTestCase {
         assertSays(ts, "count === 1 ? '\(CoordinatorHandoffCopy.waitsMovedHere(1))' : "
                    + "`\(CoordinatorHandoffCopy.waitsMovedHere(7).replacingOccurrences(of: "7", with: "${count}"))`",
                    in: Self.shared)
+        // A refused press: web's toast title is this line's lead (double-quoted for its apostrophe).
+        assertSays(ts, "refused: \"\(CoordinatorHandoffCopy.refused)\",", in: Self.shared)
+    }
+
+    /// Board 03 iOS 2's confirm body is the shared one, which Android's confirm says too: the same
+    /// two leads, the same sentence around them, the count the confirm's own.
+    func testThePhoneConfirmBodyIsTheShared() throws {
+        let ts = try source(Self.shared)
+        let lead = CoordinatorContextCopy.phoneConfirmBody(waits: 0, running: false)
+            .components(separatedBy: ", then").first!
+        let runningLead = CoordinatorContextCopy.phoneConfirmBody(waits: 0, running: true)
+            .components(separatedBy: ", then").first!
+        assertSays(ts, "const lead = running ? '\(runningLead)' : '\(lead)';", in: Self.shared)
+        assertSays(ts, "const moves = waits > 0 ? ` ${COORDINATOR_HANDOFF_COPY.waitsRowTitle(waits)}.` : '';",
+                   in: Self.shared)
+        let tail = CoordinatorContextCopy.phoneConfirmBody(waits: 0, running: false)
+            .replacingOccurrences(of: lead, with: "")
+            .replacingOccurrences(of: " Nothing is deleted.", with: "${moves} Nothing is deleted.")
+        assertSays(ts, "return `${lead}\(tail)`;", in: Self.shared)
     }
 
     func testTheFailureSentencesSectionsAndTurnPrefixAreTheShared() throws {

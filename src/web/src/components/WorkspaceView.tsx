@@ -7437,7 +7437,7 @@ export function WorkspaceView({
       if (action !== 'cancel') setFollowHandoff(sessionId);
       if (view.handedOverToSessionId && selectedId === sessionId) navigate(sessionPath(view.handedOverToSessionId));
     },
-    onError: (e: Error) => message.error("Couldn't hand over", e.message),
+    onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
   });
   const runHandoffAction = (action: CoordinatorHandoffAction): void => {
     const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;

@@ -3808,7 +3808,7 @@ final class ConsoleModel {
     /// (every transition publishes it), so the answer is read only for a refusal.
     func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction) async {
         do { _ = try await api.coordinatorHandoff(projectID, action) }
-        catch { statusMessage = "The handover didn't go through: \(APIClient.failureReason(error))." }
+        catch { statusMessage = CoordinatorHandoffCopy.refusal(APIClient.failureReason(error)) }
     }
 
     /// Compact: the engine's own command, sent as if typed — no confirm, and the composer's draft

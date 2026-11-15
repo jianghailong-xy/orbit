@@ -2758,8 +2758,10 @@ private struct ContextActionsSheet: View {
 #endif
 
 /// The confirm Start a new coordinator asks (board 02 ①): the Mac's own dialog naming the note and
-/// each wait; on iOS the system Alert, Hand over bold above Cancel and the waits a count only
-/// (board 03 iOS 2).
+/// each wait; on iOS the system Alert, Hand over bold (the default action) and the waits a count only
+/// (board 03 iOS 2). Board 03 ② draws Hand over above Cancel; SwiftUI's `.alert` has no axis to ask
+/// for, so the system lays out two buttons that fit side by side, Cancel leading, and that is the
+/// accepted reading (docs/coordinator-handoff.md, Phones).
 private struct CoordinatorHandoffConfirmPresentation: ViewModifier {
     @Binding var waits: [CoordinatorPendingWait]?
     let actions: ContextActions
