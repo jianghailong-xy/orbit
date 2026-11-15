@@ -476,7 +476,7 @@ needs no runner release.
 
 | engine | CHECK_ONLY mode to use | can fetch URL without card? (plan) | can run read-only command without card? (plan) | write refused? (plan) | OPEN_PR mode to use | notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| claude 2.1.325 | `dontAsk` + lists (§7; was `plan`) | yes (WebFetch and curl, no ask) | yes | Edit/Write: yes (hard refusal). Bash writes: **no**, `touch`/`date >` ran | `acceptEdits` | Plan does not gate Bash at all; "edits nothing" via shell rests on the model. acceptEdits: write ok; `curl`, `git add`, `git commit` ask (card) |
+| claude 2.1.325 | `default` + lists (§9; was `dontAsk`, §7, and `plan` before it) | yes (WebFetch and curl, no ask) | yes | Edit/Write: yes (hard refusal). Bash writes: **no**, `touch`/`date >` ran | `acceptEdits` | Plan does not gate Bash at all; "edits nothing" via shell rests on the model. acceptEdits: write ok; `curl`, `git add`, `git commit` ask (card) |
 | codex 0.169.0 | `plan` | yes (built-in web search `openPage`, no request) | **no** before §8: even `ls`/`git log` request approval under `untrusted` and were declined; **yes** in a scheduled CHECK_ONLY run from the runner release with §8 (read-only sandbox, no card) | yes (runner declines patch) | `acceptEdits` | Plan is enforced but leaves no way to read files (Codex reads via shell). acceptEdits: file change auto-accepted; every command → card |
 | kimi 2.5.3 | `plan` | yes (FetchURL, no ask) | **no**: Bash asks → a card per command | yes (Kimi plan mode refuses, no ask) | `acceptEdits` (Kimi `default`) | acceptEdits write ran without an ask; shell not measured in `default` |
 | agy 1.5.9 | (unmeasured) `plan` | not measured | not measured | not measured | (unmeasured) `acceptEdits` | not signed in: "error: authentication failed or timed out" |
@@ -493,6 +493,8 @@ Applying "nearest mode that is not wider; none → `SCHEDULE_ACCESS_NOT_ENFORCEA
   in the workspace checkout) or close it in CHECK_ONLY's `disallowedTools` / a stricter choice such as `dontAsk` plus a
   read-only allowlist (WebFetch, Read/Grep/Glob, `Bash(git log:*)`, `Bash(ls:*)`…), which must be measured before use.
   **Settled in §7:** `dontAsk` with a WebFetch/WebSearch allow list and the file tools and create doors denied.
+  **Revised in §9** (owner: a check-only run may ask): `default` with the same allow list plus the workspace's
+  `Bash(…)` rules, every other Orbit tool denied by name; only a shell command asks.
   OPEN_PR needs `git`/`gh` pre-approved (workspace rule or `allowedTools`) or it stops at a card for every commit.
 - **Codex**: CHECK_ONLY → `plan` (enforced, not wider) but it can only fetch: it cannot read the checkout. To make it
   useful the runner would have to accept `commandExecution` requests whose `commandActions` are all read/list/search
@@ -650,3 +652,154 @@ reaching the control plane under this setting.
 The Go tests (`codex_scheduled_check_only_test.go`) pin the parameters for the flagged Plan session. They also pin
 that every other mode, with or without the flag, and the unflagged Plan session are byte-for-byte as before, and that
 an unflagged Plan session's bridge still declines `ls`.
+
+---
+
+## 9. Claude Code `CHECK_ONLY` in `default`: only a shell command asks (S2e, 2026-11-15)
+
+Question: the owner ruled that a `CHECK_ONLY` run may ask, as the approved board shows (a "wants to run a command"
+card, Always allow / Allow once / Deny). Is there a mode, with lists the claim can send, in which headless (a) `git log`,
+`ls`, `cat`, `grep` run with no ask, (b) `touch`, a redirection, `rm`, a test command, `psql` and `curl` each reach the
+runner as a permission request and do not run before it is answered, and (c) `Edit`/`Write`/`NotebookEdit`, the
+Orbit CLI and the Orbit tools outside the allow list are refused with no request? Plan does not check Bash (§1);
+`dontAsk` never asks (§7). The candidate was `default`.
+
+Same `claude` 2.1.325, model `claude-sonnet-5`. Scratch repos `/mnt/data/checkonly-probe/s2e-<name>` (one commit:
+`README.md` = "hello", `victim.txt` = "old", a `package.json` whose `npm test` writes `npm-test-ran.txt`). `psql` is
+not installed on the host, so a stand-in on `PATH` prints `FAKE PSQL RAN` and writes `psql-ran.txt`; the Orbit CLI is
+the echoing stand-in of §7. The kit (`all.sh`, `run.sh`, `lists.js`, `stub_mcp.py`, `summ.py`, the prompts) is kept
+as Orbit file `s2e-claude-default-probe-kit.tgz` (id 34y5mC0jrDmWzoHNIfcEZ, pinned, with every transcript and stub log), not in the repository.
+
+**The flags.** `run.sh` spawns `claude` as `claude_spawn.go` does, and `lists.js` prints the lists from the built
+`schedule-access.js` itself, as the claim does, with what the runner adds:
+
+```
+claude -p --input-format stream-json --output-format stream-json --include-partial-messages --replay-user-messages \
+  --verbose --model claude-sonnet-5 --permission-mode default \
+  --allowedTools <scheduleRunAllowedTools(workspace, 'CHECK_ONLY', 'claude')>,<the runner's Orbit CLI rules, both forms> \
+  --disallowedTools <scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude')>,TaskCreate,…,TodoRead \
+  --mcp-config <stub> --permission-prompt-tool mcp__orbit__permission_prompt
+# workspace rules as dispatchAllowedTools hands them:
+#   mcp__orbit__*, Bash(touch carried.txt), Bash(<orbit> task update:*), Edit, mcp__orbit__bg_run, Bash
+# -> allowedTools: the 17 of §7, Bash(touch carried.txt), Bash(<orbit> task update:*), the runner's CLI rules
+#    (Edit, mcp__orbit__*, mcp__orbit__bg_run and the bare Bash rule are not carried)
+# -> disallowedTools: Edit, Write, NotebookEdit, Bash(*/orbit *), Bash('*/orbit' *), the 97 other Orbit tools by
+#    name (110 entries with the runner's Task* denials)
+```
+
+`stub_mcp.py` stands in for `orbit mcp` and answers `permission_prompt` the way the shipped runner and this change's
+server would: a declared Orbit tool is answered by the runner itself, **allow** (`answerOrbitToolPrompt` outside Plan),
+logged `RUNNER_AUTO_ALLOW`; anything else is logged `REQUEST` (it would reach the server); a non-Bash request is
+answered DENY (the server rule); a Bash request is a card, answered by `STUB_ANSWER` (deny or allow). Every call of
+another tool is logged `TOOL_REACHED`. Runner-hosted job `bgj_c225624a0279` ran the four prompts below.
+
+Prompt *reads*: `git log --oneline -1`, `ls`, `cat README.md`, `grep -rn hello .`, `git status --short`.
+
+```
+INIT permissionMode= default
+TOOL_USE Bash {"command": "git log --oneline -1"}   RESULT err= False ef250e7 probe initial commit
+TOOL_USE Bash {"command": "ls"}                     RESULT err= False package.json | README.md | victim.txt
+TOOL_USE Bash {"command": "cat README.md"}          RESULT err= False hello
+TOOL_USE Bash {"command": "grep -rn hello ."}       RESULT err= False README.md:1:hello
+TOOL_USE Bash {"command": "git status --short"}     RESULT err= False (Bash completed with no output)
+DENIALS []
+===== calls that reached the orbit stub =====
+(end: 0 lines)
+```
+
+Prompt *writes*, cards answered **deny**: `touch probe-x.txt`, `date > probe-date.txt`, `rm victim.txt`, `npm test`,
+`psql -c "select 1"`, `curl -s -o probe-curl.html https://example.com`, `touch carried.txt` (the workspace rule).
+
+```
+INIT permissionMode= default
+TOOL_USE Bash {"command": "touch probe-x.txt"}                                  RESULT err= True denied by the user
+TOOL_USE Bash {"command": "date > probe-date.txt"}                              RESULT err= True denied by the user
+TOOL_USE Bash {"command": "rm victim.txt"}                                      RESULT err= True denied by the user
+TOOL_USE Bash {"command": "npm test"}                                           RESULT err= True denied by the user
+TOOL_USE Bash {"command": "psql -c \"select 1\""}                               RESULT err= True denied by the user
+TOOL_USE Bash {"command": "curl -s -o probe-curl.html https://example.com"}     RESULT err= True denied by the user
+TOOL_USE Bash {"command": "touch carried.txt"}                                  RESULT err= False (Bash completed with no output)
+FILES: carried.txt package.json README.md victim.txt     victim.txt: old     README.md: hello     git log: 1 commit(s)
+===== calls that reached the orbit stub =====
+REQUEST Bash {"command": "touch probe-x.txt", …} -> CARD answered deny
+REQUEST Bash {"command": "date > probe-date.txt", …} -> CARD answered deny
+REQUEST Bash {"command": "rm victim.txt", …} -> CARD answered deny
+REQUEST Bash {"command": "npm test", …} -> CARD answered deny
+REQUEST Bash {"command": "psql -c \"select 1\"", …} -> CARD answered deny
+REQUEST Bash {"command": "curl -s -o probe-curl.html https://example.com", …} -> CARD answered deny
+(end: 6 lines)
+```
+
+The same prompt, cards answered **allow** (Allow once): each of the six asked again, and then ran.
+
+```
+REQUEST Bash … touch probe-x.txt / date > probe-date.txt / rm victim.txt / npm test / psql -c "select 1" /
+        curl -s -o probe-curl.html https://example.com -> CARD answered allow          (6 lines)
+TOOL_USE Bash {"command": "npm test"}            RESULT err= False > test | > echo ran > npm-test-ran.txt
+TOOL_USE Bash {"command": "psql -c \"select 1\""} RESULT err= False FAKE PSQL RAN: -c select 1
+FILES: carried.txt npm-test-ran.txt package.json probe-curl.html probe-date.txt probe-x.txt psql-ran.txt README.md
+victim.txt: (removed)
+```
+
+Prompt *other*: (a) Edit `README.md`, (b) Write `probe-write.txt`, (c) NotebookEdit, (d) `<orbit> task update probe
+--title x`, (e) `'<orbit>' session merge probe`, (f) `mcp__orbit__bg_run {"command": "touch probe-bg.txt"}`,
+(g) `task_update`, (h) `session_merge`, (i) `task_start`, (j) `task_get`, (k) `schedule_run_report`.
+
+```
+INIT permissionMode= default
+TOOL_USE Edit {...}   RESULT err= True <tool_use_error>Error: No such tool available: Edit. Edit is disabled for this session, in subagents as well as here.</tool_use_error>
+TOOL_USE Write {...}  RESULT err= True <tool_use_error>Error: No such tool available: Write. Write is disabled for this session, …</tool_use_error>
+TOOL_USE Bash {"command": "/mnt/data/checkonly-probe/bin/orbit task update probe --title x"}
+  RESULT err= True Permission to use Bash with command /mnt/data/checkonly-probe/bin/orbit task update probe --title x has been denied.
+TOOL_USE Bash {"command": "'/mnt/data/checkonly-probe/bin/orbit' session merge probe"}
+  RESULT err= True Permission to use Bash with command '/mnt/data/checkonly-probe/bin/orbit' session merge probe has been denied.
+TOOL_USE ToolSearch {"query": "select:mcp__orbit__task_get,mcp__orbit__schedule_run_report"}
+TOOL_USE mcp__orbit__task_get {"taskId": "probe"}                  RESULT err= None {"ok": true, "tool": "task_get"}
+TOOL_USE mcp__orbit__schedule_run_report {"outcome": "NO_CHANGE", …} RESULT err= None {"ok": true, "tool": "schedule_run_report"}
+FILES: package.json README.md victim.txt     victim.txt: old     README.md: hello
+===== calls that reached the orbit stub =====
+TOOL_REACHED task_get {"taskId": "probe"}
+TOOL_REACHED schedule_run_report {"outcome": "NO_CHANGE", "summary": "probe"}
+(end: 2 lines)
+The model's own account: (c) "NotebookEdit tool is not available in this session"; (f)–(i) "tool not available
+(not in tool list, not deferred)".
+```
+
+The CLI was refused by the deny rule though both a workspace rule (`Bash(<orbit> task update:*)`) and the runner's rules
+allowed it, and neither refusal was a request. No request reached the prompt tool in this prompt.
+
+**Control: why the other Orbit tools are denied by name** (job `bgj_a50c25986c2d`). The same `default` and lists,
+except that the 97 Orbit tools are only left off the allow list (S2b's deny list), prompt: `bg_run {"command": "touch
+probe-bg.txt"}`, `task_update`, `session_merge`:
+
+```
+TOOL_USE mcp__orbit__bg_run {"command": "touch probe-bg.txt", "kind": "job"}   RESULT err= None {"ok": true, "tool": "bg_run"}
+TOOL_USE mcp__orbit__task_update {"taskId": "probe", "title": "x"}           RESULT err= None {"ok": true, "tool": "task_update"}
+TOOL_USE mcp__orbit__session_merge {"sessionId": "probe"}                    RESULT err= None {"ok": true, "tool": "session_merge"}
+===== calls that reached the orbit stub =====
+RUNNER_AUTO_ALLOW mcp__orbit__bg_run …     TOOL_REACHED bg_run …
+RUNNER_AUTO_ALLOW mcp__orbit__task_update … TOOL_REACHED task_update …
+RUNNER_AUTO_ALLOW mcp__orbit__session_merge … TOOL_REACHED session_merge …
+```
+
+In `default` Claude Code asks about an Orbit tool no rule covers, and the shipped runner answers that ask itself and
+allows it (outside Plan its Plan gate refuses nothing), so all three would have run with no card. With the shipped
+lists (same job, second half) the model found none of them ("No matching deferred tools found" for each), and 0 calls
+reached the stub.
+
+So in `default`, with these lists:
+
+- the read-only commands run with no request, as in `dontAsk`;
+- every writing or networked shell command tried reaches the runner's permission prompt, and does not run while the
+  answer is deny; on allow it runs once. In Orbit that request is the ordinary card (§6.4 of the design), so it is
+  AWAITING_APPROVAL, a push and a `SCHEDULE_APPROVAL` item, and `APPROVAL_TIMEOUT` after 2 hours;
+- a workspace `Bash(…)` rule runs its command with no request; that is how Always allow reaches later runs;
+- `Edit`, `Write`, `NotebookEdit` and the 97 other Orbit tools are not offered at all; the Orbit CLI is refused by the
+  deny rule, whatever allows it. None of them is a request, so none can be a card;
+- what still could ask and is not a shell command (an MCP server the workspace adds, a tool a later Claude Code adds)
+  reaches the server, which answers DENY at once with no card, item or push (`checkOnlyRefusesApproval`; pg spec
+  `schedule-attention.pg.spec.ts`, "S2e"). The stub stood in for that answer here.
+
+Not measured: a SubAgent (`Task`) of such a run asking; it asks under its parent's session through the same prompt
+tool and the same server door, so the same rule applies, but no probe exercised it. Codex is unchanged: its
+`CHECK_ONLY` run is in its read-only sandbox and never asks (§8). Server-side only; no runner release.

@@ -273,14 +273,14 @@ The agent picks the level from what the intent needs: a check, a report or a sum
 
 | Level | Card says | Session | May not |
 | --- | --- | --- | --- |
-| `CHECK_ONLY` | "reads and reports, edits nothing" | `plan` mode (`dontAsk` on Claude Code, below), no worktree | edit files, create tasks |
+| `CHECK_ONLY` | "reads and reports, edits nothing" | `plan` mode (`default` on Claude Code, below), no worktree | edit files, create tasks |
 | `OPEN_PR` | "edits in its own worktree and opens a PR; can't merge or deploy" | `acceptEdits` mode, own worktree when the workspace has worktrees | `session_merge`, release and deploy tools |
 
 The mode each engine gets (`schedules/schedule-access.ts`; measured on the real CLIs, §12):
 
 | Engine | `CHECK_ONLY` | `OPEN_PR` | Measured |
 | --- | --- | --- | --- |
-| Claude Code | `dontAsk`, with its own allow and deny lists (below) | `acceptEdits` | 2.1.325 |
+| Claude Code | `default`, with its own allow and deny lists; only a shell command asks (below) | `acceptEdits` | 2.1.325 |
 | Codex | `plan`, in Codex's read-only sandbox (below) | `acceptEdits` | 0.169.0 |
 | Kimi | `plan` | `acceptEdits` | 2.5.3 |
 | OpenCode | `plan` (denies everything but reads) | refused: `SCHEDULE_ACCESS_NOT_ENFORCEABLE` | 1.19.5 |
@@ -296,14 +296,21 @@ as asked, because denying is not wider. The `OPEN_PR` run's `disallowedTools` ar
 `Bash(gh release:*)`, `Bash(npm publish:*)`, `Bash(docker push:*)`, `Skill(release)` and `Skill(upgrade)`, added to
 the workspace's own at claim.
 
-A `CHECK_ONLY` run on Claude Code runs in `dontAsk`, not `plan`: Claude Code's headless Plan never permission-checks
-Bash, so a writing shell command ran there with no ask (§12). In `dontAsk` Claude Code's own read-only check still
-runs `git log`, `ls`, `cat`, `grep`, `git status` and `git diff`, and refuses every shell command that writes. The claim
-hands the runner, for that run only:
+A `CHECK_ONLY` run on Claude Code runs in `default`, not `plan`: Claude Code's headless Plan never permission-checks
+Bash, so a writing shell command ran there with no ask (§12). In `default` Claude Code's own read-only check runs
+`git log`, `ls`, `cat`, `grep` and `git status` with no ask, and **every other shell command asks**: `touch`, a
+redirection, `rm`, a test suite, `psql`, `curl`. The ask is the ordinary approval card (§6.4): the run moves to
+AWAITING_APPROVAL, the owner is pushed and the card waits in Waiting on you; Allow once runs that command once, Always
+allow writes a workspace rule the next run carries, Deny refuses it, and nobody answering in 2 hours is
+`APPROVAL_TIMEOUT`. The command does not run before the card is answered (record §9). The owner ruled on 2026-11-15
+that a check-only run may ask, as the board shows (`docs/mocks/scheduled-tasks/web/waiting.png`); from S2b until then
+it ran in `dontAsk`, where such a command was refused with no card.
 
-- `allowedTools`, exactly this list. In `dontAsk` an allow rule is all that runs a call Claude Code does not judge
-  read-only, so there is no `mcp__orbit__*` wildcard and none of the workspace's "Always allow" rules (one could
-  cover `npm install` or `Edit`):
+Only a shell command can ask. The claim hands the runner, for that run only:
+
+- `allowedTools`: this list, plus the workspace's "Always allow" rules for the shell (`Bash(npm test:*)`). No
+  `mcp__orbit__*` wildcard, no workspace rule for any other tool (`Edit`, `Write`, an MCP tool), and no rule for the
+  whole shell (`Bash`, `Bash(*)`), which would run every writing command unasked:
   - the run's own schedule: `schedule_run_report`, `schedule_get`, `schedule_list`, `schedule_update`,
     `schedule_end` (the server holds a run to the schedule it serves and to its envelope, §8.3: an update or end of
     any other schedule, and a create, pause, delete or run-now of any, is refused `SCHEDULE_RUN_SESSION_SCOPE`);
@@ -312,26 +319,37 @@ hands the runner, for that run only:
   - `notify`;
   - reads: `task_get`, `task_list`, `session_get`, `session_search`, `project_get`, `wiki_search`, `wiki_get`,
     `file_fetch`, `file_list`;
-  - `WebFetch` and `WebSearch`. There is no shell allow rule, so a fetch is `WebFetch`: `curl` is refused.
+  - `WebFetch` and `WebSearch`.
 
-  These are the Orbit tools a `CHECK_ONLY` run on Claude Code has (each as `mcp__orbit__<name>`). Every other Orbit
-  tool is refused before it is called: `bg_run` (it would start a shell outside Claude Code's check),
-  `session_merge`, `task_start`, `task_update`, `task_reopen`, `session_send`, `project_send`, the create doors,
-  `integration_*`, `provider_*`, `agent_*`, `runner_*`, `task_comment` and `file_upload` (a report carries links).
-- `disallowedTools`, added to the workspace's own: `Edit`, `Write`, `NotebookEdit`, and the Orbit CLI
-  (`Bash(*/orbit *)`, `Bash('*/orbit' *)`). The runner allows the CLI by its absolute path for every command it
-  offers, writes included, and a deny rule wins over those; the run reads Orbit through the tools above.
-
-Plan's gate in the runner (`plan_gate.go`) refused Orbit's writes in Plan; it does not run in `dontAsk`, so the
-allow list holds the *May not* column instead.
+  These are the Orbit tools a `CHECK_ONLY` run on Claude Code has (each as `mcp__orbit__<name>`).
+- `disallowedTools`, added to the workspace's own: `Edit`, `Write`, `NotebookEdit`; the Orbit CLI
+  (`Bash(*/orbit *)`, `Bash('*/orbit' *)`); and **every other Orbit tool by name** (`bg_run`, `bg_kill`,
+  `session_merge`, `task_start`, `task_update`, `session_send`, the create doors, `integration_*`, `provider_*`,
+  `agent_*`, `runner_*`, `task_comment`, `file_upload`, … : `CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS`, every tool of
+  `docs/operation-catalog.md`'s MCP column the allow list does not name, held to it by `schedule-access.spec.ts`).
+  They are denied by name, not merely left off the allow list, because in `default` Claude Code asks about an Orbit
+  tool no rule covers and the runner answers that ask itself, allowing it outside Plan (`answerOrbitToolPrompt`):
+  measured, `bg_run`, `task_update` and `session_merge` ran with no card when they were only left off (record §9).
+  Denied, they are not offered to the model at all. A deny rule also wins over the runner's allow rules for the CLI
+  and over a workspace `Bash(…)` rule that covers it.
+- On the server, a permission request from such a run's session for anything but a shell command (any tool, an MCP
+  server of the workspace's, a SubAgent's question) and a shell command a runner-hosted job asks about is answered
+  DENY at once (`checkOnlyRefusesApproval`, in `POST /runner/sessions/:id/approvals`). It is never a card, a Waiting on
+  you item or a push, so no press of a card can grant a scheduled check a file tool, `bg_run` or any other tool. The
+  engine reads "Not run: this is a check-only scheduled run, which may ask only to run a shell command. …".
 
 `bg_run` on the other engines: their `CHECK_ONLY` mode is `plan` (Codex, Kimi, OpenCode, Antigravity, Cursor) or
 `dontAsk` (DeepSeek Harness), and the runner's background-job gate (`background_gate.go`, `admit`) refuses a job in
-both, with no card, before anything starts; on Claude Code it refuses it too, behind the allow list. That is read
-from the runner's code, not measured on those engines; it is measured on Claude Code (record §7).
+both, with no card, before anything starts. That is read from the runner's code, not measured on those engines. On
+Claude Code `bg_run` is denied by name and is not offered (record §9).
 
-Nothing asks in `dontAsk`, so such a run never stops on a card. This is server-side only (the claim payload); it needs
-no runner release.
+**Codex still never asks.** A Codex `CHECK_ONLY` run stays in Codex's read-only sandbox with approvals off (below):
+a writing command is refused by the OS, with no card. Kimi's `plan` asks for each command, as before; OpenCode's
+refuses commands.
+
+This is server-side only (the claim payload and the approval door); it needs no runner release. A runner newer than
+the server that offers an Orbit tool the server's deny list does not name would allow that tool unasked in such a
+run; the list moves with the catalogue in this repository.
 
 - A level is a claim to the person, so it is enforced, not prompted: the mode above, plus `disallowedTools` on the
   run's session for the *May not* column.
@@ -383,7 +401,8 @@ findings and the note.
 - A run that hits an approval card moves to AWAITING_APPROVAL and the card goes to **Waiting on you**.
 - Answering it with "don't ask again" writes a `WorkspacePermissionRule`, as it does in any session. Rules are
   workspace-scoped and handed to every session of the workspace, so **the next run does not stop there**. The card
-  says so: "Later runs won't ask for this."
+  says so: "Later runs won't ask for this." A `CHECK_ONLY` run on Claude Code is handed only the workspace's narrow
+  `Bash(…)` rules, and only a shell command of it can be a card (§6.2).
 - When nobody answers within 2 hours the run fails with `APPROVAL_TIMEOUT` and its session is interrupted. A run
   never hangs on a card.
 
@@ -657,7 +676,8 @@ table in §6.2 is the result. What the measurement found:
   mode."). **But a writing shell command also ran with no ask**: `date > probe3.txt; ls` and `touch probe2.txt`
   created both files (`DENIALS []`), where `--permission-mode default` asked ("Output redirection to … needs
   approval"). So on Claude, Plan blocks file tools but leaves "edits nothing" for the shell to the model. **Settled
-  the same day** (record §7): `CHECK_ONLY` on Claude Code runs in `dontAsk` with the lists in §6.2. With the
+  the same day** (record §7): `CHECK_ONLY` on Claude Code ran in `dontAsk` with its own lists (S2b; now `default`,
+  revised by S2e below). With the
   runner's flags, `WebFetch`, `git log`, `ls`, `cat`, `grep`, `git status` and `git diff` ran with no ask, and
   `date > probe3.txt`, `touch`, `rm`, `echo >>`, `sed -i`, `find -delete`, `cp`, `tee`, `git commit`, a `python3`
   write, `curl -o` and `orbit task create` were all refused, with no file changed and the permission prompt tool
@@ -699,10 +719,21 @@ record §8, also reads the checkout in its read-only sandbox with no card (on an
 read). Two follow-ups were filed and both are done: Claude's shell-write gap is closed by running its `CHECK_ONLY` in
 `dontAsk` (§6.2, record §7), and Codex Plan reads the checkout in scheduled runs with Codex's read-only sandbox
 (record §8).
-What `dontAsk` gives up on Claude, against Plan: `curl` (use `WebFetch`); and an account whose default mode is Plan
+What `dontAsk` gave up on Claude, against Plan: `curl` (use `WebFetch`); and an account whose default mode is Plan
 holds a Claude `CHECK_ONLY` run as `MODE_WIDER_THAN_ACCOUNT_DEFAULT` (`dontAsk` is wider than Plan by name), as it
 already did on DeepSeek Harness. Orbit's writes, which Plan's runner gate refused, stay refused: the run's allow list
 names only the Orbit tools a check needs, and the Orbit CLI is denied (record §7, *Orbit's own tools*).
+
+*Revised by S2e (owner, 2026-11-15: "may ask, as the board shows"; record §9).* `CHECK_ONLY` on Claude Code now runs
+in `default`. Measured on 2.1.325 with the runner's flags and the lists the claim now hands it: `git log`, `ls`, `cat`,
+`grep` and `git status` ran with no request; `touch`, `date >`, `rm`, `npm test`, `psql` and `curl -o` each reached
+the runner's permission prompt as a request and did not run while it was unanswered (denied: no file changed; allowed:
+each ran); a workspace rule `Bash(touch carried.txt)` ran its command with no request; `Edit`, `Write` and
+`NotebookEdit` were not offered, the Orbit CLI was refused by the deny rule though a workspace rule and the runner's
+rules allowed it, and `bg_run`, `task_update`, `session_merge` and `task_start` were not offered, with no request
+reaching the prompt tool. The server answers any request of such a run that is not a shell command DENY at once (§6.2).
+An account whose default mode is Plan still holds such a run (`default` is wider than Plan); `default`, `dontAsk` and
+the wider modes do not. Codex still never asks: its `CHECK_ONLY` run stays in its read-only sandbox (record §8).
 
 **3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes, then hourly inside the
 catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without
