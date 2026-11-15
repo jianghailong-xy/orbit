@@ -70,6 +70,9 @@ internal object RunnerCopy {
     fun versionUpdatingTo(version: String) = "updating to $version"
     const val ONLINE = "Online"
     const val OFFLINE = "Offline"
+    /** A managed runner that has not reported yet (preparing, waiting for capacity, failed to start): its Resources and Engines say
+     * only this (web runnerCopy MANAGED_RUNNER_NOT_REPORTED). */
+    const val MANAGED_NOT_REPORTED = "Available once the runner is ready."
     const val SEP = " · "
     fun offlineLastSeen(whenText: String) = "Offline · last seen $whenText"
     fun versionTag(version: String) = "v$version"
