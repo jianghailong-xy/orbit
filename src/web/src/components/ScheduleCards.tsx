@@ -421,21 +421,7 @@ export function useSessionScheduleInserts(
   return useMemo(() => {
     if (!sessionId) return [];
     const inserts: TranscriptInsert[] = [];
-    for (const card of cards.data?.cards ?? []) {
-      const anchor = decisionReceiptAnchor(events, card.createdAt);
-      if (anchor === null) continue;
-      inserts.push({ anchor, moment: card.createdAt, key: `schedule-card:${card.id}`, element: <ScheduleCardView card={card} /> });
-    }
-    for (const record of cards.data?.records ?? []) {
-      const anchor = decisionReceiptAnchor(events, record.createdAt);
-      if (anchor === null) continue;
-      inserts.push({
-        anchor,
-        moment: record.createdAt,
-        key: `schedule-record:${record.scheduleId}:${record.revision}`,
-        element: <ScheduleRecordLine record={record} />,
-      });
-    }
+    // A run's strip leads, and its report comes before the change lines after the same event (board 2/2 ⑤).
     if (run) {
       inserts.push({ anchor: 'head', moment: '', key: 'schedule-run-strip', element: <ScheduleRunStrip of={run} /> });
       const last = events.reduce<number | null>((max, e) => (max === null || e.seq > max ? e.seq : max), null);
@@ -444,6 +430,22 @@ export function useSessionScheduleInserts(
       if (anchor !== null && ENDED_STATES.includes(run.run.state)) {
         inserts.push({ anchor, moment: run.run.endedAt ?? '', key: `schedule-run-report:${run.run.id}`, element: <ScheduleRunReport of={run} /> });
       }
+    }
+    // Cards and change lines in the order they happened, so two after the same event read as they were made.
+    const said = [
+      ...(cards.data?.cards ?? []).map((card) => ({
+        at: card.createdAt, key: `schedule-card:${card.id}`, element: <ScheduleCardView card={card} />,
+      })),
+      ...(cards.data?.records ?? []).map((record) => ({
+        at: record.createdAt,
+        key: `schedule-record:${record.scheduleId}:${record.revision}`,
+        element: <ScheduleRecordLine record={record} />,
+      })),
+    ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+    for (const item of said) {
+      const anchor = decisionReceiptAnchor(events, item.at);
+      if (anchor === null) continue;
+      inserts.push({ anchor, moment: item.at, key: item.key, element: item.element });
     }
     return inserts;
   }, [sessionId, events, cards.data, run]);

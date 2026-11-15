@@ -274,6 +274,7 @@ describe('a conversation’s scheduled-task inserts', () => {
       el.dataset.anchor,
       el.querySelector('[data-schedule-card]')?.getAttribute('data-schedule-card') ?? (el.querySelector('[data-schedule-record]') ? 'record' : null),
     ]);
-    expect(drawn).toEqual([['1', 'create'], ['1', 'envelope'], ['1', 'record']]);
+    // The change line (12:19) was made before the access card (12:20); the create card (12:01) first of all.
+    expect(drawn).toEqual([['1', 'create'], ['1', 'record'], ['1', 'envelope']]);
   });
 });
