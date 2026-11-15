@@ -130,7 +130,7 @@ describe('Machines in the account menu', () => {
     const labels = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu > [role="menuitem"]')]
       .filter((row) => !row.classList.contains('tp-account-profile'))
       .map((row) => row.textContent);
-    expect(labels).toEqual(['AppearanceSystem', 'Machines2 of 3 online', 'Settings', 'Log out']);
+    expect(labels).toEqual(['AppearanceSystem', 'Machines2 of 3 online', 'Settings', 'Help center', 'Log out']);
     expect(accountRow('Machines')!.getAttribute('aria-haspopup')).toBe('menu');
   });
 
