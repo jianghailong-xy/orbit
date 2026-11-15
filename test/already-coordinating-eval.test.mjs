@@ -158,6 +158,20 @@ test('missing capability is not evidence that the owner disabled orchestration',
   assert.throws(() => grade(trace, scenario), /does not prove/);
 });
 
+test('denying an unsupported disabled-switch inference is not making that inference', async () => {
+  const scenario = scenarios.find(s => s.name === 'capability-missing');
+  const trace = await evaluate(referenceAgent(), 'mcp', scenario);
+  for (const explanation of [
+    "That alone doesn't mean session orchestration is turned off; no reason was given.",
+    "No reason was given, so this doesn't by itself mean session orchestration is turned off.",
+    "No reason was given, so this doesn't show that session orchestration is off.",
+  ]) {
+    grade({ ...trace, replies: [trace.replies[0], trace.replies[1] + '\n' + explanation] }, scenario);
+  }
+  trace.replies[1] += "\nI can't open a session because orchestration is off.";
+  assert.throws(() => grade(trace, scenario), /does not prove/);
+});
+
 test('reconciliation accepts separate from the existing project', () => {
   const trace = valid();
   trace.calls.shift();
