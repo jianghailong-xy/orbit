@@ -224,7 +224,7 @@ test('1. a rule moved to a few minutes from now after every run starts at most r
   assert.equal(after.consecutiveFailures, 0, 'a slot over budget is not a failure');
 
   // Told once for the new reason, not once per slot.
-  const budget = pushed.filter((a) => a.kind === 'OVER_BUDGET');
+  const budget = pushed.filter((a) => (a.kind as string) === 'OVER_BUDGET');
   assert.equal(budget.length, 1, `one push for three slots over budget, got ${budget.length}`);
   assert.match(budget[0].body, /7 runs/);
 
@@ -300,12 +300,12 @@ test('3. the owner\'s Run now starts over budget and counts; a session\'s Run no
   await runs.report(w.ownerId, first.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
 
   // Now over budget: a session's Run now is refused with a named code, and writes no run.
-  const before = await db.scheduleRun.count({ where: { scheduleId: s.id } });
+  const runsBefore = await db.scheduleRun.count({ where: { scheduleId: s.id } });
   await assert.rejects(runs.runNow(w.agent, s.id), (error: unknown) => {
     assert.equal(code(error), 'SCHEDULE_OVER_BUDGET');
     return true;
   });
-  assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id } }), before, 'a refused Run now writes no run');
+  assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id } }), runsBefore, 'a refused Run now writes no run');
 
   // The owner's press starts even over budget.
   const press = await runs.runNow(w.owner, s.id);
