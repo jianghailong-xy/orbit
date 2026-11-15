@@ -449,7 +449,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     );
   });
 
-  it('says "Couldn\'t hand over" and the server\'s reason when the press is refused', async () => {
+  it('says "Couldn\'t hand over" and the server\'s reason when the confirm\'s press is refused', async () => {
     detail = session({ projectId: PROJECT, projectMembership: coordinator });
     await mount();
     const post = apiMock.getMockImplementation()!;
@@ -461,8 +461,25 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await click(rows.find((r) => titleOf(r) === 'Start a new coordinator'));
     await waitFor(() => expect(document.querySelector('.handoff-confirm')).not.toBeNull());
     await click(button('Hand over'));
+    await waitFor(() => expect(document.querySelector('.orbit-confirm-error')?.textContent)
+      .toBe("Couldn't hand over: This project already has a handoff under way."));
+  });
+
+  it('toasts "Couldn\'t hand over" and the server\'s reason when a press on the handoff\'s row is refused', async () => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: { state: 'FAILED', startedAt: new Date().toISOString(), failureCode: 'TURN_FAILED',
+        failureReason: null, handedOverToSessionId: null },
+    });
+    await mount();
+    const post = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, init?: { method?: string }) =>
+      p.includes('/coordinator/handoff/') ? Promise.reject(new Error('The handoff already ended.')) : post(p, init as never)) as never);
+    await waitFor(() => expect(mounted().querySelector('[data-handoff-state="FAILED"]')).not.toBeNull());
+    await click(button('Keep this coordinator'));
     await waitFor(() => expect(document.body.querySelector('.toast-viewport .toast-head')?.textContent).toBe("Couldn't hand over"));
     expect(document.body.querySelector('.toast-viewport .toast-detail, .toast-viewport .toast-reason')?.textContent)
-      .toBe('This project already has a handoff under way.');
+      .toBe('The handoff already ended.');
   });
 });
