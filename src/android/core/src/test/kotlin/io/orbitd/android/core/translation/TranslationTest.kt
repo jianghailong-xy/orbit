@@ -75,7 +75,7 @@ class TranslationTest {
         assertTrue(Translation.turn(obj("""{"state":"FAILED","from":"ja","original":"x"}"""))!!.held)
         assertFalse(Translation.turn(obj("""{"state":"SENT_AS_WRITTEN","from":"ja","original":"x"}"""))!!.held)
         assertNull(Translation.turn(obj("""{"state":"LOST","from":"ja","original":"x"}""")))
-        assertNull(Translation.turn(obj("""{"state":"DONE","from":"en","original":"x"}""")))
+        assertNull(Translation.turn(obj("""{"state":"DONE","from":"xx","original":"x"}""")))
         assertNull(Translation.turn(obj("""{"state":"DONE","from":"ja"}""")))
         assertNull(Translation.turn(JsonNull))
     }
@@ -84,7 +84,7 @@ class TranslationTest {
         assertEquals(Translation.Reply("zh-Hans", "找到了", false), Translation.reply(obj("""{"lang":"zh-Hans","text":"找到了"}""")))
         assertEquals(Translation.Reply("ko", null, true), Translation.reply(obj("""{"lang":"ko","failed":true}""")))
         assertNull(Translation.reply(obj("""{"lang":"ko"}""")))
-        assertNull(Translation.reply(obj("""{"lang":"en","text":"x"}""")))
+        assertNull(Translation.reply(obj("""{"lang":"xx","text":"x"}""")))
     }
 
     @Test fun aLiveTranslationFoldsIntoTheEventItTranslatesAsAReplayCarriesIt() {

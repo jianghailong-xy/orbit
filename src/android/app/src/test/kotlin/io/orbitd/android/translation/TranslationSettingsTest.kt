@@ -169,7 +169,6 @@ class TranslationSettingsTest {
         compose.onNode(hasText(TranslationCopy.AGENTS_WORK_IN) and hasClickAction()).performClick()
         compose.waitUntil(60_000) { compose.onAllNodes(isSelectable()).fetchSemanticsNodes().size == Translation.LANGUAGES.size }
         compose.onNode(hasText("Japanese") and isSelectable()).assertIsSelected()
-        shot("8-settings-agent-language-sheet")
         assertTrue(writes.isEmpty())
     }
 
