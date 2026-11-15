@@ -1367,10 +1367,15 @@ type AgentExecConfig struct {
 	// (`--prompt-suggestions`), which this runner files as a prompt_suggestion event. The
 	// control plane decides it per session; absent is off, so an older control plane never turns
 	// it on. A spawn flag like FastMode's settings key: it moves only across a re-spawn.
-	PromptSuggestions bool                   `json:"promptSuggestions,omitempty"`
-	MaxTurns          *int                   `json:"maxTurns"`
-	MaxBudgetUsd      *float64               `json:"maxBudgetUsd"`
-	McpConfig         map[string]interface{} `json:"mcpConfig"`
+	PromptSuggestions bool `json:"promptSuggestions,omitempty"`
+	// ScheduledCheckOnly says the session serves a scheduled CHECK_ONLY run (design §6.2). In Plan,
+	// Codex then runs in its own read-only sandbox with no approvals (codexScheduledCheckOnly), so
+	// it can read the checkout and the OS refuses every write. Absent, as from an older control
+	// plane, Plan is as for every other session: every command is declined.
+	ScheduledCheckOnly bool                   `json:"scheduledCheckOnly,omitempty"`
+	MaxTurns           *int                   `json:"maxTurns"`
+	MaxBudgetUsd       *float64               `json:"maxBudgetUsd"`
+	McpConfig          map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
 	Env map[string]string `json:"env"`
 }
@@ -1431,6 +1436,9 @@ type ClaimedSession struct {
 	// ORBIT_WIKI=off, which leaves the wiki tools out of the MCP server and the wiki commands out of
 	// `orbit capabilities` (wiki_tools.go). Absent means on.
 	WikiDisabled bool `json:"wikiDisabled,omitempty"`
+	// ScheduleRun is set for the session of a scheduled task's run (Session.scheduleRunId); injected as
+	// ORBIT_SCHEDULE_RUN=1, which lists schedule_run_report in its `orbit mcp` (schedule_tools.go).
+	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// SpawnDepth is how many spawn links sit above this session (a root is 0), injected as
 	// ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
 	// nested wait always settles inside the wait that is waiting on it.
@@ -1685,6 +1693,8 @@ type ReclaimSession struct {
 	// may have moved since the session was first claimed.
 	WatchesDisabled bool `json:"watchesDisabled,omitempty"`
 	WikiDisabled    bool `json:"wikiDisabled,omitempty"`
+	// ScheduleRun, cf. ClaimedSession.ScheduleRun.
+	ScheduleRun bool `json:"scheduleRun,omitempty"`
 	// OrchestrationToken is freshly persisted for the reclaimed runtime, cf. ClaimedSession.
 	OrchestrationToken string `json:"orchestrationToken,omitempty"`
 	// Branch is the session's worktree branch, cf. ClaimedSession.Branch.

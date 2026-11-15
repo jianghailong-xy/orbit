@@ -33,6 +33,12 @@ func TestHostSetupChildRunsMain(t *testing.T) {
 // proves what a shell actually sees — the whole CLI, an euid that really is not root's,
 // and the exit status a provisioning script branches on.
 func TestHostSetupWithoutRootExitsOne(t *testing.T) {
+	// The test proves a refused setup leaves no unit behind, which a host whose runner was really installed cannot
+	// show: the unit is there before the test starts (it fails on such a host on plain origin/main too; job
+	// bgj_b795bcd0e044 of task 34y6irXzFXq0nJqe51xR9).
+	if _, err := os.Stat(hostRunnerTemplatePath); err == nil {
+		t.Skipf("%s is installed on this host already, so a refused setup cannot be shown to leave it absent", hostRunnerTemplatePath)
+	}
 	binary := reachableTestBinary(t)
 	cmd := exec.Command(binary, "-test.run=^TestHostSetupChildRunsMain$")
 	cmd.Env = append(os.Environ(), hostSetupChildEnv+"=1")

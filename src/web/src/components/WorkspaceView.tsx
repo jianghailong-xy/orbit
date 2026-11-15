@@ -368,6 +368,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
+import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -503,6 +504,7 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
+  scheduleRunHeadText,
   encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
@@ -630,6 +632,7 @@ import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { useOpenTaskOverPage } from '../lib/taskInPlace';
+import { OPTIMIZE_SHORTCUT, usePromptOptimizer, type PromptOptimizerTarget } from './PromptOptimizer';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -689,6 +692,8 @@ interface ComposerSendVars {
    *  that a refusal about who holds the task is answered where the press was — on the card, whose
    *  offer to re-send is what stopped being true — instead of twice, in two places at once. */
   source?: 'autoRetry';
+  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English. */
+  skipTranslation?: boolean;
   /** A machine's first session: which machine, and the folder of the workspace it makes, sent instead
    *  of a workspace. */
   firstWorkspace?: { runnerId: string; folder: NewWorkspaceRequest };
@@ -2475,6 +2480,9 @@ export function WorkspaceView({
   const canHover = useMediaQuery('(hover: hover)');
   const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
+  // The prompt optimizer's text, while it is what Use put in the box (D2): a send of exactly it is
+  // already English and skips Translation. Any other text is translated as usual.
+  const [optimizedInsert, setOptimizedInsert] = useState<string | null>(null);
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
   // text it annotates — a token the user edits stops matching and simply travels as prose.
@@ -2958,7 +2966,9 @@ export function WorkspaceView({
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
   const sessions = useMemo(() => {
-    const rows = (sessionsQ.data ?? []).slice();
+    // A scheduled task's run is in no session list (owner ruling, docs/scheduled-tasks-design.md §7.4): the server
+    // leaves them out, and a row that says it is one is not drawn here either. It is reached from the schedule.
+    const rows = (sessionsQ.data ?? []).filter((row) => row.runSource !== 'SCHEDULE');
     // The Completed view is ordered by the server on completed_at (newest first) and
     // intentionally ignores pinning. The optimistic cache edits
     // (drop/rename/pin) only remove or patch rows in place — never reorder — and a real
@@ -3709,6 +3719,16 @@ export function WorkspaceView({
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
   const projectIntent = composing && searchParams.get('intent') === 'project';
+  // A scheduled task's Change… lands here with the schedule named in the composer (ScheduledPage): it is changed
+  // by talking to a session, never through a form. Read from the browser's own entry (useLocation trails it), once.
+  useEffect(() => {
+    if (!composing) return;
+    const entry = window.history.state as { usr?: { composerText?: string } } | null;
+    const seed = entry?.usr?.composerText;
+    if (!seed) return;
+    setText(seed);
+    window.history.replaceState({ ...entry, usr: { ...entry.usr, composerText: undefined } }, '');
+  }, [composing]);
   const dismissProjectIntent = useCallback(() => {
     setSearchParams(
       (current) => {
@@ -5460,6 +5480,12 @@ export function WorkspaceView({
     startOwnerRequestChat,
   );
 
+  // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
+  // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
+  const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';
+  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null);
+  const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);
+
   // Cross-project requests into the project this conversation coordinates, one decision card per
   // batch, drawn where the batch was first asked (board docs/mocks/handoff-in-chat). The batches
   // still waiting are counted by the pinned strip beside the criteria proposals.
@@ -5468,8 +5494,8 @@ export function WorkspaceView({
   // One array for the transcript, memoized: a fresh array on every render would rebuild the whole
   // conversation with it (`Transcript` memoizes on this prop).
   const transcriptInserts = useMemo(
-    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
-    [decisionReceipts, questionRecords, ownerRequestCards, crossingCards.inserts, blockedPromotionCard, exceptionCards],
+    () => [...decisionReceipts, ...questionRecords, ...ownerRequestCards, ...scheduleInserts, ...crossingCards.inserts, ...blockedPromotionCard, ...exceptionCards],
+    [decisionReceipts, questionRecords, ownerRequestCards, scheduleInserts, crossingCards.inserts, blockedPromotionCard, exceptionCards],
   );
 
   // Follow `/sessions/<id>?item=<itemId>` only after the open-item insert has been rendered. The
@@ -5780,6 +5806,7 @@ export function WorkspaceView({
           shell ? 'shell' : undefined,
           intent,
           operation.clientTurnId,
+          vars.skipTranslation,
         );
         // The server decides this under the same Session row lock as enqueue/claim. Missing
         // placement is a protocol error; local idle state is never used to infer delivery.
@@ -5834,6 +5861,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             intent,
             operation.clientTurnId,
+            vars.skipTranslation,
           );
           const placement = turnPlacementOf(res);
           const queuedItem =
@@ -5885,6 +5913,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             operation.clientTurnId,
             vars.stopSessionId,
+            vars.skipTranslation,
           );
           // The task moved on to another run and the server delivered this there. Nothing was
           // placed on THIS row, so there is no placement to honour and no bubble to paint here —
@@ -5979,6 +6008,7 @@ export function WorkspaceView({
         shell,
         // Composed on a folder's page: the session starts in that folder.
         ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
+        ...(vars.skipTranslation ? { skipTranslation: true } : {}),
       });
       // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
@@ -7284,10 +7314,14 @@ export function WorkspaceView({
       else setText('');
       return;
     }
+    // D2: still exactly what the optimizer put in the box, so it is English already.
+    const skipTranslation = optimizedInsert !== null && c === optimizedInsert.trim();
+    setOptimizedInsert(null);
     sendFromComposer({
       content: materializeReferences(c, composerRefs),
       images: readyImages,
       intent,
+      ...(skipTranslation ? { skipTranslation: true } : {}),
     });
   };
   // Open the new-session draft for this workspace. A /sessions/<id> URL carries no
@@ -8296,6 +8330,16 @@ export function WorkspaceView({
   // An existing session's workspace is fixed (live or recycled/terminal); only a brand-new
   // compose draft reflects the local pick.
   const shownWorkspaceId: string | undefined = selected ? (selected.workspace?.id ?? undefined) : workspaceId;
+  // ✦ Optimize's context (docs/prompt-optimizer-design.md, D1): a session supplies its own; a new
+  // draft has none yet, so it names the workspace the composer picked.
+  const promptOptimizerTarget = useMemo<PromptOptimizerTarget>(
+    () => ({
+      ...(selectedId ? { sessionId: selectedId } : shownWorkspaceId ? { workspaceId: shownWorkspaceId } : {}),
+      onInserted: setOptimizedInsert,
+    }),
+    [selectedId, shownWorkspaceId],
+  );
+  useEffect(() => setOptimizedInsert(null), [selectedId]);
   // The workspace can't be switched once the session exists (live or terminal), nor when the
   // view is locked to one workspace. In those cases the Select is dropped from the controls row
   // entirely — the workspace is already named in the header and the sidebar.
@@ -9343,6 +9387,14 @@ export function WorkspaceView({
     : null;
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
+    // A scheduled run's header is its run's: state · agent · how long it took (board web/run.png).
+    : selected && isScheduleRun && scheduleRun
+      ? scheduleRunHeadText({
+          state: headLifecycleWord,
+          engine: scheduleRunAgentName(scheduleRun, ENGINE_CLI_NAMES[selectedEngine] ?? null),
+          run: scheduleRun.run,
+          now: new Date(),
+        })
     : selected
       ? [
           headRunWord,
@@ -9860,7 +9912,7 @@ export function WorkspaceView({
   );
 
   return (
-    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}`}>
+    <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}${isScheduleRun && !composing ? ' is-schedule-run' : ''}`}>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -10080,6 +10132,7 @@ export function WorkspaceView({
             </button>
           )}
           <div className="workspace-header-main">
+            {scheduleRun && isScheduleRun && !composing && <ScheduleRunCrumb of={scheduleRun} />}
             {selected?.taskId && !composing && (
               <button
                 type="button"
@@ -10179,7 +10232,8 @@ export function WorkspaceView({
                   <GlobalOutlined /> Shared · Live
                 </button>
               )}
-              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
+              {/* A scheduled run is followed through its schedule, not by a chip of its own. */}
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && !isScheduleRun && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
             </div>
@@ -11357,6 +11411,7 @@ export function WorkspaceView({
           queueOffered={queueOffered}
           defaultSendIntent={defaultSendIntent}
           contextActions={composerContextActions}
+          promptOptimizer={promptOptimizerTarget}
         />
         )}
         {handoffConfirm && (
@@ -11534,6 +11589,9 @@ export interface SessionComposerProps {
   defaultSendIntent: SessionTurnIntent;
   /** Compact and Start a new coordinator in the Context popover (board 01). */
   contextActions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
+  /** The prompt optimizer's ✦ Optimize (docs/prompt-optimizer-design.md): where the draft's context
+   *  comes from. Absent, the composer offers no optimizer. */
+  promptOptimizer?: PromptOptimizerTarget;
 }
 
 export function SessionComposer({
@@ -11605,6 +11663,7 @@ export function SessionComposer({
   queueOffered,
   defaultSendIntent,
   contextActions,
+  promptOptimizer,
 }: SessionComposerProps) {
   // Settings › Translation (6A): the account's switch and language, for the composer's tag.
   const navigate = useNavigate();
@@ -11822,6 +11881,16 @@ export function SessionComposer({
   // and a reply-to-question draft resolves an approval instead), so the composer only turns
   // red when the send really would be a shell turn.
   const shellMode = shellOffered && !replyTo && text.trim().startsWith('!');
+  // ✦ Optimize (board docs/mocks/prompt-optimizer, frames 2–6).
+  const optimizer = usePromptOptimizer({
+    target: promptOptimizer,
+    text,
+    setText,
+    taRef,
+    shellMode,
+    disabled: !!composerDisabled || !!replyTo,
+    resetKey: selectedId,
+  });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   const insertShell = (): void => {
@@ -11872,6 +11941,7 @@ export function SessionComposer({
 
   return (
     <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
+      {optimizer.card}
       {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
           Only shown once the box has hit its auto-grow cap or the user set a manual
           height — an empty/short composer has nothing worth resizing. */}
@@ -12147,6 +12217,7 @@ export function SessionComposer({
               return;
             }
           }
+          if (optimizer.onKeyDown(e)) return;
           // Tab takes the offered suggestion. An open menu above has already had the key, and
           // with no suggestion on offer Tab moves focus as it always has.
           if (
@@ -12518,6 +12589,26 @@ export function SessionComposer({
             onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
           >
             {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
+          </button>
+        )}
+        {optimizer.buttonShown && (
+          <button
+            type="button"
+            className={optimizer.busy ? 'composer-optimize composer-optimize-busy' : 'composer-optimize'}
+            onClick={optimizer.press}
+            aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
+            title={optimizer.busy ? 'Press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
+          >
+            {optimizer.busy ? (
+              <>
+                <span className="composer-optimize-spin" aria-hidden="true" />
+                Optimizing…
+              </>
+            ) : (
+              <>
+                <span aria-hidden="true">✦</span> Optimize
+              </>
+            )}
           </button>
         )}
         {showStop ? (

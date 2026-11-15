@@ -40,6 +40,7 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		scheduleRun:           scheduleRunFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
 		helpAsk:               helpAskModeFromEnv(),
@@ -57,6 +58,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
 	// owner's wait is handed to, handOffOwnerWait). Nil serves every tool.
 	onlyTools map[string]bool
@@ -247,6 +249,7 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if s.helpAsk {
 			return s.ok(req.ID, map[string]interface{}{"tools": helpAskToolDescriptors()}), true
 		}
+		// schedule_run_report's filter lives in listedToolDescriptors, so recovery's listedTools counts what this lists.
 		return s.ok(req.ID, map[string]interface{}{"tools": s.listedToolDescriptors()}), true
 	case "tools/call":
 		var p struct {
@@ -396,6 +399,10 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 	}
 	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
 	if result, handled := s.callFileTool(name, args); handled {
+		return result
+	}
+	// And the scheduled tasks' tools, which act as this session (schedule_tools.go).
+	if result, handled := s.callScheduleTool(name, args); handled {
 		return result
 	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
@@ -2884,6 +2891,11 @@ func (s *mcpServer) answerOrbitToolPrompt(args map[string]interface{}) (map[stri
 	tool, ours := strings.CutPrefix(getString(args, "tool_name"), claudeToolName(""))
 	if !ours {
 		return nil, false
+	}
+	// A scheduled CHECK_ONLY run: an Orbit tool its allow rules do not cover is refused, whatever the catalogue says
+	// of it, and asks nobody (schedule_check_only.go).
+	if scheduledCheckOnlyFromEnv() {
+		return toolResult(denyJSON(checkOnlyOrbitToolRefusal), false), true
 	}
 	if entry, declared := planGateTable()[tool]; !declared || !entry.mcp {
 		return nil, false

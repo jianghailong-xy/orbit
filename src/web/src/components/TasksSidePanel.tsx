@@ -56,6 +56,7 @@ import type {
   SlashCommandInfo,
   ManagedRunnerRow,
 } from '@orbit/shared';
+import { SCHEDULE_COPY } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { managedRowOf, useManagedRunner } from '../lib/managedRunner';
 import { routeId, encodeId } from '../lib/idCodec';
@@ -86,6 +87,7 @@ import {
 } from '../lib/projectAttention';
 import { WIKI_PATH, wikiShown, wikiSpacePath, wikiWaitingOnYou, type WikiSpaceRow } from '../lib/wiki';
 import { WAITING_ON_YOU, useWaitingOnYouCount } from '../lib/ownerRequests';
+import { useScheduledNeedsCount } from '../lib/schedules';
 import { WIKI_SETTINGS_TITLE, WIKI_TRASH_OPEN, wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   readWikiFromWorkspace,
@@ -172,6 +174,9 @@ const TOP: TopNavItem[] = [
   // Tasks under Projects, in the iPhone drawer's order (Projects · Tasks · Wiki). It is the way into
   // the task lists too: they are picked from the Tasks page's title, as they are on the phone.
   { key: 'tasks', icon: <SidebarNavIcon name="tasks" />, label: 'Tasks' },
+  // Scheduled tasks live here and only here: no workspace's session list carries them (owner ruling). Its count is
+  // the failing and the held schedules, the page's Needs you.
+  { key: 'scheduled', icon: <SidebarNavIcon name="scheduled" />, label: SCHEDULE_COPY.nav.scheduled },
   // Every thing an agent has asked the owner to do, in one inbox. Its amber count follows the rule the
   // Wiki's states below: a row carrying an amber number shows no shortcut.
   { key: 'waiting', icon: <SidebarNavIcon name="waiting" />, label: WAITING_ON_YOU },
@@ -420,9 +425,12 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // would jump back there until the new detail arrived (and Cmd/Ctrl + Up/Down step from there).
   // While the placeholder stands, the row already active holds.
   const [heldWorkspaceId, setHeldWorkspaceId] = useState<string | null>(null);
+  // A scheduled task's run belongs to its schedule, not to a workspace's list (docs/scheduled-tasks-design.md §7.4):
+  // its session lights Scheduled, and no workspace row.
+  const onScheduleRun = !!sessionId && !sessionQ.isPlaceholderData && sessionQ.data?.runSource === 'SCHEDULE';
   const activeWorkspaceId =
     openWorkspaceId ??
-    (sessionId
+    (sessionId && !onScheduleRun
       ? sessionQ.isPlaceholderData
         ? heldWorkspaceId
         : (sessionQ.data?.workspace?.id ?? null)
@@ -432,6 +440,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // The open projects, which close the rail the way they close the iPhone drawer (below).
   const projects = useQuery(openProjectsQuery());
   const waitingOnYou = useWaitingOnYouCount();
+  const scheduledNeeds = useScheduledNeedsCount();
   const openProjects = useMemo(() => sidebarProjects(projects.data ?? []), [projects.data]);
   // A project's own page lights its row in that group rather than the Projects entry, which stands
   // for the index — the drawer's rule. A project the group does not list (a closed one) keeps the
@@ -481,6 +490,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // the pages under it (a machine's, a key's, a pool's) light nothing, as Settings lights nothing.
   const routeKey = projectPageKey
     ? projectPageKey
+    : onScheduleRun
+    ? 'scheduled'
     : activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
@@ -939,6 +950,11 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 {waitingOnYou}
               </span>
             )}
+            {t.key === 'scheduled' && scheduledNeeds > 0 && (
+              <span className="tp-rail-badge needs-you" data-scheduled-count="">
+                {scheduledNeeds}
+              </span>
+            )}
             {t.key === 'wiki' && wikiWaitingCount > 0 && (
               <span
                 className="tp-rail-badge needs-you"
@@ -1008,6 +1024,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   aria-label={wikiWaitingOnYou(waitingOnYou)}
                 >
                   {waitingOnYou}
+                </span>
+              ) : t.key === 'scheduled' && scheduledNeeds > 0 ? (
+                <span className="tp-count needs-you" data-scheduled-count="">
+                  {scheduledNeeds}
                 </span>
               ) : t.key === 'wiki' && wikiWaitingCount > 0 ? (
                 <span

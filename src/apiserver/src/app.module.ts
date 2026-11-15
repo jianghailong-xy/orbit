@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { SessionsModule } from './sessions/sessions.module';
+import { PromptOptimizerModule } from './sessions/prompt-optimizer.module';
 import { SessionTagsModule } from './session-tags/session-tags.module';
 import { SessionFoldersModule } from './session-folders/session-folders.module';
 import { TasksModule } from './tasks/tasks.module';
@@ -47,7 +48,9 @@ import { FeishuModule } from './feishu/feishu.module';
 import { FeishuActionsModule } from './feishu/feishu-actions.module';
 import { EmailModule } from './email/email.module';
 import { TerminalsModule } from './terminals/terminals.module';
+import { ScheduleRunsModule } from './schedules/schedule-runs.module';
 import { SchedulesModule } from './schedules/schedules.module';
+import { ScheduleDoorsModule } from './schedules/schedule-doors.module';
 
 @Module({
   imports: [
@@ -65,6 +68,7 @@ import { SchedulesModule } from './schedules/schedules.module';
     UsersModule,
     WorkspacesModule,
     SessionsModule,
+    PromptOptimizerModule,
     SessionTagsModule,
     SessionFoldersModule,
     TasksModule,
@@ -107,6 +111,9 @@ import { SchedulesModule } from './schedules/schedules.module';
     TerminalsModule,
     // Scheduled tasks (docs/scheduled-tasks-design.md): the domain service, for the tools and doors built on it.
     SchedulesModule,
+    ScheduleRunsModule,
+    // Its REST doors: read, control, and the owner's press on a card (schedules/schedules.controller.ts).
+    ScheduleDoorsModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
   // PrismaService injected, which only the DI container can provide.

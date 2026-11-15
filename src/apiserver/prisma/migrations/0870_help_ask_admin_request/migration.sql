@@ -1,4 +1,4 @@
--- 0860 — Still stuck → Ask your admin (docs/mocks/help-center board 02 ② right frame, side note 5; task
+-- 0870 — Still stuck → Ask your admin (docs/mocks/help-center board 02 ② right frame, side note 5; task
 -- "Help center: Still stuck — retry, ask your admin, report on GitHub").
 --
 -- WHAT IT ADDS
@@ -54,7 +54,7 @@ BEGIN
     EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
       tries := tries + 1;
       IF tries >= 45 THEN
-        RAISE EXCEPTION '0860: "session", "task" or "user" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 0860_help_ask_admin_request) and deploy again: it is safe to run twice.'
+        RAISE EXCEPTION '0870: "session", "task" or "user" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 0870_help_ask_admin_request) and deploy again: it is safe to run twice.'
           USING ERRCODE = 'lock_not_available';
       END IF;
       PERFORM pg_sleep(1);

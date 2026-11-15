@@ -50,6 +50,7 @@ import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
+import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
 import { HelpLayout } from './pages/help/HelpLayout';
 import { HelpHomePage } from './pages/help/HelpHomePage';
@@ -344,6 +345,16 @@ export function App() {
             <Route path="providers" element={<ProvidersRedirect />} />
             <Route path="providers/*" element={<ProvidersRedirect />} />
             <Route path="admin/providers" element={<ProvidersRedirect />} />
+            {/* Scheduled tasks: a timeline with the inspector beside it, full-bleed so the inspector reaches the edge.
+                `?id=` opens one schedule, `?draft=` one draft. */}
+            <Route
+              path="scheduled"
+              element={
+                <FlushView>
+                  <ScheduledPage />
+                </FlushView>
+              }
+            />
             {/* Everything an agent has asked the owner to do: owner requests and coordinator questions. */}
             <Route
               path="waiting"

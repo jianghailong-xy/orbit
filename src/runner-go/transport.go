@@ -99,6 +99,7 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		claudeScheduledCheckOnlyAsksCapabilityV1,
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
 		kimiLoginRegionCapabilityV1,

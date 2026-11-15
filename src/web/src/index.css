@@ -8285,6 +8285,192 @@ button.chat-jump-start:hover {
 .composer-translation-tag:hover {
   color: var(--text-1);
 }
+/* Prompt optimizer (docs/mocks/prompt-optimizer, frames 2–6): ✦ Optimize beside Send, and the
+   suggestion card (or the failure line) above the composer, as the slash menu sits. */
+.composer-optimize {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.composer-optimize:hover {
+  background: var(--brand-tint-hover);
+}
+.composer-optimize-busy {
+  border-color: var(--border);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+}
+.composer-optimize-spin {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--text-3);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: composer-optimize-spin 0.9s linear infinite;
+}
+@keyframes composer-optimize-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.composer-optimized {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  max-height: min(60vh, 520px);
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px var(--fill-inset);
+  overflow: hidden;
+}
+.composer-optimized-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 16px;
+  background: var(--brand-tint);
+  font-size: 13px;
+}
+.composer-optimized-title {
+  flex: 1;
+  color: var(--brand);
+  font-weight: 500;
+}
+.composer-optimized-earlier {
+  color: var(--warning);
+  font-size: 12px;
+}
+.composer-optimized-close {
+  flex: none;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.composer-optimized-close:hover {
+  color: var(--text-1);
+}
+.composer-optimized-text {
+  padding: 12px 16px 8px;
+  overflow-y: auto;
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.composer-optimized-added {
+  background: var(--success-bg);
+  color: inherit;
+  border-radius: 2px;
+}
+.composer-optimized-used {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.composer-optimized-chip {
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+  line-height: 20px;
+}
+.composer-optimized-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.composer-optimized-use,
+.composer-optimized-edit,
+.composer-optimized-retry {
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.composer-optimized-use {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--invert-text);
+}
+.composer-optimized-use:hover {
+  background: var(--brand-strong);
+}
+.composer-optimized-retry {
+  border-color: transparent;
+  background: none;
+  color: var(--text-2);
+}
+.composer-optimized-hint {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.composer-optimize-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.composer-optimized-head .composer-optimize-link {
+  color: var(--brand);
+  font-size: 12px;
+}
+.composer-optimize-failed {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  background: var(--error-bg);
+  color: var(--error);
+  font-size: 13px;
+}
+.composer-optimize-failed .composer-optimize-link {
+  font-weight: 500;
+}
+.composer-optimize-failed .composer-optimized-close {
+  margin-left: auto;
+}
 /* Frame 2: the server cannot translate, and says who can change that. */
 .settings-translation-notice {
   margin: 4px 0 6px;

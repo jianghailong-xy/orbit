@@ -155,9 +155,21 @@ func (op *operation) retryPolicy() cliRetryPolicy {
 	return policy
 }
 
+// catalogInteractionOverrides are the owner operations whose owner step is a card the owner presses, not a request
+// answered elsewhere: schedule_create returns at once and its create card writes nothing until the owner presses
+// Create; schedule_update outside the envelope waits on the envelope card the same way (docs/scheduled-tasks-design.md
+// §8). Their Approval stays owner (it is not a runner permission card under an ApprovalKey that holds the call open).
+var catalogInteractionOverrides = map[string]string{
+	"schedule_create": interactionCard,
+	"schedule_update": interactionCard,
+}
+
 func (op *operation) interaction() string {
 	if op.CLI != nil && op.CLI.HeadlessOnly {
 		return interactionHumanOnly
+	}
+	if interaction, ok := catalogInteractionOverrides[op.Tool]; ok {
+		return interaction
 	}
 	switch op.Approval {
 	case approvalKindCard:
