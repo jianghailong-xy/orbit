@@ -310,12 +310,11 @@ test('session guests: the guest door shows only what the public link may, and th
     assert.deepEqual(echo?.payload?.externalSender, ORBIT_GUEST, 'the guest page names the guest on the echo');
     const [, shared] = guestAnswers[0]!;
     assert.deepEqual(shared.json.sessions.map((x: Json) => x.ownerName), [OWNER_NAME]);
-    // The guest door's page is the public link's page, field for field, plus who shared it and whether the agent
-    // waits on them — a bare boolean, since what the waiting card asks is the owner's alone.
+    // The guest door's page is the public link's page, field for field, plus who shared it.
     const [, publicRoot] = publicAnswers[0]!;
     const fieldsOf = (json: Json) => Object.keys(json).sort();
-    const { ownerName: _ownerName, waitingOnOwner, ...guestPage } = page.json;
-    assert.equal(typeof waitingOnOwner, 'boolean', 'the guest page says only whether the agent waits on the owner');
+    const { ownerName: _ownerName, ...guestPage } = page.json;
+    assert.equal(typeof page.json.waitingOnOwner, 'boolean', 'the guest page says only whether the agent waits on the owner');
     assert.deepEqual(
       fieldsOf(guestPage).filter((f) => !fieldsOf(publicRoot.json).includes(f)),
       [],
