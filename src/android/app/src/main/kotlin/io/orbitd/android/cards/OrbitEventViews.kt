@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,7 +37,7 @@ internal fun OrbitEventLine(note: String, ts: String?, steerState: String? = nul
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     val label = MaterialTheme.typography.bodySmall
     val name = remember(note) { OrbitEvent.name(describeNote(note)) }
-    val mark = @Composable { Text(OrbitEvent.mark, Modifier.clearAndSetSemantics { }.testTag("orbit-event:mark"), color = secondary,
+    val mark = @Composable { Text(OrbitEvent.mark, Modifier.clearAndSetSemantics { testTag = "orbit-event:mark" }, color = secondary,
         style = MaterialTheme.typography.labelLarge) }
     val title = @Composable { Text(OrbitEvent.title, style = label, color = secondary, maxLines = 1) }
     val nameText = @Composable { modifier: Modifier ->
