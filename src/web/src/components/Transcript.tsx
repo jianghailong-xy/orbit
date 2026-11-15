@@ -3399,6 +3399,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
     translation && translation.state !== 'SENT_AS_WRITTEN' ? (
       <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
     ) : null;
+  const flipFoot = translation?.state === 'DONE';
   // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
   // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
   const noteKind = node.note ? describeNote(node.note) : '';
@@ -3469,9 +3470,15 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
               {copied ? <CheckOutlined /> : <CopyOutlined />}
             </button>
           )}
+          {/* A delivered translation's flip sits before the time, which ends the row
+              (docs/mocks/translation-user-hover). */}
+          {flipFoot && translationFoot}
+          {flipFoot && typed && node.ts && <span className="chat-meta-sep">·</span>}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note || held || translationFoot) && <span className="chat-meta-sep">·</span>}
-          {translationFoot}
+          {typed && node.ts && (status || note || held || (!flipFoot && translationFoot)) && (
+            <span className="chat-meta-sep">·</span>
+          )}
+          {!flipFoot && translationFoot}
           {status}
           {held}
           {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
