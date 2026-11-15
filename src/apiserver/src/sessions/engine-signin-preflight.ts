@@ -10,6 +10,7 @@ import {
   type RunnerEngineHealth,
 } from '@orbit/shared';
 import { isLoginEngine, usedRunnerEngines } from '../common/runner-engines';
+import { sessionRecoveryBody } from './session-recovery';
 import { accountDir, isAccountEngine } from '@orbit/shared';
 import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner, type AccountRunner } from '../providers/account';
 import type { WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
@@ -191,7 +192,8 @@ export class EngineSignedOutConflict extends ConflictException {
       runnerId,
       ...(signIn ? { signIn } : {}),
     };
-    super(body);
+    // The recovery block beside it (session-recovery.ts): a person signs the engine in, never the caller.
+    super({ ...sessionRecoveryBody(ENGINE_SIGNED_OUT, message, { resources: [{ type: 'RUNNER', id: runnerId }] }), ...body });
   }
 }
 

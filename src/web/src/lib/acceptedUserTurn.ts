@@ -2,6 +2,7 @@ import { COORDINATOR_HANDOFF_PROMPT_HEAD } from '@orbit/shared';
 import type { TurnTranslation } from '@orbit/shared';
 import type { TurnCards } from '../api';
 import { parseBackgroundWake } from './backgroundWake';
+import { parseSubagentFinished } from './subagentFinished';
 
 /** A user turn the API accepted but whose durable `user` event has not reached this tab yet.
  *
@@ -183,7 +184,7 @@ function listedWithItsBlock(turn: QueuedTurnRow): boolean {
   ) {
     return true;
   }
-  return parseBackgroundWake(turn.content) !== null;
+  return parseBackgroundWake(turn.content) !== null || parseSubagentFinished(turn.content) !== null;
 }
 
 /**

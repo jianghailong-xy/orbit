@@ -209,9 +209,64 @@ deliberate and is stated in §4.5.
   mandatory test executes every advertised `argv` and `helpArgv` through the CLI's own router. Since
   v1.3.0 every `mcpInputSchema` is closed (`additionalProperties: false` on each object that names
   its properties, §5.3), an entry with exclusive arguments carries `mutuallyExclusive`, and the
-  document carries `receiptFlag` (`--receipt`, §6.3). There
-  is still no graded discovery — the document remains one ~300 KB blob in the fullest context
+  document carries `receiptFlag` (`--receipt`, §6.3). Catalogue v1.6.0 adds, all additively
+  (`schemaVersion` stays 2), what the document says about a command it cannot run here and how to
+  call the ones it can — see [Capability availability](#capability-availability-catalogue-v160) below.
+  There is still no graded discovery — the document remains one ~300 KB blob in the fullest context
   (§8.2), which is why P1-01 exists.
+
+#### Capability availability (catalogue v1.6.0)
+
+Every entry, in `capabilities` and in `unavailableCapabilities`, declares:
+
+| Field | Meaning |
+| --- | --- |
+| `argv` | The command with its absolute executable path in argv[0]. Run it as given. |
+| `mcpInputSchema` | The input schema: the MCP tool's, or the command's own flags when no tool stands beside it. Never null. |
+| `availability` | `{mcp, cli}`: which gates each surface needs (`always`, `orchestration`, `session`, `headless`, `watch_switch`, `wiki_switch`, `absent`, joined with `+`). |
+| `retryPolicy` | `{onNoAnswer, onNoAnswerWithKey?}`: the `error.retry` the receipt gives when the call got no answer (a lost connection, a 408 or a 5xx), without and with its key. `resend` or `reread_first`. It comes from the same rule the receipt uses, so the two never disagree. Every other failure's retry follows from its status (§5.2). |
+| `idempotencyArg` | `{mcp, cli, repeat}` for a `caller_key` operation, `null` for every other: the argument that carries the key (`idempotencyKey` / `--idempotency-key`, `clientTurnId` / `--client-turn-id`, or `requestId` / `REQUEST_ID` for `session_reply`). `repeat` is `returns_first` (the same key answers with the first result) or `refused` (the call can land once, so a repeat is refused, never written twice). |
+| `interaction` | Who else takes part: `none`, `confirmation_card` (the owner answers a card), `owner_decision` (only the owner can answer), or `human_only` (a person's own terminal command). |
+| `unavailableCode` | Set only when `available` is false. A stable code, listed below. `unavailableReason` says the same thing in prose, for a person, and its wording may change. |
+
+`unavailableCapabilities` lists every catalogue command this process cannot run. That covers the
+ones the document leaves out of `capabilities` for this context and the ones it lists with
+`available: false`. It is `[]` when there are none. A consumer that never reads it sees `capabilities`
+unchanged. The codes:
+
+| Code | When |
+| --- | --- |
+| `ORCHESTRATION_DISABLED` | Inside a session whose account has Session orchestration off: the session, agent and runner commands, and the project deliveries that spend the grant. |
+| `SESSION_CONTEXT_MISSING` | The command acts for the session it runs in (`ORBIT_SESSION_ID`), and there is none. It also covers a session verb that no service-token scope can grant, and the agent and runner commands, which have no headless form. |
+| `SERVICE_TOKEN_SCOPE_MISSING` | `ORBIT_SERVICE_TOKEN` is valid but lacks the scope the session command needs. The reason names the scope. |
+| `TOKEN_INVALID` | The credential in effect does not decode: a truncated or foreign service token, or an unreadable saved login. Every command that sends with it is affected. |
+| `TOKEN_EXPIRED` | The service token is past its `exp`. |
+| `RUNNER_NOT_REGISTERED` | No runner credential on this machine. Every command except `login`/`logout`/`whoami` sends with it, and so does a service-token caller outside a session. |
+| `RUNNER_CREDENTIAL_UNUSABLE` | The runner credential exists, but its storage is not private, so it is not used. |
+| `NOT_AVAILABLE_AS_USER` | The CLI acts as the person, and the command has no form that does. |
+| `REQUIRES_USER_LOGIN` | `orbit api`: it acts only as the person, and this process does not. |
+| `HUMAN_ONLY` | A person's own terminal command (`login`, `logout`, `whoami`, `api`). A running agent is never offered one. |
+| `WATCHES_OFF` / `WIKI_OFF` | The session was spawned with that switch off. |
+
+A token's validity is read from the token itself (its shape and `exp`), without asking the server.
+A token the server has revoked still reads as valid here; `orbit whoami` asks the server. A recovery
+step (docs/recovery-contract.md) invokes only `available` entries. Under an invalid or expired service
+token, that takes the session readers out of every recovery that would otherwise name them.
+
+The Claude Code Bash allowlist (`orbitCLIAllowedTools`) is the same catalogue projected again. In
+every session shape (orchestration × watches × wiki), its rules are exactly `capabilities --json`
+plus what the session is offered, plus what it is withheld only because a switch is off. Nothing
+withheld for any other reason is pre-approved. Every other `orbit` command is excluded with a kind
+and a reason (`orbitCLIAllowlistExclusions`): `human_only` (register, unregister, token, terminal,
+resume, host, upgrade, and the catalogue's own login/logout/whoami/api), `headless_only` (run, hostd,
+mcp, hook), `runner_local` (engine-update, status, doctor, version) and `arbitrary_command`
+(`secret exec`). `capability_contract_test.go` holds both lists to the CLI's own router.
+
+Recovery examples and the failure-injection matrix are in the
+[recovery runbook](recovery-contract.md#12-cross-surface-recovery-runbook). After a read, decide
+against current state again; a capability snapshot is discovery, not a grant that survives revocation.
+An unknown write outcome keeps its original key. A committed child with a failed wait is read back,
+not created again. A declined card stops at the owner, and a CLI call cannot override that boundary.
 
 ### 2.6 The always-on primer
 
@@ -455,7 +510,11 @@ A DAG batch restructure has no person route today: a person's terminal edits edg
    A create without a key is sent exactly once: after a timeout or a dropped response its receipt
    says `outcome: unknown`, `retry: reread_first` — list the tasks it would have created (same
    title/project, this session) and only then decide. A second keyless create in a later turn does
-   **not** dedup.
+   **not** dedup. The same holds for every `caller_key` write: a call that carried its key
+   (`idempotencyArg`, §2.5) and got no answer says `retry: resend`, and one without its key says
+   `reread_first`. A send that carried `clientTurnId` is resent under it, because the server answers
+   the same turn. A `session_reply` is never resent, because a request takes one answer.
+   `retryPolicy` in `orbit capabilities --json` states this per operation.
 5. **Never retry by a different door**: MCP after CLI, `task_create` after a declined card, a
    `session_create` after orchestration refused. Different door, same answer, plus a lie in the log.
 6. **An error is never evidence of success.** Only a receipt is (§6).
@@ -601,6 +660,7 @@ whose outputSchema describes their answer, and `permission_prompt`, the engine's
 | `items` / `count` | a written batch | `[{index, ref?, id, status}]` in input order, and how many were written. |
 | `notes` / `text` | when there are any | Sentences that used to travel as prose beside the document; `text` is an answer that is not JSON, and a chat's reply. |
 | `entity` | when there is one | The server's document, exactly as it answered. |
+| `recovery` | on a failed call that has one | The recovery report (docs/recovery-contract.md): `error` in the shared recovery envelope and `next`, the one step to take. |
 
 The CLI is the same mapping: `orbit … --receipt` prints this document — built by the same code from
 the same facts: the requests the command made, the card it filed and its answer, the body it sent —
