@@ -51,6 +51,10 @@ import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
 import { WikiPage } from './pages/WikiPage';
+import { HelpLayout } from './pages/help/HelpLayout';
+import { HelpHomePage } from './pages/help/HelpHomePage';
+import { HelpArticlePage } from './pages/help/HelpArticlePage';
+import { HelpCategoryPage, HelpPlaceholderPage } from './pages/help/HelpCategoryPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -219,6 +223,27 @@ export function App() {
       {/* The privacy policy, which Google's consent screen and the login page link to: public, and the
           same page signed out or in. */}
       <Route path="/privacy" element={<PrivacyPage />} />
+      {/* The help center (docs/mocks/help-center board 01 §3–4): its own window, drawn as Settings is, and public —
+          an article reads signed out (the sign-in page's "Can't sign in?" links to one), with no in-app buttons. */}
+      <Route path="/help" element={<HelpLayout />}>
+        <Route index element={<HelpHomePage />} />
+        <Route
+          path="whats-new"
+          element={<HelpPlaceholderPage title="What's new" text="What changed in each Orbit release will be listed here." />}
+        />
+        <Route
+          path="questions"
+          element={
+            authed ? (
+              <HelpPlaceholderPage title="Your questions" text="The questions you ask with Ask will be listed here." />
+            ) : (
+              <Navigate to={`/login?next=${encodeURIComponent('/help/questions')}`} replace />
+            )
+          }
+        />
+        <Route path=":category" element={<HelpCategoryPage />} />
+        <Route path=":category/:slug" element={<HelpArticlePage />} />
+      </Route>
       <Route path="/login" element={authed ? <Navigate to="/" /> : <LoginPage />} />
       {/* First-run setup. Signed-out only; once a user exists SetupPage itself bounces to
           login, and a signed-in visitor (so users exist) is sent to the app. */}
