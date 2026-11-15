@@ -768,9 +768,9 @@ export class ScheduleRunsService {
           throw refusal('CONFLICT', 'SCHEDULE_HELD', `The schedule is held (${schedule.heldReason}); resume it first.`);
         }
         const now = this.clock();
-        // §8.4: the owner's Run now (the owner channel, or a token recorded as the person) starts even over budget; a
-        // session's may not spend runs the owner did not allow.
-        if (actor.kind === 'SESSION' && (await scheduleOverBudget(tx, schedule, now))) {
+        // §8.4: only the owner's own press (the owner-interactive channel) starts over budget. A session, or a personal
+        // access token (what an agent with a shell on the runner holds), may not spend runs the owner did not allow.
+        if (actor.kind !== 'OWNER' && (await scheduleOverBudget(tx, schedule, now))) {
           throw refusal(
             'CONFLICT',
             'SCHEDULE_OVER_BUDGET',
@@ -1086,6 +1086,10 @@ export class ScheduleRunsService {
       where: { id: run.id },
       data: { state: 'MISSED', failureReason: 'OVER_BUDGET', endedAt: now, notBeforeAt: null },
     });
+    // A ONCE schedule's only slot follows §5.2's missed-ONCE rule: one push saying nothing else will run (fire has
+    // already ended the schedule, END_REACHED); the run list carries why.
+    const once = this.onceMissedIf(schedule, run);
+    if (once.length > 0) return once;
     if (previous?.state === 'MISSED' && previous.failureReason === 'OVER_BUDGET') return [];
     return [{
       kind: 'OVER_BUDGET',

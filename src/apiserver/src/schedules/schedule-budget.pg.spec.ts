@@ -8,7 +8,10 @@
  *   2. two replicas racing on the last slot of the budget start exactly one run, and none past it;
  *   3. the owner's Run now starts over budget and counts toward later automatic starts; a session's is refused
  *      (SCHEDULE_OVER_BUDGET);
- *   4. a start that never reached its engine and was retried is one start, not four.
+ *   4. a start that never reached its engine and was retried is one start, not four;
+ *   5. a personal access token's Run now is refused over budget like a session's;
+ *   6. a ONCE slot over budget follows the missed-ONCE rule;
+ *   7. runs already started stay counted when the envelope is narrowed mid-week.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/schedules/schedule-budget.pg.spec.ts
  *
@@ -356,4 +359,79 @@ test('4. a start that never reached its engine, retried three times, is one star
   const [third] = await nextSlot(s.id);
   assert.equal(third?.outcome, 'MISSED');
   assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: third.runId } })).failureReason, 'OVER_BUDGET');
+});
+
+test('5. a personal access token\'s Run now works inside the budget and is refused over it; the owner\'s still starts', { skip }, async () => {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world('budget-pat');
+  const pat: ScheduleActor = { kind: 'PAT', ownerId: w.ownerId };
+  const s = await created(w, { rule: { kind: 'WEEKLY', time: '10:00', weekdays: ['MON', 'TUE'] } });
+  assert.equal(s.envelopeRunsPerWeek, 2);
+
+  // Inside the budget a token works as before: two starts of two.
+  for (let i = 0; i < 2; i++) {
+    const asked = await runs.runNow(pat, s.id);
+    const run = await db.scheduleRun.findUniqueOrThrow({ where: { id: asked.id } });
+    assert.equal(run.state, 'RUNNING', 'inside the budget a token may run it now');
+    await delivered(run.sessionId!);
+    advance(MINUTE);
+    await runs.report(w.ownerId, run.sessionId!, { outcome: 'NO_CHANGE', summary: 'same' });
+  }
+  // Over it, a token is what an agent with a shell holds: refused like a session.
+  const runsBefore = await db.scheduleRun.count({ where: { scheduleId: s.id } });
+  await assert.rejects(runs.runNow(pat, s.id), (error: unknown) => {
+    assert.equal(code(error), 'SCHEDULE_OVER_BUDGET');
+    return true;
+  });
+  assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id } }), runsBefore, 'a refused Run now writes no run');
+  // Only the owner-interactive press starts over budget.
+  const press = await runs.runNow(w.owner, s.id);
+  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } })).state, 'RUNNING');
+});
+
+test('6. a ONCE slot over budget is MISSED (OVER_BUDGET) and follows the missed-ONCE rule: one push, the schedule ends', { skip }, async () => {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world('budget-once');
+  const s = await created(w, { rule: { kind: 'ONCE', at: '2026-11-16T10:00' } });
+  assert.equal(s.envelopeRunsPerWeek, 1);
+
+  // The owner runs it now first: the one start of the week.
+  const press = await runs.runNow(w.owner, s.id);
+  const run = await db.scheduleRun.findUniqueOrThrow({ where: { id: press.id } });
+  await delivered(run.sessionId!);
+  advance(MINUTE);
+  await runs.report(w.ownerId, run.sessionId!, { outcome: 'NO_CHANGE', summary: 'healthy' });
+  pushed = [];
+
+  const [slot] = await nextSlot(s.id);
+  assert.equal(slot?.outcome, 'MISSED');
+  const missed = await db.scheduleRun.findUniqueOrThrow({ where: { id: slot.runId } });
+  assert.equal(missed.failureReason, 'OVER_BUDGET');
+  assert.equal(missed.sessionId, null);
+  const after = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
+  assert.equal(after.state, 'ENDED');
+  assert.equal(after.endedReason, 'END_REACHED', 'its only slot has passed');
+  assert.deepEqual(pushed.map((a) => a.kind), ['ONCE_MISSED'], 'one push, the missed-ONCE one');
+});
+
+test('7. narrowed mid-week: runs already started stay counted against the new, smaller number', { skip }, async () => {
+  pushed = [];
+  at('2026-11-16T09:58:00Z');
+  const w = await world('budget-narrowed');
+  const s = await created(w, { rule: daily('10:00') });
+  assert.equal(s.envelopeRunsPerWeek, 7);
+  for (let i = 0; i < 3; i++) {
+    const [started] = await nextSlot(s.id);
+    assert.equal(started?.outcome, 'STARTED');
+    await runMovesAndEnds(w, started.runId, s.id, daily);
+  }
+  // The owner narrows to two weekdays, today among them: the envelope shrinks to 2, below the 3 already started.
+  const narrowed = await schedules.update(w.owner, s.id, { rule: { kind: 'WEEKLY', time: hhmm(5 * MINUTE), weekdays: ['MON', 'WED'] } });
+  assert.equal(narrowed.outcome, 'APPLIED');
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).envelopeRunsPerWeek, 2);
+  const [next] = await nextSlot(s.id);
+  assert.equal(next?.outcome, 'MISSED', 'the three starts count against the new budget of two');
+  assert.equal((await db.scheduleRun.findUniqueOrThrow({ where: { id: next.runId } })).failureReason, 'OVER_BUDGET');
 });
