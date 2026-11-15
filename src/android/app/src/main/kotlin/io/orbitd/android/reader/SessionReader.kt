@@ -47,6 +47,7 @@ import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
+import io.orbitd.android.composer.ManagedRunnerAsleepLine
 import io.orbitd.android.composer.SessionPendingTray
 import io.orbitd.android.cards.AnsweredQuestions
 import io.orbitd.android.cards.CardFocus
@@ -756,6 +757,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     open(OrbitRoute(Destination.SESSION, it)) } }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
+                // The session's runner is the account's managed runner, asleep: the shared composer line, and sending stays open — a
+                // message wakes it (coordinator comment 34xSUx9zU5vQtCEYNoqwu).
+                ManagedRunnerAsleepLine(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceOfSession) }?.runnerId)
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
