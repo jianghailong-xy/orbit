@@ -146,7 +146,6 @@ import {
   clampPermissionModeForModel,
   DEFAULT_PERMISSION_MODE,
   defaultModelFor,
-  defaultModelKey,
   effectiveSessionModel,
   effortOptionsFor,
   isLoginProvider,
@@ -583,7 +582,7 @@ const modeLabel = (value: string): string => MODE_OPTIONS.find((option) => optio
  * The composer toolbar's facts and picks for a chat, by the session page's own rules: the models of the engine and
  * provider the chat runs on, the mode and the effort as that model takes them, a fast lane where there is one, and a
  * Cursor model's own settings. A pick says what it changes and `change` applies it — a new chat keeps it for its
- * create, a chat that runs writes its session's config — and, as on the session page, a model or an effort picked is
+ * create, a chat that runs writes its session's config — and, as on the session page, an effort picked is
  * remembered as the account's next.
  */
 function useChatToolbar({
@@ -604,12 +603,6 @@ function useChatToolbar({
   change: (next: ChatConfigChange) => void;
 }) {
   const qc = useQueryClient();
-  const modelPreference = useMutation({
-    // In the order they were made, beside the session page's own picks.
-    scope: { id: 'model-preferences' },
-    mutationFn: (model: string) =>
-      api('/users/me/preferences', { method: 'PATCH', body: { defaultModels: { [defaultModelKey(engine, provider)]: model } } }),
-  });
   const catalog = runner?.modelCatalog ?? null;
   const shownModel = current.model;
   const shownCursorPick = engine === AgentProvider.CURSOR ? cursorModelPick(shownModel, catalog) : null;
@@ -630,23 +623,12 @@ function useChatToolbar({
   const permissionSemanticsFor = (label: string) =>
     derivePermissionSemantics(engine, modeValue(label), onOwnModels ? undefined : shownModel, runner?.runsAsRoot, catalog);
 
-  const remember = (patch: { defaultModels?: Record<string, string>; defaultEffort?: string }) =>
+  const remember = (patch: { defaultEffort: string }) =>
     qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
-      prev
-        ? {
-            ...prev,
-            preferences: {
-              ...prev.preferences,
-              ...(patch.defaultModels ? { defaultModels: { ...prev.preferences?.defaultModels, ...patch.defaultModels } } : {}),
-              ...(patch.defaultEffort !== undefined ? { defaultEffort: patch.defaultEffort } : {}),
-            },
-          }
-        : prev,
+      prev ? { ...prev, preferences: { ...prev.preferences, defaultEffort: patch.defaultEffort } } : prev,
     );
   const pickModel = (model: string): void => {
-    // A re-selection is still a preference, as on the session page.
-    remember({ defaultModels: { [defaultModelKey(engine, provider)]: model } });
-    modelPreference.mutate(model);
+    // The pick is this chat's alone: no account-wide model memory is written (docs/workspace-default-model-design.md).
     if (model === shownModelName) return;
     // A model that cannot run Auto drops it to Default, and an effort the model does not take goes too.
     const drop = shownMode === 'Auto' && !supportsAuto(model, engine, provider, configured, catalog);

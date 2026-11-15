@@ -801,7 +801,8 @@ func prepareCursorPrompt(ctx context.Context, t *Transport, job *ClaimedSession,
 
 // cursorAgentInstructions are Orbit's agent instructions for a Cursor CLI conversation: the workspace's
 // system prompt and its appended one, with Orbit's own (withOrbitCLIInstructions) — Orbit's MCP tools
-// named as Cursor shows them, a server's tools rather than mcp__orbit__* names. They go ahead of the
+// named as Cursor shows them, a server's tools rather than mcp__orbit__* names, and without the sentence on loading
+// delegate in Claude Code. They go ahead of the
 // conversation's first prompt (§7.2: no user-level rules file reaches the model), and stay in the
 // conversation Cursor keeps from then on.
 func cursorAgentInstructions(job *ClaimedSession) string {
@@ -809,9 +810,10 @@ func cursorAgentInstructions(job *ClaimedSession) string {
 	if strings.TrimSpace(job.Agent.SystemPrompt) != "" {
 		parts = append(parts, strings.TrimSpace(job.Agent.SystemPrompt))
 	}
-	appended := strings.TrimSpace(withOrbitCLIInstructions(job.appendSystemPrompt(), orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn()))
+	appended := strings.TrimSpace(withOrbitCLIInstructions(job.appendSystemPrompt(), orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent)))
 	if appended != "" {
-		parts = append(parts, strings.Replace(appended, "the `mcp__orbit__*` tools", "the tools of the `orbit` MCP server", 1))
+		appended = strings.Replace(appended, "the `mcp__orbit__*` tools", "the tools of the `orbit` MCP server", 1)
+		parts = append(parts, strings.Replace(appended, orbitDelegateClaudeCodeLoad, "", 1))
 	}
 	return strings.Join(parts, "\n\n")
 }

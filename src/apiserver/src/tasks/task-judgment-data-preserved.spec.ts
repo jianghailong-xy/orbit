@@ -3011,6 +3011,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // approval_decided_via_chk and lets activity_credential_chk say TERMINAL; no preserved rows, triggers or DONE
       // fence change, and no row is written.
       '0663_approval_decided_terminal_machine',
+      // 0670 adds session.opened_by (who opened a conversation), its CHECK and a partial index, and backfills it on
+      // conversations with no task and no parent; no preserved table, trigger or DONE fence changes.
+      '0670_session_opened_by',
       // 0700 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
       '0700_session_settings',
       // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
@@ -3033,6 +3036,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // VALID and then validated; `main_checkout_request` is none of the preserved relations, no trigger, function or
       // DONE fence changes, and no row is written.
       '0770_main_checkout_discard',
+      // 0780 adds runner_presence.background_job_session_ids (UUID[], NOT NULL with a constant default) only,
+      // catalog-only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0780_runner_presence_background_job_sessions',
       // 0790 adds the schedule tables, a SCHEDULE session_run_source value and a nullable session.schedule_run_id
       // only; no preserved rows, triggers or DONE fence change, and no row is written.
       '0790_schedules',

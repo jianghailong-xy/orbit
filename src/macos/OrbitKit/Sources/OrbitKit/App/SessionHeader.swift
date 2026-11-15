@@ -37,7 +37,8 @@ public enum SessionHeader {
         switch s.effectiveRunState {
         case .queued:
             return ClaudeRegion.heldWords(s, machine: machine)
-                ?? (RunnerUpdating.holds(s) ? RunnerUpdating.title(s) : "Queued")
+                ?? (RunnerUpdating.holds(s) ? RunnerUpdating.title(s)
+                    : QueuedCapacity.holds(s) ? QueuedCapacity.title(s) : "Queued")
         case .running:
             return "Running"
         case .awaitingInput:

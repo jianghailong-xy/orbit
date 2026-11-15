@@ -269,6 +269,7 @@ public extension Session {
             merged.queuedReason = queuedReason
             merged.queuedActive = queuedActive
             merged.queuedLimit = queuedLimit
+            merged.queuedHeldByJobs = queuedHeldByJobs
             merged.queuedRunnerUpdate = queuedRunnerUpdate
         }
         return merged

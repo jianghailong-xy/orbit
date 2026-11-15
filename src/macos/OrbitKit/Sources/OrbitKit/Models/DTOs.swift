@@ -558,6 +558,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public var queuedReason: String? = nil
     public var queuedActive: Int? = nil
     public var queuedLimit: Int? = nil
+    /// Of `queuedActive`, the slots background jobs hold; beside `runner_at_capacity` only (`QueuedCapacity`).
+    public var queuedHeldByJobs: Int? = nil
     /// Beside `queuedReason` `runner_updating` only: what the update is and what it waits for.
     public var queuedRunnerUpdate: QueuedRunnerUpdate? = nil
     public let pendingApprovals: Int?
@@ -833,6 +835,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         queuedReason = try? values.decodeIfPresent(String.self, forKey: .queuedReason)
         queuedActive = try? values.decodeIfPresent(Int.self, forKey: .queuedActive)
         queuedLimit = try? values.decodeIfPresent(Int.self, forKey: .queuedLimit)
+        queuedHeldByJobs = try? values.decodeIfPresent(Int.self, forKey: .queuedHeldByJobs)
         queuedRunnerUpdate = try? values.decodeIfPresent(QueuedRunnerUpdate.self, forKey: .queuedRunnerUpdate)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)

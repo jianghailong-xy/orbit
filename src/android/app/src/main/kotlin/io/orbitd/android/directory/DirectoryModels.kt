@@ -88,6 +88,8 @@ data class DirectorySession(
     /** Which gate the server found holding a queued row (web `QueuedGate`): `runner_updating` is the one this build words for itself
      *  ([RunnerUpdating]). [queuedActive] is the turns in flight that gate judged on. All absent from an older server. */
     val queuedReason: String? = null, val queuedActive: Int? = null, val queuedLimit: Int? = null,
+    /** Of [queuedActive], the slots background jobs hold; beside `runner_at_capacity` only ([QueuedCapacity]). */
+    val queuedHeldByJobs: Int? = null,
     /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
     val queuedRunnerUpdate: JsonElement? = null,
 ) {

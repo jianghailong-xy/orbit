@@ -82,7 +82,7 @@ func orbitCLIInstructionExecutable(exe string) string {
 // Kept ASCII and in paragraphs no longer than one Codex application-context value: codex carries
 // each value capped at 1,000 tokens, and codexAgentAdditionalContext sends these paragraphs packed
 // into values of at most codexContextValueMaxBytes.
-func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) string {
+func orbitCLIInstructions(executable string, insideRecordedWork, watches, delegates bool) string {
 	executable = orbitCLIInstructionExecutable(executable)
 	if executable == "" {
 		return ""
@@ -94,6 +94,7 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 		orbitProjectInstructions(insideRecordedWork) +
 		orbitProgressInstructions(insideRecordedWork) +
 		orbitWaitInstructionsFor(watches) +
+		orbitDelegateInstructionsFor(delegates) +
 		orbitWikiPathInstructions +
 		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
 		"they need no shell. Inside a session the Orbit CLI at `" + command + "` takes the same approvals and attributes " +
@@ -151,6 +152,35 @@ func orbitWaitInstructionsFor(watches bool) string {
 		return ""
 	}
 	return orbitWaitInstructions
+}
+
+// orbitDelegateInstructions says when to reach for the delegate tool (subagent.go). Its description says what it
+// does, but nothing said when: in Claude Code it is a deferred MCP tool, seen by name only until ToolSearch loads it,
+// while the engine's own Agent tool is always loaded and does a similar job without Orbit's routing, cost record or
+// runs on another machine, so agents called delegate only when a person asked for it. Measured 2026-11-15: 440 bytes,
+// 98 o200k tokens. ASCII like the rest of the paragraph.
+const orbitDelegateInstructions = "Use delegate to hand a self-contained piece of work to a cheaper or stronger model " +
+	"than yours, to run it on another machine (needs: [\"os:darwin\"], or workspace), or to run an independent piece " +
+	"in the background while you go on. Prefer it to your engine's built-in subagent or Agent tool when Orbit should " +
+	"pick the model, record the cost or run the work elsewhere." + orbitDelegateClaudeCodeLoad + "\n\n"
+
+// orbitDelegateClaudeCodeLoad is the paragraph's Claude Code sentence. Cursor, which never shows mcp__orbit__*
+// names, is given the paragraph without it (cursorAgentInstructions).
+const orbitDelegateClaudeCodeLoad = " In Claude Code, load it first with ToolSearch select:mcp__orbit__delegate."
+
+// orbitDelegateInstructionsFor is that paragraph for a top-level session, and nothing for a SubAgent, which is
+// neither offered nor served delegate (mcp.go).
+func orbitDelegateInstructionsFor(delegates bool) string {
+	if !delegates {
+		return ""
+	}
+	return orbitDelegateInstructions
+}
+
+// agentDelegates reports whether a session run with this agent is offered delegate: every one but a SubAgent's
+// (subagentChildJob marks it with envSubagentRunID, which its `orbit mcp` reads).
+func agentDelegates(agent AgentExecConfig) bool {
+	return agent.Env[envSubagentRunID] == ""
 }
 
 // orbitProgressInstructions tells a session running a task how its progress reaches Orbit. A watch on the
@@ -235,8 +265,8 @@ func (s *ClaimedSession) instructionAgent() AgentExecConfig {
 	return agent
 }
 
-func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches bool) string {
-	orbit := orbitCLIInstructions(executable, insideRecordedWork, watches)
+func withOrbitCLIInstructions(configured, executable string, insideRecordedWork, watches, delegates bool) string {
+	orbit := orbitCLIInstructions(executable, insideRecordedWork, watches, delegates)
 	if orbit == "" {
 		return configured
 	}
@@ -364,7 +394,7 @@ func appendClaudeAgentInstructionArgs(
 	if agent.SystemPrompt != "" {
 		args = append(args, "--system-prompt", agent.SystemPrompt)
 	}
-	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches); appendPrompt != "" {
+	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent)); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
 	allowed := appendUnique(agent.AllowedTools, orbitCLIAllowedTools(executable, allowOrchestration)...)

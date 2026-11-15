@@ -19,6 +19,10 @@ struct PendingTrayView: View {
     /// message mid-turn (Cursor CLI's would stop the turn), said only while one is waiting for the
     /// next turn (board iOS 5 ⑤, web `PendingTray`'s `note`).
     var note: String? = nil
+    /// The session, when its runner's update or a full runner, run or batch holds what waits for the
+    /// next turn: each such row says so in place of `Queued for next turn` (boards
+    /// queued-card-runner-updating ⑤, queued-card-runner-full ②; web `usePendingTray`).
+    var held: Session? = nil
 
     var body: some View {
         if !rows.isEmpty {
@@ -26,6 +30,7 @@ struct PendingTrayView: View {
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                     if index > 0 { Divider().padding(.leading, 38) }
                     PendingTrayRowView(row: row,
+                                       held: heldFoot(row),
                                        onSteer: { Task { await console.steerQueued(row.bubble) } },
                                        onWithdraw: { withdraw(row) })
                 }
@@ -47,6 +52,13 @@ struct PendingTrayView: View {
         }
     }
 
+    /// The tag a row waiting for the next turn reads while `held` holds it.
+    private func heldFoot(_ row: PendingTrayRow) -> RunnerUpdatingFoot? {
+        guard let held, row.heading == .nextTurn, !row.busy else { return nil }
+        return RunnerUpdatingFoot(bubbleID: row.bubble.id, session: held, machine: console.runnerName,
+                                  runnerID: console.runnerID)
+    }
+
     /// A steer — on its way into the turn, whoever holds it — is taken back by its own door; a message
     /// queued for the next turn by the queue's Cancel. Both hand the words back under the draft.
     private func withdraw(_ row: PendingTrayRow) {
@@ -60,6 +72,7 @@ struct PendingTrayView: View {
 
 private struct PendingTrayRowView: View {
     let row: PendingTrayRow
+    var held: RunnerUpdatingFoot? = nil
     let onSteer: () -> Void
     let onWithdraw: () -> Void
     /// One line, so a long message does not push the composer up the screen; pressed, the words open
@@ -86,9 +99,13 @@ private struct PendingTrayRowView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture { open.toggle() }
-                Text(row.state)
-                    .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
+                if let held {
+                    RunnerUpdatingTagView(foot: held)
+                } else {
+                    Text(row.state)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
             }
             .opacity(row.busy ? 0.5 : 1)
             if !row.busy {

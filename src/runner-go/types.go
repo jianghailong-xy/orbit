@@ -58,6 +58,11 @@ type HeartbeatRequest struct {
 	// older runners omit both fields and retain the legacy heartbeat behavior.
 	LeaseOwner           string   `json:"leaseOwner,omitempty"`
 	SupervisedSessionIDs []string `json:"supervisedSessionIds,omitempty"`
+	// BackgroundJobSessionIDs are the sessions that occupy a slot of IdleCapacity's count only
+	// through runner-hosted background jobs of their own (sessionPool.admissionOccupancy): no turn
+	// runs, yet the runner takes no work in their place. The control plane counts them as running.
+	// Omitted when there are none; an older runner never sends it, and is counted by turns alone.
+	BackgroundJobSessionIDs []string `json:"backgroundJobSessionIds,omitempty"`
 	// ExpiredCommitErrors: see CommitErrorExpiry. Omitted when there are none.
 	ExpiredCommitErrors []CommitErrorExpiry `json:"expiredCommitErrors,omitempty"`
 	// Draining marks a process that keeps heartbeating (so the reaper spares its
@@ -1323,6 +1328,26 @@ type RunnerAgent struct {
 	Provider string `json:"provider,omitempty"`
 	AgentKey string `json:"agentKey,omitempty"`
 	WorkDir  string `json:"workDir,omitempty"`
+	// What the workspace's unattended work starts on, as dispatch resolves it (apiserver
+	// SessionsService.taskRunsWith): RunsWith for a task outside any project, Projects for an unpinned
+	// task of each open project with open work here. Absent from an older apiserver.
+	RunsWith *RunsWith         `json:"runsWith,omitempty"`
+	Projects []RunsWithProject `json:"projects,omitempty"`
+}
+
+// RunsWith is the apiserver's TaskRunsWith (workspaces/start-anchor.ts).
+type RunsWith struct {
+	Engine          *string `json:"engine"`
+	Provider        *string `json:"provider"`
+	Source          string  `json:"source"`
+	AnchorSessionID *string `json:"anchorSessionId"`
+	Refusal         *string `json:"refusal"`
+}
+
+type RunsWithProject struct {
+	ID       string   `json:"id"`
+	Title    string   `json:"title"`
+	RunsWith RunsWith `json:"runsWith"`
 }
 
 type AgentExecConfig struct {

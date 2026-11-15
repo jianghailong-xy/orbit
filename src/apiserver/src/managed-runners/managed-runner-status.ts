@@ -28,8 +28,8 @@ export interface ManagedRunnerStatusInput {
   /** The runner row: its heartbeat (read with RUNNER_BEATS), and what its last heartbeat reported of its
    *  engines (absent: nothing yet). */
   runner: ({ status: RunnerStatus } & RunnerBeats & Partial<ManagedSupplyRunner>) | null;
-  /** The owner's first own model key a managed runner can run (ownerManagedKeys), asked only before the
-   *  runner has been READY. Absent: none. */
+  /** The owner's first own model key this managed runner can run (managedFirstSessionKeyOf), asked only
+   *  before the runner has been READY. Absent: none. */
   firstSessionKey?: { slug: string; engine: LoginEngine } | null;
   now: Date;
   heartbeatFreshMs: number;
