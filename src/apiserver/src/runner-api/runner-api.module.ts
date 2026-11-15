@@ -25,6 +25,9 @@ import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerOwnerRequestsController } from './runner-owner-requests.controller';
+import { RunnerSchedulesController } from './runner-schedules.controller';
+import { SchedulesModule } from '../schedules/schedules.module';
+import { ScheduleRunsModule } from '../schedules/schedule-runs.module';
 import { RunnerSecretGrantsController } from './runner-secret-grants.controller';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
@@ -91,6 +94,9 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     // RunnerEngineInstallController starts and reads the engine relay through the RunnersService the
     // web's Install uses.
     RunnersModule,
+    // RunnerSchedulesController: a session's schedule_* tools, through the services the REST doors use.
+    SchedulesModule,
+    ScheduleRunsModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
@@ -101,6 +107,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerTaskCompletionEvidenceController,
     RunnerTaskOwnerConfirmationController,
     RunnerTaskProgressController,
+    // A session's schedule_* tools (docs/scheduled-tasks-design.md §9.1).
+    RunnerSchedulesController,
     // SubAgent runs a session's `delegate` opens and ends (runner-subagents.controller.ts).
     RunnerSubagentsController,
     RunnerServiceTokensController,

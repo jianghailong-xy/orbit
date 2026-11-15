@@ -519,6 +519,23 @@ Agents have the same five as tools, so "pause the Codex check until Monday" work
 - REST: `GET /api/schedules`, `GET /api/schedules/:id`, `GET /api/schedules/:id/runs`,
   `POST /api/schedules/:id/{pause,resume,run,undo}`, `DELETE /api/schedules/:id`, `POST /api/schedule-runs/:id/stop`.
   There is no REST door that creates or changes a schedule: those go through a session and its card.
+- The cards (S4, 2026-11-15): a card is its `ScheduleChangeRequest` row. `schedule_create` returns at once with the
+  PENDING create card (and says in words that nothing is scheduled yet); `schedule_update` returns APPLIED with the
+  change's record (its Undo is `POST /api/schedules/:id/undo`) or PENDING with the envelope card. The owner's press is
+  `POST /api/schedule-requests/:id/allow` (Create or Allow; a create card that names no time zone takes the pressing
+  device's `timezone`, one that names a zone refuses another) and `.../decline` (Not now or Decline), owner channel
+  only: a personal access token, a request with an acting session and anything under `/runner` are refused. Allow
+  re-judges a card: an envelope card asked of an older revision, or any card naming a workspace no longer the owner's,
+  is SUPERSEDED (`SCHEDULE_REQUEST_STALE`, `reason` REVISION_MOVED or WORKSPACE_GONE), not applied.
+  `GET /api/schedule-requests` lists the cards (PENDING by default; a run's widen request is one, `askedBy` RUN), and
+  `GET /api/sessions/:id/schedule-cards` gives one session's cards and change records, for drawing them in it.
+- A run's session may update and end only the schedule it serves; anything else, including the controls on its own
+  schedule and creating one, is refused `SCHEDULE_RUN_SESSION_SCOPE`; it may not change the intent either
+  (`SCHEDULE_RUN_MAY_NOT_RESTATE_INTENT`, §8.2). `schedule_run_report` is listed only in a run's
+  session (claim field `scheduleRun`, `ORBIT_SCHEDULE_RUN=1`).
+- The quick-add line: `POST /api/schedules/drafts {workspaceId, text}` opens an ordinary session with the sentence;
+  `GET /api/schedules/drafts` lists the account's PENDING create cards, each naming the session that put it up.
+- Tokens: the reads take `sessions:read`, the controls `sessions:write`; no token reaches a card press.
 
 ### 9.2 Clients
 

@@ -73,7 +73,13 @@ import {
 import { scheduledRunTurn } from './schedule-run-block';
 import { scheduleOverBudget, scheduleStartCheck, type StartPlan } from './schedule-start-check';
 import { nextDueAt, parseRule, type ScheduleRule } from './schedule-time';
-import { SCHEDULE_CLOCK, SCHEDULE_LOCK_NAMESPACE, type ScheduleActor } from './schedules.service';
+import {
+  SCHEDULE_CLOCK,
+  SCHEDULE_LOCK_NAMESPACE,
+  assertRunSessionScope,
+  runSessionScheduleId,
+  type ScheduleActor,
+} from './schedules.service';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -763,6 +769,7 @@ export class ScheduleRunsService {
       async (tx) => {
         const schedule = await this.lock(tx, scheduleId, actor.ownerId);
         if (!schedule) throw refusal('NOT_FOUND', 'SCHEDULE_NOT_FOUND', 'No such schedule.');
+        assertRunSessionScope(await runSessionScheduleId(tx, actor), scheduleId, 'CONTROL');
         if (schedule.state === 'ENDED') throw refusal('CONFLICT', 'SCHEDULE_ENDED', 'The schedule has ended.');
         if (schedule.state === 'HELD') {
           throw refusal('CONFLICT', 'SCHEDULE_HELD', `The schedule is held (${schedule.heldReason}); resume it first.`);
@@ -797,6 +804,7 @@ export class ScheduleRunsService {
         const schedule = head ? await this.lock(tx, head.scheduleId, actor.ownerId) : null;
         const run = schedule ? await tx.scheduleRun.findUnique({ where: { id: runId } }) : null;
         if (!schedule || !run) throw refusal('NOT_FOUND', 'SCHEDULE_RUN_NOT_FOUND', 'No such run.');
+        assertRunSessionScope(await runSessionScheduleId(tx, actor), schedule.id, 'CONTROL');
         if (run.state !== 'QUEUED' && run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL') {
           throw refusal('CONFLICT', 'SCHEDULE_RUN_NOT_ACTIVE', `This run has already ended (${run.state}).`);
         }

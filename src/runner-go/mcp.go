@@ -40,6 +40,7 @@ func cmdMcp() {
 		allowOrchestration:    mcpOrchestrationEnabled(),
 		watchesOff:            !watchesEnabledFromEnv(),
 		wikiOff:               !wikiEnabledFromEnv(),
+		scheduleRun:           scheduleRunFromEnv(),
 		onlyTools:             mcpToolsFromEnv(),
 		callTimeout:           mcpCallTimeoutFromEnv(),
 	}
@@ -56,6 +57,7 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
+	scheduleRun           bool   // spawned with ORBIT_SCHEDULE_RUN=1: a scheduled run's session (schedule_tools.go)
 	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
 	// owner's wait is handed to, handOffOwnerWait). Nil serves every tool.
 	onlyTools map[string]bool
@@ -243,6 +245,10 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 		if s.wikiOff {
 			tools = withoutWikiTools(tools)
 		}
+		// schedule_run_report is a scheduled run's own (schedule_tools.go).
+		if !s.scheduleRun {
+			tools = withoutScheduleRunReport(tools)
+		}
 		// A SubAgent cannot hand work on again (subagent.go).
 		if os.Getenv(envSubagentRunID) == "" {
 			cwd, _ := os.Getwd()
@@ -390,6 +396,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	}
 	// So are the file tools: `orbit file` runs the same runFileTool (file_tools.go).
 	if result, handled := s.callFileTool(name, args); handled {
+		return result
+	}
+	// And the scheduled tasks' tools, which act as this session (schedule_tools.go).
+	if result, handled := s.callScheduleTool(name, args); handled {
 		return result
 	}
 	if s.callTimeout > 0 && s.sessionID != "" && waitsForTheOwner(name, args) {
