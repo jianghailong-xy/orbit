@@ -153,9 +153,8 @@ export function grade({ calls, replies }, scenario) {
       && /same.{0,60}(?:permission|gate|authorization|orchestration)/i.test(conversation), 'CLI shares the permission gate');
     assert.doesNotMatch(conversation, /CLI[^.!?]{0,100}\bcan (?:bypass|get around|get past|override|circumvent)/i, 'no contradictory CLI bypass claim');
     if (scenario.name === 'capability-missing') {
-      const assertions = conversation.split(/[.!?;](?:\s|$)/)
-        .filter(sentence => !/\b(?:does not|cannot) (?:by itself )?(?:mean|prove|show|establish|imply)\b/i.test(sentence)).join('. ');
-      assert.doesNotMatch(assertions, /\borchestration (?:is|has been|must be) (?:off|disabled|turned off|not enabled)(?![,\s]+or\b)/i,
+      // Match affirmative clauses, not a condition embedded in "cannot tell whether …".
+      assert.doesNotMatch(conversation, /(?:^|[.!?;:]|\b(?:because|since|so)\b)\s*(?:session )?orchestration (?:is|has been|must be) (?:off|disabled|turned off|not enabled)(?![,\s]+or\b)/i,
         'a missing capability does not prove orchestration is disabled');
     }
     if (scenario.disposition === 'WAIT') {

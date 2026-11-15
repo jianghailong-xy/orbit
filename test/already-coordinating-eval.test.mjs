@@ -167,6 +167,8 @@ test('denying an unsupported disabled-switch inference is not making that infere
     "That alone doesn't mean session orchestration is turned off; no reason was given.",
     "No reason was given, so this doesn't by itself mean session orchestration is turned off.",
     "No reason was given, so this doesn't show that session orchestration is off.",
+    "No reason was given, so I can't tell whether session orchestration is turned off.",
+    "That doesn't necessarily mean session orchestration is off.",
   ]) {
     grade({ ...trace, replies: [trace.replies[0], trace.replies[1] + '\n' + explanation] }, scenario);
   }
