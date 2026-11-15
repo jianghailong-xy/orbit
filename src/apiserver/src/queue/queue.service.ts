@@ -1194,6 +1194,9 @@ export class QueueService {
       // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
       // the runner spawns the session without the wiki tools.
       ...wikiClaimFields(currentWikiRollout(), session.ownerId),
+      // A scheduled task's run (docs/scheduled-tasks-design.md §7.1): the runner spawns it with ORBIT_SCHEDULE_RUN=1,
+      // which is what lists schedule_run_report in its `orbit mcp`. Absent for every other session.
+      ...(session.scheduleRunId ? { scheduleRun: true } : {}),
       // Lets `orbit mcp` shrink its wait budget with depth, so a nested session_create(wait)
       // cannot outlast the one waiting on it.
       spawnDepth: session.spawnDepth,

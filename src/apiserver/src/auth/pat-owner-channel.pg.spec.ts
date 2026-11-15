@@ -473,6 +473,9 @@ test('the owner channel refuses a personal access token door by door and field b
       route: 'POST /terminals/requests/:id/deny', path: `/terminals/requests/${terminalToDeny}/deny`,
       login: 200, observe: () => terminalStatus(terminalToDeny),
     },
+    // A login reaches the door, which answers a card id that names nothing 404 (schedule-doors.pg.spec.ts presses real ones).
+    { route: 'POST /schedule-requests/:id/allow', path: `/schedule-requests/${nobody()}/allow`, body: {}, login: 404 },
+    { route: 'POST /schedule-requests/:id/decline', path: `/schedule-requests/${nobody()}/decline`, login: 404 },
   ];
 
   await t.test('every door in OWNER_INTERACTIVE_ROUTES has a case below, on a path that door answers, and nothing else has one', () => {

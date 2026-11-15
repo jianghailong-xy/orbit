@@ -859,6 +859,31 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
 export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── scheduled tasks (docs/scheduled-tasks-design.md §9.1) ─────────────────────────────────────────
+  'GET /schedules/:id':
+    "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
+  'GET /schedules/:id/runs':
+    "the schedule is counted by (id, the caller) first, 404 for another account's id (schedules/schedule-reads.service.ts:128)",
+  'POST /schedules/:id/pause':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+  'POST /schedules/:id/resume':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+  'POST /schedules/:id/undo':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+  'DELETE /schedules/:id':
+    "the schedule is read FOR UPDATE by (id, the caller) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:859)",
+  'POST /schedules/:id/run':
+    'the schedule is locked only when its owner is the caller, else 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:888)',
+  'POST /schedule-runs/:id/stop':
+    "the run's schedule is locked only when its owner is the caller, else 404 SCHEDULE_RUN_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:717, :888)",
+  'GET /schedule-requests/:id':
+    "read by (id, the caller) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:163)",
+  'POST /schedule-requests/:id/allow':
+    "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:414); schedule-doors.pg.spec.ts presses real ones",
+  'POST /schedule-requests/:id/decline':
+    "the request is read FOR UPDATE by (id, the caller as its owner) and nothing else, 404 SCHEDULE_REQUEST_NOT_FOUND for another account's (schedules/schedules.service.ts:414)",
+  'GET /sessions/:id/schedule-cards':
+    "the session is read by (id, the caller) first, 404 for another account's (schedules/schedule-reads.service.ts:183), and the cards and records are read by the caller as owner",
   // Settings → Storage's file lists (docs/orbit-files-design.md §2.10).
   'GET /attachments/usage/weeks/:week/files':
     'the week is a date, not an object: every row the list reads is filtered by the caller\'s owner_id, in the scope, in what is counted as holding it and in its totals, so another account\'s files never reach it (files/files.service.ts:963, :965, :1011); it writes nothing',
@@ -1393,6 +1418,10 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
 
 /** Ids a request carries that name nothing of an account's to reach, each with why and where that is so. */
 export const TENANT_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  'GET /schedules query workspaceId':
+    "a filter on the caller's own schedules (ownerId, then workspaceId), so another account's workspace id answers the empty list an id that names nothing does (schedules/schedule-reads.service.ts:71)",
+  'POST /schedules/drafts body workspaceId':
+    "handed to SessionsService.create, which reads the workspace by (id, the caller) and refuses one that is not the caller's before anything is written (sessions/sessions.service.ts:1244), as POST /sessions body workspaceId",
   'POST /workspaces/:id/main-checkout/actions body targetSessionId':
     'read by (id, the caller, not deleted) and required to be a session of this workspace before anything is written, so another account\'s is the 404 of one that does not exist (workspaces/main-checkout.service.ts:553); main-checkout.pg.spec.ts "move: the target must be…" sends one that does not exist',
   'POST /workspaces/:id/main-checkout/actions body initiatedFromSessionId':
