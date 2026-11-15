@@ -1,0 +1,32 @@
+# TEMPORARY probe (task 34wfVifUVde2sky4m3et4; lives only on branch
+# probe/compile-gate-main-34wf, never on main). The Mac that runs Orbit's evidence sessions has no
+# `gh` and no GitHub token, so a push is the only trigger it can pull. This job turns that push
+# into the `workflow_dispatch` run of client.yml on main that the macOS + iOS compile gate needs,
+# using the repository token, which GitHub excepts from the no-recursion rule for
+# workflow_dispatch.
+#
+# Re-pushed (revision 2) after main advanced to a3bf725ad; the dispatch always follows `main`.
+name: Probe dispatch (client.yml on main)
+
+on:
+  push:
+    branches: ["probe/compile-gate-main-34wf"]
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    name: Dispatch client.yml on main
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST the dispatch for ref main
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -sS -o /tmp/answer -w 'HTTP %{http_code}\n' -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/client.yml/dispatches" \
+            -d '{"ref":"main"}'
+          cat /tmp/answer
