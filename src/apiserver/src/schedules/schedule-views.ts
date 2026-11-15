@@ -21,6 +21,7 @@ import {
 } from '@orbit/shared';
 import type { Prisma, Schedule, ScheduleChangeRequest, ScheduleFinding, ScheduleRevision, ScheduleRun } from '@prisma/client';
 
+import { runReasonText } from './schedule-attention';
 import type { Envelope, EnvelopePart } from './schedule-envelope';
 import { instantOfLocal, nextDueAt, offsetAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
 
@@ -268,6 +269,8 @@ export function scheduleRunView(run: ScheduleRun) {
     links: run.links,
     failureReason: run.failureReason,
     heldReason: run.heldReason,
+    /** Why the run did not start or ended, in English (an OVER_BUDGET slot says so); null when it has no reason. */
+    reasonText: runReasonText(run),
   };
 }
 

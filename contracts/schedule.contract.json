@@ -284,6 +284,9 @@
       "CANCELLED_BY_OWNER": "was stopped by you",
       "OVER_BUDGET": "was over what you allowed this week"
     },
+    "runReasonTexts": {
+      "OVER_BUDGET": "Not started: it had already started as many runs in the past 7 days as you allowed."
+    },
     "failureReasonsWithSummary": {
       "REPORTED_FAILED": "reported a failure: {summary}"
     },

@@ -192,6 +192,10 @@ export const SCHEDULE_COPY = {
     CANCELLED_BY_OWNER: 'was stopped by you',
     OVER_BUDGET: 'was over what you allowed this week',
   },
+  /** A run's reasonText as the server writes it (ScheduleRunView.reasonText), for the reasons whose sentence is shared. */
+  runReasonTexts: {
+    OVER_BUDGET: 'Not started: it had already started as many runs in the past 7 days as you allowed.',
+  },
   /** A failure that reported what went wrong says it, in the failure card and its push (one line, 120 characters). */
   failureReasonsWithSummary: {
     REPORTED_FAILED: 'reported a failure: {summary}',
