@@ -101,6 +101,10 @@ public struct ScheduleRunView: Codable, Equatable, Hashable, Sendable, Identifia
     /// S2d: the server's own line for why the run did not happen; preferred over the client's words.
     public let reasonText: String?
     public let session: ScheduleRunSessionRef?
+    /// The list's timeline runs only (`ScheduleTimelineRun`): whether its finding was new, and whether the owner
+    /// was told. Nil from the other reads, where `ScheduleDisplay.runFindingFacts` works it out from findings.
+    public var newFinding: Bool? = nil
+    public var notified: Bool? = nil
 
     public init(id: String, scheduleId: String, scheduleRevision: Int = 1, plannedAt: String,
                 trigger: String = "SCHEDULED", state: String, attempt: Int = 1, startedAt: String? = nil,
@@ -127,7 +131,7 @@ public struct ScheduleRunView: Codable, Equatable, Hashable, Sendable, Identifia
 
     private enum CodingKeys: String, CodingKey {
         case id, scheduleId, scheduleRevision, plannedAt, trigger, state, attempt, startedAt, endedAt, sessionId
-        case key, summary, failureReason, heldReason, reasonText, session
+        case key, summary, failureReason, heldReason, reasonText, session, newFinding, notified
     }
 
     public init(from decoder: Decoder) throws {
@@ -148,6 +152,8 @@ public struct ScheduleRunView: Codable, Equatable, Hashable, Sendable, Identifia
         heldReason = try? c.decodeIfPresent(String.self, forKey: .heldReason)
         reasonText = try? c.decodeIfPresent(String.self, forKey: .reasonText)
         session = try? c.decodeIfPresent(ScheduleRunSessionRef.self, forKey: .session)
+        newFinding = try? c.decodeIfPresent(Bool.self, forKey: .newFinding)
+        notified = try? c.decodeIfPresent(Bool.self, forKey: .notified)
     }
 }
 
@@ -180,6 +186,8 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     public let endedAt: String?
     /// The list's rows only.
     public let lastRun: ScheduleRunView?
+    /// The list's rows only: when a PAUSED schedule was paused.
+    public var pausedAt: String? = nil
 
     public init(id: String, title: String, intent: String = "", prompt: String = "", rule: ScheduleRule,
                 timezone: String, workspaceId: String, workspaceName: String? = nil, agentId: String? = nil,
@@ -221,7 +229,7 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
     private enum CodingKeys: String, CodingKey {
         case id, title, intent, prompt, rule, timezone, workspaceId, workspaceName, agentId, accessLevel
         case runLimitMinutes, runsPerWeek, envelope, state, heldReason, endedReason, note, revision, startAt, endAt
-        case nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun
+        case nextDueAt, consecutiveFailures, createdFromSessionId, createdAt, endedAt, lastRun, pausedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -254,17 +262,25 @@ public struct ScheduleView: Codable, Equatable, Hashable, Sendable, Identifiable
         createdAt = (try? c.decode(String.self, forKey: .createdAt)) ?? ""
         endedAt = try? c.decodeIfPresent(String.self, forKey: .endedAt)
         lastRun = try? c.decodeIfPresent(ScheduleRunView.self, forKey: .lastRun)
+        pausedAt = try? c.decodeIfPresent(String.self, forKey: .pausedAt)
     }
 }
 
 /// `GET /schedules`. A row this build cannot read is dropped, not the list.
 public struct ScheduleListResponse: Decodable, Sendable {
     public let schedules: [ScheduleView]
-    private enum CodingKeys: String, CodingKey { case schedules }
-    public init(schedules: [ScheduleView]) { self.schedules = schedules }
+    /// The runs of the page's window, for every listed schedule: each run under way, and the ended runs planned in
+    /// the last 24 hours. Nil from a server before W2, where the page reads each schedule's detail instead.
+    public let runs: [ScheduleRunView]?
+    private enum CodingKeys: String, CodingKey { case schedules, runs }
+    public init(schedules: [ScheduleView], runs: [ScheduleRunView]? = nil) {
+        self.schedules = schedules
+        self.runs = runs
+    }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         schedules = try c.decode([ScheduleLenient<ScheduleView>].self, forKey: .schedules).compactMap(\.value)
+        runs = (try? c.decodeIfPresent([ScheduleLenient<ScheduleRunView>].self, forKey: .runs))?.map { $0.compactMap(\.value) }
     }
 }
 
@@ -650,17 +666,21 @@ public struct ScheduleDraftAnswer: Decodable, Sendable {
 
 /// `GET /sessions/:id/schedule-cards`: the cards a conversation asked and the changes it made.
 public struct SessionScheduleCardsResponse: Decodable, Sendable, Equatable {
+    /// A scheduled run's session: the run it serves, however old; nil for any other session.
+    public let run: ScheduleRunView?
     public let cards: [ScheduleCard]
     public let records: [ScheduleChangeRecord]
 
-    public init(cards: [ScheduleCard], records: [ScheduleChangeRecord]) {
+    public init(run: ScheduleRunView? = nil, cards: [ScheduleCard], records: [ScheduleChangeRecord]) {
+        self.run = run
         self.cards = cards
         self.records = records
     }
 
-    private enum CodingKeys: String, CodingKey { case cards, records }
+    private enum CodingKeys: String, CodingKey { case run, cards, records }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        run = try? c.decodeIfPresent(ScheduleRunView.self, forKey: .run)
         cards = ((try? c.decode([ScheduleLenient<ScheduleCard>].self, forKey: .cards)) ?? []).compactMap(\.value)
         records = ((try? c.decode([ScheduleLenient<ScheduleChangeRecord>].self, forKey: .records)) ?? []).compactMap(\.value)
     }

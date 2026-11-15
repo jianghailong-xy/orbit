@@ -189,6 +189,12 @@ public enum ScheduleCopy {
         public static let allowOnce = "Allow once"
         public static let deny = "Deny"
     }
+    public enum DeleteConfirm {
+        public static let title = "Delete “{title}”?"
+        public static let body = "It stops running: a run waiting to start is cancelled, and one under way finishes. Its runs and their sessions are kept, but the Scheduled page no longer shows it or its history, and you cannot undo this here."
+        public static let confirm = "Delete"
+        public static let cancel = "Cancel"
+    }
     public static let keep: [String: String] = [
         "ACCESS_LEVEL": "Keep check only",
         "RUNS_PER_WEEK": "Keep weekly",
@@ -289,6 +295,8 @@ public enum ScheduleCopy {
         public static let runOf = "run of {date}"
         public static let strip = "Scheduled run · planned {planned}, started {started} · access {access} · this session is not in your session list"
         public static let reported = "Reported: {state}"
+        public static let agent = "{engine} agent"
+        public static let duration = "{minutes} min"
     }
 
     /// Every sentence above under its contract path (`group.key`, arrays by index): what the parity test reads.
@@ -452,6 +460,10 @@ public enum ScheduleCopy {
         "actions.alwaysAllow": ScheduleCopy.Actions.alwaysAllow,
         "actions.allowOnce": ScheduleCopy.Actions.allowOnce,
         "actions.deny": ScheduleCopy.Actions.deny,
+        "deleteConfirm.title": ScheduleCopy.DeleteConfirm.title,
+        "deleteConfirm.body": ScheduleCopy.DeleteConfirm.body,
+        "deleteConfirm.confirm": ScheduleCopy.DeleteConfirm.confirm,
+        "deleteConfirm.cancel": ScheduleCopy.DeleteConfirm.cancel,
         "keep.ACCESS_LEVEL": ScheduleCopy.keep["ACCESS_LEVEL"]!,
         "keep.RUNS_PER_WEEK": ScheduleCopy.keep["RUNS_PER_WEEK"]!,
         "keep.RUN_LIMIT": ScheduleCopy.keep["RUN_LIMIT"]!,
@@ -529,5 +541,7 @@ public enum ScheduleCopy {
         "runSession.runOf": ScheduleCopy.RunSession.runOf,
         "runSession.strip": ScheduleCopy.RunSession.strip,
         "runSession.reported": ScheduleCopy.RunSession.reported,
+        "runSession.agent": ScheduleCopy.RunSession.agent,
+        "runSession.duration": ScheduleCopy.RunSession.duration,
     ]
 }

@@ -804,6 +804,26 @@ public enum ScheduleDisplay {
         capitalize(runOfText(plannedAt: plannedAt, timezone: timezone))
     }
 
+    /// A run's session's header line (board web/run.png): "Open · Codex agent · 4 min" — the session's state word,
+    /// the engine it ran on, and how long the run took (until now while it runs). A part not known is left out.
+    public static func runHeadText(state: String?, engine: String?, startedAt: String?, endedAt: String?,
+                                   now: Date) -> String {
+        var parts: [String] = []
+        if let state, !state.isEmpty { parts.append(state) }
+        if let engine, !engine.isEmpty { parts.append(fill(C.RunSession.agent, ["engine": engine])) }
+        if let started = startedAt.flatMap(parse) {
+            let end = endedAt.flatMap(parse) ?? now
+            let minutes = max(1, Int((end.timeIntervalSince(started) / 60).rounded()))
+            parts.append(fill(C.RunSession.duration, ["minutes": String(minutes)]))
+        }
+        return parts.joined(separator: C.separator)
+    }
+
+    /// The delete question's title: "Delete “Codex stable check”?".
+    public static func deleteTitle(_ title: String) -> String {
+        fill(C.DeleteConfirm.title, ["title": title])
+    }
+
     /// "run of Nov 13".
     public static func runOfText(plannedAt: String, timezone: String) -> String {
         fill(C.RunSession.runOf, ["date": parse(plannedAt).map { dateText($0, timezone: timezone) } ?? ""])
@@ -819,9 +839,11 @@ public enum ScheduleDisplay {
         state != "NO_CHANGE" && state != "CHANGED"
     }
 
-    /// Whether this run's finding was new, and whether the owner was told (the web's `runFindingFacts`).
+    /// Whether this run's finding was new, and whether the owner was told (the web's `runFindingFacts`): the list's
+    /// own answer when it carries one, else worked out from the schedule's findings.
     public static func runFindingFacts(_ run: ScheduleRunView,
                                        findings: [ScheduleFindingView]) -> (newFinding: Bool, notified: Bool) {
+        if let isNew = run.newFinding { return (isNew, run.notified ?? false) }
         guard let key = run.key, let finding = findings.first(where: { $0.key == key }),
               let first = finding.firstRunId else { return (false, false) }
         let isNew = PublicID.storageKey(first) == PublicID.storageKey(run.id)

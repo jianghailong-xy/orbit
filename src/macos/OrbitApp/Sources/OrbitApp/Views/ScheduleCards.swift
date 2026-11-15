@@ -290,14 +290,24 @@ struct ScheduleRecordLineView: View {
 
 /// The head of a run's session (board 02 ④, 01 ⑦): what run this is, planned and started when, with what access.
 struct ScheduleRunStripView: View {
+    @Environment(AppModel.self) private var appModel
+    let sessionID: String
     let schedule: ScheduleView
     let run: ScheduleRunView
 
     var body: some View {
         let zone = TimeZone.current.identifier
+        let session = appModel.session(id: sessionID)
+        // "Open · Codex CLI agent · 4 min", the web's run header line (`scheduleRunHeadText`).
+        let head = ScheduleDisplay.runHeadText(state: session.map(SessionHeader.lifecycleWord(for:)),
+                                               engine: session?.engine.map(ProviderEngines.cliName),
+                                               startedAt: run.startedAt, endedAt: run.endedAt, now: Date())
         VStack(alignment: .leading, spacing: 6) {
             Text(ScheduleDisplay.capitalizedRunOf(plannedAt: run.plannedAt, timezone: zone))
                 .font(.title3.weight(.bold))
+            if !head.isEmpty {
+                Text(head).font(.orbitLabel).foregroundStyle(.secondary)
+            }
             Label {
                 Text(ScheduleDisplay.runStripText(plannedAt: run.plannedAt, startedAt: run.startedAt,
                                                   accessLevel: schedule.accessLevel, timezone: zone))
@@ -383,7 +393,7 @@ struct ScheduleConsoleCard: View {
             }
         case .scheduleRunStrip:
             if let found = console.scheduleRun {
-                ScheduleRunStripView(schedule: found.schedule, run: found.run)
+                ScheduleRunStripView(sessionID: console.sessionID, schedule: found.schedule, run: found.run)
             }
         case .scheduleRunReport:
             if let found = console.scheduleRun {

@@ -298,6 +298,38 @@ final class ScheduleDisplayTests: XCTestCase {
         XCTAssertEqual(ScheduleDisplay.reportedText(state: "NO_CHANGE", key: nil), "Reported: No change")
     }
 
+    /// `scheduleRunHeadText`: state · agent · how long, the unknown parts left out; at least a minute.
+    func testTheRunHeadLine() {
+        XCTAssertEqual(ScheduleDisplay.runHeadText(state: "Open", engine: "Codex", startedAt: sh("2025-11-13T10:01"),
+                                                   endedAt: sh("2025-11-13T10:05"), now: Self.now),
+                       "Open · Codex agent · 4 min")
+        XCTAssertEqual(ScheduleDisplay.runHeadText(state: nil, engine: nil, startedAt: sh("2025-11-14T12:19"),
+                                                   endedAt: nil, now: Self.now), "1 min")
+        XCTAssertEqual(ScheduleDisplay.runHeadText(state: "Completed", engine: nil, startedAt: nil, endedAt: nil,
+                                                   now: Self.now), "Completed")
+        XCTAssertEqual(ScheduleDisplay.deleteTitle("Codex stable check"), "Delete “Codex stable check”?")
+    }
+
+    /// The list's own timeline runs (W2) and a run's session's `run` decode, with the facts the list worked out.
+    func testTheListsRunsAndTheSessionsRunDecode() throws {
+        let list = """
+        {"schedules":[{"id":"a","title":"A","rule":{"kind":"DAILY","time":"09:00"},"timezone":"UTC","workspaceId":"w",
+          "state":"PAUSED","pausedAt":"2025-11-07T07:00:00.000Z"}],
+         "runs":[{"id":"r","scheduleId":"a","plannedAt":"2025-11-14T02:00:00.000Z","state":"CHANGED","key":"k",
+          "newFinding":true,"notified":true}]}
+        """
+        let read = try JSONDecoder().decode(ScheduleListResponse.self, from: Data(list.utf8))
+        XCTAssertEqual(read.schedules.first?.pausedAt, "2025-11-07T07:00:00.000Z")
+        let run = try XCTUnwrap(read.runs?.first)
+        let facts = ScheduleDisplay.runFindingFacts(run, findings: [])
+        XCTAssertTrue(facts.newFinding && facts.notified)
+        XCTAssertNil(try JSONDecoder().decode(ScheduleListResponse.self, from: Data(#"{"schedules":[]}"#.utf8)).runs)
+        let cards = """
+        {"run":{"id":"r","scheduleId":"a","plannedAt":"2025-11-13T02:00:00.000Z","state":"RUNNING"},"cards":[],"records":[]}
+        """
+        XCTAssertEqual(try JSONDecoder().decode(SessionScheduleCardsResponse.self, from: Data(cards.utf8)).run?.id, "r")
+    }
+
     func testFillLeavesAMissingPlaceholderShowing() {
         XCTAssertEqual(ScheduleDisplay.fill("{a} and {b}", ["a": "x"]), "x and {b}")
         XCTAssertEqual(ScheduleDisplay.fill("no { brace", [:]), "no { brace")

@@ -2304,11 +2304,15 @@ public final class APIClient: @unchecked Sendable {
 
     /// The account's schedules, each with its last run. `state` is a comma list (`ACTIVE,PAUSED,HELD`).
     public func schedules(state: String? = nil, workspaceID: String? = nil) async throws -> [ScheduleView] {
+        try await scheduleList(state: state, workspaceID: workspaceID).schedules
+    }
+
+    /// The list with the runs of the page's window (W2), when the server sends them.
+    public func scheduleList(state: String? = nil, workspaceID: String? = nil) async throws -> ScheduleListResponse {
         var query: [URLQueryItem] = []
         if let state { query.append(URLQueryItem(name: "state", value: state)) }
         if let workspaceID { query.append(URLQueryItem(name: "workspaceId", value: workspaceID)) }
-        let list: ScheduleListResponse = try await get("schedules", query: query)
-        return list.schedules
+        return try await get("schedules", query: query)
     }
 
     /// The inspector: the schedule, its last runs, findings, this month's use, history and pending cards.

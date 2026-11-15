@@ -12,6 +12,9 @@ import OrbitKit
 final class ScheduledModel {
     /// Every schedule not ended, each with its last run.
     private(set) var schedules: [ScheduleView] = []
+    /// The runs of the page's window the list carried (each under way, and the ended ones of the last 24 hours);
+    /// nil from a server that sends none, where each schedule's detail read stands in.
+    private(set) var listRuns: [ScheduleRunView]?
     /// The account's PENDING create cards: the timeline's dashed rows and the draft panel.
     private(set) var drafts: [ScheduleCard] = []
     /// The inspector's reads, by schedule id.
@@ -79,7 +82,9 @@ final class ScheduledModel {
         // Each schedule's last run, and the recent runs its detail read brought (Show past runs lists today's).
         var runs: [ScheduleRunView] = []
         var seen = Set<String>()
-        for s in shown {
+        let ids = Set(shown.map(\.id))
+        if let listRuns { runs = listRuns.filter { ids.contains($0.scheduleId) } }
+        for s in shown where listRuns == nil {
             for run in [s.lastRun].compactMap({ $0 }) + (detail(s.id)?.recentRuns ?? []) where seen.insert(run.id).inserted {
                 runs.append(run)
             }
@@ -103,8 +108,9 @@ final class ScheduledModel {
     func load() async {
         guard !unsupported else { return }
         do {
-            let rows = try await api.schedules(state: "ACTIVE,PAUSED,HELD")
-            if rows != schedules { schedules = rows }
+            let list = try await api.scheduleList()
+            if list.schedules != schedules { schedules = list.schedules }
+            if list.runs != listRuns { listRuns = list.runs }
             if let drafts = try? await api.scheduleDrafts(), drafts != self.drafts { self.drafts = drafts }
             loaded = true
         } catch APIError.http(let status, _) where status == 404 {

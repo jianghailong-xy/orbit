@@ -5175,7 +5175,8 @@ final class ConsoleModel {
         lastScheduleRead = Date()
         loadingScheduleCards = true
         defer { loadingScheduleCards = false }
-        if let read = try? await api.sessionScheduleCards(sessionID: sessionID) {
+        let read = try? await api.sessionScheduleCards(sessionID: sessionID)
+        if let read {
             if scheduleCards != read { scheduleCards = read }
             var said: [(at: String, kind: DeliveredDecisionCard.Kind)] = []
             for card in read.cards {
@@ -5191,11 +5192,26 @@ final class ConsoleModel {
                 deliver(item.kind, placement: .at(item.at))
             }
         }
-        await findScheduleRun()
+        if let run = read?.run {
+            await adoptScheduleRun(run)
+        } else {
+            await findScheduleRun()
+        }
     }
 
-    /// The run this session is, found among the account's schedules (a run's session is in no list: it is reached
-    /// from the schedule's history or a notification, §7.4).
+    /// The run the session read named (W2): its schedule and findings from the schedule's own read.
+    private func adoptScheduleRun(_ run: ScheduleRunView) async {
+        guard let detail = try? await api.schedule(run.scheduleId) else { return }
+        scheduleRun = (detail.schedule, run)
+        scheduleRunDetail = detail
+        deliver(.scheduleRunStrip(runID: run.id), placement: .at(run.plannedAt))
+        if let ended = run.endedAt, ScheduleDisplay.runEnded(run.state) {
+            deliver(.scheduleRunReport(runID: run.id), placement: .at(ended))
+        }
+    }
+
+    /// The run this session is, found among the account's schedules, for a server whose session read names no run
+    /// (a run's session is in no list: it is reached from the schedule's history or a notification, §7.4).
     private func findScheduleRun() async {
         guard let runID = scheduleRunID else { return }
         let key = PublicID.storageKey(runID)

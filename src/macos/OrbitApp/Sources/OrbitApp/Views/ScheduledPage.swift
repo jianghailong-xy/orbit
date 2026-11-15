@@ -152,7 +152,10 @@ struct ScheduledPage: View {
         }
         .task {
             await scheduled.load()
-            for s in scheduled.schedules { await scheduled.loadDetail(s.id) }
+            // A server that sends the window's runs with the list needs no other read to draw the page.
+            if scheduled.listRuns == nil {
+                for s in scheduled.schedules { await scheduled.loadDetail(s.id) }
+            }
         }
         .sheet(isPresented: Binding(get: { scheduled.inspectedID != nil },
                                     set: { if !$0 { scheduled.inspectedID = nil } })) {
@@ -310,7 +313,8 @@ struct ScheduledPage: View {
                     title: s.title,
                     line: ScheduleDisplay.rowLine(rule: s.rule, workspaceName: s.workspaceName, accessLevel: s.accessLevel,
                                                   state: s.state, heldReason: s.heldReason,
-                                                  pausedAt: pausedAt(scheduled.detail(s.id)),
+                                                  pausedAt: s.pausedAt.flatMap(ScheduleDisplay.parse)
+                                                    ?? pausedAt(scheduled.detail(s.id)),
                                                   timezone: scheduled.timezone),
                     repeats: ScheduleDisplay.ruleRepeats(s.rule), time: time, draft: false, paused: inPaused,
                     open: { scheduled.inspectedID = s.id })
@@ -436,11 +440,14 @@ struct ScheduleDetailPanel: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .task { await model.scheduled?.loadDetail(scheduleID) }
-        .orbitConfirmation(SC.Actions.delete, isPresented: $confirmingDelete) {
-            Button(SC.Actions.delete, role: .destructive) {
+        .orbitConfirmation(ScheduleDisplay.deleteTitle(model.scheduled?.schedule(scheduleID)?.title ?? ""),
+                           isPresented: $confirmingDelete) {
+            Button(SC.DeleteConfirm.confirm, role: .destructive) {
                 Task { @MainActor in await model.scheduled?.delete(scheduleID) }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(SC.DeleteConfirm.cancel, role: .cancel) {}
+        } message: {
+            Text(SC.DeleteConfirm.body)
         }
     }
 
