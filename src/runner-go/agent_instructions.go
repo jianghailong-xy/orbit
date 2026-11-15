@@ -342,6 +342,47 @@ var orbitCLICommands = sync.OnceValue(func() []orbitCLICommand {
 	return commands
 })
 
+// Why a command is left out of orbitCLIAllowedTools: every `orbit` command is pre-approved there or
+// named in orbitCLIAllowlistExclusions with one of these and its reason
+// (TestEveryOrbitCommandIsPreApprovedOrExcludedWithAReason).
+const (
+	// A person's own act at their own terminal: their login, the machine's registration, credentials.
+	allowlistHumanOnly = "human_only"
+	// Started by the runner, its service manager or the engine itself, never typed into an agent's shell.
+	allowlistHeadlessOnly = "headless_only"
+	// Runs a command line of the caller's choosing, so a rule for it would pre-approve any command.
+	allowlistArbitraryCommand = "arbitrary_command"
+	// Looks after this machine's runner install rather than calling Orbit: not a catalogue operation.
+	allowlistRunnerLocal = "runner_local"
+)
+
+type orbitCLIAllowlistExclusion struct {
+	kind, reason string
+}
+
+// orbitCLIAllowlistExclusions are the `orbit` commands outside the operation catalogue, by their first
+// word, and why none is pre-approved. The catalogue's own human-only commands (HeadlessOnly) are
+// excluded by orbitCLICommands and carry their catalogue reason (catalogMCPExemptions); `capabilities`
+// is pre-approved only as `capabilities --json`.
+var orbitCLIAllowlistExclusions = map[string]orbitCLIAllowlistExclusion{
+	"register":      {allowlistHumanOnly, "registers this machine as a runner, approved in a person's browser"},
+	"unregister":    {allowlistHumanOnly, "deletes this runner and its local config"},
+	"token":         {allowlistHumanOnly, "mints, lists and revokes credentials for headless processes: a credential is the owner's to hand out"},
+	"terminal":      {allowlistHumanOnly, "approves or signs out a person's terminal in the Orbit app"},
+	"resume":        {allowlistHumanOnly, "reopens a session in the interactive Orbit terminal client"},
+	"host":          {allowlistHumanOnly, "sets the machine up for runners, as root, once per host"},
+	"upgrade":       {allowlistHumanOnly, "force-reinstalls the runner binary the session itself runs on"},
+	"run":           {allowlistHeadlessOnly, "the runner loop: the service manager starts it"},
+	"hostd":         {allowlistHeadlessOnly, "the machine broker: systemd starts it"},
+	"mcp":           {allowlistHeadlessOnly, "the MCP server the engine starts from its own configuration, never through the shell"},
+	"hook":          {allowlistHeadlessOnly, "the engine's hook entry point, run by the engine on its own events"},
+	"engine-update": {allowlistRunnerLocal, "updates this machine's coding-engine CLIs"},
+	"status":        {allowlistRunnerLocal, "shows this directory's runner status; not an Orbit operation"},
+	"doctor":        {allowlistRunnerLocal, "checks this machine's engine install and sign-in; not an Orbit operation"},
+	"version":       {allowlistRunnerLocal, "prints the binary's version, which `capabilities --json` already carries as cliVersion"},
+	"secret":        {allowlistArbitraryCommand, "`secret exec NAME -- COMMAND` runs COMMAND, so each run stays with the engine's own permission check"},
+}
+
 func shellWordSafe(value string) bool {
 	if value == "" {
 		return false

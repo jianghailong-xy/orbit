@@ -335,7 +335,11 @@ func main() {
 	}
 
 	if err := runOrbitCLI(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		// A command failure runCLICommand reported is already on stderr or stdout (recovery_render.go).
+		var reported *reportedCLIError
+		if !errors.As(err, &reported) {
+			fmt.Fprintln(os.Stderr, err)
+		}
 		os.Exit(1)
 	}
 }
@@ -397,53 +401,29 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 	case "resume":
 		cmdResume(args[1:])
 	case "task":
-		if err := cmdTaskCLI(args[1:], in, out); err != nil {
-			return fmt.Errorf("orbit task: %w", err)
-		}
+		return runCLICommand("orbit task", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdTaskCLI(args[1:], in, out) })
 	case "task-list":
-		if err := cmdTaskListCLI(args[1:], in, out); err != nil {
-			return fmt.Errorf("orbit task-list: %w", err)
-		}
+		return runCLICommand("orbit task-list", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdTaskListCLI(args[1:], in, out) })
 	case "project":
-		if err := cmdProjectCLI(args[1:], in, out); err != nil {
-			return fmt.Errorf("orbit project: %w", err)
-		}
+		return runCLICommand("orbit project", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdProjectCLI(args[1:], in, out) })
 	case "session":
-		if err := cmdSessionCLI(args[1:], in, out); err != nil {
-			return fmt.Errorf("orbit session: %w", err)
-		}
+		return runCLICommand("orbit session", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdSessionCLI(args[1:], in, out) })
 	case "agent":
-		if err := cmdAgentCLI(args[1:], out); err != nil {
-			return fmt.Errorf("orbit agent: %w", err)
-		}
+		return runCLICommand("orbit agent", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdAgentCLI(args[1:], out) })
 	case "runner":
-		if err := cmdRunnerCLI(args[1:], out); err != nil {
-			return fmt.Errorf("orbit runner: %w", err)
-		}
+		return runCLICommand("orbit runner", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdRunnerCLI(args[1:], out) })
 	case "provider":
-		if err := cmdProviderCLI(args[1:], in, out); err != nil {
-			return fmt.Errorf("orbit provider: %w", err)
-		}
+		return runCLICommand("orbit provider", args, false, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdProviderCLI(args[1:], in, out) })
 	case "notify":
-		if err := cmdNotifyCLI(args[1:], out); err != nil {
-			return fmt.Errorf("orbit notify: %w", err)
-		}
+		return runCLICommand("orbit notify", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdNotifyCLI(args[1:], out) })
 	case "watch":
-		if err := cmdWatchCLI(args[1:], in, out); err != nil {
-			return fmt.Errorf("orbit watch: %w", err)
-		}
+		return runCLICommand("orbit watch", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWatchCLI(args[1:], in, out) })
 	case "wiki":
-		if err := cmdWikiCLI(args[1:], in, out); err != nil {
-			return fmt.Errorf("orbit wiki: %w", err)
-		}
+		return runCLICommand("orbit wiki", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWikiCLI(args[1:], in, out) })
 	case "file":
-		if err := cmdFileCLI(args[1:], out); err != nil {
-			return fmt.Errorf("orbit file: %w", err)
-		}
+		return runCLICommand("orbit file", args, true, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdFileCLI(args[1:], out) })
 	case "token":
-		if err := cmdTokenCLI(args[1:], out); err != nil {
-			return fmt.Errorf("orbit token: %w", err)
-		}
+		return runCLICommand("orbit token", args, false, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdTokenCLI(args[1:], out) })
 	case "login":
 		if err := cmdLoginCLI(args[1:], in, out, errW); err != nil {
 			return fmt.Errorf("orbit login: %w", err)
@@ -458,17 +438,11 @@ func runOrbitCLI(args []string, in io.Reader, out, errW io.Writer) error {
 			return fmt.Errorf("orbit logout: %w", err)
 		}
 	case "whoami":
-		if err := cmdWhoamiCLI(args[1:], out, errW); err != nil {
-			return fmt.Errorf("orbit whoami: %w", err)
-		}
+		return runCLICommand("orbit whoami", args, false, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdWhoamiCLI(args[1:], out, errW) })
 	case "api":
-		if err := cmdAPICLI(args[1:], in, out, errW); err != nil {
-			return fmt.Errorf("orbit api: %w", err)
-		}
+		return runCLICommand("orbit api", args, false, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdAPICLI(args[1:], in, out, errW) })
 	case "capabilities":
-		if err := cmdCapabilitiesCLI(args[1:], out); err != nil {
-			return fmt.Errorf("orbit capabilities: %w", err)
-		}
+		return runCLICommand("orbit capabilities", args, false, in, out, errW, func(in io.Reader, out io.Writer) error { return cmdCapabilitiesCLI(args[1:], out) })
 	case "host":
 		if err := cmdHostCLI(args[1:], out); err != nil {
 			return fmt.Errorf("orbit host: %w", err)
