@@ -162,7 +162,8 @@ export interface ManagedInstance {
    *  whether it was killed at its memory limit. Null while it has not ended, or when it never ran. */
   readonly exit: { readonly code: number | null; readonly outOfMemory: boolean } | null;
   /** The image it was made from, when its host says and that is not the one this backend makes instances from
-   *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on). Absent otherwise. */
+   *  now (Docker: the image ID against the profile's `runner.image`, which an upgrade moves on; Kubernetes: a Pod
+   *  container's image against the profile's `runner.image`). Absent otherwise. */
   readonly previousImage?: string;
 }
 
@@ -259,6 +260,12 @@ export interface ManagedRunnerBackend {
    * Called by the loop for each host of a several-host runtime only. Absent where `unreachable` is.
    */
   recheckReachability?(): Promise<void>;
+  /**
+   * The image a READY instance of a previous image (`previousImage`) is moved onto once it is idle: drained and woken
+   * at once as the next generation (the manager's image roll). Kubernetes: the profile's `runner.image`. Absent on a
+   * backend whose instances keep their image until they next sleep (Docker).
+   */
+  readonly rollImage?: string;
 
   /** The fixed names of one runner's objects, from its UUID alone. */
   names(runnerId: string): { volume: string; instance: string; credential: string };
