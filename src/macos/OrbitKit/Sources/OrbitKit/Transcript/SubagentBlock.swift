@@ -25,6 +25,9 @@ public struct SubagentBlock: Equatable, Sendable {
     /// the other is unknown. Nil when neither is known yet.
     public let engineName: String?
     public let model: String?
+    /// The model's own name already says the engine (`DeepSeek Chat` on DeepSeek): the chip then shows
+    /// the engine's mark and the model, not the name twice.
+    public let modelNamesEngine: Bool
     /// The parent's engine, by its short name, when the run is on another one: the chip's `Claude →`.
     public let fromEngine: String?
     /// The tier and the type, grey after the chip: `S · explore`, `M · Background`, or the type alone.
@@ -102,6 +105,10 @@ public struct SubagentBlock: Equatable, Sendable {
             engine: engine,
             engineName: engine.map(shortName),
             model: model,
+            modelNamesEngine: {
+                guard let engine, let model else { return false }
+                return model.lowercased().hasPrefix(shortName(engine).lowercased())
+            }(),
             fromEngine: fromEngine,
             meta: meta,
             readonly: readonly,

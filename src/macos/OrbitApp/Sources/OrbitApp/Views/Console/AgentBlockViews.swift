@@ -23,6 +23,8 @@ struct AgentEngineChip: View {
     let engine: String?
     let name: String?
     let model: String?
+    /// The model's name already says the engine's: the mark stands for it alone.
+    var modelNamesEngine = false
 
     var body: some View {
         let tint = engineTint(engine)
@@ -33,9 +35,12 @@ struct AgentEngineChip: View {
                     .foregroundStyle(Color(white: 1))
                     .frame(width: 14, height: 14)
                     .background(tint, in: RoundedRectangle(cornerRadius: 4))
-                Text(name).fontWeight(.semibold)
+                if !modelNamesEngine || model == nil { Text(name).fontWeight(.semibold) }
             }
-            if let model { Text(model).lineLimit(1).truncationMode(.middle) }
+            if let model {
+                Text(model).fontWeight(modelNamesEngine ? .semibold : .regular)
+                    .lineLimit(1).truncationMode(.middle)
+            }
         }
         .font(.orbitLabel)
         .foregroundStyle(engine == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
@@ -65,6 +70,8 @@ struct AgentFact: View {
 struct AgentIdentityLine: View {
     let block: SubagentBlock
     var showsMeta = true
+    /// What ends the line where a row has no room of its own for it: `22s · <$0.01`.
+    var trailing: String? = nil
 
     var body: some View {
         FlowLayout(spacing: 5) {
@@ -72,13 +79,17 @@ struct AgentIdentityLine: View {
                 Text("\(from) →").font(.orbitLabel).foregroundStyle(.secondary)
             }
             if block.engineName != nil || block.model != nil {
-                AgentEngineChip(engine: block.engine, name: block.engineName, model: block.model)
+                AgentEngineChip(engine: block.engine, name: block.engineName, model: block.model,
+                                modelNamesEngine: block.modelNamesEngine)
             }
             if showsMeta, !block.meta.isEmpty {
                 Text(block.meta).font(.orbitLabel).foregroundStyle(.secondary)
             }
             if block.readonly { AgentFact(symbol: "lock.fill", text: "Read-only") }
             if let workspace = block.workspace { AgentFact(symbol: "desktopcomputer", text: workspace) }
+            if let trailing {
+                Text(trailing).font(.orbitLabel).foregroundStyle(.secondary).monospacedDigit()
+            }
         }
     }
 }
@@ -209,16 +220,16 @@ struct AgentGroupView: View {
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .padding(.leading, 27)
             }
-            GeometryReader { geo in
-                let total = CGFloat(max(1, group.done + group.failed + group.running))
-                HStack(spacing: 0) {
-                    Rectangle().fill(Color.green).frame(width: geo.size.width * CGFloat(group.done) / total)
-                    Rectangle().fill(Color.red).frame(width: geo.size.width * CGFloat(group.failed) / total)
-                    Rectangle().fill(Color.purple.opacity(0.3))
+            // One segment per Agent, as far as it has got: ended well, failed, still running.
+            HStack(spacing: 3) {
+                ForEach(0..<(group.done + group.failed + group.running), id: \.self) { i in
+                    Capsule()
+                        .fill(i < group.done ? Color.green
+                              : i < group.done + group.failed ? Color.red : Color.purple.opacity(0.3))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 4)
                 }
             }
-            .frame(height: 4)
-            .clipShape(Capsule())
             .padding(.leading, 27).padding(.bottom, 6)
         }
     }
@@ -238,14 +249,9 @@ struct AgentGroupView: View {
                     .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
                     .rotationEffect(.degrees(open ? 90 : 0))
             }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                AgentIdentityLine(block: block, showsMeta: open)
-                Spacer(minLength: 4)
-                if let numbers = block.numbers {
-                    Text(numbers).font(.orbitMonoFine).foregroundStyle(.secondary).fixedSize()
-                }
-            }
-            .padding(.leading, 27)
+            AgentIdentityLine(block: block, showsMeta: open, trailing: block.numbers)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 27)
             if open {
                 ToolCardView(card: card, fullPayload: fullPayload, showsHeader: false)
                     .padding(.leading, 27).padding(.top, 4)
@@ -383,12 +389,8 @@ struct AgentsSheet: View {
                     .frame(width: 18)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(run.description ?? run.type).font(.body).lineLimit(1)
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        AgentIdentityLine(block: block, showsMeta: false)
-                        if let numbers = rowNumbers(block, run) {
-                            Text(numbers).font(.orbitMeta).foregroundStyle(.secondary).fixedSize()
-                        }
-                    }
+                    AgentIdentityLine(block: block, showsMeta: false, trailing: rowNumbers(block, run))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)

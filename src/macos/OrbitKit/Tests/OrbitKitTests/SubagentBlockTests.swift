@@ -47,6 +47,7 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(block.engineName, "DeepSeek")
         XCTAssertEqual(block.model, "DeepSeek Chat")
         XCTAssertNil(block.fromEngine, "the same engine as the parent: no arrow")
+        XCTAssertTrue(block.modelNamesEngine, "DeepSeek Chat already says DeepSeek")
         XCTAssertEqual(block.meta, "S · explore")
         XCTAssertEqual(block.type, "explore")
         XCTAssertFalse(block.background)
@@ -60,6 +61,7 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(block.fromEngine, "Claude")
         XCTAssertEqual(block.engineName, "Codex")
         XCTAssertEqual(block.model, "gpt-6.1-sol", "the id when the table names none")
+        XCTAssertFalse(block.modelNamesEngine)
     }
 
     func testAnUnknownEngineHasNoChipNameAndNoArrow() {
