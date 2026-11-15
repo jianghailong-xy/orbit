@@ -6,6 +6,8 @@ import type {
   MainCheckoutView,
   MergeRecovery,
   MergeRecoveryAction,
+  PromptOptimization,
+  PromptOptimizationRequest,
   ReplyTranslationRetryResponse,
   SessionGuestPerson,
   TranslationActionResponse,
@@ -528,6 +530,8 @@ export const createInteractiveSession = (body: {
   /** Instead of `workspaceId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
    *  the transaction that creates it (docs/first-workspace-contract.md §3). */
   newWorkspace?: NewWorkspaceRequest;
+  /** Prompt optimizer (D2): the opening message is still exactly the inserted optimized English. */
+  skipTranslation?: boolean;
 }) =>
   api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
@@ -641,6 +645,9 @@ export const sendTurn = (
   kind?: 'message' | 'shell',
   intent: SessionTurnIntent = 'NEXT_TURN',
   clientTurnId: string = uuid(),
+  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English, so the server
+   *  does not hold it for Translation. Sent only when true. */
+  skipTranslation?: boolean,
 ) =>
   api<{
     turnId: string;
@@ -658,6 +665,7 @@ export const sendTurn = (
       intent,
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
+      ...(skipTranslation ? { skipTranslation: true } : {}),
     },
   });
 
@@ -875,6 +883,12 @@ export const sendTurnAsWritten = (sessionId: string, turnId: string) =>
 export const retryReplyTranslation = (sessionId: string, seq: number) =>
   api<ReplyTranslationRetryResponse>(`/sessions/${sessionId}/events/${seq}/translation/retry`, { method: 'POST' });
 
+/** Prompt optimizer (docs/prompt-optimizer-design.md): DeepSeek improves a composer draft. The answer is
+ *  a suggestion the composer draws as a card (board frame 4); the box keeps the draft until the owner presses Use.
+ *  Refusals: 409 PROMPT_OPTIMIZER_OFF, 404, 400, and 422 PROMPT_OPTIMIZATION_FAILED (frame 6). */
+export const optimizePrompt = (body: PromptOptimizationRequest, signal?: AbortSignal) =>
+  api<PromptOptimization>('/prompt-optimizations', { method: 'POST', body, signal });
+
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
  *  bubbles on reopen and bridges the dequeue-to-first-event gap. The unqualified endpoint keeps
  *  its PENDING-only response for older native clients. Placement distinguishes the accepted head,
@@ -908,6 +922,8 @@ export const resumeSession = (
    *  Only `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED` asks for one, and only the person
    *  answering that question supplies it (see `lib/taskRunHandoff.ts#stopSessionIdFor`). */
   stopSessionId?: string,
+  /** As sendTurn's: the text is still exactly the inserted optimized English (D2). */
+  skipTranslation?: boolean,
 ) =>
   api<{
     turnId: string;
@@ -930,6 +946,7 @@ export const resumeSession = (
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
       ...(stopSessionId ? { stopSessionId } : {}),
+      ...(skipTranslation ? { skipTranslation: true } : {}),
     },
   });
 
@@ -2007,6 +2024,10 @@ export interface SessionDetail {
    *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
    *  Optional, because an older server does not send it. */
   forkSource?: string | null;
+  /** How the session was started; `SCHEDULE` is a scheduled task's run (docs/scheduled-tasks-design.md §6.3), and
+   *  `scheduleRunId` names the run. Optional, because an older server does not send them. */
+  runSource?: string | null;
+  scheduleRunId?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */

@@ -444,7 +444,12 @@ func appendClaudeAgentInstructionArgs(
 	if appendPrompt := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent)); appendPrompt != "" {
 		args = append(args, "--append-system-prompt", appendPrompt)
 	}
-	allowed := appendUnique(agent.AllowedTools, orbitCLIAllowedTools(executable, allowOrchestration)...)
+	allowed := agent.AllowedTools
+	// A scheduled CHECK_ONLY run does not get the CLI: it reads Orbit through the tools the claim allows, and its
+	// deny list names this executable (schedule_check_only.go).
+	if !agent.ScheduledCheckOnly {
+		allowed = appendUnique(allowed, orbitCLIAllowedTools(executable, allowOrchestration)...)
+	}
 	if len(allowed) > 0 {
 		args = append(args, "--allowedTools", strings.Join(allowed, ","))
 	}

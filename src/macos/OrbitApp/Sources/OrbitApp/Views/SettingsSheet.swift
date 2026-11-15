@@ -737,6 +737,8 @@ private struct SessionSettingsPage: View {
     @State private var recaps = true
     /// Settings › Translation: the account's switch. Absent on the server means off.
     @State private var translation = false
+    /// Settings › Prompt optimizer: the account's switch. Absent on the server means off.
+    @State private var promptOptimizer = false
     /// "Show both languages" (02-bilingual.png, mark A). Absent on the server means off.
     @State private var bilingual = false
     @State private var seeded = false
@@ -753,6 +755,8 @@ private struct SessionSettingsPage: View {
                     }
                 case .translation:
                     translationSection
+                case .promptOptimizer:
+                    promptOptimizerSection
                 }
             }
         }
@@ -783,6 +787,10 @@ private struct SessionSettingsPage: View {
         .onChange(of: translation) { _, value in
             guard (model.user?.preferences?.translationEnabled ?? false) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: value)) }
+        }
+        .onChange(of: promptOptimizer) { _, value in
+            guard (model.user?.preferences?.promptOptimizer ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: value)) }
         }
         .onChange(of: bilingual) { _, value in
             guard (model.user?.preferences?.translationBilingual ?? false) != value else { return }
@@ -848,6 +856,24 @@ private struct SessionSettingsPage: View {
         .disabled(unavailable)
     }
 
+    /// Settings › Prompt optimizer (board frame 1): one account-wide switch, off by default, under
+    /// Suggested replies. A server without a DeepSeek key draws it disabled with frame 1b's notice.
+    @ViewBuilder private var promptOptimizerSection: some View {
+        let unavailable = PromptOptimizer.unavailable(model.user)
+        Section {
+            Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
+            .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
+            if unavailable {
+                Text(PromptOptimizerCopy.unavailable)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.orange)
+            }
+        } footer: {
+            Text(PromptOptimizerCopy.hint)
+        }
+        .disabled(unavailable)
+    }
+
     private func seed() {
         guard !seeded else { return }
         seeded = true
@@ -860,6 +886,7 @@ private struct SessionSettingsPage: View {
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
         translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+        promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true
         bilingual = p?.translationBilingual == true
     }
 }

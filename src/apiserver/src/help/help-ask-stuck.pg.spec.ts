@@ -1,6 +1,6 @@
 /**
  * Still stuck (docs/mocks/help-center board 02 ② right frame, side note 5; help/help-ask.ts#stuck and #askAdmin,
- * migration 0860), held against the production apiserver — `build/main.js`, the whole AppModule — over a real
+ * migration 0870), held against the production apiserver — `build/main.js`, the whole AppModule — over a real
  * PostgreSQL that `scripts/run-pg-spec.sh` migrates from empty:
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/help/help-ask-stuck.pg.spec.ts

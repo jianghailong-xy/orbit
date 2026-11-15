@@ -147,3 +147,61 @@ export const ZH_JOB_AND_SCHEDULED = `<background-job-wake>
       升级备份唤醒:检查 bg_run 升级作业(upgrade to 39551b637)是否已结束且成功 — 1) apiserver 容器 dist 含 CLAUDE_CODE_MAX_CONTEXT_TOKENS 且 import catalogModels;2) 迁移 0274_session_import_source 已应用;3) 四服务健康;4) runner 自更新情况(web 镜像 ORBIT_SOURCE_SHA=39551b637)。若作业还在跑则再等。完成或失败都向用户汇报。
   这是控制面替你记下的，不是用户说的。还要再等，就再调一次 mcp__orbit__schedule_wakeup。
 </scheduled-wakeup>`;
+
+// ── A quiet job's wake ──────────────────────────────────────────────────────────────────────────
+// Built the way runner-api/background-job-wake.ts `buildBackgroundStallBlock` builds them: there is no
+// older wording, the stall wake shipped in English (721ae19fc, 2026-11-15).
+
+const STALL_HEAD =
+  '  A background job you started with bg_run is still running and has written nothing for as long as you asked to be told about; the control plane opened this turn for it:';
+const STALL_FOOT = [
+  '  The control plane recorded this for you; the user did not say it. The job has not ended: read its output with mcp__orbit__bg_output by id (pass sinceOffset to read only what is new), stop it with mcp__orbit__bg_kill, or leave it running.',
+  '  One silence wakes you once: you are woken again only if the job writes something and then goes quiet as long again.',
+];
+
+/** A job that wrote something, then nothing for 15 minutes. */
+export const EN_STALL = [
+  '<background-job-stall>',
+  STALL_HEAD,
+  '    bgj_28a9b17fe75c｜job｜./scripts/rebuild-index.sh --workers 6｜Nightly index rebuild (6 workers)',
+  '      gone quiet｜still running｜running for 15m 2s when this was sent',
+  '      no new output for 15m 0s｜last output at 2026-11-15T17:34:10Z',
+  '      output /root/.orbit/runs/4f50733a/bgj_28a9b17fe75c.output｜this covers bytes 0–21',
+  '      output tail:',
+  '        entries=32 workers=6',
+  ...STALL_FOOT,
+  '</background-job-stall>',
+].join('\n');
+
+/** A job with no description that has written nothing since it started. */
+export const EN_STALL_SILENT = [
+  '<background-job-stall>',
+  STALL_HEAD,
+  '    bgj_5c03e1aa90d2｜job｜pg_dump orbit > /backup/orbit.sql',
+  '      gone quiet｜still running｜running for 30m 0s when this was sent',
+  '      no output at all｜it has written nothing in the 30m 0s since it started',
+  '      output /root/.orbit/runs/4f50733a/bgj_5c03e1aa90d2.output｜this covers bytes 0–0',
+  '      (no output)',
+  ...STALL_FOOT,
+  '</background-job-stall>',
+].join('\n');
+
+/** Two jobs gone quiet on one turn. */
+export const EN_TWO_STALLS = [
+  '<background-job-stall>',
+  STALL_HEAD,
+  '    bgj_28a9b17fe75c｜job｜./scripts/rebuild-index.sh --workers 6｜Nightly index rebuild (6 workers)',
+  '      gone quiet｜still running｜running for 15m 2s when this was sent',
+  '      no new output for 15m 0s｜last output at 2026-11-15T17:34:10Z',
+  '      output /root/.orbit/runs/4f50733a/bgj_28a9b17fe75c.output｜this covers bytes 0–21',
+  '      output tail:',
+  '        entries=32 workers=6',
+  '    bgj_91b7c2e0d4f1｜job｜npm run e2e -- --project=staging｜E2E suite against staging',
+  '      gone quiet｜still running｜running for 1h 2m 5s when this was sent',
+  '      no new output for 10m 0s｜last output at 2026-11-15T17:39:10Z',
+  '      output /root/.orbit/runs/4f50733a/bgj_91b7c2e0d4f1.output｜this covers bytes 0–3481',
+  '      output tail:',
+  '        ✓ 41 passed',
+  ...STALL_FOOT,
+  '</background-job-stall>',
+].join('\n');

@@ -76,12 +76,18 @@ internal object StickySummary {
                 .any { event.card(cards, it) != null }) return true
         if (event.card(cards, "watch") != null) return false
         if (event.card(cards, "ownerAnswer") != null) return false
-        if (event.card(cards, "wake") == null) return true
+        // A SubAgent's end is a line inside the answer too, as a background job's news is (board subagent-finished-line ①).
+        if (event.card(cards, "wake") == null && event.card(cards, "subagent") == null) {
+            // A turn that is only a note this reader cannot read draws no row of the reader's, so it heads no round (OrbitKit).
+            return cards.isNotEmpty() || !io.orbitd.android.core.cards.BackgroundWakeCard.drawsNoteAlone(event.personWords(),
+                (event.fields["attachments"] as? kotlinx.serialization.json.JsonArray).orEmpty().isNotEmpty(),
+                event.fields.string("controlPlaneNote"), queued = false)
+        }
         return event.personWords().isNotBlank()
     }
 
     /** The turns that are lines inside an answer rather than Orbit opening a round of its own (`isAnchor`). */
-    private val linesInAnAnswer = setOf("watch", "wake", "ownerAnswer")
+    private val linesInAnAnswer = setOf("watch", "wake", "subagent", "ownerAnswer")
 
     /**
      * Whether Orbit, not a person, opened this turn: one of the control plane's cards stands in for the bubble (OrbitKit

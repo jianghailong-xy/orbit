@@ -223,6 +223,10 @@ export interface AgentExecConfig {
    *  plane on claim and reclaim; absent means off, so an older control plane never turns it on.
    *  Like fastMode it is read once, at spawn. */
   promptSuggestions?: boolean;
+  /** The session serves a scheduled CHECK_ONLY run (docs/scheduled-tasks-design.md §6.2): in Plan, Codex then runs
+   *  in its own read-only sandbox with no approvals, so it reads the checkout and the OS refuses writes. Absent on
+   *  every other session, which keeps Codex's ordinary Plan (every command declined); an older runner ignores it. */
+  scheduledCheckOnly?: boolean;
   maxTurns?: number;
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */
@@ -2807,6 +2811,9 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only for the session of a scheduled task's run (`Session.scheduleRunId`, docs/scheduled-
+   *  tasks-design.md §7.1). Injected as ORBIT_SCHEDULE_RUN=1 so `orbit mcp` lists schedule_run_report. */
+  scheduleRun?: boolean;
   /** How many spawn links sit above this session (a root is 0), injected as
    *  ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
    *  nested wait always finishes inside the wait that is waiting on it. */
@@ -3280,6 +3287,8 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */
+  scheduleRun?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
   orchestrationToken?: string;
   /** The SOURCE snapshot, cf. ClaimedSession.source. On reclaim it is read, never re-derived

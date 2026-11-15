@@ -32,6 +32,7 @@ import {
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from '../runner-api/scheduled-wakeup';
+import { checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_CHECK_ONLY_RULE_REFUSED } from '../schedules/schedule-access';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
@@ -1178,6 +1179,12 @@ export class SessionsService {
        * to the workspace's seed. Internal: public session creation cannot claim it.
        */
       anchor?: () => Promise<AnchorSeed | null>;
+      /**
+       * The scheduled task's run this session serves (docs/scheduled-tasks-design.md §6.3). Internal: set only by
+       * the schedule starter (schedules/schedule-runs.service.ts), together with `runSource: SCHEDULE`, in the
+       * session's own INSERT so no claim can see the session before it names its run.
+       */
+      scheduleRunId?: string;
     },
   ) {
     refuseOwnerFieldsToToken(opts?.credential, { permissionMode: dto.permissionMode });
@@ -1698,6 +1705,7 @@ export class SessionsService {
         contextTaskId: opts?.contextTaskId ?? null,
         dispatchOrigin: opts?.dispatchOrigin ?? SessionDispatchOrigin.USER,
         runSource: opts?.runSource ?? SessionRunSource.MANUAL,
+        ...(opts?.scheduleRunId ? { scheduleRunId: opts.scheduleRunId } : {}),
         startsTaskWork: opts?.startsTaskWork ?? false,
         // A task session must remain discoverable in Open even if an internal caller
         // accidentally asks for the legacy "system" provenance.
@@ -1721,7 +1729,7 @@ export class SessionsService {
       },
     });
     // Settings › Translation: the language the opening message is translated from, or null.
-    const heldFrom = opts?.translate && !dto.taskId && !wikiChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
+    const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
       && !opts.externalSender && !opts.fence && dto.prompt.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
@@ -3086,6 +3094,8 @@ export class SessionsService {
         // conversations. Landing containers are reached by their link, or through the project
         // grouping's `includeLanding` (a later task), never here.
         sessionKind: SESSION_KIND_CONVERSATION,
+        // A scheduled task's run is reached by id (session_get), not listed (scheduled-tasks-design.md §7.4).
+        runSource: { not: SessionRunSource.SCHEDULE },
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
         ...runnerScopeWhere(filters.scope),
@@ -3349,7 +3359,7 @@ export class SessionsService {
               LEFT JOIN conversation_turn ct
                 ON ct.id = e.turn_id AND ct.session_id = e.session_id
               WHERE s.owner_id = ${ownerId}::uuid
-                AND s.kind = 'CONVERSATION'
+                AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
                 AND e.type IN ('user', 'assistant')
                 -- Keep the exact indexed expression as the cheap candidate filter. On an ordinary
                 -- delivery it contains the authored user text. A reclaimed continuation can
@@ -3462,7 +3472,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND s.id = ${norm.sessionId}::uuid
             UNION
             -- Workspaces and logs commonly shorten a UUID to its first 8–12 hex characters. At this
@@ -3471,7 +3481,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND replace(s.id::text, '-', '') LIKE ${
                 norm.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null
               }
@@ -3484,7 +3494,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND ${sessionPredicate}
             UNION
             -- Joined names resolve against their own tiny tables first (~10 workspaces, ~500 tasks),
@@ -3492,14 +3502,14 @@ export class SessionsService {
             -- index instead would mean reindexing every session whenever a workspace is renamed.
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND s.workspace_id IN (
                 SELECT id FROM workspace WHERE ${matches(stripMarks(Prisma.sql`name`))}
               )
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND s.task_id IN (
                 SELECT id FROM task WHERE ${matches(stripMarks(Prisma.sql`title`))}
               )
@@ -3665,7 +3675,7 @@ export class SessionsService {
           LEFT JOIN workspace a ON a.id = s.workspace_id
           LEFT JOIN task  t ON t.id = s.task_id
           WHERE s.owner_id = ${ownerId}::uuid
-            AND s.kind = 'CONVERSATION'
+            AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
             AND s.deleted_at IS NULL
           ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
           LIMIT ${take}::int
@@ -3725,6 +3735,8 @@ export class SessionsService {
       // LS6: a landing in flight is not a conversation waiting on anybody, and its AWAITING_INPUT
       // means only that its subject is open. It counts in no workspace tally.
       sessionKind: SESSION_KIND_CONVERSATION,
+      // Nor does a scheduled task's run, which is in no list (docs/scheduled-tasks-design.md §7.4).
+      runSource: { not: SessionRunSource.SCHEDULE },
     } as const;
     const [active, running, jobs, blocked, jobCards] = await Promise.all([
       this.prisma.session.groupBy({
@@ -4019,7 +4031,10 @@ export class SessionsService {
     // An Ask (migration 0850) is in no session list: it is listed under /help → Your questions (help/help-ask.ts).
     const build = () => this.listRows(ownerId, {
       scope: Prisma.sql`AND s.help_ask IS NULL ${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
-      visibility,
+      // A scheduled task's run is reached from its schedule's history and its notification, never from a list
+      // (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, and the delta that reads this.
+      // `listRowsByIds` names its sessions and is left as it is: a link card to a run is by id.
+      visibility: view === 'system' ? visibility : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
     });
@@ -6849,7 +6864,7 @@ export class SessionsService {
     const wikiContext = readWikiChatContext(dto.wikiContext);
     // Settings › Translation: the language this message is translated from, or null when it goes as
     // written. Words only — a `!cmd` is a command, and attachments alone carry no words.
-    const translateFrom = opts?.translate && dto.kind !== 'shell' && dto.content?.trim()
+    const translateFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     // Retried whole. This is where a user turn serializes against the runner's claim and against
@@ -9732,7 +9747,10 @@ export class SessionsService {
     }
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, workspaceId: true, sessionKind: true },
+      select: {
+        id: true, workspaceId: true, sessionKind: true, ownerId: true, engine: true, provider: true, providerBuiltin: true,
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
+      },
     });
     if (!session) throw new NotFoundException('session not found');
     // Answering a tool-permission card is an engine door (§2.9 LS6).
@@ -9779,6 +9797,16 @@ export class SessionsService {
       where: { id: approvalId, sessionId: id },
       select: { toolName: true, input: true, translation: true, status: true },
     });
+    // A scheduled CHECK_ONLY run on Claude Code (design §6.2): Always allow on its card writes only that card's command's
+    // rules, computed here, and only those rules are marked for later checks to carry (from_schedule_run). A rule from
+    // any other card, an OPEN_PR run's included, is the client's choice and is never carried by a check.
+    const checkOnlyRules = dto.behavior === 'allow' && !!dto.rememberRules?.length && !!answering
+      && runAccessLevel(session.scheduleRun) === 'CHECK_ONLY'
+      && (await sessionEngine(this.prisma, session)) === AgentProvider.CLAUDE;
+    if (checkOnlyRules) {
+      const refused = checkOnlyRuleRefusal(answering!, dto.rememberRules!);
+      if (refused) throw new BadRequestException({ code: SCHEDULE_CHECK_ONLY_RULE_REFUSED, message: refused });
+    }
     // Settings › Translation (3A, reply-translation.ts): what the engine reads is in the account's agent language —
     // options the owner picked in translation mapped back to the card's own, their own words translated. A failed translation
     // records nothing (422 TRANSLATION_FAILED). Only for a card still asking: a late click is a no-op anyway.
@@ -9858,7 +9886,9 @@ export class SessionsService {
       // Only the decision that actually landed writes the standing grant: a second, losing
       // click on an already-answered approval must not widen anything.
       if (dto.behavior === 'allow' && session.workspaceId) {
-        await this.rememberForWorkspace(session.workspaceId, ownerId, approvalId, dto.rememberRules);
+        await this.rememberForWorkspace(
+          session.workspaceId, ownerId, approvalId, dto.rememberRules, checkOnlyRules,
+        );
       }
       this.realtime.publish(id, {
         seq: 0,
@@ -9880,6 +9910,7 @@ export class SessionsService {
     ownerId: string,
     approvalId: string,
     rules: PermissionRule[] | undefined,
+    fromScheduleRun = false,
   ): Promise<void> {
     const stored = normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
     if (!stored.length) return;
@@ -9890,9 +9921,22 @@ export class SessionsService {
         ruleContent: rule.ruleContent,
         createdById: ownerId,
         approvalId,
+        ...(fromScheduleRun ? { fromScheduleRun: true } : {}),
       })),
       skipDuplicates: true,
     });
+    // A rule an interactive session wrote first is the same row: answering a CHECK_ONLY run's card for it marks it, so
+    // a CHECK_ONLY run carries it from now on (schedule-access.ts scheduleRunAllowedTools).
+    if (fromScheduleRun) {
+      await this.prisma.workspacePermissionRule.updateMany({
+        where: {
+          workspaceId,
+          fromScheduleRun: false,
+          OR: stored.map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent })),
+        },
+        data: { fromScheduleRun: true },
+      });
+    }
   }
 
   private toApprovalInfo(a: {
@@ -10386,7 +10430,7 @@ export class SessionsService {
     // locks taken inside the closure and writes from that read; nothing outside it moves between
     // attempts, and the runner is notified after this returns.
     // Settings › Translation on the revive: its message is laid down HELD (insertHeldOpeningLocked's rule).
-    const reviveHeldFrom = opts?.translate && dto.kind !== 'shell' && dto.content?.trim()
+    const reviveHeldFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
     const revived = await withTransactionRetry(this.prisma, async (tx) => {
@@ -12173,7 +12217,7 @@ export class SessionsService {
     const filed = folders.length
       ? await this.prisma.session.groupBy({
           by: ['folderId'],
-          where: { ownerId, deletedAt: null, folderId: { in: folders.map((f) => f.id) } },
+          where: { ownerId, deletedAt: null, runSource: { not: SessionRunSource.SCHEDULE }, folderId: { in: folders.map((f) => f.id) } },
           _count: { _all: true },
         })
       : [];

@@ -332,8 +332,8 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
-  helpAskAdminRequests     HelpAskAdminRequest[] @relation("HelpAskAdminRequestOwner") // Asks this user sent to an admin (0860)
-  helpAskAdminRequestsToMe HelpAskAdminRequest[] @relation("HelpAskAdminRequestAdmin") // Asks sent to this admin (0860)
+  helpAskAdminRequests     HelpAskAdminRequest[] @relation("HelpAskAdminRequestOwner") // Asks this user sent to an admin (0870)
+  helpAskAdminRequestsToMe HelpAskAdminRequest[] @relation("HelpAskAdminRequestAdmin") // Asks sent to this admin (0870)
   terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0660)
   terminalCredentials TerminalCredential[] // the terminals this user approved (0660)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
@@ -1754,6 +1754,9 @@ model WorkspacePermissionRule {
   // long before the rule is revoked).
   createdById String?   @map("created_by_id") @db.Uuid
   approvalId  String?   @map("approval_id") @db.Uuid
+  // Written by answering Always allow on a scheduled run's card (migration 0860): the only Bash rules a CHECK_ONLY
+  // run on Claude Code carries (docs/scheduled-tasks-design.md §6.2).
+  fromScheduleRun Boolean @default(false) @map("from_schedule_run")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@unique([workspaceId, toolName, ruleContent])
@@ -2186,7 +2189,7 @@ model Session {
   /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its
   /// runner, and may call only the runner doors of help/help-ask-reads.ts.
   helpAsk                  Json?     @map("help_ask")
-  /// Still stuck → Ask your admin (migration 0860): this Ask sent to an admin, at most once.
+  /// Still stuck → Ask your admin (migration 0870): this Ask sent to an admin, at most once.
   helpAskAdminRequest      HelpAskAdminRequest?
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
@@ -6227,7 +6230,7 @@ model Task {
   /// The tenancy fence `[K2]`'s two ledger tables hang off: a child row names BOTH the task and
   /// the owner, so it cannot disagree with its parent about whose it is. The same device migration
   /// 0120 used for (decision, project).
-  /// The Ask this task carries to an admin (Still stuck → Ask your admin, migration 0860), when it is one.
+  /// The Ask this task carries to an admin (Still stuck → Ask your admin, migration 0870), when it is one.
   helpAskAdminRequests HelpAskAdminRequest[]
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
@@ -7859,6 +7862,11 @@ model OwnerRequest {
   repoUrlNorm         String?   @map("repo_url_norm")
   /// WIKI_CREATE: the asking session's workspace, which the wiki's maintenance reads. History, not a foreign key.
   workspaceId         String?   @map("workspace_id") @db.Uuid
+  /// SCHEDULE_* kinds (migration 0840): the schedule and run the item is about, and what answers it. History, no FK.
+  scheduleId              String?   @map("schedule_id") @db.Uuid
+  scheduleRunId           String?   @map("schedule_run_id") @db.Uuid
+  approvalId              String?   @map("approval_id") @db.Uuid
+  scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
@@ -9940,6 +9948,13 @@ model ScheduleRun {
   summary          String?
   links            Json               @default("[]")
   failureReason    String?            @map("failure_reason")
+  /// A QUEUED run is not started before this (migration 0830): a retry's 1, 5 or 15 minutes (§7.2).
+  notBeforeAt      DateTime?          @map("not_before_at") @db.Timestamptz(3)
+  /// Why a HELD run's start checks failed (§6.1, migration 0830).
+  heldReason       String?            @map("held_reason")
+  /// The level the run started with (§6.2, migration 0860): what its session is held to, whatever the schedule
+  /// says later. NULL until the run starts.
+  accessLevel      ScheduleAccessLevel? @map("access_level")
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
 
@@ -9991,7 +10006,7 @@ model ScheduleChangeRequest {
   @@map("schedule_change_request")
 }
 
-/// Still stuck → Ask your admin (migration 0860; docs/mocks/help-center board 02 ② right frame, side note 5): an Ask
+/// Still stuck → Ask your admin (migration 0870; docs/mocks/help-center board 02 ② right frame, side note 5): an Ask
 /// its person sent to an admin, keyed by the Ask so it is sent at most once, and the ordinary task in the admin's own
 /// task list that carries it. /help → Your questions reads it to say "With your admin". Written only by
 /// help/help-ask.ts#askAdmin. Its own table because 0850's trigger keeps `session.help_ask` as its INSERT wrote it.

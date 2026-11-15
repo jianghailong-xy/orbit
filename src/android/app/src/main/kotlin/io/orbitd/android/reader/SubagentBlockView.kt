@@ -29,7 +29,7 @@ import io.orbitd.android.text.CodeText
 import io.orbitd.android.ui.LocalOrbitColors
 
 /** The agent tone iOS draws the SubAgent's rail and ✦ in (`ToolTone.agent`). */
-private val AgentTone = Color(0xFFAF52DE)
+internal val AgentTone = Color(0xFFAF52DE)
 
 /**
  * Orbit's own SubAgent — a `mcp__orbit__delegate` call — as one folded block (board docs/mocks/subagent/03.png, iOS `ToolCardView`'s

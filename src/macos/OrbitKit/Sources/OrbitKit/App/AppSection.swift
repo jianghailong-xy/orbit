@@ -5,6 +5,9 @@ import Foundation
 /// renders `workSections`. Admin is role-gated like the web's route guard.
 public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     case tasks, following, agents, skills, runners, settings, admin, projects, wiki
+    /// Scheduled tasks (docs/scheduled-tasks-design.md §9.2): account-wide, in the drawer only — never a row of a
+    /// workspace's session list. The phone's drawer adds it (`DrawerWorkLogic.rows(scheduled:)`).
+    case scheduled
 
     public var id: String { rawValue }
 
@@ -21,6 +24,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         case .settings: return "Settings"
         case .admin:    return "Admin"
         case .wiki:     return "Wiki"
+        case .scheduled: return ScheduleCopy.Nav.scheduled
         }
     }
 
@@ -38,6 +42,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         // The SF Symbols glyph for a book or a library — what the web draws as AntD's
         // `BookOutlined`, on the drawer row and on every `orbit-wiki:` card alike.
         case .wiki:     return "book.closed"
+        case .scheduled: return "calendar"
         }
     }
 
