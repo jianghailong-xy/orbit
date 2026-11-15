@@ -5,13 +5,15 @@
  *
  * WHAT A CLIENT READS AND WRITES
  * ==============================
- *  - `GET /users/me` → `preferences.translationEnabled` / `preferences.translationLanguage`
- *    (TranslationPreferences) and `translationAvailable` (MeTranslation). Absent
- *    `translationEnabled` is OFF. `translationAvailable: false` is board frame 2: the switch is
+ *  - `GET /users/me` → `preferences.translationEnabled` / `preferences.translationLanguage` /
+ *    `preferences.translationAgentLanguage` (TranslationPreferences) and `translationAvailable`
+ *    (MeTranslation). Absent `translationEnabled` is OFF, absent `translationLanguage` is zh-Hans,
+ *    absent `translationAgentLanguage` is English. Both languages come from the one list
+ *    TRANSLATION_LANGUAGES ("Your language" and "Agents work in" alike). `translationAvailable: false` is board frame 2: the switch is
  *    drawn disabled with the DEEPSEEK_API_KEY notice, and nothing is translated whatever the
  *    preference says.
- *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage? }`. A
- *    `translationLanguage` outside TRANSLATION_LANGUAGES is a 400. The answer is the same shape as
+ *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage?,
+ *    translationAgentLanguage? }`. Either language outside TRANSLATION_LANGUAGES is a 400. The answer is the same shape as
  *    `/users/me`.
  *  - The owner's message, once translated, travels as a turn whose `content` is the English the
  *    engine receives and whose `translation.original` is what the owner typed (TurnTranslation).
@@ -73,20 +75,59 @@
  *    and Send as written (send it again with `sendAsWritten: true`).
  */
 
-/** "Your language": the seven the owner may write and read in (board decision 5A). "Agents work in"
- *  is fixed to English and is not a field. */
-export const TRANSLATION_LANGUAGES = ['zh-Hans', 'zh-Hant', 'ja', 'ko', 'es', 'fr', 'de'] as const;
+/** The curated languages DeepSeek translates well (owner decision, 2026-11-15). ONE list for both
+ *  pickers, "Your language" and "Agents work in", on every client; the Swift and Kotlin copies
+ *  mirror it under parity tests. The first seven codes after English are the ones shipped before
+ *  the list grew: never rename them, stored preferences name them. */
+export const TRANSLATION_LANGUAGES = [
+  'en',
+  'zh-Hans',
+  'zh-Hant',
+  'ja',
+  'ko',
+  'es',
+  'fr',
+  'de',
+  'ru',
+  'pt',
+  'it',
+  'nl',
+  'ar',
+  'hi',
+  'tr',
+  'vi',
+  'th',
+  'id',
+  'pl',
+  'uk',
+  'he',
+  'sv',
+  'cs',
+  'da',
+  'fi',
+  'el',
+  'hu',
+  'ro',
+  'ms',
+  'bn',
+] as const;
 export type TranslationLanguage = (typeof TRANSLATION_LANGUAGES)[number];
 
-/** What a preference without a language means: the board's default pick. */
+/** What a preference without an owner language means: the board's default pick. */
 export const DEFAULT_TRANSLATION_LANGUAGE: TranslationLanguage = 'zh-Hans';
 
-/** The language every engine is spoken to in. Read-only on every client ("Agents work in"). */
-export const AGENT_LANGUAGE = 'en' as const;
+/** What a preference without an agent language means: English, as every account had before the
+ *  agent language could be chosen. */
+export const DEFAULT_AGENT_LANGUAGE = 'en' satisfies TranslationLanguage;
 
-/** Each language's English name, as Settings lists it and the composer tag reads it (6A:
- *  "<Language> → English", where the tag drops the parenthesis: "Chinese → English"). */
+/** @deprecated The agent language is now the account's `translationAgentLanguage`; this is only its
+ *  default. Kept so code written when it was fixed still compiles. */
+export const AGENT_LANGUAGE = DEFAULT_AGENT_LANGUAGE;
+
+/** Each language's English name, as Settings lists it and the composer tag reads it
+ *  ("<Language> → <Agent language>", where the tag drops the parenthesis: "Chinese → English"). */
 export const TRANSLATION_LANGUAGE_NAMES: Readonly<Record<TranslationLanguage, string>> = {
+  en: 'English',
   'zh-Hans': 'Chinese (Simplified)',
   'zh-Hant': 'Chinese (Traditional)',
   ja: 'Japanese',
@@ -94,19 +135,43 @@ export const TRANSLATION_LANGUAGE_NAMES: Readonly<Record<TranslationLanguage, st
   es: 'Spanish',
   fr: 'French',
   de: 'German',
+  ru: 'Russian',
+  pt: 'Portuguese',
+  it: 'Italian',
+  nl: 'Dutch',
+  ar: 'Arabic',
+  hi: 'Hindi',
+  tr: 'Turkish',
+  vi: 'Vietnamese',
+  th: 'Thai',
+  id: 'Indonesian',
+  pl: 'Polish',
+  uk: 'Ukrainian',
+  he: 'Hebrew',
+  sv: 'Swedish',
+  cs: 'Czech',
+  da: 'Danish',
+  fi: 'Finnish',
+  el: 'Greek',
+  hu: 'Hungarian',
+  ro: 'Romanian',
+  ms: 'Malay',
+  bn: 'Bengali',
 };
 
 export function isTranslationLanguage(value: unknown): value is TranslationLanguage {
   return typeof value === 'string' && (TRANSLATION_LANGUAGES as readonly string[]).includes(value);
 }
 
-/** The two keys of `User.preferences` (UserPreferences) this feature owns. Account-wide, no
+/** The keys of `User.preferences` (UserPreferences) this feature owns. Account-wide, no
  *  per-session switch; read on every send, so a change applies from the next message. */
 export interface TranslationPreferences {
   /** Absent = off. */
   translationEnabled?: boolean;
-  /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
+  /** "Your language". Absent = DEFAULT_TRANSLATION_LANGUAGE. */
   translationLanguage?: TranslationLanguage;
+  /** "Agents work in": the language engines are spoken to in. Absent = DEFAULT_AGENT_LANGUAGE. */
+  translationAgentLanguage?: TranslationLanguage;
 }
 
 /** Added to `GET /users/me` (and every answer shaped like it). */

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { meQuery, type Me, type UserPreferences } from '../../lib/queries';
+import { TRANSLATION_LANGUAGE_NAMES, TRANSLATION_LANGUAGES } from '@orbit/shared';
 
 /**
  * Settings › Translation (docs/mocks/session-translation/01-board.png, frames 1 and 2), a section of
@@ -147,22 +148,14 @@ describe('Settings › Translation', () => {
     expect(translateSwitch().getAttribute('aria-checked')).toBe('false');
   });
 
-  it('reads the saved language, and offers the seven', async () => {
+  it('reads the saved language, and offers the shared list', async () => {
     await mount(me({ translationEnabled: true, translationLanguage: 'ja' }));
     expect(translateSwitch().getAttribute('aria-checked')).toBe('true');
     expect(select('Your language').textContent).toContain('Japanese');
     await act(async () => select('Your language').click());
     await settle();
     const options = [...document.querySelectorAll('.orbit-select-option')].map((o) => o.textContent?.trim());
-    expect(options).toEqual([
-      'Chinese (Simplified)',
-      'Chinese (Traditional)',
-      'Japanese',
-      'Korean',
-      'Spanish',
-      'French',
-      'German',
-    ]);
+    expect(options).toEqual(TRANSLATION_LANGUAGES.map((code) => TRANSLATION_LANGUAGE_NAMES[code]));
   });
 
   it('picking a language saves translationLanguage', async () => {
