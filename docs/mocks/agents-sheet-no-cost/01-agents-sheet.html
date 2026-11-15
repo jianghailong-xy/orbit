@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:NotoSC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+body{margin:0;padding:32px;background:#e7e7ec;font-family:Inter,NotoSC,sans-serif;color:#000;width:1180px}
+h1{font-size:24px;margin:0 0 6px}.sub{color:#555;font-size:15px;margin-bottom:24px;line-height:1.5}
+.cols{display:flex;gap:40px}.col{flex:1}.col h2{font-size:18px;margin:0 0 10px}
+.phone{width:393px;height:852px;border-radius:48px;background:#f2f2f7;overflow:hidden;box-shadow:0 0 0 10px #111,0 10px 30px rgba(0,0,0,.25);position:relative;margin:10px}
+.bar{display:flex;align-items:center;justify-content:center;height:56px;margin-top:54px;position:relative}
+.bar b{font-size:17px}.done{position:absolute;right:16px;background:#fff;border-radius:20px;padding:8px 16px;font-weight:600;font-size:16px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.card{background:#fff;border-radius:22px;margin:16px 16px 0;padding:16px 18px}
+.figs{display:flex;gap:10px}.fig{flex:1}.fig .v{font-size:20px;font-weight:600}.fig .c{font-size:12px;color:#8a8a8e;margin-top:2px}
+.share{border-top:1px solid #e5e5ea;margin-top:14px;padding-top:14px}.sbar{height:8px;border-radius:4px;background:#c97b5a}
+.leg{font-size:12px;margin-top:8px;display:flex;align-items:center;gap:5px}.leg i{width:8px;height:8px;border-radius:2px;background:#c97b5a;display:inline-block}
+.sec{color:#8a8a8e;font-weight:600;font-size:15px;margin:22px 34px 8px}
+.row{display:flex;gap:10px;padding:12px 0}.row+.row{border-top:1px solid #e5e5ea;margin-left:28px}.row+.row .g{margin-left:-28px}
+.g{width:18px;flex:none;margin-top:3px}.ok{width:14px;height:14px;border-radius:50%;background:#34c759}.spin{width:14px;height:14px;border-radius:50%;border:2px dotted #aaa}
+.t{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:280px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;font-size:13px;align-items:center}
+.chip{background:#f7e9e3;border-radius:6px;padding:2px 6px}.chip b{color:#000}.m{background:#eee;border-radius:6px;padding:2px 6px;color:#666}.n{color:#8a8a8e}
+.del{background:#ffe1e1;outline:2px dashed #e5484d;outline-offset:2px;border-radius:4px}
+.note{font-size:14px;color:#333;line-height:1.6;margin-top:18px;width:410px}.note b{color:#e5484d}
+.band{font-size:14px;background:#fff;border-radius:14px;padding:9px 12px;margin:16px 10px 0;width:370px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.q{background:#fff;border-radius:14px;padding:16px 20px;margin-top:28px;font-size:15px;line-height:1.6}
+</style></head><body>
+<h1>Agents sheet: no cost shown (iPhone · Mac uses the same view)</h1>
+<div class="sub">Hand-drawn from AgentsSheet in AgentBlockViews.swift, with the data from your screenshot. Left: today, with what gets removed outlined in red. Right: after the change.</div>
+<div class="cols">
+<div class="col"><h2>Today</h2><div class="phone">
+ <div class="bar"><b>Agents</b><span class="done">Done</span></div>
+ <div class="card"><div class="figs">
+  <div class="fig"><div class="v">3</div><div class="c">runs · 1 running</div></div>
+  <div class="fig del"><div class="v">$0.32</div><div class="c">added to this session</div></div>
+  <div class="fig"><div class="v">1 engine</div><div class="c">2 machines</div></div></div>
+  <div class="share del"><div class="sbar"></div><div class="leg"><i></i>Claude $0.32</div></div></div>
+ <div class="sec">Running</div><div class="card" style="padding:4px 18px"><div class="row"><div class="g"><div class="spin"></div></div><div><div class="t">Wait for 515b39cda, check it, move c…</div><div class="meta"><span class="chip"><b>Claude</b> Opus 5.5</span><span class="m">on orbit-prod</span></div></div></div></div>
+ <div class="sec">Done</div><div class="card" style="padding:4px 18px">
+  <div class="row"><div class="g"><div class="ok"></div></div><div><div class="t">Read-only preflight of the orbit-op de…</div><div class="meta"><span class="chip"><b>Claude</b> DeepSeek V4.1 Flash 1017</span><span class="m">on orbit-op</span><span class="n">58s · <span class="del">$0.19</span></span></div></div></div>
+  <div class="row"><div class="g"><div class="ok"></div></div><div><div class="t">Check production runs ddec47f84</div><div class="meta"><span class="chip"><b>Claude</b> Opus 5.5</span><span class="m">on orbit-prod</span><span class="n">33s · <span class="del">$0.13</span></span></div></div></div></div>
+</div></div>
+<div class="col"><h2>After</h2><div class="phone">
+ <div class="bar"><b>Agents</b><span class="done">Done</span></div>
+ <div class="card"><div class="figs">
+  <div class="fig"><div class="v">3</div><div class="c">runs · 1 running</div></div>
+  <div class="fig"><div class="v">1 engine</div><div class="c">2 machines</div></div></div></div>
+ <div class="sec">Running</div><div class="card" style="padding:4px 18px"><div class="row"><div class="g"><div class="spin"></div></div><div><div class="t">Wait for 515b39cda, check it, move c…</div><div class="meta"><span class="chip"><b>Claude</b> Opus 5.5</span><span class="m">on orbit-prod</span></div></div></div></div>
+ <div class="sec">Done</div><div class="card" style="padding:4px 18px">
+  <div class="row"><div class="g"><div class="ok"></div></div><div><div class="t">Read-only preflight of the orbit-op de…</div><div class="meta"><span class="chip"><b>Claude</b> DeepSeek V4.1 Flash 1017</span><span class="m">on orbit-op</span><span class="n">58s</span></div></div></div>
+  <div class="row"><div class="g"><div class="ok"></div></div><div><div class="t">Check production runs ddec47f84</div><div class="meta"><span class="chip"><b>Claude</b> Opus 5.5</span><span class="m">on orbit-prod</span><span class="n">33s</span></div></div></div></div>
+</div></div>
+</div>
+<div class="q"><b>Open question: the Agents line above the composer, which opens this sheet.</b> Today it reads <i>Agents 3 · $0.32 · 1 running</i>.<br>
+<div style="display:flex;gap:30px;margin-top:8px"><div>A (recommended): remove the cost there too<div class="band">✦ <b>Agents</b> <span class="n">3 · 1 running</span></div></div>
+<div>B: keep it<div class="band">✦ <b>Agents</b> <span class="n">3 · $0.32 · 1 running</span></div></div></div>
+<div style="margin-top:10px;color:#555">The Agent block in the conversation itself (its "58s · $0.19") is not changed by either option.</div></div>
+</body></html>

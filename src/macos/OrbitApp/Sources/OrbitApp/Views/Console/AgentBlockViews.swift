@@ -264,7 +264,7 @@ struct AgentGroupView: View {
     }
 }
 
-/// The composer band's line for the session's Agents: how many, what they cost, how many still run.
+/// The composer band's line for the session's Agents: how many, how many still run. No cost.
 /// It opens their list (`AgentsSheet`). Absent until the session has started one.
 struct AgentsBandRow: View {
     @Environment(AppModel.self) private var app
@@ -301,14 +301,13 @@ struct AgentsBandRow: View {
 
     private func line(_ summary: SubagentSessionSummary) -> String {
         var parts = ["\(summary.count)"]
-        if let cost = summary.cost { parts.append(cost) }
         if summary.running > 0 { parts.append("\(summary.running) running") }
         return parts.joined(separator: " · ")
     }
 }
 
-/// Every Agent the session started: three figures, what each engine cost, and the runs — the running
-/// ones first. A row closes the sheet and scrolls the conversation to its block.
+/// Every Agent the session started: two figures and the runs — the running ones first. No cost is shown,
+/// not even a run's own. A row closes the sheet and scrolls the conversation to its block.
 struct AgentsSheet: View {
     let summary: SubagentSessionSummary
     let parentEngine: String?
@@ -321,12 +320,8 @@ struct AgentsSheet: View {
                 Section {
                     HStack(spacing: 10) {
                         figure("\(summary.count)", summary.running > 0 ? "runs · \(summary.running) running" : "runs · all done")
-                        figure(summary.cost ?? "<$0.01", "added to this session")
                         figure(summary.spread.components(separatedBy: " · ").first ?? summary.spread,
                                summary.spread.components(separatedBy: " · ").dropFirst().first ?? " ")
-                    }
-                    if summary.byEngine.count > 1 || summary.byEngine.first.map({ $0.costUsd > 0 }) == true {
-                        shareBar
                     }
                 }
                 let running = summary.rows.filter(\.isRunning)
@@ -355,31 +350,6 @@ struct AgentsSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var shareBar: some View {
-        let total = max(summary.byEngine.reduce(0) { $0 + $1.costUsd }, 0.0001)
-        return VStack(alignment: .leading, spacing: 6) {
-            GeometryReader { geo in
-                HStack(spacing: 0) {
-                    ForEach(summary.byEngine, id: \.engine) { share in
-                        Rectangle().fill(engineTint(share.engine))
-                            .frame(width: geo.size.width * CGFloat(share.costUsd / total))
-                    }
-                }
-            }
-            .frame(height: 8)
-            .clipShape(Capsule())
-            HStack(spacing: 12) {
-                ForEach(summary.byEngine, id: \.engine) { share in
-                    HStack(spacing: 4) {
-                        RoundedRectangle(cornerRadius: 2).fill(engineTint(share.engine)).frame(width: 8, height: 8)
-                        Text("\(share.name) \(share.cost)")
-                    }
-                }
-            }
-            .font(.orbitMeta)
-        }
-    }
-
     private func row(_ run: SubagentRunView) -> some View {
         let block = SubagentBlock.describe(input: .object([:]), run: run, status: .ok,
                                            parentEngine: parentEngine)
@@ -400,11 +370,11 @@ struct AgentsSheet: View {
         .buttonStyle(.plain)
     }
 
-    /// A writer's file count ahead of its time and cost (`3 files · 2m 4s · $0.03`).
+    /// A writer's file count ahead of its time (`3 files · 2m 4s`); the run's cost is left out.
     private func rowNumbers(_ block: SubagentBlock, _ run: SubagentRunView) -> String? {
         var parts: [String] = []
         if block.outcomeIsFiles { parts.append(block.changedFiles.count == 1 ? "1 file" : "\(block.changedFiles.count) files") }
-        if let numbers = block.numbers { parts.append(numbers) }
+        if let duration = SubagentBlock.duration(run) { parts.append(duration) }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

@@ -2994,6 +2994,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0641_open_list_epoch_session_waits',
       // 0642 adds five nullable subagent_run columns, an index and the subagent_relay_event table; no preserved row, trigger or DONE fence change.
       '0642_subagent_run_remote',
+      // 0645: the project_create / session_create receipts (runner-api/create-request-receipts.ts).
+      '0645_create_request_receipt',
       // 0660 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.

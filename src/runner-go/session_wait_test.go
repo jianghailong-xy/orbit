@@ -346,10 +346,7 @@ func TestSessionWaitWithNoCallingSessionRecordsNoWatch(t *testing.T) {
 	srv := httptest.NewServer(server)
 	defer srv.Close()
 	created := json.RawMessage(`{"id":"child-session","status":"PENDING"}`)
-	wait, err := waitForSessionDurably(NewTransport(srv.URL, "service-token"), cliOrchestrationContext{}, created)
-	if err != nil {
-		t.Fatal(err)
-	}
+	wait := waitForSessionDurably(NewTransport(srv.URL, "service-token"), cliOrchestrationContext{}, created)
 	if want := []string{"GET /api/runner/sessions/child-session"}; !reflect.DeepEqual(server.requests, want) {
 		t.Fatalf("requests = %#v, want %#v: a headless wait has no session a watch could wake", server.requests, want)
 	}

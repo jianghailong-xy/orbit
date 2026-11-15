@@ -42,7 +42,10 @@ struct SettingsSheet: View {
                         case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
                         case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
                         case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
-                        case .settingsPage(let page):     SettingsPageView(page: page)
+                        // Inline, as the list is: a page pushed from the list inherits that, but
+                        // one the sheet opens directly on (the composer's translation tag opens
+                        // Sessions) would otherwise get a large title drawn over its first row.
+                        case .settingsPage(let page):     SettingsPageView(page: page).navigationBarTitleDisplayMode(.inline)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
                         case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)

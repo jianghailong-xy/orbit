@@ -31,7 +31,7 @@ Orbit's MCP tools under Claude Code's `mcp__orbit__*` allow rule (ALWAYS_ALLOWED
 
 ## Claude · CLI
 
-The in-session `orbit` CLI through Claude Code's shell, where every command `capabilities --json` offers the session is pre-approved (orbitCLIAllowedTools, generated from the catalogue). Claude Code runs an allowlisted command in every mode, Plan included, so the CLI's own Plan gate refuses a write there, with the MCP tool's words.
+The in-session `orbit` CLI through Claude Code's shell, where every command `capabilities --json` offers the session is pre-approved (orbitCLIAllowedTools, generated from the catalogue). A command withheld because a session switch is off (`WATCHES_OFF`, `WIKI_OFF`) keeps its rule. A command withheld for any other reason (`ORCHESTRATION_DISABLED`, `HUMAN_ONLY`) has none. Every `orbit` command outside the catalogue is excluded with a kind and a reason (docs/orbit-agent-contract.md §2.5). Claude Code runs an allowlisted command in every mode, Plan included, so the CLI's own Plan gate refuses a write there, with the MCP tool's words.
 
 | Call | Example | Plan | Default | Accept Edits | Don't Ask | Auto | Bypass |
 | --- | --- | --- | --- | --- | --- | --- | --- |

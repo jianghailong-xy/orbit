@@ -78,6 +78,11 @@ class TranslationConversationTest : ComposerShellTest() {
         // Frame 10's composer: the tag says which way the words go.
         assertTrue(has(hasTestTag("composer-translation-tag") and hasText("Chinese → English"), unmerged = true))
         shot("1-conversation-translated")
+        // Like the placeholder, the tag gives way once the owner types, and comes back when the box is empty.
+        compose.onNodeWithTag("composer-input").performTextInput("hi")
+        await { !has(hasTestTag("composer-translation-tag"), unmerged = true) }
+        compose.onNodeWithTag("composer-input").performTextClearance()
+        await { has(hasTestTag("composer-translation-tag"), unmerged = true) }
 
         // Frame 10: the reply flipped to the English the agent wrote — "Original · Show translation" — and only that one.
         compose.onNode(action(TranslationCopy.SHOW_ORIGINAL, 2), useUnmergedTree = true).performClick()
