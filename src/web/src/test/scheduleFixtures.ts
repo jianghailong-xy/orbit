@@ -8,9 +8,11 @@ import type {
   ScheduleEnvelopeCard,
   ScheduleEnvelopeLines,
   ScheduleFindingView,
+  ScheduleListResponse,
   ScheduleListRow,
   ScheduleRule,
   ScheduleRunView,
+  ScheduleTimelineRun,
   ScheduleView,
 } from '@orbit/shared';
 
@@ -252,6 +254,28 @@ export function scheduleDetail(id: string): ScheduleDetailResponse {
     usage: { since: sh(1, '00:00'), runs: id === codex.id ? 14 : 3, minutes: id === codex.id ? 41 : 9, costUsd: null, text: '' },
     history: HISTORY[id] ?? [],
     pendingCards: [],
+  };
+}
+
+/**
+ * `GET /api/schedules` as the REST door answers it (schedule-reads.service.ts list with `timeline`): the rows with
+ * when each paused one was paused, and the runs of the last day and those under way, each with its finding facts.
+ */
+export function listAnswer(rows: ScheduleListRow[] = LIST_ROWS): ScheduleListResponse {
+  const since = Date.parse(SCHEDULE_NOW) - 24 * 60 * 60_000;
+  const under = ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'];
+  const ids = new Set(rows.map((r) => r.id));
+  const runs: ScheduleTimelineRun[] = Object.values(RUNS).flat()
+    .filter((r) => ids.has(r.scheduleId) && (under.includes(r.state) || Date.parse(r.plannedAt) >= since))
+    .map((r) => {
+      const f = (FINDINGS[r.scheduleId] ?? []).find((x) => x.firstRunId === r.id && x.key === r.key);
+      return { ...r, newFinding: Boolean(f), notified: Boolean(f?.notifiedAt) };
+    });
+  const pausedAt = (id: string) =>
+    (HISTORY[id] ?? []).find((record) => record.after?.state === 'PAUSED')?.createdAt ?? null;
+  return {
+    schedules: rows.map((r) => ({ ...r, pausedAt: r.state === 'PAUSED' ? pausedAt(r.id) : null })),
+    runs,
   };
 }
 

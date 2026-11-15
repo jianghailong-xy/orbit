@@ -26,6 +26,10 @@ import type { ScheduleCreateResult, ScheduleDecisionResult, ScheduleUpdateResult
 
 type Tx = Prisma.TransactionClient;
 
+/** The Scheduled page's past runs are today's, in the viewer's zone: today never began more than a day ago. */
+const TIMELINE_WINDOW_MS = 24 * 60 * 60_000;
+const TIMELINE_RUNS_MAX = 500;
+
 const SCHEDULE_STATES: readonly ScheduleState[] = ['ACTIVE', 'PAUSED', 'HELD', 'ENDED'];
 const REQUEST_STATES: readonly ScheduleChangeRequestState[] = ['PENDING', 'ALLOWED', 'DECLINED', 'SUPERSEDED'];
 
@@ -57,8 +61,13 @@ export class ScheduleReadsService {
     return new Date();
   }
 
-  /** `GET /api/schedules`: not ENDED unless asked; newest first. */
-  async list(ownerId: string, filter: { state?: string; workspaceId?: string } = {}) {
+  /**
+   * `GET /api/schedules`: not ENDED unless asked; newest first. With `timeline` (the REST door) the answer also carries
+   * what the Scheduled page draws beyond the rows, so the page is one read: when each paused schedule was paused, and
+   * the runs of the shown window (every run under way, and the ended runs planned in the last day, which holds the
+   * viewer's today in any zone), each with whether its finding was new and whether the owner was told.
+   */
+  async list(ownerId: string, filter: { state?: string; workspaceId?: string; timeline?: boolean } = {}) {
     const states = filter.state === 'all'
       ? [...SCHEDULE_STATES]
       : filter.state
@@ -83,11 +92,56 @@ export class ScheduleReadsService {
         })
       : [];
     const last = new Map(lastRuns.map((r) => [r.scheduleId, r]));
+    const schedules = rows.map((r) => ({
+      ...scheduleView(r, names, viewNames),
+      lastRun: last.has(r.id) ? scheduleRunView(last.get(r.id)!) : null,
+    }));
+    if (!filter.timeline) return { schedules };
+    const timeline = await this.timeline(rows);
     return {
-      schedules: rows.map((r) => ({
-        ...scheduleView(r, names, viewNames),
-        lastRun: last.has(r.id) ? scheduleRunView(last.get(r.id)!) : null,
-      })),
+      schedules: schedules.map((s) => ({ ...s, pausedAt: timeline.pausedAt.get(s.id) ?? null })),
+      runs: timeline.runs,
+    };
+  }
+
+  /** The list's timeline part; `rows` are already the caller's own, so every read below is scoped by them. */
+  private async timeline(rows: Schedule[]) {
+    const ids = rows.map((r) => r.id);
+    const paused = rows.filter((r) => r.state === 'PAUSED').map((r) => r.id);
+    if (ids.length === 0) return { pausedAt: new Map<string, string>(), runs: [] };
+    const since = new Date(this.now().getTime() - TIMELINE_WINDOW_MS);
+    const [runs, pauses] = await Promise.all([
+      this.prisma.scheduleRun.findMany({
+        where: {
+          scheduleId: { in: ids },
+          OR: [{ state: { in: ['QUEUED', 'RUNNING', 'AWAITING_APPROVAL'] } }, { plannedAt: { gte: since } }],
+        },
+        orderBy: [{ plannedAt: 'desc' }, { id: 'desc' }],
+        take: TIMELINE_RUNS_MAX,
+      }),
+      paused.length
+        ? this.prisma.scheduleRevision.findMany({
+            where: { scheduleId: { in: paused }, fields: { path: ['after', 'state'], equals: 'PAUSED' } },
+            orderBy: { revision: 'desc' },
+            distinct: ['scheduleId'],
+            select: { scheduleId: true, createdAt: true },
+          })
+        : [],
+    ]);
+    const findings = runs.length
+      ? await this.prisma.scheduleFinding.findMany({
+          where: { scheduleId: { in: ids }, firstRunId: { in: runs.map((r) => r.id) } },
+          select: { key: true, firstRunId: true, notifiedAt: true },
+        })
+      : [];
+    const firstFound = new Map(findings.map((f) => [f.firstRunId!, f]));
+    return {
+      pausedAt: new Map(pauses.map((p) => [p.scheduleId, p.createdAt.toISOString()])),
+      runs: runs.map((run) => {
+        const finding = firstFound.get(run.id);
+        const newFinding = Boolean(finding && run.key !== null && finding.key === run.key);
+        return { ...scheduleRunView(run), newFinding, notified: newFinding && finding!.notifiedAt !== null };
+      }),
     };
   }
 
@@ -180,12 +234,16 @@ export class ScheduleReadsService {
 
   /**
    * What one session put up (§9.2 "Sessions"): the cards it asked for, and the records of the changes it made with
-   * Undo. A client draws them where the session's tool calls are.
+   * Undo. A client draws them where the session's tool calls are. A scheduled run's session also gets its run (and
+   * through it the schedule), however old, so its crumb, strip and report need nothing else to find it.
    */
   async sessionCards(ownerId: string, sessionId: string) {
-    const session = await this.prisma.session.findFirst({ where: { id: sessionId, ownerId }, select: { id: true } });
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { id: true, runSource: true, scheduleRunId: true },
+    });
     if (!session) throw new NotFoundException('session not found');
-    const [{ requests }, revisions] = await Promise.all([
+    const [{ requests }, revisions, run] = await Promise.all([
       this.requests(ownerId, { state: 'all', sessionId }),
       this.prisma.scheduleRevision.findMany({
         where: { sessionId, schedule: { ownerId } },
@@ -193,9 +251,13 @@ export class ScheduleReadsService {
         take: 200,
         include: { schedule: { select: { id: true, title: true } } },
       }),
+      session.runSource === 'SCHEDULE' && session.scheduleRunId
+        ? this.prisma.scheduleRun.findFirst({ where: { id: session.scheduleRunId, schedule: { ownerId } } })
+        : null,
     ]);
     const undoneBy = await this.undoneBy(revisions.map((r) => ({ scheduleId: r.scheduleId, revision: r.revision })));
     return {
+      run: run ? scheduleRunView(run) : null,
       cards: requests,
       records: revisions.map((r) =>
         scheduleRecordView(r.schedule.id, r.schedule.title, r, undoneBy.get(`${r.scheduleId}:${r.revision}`) ?? null)),

@@ -1,5 +1,5 @@
 import { useMemo, useState, type JSX, type ReactNode } from 'react';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   SCHEDULE_COPY,
@@ -32,9 +32,7 @@ import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import {
   scheduleDetailQuery,
   scheduleRecordUndoable,
-  scheduleRunsQuery,
   schedulePath,
-  schedulesQuery,
   sessionScheduleCardsQuery,
   undoScheduleRecord,
   viewerTimezone,
@@ -317,30 +315,15 @@ export interface ScheduleRunOfSession {
 }
 
 /**
- * The schedule and run a run's session belongs to. A session opened from the schedule's history names both in its
- * address (`?schedule=&run=`); one opened any other way (a notification) is found among the account's schedules.
+ * The schedule and run a run's session belongs to, read from the session alone: its schedule-cards answer names the
+ * run it serves however old (`run`), and the run names its schedule. Nothing else is searched.
  */
-export function useScheduleRunOfSession(
-  scheduleRunId: string | null | undefined,
-  hint: { scheduleId?: string | null } = {},
-): ScheduleRunOfSession | null {
-  const enabled = Boolean(scheduleRunId);
-  const list = useQuery({ ...schedulesQuery(null, 'all'), enabled: enabled && !hint.scheduleId });
-  const candidates = hint.scheduleId ? [hint.scheduleId] : (list.data?.schedules ?? []).map((s) => s.id);
-  const runs = useQueries({
-    queries: candidates.map((id) => ({ ...scheduleRunsQuery(id), enabled })),
-  });
-  let found: ScheduleRunView | null = null;
-  for (const q of runs) {
-    const hit = q.data?.runs.find((r) => sameResourceId(r.id, scheduleRunId ?? ''));
-    if (hit) {
-      found = hit;
-      break;
-    }
-  }
-  const detail = useQuery({ ...scheduleDetailQuery(found?.scheduleId ?? ''), enabled: Boolean(found) });
-  if (!found || !detail.data) return null;
-  return { schedule: detail.data.schedule, run: found, detail: detail.data };
+export function useScheduleRunOfSession(sessionId: string | null | undefined): ScheduleRunOfSession | null {
+  const cards = useQuery({ ...sessionScheduleCardsQuery(sessionId ?? ''), enabled: Boolean(sessionId) });
+  const run = sessionId ? cards.data?.run ?? null : null;
+  const detail = useQuery({ ...scheduleDetailQuery(run?.scheduleId ?? ''), enabled: Boolean(run) });
+  if (!run || !detail.data) return null;
+  return { schedule: detail.data.schedule, run, detail: detail.data };
 }
 
 /** Scheduled › Codex stable check › run of Nov 13 (board 2/2 ⑤ ⑥). */
