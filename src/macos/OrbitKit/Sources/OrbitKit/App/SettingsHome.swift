@@ -178,6 +178,22 @@ public enum SessionSettings {
         case defaultPermission, orchestration, modelRouting, promptSuggestions, recaps
     }
 
+    /// One group on the page: a row's section, Settings › Translation's, or the Prompt optimizer's.
+    public enum Group: Hashable, Sendable {
+        case row(Row)
+        case translation
+        case promptOptimizer
+    }
+
+    /// The page top to bottom: Translation sits right after Default permission and before Session
+    /// orchestration, as Android's and the web's pages have it (docs/mocks/session-translation, frame 7);
+    /// the Prompt optimizer sits right under Suggested replies (docs/mocks/prompt-optimizer, frame 1);
+    /// the rows keep their own order around them.
+    public static let groups: [Group] =
+        [.row(.defaultPermission), .translation] + Row.allCases.dropFirst().flatMap { row -> [Group] in
+            row == .promptSuggestions ? [.row(row), .promptOptimizer] : [.row(row)]
+        }
+
     public static func title(_ row: Row) -> String {
         switch row {
         case .defaultPermission: return "Default permission"

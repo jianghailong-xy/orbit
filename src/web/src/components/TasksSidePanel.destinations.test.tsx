@@ -264,18 +264,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Waiting on you', 'Wiki']);
-  });
-
-  it('is no row of the account menu either: it is a part of Settings', async () => {
-    serve();
-    await visit('/tasks');
-    await click(container!.querySelector<HTMLElement>('.tp-user-trigger')!);
-    const labels = [...document.querySelectorAll<HTMLElement>('[role="menu"].tp-account-menu [role="menuitem"]')].map(
-      (row) => row.textContent,
-    );
-    expect(labels).toContain('Settings');
-    expect(labels).not.toContain('Machines & models');
+    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
   });
 
   it.each([

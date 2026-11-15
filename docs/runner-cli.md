@@ -20,16 +20,24 @@ any `approvalDetail`), `destructive`, `idempotency` and `retry` (how a retry is 
 versioned operation catalogue, identified by `catalogVersion` and `catalogHash`; the same catalogue
 rendered for a person is the [operation catalogue](operation-catalog.md).
 
+For failures, submission uncertainty, partial success and safe replay examples, see the
+[recovery runbook](recovery-contract.md#12-cross-surface-recovery-runbook). The same rules apply to
+Agent shell calls and MCP; a CLI command never bypasses a missing capability or a refused card.
+
 ## Tasks and task lists
 
 ```bash
 orbit task list --status OPEN --json
 orbit task create --title "Check deployment" --description "Verify health and logs" --json
-orbit task update <task-id> --status DONE --json
+orbit task evidence-submit <task-id> --evidence-file evidence.json --receipt
 orbit task reopen <task-id> --json
 orbit task delete <task-id> --json
 orbit task-list create --title "Release" --json
 ```
+
+Completion follows the task's declared criterion. For an evidence task, submit an envelope with
+`claim`, recorded `checks` and `gaps`; the evaluator decides completion. A direct status update to
+`DONE` does not establish acceptance.
 
 To create a task with existing uploaded Orbit attachments, pass their IDs:
 
@@ -583,7 +591,11 @@ read or sent, saying why and what to use instead: the ones that act for an Orbit
 in another shape or not at all (`task batch-pin`, `session create`, `session import`). No command falls back to
 the runner credential while you are logged in: the machine's other commands — `orbit task-list`, `orbit provider`,
 `orbit notify`, `orbit token` and the rest — are refused too, so run them where you are not logged in.
-`orbit capabilities --json` marks every command `available` or not under the identity in effect, with the reason.
+`orbit capabilities --json` marks every command `available` or not under the identity in effect, with the reason
+and a stable `unavailableCode`. `unavailableCapabilities` lists every command this process cannot run, each with
+its code: `ORCHESTRATION_DISABLED`, `SESSION_CONTEXT_MISSING`, `SERVICE_TOKEN_SCOPE_MISSING`, `TOKEN_INVALID`,
+`TOKEN_EXPIRED`, `RUNNER_NOT_REGISTERED`, `RUNNER_CREDENTIAL_UNUSABLE`, `NOT_AVAILABLE_AS_USER`,
+`REQUIRES_USER_LOGIN`, `HUMAN_ONLY`, `WATCHES_OFF` or `WIKI_OFF` (docs/orbit-agent-contract.md §2.5).
 
 Inside a session the session decides for every command, the session commands included: a service token in the
 session's environment is not used there.

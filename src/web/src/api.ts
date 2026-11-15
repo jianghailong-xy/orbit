@@ -1,11 +1,17 @@
 import type {
+  ApprovalTranslation,
   GuestSessionSummary,
   MainCheckoutActionAnswer,
   MainCheckoutActionPost,
   MainCheckoutView,
   MergeRecovery,
   MergeRecoveryAction,
+  PromptOptimization,
+  PromptOptimizationRequest,
+  ReplyTranslationRetryResponse,
   SessionGuestPerson,
+  TranslationActionResponse,
+  TurnTranslation,
   SubagentRunView,
 } from '@orbit/shared';
 import type {
@@ -513,6 +519,8 @@ export const createInteractiveSession = (body: {
   /** Instead of `workspaceId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
    *  the transaction that creates it (docs/first-workspace-contract.md §3). */
   newWorkspace?: NewWorkspaceRequest;
+  /** Prompt optimizer (D2): the opening message is still exactly the inserted optimized English. */
+  skipTranslation?: boolean;
 }) =>
   api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
@@ -626,6 +634,9 @@ export const sendTurn = (
   kind?: 'message' | 'shell',
   intent: SessionTurnIntent = 'NEXT_TURN',
   clientTurnId: string = uuid(),
+  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English, so the server
+   *  does not hold it for Translation. Sent only when true. */
+  skipTranslation?: boolean,
 ) =>
   api<{
     turnId: string;
@@ -633,6 +644,8 @@ export const sendTurn = (
     kind: ConversationTurnKind;
     placement: SessionTurnPlacement;
     targetTurnId?: string;
+    /** Settings › Translation: TRANSLATING when the message is held to be translated first. */
+    translation?: TurnTranslation;
   }>(`/sessions/${sessionId}/turns/current-work-routing`, {
     method: 'POST',
     body: {
@@ -641,6 +654,7 @@ export const sendTurn = (
       intent,
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
+      ...(skipTranslation ? { skipTranslation: true } : {}),
     },
   });
 
@@ -835,10 +849,34 @@ export interface ActiveSessionTurn extends TurnCards {
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
+  /** Settings › Translation: the owner's message as typed, and how far its translation got. While
+   *  TRANSLATING or FAILED the turn is held and not delivered; `content` is then what they typed. */
+  translation?: TurnTranslation;
   /** The session's opening prompt, listed until the runner echoes it: the same message a tab that
    *  created the session drew itself (`initial:<session>`). */
   opening?: true;
 }
+
+/** Settings › Translation, a held message whose translation failed (1A): translate it again. */
+export const retryTurnTranslation = (sessionId: string, turnId: string) =>
+  api<TranslationActionResponse>(`/sessions/${sessionId}/turns/${turnId}/translation/retry`, { method: 'POST' });
+
+/** Settings › Translation, a held message whose translation failed (1A): deliver it untranslated. */
+export const sendTurnAsWritten = (sessionId: string, turnId: string) =>
+  api<TranslationActionResponse>(`/sessions/${sessionId}/turns/${turnId}/translation/send-as-written`, {
+    method: 'POST',
+  });
+
+/** Settings › Translation, an agent reply whose translation failed (2A): translate it again. The
+ *  result arrives on the stream as a `translation` event for `seq`. */
+export const retryReplyTranslation = (sessionId: string, seq: number) =>
+  api<ReplyTranslationRetryResponse>(`/sessions/${sessionId}/events/${seq}/translation/retry`, { method: 'POST' });
+
+/** Prompt optimizer (docs/prompt-optimizer-design.md): DeepSeek improves a composer draft. The answer is
+ *  a suggestion the composer draws as a card (board frame 4); the box keeps the draft until the owner presses Use.
+ *  Refusals: 409 PROMPT_OPTIMIZER_OFF, 404, 400, and 422 PROMPT_OPTIMIZATION_FAILED (frame 6). */
+export const optimizePrompt = (body: PromptOptimizationRequest, signal?: AbortSignal) =>
+  api<PromptOptimization>('/prompt-optimizations', { method: 'POST', body, signal });
 
 /** Opt into active PENDING/IN_FLIGHT turns not represented by the transcript yet — restores
  *  bubbles on reopen and bridges the dequeue-to-first-event gap. The unqualified endpoint keeps
@@ -873,6 +911,8 @@ export const resumeSession = (
    *  Only `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED` asks for one, and only the person
    *  answering that question supplies it (see `lib/taskRunHandoff.ts#stopSessionIdFor`). */
   stopSessionId?: string,
+  /** As sendTurn's: the text is still exactly the inserted optimized English (D2). */
+  skipTranslation?: boolean,
 ) =>
   api<{
     turnId: string;
@@ -884,6 +924,8 @@ export const resumeSession = (
      *  ordinary resume, so an older server reads exactly as it always did. See
      *  `docs/session-message-routing-contract.md` §2.1. */
     routedToSessionId?: string;
+    /** Settings › Translation: TRANSLATING when the message is held to be translated first. */
+    translation?: TurnTranslation;
   }>(`/sessions/${sessionId}/resume`, {
     method: 'POST',
     body: {
@@ -893,6 +935,7 @@ export const resumeSession = (
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
       ...(stopSessionId ? { stopSessionId } : {}),
+      ...(skipTranslation ? { skipTranslation: true } : {}),
     },
   });
 
@@ -913,6 +956,9 @@ export interface ApprovalInfo {
   message?: string;
   createdAt: string;
   decidedAt?: string;
+  /** Settings › Translation (3A): what the card shows, in the owner's language. Absent until the
+   *  server has translated it, and whenever translation is off. */
+  translation?: ApprovalTranslation;
 }
 
 /** Pending (default) tool-permission approvals awaiting a human allow/deny. */
@@ -946,7 +992,8 @@ export const revokeWorkspacePermissionRule = (workspaceId: string, ruleId: strin
  *  AskUserQuestion, `answers` (question text → picked labels) rides along an allow.
  *  `rememberRules` (on an allow) auto-allows the same kinds of call for the session.
  *  `startAfterCreate` is the single-task card's Create and start, sent only when chosen, so
- *  every other answer's body is what it always was. */
+ *  every other answer's body is what it always was. `sendAsWritten` is Settings › Translation's
+ *  "Send as written" after a 422 TRANSLATION_FAILED, sent the same way. */
 export const decideApproval = (
   sessionId: string,
   approvalId: string,
@@ -955,10 +1002,18 @@ export const decideApproval = (
   answers?: Record<string, string[]>,
   rememberRules?: PermissionRule[],
   startAfterCreate?: boolean,
+  sendAsWritten?: boolean,
 ) =>
   api<ApprovalInfo>(`/sessions/${sessionId}/approvals/${approvalId}/decision`, {
     method: 'POST',
-    body: { behavior, message, answers, rememberRules, ...(startAfterCreate ? { startAfterCreate: true } : {}) },
+    body: {
+      behavior,
+      message,
+      answers,
+      rememberRules,
+      ...(startAfterCreate ? { startAfterCreate: true } : {}),
+      ...(sendAsWritten ? { sendAsWritten: true } : {}),
+    },
   });
 
 /** Change a live session's model, permission mode, effort, fast mode and/or provider — mid-turn
@@ -1958,6 +2013,10 @@ export interface SessionDetail {
    *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
    *  Optional, because an older server does not send it. */
   forkSource?: string | null;
+  /** How the session was started; `SCHEDULE` is a scheduled task's run (docs/scheduled-tasks-design.md §6.3), and
+   *  `scheduleRunId` names the run. Optional, because an older server does not send them. */
+  runSource?: string | null;
+  scheduleRunId?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */

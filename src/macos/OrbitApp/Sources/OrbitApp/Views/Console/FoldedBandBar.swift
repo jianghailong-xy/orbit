@@ -52,7 +52,7 @@ struct FoldedBandBar: View {
         let tasks = taskCard
         let branch = branchMark(turnActive: turnActive)
         let lead = FoldedBand.lead(draft: draft, hasMarks: watching != nil || !console.state.background.isEmpty
-                                   || tasks != nil || branch != nil)
+                                   || tasks != nil || agents != nil || branch != nil)
         Button(action: open) {
             HStack(spacing: 8) {
                 if turnActive {
@@ -109,6 +109,10 @@ struct FoldedBandBar: View {
                 let part = FoldedBand.tasks(tasks)
                 mark("checkmark.square", part.text, tint: part.failed ? .red : nil)
             }
+            if let agents {
+                // The session's Agents (`AgentsBandRow`): how many, no cost.
+                mark("sparkle", agents.capsule, tint: .purple)
+            }
             if let branch {
                 switch branch {
                 case .landed(let words):
@@ -137,6 +141,11 @@ struct FoldedBandBar: View {
                 .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
         }
         .foregroundStyle(.secondary)
+    }
+
+    /// The Agents line's own reading (`AgentsBandRow`).
+    private var agents: SubagentSessionSummary? {
+        SubagentSessionSummary.make(Array(console.subagentRuns.values))
     }
 
     /// The Tasks card's own reading (`CreatedTasksCard`): the tasks created here and those the
@@ -197,6 +206,7 @@ struct FoldedBandBar: View {
             parts.append("Background processes: \(FoldedBand.processes(console.state.background))")
         }
         if let tasks { parts.append("\(SessionCreatedTasksCopy.title): \(FoldedBand.tasks(tasks).text)") }
+        if let agents { parts.append("Agents: \(agents.capsule)") }
         switch branch {
         case .landed(let words): parts.append(words)
         case .merging: parts.append(FoldedBand.merging)

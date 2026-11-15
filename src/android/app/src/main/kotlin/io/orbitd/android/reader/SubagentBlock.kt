@@ -1,6 +1,7 @@
 package io.orbitd.android.reader
 
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.wiki.RelativeTime
 import io.orbitd.android.wiki.WikiRunsLogic
@@ -160,3 +161,25 @@ internal object SubagentRuns {
 
 /** The session's SubAgent runs by `delegate` call, as the reader last read them. */
 internal val LocalSubagentRuns = compositionLocalOf<Map<String, SubagentRun>> { emptyMap() }
+
+/**
+ * Each SubAgent run by the `delegate` call it was started from: run id → that call's seq, read off the call's result (a foreground call's
+ * end or a background call's launch receipt both name `runId`; web `delegateRunId`).
+ */
+internal fun delegateCallsByRun(events: List<RunEvent>): Map<String, Long> {
+    val calls = events.filter { it.type == "tool_use" && it.parent() == null &&
+        (it.fields.string("name") ?: it.fields.string("toolName")) == SubagentBlock.TOOL_NAME }.mapNotNull { e -> e.toolId()?.let { it to e.seq } }.toMap()
+    if (calls.isEmpty()) return emptyMap()
+    return buildMap {
+        events.forEach { event ->
+            if (event.type != "tool_result") return@forEach
+            val seq = event.toolId()?.let(calls::get) ?: return@forEach
+            val text = contentText(event.fields["content"]) ?: event.fields.string("result") ?: return@forEach
+            val runId = runCatching { (Json.parseToJsonElement(text.trim()) as? JsonObject)?.string("runId") }.getOrNull()
+            if (!runId.isNullOrEmpty()) put(runId, seq)
+        }
+    }
+}
+
+/** The way back from a SubAgent's finished line to the card its run was started from, when that card is drawn; null where it is not. */
+internal val LocalSubagentCardJump = staticCompositionLocalOf<(String) -> (() -> Unit)?> { { null } }

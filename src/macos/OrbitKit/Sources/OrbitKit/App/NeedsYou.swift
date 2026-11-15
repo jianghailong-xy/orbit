@@ -34,20 +34,15 @@ public struct NeedsYouBanner: Equatable, Sendable {
     /// conversation is where it is drawn, and this is which one it is. Nil when the oldest thing
     /// waiting is an ordinary blocked tool call, which is the bar as it always was.
     public let ownerItem: SessionOwnerItem?
-    /// The bar is saying an approval that has just arrived (`NeedsYouLogic.arriving`), for its first
-    /// seconds: it carries the push's own words and an amber ring, where the app used to put up an
-    /// amber card of its own (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/05-one-surface`).
-    public let arriving: Bool
 
     public init(count: Int, target: Session, text: String, detail: String? = nil, since: String? = nil,
-                ownerItem: SessionOwnerItem? = nil, arriving: Bool = false) {
+                ownerItem: SessionOwnerItem? = nil) {
         self.count = count
         self.target = target
         self.text = text
         self.detail = detail
         self.since = since
         self.ownerItem = ownerItem
-        self.arriving = arriving
     }
 
     /// The mark the bar draws for what it names: the owner item's kind, or the raised hand of a
@@ -84,20 +79,29 @@ public enum NeedsYouGlyph: Equatable, Sendable {
     }
 }
 
-/// An approval that has just reached this device while the app is open: the session it stops, the
-/// push's own line ("Needs your reply · Bash") and when it came. The needs-you bar says it for its
-/// first `NeedsYouLogic.arrivalSeconds`, then goes back to what it says about everything waiting.
-public struct NeedsYouArrival: Equatable, Sendable {
-    /// In the lists' spelling, so it is found among `waiting`.
-    public let sessionID: String
+/// One notice that a conversation has just started waiting on the reader (the owner, 2026-11-15,
+/// `docs/mocks/needs-you-capsule/12-once`): shown once, as a toast, naming which conversation and what
+/// it waits on. How many wait is the lists' to say, never this.
+public struct NeedsYouToast: Equatable, Sendable, Identifiable {
+    /// The wait it announces (`NeedsYouLogic.waitKey`): one notice per wait.
+    public let id: String
+    public let target: Session
+    /// Line one: the conversation.
+    public let title: String
+    /// Line two: what it waits on, and the workspace.
     public let line: String
-    public let at: Date
+    /// The owner item it waits on, so a press lands on that card; nil for a blocked tool call.
+    public let ownerItem: SessionOwnerItem?
 
-    public init(sessionID: String, line: String, at: Date) {
-        self.sessionID = sessionID
+    public init(id: String, target: Session, title: String, line: String, ownerItem: SessionOwnerItem?) {
+        self.id = id
+        self.target = target
+        self.title = title
         self.line = line
-        self.at = at
+        self.ownerItem = ownerItem
     }
+
+    public var glyph: NeedsYouGlyph { ownerItem.map { NeedsYouGlyph($0.kind) } ?? .hand }
 }
 
 /// What is waiting in the conversation ON SCREEN, and where in it: a count, the row to scroll to,
@@ -205,6 +209,17 @@ public enum NeedsYouLogic {
                             glyph: first.isQuestion ? .question : .warning)
     }
 
+    /// What the conversation's own capsule says (the owner, 2026-11-15,
+    /// `docs/mocks/needs-you-capsule/07-console-one-capsule`, B): the cards waiting in it — `below`'s
+    /// rows — and then its own approvals, which wait at its tail (`approval-<id>` rows), so they lie
+    /// below wherever the reader is. Only this conversation: what waits elsewhere is the lists' to say.
+    public static func here(rows: [BelowRow], approvalIDs: [String], side: ReaderSide?) -> WaitingBelow? {
+        let approvals = approvalIDs.map { BelowRow(rowID: "approval-\($0)", isQuestion: false) }
+        guard let said = below(rows: rows + approvals, side: rows.isEmpty ? .below : side) else { return nil }
+        return WaitingBelow(count: said.count, rowID: said.rowID, text: said.text, side: said.side,
+                            glyph: rows.isEmpty ? .hand : said.glyph)
+    }
+
     /// "1 open question below" while every card below is a question — the words this bar has always
     /// used, unchanged for the case it was built for. Anything else says "2 waiting below": never a
     /// bare number (the count is the useful part here, unlike the cross-session bar, where "1" told
@@ -274,45 +289,35 @@ public enum NeedsYouLogic {
                               since: target.lastTurnAt ?? target.updatedAt ?? target.createdAt)
     }
 
-    /// How long the bar says an approval that has just arrived before it goes back to the count —
-    /// as long as the amber card it replaced stayed open before folding to a pill.
-    public static let arrivalSeconds: TimeInterval = 6
-
-    /// The bar while an approval has just arrived: the push's line, the conversation it stops, and
-    /// the count of everything waiting, so a press goes straight to the newcomer and the deck under
-    /// the capsule still says how many there are. Nil once it is older than `arrivalSeconds`, and
-    /// while its conversation is not (or no longer) among those waiting elsewhere: the push can land
-    /// a moment before the list does, and an approval answered by then has nothing left to say.
-    public static func arriving(_ arrival: NeedsYouArrival?, waiting: [Session], excluding focused: String? = nil,
-                                now: Date) -> NeedsYouBanner? {
-        guard let arrival, now.timeIntervalSince(arrival.at) < arrivalSeconds else { return nil }
-        let elsewhere = waiting.filter { $0.id != focused }
-        guard let target = elsewhere.first(where: { $0.id == arrival.sessionID }) else { return nil }
-        return NeedsYouBanner(count: elsewhere.count, target: target, text: arrival.line,
-                              detail: named(target.title), since: ISO8601DateFormatter().string(from: arrival.at),
-                              arriving: true)
+    /// One conversation's wait, keyed by the instant it began — its oldest owner item's, or its last
+    /// turn's — so the same wait reads as the same key on every snapshot, and the conversation stopping
+    /// again reads as a new one.
+    public static func waitKey(_ session: Session) -> String {
+        let since = oldestOwnerItem([session])?.item.since
+            ?? session.lastTurnAt ?? session.updatedAt ?? session.createdAt ?? ""
+        return "\(session.id)|\(since)"
     }
 
-    /// What a swipe on the bar puts away (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/06-list-floats`):
-    /// each conversation waiting at that moment, keyed by the instant it started waiting — its oldest
-    /// owner item's, or its last turn's. A swipe is "not now", not an answer: nothing is sent and no
-    /// session changes. Recorded from the whole set (no conversation excluded), so the bar stays put
-    /// away on every page.
-    public static func dismissalKeys(waiting: [Session]) -> Set<String> {
-        Set(waiting.map { session in
-            let since = oldestOwnerItem([session])?.item.since
-                ?? session.lastTurnAt ?? session.updatedAt ?? session.createdAt ?? ""
-            return "\(session.id)|\(since)"
-        })
+    /// The notices for what has started waiting since `seen` (the keys of the last look), oldest
+    /// first, leaving out the conversation on screen — its own card is in front of the reader. Each
+    /// names the conversation and what it waits on: an owner item's word, or a reply to a tool call,
+    /// then the workspace.
+    public static func newlyWaiting(_ waiting: [Session], seen: Set<String>,
+                                    excluding focused: String? = nil) -> [NeedsYouToast] {
+        entries(waiting: waiting, excluding: focused).compactMap { entry in
+            let key = waitKey(entry.target)
+            guard !seen.contains(key) else { return nil }
+            let session = entry.target
+            let what = entry.ownerItem.map(ownerItemWord) ?? replyWord
+            let line = [what, named(session.agent?.name)].compactMap { $0 }.joined(separator: " · ")
+            return NeedsYouToast(id: key, target: session,
+                                 title: named(session.title) ?? named(session.agent?.name) ?? "A session",
+                                 line: line, ownerItem: entry.ownerItem)
+        }
     }
 
-    /// Whether the bar stays put away: everything waiting elsewhere was already waiting when it was
-    /// swiped. Something new — another conversation, or one that stopped again — brings it back.
-    public static func isDismissed(waiting: [Session], excluding focused: String? = nil,
-                                   dismissed: Set<String>) -> Bool {
-        let keys = dismissalKeys(waiting: waiting.filter { $0.id != focused })
-        return !keys.isEmpty && keys.isSubset(of: dismissed)
-    }
+    /// What a blocked tool call waits on, in the push's own words.
+    public static let replyWord = "Needs your reply"
 
     /// At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest.
     public static let unfoldedLimit = 5
