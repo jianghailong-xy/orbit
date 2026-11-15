@@ -9,6 +9,7 @@ import { feishuAdminQuery } from '../../pages/AdminIntegrationsPage';
 import { googleSignInSettingsQuery } from '../../pages/AdminSignInPage';
 import { emailSettingsQuery } from '../../pages/AdminEmailPage';
 import { ImpersonationBanner } from '../ImpersonationBanner';
+import { HelpDrawer } from '../HelpDrawer';
 import { NARROW_SETTINGS_QUERY, NavGroup, NavRow } from './SettingsLayout';
 import './Settings.css';
 
@@ -69,6 +70,7 @@ export function AdminLayout() {
             </div>
           </main>
         )}
+        <HelpDrawer />
       </div>
     </>
   );

@@ -7,6 +7,7 @@ import { workspacesQuery, runnersQuery } from './lib/queries';
 import { machineDraftPath } from './lib/machineSetup';
 import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
+import { HelpDrawerProvider } from './lib/helpDrawer';
 import { AdminLayout } from './components/settings/AdminLayout';
 import { SettingsLayout } from './components/settings';
 import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
@@ -200,6 +201,9 @@ export function App() {
     </DocView>
   );
   return (
+    // The help drawer's state spans every signed-in window — the app, Settings, /help — so it stays open from one to
+    // the next. Signed out it opens for nothing.
+    <HelpDrawerProvider enabled={authed}>
     <Routes>
       {/* Public read-only share link — works signed-out, so it sits outside the auth gate. The root
           page is drawn for what the link opens; a conversation the link opens besides its root (a
@@ -525,5 +529,6 @@ export function App() {
       </Route>
       {!authed && <Route path="*" element={notFound} />}
     </Routes>
+    </HelpDrawerProvider>
   );
 }

@@ -1,0 +1,127 @@
+/* The help drawer (board docs/mocks/help-center/01-web.png ①): a 380px column at the window's right, a flex sibling
+   of the page's main area in .app-shell and .settings-shell, so the page narrows rather than being covered. */
+.help-drawer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  height: var(--app-vh, 100vh);
+  box-sizing: border-box;
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-raised, var(--bg-base));
+  color: var(--text-1);
+}
+.help-drawer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 52px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.help-drawer-title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.help-drawer-head .orbit-segmented {
+  margin-right: 4px;
+}
+.help-drawer-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
+}
+.help-drawer-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.help-drawer-icon:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.help-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.help-drawer-placeholder {
+  padding: 24px 16px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+/* A phone has no room for a column: the drawer lies over the page, the full width. */
+@media (max-width: 767.98px) {
+  .help-drawer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    width: auto;
+    border-left: 0;
+  }
+}
+
+/* The ? button at the sidebar's foot, beside the avatar; above it on the collapsed rail. */
+.tp-user {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tp-user > .tp-user-trigger {
+  flex: 1;
+  min-width: 0;
+}
+.tp-help {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 15px;
+  cursor: pointer;
+}
+.tp-help:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.tp-help.is-open {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.tp-help:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.tp-help-key {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 14px;
+  opacity: 0.7;
+}
+@media (min-width: 961px) {
+  .app-nav.collapsed .tp-user {
+    flex-direction: column-reverse;
+  }
+}
