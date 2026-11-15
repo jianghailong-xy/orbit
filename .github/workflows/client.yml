@@ -324,9 +324,13 @@ jobs:
         id: probe
         continue-on-error: true
         env:
-          # XCUITest's clicks, the same path a user's press takes. The probe driver inside the app
-          # (`MODE=probe`) is the fallback for a host whose automation mode is off.
-          MODE: ui
+          # The in-app driver: it selects the source list's rows the way a click does (the same
+          # selection change SwiftUI's outline coordinator reads), which is what the sidebar fix's
+          # own evidence ran. The XCUITest driver (`MODE=ui`) cannot be used here: on this Mac the
+          # app's accessibility session goes empty once the Wiki page opens (every query answers
+          # nothing while the app keeps serving the page), so a UI run presses three rows and then
+          # has nothing left to press.
+          MODE: probe
           CLICKS: "200"
           CHURN: "0.1"
           WIKI_FLICKER: "1"
