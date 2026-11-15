@@ -380,7 +380,9 @@ public enum ScheduleDisplay {
     public static func runLine(state: String, summary: String?, failureReason: String?, reasonText: String?,
                                notified: Bool = false) -> String {
         if state == "FAILED" || state == "MISSED" || state == "HELD" {
-            if let clause = failureClause(failureReason: failureReason, reasonText: reasonText) {
+            // A reported failure says what the run reported, as its Waiting card and push do (W3).
+            if let clause = reportedFailureClause(failureReason: failureReason, reasonText: reasonText, summary: summary)
+                ?? failureClause(failureReason: failureReason, reasonText: reasonText) {
                 return capitalize(clause)
             }
             return C.runStates[state] ?? state
@@ -761,16 +763,22 @@ public enum ScheduleDisplay {
     /// The failure clause a failure card and its push say (S5 `failedWaitingClause`): a REPORTED_FAILED run's own
     /// summary, one line of at most 120 characters with no closing full stop, else the reason's clause.
     static func failedWaitingClause(failureReason: String?, reasonText: String?, summary: String?) -> String {
-        let template = reasonText == nil ? C.failureReasonsWithSummary[failureReason ?? ""] : nil
+        reportedFailureClause(failureReason: failureReason, reasonText: reasonText, summary: summary)
+            ?? failureClause(failureReason: failureReason, reasonText: reasonText)
+            ?? C.failureReasons["REPORTED_FAILED"]!
+    }
+
+    /// A REPORTED_FAILED run's clause with its own summary (shared `reportedFailureClause`), or nil when the run has
+    /// none, or the server wrote its own reasonText.
+    static func reportedFailureClause(failureReason: String?, reasonText: String?, summary: String?) -> String? {
+        guard reasonText == nil, let template = C.failureReasonsWithSummary[failureReason ?? ""] else { return nil }
         var flat = (summary ?? "").split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
         while let last = flat.last, last == "." || last == "。" { flat.removeLast() }
-        if let template, !flat.isEmpty {
-            let clipped = flat.count <= summaryMax
-                ? flat
-                : String(flat.prefix(summaryMax - 1)).trimmingCharacters(in: .whitespaces) + "…"
-            return fill(template, ["summary": clipped])
-        }
-        return failureClause(failureReason: failureReason, reasonText: reasonText) ?? C.failureReasons["REPORTED_FAILED"]!
+        guard !flat.isEmpty else { return nil }
+        let clipped = flat.count <= summaryMax
+            ? flat
+            : String(flat.prefix(summaryMax - 1)).trimmingCharacters(in: .whitespaces) + "…"
+        return fill(template, ["summary": clipped])
     }
 
     /// A failure's push (S5 `scheduleFailedPush`): the card's title, and "The last run ended without a report. It
@@ -885,10 +893,16 @@ public enum ScheduleDisplay {
     /// the run took. "Open · Codex agent · 5 min".
     public static func runHeadText(session: Session?, run: ScheduleRunView, scheduleEngine: String? = nil,
                                    now: Date) -> String {
-        // The session's own engine; before its read, the schedule's (S5 `ScheduleView.engine`).
         runHeadText(state: session.map(SessionHeader.lifecycleWord(for:)),
-                    engine: (session?.engine ?? scheduleEngine).map(ProviderEngines.cliName),
+                    engine: runAgentName(scheduleEngine: scheduleEngine, sessionEngine: session?.engine),
                     startedAt: run.startedAt, endedAt: run.endedAt, now: now)
+    }
+
+    /// The agent a run's header names (the web's `scheduleRunAgentName`): the engine its schedule's view carries
+    /// ("Codex"), else the session's own, as the engine lists name it.
+    public static func runAgentName(scheduleEngine: String?, sessionEngine: String?) -> String? {
+        if let scheduleEngine, !scheduleEngine.isEmpty { return engineName(scheduleEngine) }
+        return sessionEngine.map(ProviderEngines.cliName)
     }
 
     /// The delete question's title: "Delete “Codex stable check”?".

@@ -229,6 +229,13 @@ final class ScheduleDisplayTests: XCTestCase {
         XCTAssertEqual(ScheduleDisplay.runLine(state: "MISSED", summary: nil, failureReason: "OVER_BUDGET",
                                                reasonText: "Over budget: 7 of 7 runs this week"),
                        "Over budget: 7 of 7 runs this week")
+        // A reported failure says what the run reported, as its Waiting card and push do (W3, schedule.spec.ts).
+        XCTAssertEqual(ScheduleDisplay.runLine(state: "FAILED", summary: "The releases page returned 503.",
+                                               failureReason: "REPORTED_FAILED", reasonText: nil),
+                       "Reported a failure: The releases page returned 503")
+        XCTAssertEqual(ScheduleDisplay.runLine(state: "FAILED", summary: nil, failureReason: "REPORTED_FAILED",
+                                               reasonText: nil),
+                       "Reported a failure")
     }
 
     func testWhen() {
@@ -335,6 +342,19 @@ final class ScheduleDisplayTests: XCTestCase {
         let card = try JSONDecoder().decode(ScheduleCard.self, from: Data(
             #"{"id":"c","kind":"CREATE","notice":"You'll hear about new versions and failures only."}"#.utf8))
         XCTAssertEqual(card.notice, "You'll hear about new versions and failures only.")
+    }
+
+    /// The web's `scheduleRunAgentName`: the schedule view's engine first, else the session's own.
+    func testTheRunHeadNamesTheSchedulesEngineFirst() throws {
+        XCTAssertEqual(ScheduleDisplay.runAgentName(scheduleEngine: "codex", sessionEngine: "claude"), "Codex")
+        XCTAssertEqual(ScheduleDisplay.runAgentName(scheduleEngine: nil, sessionEngine: "claude"), "Claude Code")
+        XCTAssertNil(ScheduleDisplay.runAgentName(scheduleEngine: nil, sessionEngine: nil))
+        let json = #"{"id":"R9","status":"AWAITING_INPUT","engine":"claude","lifecycleState":"OPEN"}"#
+        let session = try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+        let run = ScheduleRunView(id: "r", scheduleId: "S", plannedAt: sh("2025-11-13T10:00"), state: "CHANGED",
+                                  startedAt: sh("2025-11-13T10:01"), endedAt: sh("2025-11-13T10:06"))
+        XCTAssertEqual(ScheduleDisplay.runHeadText(session: session, run: run, scheduleEngine: "codex", now: Self.now),
+                       "Open · Codex agent · 5 min")
     }
 
     func testTheRunsSession() {
