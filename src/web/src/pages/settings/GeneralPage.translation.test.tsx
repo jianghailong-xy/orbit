@@ -223,7 +223,7 @@ describe('Settings › Translation › Show both languages', () => {
     await mount(me({}));
     expect(bothSwitch()).toBeNull();
     expect(card().textContent).toContain(
-      'With both languages on, each translated message also shows the English the agent read or wrote.',
+      'With both languages on, each translated message also shows the words the agent read or wrote, in the language agents work in.',
     );
     await act(async () => root!.unmount());
     root = null;
