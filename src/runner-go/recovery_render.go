@@ -449,6 +449,10 @@ func (s *mcpServer) listedToolDescriptors() []map[string]interface{} {
 	if s.wikiOff {
 		tools = withoutWikiTools(tools)
 	}
+	// schedule_run_report is a scheduled run's own (schedule_tools.go).
+	if !s.scheduleRun {
+		tools = withoutScheduleRunReport(tools)
+	}
 	// A SubAgent cannot hand work on again (subagent.go).
 	if os.Getenv(envSubagentRunID) == "" {
 		cwd, _ := os.Getwd()

@@ -637,6 +637,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// Legacy internal provenance. Current clients keep every unfiled session in Open and no longer
     /// expose a separate System list; the optional field remains for older-server compatibility.
     public let source: String?
+    /// The scheduled task's run this session is (docs/scheduled-tasks-design.md §6.3), from the session's own
+    /// read; nil for every other session. What puts the run's header over its conversation.
+    public var scheduleRunId: String? = nil
     /// The Project this Session coordinates, projected from the Project-owned pointer. Both are
     /// nil for ordinary Sessions and when talking to an older server.
     public let projectId: String?
@@ -872,6 +875,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         effort = try values.decodeIfPresent(String.self, forKey: .effort)
         fastMode = try values.decodeIfPresent(Bool.self, forKey: .fastMode)
         source = try values.decodeIfPresent(String.self, forKey: .source)
+        scheduleRunId = try? values.decodeIfPresent(String.self, forKey: .scheduleRunId)
         projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
         projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
         projectMembership = try values.decodeIfPresent(SessionProjectMembership.self, forKey: .projectMembership)

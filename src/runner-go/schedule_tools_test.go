@@ -1,0 +1,186 @@
+package main
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+// Scheduled tasks' MCP tools (schedule_tools.go, docs/scheduled-tasks-design.md §9.1).
+
+type scheduleCall struct {
+	method, path, session string
+	body                  map[string]interface{}
+}
+
+func scheduleServer(t *testing.T, calls *[]scheduleCall, answer string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		var body map[string]interface{}
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &body); err != nil {
+				t.Errorf("decode body: %v", err)
+			}
+		}
+		*calls = append(*calls, scheduleCall{r.Method, r.URL.RequestURI(), r.Header.Get("X-Orbit-Session-Id"), body})
+		_, _ = w.Write([]byte(answer))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestScheduleRunReportIsListedOnlyInAScheduledRunsSession(t *testing.T) {
+	ordinary := mcpToolNames(t, &mcpServer{sessionID: "s1"})
+	run := mcpToolNames(t, &mcpServer{sessionID: "s1", scheduleRun: true})
+	for name := range scheduleToolNames {
+		if !run[name] {
+			t.Errorf("%s is missing from a scheduled run's session", name)
+		}
+		if name == scheduleRunReportTool {
+			if ordinary[name] {
+				t.Errorf("%s is listed in a session that serves no run", name)
+			}
+		} else if !ordinary[name] {
+			t.Errorf("%s is missing from an ordinary session", name)
+		}
+	}
+	t.Setenv(envScheduleRun, "1")
+	if !scheduleRunFromEnv() {
+		t.Fatal("ORBIT_SCHEDULE_RUN=1 reads as no run")
+	}
+	t.Setenv(envScheduleRun, "0")
+	if scheduleRunFromEnv() {
+		t.Fatal("ORBIT_SCHEDULE_RUN=0 reads as a run")
+	}
+}
+
+func TestScheduleRunReportOutsideARunSendsNothing(t *testing.T) {
+	var calls []scheduleCall
+	srv := scheduleServer(t, &calls, `{}`)
+	s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "s1"}
+	res := s.callTool(scheduleRunReportTool, map[string]interface{}{"outcome": "NO_CHANGE", "summary": "x"})
+	if res["isError"] != true || !strings.Contains(resultText(res), "serves none") {
+		t.Fatalf("result = %v", res)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("calls = %+v", calls)
+	}
+}
+
+func TestScheduleCreateSaysNothingIsScheduledYet(t *testing.T) {
+	var calls []scheduleCall
+	srv := scheduleServer(t, &calls, `{"outcome":"PENDING","scheduled":false,"note":"Nothing is scheduled yet. The create card is in front of the person.","card":{"id":"r1"}}`)
+	s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "s1"}
+	res := s.callTool("schedule_create", map[string]interface{}{
+		"intent": "every day at 10", "title": "Check", "prompt": "check it", "accessLevel": "CHECK_ONLY",
+		"rule": map[string]interface{}{"kind": "DAILY", "time": "10:00"}, "readBack": "Every day I check it.",
+		"findings": "versions", "baseline": map[string]interface{}{"key": "v1"}, "workspaceId": "ignored",
+	})
+	if res["isError"] == true {
+		t.Fatalf("result = %v", res)
+	}
+	if !strings.HasPrefix(resultText(res), "Nothing is scheduled yet.") {
+		t.Fatalf("a PENDING answer must lead with what it means: %q", resultText(res))
+	}
+	if len(calls) != 1 || calls[0].method != "POST" || calls[0].path != "/api/runner/schedules" || calls[0].session != "s1" {
+		t.Fatalf("calls = %+v", calls)
+	}
+	if _, sent := calls[0].body["workspaceId"]; sent {
+		t.Fatal("the workspace is the calling session's: the tool sends none")
+	}
+	for _, key := range []string{"intent", "title", "prompt", "rule", "accessLevel", "readBack", "findings", "baseline"} {
+		if _, sent := calls[0].body[key]; !sent {
+			t.Errorf("%s was not sent", key)
+		}
+	}
+}
+
+func TestScheduleToolsReachTheirDoors(t *testing.T) {
+	var calls []scheduleCall
+	srv := scheduleServer(t, &calls, `{"outcome":"APPLIED"}`)
+	s := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "s1", scheduleRun: true}
+	for _, tc := range []struct {
+		tool         string
+		args         map[string]interface{}
+		method, path string
+	}{
+		{"schedule_list", map[string]interface{}{"state": "all"}, "GET", "/api/runner/schedules?state=all"},
+		{"schedule_get", map[string]interface{}{"scheduleId": "sch1"}, "GET", "/api/runner/schedules/sch1"},
+		{"schedule_update", map[string]interface{}{"scheduleId": "sch1", "title": "t"}, "PATCH", "/api/runner/schedules/sch1"},
+		{"schedule_pause", map[string]interface{}{"scheduleId": "sch1"}, "POST", "/api/runner/schedules/sch1/pause"},
+		{"schedule_resume", map[string]interface{}{"scheduleId": "sch1"}, "POST", "/api/runner/schedules/sch1/resume"},
+		{"schedule_run_now", map[string]interface{}{"scheduleId": "sch1"}, "POST", "/api/runner/schedules/sch1/run"},
+		{"schedule_end", map[string]interface{}{"scheduleId": "sch1"}, "POST", "/api/runner/schedules/sch1/end"},
+		{"schedule_delete", map[string]interface{}{"scheduleId": "sch1"}, "DELETE", "/api/runner/schedules/sch1"},
+		{"schedule_run_stop", map[string]interface{}{"runId": "run1"}, "POST", "/api/runner/schedule-runs/run1/stop"},
+		{scheduleRunReportTool, map[string]interface{}{"outcome": "NO_CHANGE", "summary": "nothing"}, "POST", "/api/runner/schedule-runs/report"},
+	} {
+		calls = nil
+		res := s.callTool(tc.tool, tc.args)
+		if res["isError"] == true {
+			t.Errorf("%s: %v", tc.tool, res)
+			continue
+		}
+		if len(calls) != 1 || calls[0].method != tc.method || calls[0].path != tc.path || calls[0].session != "s1" {
+			t.Errorf("%s: calls = %+v", tc.tool, calls)
+		}
+	}
+	if res := s.callTool("schedule_pause", map[string]interface{}{}); res["isError"] != true {
+		t.Fatalf("a schedule tool without its id must refuse: %v", res)
+	}
+}
+
+// A CHECK_ONLY run on Codex, Kimi or Cursor is in Plan: it must still be able to report, change and end the schedule
+// it serves (§8.3), and to propose one from a planning conversation; the controls stay closed in Plan.
+func TestScheduleToolsInPlan(t *testing.T) {
+	plan := func() (string, bool, error) { return "plan", true, nil }
+	s := &mcpServer{sessionID: "s1", scheduleRun: true, permissionMode: plan}
+	for _, name := range []string{"schedule_create", "schedule_update", "schedule_end", scheduleRunReportTool, "schedule_list", "schedule_get"} {
+		if refusal := s.planRefusal(name, map[string]interface{}{}); refusal != "" {
+			t.Errorf("%s is refused in Plan: %s", name, refusal)
+		}
+	}
+	for _, name := range []string{"schedule_pause", "schedule_resume", "schedule_run_now", "schedule_run_stop", "schedule_delete"} {
+		if refusal := s.planRefusal(name, map[string]interface{}{}); refusal == "" {
+			t.Errorf("%s runs in Plan", name)
+		}
+	}
+}
+
+func TestScheduleRunReachesTheEngineEnvironment(t *testing.T) {
+	run := &ClaimedSession{SessionID: "s1", ScheduleRun: true}
+	plain := &ClaimedSession{SessionID: "s2"}
+	if !strings.Contains(strings.Join(codexOrbitSessionEnv(run), "\n"), envScheduleRun+"=1") {
+		t.Fatal("the Codex spawn does not mark a scheduled run")
+	}
+	if !strings.Contains(strings.Join(codexOrbitSessionEnv(plain), "\n"), envScheduleRun+"=0") {
+		t.Fatal("the Codex spawn marks an ordinary session as a run")
+	}
+	if !strings.Contains(codexOrbitMCPEnvVarsConfig, `"`+envScheduleRun+`"`) {
+		t.Fatal("Codex does not pass ORBIT_SCHEDULE_RUN to orbit mcp")
+	}
+	// A workspace's own variables cannot claim to be a run: the spawn site states it.
+	if !sessionContextEnvKey(envScheduleRun) {
+		t.Fatal("ORBIT_SCHEDULE_RUN is not stripped from a caller's environment")
+	}
+	var reclaimed ReclaimSession
+	if err := json.Unmarshal([]byte(`{"scheduleRun":true}`), &reclaimed); err != nil || !reclaimed.ScheduleRun {
+		t.Fatalf("a reclaim does not carry scheduleRun: %+v %v", reclaimed, err)
+	}
+}
+
+func TestScheduleToolDescriptionsCarryTheTimerChoice(t *testing.T) {
+	for _, tool := range toolDescriptors(false, false) {
+		name, _ := tool["name"].(string)
+		if name != "schedule_create" && name != "schedule_wakeup" {
+			continue
+		}
+		if !strings.Contains(tool["description"].(string), scheduleTimerChoice) {
+			t.Errorf("%s does not say which of the four timers to use", name)
+		}
+	}
+}

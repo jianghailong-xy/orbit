@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 445 |
+| `user` | 461 |
 | `admin` | 28 |
-| `runner` | 186 |
+| `runner` | 197 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **694** |
+| **Total** | **721** |
 
 ## Public routes
 
@@ -312,6 +312,21 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/runners/enrollment-tokens` | — | `RunnersController.listTokens` |
 | `POST` | `/api/runners/enrollment-tokens` | body `CreateEnrollmentTokenDto` | `RunnersController.createToken` |
 | `POST` | `/api/runners/reorder` | body `ReorderRunnersDto` | `RunnersController.reorder` |
+| `GET` | `/api/schedule-requests` | query `kind`, `state` | `SchedulesController.requests` |
+| `GET` | `/api/schedule-requests/:id` | path `id` | `SchedulesController.request` |
+| `POST` | `/api/schedule-requests/:id/allow` | body `ScheduleDecisionDto`; path `id` | `SchedulesController.allow` |
+| `POST` | `/api/schedule-requests/:id/decline` | path `id` | `SchedulesController.decline` |
+| `POST` | `/api/schedule-runs/:id/stop` | path `id` | `SchedulesController.stop` |
+| `GET` | `/api/schedules` | query `state`, `workspaceId` | `SchedulesController.list` |
+| `DELETE` | `/api/schedules/:id` | path `id` | `SchedulesController.remove` |
+| `GET` | `/api/schedules/:id` | path `id` | `SchedulesController.get` |
+| `POST` | `/api/schedules/:id/pause` | path `id` | `SchedulesController.pause` |
+| `POST` | `/api/schedules/:id/resume` | path `id` | `SchedulesController.resume` |
+| `POST` | `/api/schedules/:id/run` | path `id` | `SchedulesController.runNow` |
+| `GET` | `/api/schedules/:id/runs` | path `id`; query `before`, `limit` | `SchedulesController.listRuns` |
+| `POST` | `/api/schedules/:id/undo` | body `ScheduleUndoDto`; path `id` | `SchedulesController.undo` |
+| `GET` | `/api/schedules/drafts` | — | `SchedulesController.drafts` |
+| `POST` | `/api/schedules/drafts` | body `ScheduleDraftDto` | `SchedulesController.draft` |
 | `GET` | `/api/session-folders` | — | `SessionFoldersController.list` |
 | `POST` | `/api/session-folders` | body `CreateSessionFolderDto` | `SessionFoldersController.create` |
 | `DELETE` | `/api/session-folders/:id` | path `id` | `SessionFoldersController.remove` |
@@ -369,6 +384,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/resume` | body `Object`; path `id` | `SessionsController.resume` |
 | `GET` | `/api/sessions/:id/retry-message` | path `id` | `SessionsController.retryMessage` |
 | `POST` | `/api/sessions/:id/retry-message` | body `Object`; path `id` | `SessionsController.resendRetryMessage` |
+| `GET` | `/api/sessions/:id/schedule-cards` | path `id` | `SchedulesController.sessionCards` |
 | `PATCH` | `/api/sessions/:id/settings` | body `Object`; path `id` | `SessionsController.updateSettings` |
 | `DELETE` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.turnOffSessionLink` |
 | `GET` | `/api/sessions/:id/share` | path `id` | `ShareLinksController.sessionLink` |
@@ -637,6 +653,17 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/runner/runners/:id` | path `id` | `RunnerDeleteController.deleteRunner` |
 | `GET` | `/api/runner/runners/:id/engine-install` | path `id` | `RunnerEngineInstallController.engineInstallState` |
 | `POST` | `/api/runner/runners/:id/engine-install` | body `RequestEngineInstallDto`; path `id` | `RunnerEngineInstallController.requestEngineInstall` |
+| `POST` | `/api/runner/schedule-runs/:id/stop` | path `id` | `RunnerSchedulesController.stop` |
+| `POST` | `/api/runner/schedule-runs/report` | body `ScheduleRunReportDto` | `RunnerSchedulesController.report` |
+| `GET` | `/api/runner/schedules` | query `state` | `RunnerSchedulesController.list` |
+| `POST` | `/api/runner/schedules` | body `ScheduleCreateDto` | `RunnerSchedulesController.create` |
+| `DELETE` | `/api/runner/schedules/:id` | path `id` | `RunnerSchedulesController.remove` |
+| `GET` | `/api/runner/schedules/:id` | path `id` | `RunnerSchedulesController.get` |
+| `PATCH` | `/api/runner/schedules/:id` | body `ScheduleUpdateDto`; path `id` | `RunnerSchedulesController.update` |
+| `POST` | `/api/runner/schedules/:id/end` | path `id` | `RunnerSchedulesController.end` |
+| `POST` | `/api/runner/schedules/:id/pause` | path `id` | `RunnerSchedulesController.pause` |
+| `POST` | `/api/runner/schedules/:id/resume` | path `id` | `RunnerSchedulesController.resume` |
+| `POST` | `/api/runner/schedules/:id/run` | path `id` | `RunnerSchedulesController.runNow` |
 | `POST` | `/api/runner/secret-grants/:id/ack` | body `SecretGrantAckDto`; path `id` | `RunnerSecretGrantsController.ack` |
 | `POST` | `/api/runner/secret-grants/:id/fetch` | path `id` | `RunnerSecretGrantsController.fetch` |
 | `POST` | `/api/runner/secret-grants/:id/removed` | body `SecretGrantRemovedDto`; path `id` | `RunnerSecretGrantsController.removed` |

@@ -528,6 +528,9 @@ final class AppModel {
     private(set) var projects: ProjectsModel?
     /// The account's wiki: the Wiki section, the drawer's Wiki row and every entry page.
     private(set) var wiki: WikiModel?
+    /// The account's scheduled tasks: the Scheduled section, the drawer's Scheduled row, the cards a
+    /// conversation asks and the Waiting on you items (docs/scheduled-tasks-design.md §9.2).
+    private(set) var scheduled: ScheduledModel?
     /// The wiki chat beside every wiki page: its round button, its panel and the cards it draws
     /// (docs/wiki-chat-design.md §9).
     private(set) var wikiChat: WikiChatModel?
@@ -635,6 +638,7 @@ final class AppModel {
         ownerRequests = ownerRequestsModel
         projects = ProjectsModel(baseURL: url, tokenStore: tokenStore)
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
+        scheduled = ScheduledModel(baseURL: url, tokenStore: tokenStore)
         wikiChat = WikiChatModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
@@ -1094,6 +1098,7 @@ final class AppModel {
         await refreshFocusedSessionDetailIfNeeded()
         await refreshWatchesIfDue()
         await refreshOwnerRequestsIfDue()
+        await refreshScheduledIfDue()
         await projects?.refreshIfDue(live: controlPlaneLive)
         await managedRunner?.refreshIfDue()
     }
@@ -1134,6 +1139,43 @@ final class AppModel {
         ownerRequestsRefreshNotBefore = now.addingTimeInterval(
             controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
         await ownerRequests.load()
+    }
+
+    /// The schedules' floor: no event names them, so they ride the owner requests' cadence; the drawer's count
+    /// is what it keeps true while the page is not showing.
+    private var scheduledRefreshNotBefore = Date.distantPast
+
+    private func refreshScheduledIfDue(now: Date = Date()) async {
+        guard now >= scheduledRefreshNotBefore, let scheduled else { return }
+        scheduledRefreshNotBefore = now.addingTimeInterval(
+            controlPlaneLive ? PollSchedule.liveFallback : Self.watchesRefreshInterval)
+        await scheduled.load()
+    }
+
+    /// One schedule's detail panel, over the Scheduled page, from anywhere: a change line's Open, a Waiting on
+    /// you card, a push that names the schedule.
+    func openSchedule(_ id: String) {
+        settingsPresented = false
+        ownerRequests?.inboxPresented = false
+        selectedSection = .scheduled
+        nav.path = []
+        scheduled?.inspectedID = id
+    }
+
+    /// A run's session, over the Scheduled page: run sessions are in no list (§7.4), so the back swipe returns to
+    /// the schedule they ran for.
+    func openScheduleRun(sessionID: String, scheduleID: String?) {
+        settingsPresented = false
+        ownerRequests?.inboxPresented = false
+        scheduled?.inspectedID = nil
+        #if os(iOS)
+        selectedSection = .scheduled
+        // Pushed over the Scheduled page from the schedule's history (a list), or put there by its push.
+        nav.path = [.console(sessionID: sessionID, origin: .list)]
+        #else
+        // The Mac's Scheduled page is its own task (I2): until then a run's session opens as any session does.
+        route(to: .session(sessionID))
+        #endif
     }
 
     /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.
@@ -2047,6 +2089,12 @@ final class AppModel {
         show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
+    /// A schedule's Change… (board 01 ③ 1): no form — a new conversation in the schedule's workspace, where the
+    /// change is said and its card or record comes back.
+    func openChangeConversation(for schedule: ScheduleView) {
+        show(.compose(agentID: schedule.workspaceId, folderID: nil), agent: schedule.workspaceId)
+    }
+
     private func newSessionWithNoWorkspace() {
         switch newSessionTarget {
         case .machine(let id)?: openMachineDraft(id)
@@ -2445,6 +2493,8 @@ final class AppModel {
         case .projects: return nav.sectionAtRoot
         // An entry's page, or Review, over the Wiki's home: the same one read.
         case .wiki: return nav.sectionAtRoot
+        // A run's session over the Scheduled page: the same one read.
+        case .scheduled: return nav.sectionAtRoot
         }
     }
 
@@ -4057,6 +4107,17 @@ final class AppModel {
             ownerRequests?.tab = .open
             ownerRequests?.inboxPresented = true
             Task { await ownerRequests?.loadTerminalRequests() }
+        case let .openSchedule(scheduleID, sessionID):
+            // A push names the schedule and the run's session by their stored UUIDs; the app spells them base62.
+            #if os(iOS)
+            if let sessionID {
+                openScheduleRun(sessionID: PublicID.toPublic(sessionID), scheduleID: PublicID.toPublic(scheduleID))
+            } else {
+                openSchedule(PublicID.toPublic(scheduleID))
+            }
+            #else
+            if let sessionID { route(to: .session(PublicID.toPublic(sessionID))) }
+            #endif
         }
     }
 

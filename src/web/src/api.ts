@@ -2013,6 +2013,10 @@ export interface SessionDetail {
    *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
    *  Optional, because an older server does not send it. */
   forkSource?: string | null;
+  /** How the session was started; `SCHEDULE` is a scheduled task's run (docs/scheduled-tasks-design.md §6.3), and
+   *  `scheduleRunId` names the run. Optional, because an older server does not send them. */
+  runSource?: string | null;
+  scheduleRunId?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
