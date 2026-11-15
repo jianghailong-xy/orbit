@@ -8,9 +8,9 @@ import { useLocation } from 'react-router-dom';
  */
 let lastOutside: string | null = null;
 
-/** Settings, and Admin, which is drawn as Settings is: moving between their pages is not leaving them. */
+/** Settings, and Admin and the help center, which are drawn as Settings is: moving between their pages is not leaving them. */
 export const isSettingsPath = (pathname: string): boolean =>
-  pathname === '/settings' || pathname.startsWith('/settings/') || pathname === '/admin' || pathname.startsWith('/admin/');
+  /^\/(settings|admin|help)(\/|$)/.test(pathname);
 
 export function settingsReturnPath(): string {
   return lastOutside ?? '/';

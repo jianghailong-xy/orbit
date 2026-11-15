@@ -1,0 +1,121 @@
+/* A help article's body (HelpMarkdown): the /help article page and the help drawer read it the same way. */
+.help-md {
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.help-md > :first-child {
+  margin-top: 0;
+}
+.help-md h2 {
+  margin: 28px 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  scroll-margin-top: 16px;
+}
+.help-md h3 {
+  margin: 20px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.help-md p,
+.help-md ul,
+.help-md ol {
+  margin: 0 0 12px;
+}
+.help-md ul,
+.help-md ol {
+  padding-left: 22px;
+}
+.help-md li + li {
+  margin-top: 4px;
+}
+.help-md a {
+  color: var(--brand);
+}
+.help-md :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--fill-muted);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+}
+.help-md blockquote {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--brand-tint);
+  color: var(--text-1);
+}
+.help-md blockquote > :last-child {
+  margin-bottom: 0;
+}
+.help-md table {
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.help-md th,
+.help-md td {
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+/* An in-app orbit:/ link: a small outlined button that goes there. */
+.help-md a.help-md-action {
+  display: inline-flex;
+  align-items: center;
+  margin: 2px 0;
+  padding: 2px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  background: var(--bg-base);
+  color: var(--brand);
+  font-size: 13px;
+  line-height: 22px;
+  text-decoration: none;
+}
+.help-md-action-chevron {
+  margin-left: 4px;
+}
+.help-md a.help-md-action:hover {
+  background: var(--brand-tint);
+}
+
+.help-md-code {
+  position: relative;
+  margin: 0 0 12px;
+}
+.help-md-code pre {
+  margin: 0;
+  padding: 10px 14px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.help-md-code pre code {
+  background: none;
+  padding: 0;
+}
+.help-md-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: var(--bg-base);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.help-md-code:hover .help-md-copy,
+.help-md-copy:focus-visible {
+  opacity: 1;
+}
