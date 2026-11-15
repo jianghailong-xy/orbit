@@ -353,27 +353,23 @@ class CardsDeviceTest {
         assertFalse(exists("card-review")); capture("needs-you-here-door")
     }
 
-    /** Another open session that needs you is named by the bar, and its press opens that session. */
-    @Test fun needsYouBarOpensTheSessionWaitingElsewhere() = journey("needs-you-elsewhere") {
+    /** Another open session that already needed you at sign-in is not announced (the owner, 2026-11-15, needs-you-capsule/12-once):
+     * the menu's count says it, and its row opens it. */
+    @Test fun aSessionWaitingElsewhereIsCountedNotAnnounced() = journey("needs-you-elsewhere") {
         login("a1", "elsewhere")
         val second = http("/__a08c").obj("secondSession")!!
-        // A conversation carries no bar for what waits elsewhere (07-console-one-capsule): the session list does.
         compose.waitUntil(15_000) { compose.onAllNodesWithTag("transcript-list").fetchSemanticsNodes().isNotEmpty() }
-        assertFalse(exists("needs-you-bar"))
+        assertFalse(exists("needs-you-toast"))
         compose.onNodeWithContentDescription("Back").performClick()
-        // The capsule (A08-21) says what waits and, on its second line, the conversation a press opens.
-        await("${second.obj("agent")!!.text("name")} needs you")
-        compose.waitUntil(15_000) {
-            compose.onAllNodes(hasText(second.text("title")!!) and hasAnyAncestor(hasTestTag("needs-you-bar"))).fetchSemanticsNodes().isNotEmpty()
-        }
-        capture("needs-you-elsewhere-bar")
-        compose.onNodeWithTag("needs-you-bar").performClick()
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("needs-you-menu-badge", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertFalse("what waited at sign-in is not news", exists("needs-you-toast"))
+        capture("needs-you-elsewhere-count")
+        compose.onNode(hasText(second.text("title")!!) and hasClickAction()).performClick()
         compose.waitUntil(15_000) { ObjectId.same(app.realtime.state.value.session?.id, second.text("id")) }
         // The page names no session in its bar since A06-18: the session opened is read off its own transcript.
         awaitInTranscript(hasText("The second session waits on you."))
         compose.onNodeWithTag("approval:b1:ALLOW").performScrollTo().assertIsDisplayed()
-        // A conversation carries no needs-you bar.
-        assertFalse(exists("needs-you-bar"))
+        assertFalse(exists("needs-you-toast"))
         capture("needs-you-elsewhere-opened")
     }
 
