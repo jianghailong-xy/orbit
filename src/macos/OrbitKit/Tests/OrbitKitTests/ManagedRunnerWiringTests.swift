@@ -160,20 +160,93 @@ final class ManagedRunnerWiringTests: XCTestCase {
 
     // MARK: Machines & models and the actions
 
-    func testMachinesAndModelsShowsItOnlyToAnAccountWithNoRunner() throws {
+    func testMachinesAndModelsOffersTheEntryAndTakesTheAnswerToTheMachine() throws {
         let list = code(try source("Views/SkillsRunnersView.swift"))
         let page = try slice(list, from: "struct RunnersListView: View {", to: ".modifier(RunnersLoadOverlay(")
         XCTAssertTrue(flat(page).contains("let managed = runners.loadState.hasLoaded ? ManagedRunnerLogic.onboarding(model.managedRunner?.display, runnerCount: runners.runners.count) : nil"))
         // In the list on iOS; in room of its own above the list on the Mac, whose table does not
-        // follow a row or a top inset that arrives after it has drawn.
+        // follow a row or a top inset that arrives after it has drawn. Both ask first on an
+        // established account and take an accepted Set up to the managed runner's own page.
         let ios = try slice(page, from: "#if os(iOS)", to: "#endif")
         XCTAssertTrue(ios.contains("ManagedRunnerBanner(display: managed"))
-        XCTAssertTrue(page.contains(".modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId))"))
+        XCTAssertTrue(flat(ios).contains("confirmsSetup: confirmsSetup, onEnsured: openManagedRunner"))
+        XCTAssertTrue(flat(page).contains(".modifier(ManagedRunnerAboveList(display: managed, runnerID: model.managedRunner?.status?.runnerId, confirmsSetup: confirmsSetup, onEnsured: openManagedRunner))"))
         let above = try slice(list, from: "private struct ManagedRunnerAboveList: ViewModifier {", to: "\n}\n")
         let mac = try slice(above, from: "#if os(macOS)", to: "#else")
         XCTAssertTrue(mac.contains("VStack(spacing: 0) {"))
-        XCTAssertTrue(mac.contains("ManagedRunnerBanner(display: display, runnerID: runnerID)"))
+        XCTAssertTrue(mac.contains("ManagedRunnerBanner(display: display, runnerID: runnerID,"))
         XCTAssertTrue(try slice(above, from: "#else", to: "#endif").contains("content"))
+        // The confirmation is the shared one (D3): an alert on the phone, a sheet on the Mac.
+        let banner = code(try source("Views/ManagedRunnerBanner.swift"))
+        XCTAssertTrue(banner.contains("if confirmsSetup { askingSetup = true } else { ensure() }"))
+        XCTAssertTrue(banner.contains("orbitConfirmation(ManagedRunnerCopy.Confirm.title, isPresented: $askingSetup)"))
+        XCTAssertTrue(banner.contains("Button(ManagedRunnerCopy.Confirm.action) { ensure() }"))
+        XCTAssertTrue(banner.contains("Text(ManagedRunnerCopy.Confirm.body)"))
+        // The answer names the runner: the page is pushed on a stack, selected in the three-column pane.
+        let open = try slice(list, from: "private func openManagedRunner(", to: "\n    }")
+        XCTAssertTrue(open.contains("model.push(.runnerDetail(runnerID: id))"))
+        XCTAssertTrue(open.contains("model.selectedRunnerID = id"))
+        XCTAssertTrue(open.contains("await model.runners?.load()"))
+        // Set up asks first only where the account already has a machine or a workspace.
+        let confirm = try slice(list, from: "private var confirmsSetup: Bool {", to: "\n    }")
+        XCTAssertTrue(confirm.contains("ManagedRunnerLogic.confirmsSetup(runnerCount: model.runners?.runners.count ?? 0,"))
+        XCTAssertTrue(confirm.contains("workspaceCount: model.agents?.items.count ?? 0)"))
+        // Its row in the list is the managed one: the shared short label, never Online/Offline (D4).
+        XCTAssertTrue(flat(list).contains("managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status)"))
+        // Needs you does not repeat the heartbeat's "offline" for it.
+        XCTAssertTrue(flat(page).contains("let attention = lists.attention.filter { !isManagedOffline($0) }"))
+        let notOffline = try slice(list, from: "private func isManagedOffline(", to: "\n    }")
+        XCTAssertTrue(notOffline.contains("guard case .offline(let runnerID) = item.kind else { return false }"))
+        XCTAssertTrue(notOffline.contains("ManagedRunnerLogic.row(runnerID: runnerID, status: model.managedRunner?.status) != nil"))
+    }
+
+    func testTheManagedMachinePageShowsItsBannerItsLabelAndNothingBeforeItReports() throws {
+        let list = code(try source("Views/SkillsRunnersView.swift"))
+        let page = try slice(list, from: "struct RunnerDetailContent: View {", to: "private func statusLine(now: Date)")
+        // Its state in the shared words, as one machine: the label, not the heartbeat's Offline.
+        XCTAssertTrue(page.contains("let managed = managedRow"))
+        XCTAssertTrue(page.contains("private var managedRow: ManagedRunnerRow? {"))
+        XCTAssertTrue(page.contains("ManagedRunnerLogic.row(runnerID: runner.id, status: model.managedRunner?.status)"))
+        XCTAssertTrue(page.contains("head(now: now)"))
+        XCTAssertTrue(page.contains("Text(managed.label)"))
+        // The banner sits on its page while it is anything but ready.
+        XCTAssertTrue(page.contains("if let managedDisplay, managedDisplay.kind != .available {"))
+        XCTAssertTrue(page.contains("ManagedRunnerBanner(display: managedDisplay, runnerID: runner.id)"))
+        // Its heartbeat "offline" card is not repeated beside the shared state.
+        XCTAssertTrue(flat(page).contains(".filter { !(managed != nil && $0.kind == .offline) }"))
+        // Before it reports: no Update card, Resources and Engines each one quiet line, no engine rows.
+        XCTAssertTrue(page.contains("if !managedWaiting, let card = RunnerPageFormat.updateCard(runner, now: now) {"))
+        XCTAssertTrue(page.contains("managedWaitingSection(RunnerPageCopy.RUNNER_RESOURCES)"))
+        XCTAssertTrue(page.contains("managedWaitingSection(RunnerPageCopy.RUNNER_ENGINES)"))
+        let waiting = try slice(page, from: "private func managedWaitingSection(", to: "\n    }")
+        XCTAssertTrue(waiting.contains("Text(ManagedRunnerCopy.notReported)"))
+        let branch = try slice(page, from: "if managedWaiting {", to: "} else {")
+        XCTAssertFalse(branch.contains("enginesSection"), "no engine rows before it reports")
+        XCTAssertFalse(branch.contains("resourcesSection"), "no readings before it reports")
+    }
+
+    func testAsleepIsSaidInTheComposerTheSidebarAndThePicker() throws {
+        // The composer of a live session and of a new one: the shared calm line, not the notice.
+        for file in ["Views/Console/ConsoleView.swift", "Views/AgentsView.swift"] {
+            let view = code(try source(file))
+            XCTAssertTrue(view.contains("managed.display.kind == .sleeping"), file)
+            XCTAssertTrue(view.contains("ManagedRunnerCopy.Asleep.composer"), file)
+        }
+        // The sidebar row: the managed runner's shared state in the trailing slot, and no
+        // "Runner offline" badge for it.
+        let agents = code(try source("Views/AgentsView.swift"))
+        let row = try slice(agents, from: "struct WorkspaceNavigationRow: View {", to: "\n}\n")
+        XCTAssertTrue(row.contains("ManagedRunnerLogic.row(runnerID: agent.runnerId, status: app.managedRunner?.status)"))
+        XCTAssertTrue(row.contains("let offlineNow = offline && managedRow == nil"))
+        XCTAssertTrue(row.contains("Text(managedRow.label)"))
+        let icon = try slice(agents, from: "struct WorkspaceFolderIcon: View {", to: "\n}\n")
+        XCTAssertTrue(icon.contains("managed.asleep ? \"moon.zzz.fill\""))
+        XCTAssertTrue(icon.contains(".accessibilityLabel(managed?.label ?? \"Runner offline\")"))
+        // The project page's Change workspace picker: Asleep rather than Runner offline.
+        let picker = code(try source("Views/CoordinatorChangeSheet.swift"))
+        XCTAssertTrue(picker.contains("ManagedRunnerLogic.row(runnerID: runnerID, status: app.managedRunner?.status)"))
+        XCTAssertTrue(picker.contains("if let managed, row.runnerOffline {"))
+        XCTAssertTrue(picker.contains("Text(managed.label).font(.orbitLabel).foregroundStyle(managed.ink)"))
     }
 
     func testABlockedDraftShowsNoModelInTheComposer() throws {
@@ -187,12 +260,15 @@ final class ManagedRunnerWiringTests: XCTestCase {
         let retry = try slice(model, from: "func retry() async {", to: "\n    }")
         XCTAssertTrue(retry.contains("guard let status, display?.retry == true, !acting else { return }"))
         XCTAssertTrue(retry.contains("api.retryManagedRunner(revision: status.revision)"))
-        let ensure = try slice(model, from: "func ensure() async {", to: "\n    }")
-        XCTAssertTrue(ensure.contains("guard display?.ensure == true, !acting else { return }"))
+        let ensure = try slice(model, from: "func ensure(then open:", to: "\n    }")
+        XCTAssertTrue(ensure.contains("guard display?.ensure == true, !acting else { return false }"))
         XCTAssertTrue(ensure.contains("api.ensureManagedRunner()"))
+        // The accepted answer names the runner, and that is where a caller asked to land.
+        XCTAssertTrue(ensure.contains("if let runnerID = status?.runnerId { open?(runnerID) }"))
         let banner = code(try source("Views/ManagedRunnerBanner.swift"))
         XCTAssertTrue(banner.contains("Button(ManagedRunnerCopy.retry) { Task { await model.managedRunner?.retry() } }"))
-        XCTAssertTrue(banner.contains("Button(ManagedRunnerCopy.ensure) { Task { await model.managedRunner?.ensure() } }"))
+        XCTAssertTrue(banner.contains("ManagedRunnerCopy.ensure"))
+        XCTAssertTrue(banner.contains("Task { await model.managedRunner?.ensure(then: onEnsured) }"))
         XCTAssertTrue(banner.contains("Button(ManagedRunnerCopy.signIn) { model.route(to: .runner(runnerID)) }"))
         // The words are OrbitKit's shared ones, never typed out again here.
         XCTAssertTrue(banner.contains("Text(display.title)"))

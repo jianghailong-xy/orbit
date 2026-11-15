@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, HttpException } from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
 import { addTwins, boundaryOf } from './public-id-body';
+import { attachRefusalRecovery } from './refusal-recovery';
 
 /**
  * The id rule on the way OUT of a refusal.
@@ -35,7 +36,12 @@ export class PublicIdExceptionFilter extends BaseExceptionFilter {
       // A string response is `{ statusCode, message }` by the time the base filter is done with
       // it: no field to key on, nothing to do. Objects are mapped in place, which is what the base
       // filter then serializes.
-      if (body !== null && typeof body === 'object') addTwins(body, boundaryOf(host));
+      // The stated recovery block first (refusal-recovery.ts), so its ids are public before the
+      // twins pass reads the body.
+      if (body !== null && typeof body === 'object') {
+        attachRefusalRecovery(body);
+        addTwins(body, boundaryOf(host));
+      }
     }
     // Everything else — the reply, the headers-already-sent case, the 500 an unknown error becomes
     // and the log line that goes with it — stays Nest's default behaviour, unchanged.

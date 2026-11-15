@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import io.orbitd.android.core.net.ApiError
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -121,7 +122,11 @@ internal class ManagedRunnerReader(private val api: ManagementApi) {
             val status = ManagedRunner.status(call(current))
             shown = ManagedRunner.display(status)?.let { ManagedRunner.Shown(status!!, it) }
         } catch (cancel: CancellationException) { throw cancel }
-        catch (e: Exception) { refusal = listOfNotNull(headline, e.message?.takeIf { it.isNotBlank() }).joinToString(": "); read() }
+        catch (e: Exception) {
+            // The server's own sentence where it gave one (a 403 for a disabled account says why), else what went wrong.
+            val why = (e as? ApiError)?.messages?.joinToString("; ")?.takeIf { it.isNotBlank() } ?: e.message
+            refusal = listOfNotNull(headline, why?.takeIf { it.isNotBlank() }).joinToString(": "); read()
+        }
         finally { busy = false }
     }
 }
