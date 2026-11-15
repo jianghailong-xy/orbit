@@ -23639,6 +23639,10 @@ div.landing-jobs-open {
   color: var(--text-2);
   font-size: 12px;
 }
+/* A quiet job's last output, inside the fold under its row (it stays out of the fold only on a failure). */
+.bgwake-job > .bgwake-output {
+  margin-top: 6px;
+}
 .bgwake-output > summary {
   list-style: none;
   cursor: pointer;
