@@ -19,7 +19,7 @@ vi.mock('../api', async (importOriginal) => ({
   getSession: vi.fn(),
 }));
 vi.mock('../lib/theme', () => ({ useThemeMode: () => ({ mode: 'system', setMode: () => {} }) }));
-const { api } = await import('../api');
+const { api, getSession } = await import('../api');
 
 const WORKSPACE = { id: 'ws-apiserver', name: 'apiserver', runnerId: null, createdAt: '2025-11-01T00:00:00.000Z' };
 
@@ -72,6 +72,7 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.mocked(api).mockReset();
+  vi.mocked(getSession).mockReset();
 });
 
 describe('the sidebar’s Scheduled entry', () => {
@@ -95,6 +96,26 @@ describe('the sidebar’s Scheduled entry', () => {
     await act(async () => { entry().click(); });
     expect(pathname).toBe('/scheduled');
     expect(entry().classList).toContain('active');
+  });
+
+  it('is lit on a scheduled run’s session, and the session’s workspace is not', async () => {
+    serve();
+    vi.mocked(getSession).mockResolvedValue({
+      id: 'sess-run', title: 'Codex stable check', runSource: 'SCHEDULE', scheduleRunId: 'run-1', workspace: { id: WORKSPACE.id, name: WORKSPACE.name },
+    } as never);
+    await visit('/sessions/sess-run');
+    expect(entry().classList).toContain('active');
+    expect(container!.querySelector('.tp-group-workspaces .tp-item.active')).toBeNull();
+  });
+
+  it('leaves an ordinary session to its workspace’s row', async () => {
+    serve();
+    vi.mocked(getSession).mockResolvedValue({
+      id: 'sess-plain', title: 'Fix login', runSource: 'MANUAL', workspace: { id: WORKSPACE.id, name: WORKSPACE.name },
+    } as never);
+    await visit('/sessions/sess-plain');
+    expect(entry().classList).not.toContain('active');
+    expect(container!.querySelector('.tp-group-workspaces .tp-item.active')!.textContent).toContain('apiserver');
   });
 
   it('adds nothing to a workspace’s rows', async () => {

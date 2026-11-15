@@ -504,6 +504,7 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
+  scheduleRunHeadText,
   encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
@@ -5472,9 +5473,7 @@ export function WorkspaceView({
   // A scheduled task's run: its schedule and run (crumb, strip, report), and the cards and change lines a session put
   // up, each where it happened (docs/mocks/scheduled-tasks/web/02-board.png).
   const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';
-  const scheduleRun = useScheduleRunOfSession(isScheduleRun ? detailForSelected?.scheduleRunId : null, {
-    scheduleId: routeId(searchParams.get('schedule')),
-  });
+  const scheduleRun = useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null);
   const scheduleInserts = useSessionScheduleInserts(selectedTrashed ? null : selectedId, transcriptEvents, scheduleRun);
 
   // Cross-project requests into the project this conversation coordinates, one decision card per
@@ -9360,6 +9359,14 @@ export function WorkspaceView({
     : null;
   const headSub = composing
     ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
+    // A scheduled run's header is its run's: state · agent · how long it took (board web/run.png).
+    : selected && isScheduleRun && scheduleRun
+      ? scheduleRunHeadText({
+          state: headLifecycleWord,
+          engine: ENGINE_CLI_NAMES[selectedEngine] ?? null,
+          run: scheduleRun.run,
+          now: new Date(),
+        })
     : selected
       ? [
           headRunWord,
@@ -10197,7 +10204,8 @@ export function WorkspaceView({
                   <GlobalOutlined /> Shared · Live
                 </button>
               )}
-              {!composing && selectedId && !selectedTrashed && !selectedMissing && (
+              {/* A scheduled run is followed through its schedule, not by a chip of its own. */}
+              {!composing && selectedId && !selectedTrashed && !selectedMissing && !isScheduleRun && (
                 <SessionWatchBadges sessionId={selectedId} />
               )}
             </div>

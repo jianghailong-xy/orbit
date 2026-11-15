@@ -7,7 +7,6 @@ import {
   type ScheduleDetailResponse,
   type ScheduleDraftsResponse,
   type ScheduleListResponse,
-  type ScheduleRunsResponse,
   type ScheduleRunView,
   type SessionScheduleCardsResponse,
 } from '@orbit/shared';
@@ -52,12 +51,6 @@ export const scheduleDetailQuery = (id: string) =>
     queryKey: ['schedules', 'detail', id] as const,
     queryFn: () => api<ScheduleDetailResponse>(`/schedules/${encodeURIComponent(id)}`),
     refetchInterval: streamPoll(30_000),
-  });
-
-export const scheduleRunsQuery = (id: string, limit = 50) =>
-  queryOptions({
-    queryKey: ['schedules', 'runs', id, limit] as const,
-    queryFn: () => api<ScheduleRunsResponse>(`/schedules/${encodeURIComponent(id)}/runs?limit=${limit}`),
   });
 
 export const scheduleDraftsQuery = () =>
