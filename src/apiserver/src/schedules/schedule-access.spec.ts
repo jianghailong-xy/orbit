@@ -17,6 +17,7 @@ import {
   CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS,
   checkOnlyRuleRefusal,
   CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS,
+  CHECK_ONLY_CLAUDE_UNASKED_BUILTINS,
   CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1,
   OPEN_PR_DISALLOWED_TOOLS,
   scheduleRunAllowedTools,
@@ -278,14 +279,19 @@ test('a CHECK_ONLY run on Claude Code asks only on a runner that advertises it; 
     assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, caps), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS],
       'S2b\'s allow list, no rule carried');
     assert.deepEqual(scheduleRunDisallowedTools(['X'], 'CHECK_ONLY', 'claude', caps),
-      ['X', 'Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)"], 'S2b\'s deny list as it landed');
+      ['X', 'Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)", ...CHECK_ONLY_CLAUDE_UNASKED_BUILTINS],
+      'S2b\'s deny list as it landed, and the built-ins that act unasked');
   }
-  assert.deepEqual([...CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS], ['Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)"]);
+  assert.deepEqual([...CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS],
+    ['Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)", ...CHECK_ONLY_CLAUDE_UNASKED_BUILTINS]);
+  for (const tool of ['EnterWorktree', 'CronCreate']) assert.ok(CHECK_ONLY_CLAUDE_UNASKED_BUILTINS.includes(tool), tool);
   // A runner that advertises it: Default, the carried rule, and the full deny list (EnterPlanMode, every other Orbit tool).
   assert.equal(scheduleRunPermissionMode(PermissionMode.DEFAULT, 'CHECK_ONLY', 'claude', ASKS), PermissionMode.DEFAULT);
   assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, ASKS), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)']);
   const denied = scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude', ASKS);
-  for (const tool of ['EnterPlanMode', 'mcp__orbit__delegate', 'mcp__orbit__bg_run']) assert.ok(denied.includes(tool), tool);
+  for (const tool of ['EnterPlanMode', 'mcp__orbit__delegate', 'mcp__orbit__bg_run', 'EnterWorktree', 'CronCreate']) {
+    assert.ok(denied.includes(tool), tool);
+  }
   // Every other run keeps its mode whatever the runner says.
   assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'OPEN_PR', 'claude', []), PermissionMode.ACCEPT_EDITS);
   assert.equal(scheduleRunPermissionMode(PermissionMode.PLAN, 'CHECK_ONLY', 'codex', []), PermissionMode.PLAN);

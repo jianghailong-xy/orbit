@@ -127,6 +127,8 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	// user's settings would run commands unasked (schedule_check_only.go). The --settings file above still applies.
 	if a.ScheduledCheckOnly {
 		args = append(args, "--setting-sources", "")
+		// And only the built-in tools a check uses (schedule_check_only.go checkOnlyBuiltinTools).
+		args = append(args, "--tools", strings.Join(checkOnlyBuiltinTools, ","))
 	}
 	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they
 	// stay out of git (see writeUpload). Add it as an explicit working dir so claude can read

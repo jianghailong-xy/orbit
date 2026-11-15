@@ -16,6 +16,7 @@ package main
 //     docs/scheduled-tasks-engine-modes.md §10). Such a run loads none of them; the runner's own --settings file
 //     still applies, and carries what of the user's settings.json the engine needs to reach Anthropic the way the
 //     region check assumed: its env (a proxy, a base URL, a key) and its credential helpers, never its permissions.
+//   - Claude Code's other built-in tools: such a run is offered only checkOnlyBuiltinTools.
 //
 // The runner advertises claudeScheduledCheckOnlyAsksCapabilityV1; the control plane hands Default only to such a
 // runner, and runs the check in Don't Ask with S2b's lists on any other.
@@ -69,6 +70,13 @@ func checkOnlyDisallowedTools(configured []string, executable string) []string {
 	}
 	return out
 }
+
+// checkOnlyBuiltinTools is the whole of Claude Code's built-in tool set such a run is started with (--tools): reading,
+// the shell (every command it does not judge read-only asks), fetching, and loading the deferred Orbit tools. Every
+// other built-in is not offered, so none of those that act without a permission ask (EnterWorktree created a git
+// worktree, CronCreate scheduled a prompt: measured on 2.1.325, docs/scheduled-tasks-engine-modes.md §10) can run.
+// Orbit's tools come through MCP and are not governed by this list.
+var checkOnlyBuiltinTools = []string{"Bash", "Read", "Grep", "Glob", "WebFetch", "WebSearch", "ToolSearch"}
 
 // claudeScheduledCheckOnlyAsksCapabilityV1 declares that this runner closes the above for a scheduled CHECK_ONLY run
 // on Claude Code (apiserver schedule-access.ts CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1).

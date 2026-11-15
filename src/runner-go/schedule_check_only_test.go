@@ -40,6 +40,9 @@ func TestClaudeScheduledCheckOnlyArgs(t *testing.T) {
 	if _, ok := argAfter(args, "--settings"); !ok {
 		t.Errorf("the runner's own --settings file is gone: %v", args)
 	}
+	if tools, ok := argAfter(args, "--tools"); !ok || tools != "Bash,Read,Grep,Glob,WebFetch,WebSearch,ToolSearch" {
+		t.Errorf("--tools %q (present %v): only the built-ins a check uses", tools, ok)
+	}
 	allowed, _ := argAfter(args, "--allowedTools")
 	if allowed != "mcp__orbit__task_get,WebFetch,Bash(npm test:*)" {
 		t.Errorf("--allowedTools %q: exactly the claim's, with no Orbit CLI rule", allowed)
@@ -73,6 +76,9 @@ func TestClaudeScheduledCheckOnlyArgs(t *testing.T) {
 	args = claudeCommandArgs(job, t.TempDir(), true)
 	if _, ok := argAfter(args, "--setting-sources"); ok {
 		t.Errorf("an ordinary session got --setting-sources: %v", args)
+	}
+	if _, ok := argAfter(args, "--tools"); ok {
+		t.Errorf("an ordinary session got --tools: %v", args)
 	}
 	allowed, _ = argAfter(args, "--allowedTools")
 	if !strings.Contains(allowed, "Bash("+exe+" task update *)") {

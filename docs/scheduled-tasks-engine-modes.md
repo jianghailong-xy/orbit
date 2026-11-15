@@ -897,7 +897,7 @@ CLI asks (10.2: a bare `orbit` on PATH was a card).
 
 ### 10.4 What the server changed, and where it is proven
 
-- H1 rule origin (`workspace_permission_rule.from_schedule_run`, migration 0850), H5 Always allow held to the card's
+- H1 rule origin (`workspace_permission_rule.from_schedule_run`, migration 0860), H5 Always allow held to the card's
   command (`400 SCHEDULE_CHECK_ONLY_RULE_REFUSED`), H6 the run's own level (`schedule_run.access_level`): the pg spec
   `schedule-attention.pg.spec.ts` (S2e cases, including a SubAgent's Edit and the schedule moved to OPEN_PR and then
   deleted mid-run) and `schedule-access.spec.ts` (odd tool names: `bash`, `BashOutput`, `Task`, `mcp__docs__Bash`, an

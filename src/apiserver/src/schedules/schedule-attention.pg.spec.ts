@@ -43,6 +43,7 @@ import { factsSql, wikiSessionsOfSpace } from '../wiki/wiki-maintenance';
 import { lastActiveByWorkspace, workspaceSessionCount } from '../workspaces/workspace-usage';
 import {
   CHECK_ONLY_CLAUDE_ALLOWED_TOOLS,
+  CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS,
   CHECK_ONLY_REFUSED_MESSAGE,
   CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1,
   runAccessLevel,
@@ -669,7 +670,8 @@ test('§6.2 S2e: an OPEN_PR run\'s Always allow is never carried by a check, and
   const old = await claimLists(checkRun.sessionId, ['claude-account-move/v1']);
   assert.equal(old.permissionMode, PermissionMode.DONT_ASK);
   assert.deepEqual(old.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
-  assert.deepEqual(old.denied, ['Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)"]);
+  assert.deepEqual(old.denied, [...CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS]);
+  assert.ok(old.denied.includes('EnterWorktree') && old.denied.includes('CronCreate'));
   assert.deepEqual(old.agentFields, { scheduledCheckOnly: true });
 });
 
