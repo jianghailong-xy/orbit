@@ -27,24 +27,28 @@ internal fun backgroundWake(note: String): JsonObject? {
     val output = Regex("^ {6}(?:output|输出) (.+?)｜(?:this covers bytes|这次说到的是第) (\\d+)[–-](\\d+)(?: 字节)?$")
     val blocks = mutableListOf<String>()
     val timing = Regex("^ {4}(\\S+) (?:scheduled (\\d+) seconds out, due (\\S+)|约在 (\\d+) 秒后，(\\S+) 到点)$")
-    Regex("<(background-job-wake|scheduled-wakeup)>\\n([\\s\\S]*?)\\n</\\1>").findAll(note).forEach { block ->
+    // A quiet job's wake comes in a block of its own (`<background-job-stall>`), whose job lines are written as a wake's are.
+    val stallTrigger = Regex("^ {6}gone quiet｜(.*)$")
+    Regex("<(background-job-wake|background-job-stall|scheduled-wakeup)>\\n([\\s\\S]*?)\\n</\\1>").findAll(note).forEach { block ->
         blocks += block.value
         val lines = block.groupValues[2].lines()
-        val isJob = block.groupValues[1] == "background-job-wake"
+        val isJob = block.groupValues[1] != "scheduled-wakeup"
         val heads = lines.indices.filter { if (isJob) Regex("^ {4}bgj_[^｜\\s]*｜").containsMatchIn(lines[it]) else timing.matches(lines[it]) }
         heads.forEachIndexed { index, from ->
             val section = lines.subList(from, heads.getOrNull(index + 1) ?: lines.size)
             if (isJob) {
-                val at = section.indexOfFirst { trigger.matches(it) }
+                val at = section.indexOfFirst { trigger.matches(it) || stallTrigger.matches(it) }
+                val stalled = section.getOrNull(at)?.let { stallTrigger.matchEntire(it) }
                 val fields = section.take(if (at < 0) section.size else at).joinToString("\n").removePrefix("    ").split('｜')
-                val match = section.getOrNull(at)?.let { trigger.matchEntire(it) }
+                val match = if (stalled != null) null else section.getOrNull(at)?.let { trigger.matchEntire(it) }
                 val facts = match?.groupValues?.get(2).orEmpty().split('｜')
                 val tailAt = section.indexOfFirst { it in setOf("      output tail:", "      输出末尾：") }
                 jobs += buildJsonObject {
                     put("id", fields[0]); put("kind", fields.getOrElse(1) { "" })
                     put("command", if (fields.size > 3) fields.subList(2, fields.lastIndex).joinToString("｜") else fields.getOrElse(2) { "" })
                     if (fields.size > 3) put("description", fields.last())
-                    put("status", facts[0]); put("ended", match?.groupValues?.get(1) in setOf("ended", "已结束"))
+                    put("status", if (stalled != null) "running" else facts[0]); put("ended", match?.groupValues?.get(1) in setOf("ended", "已结束"))
+                    if (stalled != null) put("stall", stall(stalled.groupValues[1], section))
                     val exit = Regex("^(?:exit code|退出码)\\s*(-?\\d+)$").matchEntire(facts.getOrElse(1) { "" })?.groupValues?.get(1)?.toIntOrNull()
                     if (exit != null) put("exitCode", exit)
                     Regex("^(?:reason|原因)\\s*(.+)$").matchEntire(facts.getOrElse(1) { "" })?.groupValues?.get(1)?.let { put("killReason", it.replace(Regex("\\s*[(（].*[)）]\\s*$"), "")) }
@@ -71,11 +75,31 @@ internal fun backgroundWake(note: String): JsonObject? {
     return buildJsonObject { put("jobs", JsonArray(jobs)); put("wakeups", JsonArray(wakeups)); put("text", blocks.joinToString("\n")) }
 }
 
+/** How a quiet job stood when its stall wake was sent (OrbitKit `BackgroundJobStall`, web `BackgroundJobStall`). */
+private fun stall(facts: String, section: List<String>): JsonObject {
+    val runningFor = durationMs(Regex("running for (.+?) when this was sent").find(facts)?.groupValues?.get(1))
+    val wroteNothing = section.any { Regex("^ {6}no output at all｜").containsMatchIn(it) }
+    val quiet = section.firstNotNullOfOrNull { Regex("^ {6}no new output for (.+?)(?:｜last output at (\\S+))?$").matchEntire(it) }
+    return buildJsonObject {
+        runningFor?.let { put("runningForMs", it) }
+        (if (wroteNothing) runningFor else durationMs(quiet?.groupValues?.get(1)))?.let { put("quietForMs", it) }
+        quiet?.groupValues?.get(2)?.takeIf { it.isNotEmpty() }?.let { put("lastOutputAt", it) }
+        put("wroteNothing", wroteNothing)
+    }
+}
+
+/** `2h 5m 0s` / `15m 2s` / `45s` (the block's `readableDuration`) in milliseconds; null for anything else. */
+internal fun durationMs(text: String?): Long? {
+    if (text == null || !Regex("^(?:\\d+[hms] ?)+$").matches(text)) return null
+    val unit = mapOf('h' to 3_600_000L, 'm' to 60_000L, 's' to 1000L)
+    return Regex("(\\d+)([hms])").findAll(text).sumOf { it.groupValues[1].toLong() * unit.getValue(it.groupValues[2][0]) }
+}
+
 /** A note without its wake blocks: whatever else the same note carried, which stays an attached entry beside the wake's line
  * rather than repeating the blocks the line already draws (iOS `BackgroundWake.rest`). */
 fun withoutWakeBlocks(note: String): String =
-    Regex("<(background-job-wake|scheduled-wakeup)>\\n[\\s\\S]*?\\n</\\1>").replace(note, "").trim()
+    Regex("<(background-job-wake|background-job-stall|scheduled-wakeup)>\\n[\\s\\S]*?\\n</\\1>").replace(note, "").trim()
 
 /** A queued wake's own content is its blocks (the note it will be delivered with), read as the line it will be (A08-4). */
 fun queuedWake(content: String): JsonObject? =
-    if ("<background-job-wake>" in content || "<scheduled-wakeup>" in content) backgroundWake(content) else null
+    if ("<background-job-wake>" in content || "<background-job-stall>" in content || "<scheduled-wakeup>" in content) backgroundWake(content) else null
