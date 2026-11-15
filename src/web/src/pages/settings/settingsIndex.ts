@@ -83,6 +83,7 @@ export const PERSONAL_SETTINGS = {
     'Your language',
     'What you write in, and what replies are shown in.',
   ),
+  translationBilingual: setting('translationBilingual', '/settings/general', 'Show both languages'),
   agentLanguage: setting('agentLanguage', '/settings/general', 'Agents work in', 'What the agent receives and answers in.'),
   notifySessionFinished: setting(
     'notifySessionFinished',
