@@ -42,6 +42,8 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { hashChatTicket } from '../feishu/feishu-chat-route.service';
+import { wikiCreateTitle } from '../owner-requests/owner-request';
+import { normalizeRepoUrl } from '../wiki/wiki.service';
 import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import { PAT_FORBIDDEN_REASONS, type PatForbiddenReason } from './pat-scope.decorator';
 import { PAT_SCOPES, PatService } from './pat.service';
@@ -170,6 +172,26 @@ test('the owner channel refuses a personal access token door by door and field b
   const savedSecret = await db.accountSecret.create({ data: { ownerId: userId, label: 'door fixture', valueEnc: 'to be replaced' } });
   const savedRow = () => db.accountSecret.findUnique({ where: { id: savedSecret.id } });
 
+  // A real WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): filed from a session in a workspace on a
+  // repository with no wiki, so the Create wiki door makes that wiki and settles the card.
+  const wikiRepoUrl = `https://github.com/owner-channel/wiki-${RUN}`;
+  const wikiRepoUrlNorm = normalizeRepoUrl(wikiRepoUrl)!;
+  const wikiWorkspaceId = randomUUID();
+  await db.workspace.create({ data: { id: wikiWorkspaceId, ownerId: userId, runnerId, name: `wiki ${RUN}`, enabled: true, repoUrl: wikiRepoUrl } });
+  const wikiSessionId = toUuid(
+    ok(await api('POST', '/sessions', login, { prompt: 'asks for a wiki', workspaceId: wikiWorkspaceId }), 'creating a session on the repository').json.id,
+  );
+  const wikiToCreate = (await db.ownerRequest.create({
+    data: {
+      ownerId: userId, askedBySessionId: wikiSessionId, kind: 'WIKI_CREATE', title: wikiCreateTitle(wikiRepoUrlNorm),
+      why: 'the session needs a wiki', repoUrlNorm: wikiRepoUrlNorm, workspaceId: wikiWorkspaceId,
+    },
+  })).id;
+  const wikiCreated = async () => ({
+    state: (await db.ownerRequest.findUniqueOrThrow({ where: { id: wikiToCreate } })).state,
+    spaces: await db.wikiSpace.count({ where: { ownerId: userId, repoUrlNorm: wikiRepoUrlNorm, deletedAt: null } }),
+  });
+
   // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
   // groups connected: the three group doors (docs/feishu-bot-design.md §8.1) stood up for real.
   const feishuAppId = `cli_owner_channel_${RUN}`;
@@ -223,6 +245,10 @@ test('the owner channel refuses a personal access token door by door and field b
     {
       route: 'POST /owner-requests/:id/secret/revoke', path: `/owner-requests/${secretToRevoke}/secret/revoke`,
       login: 200, observe: () => grantRow(secretToRevoke),
+    },
+    {
+      route: 'POST /owner-requests/:id/create-wiki', path: `/owner-requests/${wikiToCreate}/create-wiki`,
+      login: 200, observe: wikiCreated,
     },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
     {
