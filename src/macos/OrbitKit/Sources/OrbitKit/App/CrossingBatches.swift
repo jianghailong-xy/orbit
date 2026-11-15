@@ -268,29 +268,43 @@ public enum CrossingBatches {
     }
 
     /// `8 tasks from Runner v1 · for criteria 4–11`; a move out says what it takes out and from where.
+    /// Criteria are named by their number — the one a person reads on the project page — and a
+    /// server too old to send one falls back to the criterion's words, never its opaque key.
     public static func summary(_ batch: CrossingBatch) -> String {
         let n = batch.rows.count
         if batch.out { return "\(n) \(noun(batch.kind, count: n)) to take out of \(batch.sourceTitle)" }
         let head = "\(n) \(noun(batch.kind, count: n)) from \(batch.sourceTitle)"
-        guard let range = criteriaRange(batch.rows.compactMap { $0.requestedCriterion?.key }) else { return head }
-        return "\(head) · \(range)"
+        var seen = Set<String>()
+        let criteria = batch.rows.compactMap(\.requestedCriterion).filter { seen.insert($0.key).inserted }
+        let ordinals = criteria.compactMap(\.ordinal)
+        let texts = criteria.filter { $0.ordinal == nil }
+            .compactMap { criterionName($0).map { "“\($0)”" } }
+        let named = Set(ordinals).count + texts.count
+        guard named > 0 else { return head }
+        var parts: [String] = []
+        if let range = criteriaRange(ordinals) { parts.append(range) }
+        parts.append(contentsOf: texts)
+        return "\(head) · for \(named == 1 ? "criterion" : "criteria") \(parts.joined(separator: ", "))"
     }
 
-    /// `for criterion 4`, `for criteria 4–11`, `for criteria 4, 6, 9`; nil for no keys.
-    public static func criteriaRange(_ keys: [String]) -> String? {
-        var seen = Set<String>()
-        let distinct = keys.filter { !$0.isEmpty && seen.insert($0).inserted }
-        guard !distinct.isEmpty else { return nil }
-        if distinct.count == 1 { return "for criterion \(distinct[0])" }
-        let numbers = distinct.compactMap { Int($0) }
-        if numbers.count == distinct.count {
-            let sorted = numbers.sorted()
-            if sorted.last! - sorted.first! == sorted.count - 1 {
-                return "for criteria \(sorted.first!)–\(sorted.last!)"
-            }
-            return "for criteria " + sorted.map(String.init).joined(separator: ", ")
+    /// `4–11` when the numbers are a run, else `4, 6, 9`; nil for none.
+    public static func criteriaRange(_ ordinals: [Int]) -> String? {
+        let numbers = Array(Set(ordinals)).sorted()
+        guard !numbers.isEmpty else { return nil }
+        let contiguous = numbers.enumerated().allSatisfy { index, number in
+            index == 0 || number == numbers[index - 1] + 1
         }
-        return "for criteria " + distinct.sorted().joined(separator: ", ")
+        if numbers.count > 1, contiguous { return "\(numbers.first!)–\(numbers.last!)" }
+        return numbers.map(String.init).joined(separator: ", ")
+    }
+
+    /// What a person calls a criterion: `Criterion 4`, or its words from a server that sends no
+    /// number. Never its key, which is an opaque id. Nil when it has neither (deleted).
+    public static func criterionName(_ criterion: ProjectCrossing.Criterion) -> String? {
+        if let ordinal = criterion.ordinal { return "Criterion \(ordinal)" }
+        guard let text = criterion.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return nil }
+        return text
     }
 
     /// `move · 8 waiting`, while live.
@@ -350,12 +364,13 @@ public enum CrossingBatches {
 
     public static func requestedLine(_ row: ProjectCrossing) -> String? {
         guard let criterion = row.requestedCriterion else { return nil }
-        let line = "\(ProjectCrossings.moveRequestedCriterionLabel): \(criterion.key)"
-        return criterion.text == nil ? "\(line) — \(ProjectCrossings.moveCriterionGone)" : line
+        let name = criterionName(criterion) ?? ProjectCrossings.moveCriterionGone
+        return "\(ProjectCrossings.moveRequestedCriterionLabel): \(name)"
     }
 
     public static func withdrawnLine(_ row: ProjectCrossing) -> String? {
-        row.withdrawnCriterion.map { "\(ProjectCrossings.moveWithdrawnCriterionLabel): \($0.key)" }
+        guard let criterion = row.withdrawnCriterion, let name = criterionName(criterion) else { return nil }
+        return "\(ProjectCrossings.moveWithdrawnCriterionLabel): \(name)"
     }
 
     /// A row already answered names its state; a waiting one names nothing.

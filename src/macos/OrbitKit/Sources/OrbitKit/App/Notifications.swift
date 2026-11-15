@@ -145,8 +145,9 @@ public enum AppIntent: Equatable, Sendable {
     /// An owner request's "Later": put off for `OwnerRequests.laterSeconds`, on this device only.
     case snoozeOwnerRequest(requestID: String)
     /// A terminal asking to be approved (push kind `terminal-login`): where its card is — the machine page's
-    /// Needs you section (docs/mocks/waiting-on-you-removal/02 ④).
-    case openTerminalRequests
+    /// Needs you section (docs/mocks/waiting-on-you-removal/02 ④). The id is the push's own when it
+    /// carries one, so that card is the one lit; nil opens the section on the oldest waiting.
+    case openTerminalRequests(requestID: String?)
 }
 
 public enum Notifications {
@@ -209,6 +210,8 @@ public enum Notifications {
     public static let keyProject = "projectID"
     /// `userInfo` key naming the runner a machine alert is about (apiserver `PushService.notifyRunnerDrainWaiting`).
     public static let keyRunner = "runnerID"
+    /// The terminal sign-in a `terminal-login` alert is about (apiserver `PushService.notifyTerminalLogin`).
+    public static let keyTerminalLogin = "terminalLoginID"
     /// A runner draining for its update with the owner's work waiting on it (D3): a tap opens its page,
     /// where Later and Update Now are.
     public static let runnerUpdatingKind = "runner-updating"
@@ -267,7 +270,9 @@ public enum Notifications {
             if let sid = userInfo[keySession] { return .open(.session(sid)) }
             return userInfo[keyProject].map { .openProject(projectID: $0) }
         }
-        if userInfo[keyKind] == "terminal-login" { return .openTerminalRequests }
+        if userInfo[keyKind] == "terminal-login" {
+            return .openTerminalRequests(requestID: userInfo[keyTerminalLogin])
+        }
         // An owner request's actions open its card or put it off; a plain tap — the alert itself or
         // its Later reminder — opens the conversation that asked, on the same card. Everything it
         // needs is the request's own id, which the app resolves to `askedBySessionId`.

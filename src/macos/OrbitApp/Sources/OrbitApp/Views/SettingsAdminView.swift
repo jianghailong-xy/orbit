@@ -206,7 +206,7 @@ struct SettingsView: View {
     /// Needs you holds, or with none how many machines are online — only once the server has answered.
     private var machinesValue: (text: String, needsYou: Bool)? {
         guard let runners = model.runners, runners.loadState.hasLoaded else { return nil }
-        let needsYou = MachinesAndModelsLists(model).attention.count
+        let needsYou = MachinesAndModelsLists(model).needsYouCount
         return (SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners), needsYou > 0)
     }
 

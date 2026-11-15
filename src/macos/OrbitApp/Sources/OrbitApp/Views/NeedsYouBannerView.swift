@@ -83,9 +83,12 @@ struct NeedsYouBannerView: View {
     /// Unfolded to one capsule per waiting conversation. Folds again after a press goes somewhere,
     /// so the page it is left on is as it was.
     @State private var unfolded = false
+    /// The clock the terminal line is filtered against, so it leaves at its request's deadline.
+    @State private var terminalNow = Date()
 
     var body: some View {
-        if let below {
+        Group {
+            if let below {
             // The chevron points where the words say the card is: a card placed by its own moment
             // can be up the conversation from a reader at the live tail, which is the ordinary case
             // here. Unknown (nothing has reported the reader's place) keeps the old down — the
@@ -101,6 +104,11 @@ struct NeedsYouBannerView: View {
                     onOpenBelow?(below.rowID)
                 }
             }
+        } else if let terminal = model.terminalNeedsYou(now: terminalNow) {
+            // Terminals asking to be approved lead (docs/mocks/waiting-on-you-removal/02 ③): a
+            // request lives ten minutes, and the oldest one's card a press goes to. Everything else
+            // waiting is what its "+N" counts and what unfolding shows under it.
+            terminalBar(terminal)
         } else if let banner = model.needsYouBanner(excluding: excluding) {
             // Several waiting, unfolded (the owner, 2026-11-13, option B of
             // docs/mocks/needs-you-capsule/03-expand.html): one capsule per conversation, the first
@@ -139,6 +147,97 @@ struct NeedsYouBannerView: View {
                     }
                 }
             }
+        }
+        }
+        .modifier(TerminalRequestsCurrent(now: $terminalNow))
+    }
+
+    /// The folded bar for terminals asking to be approved, with the sessions waiting behind them
+    /// unfolded one capsule each: the terminal line first, as the folded bar names it, and its "+N"
+    /// is every other thing waiting.
+    @ViewBuilder
+    private func terminalBar(_ terminal: TerminalNeedsYou) -> some View {
+        let sessions = model.needsYouBanner(excluding: excluding)
+        let lines = [CapsuleLine(terminal: terminal)]
+            + model.needsYouEntries(excluding: excluding).map(CapsuleLine.init(session:))
+        // A request lives ten minutes; with more than one thing waiting the press unfolds them.
+        let several = lines.count > 1
+        if unfolded && several {
+            // At most five; the last says "+N" for the ones behind it, as the folded bar does.
+            let shown = Array(lines.prefix(NeedsYouLogic.unfoldedLimit))
+            chrome(deck: true) {
+                lineBar(shown[0], more: 0, fold: { setUnfolded(false) })
+                    .overlay(alignment: .top) {
+                        VStack(spacing: 6) {
+                            ForEach(Array(shown.enumerated().dropFirst()), id: \.element.id) { index, entry in
+                                lineBar(entry, more: index == shown.count - 1 ? lines.count - shown.count : 0)
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 44 + 6)
+                    }
+            } scrim: {
+                scrim
+            }
+        } else {
+            chrome(deck: several) {
+                bar(text: terminal.text, detail: terminal.detail, since: terminal.since,
+                    more: sessions?.count ?? 0, glyph: .terminal, chevron: nil,
+                    hint: several ? "Shows all \(lines.count) waiting on you" : Terminals.needsYouHint,
+                    deck: several) {
+                    if several { setUnfolded(true) } else { model.openTerminalNeedsYou(terminal) }
+                }
+            }
+        }
+    }
+
+    /// One line of the unfolded terminal stack: the terminal's, or a waiting session's.
+    private func lineBar(_ line: CapsuleLine, more: Int, fold: (() -> Void)? = nil) -> some View {
+        bar(text: line.text, detail: line.detail, since: line.since, more: more, glyph: line.glyph,
+            chevron: nil, hint: line.hint, fold: fold) {
+            unfolded = false
+            if let terminal = line.terminal {
+                model.openTerminalNeedsYou(terminal)
+            } else if let session = line.session {
+                open(session)
+            }
+        }
+    }
+
+    /// One line of the unfolded terminal stack, either shape.
+    private struct CapsuleLine: Identifiable {
+        let id: String
+        let text: String
+        let detail: String?
+        let since: String?
+        let glyph: NeedsYouGlyph
+        let terminal: TerminalNeedsYou?
+        let session: NeedsYouBanner?
+
+        init(terminal: TerminalNeedsYou) {
+            id = "terminal:\(terminal.oldest.id)"
+            text = terminal.text
+            detail = terminal.detail
+            since = terminal.since
+            glyph = .terminal
+            self.terminal = terminal
+            session = nil
+        }
+
+        init(session: NeedsYouBanner) {
+            id = session.target.id
+            text = session.text
+            detail = session.detail
+            since = session.since
+            glyph = session.glyph
+            terminal = nil
+            self.session = session
+        }
+
+        var hint: String {
+            if terminal != nil { return Terminals.needsYouHint }
+            return session?.ownerItem == nil ? "Opens the session waiting on you"
+                                             : "Opens the card waiting on you"
         }
     }
 
@@ -396,6 +495,7 @@ private extension NeedsYouGlyph {
         case .warning: return "exclamationmark.triangle.fill"
         case .pause: return "pause.fill"
         case .hand: return "hand.raised.fill"
+        case .terminal: return "terminal"
         }
     }
 }

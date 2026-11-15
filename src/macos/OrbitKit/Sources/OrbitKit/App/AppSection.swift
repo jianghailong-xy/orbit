@@ -60,6 +60,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         case .task, .list:      return .tasks
         case .runner:           return .runners
         case .watch:            return .following
+        case .terminalLogin:    return .runners
         }
     }
 }

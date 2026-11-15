@@ -202,7 +202,7 @@ final class SettingsStackWiringTests: XCTestCase {
         // Machines & models' value is its page's Needs you, counted the page's own way, in amber while it
         // holds anything — over lists the list reads for it, pools and their people included.
         XCTAssertTrue(rows.contains(".foregroundStyle(value.needsYou ? RunnerInk.amber : Color.secondary)"))
-        XCTAssertTrue(list.contains("let needsYou = MachinesAndModelsLists(model).attention.count"))
+        XCTAssertTrue(list.contains("let needsYou = MachinesAndModelsLists(model).needsYouCount"))
         XCTAssertTrue(list.contains("SettingsHome.machinesAndModelsValue(needsYou: needsYou, runners: runners.runners)"))
         for read in [".task { await model.runners?.load() }", ".task { await model.agents?.reloadPools() }",
                      ".task { await model.sharedPools?.load() }", "await model.sharedPools?.loadAccess(id)"] {

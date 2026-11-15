@@ -25,6 +25,8 @@ public enum RunnerPageCopy {
     // MARK: Resources
 
     public static let RUNNER_RESOURCES = "Resources"
+    /// A managed runner that has not reported yet (preparing, waiting): its Resources and Engines say only this.
+    public static let MANAGED_RUNNER_NOT_REPORTED = "Available once the runner is ready."
     public static let RUNNER_RESOURCES_CPU = "CPU"
     public static let RUNNER_RESOURCES_MEMORY = "Memory"
     public static let RUNNER_RESOURCES_LIVE = "Live · every 30 s · last hour"
