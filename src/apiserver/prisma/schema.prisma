@@ -7785,6 +7785,11 @@ model OwnerRequest {
   repoUrlNorm         String?   @map("repo_url_norm")
   /// WIKI_CREATE: the asking session's workspace, which the wiki's maintenance reads. History, not a foreign key.
   workspaceId         String?   @map("workspace_id") @db.Uuid
+  /// SCHEDULE_* kinds (migration 0840): the schedule and run the item is about, and what answers it. History, no FK.
+  scheduleId              String?   @map("schedule_id") @db.Uuid
+  scheduleRunId           String?   @map("schedule_run_id") @db.Uuid
+  approvalId              String?   @map("approval_id") @db.Uuid
+  scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)

@@ -569,6 +569,46 @@ Mocks first, with iOS as the reference. Client work starts after the owner appro
 A run's session stays reachable by id (`GET /sessions/:id`, `session_get`), which is how the schedule's history and
 the notification open it.
 
+*Implemented in S3 (2026-11-15).* Every session query was read and is one of three kinds.
+
+- **Filtered** (`run_source <> 'SCHEDULE'`): `SessionsService.list` in every view, folder and project read, and so
+  `listOpenSince`; every branch of `search` (title, metadata, transcript, recents); `workspaceSessionCounts`;
+  `listForOrchestration`; the folder counts of `moveTargets`; the realtime `session.created`;
+  `workspace-usage.ts` (`workspaceSessionCount`, the "N sessions" of a workspace's page, and `lastActiveByWorkspace`);
+  the wiki's maintenance facts (`session_settled`, `approval_answered`, `merge_receipt`) and `wikiSessionsOfSpace`, since
+  v1 feeds no run to the wiki.
+- **Already unreachable:** `lastProviderByWorkspace` (`opened_by = 'PERSON'`, so a run never seeds the workspace
+  default); every raw-SQL session join in `tasks.service.ts`, `project-list-rollup.ts` and the project parts of
+  `wiki-docs-material.ts` (all through `task_id`, which a run does not have).
+- **By id, left as it is:** `GET /sessions/:id`, `session_get`, `listRowsByIds` (link cards and wiki chats name their
+  sessions: an `orbit-session:` link to a run gets its card), `searchEvents` (find inside one session),
+  `wiki-docs-material.ts`'s cited sessions, `attention-fix.ts`'s fix entries, `reaper.service.ts`'s finalize reads.
+- **Internal, left as it is:** the claim and capacity counts (`session-tree-sql.ts`, `tasks.service.ts`
+  `materialisationBudget`; a run holds a runner slot), the reaper's sweeps, `attention-fix.ts`'s `mostRecentWorkspaces`
+  (picks a workspace for a fix; it lists no session), and `runners.service.ts` `updateTurnsOf`, which lists a draining
+  runner's RUNNING sessions by title on the Update card and its confirm: a run there is named because the update will
+  interrupt it, which is what the card is for.
+
+**Needs you.** A run that needs the owner is counted once. The badge (`PushService.needsYouSessions`, and the Feishu
+`status` list that reads it) is a set of sessions waiting for a reply: a run's session waiting on a card is in it, once,
+and leaves it when the card is answered. No owner request is a badge source, of any kind. A session row's needs-you count
+(`readOwnerDecisionsBySession`) counts the card as the pending approval it is and leaves the `SCHEDULE_APPROVAL` item that
+points at the same card out, so one card is one count; the other three items count on the row they are shown beside.
+
+**Who hears.** The push side of §7.3 lives in `schedules/schedule-attention.ts`. A run's session rings no "finished" or
+"needs your reply" banner of its own (`PushService.notifySessionSettled`, `notifyApprovalRequest`); what it found, how it
+failed or what it waits on is pushed by the schedule (`PushService.notifySchedule`), after the transaction that decided
+it commits: at most once, so a crash between the two loses the push, and the Waiting on you item is the durable record.
+Waiting on you carries four owner-request kinds no session can file (they are not in `OWNER_REQUEST_KINDS`, which is
+what a session may file; `owner_request_kind_chk` takes all nine) — `SCHEDULE_FAILED` (one per schedule, the newest
+failure; none for a schedule already ended or deleted), `SCHEDULE_HELD`, `SCHEDULE_APPROVAL` (one per card),
+`SCHEDULE_WIDEN` — with `schedule_id`, `schedule_run_id`, `approval_id` and `schedule_change_request_id` on the row
+(migration 0840). They close by themselves (WITHDRAWN, with why) when a later run succeeds, the run ends, the schedule is
+resumed or ends, or a newer request replaces one; DONE when the card or request they point at is answered. Only a failure
+is ended from Waiting on you itself (done or declined); the other three are refused there, since their card, request or
+hold has its own door. Closing one delivers no turn to the run's session. A run's history
+(`ScheduleRunsService.history`) gives each run's session id with OPEN, COMPLETED, TRASH or GONE.
+
 **2. The mode each engine runs for each access level**, measured on the real CLIs on 2026-11-15; the full record,
 with the commands and their output, is [scheduled-tasks-engine-modes.md](./scheduled-tasks-engine-modes.md). The
 table in §6.2 is the result. What the measurement found:

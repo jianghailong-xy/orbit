@@ -1392,8 +1392,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the schedule, the run and its state. A rolled-back attempt takes every row it wrote with it.',
-    effects: 'None: the refusal it records happened before, and nothing outside the database is told.',
+    effects: 'None inside: the refusal it records happened before. After commit, the alerts this transaction decided (schedules/schedule-attention.ts) are pushed through the ScheduleNotifier, one per item or finding filed here; a replay files nothing new and pushes nothing.',
     answer: 'The worker logs it and the next pass reads the run again.',
+  },
+  {
+    at: 'schedules/schedule-runs.service.ts#syncApprovalItems',
+    shape: 'TX_RETRIED',
+    locks: "pg_advisory_xact_lock(4000750, hashtext(owner id)) — the per-account schedule serializer SchedulesService takes, a key rather than a row — then the schedule row FOR UPDATE (ScheduleRunsService#lock), then an UPDATE of the run's SCHEDULE_APPROVAL owner_request rows whose card is no longer PENDING and one owner_request INSERT per PENDING card ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING. Ranks only rise: the advisory key is no relation of LOCK_ORDER, and owner_request rows are the owner's, which no other path holds while it waits for the account's key.",
+    identity: "The run's state and session id, read under the schedule row lock: only a run still in progress with this session has items filed, and each card is filed once under its key (`schedule-approval:<approval id>`).",
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the run, its session and the cards. A rolled-back attempt takes every row it wrote with it.',
+    effects: 'None inside. After commit, each item filed in this attempt is pushed once through the ScheduleNotifier (AWAITING_APPROVAL).',
+    answer: 'The reconcile pass logs it and the next pass syncs the run again.',
   },
   {
     at: 'schedules/schedule-runs.service.ts#fire',
@@ -1403,7 +1414,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the schedule, the run and its state. A rolled-back attempt takes every row it wrote with it.',
-    effects: 'None: the worker that calls it starts runs afterwards, outside this transaction.',
+    effects: 'None inside: the worker that calls it starts runs afterwards. After commit, the alerts this transaction decided (schedules/schedule-attention.ts) are pushed through the ScheduleNotifier, one per item or finding filed here; a replay files nothing new and pushes nothing.',
     answer: 'The worker logs it and the next pass fires the slot.',
   },
   {
@@ -1414,7 +1425,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the schedule, the run and its state. A rolled-back attempt takes every row it wrote with it.',
-    effects: "After commit the run's session is opened with the id this transaction wrote (SessionsService.create); a failed open is answered by `fail`.",
+    effects: "After commit the run's session is opened with the id this transaction wrote (SessionsService.create); a failed open is answered by `fail`. After commit, the alerts this transaction decided (schedules/schedule-attention.ts) are pushed through the ScheduleNotifier, one per item or finding filed here; a replay files nothing new and pushes nothing.",
     answer: 'The worker logs it and the next pass starts the run.',
   },
   {
@@ -1425,7 +1436,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the schedule, the run and its state. A rolled-back attempt takes every row it wrote with it.',
-    effects: "After commit: a NO_CHANGE run's settled session is completed, and the run queued behind it is started.",
+    effects: "After commit: a NO_CHANGE run's settled session is completed, and the run queued behind it is started. After commit, the alerts this transaction decided (schedules/schedule-attention.ts) are pushed through the ScheduleNotifier, one per item or finding filed here; a replay files nothing new and pushes nothing.",
     answer: 'Typed 503; the run session reports again, and is judged against the run as it then stands.',
   },
   {
@@ -1458,7 +1469,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything is re-read under the advisory key and the schedule row lock on every attempt: the schedule, the run and its state. A rolled-back attempt takes every row it wrote with it.',
-    effects: 'After commit the session is interrupted or ended as asked, and the next queued run started.',
+    effects: 'After commit the session is interrupted or ended as asked, and the next queued run started. After commit, the alerts this transaction decided (schedules/schedule-attention.ts) are pushed through the ScheduleNotifier, one per item or finding filed here; a replay files nothing new and pushes nothing.',
     answer: 'The worker logs it and the next pass reads the run again.',
   },
   {
@@ -1480,7 +1491,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything is re-read under the advisory key and the row locks on every attempt: the schedule, its envelope, the calling session and the request. A rolled-back attempt takes every row it wrote with it.',
-    effects: 'None: nothing outside the database is told. The tools and doors that call it (later tasks) announce after commit.',
+    effects: "None inside. A run's widen card filed here (SCHEDULE_WIDEN) is pushed after commit through the ScheduleNotifier; a replay files nothing new.",
     answer: 'Typed 503; the caller asks again, and the change is judged again against the schedule as it then stands.',
   },
   {
@@ -1522,7 +1533,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything is re-read under the advisory key and the row locks on every attempt: the schedule, its envelope, the calling session and the request. A rolled-back attempt takes every row it wrote with it.',
-    effects: 'None: nothing outside the database is told. The tools and doors that call it (later tasks) announce after commit.',
+    effects: 'None inside. After commit, a schedule a run ended (the revision this transaction wrote names RUN) is pushed once through the ScheduleNotifier (GOAL_REACHED).',
     answer: 'Typed 503; the caller asks again, and the change is judged again against the schedule as it then stands.',
   },  {
     at: 'schedules/schedules.service.ts#remove',
@@ -1543,7 +1554,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Everything is re-read under the advisory key and the row locks on every attempt: the schedule, its envelope, the calling session and the request. A rolled-back attempt takes every row it wrote with it.',
-    effects: 'None: nothing outside the database is told. The tools and doors that call it (later tasks) announce after commit.',
+    effects: "None inside. A run's widen card filed here (SCHEDULE_WIDEN) is pushed after commit through the ScheduleNotifier; a replay files nothing new.",
     answer: 'Typed 503; the caller asks again, and the change is judged again against the schedule as it then stands.',
   },
   {
@@ -2885,6 +2896,8 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'schedules/schedule-attention.ts#closeScheduleItems', under: "every scheduleRuns unit that ends or syncs a run, and schedules.decide, .resume and applyLocked's end: under the advisory key and the schedule row FOR UPDATE they hold, one UPDATE of that schedule's PENDING SCHEDULE_* owner_request rows to WITHDRAWN or DONE" },
+  { at: 'schedules/schedule-attention.ts#fileScheduleItem', under: "scheduleRuns.report, .fail, .start, .holdRefused, .syncApprovalItems and schedules.update and .undo: under the advisory key and the schedule row FOR UPDATE they hold, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING" },
   { at: 'schedules/schedule-runs.service.ts#failLocked', under: 'scheduleRuns.start and .fail: under the advisory key and the schedule row FOR UPDATE they hold, one UPDATE of the run (FAILED, or QUEUED for a retry) and the schedule UPDATE of consecutive_failures' },
   { at: 'schedules/schedule-runs.service.ts#holdRun', under: 'scheduleRuns.start: under the advisory key and the schedule row FOR UPDATE it holds, one UPDATE of the run to HELD' },
   { at: 'schedules/schedule-runs.service.ts#insertSlotRun', under: "scheduleRuns.fire: under the advisory key and the schedule row FOR UPDATE it holds, one schedule_run INSERT ON CONFLICT on the slot's partial unique index DO NOTHING" },

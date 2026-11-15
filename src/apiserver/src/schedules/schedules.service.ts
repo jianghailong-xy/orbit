@@ -62,6 +62,16 @@ import {
 import { ScheduleRuleError, assertTimezone, nextDueAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
 import { SCHEDULE_ACCESS_NOT_ENFORCEABLE, scheduleRunMode } from './schedule-access';
 import { scheduleStartCheck } from './schedule-start-check';
+import {
+  SCHEDULE_NOTIFIER,
+  closeScheduleItems,
+  fileScheduleItem,
+  goalReachedCopy,
+  sendAlerts,
+  widenCopy,
+  type ScheduleAlert,
+  type ScheduleNotifier,
+} from './schedule-attention';
 
 /** At most this many schedules that are not ENDED per account (§3). */
 export const SCHEDULE_LIMIT = 50;
@@ -315,8 +325,14 @@ export class SchedulesService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() @Inject(SCHEDULE_CLOCK) clock?: () => Date,
+    /** Who hears (§7.3): a run's widen card and a run ending its own schedule. Absent, nothing is pushed. */
+    @Optional() @Inject(SCHEDULE_NOTIFIER) private readonly notifier?: ScheduleNotifier,
   ) {
     this.clock = clock ?? (() => new Date());
+  }
+
+  private async alert(alerts: readonly ScheduleAlert[]): Promise<void> {
+    await sendAlerts(this.notifier, alerts, (m) => this.logger.warn(m));
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -373,9 +389,11 @@ export class SchedulesService {
   /** §4: inside the envelope it applies at once; outside it waits on a request only the OWNER's Allow applies. */
   async update(actor: ScheduleActor, scheduleId: string, patch: SchedulePatch): Promise<ScheduleUpdateResult> {
     if (actor.kind === 'PAT') throw patRefusal();
-    return withTransactionRetry(
+    const alerts: ScheduleAlert[] = [];
+    const result = await withTransactionRetry(
       this.prisma,
       async (tx) => {
+        alerts.length = 0;
         await this.lockAccount(tx, actor.ownerId);
         const schedule = await this.lockSchedule(tx, actor.ownerId, scheduleId);
         const who = await this.resolveActor(tx, actor, scheduleId);
@@ -388,10 +406,12 @@ export class SchedulesService {
           });
         }
         if (patch.workspaceId !== undefined) await this.assertOwnWorkspace(tx, actor.ownerId, patch.workspaceId);
-        return this.changeLocked(tx, actor, who, schedule, patch, null);
+        return this.changeLocked(tx, actor, who, schedule, patch, null, alerts);
       },
       loggedRetry(this.logger, 'schedules.update'),
     );
+    await this.alert(alerts);
+    return result;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -432,96 +452,110 @@ export class SchedulesService {
           throw refusal('CONFLICT', 'SCHEDULE_REQUEST_DECIDED', `This request is already ${request.state}.`);
         }
         const now = this.clock();
-        if (decision === 'DECLINE') {
-          const declined = await tx.scheduleChangeRequest.update({
-            where: { id: requestId },
-            data: { state: 'DECLINED', decidedAt: now, decidedByUserId: actor.ownerId },
-          });
-          return { outcome: 'DECLINED' as const, request: declined, schedule: null };
-        }
-        if (request.kind === 'CREATE') {
-          await this.assertUnderLimit(tx, actor.ownerId);
-          const proposal = this.createFromProposal(request.proposed as unknown as FieldValues);
-          const pressed = input.timezone ?? null;
-          if (proposal.timezone !== null && pressed !== null && pressed !== proposal.timezone) {
-            throw refusal(
-              'BAD_REQUEST',
-              'SCHEDULE_TIMEZONE_ALREADY_SET',
-              `The card already names its time zone (${proposal.timezone}); a pressing device's zone is taken only `
-                + 'when it names none.',
-            );
+        const decided = await (async (): Promise<ScheduleDecisionResult> => {
+          if (decision === 'DECLINE') {
+            const declined = await tx.scheduleChangeRequest.update({
+              where: { id: requestId },
+              data: { state: 'DECLINED', decidedAt: now, decidedByUserId: actor.ownerId },
+            });
+            return { outcome: 'DECLINED' as const, request: declined, schedule: null };
           }
-          const timezone = proposal.timezone ?? pressed;
-          if (timezone === null) {
-            throw refusal(
-              'BAD_REQUEST',
-              'SCHEDULE_TIMEZONE_REQUIRED',
-              'This card names no time zone: Create must carry the pressing device\'s IANA time zone.',
+          if (request.kind === 'CREATE') {
+            await this.assertUnderLimit(tx, actor.ownerId);
+            const proposal = this.createFromProposal(request.proposed as unknown as FieldValues);
+            const pressed = input.timezone ?? null;
+            if (proposal.timezone !== null && pressed !== null && pressed !== proposal.timezone) {
+              throw refusal(
+                'BAD_REQUEST',
+                'SCHEDULE_TIMEZONE_ALREADY_SET',
+                `The card already names its time zone (${proposal.timezone}); a pressing device's zone is taken only `
+                  + 'when it names none.',
+              );
+            }
+            const timezone = proposal.timezone ?? pressed;
+            if (timezone === null) {
+              throw refusal(
+                'BAD_REQUEST',
+                'SCHEDULE_TIMEZONE_REQUIRED',
+                'This card names no time zone: Create must carry the pressing device\'s IANA time zone.',
+              );
+            }
+            checkTimezone(timezone);
+            // Re-judged as the world is now: a workspace deleted since the ask is not one to start runs in.
+            if (!(await this.ownsWorkspace(tx, actor.ownerId, proposal.workspaceId))) {
+              const superseded = await tx.scheduleChangeRequest.update({
+                where: { id: requestId },
+                data: { state: 'SUPERSEDED', decidedAt: now },
+              });
+              return { outcome: 'STALE' as const, request: superseded, schedule: null, reason: 'WORKSPACE_GONE' as const };
+            }
+            const schedule = await this.insertSchedule(
+              tx,
+              actor.ownerId,
+              { ...proposal, timezone },
+              request.askedBySessionId,
+              'USER',
+              request.askedBySessionId,
             );
+            const allowed = await tx.scheduleChangeRequest.update({
+              where: { id: requestId },
+              data: { state: 'ALLOWED', decidedAt: now, decidedByUserId: actor.ownerId, scheduleId: schedule.id, resultRevision: 1 },
+            });
+            return { outcome: 'ALLOWED' as const, request: allowed, schedule };
           }
-          checkTimezone(timezone);
-          // Re-judged as the world is now: a workspace deleted since the ask is not one to start runs in.
-          if (!(await this.ownsWorkspace(tx, actor.ownerId, proposal.workspaceId))) {
+          if (input.timezone != null) {
+            throw refusal('BAD_REQUEST', 'SCHEDULE_TIMEZONE_NOT_TAKEN', 'Only a create card takes the pressing device\'s time zone.');
+          }
+          const schedule = await this.lockSchedule(tx, actor.ownerId, request.scheduleId!);
+          if (request.baseRevision !== null && request.baseRevision !== schedule.revision) {
+            // Re-judged against the schedule as it is now: what was asked was asked of revision N, and the schedule
+            // has moved on. Applying the patch blind could widen something the person never saw on this card.
             const superseded = await tx.scheduleChangeRequest.update({
               where: { id: requestId },
               data: { state: 'SUPERSEDED', decidedAt: now },
             });
-            return { outcome: 'STALE' as const, request: superseded, schedule: null, reason: 'WORKSPACE_GONE' as const };
+            return { outcome: 'STALE' as const, request: superseded, schedule, reason: 'REVISION_MOVED' as const };
           }
-          const schedule = await this.insertSchedule(
-            tx,
-            actor.ownerId,
-            { ...proposal, timezone },
-            request.askedBySessionId,
-            'USER',
-            request.askedBySessionId,
-          );
+          const moveTo = (request.proposed as FieldValues).workspaceId;
+          if (typeof moveTo === 'string' && !(await this.ownsWorkspace(tx, actor.ownerId, moveTo))) {
+            // Deleting a workspace bumps no revision, so the revision check above cannot see it.
+            const superseded = await tx.scheduleChangeRequest.update({
+              where: { id: requestId },
+              data: { state: 'SUPERSEDED', decidedAt: now },
+            });
+            return { outcome: 'STALE' as const, request: superseded, schedule, reason: 'WORKSPACE_GONE' as const };
+          }
+          const who: ResolvedActor = {
+            changedBy: request.askedBy,
+            sessionId: request.askedBySessionId,
+            session: null,
+            servesScheduleId: null,
+          };
+          const patch = this.patchFromJson(request.proposed as unknown as FieldValues);
+          const result = await this.applyLocked(tx, schedule, patch, who, { widen: true, undoOf: null });
           const allowed = await tx.scheduleChangeRequest.update({
             where: { id: requestId },
-            data: { state: 'ALLOWED', decidedAt: now, decidedByUserId: actor.ownerId, scheduleId: schedule.id, resultRevision: 1 },
+            data: {
+              state: 'ALLOWED',
+              decidedAt: now,
+              decidedByUserId: actor.ownerId,
+              resultRevision: result.outcome === 'APPLIED' ? result.revision : null,
+            },
           });
-          return { outcome: 'ALLOWED' as const, request: allowed, schedule };
+          return { outcome: 'ALLOWED' as const, request: allowed, schedule: result.schedule };
+        })();
+        if (request.scheduleId) {
+          // The card a run asked for in Waiting on you is answered by this press: DONE when it was allowed or
+          // declined, WITHDRAWN when the press found it stale and superseded it without applying anything.
+          await closeScheduleItems(
+            tx,
+            { scheduleId: request.scheduleId, kinds: ['SCHEDULE_WIDEN'], scheduleChangeRequestId: requestId },
+            decided.outcome === 'STALE'
+              ? { state: 'WITHDRAWN', note: 'The scheduled task changed since this was asked; nothing was applied.', now }
+              : { state: 'DONE', note: decided.outcome === 'ALLOWED' ? 'Allowed.' : 'Declined.', byUserId: actor.ownerId, now },
+          );
         }
-        if (input.timezone != null) {
-          throw refusal('BAD_REQUEST', 'SCHEDULE_TIMEZONE_NOT_TAKEN', 'Only a create card takes the pressing device\'s time zone.');
-        }
-        const schedule = await this.lockSchedule(tx, actor.ownerId, request.scheduleId!);
-        if (request.baseRevision !== null && request.baseRevision !== schedule.revision) {
-          // Re-judged against the schedule as it is now: what was asked was asked of revision N, and the schedule
-          // has moved on. Applying the patch blind could widen something the person never saw on this card.
-          const superseded = await tx.scheduleChangeRequest.update({
-            where: { id: requestId },
-            data: { state: 'SUPERSEDED', decidedAt: now },
-          });
-          return { outcome: 'STALE' as const, request: superseded, schedule, reason: 'REVISION_MOVED' as const };
-        }
-        const moveTo = (request.proposed as FieldValues).workspaceId;
-        if (typeof moveTo === 'string' && !(await this.ownsWorkspace(tx, actor.ownerId, moveTo))) {
-          // Deleting a workspace bumps no revision, so the revision check above cannot see it.
-          const superseded = await tx.scheduleChangeRequest.update({
-            where: { id: requestId },
-            data: { state: 'SUPERSEDED', decidedAt: now },
-          });
-          return { outcome: 'STALE' as const, request: superseded, schedule, reason: 'WORKSPACE_GONE' as const };
-        }
-        const who: ResolvedActor = {
-          changedBy: request.askedBy,
-          sessionId: request.askedBySessionId,
-          session: null,
-          servesScheduleId: null,
-        };
-        const patch = this.patchFromJson(request.proposed as unknown as FieldValues);
-        const result = await this.applyLocked(tx, schedule, patch, who, { widen: true, undoOf: null });
-        const allowed = await tx.scheduleChangeRequest.update({
-          where: { id: requestId },
-          data: {
-            state: 'ALLOWED',
-            decidedAt: now,
-            decidedByUserId: actor.ownerId,
-            resultRevision: result.outcome === 'APPLIED' ? result.revision : null,
-          },
-        });
-        return { outcome: 'ALLOWED' as const, request: allowed, schedule: result.schedule };
+        return decided;
       },
       loggedRetry(this.logger, 'schedules.decide'),
     );
@@ -564,6 +598,11 @@ export class SchedulesService {
             throw refusal('CONFLICT', 'SCHEDULE_START_CHECK_FAILED', `The schedule is still held: ${check.reason}.`);
           }
         });
+        await closeScheduleItems(
+          tx,
+          { scheduleId: resumed.id, kinds: ['SCHEDULE_HELD'] },
+          { state: 'WITHDRAWN', note: 'The scheduled task was resumed.', now: this.clock() },
+        );
         if (resumed.heldReason === null) return resumed;
         return tx.schedule.update({ where: { id: resumed.id }, data: { heldReason: null } });
       },
@@ -573,12 +612,35 @@ export class SchedulesService {
 
   /** ENDED (GOAL_REACHED): what a session, or the run itself, says when there is nothing left to watch. */
   async end(actor: ScheduleActor, scheduleId: string): Promise<Schedule> {
-    return withTransactionRetry(
+    const { schedule, byRun } = await withTransactionRetry(
       this.prisma,
-      (tx) =>
-        this.controlLocked(tx, actor, scheduleId, () => ({ state: 'ENDED', endedReason: 'GOAL_REACHED' }), false, undefined, 'END'),
+      async (tx) => {
+        const ended = await this.controlLocked(
+          tx, actor, scheduleId, () => ({ state: 'ENDED', endedReason: 'GOAL_REACHED' }), false, undefined, 'END',
+        );
+        const written = await tx.scheduleRevision.findUnique({
+          where: { scheduleId_revision: { scheduleId, revision: ended.revision } },
+          select: { changedBy: true },
+        });
+        return { schedule: ended, byRun: written?.changedBy === 'RUN' };
+      },
       loggedRetry(this.logger, 'schedules.end'),
     );
+    // §8.3: a run ending its own schedule is news, once (an ENDED schedule cannot be ended again); a person's own
+    // end is not, they did it.
+    if (byRun) {
+      await this.alert([{
+        kind: 'GOAL_REACHED',
+        ownerId: schedule.ownerId,
+        scheduleId: schedule.id,
+        runId: null,
+        opens: { scheduleId: schedule.id },
+        ownerRequestId: null,
+        ...goalReachedCopy(schedule.title),
+        collapseId: `schedule-ended-${schedule.id}-${schedule.revision}`,
+      }]);
+    }
+    return schedule;
   }
 
   /** ENDED (DELETED). Runs and findings are kept. */
@@ -595,9 +657,11 @@ export class SchedulesService {
    * restores the envelope too; a session's or a token's is judged by §4 like any other change.
    */
   async undo(actor: ScheduleActor, scheduleId: string, revision: number): Promise<ScheduleUpdateResult> {
-    return withTransactionRetry(
+    const alerts: ScheduleAlert[] = [];
+    const result = await withTransactionRetry(
       this.prisma,
       async (tx) => {
+        alerts.length = 0;
         await this.lockAccount(tx, actor.ownerId);
         const schedule = await this.lockSchedule(tx, actor.ownerId, scheduleId, { allowEnded: true });
         const row = await tx.scheduleRevision.findUnique({
@@ -643,10 +707,12 @@ export class SchedulesService {
             restoreEnvelope: envelope as Envelope | undefined,
           });
         }
-        return this.changeLocked(tx, actor, who, schedule, patch, revision);
+        return this.changeLocked(tx, actor, who, schedule, patch, revision, alerts);
       },
       loggedRetry(this.logger, 'schedules.undo'),
     );
+    await this.alert(alerts);
+    return result;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -681,6 +747,7 @@ export class SchedulesService {
     schedule: Schedule,
     patch: SchedulePatch,
     undoOf: number | null,
+    alerts: ScheduleAlert[],
   ): Promise<ScheduleUpdateResult> {
     const settings = this.settingsAfter(schedule, patch);
     if (who.session && settings.accessLevel !== schedule.accessLevel) this.assertEnforceable(who.session.engine, settings.accessLevel);
@@ -698,6 +765,11 @@ export class SchedulesService {
       where: { scheduleId: schedule.id, state: 'PENDING', kind: 'UPDATE' },
       data: { state: 'SUPERSEDED' },
     });
+    await closeScheduleItems(
+      tx,
+      { scheduleId: schedule.id, kinds: ['SCHEDULE_WIDEN'] },
+      { state: 'WITHDRAWN', note: 'A newer request replaced it.', now: this.clock() },
+    );
     const request = await tx.scheduleChangeRequest.create({
       data: {
         ownerId: schedule.ownerId,
@@ -712,6 +784,35 @@ export class SchedulesService {
         widens: judgment.widens,
       },
     });
+    if (who.changedBy === 'RUN' && who.sessionId) {
+      // §8.3: a run asking to widen its envelope gets the card in Waiting on you; nobody is in its conversation.
+      const run = await tx.session.findUnique({ where: { id: who.sessionId }, select: { scheduleRunId: true } });
+      const copy = widenCopy(schedule.title, judgment.widens);
+      const itemId = await fileScheduleItem(tx, {
+        kind: 'SCHEDULE_WIDEN',
+        ownerId: schedule.ownerId,
+        askedBySessionId: who.sessionId,
+        scheduleId: schedule.id,
+        scheduleRunId: run?.scheduleRunId ?? null,
+        scheduleChangeRequestId: request.id,
+        workspaceId: schedule.workspaceId,
+        key: `schedule-widen:${request.id}`,
+        title: copy.title,
+        why: copy.body,
+      });
+      if (itemId) {
+        alerts.push({
+          kind: 'WIDEN',
+          ownerId: schedule.ownerId,
+          scheduleId: schedule.id,
+          runId: run?.scheduleRunId ?? null,
+          opens: { sessionId: who.sessionId },
+          ownerRequestId: itemId,
+          ...copy,
+          collapseId: `owner-request-${itemId}`,
+        });
+      }
+    }
     return { outcome: 'PENDING', request };
   }
 
@@ -812,6 +913,12 @@ export class SchedulesService {
         where: { scheduleId: schedule.id, state: 'PENDING' },
         data: { state: 'SUPERSEDED' },
       });
+      // Nothing about an ended schedule waits on the owner any more.
+      await closeScheduleItems(
+        tx,
+        { scheduleId: schedule.id, kinds: ['SCHEDULE_FAILED', 'SCHEDULE_HELD', 'SCHEDULE_WIDEN'] },
+        { state: 'WITHDRAWN', note: 'The scheduled task ended.', now },
+      );
     }
     return { outcome: 'APPLIED', schedule: updated, revision };
   }

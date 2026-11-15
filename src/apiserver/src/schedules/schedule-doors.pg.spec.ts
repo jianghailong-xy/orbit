@@ -710,3 +710,51 @@ test('Allow on a card whose schedule has ended, or whose envelope was narrowed s
   assert.equal(after.runLimitMinutes, 20);
   assert.equal(after.envelopeRunLimitMinutes, 20, 'not applied blind over the narrowing');
 });
+
+// -----------------------------------------------------------------------------------------------------------------
+// The seam with S3 (schedule-attention.ts): a run's widen card is a Waiting on you item, closed by the owner's press
+// -----------------------------------------------------------------------------------------------------------------
+
+async function widenItem(scheduleChangeRequestId: string) {
+  return db.ownerRequest.findFirst({ where: { kind: 'SCHEDULE_WIDEN', scheduleChangeRequestId } });
+}
+
+test('a run\'s widen through the tool is a Waiting on you item; Allow and Decline through the REST door leave it DONE', { skip }, async () => {
+  const w = await world('seam-press');
+  const s = await createdThroughCard(w);
+  const run = await runSession(w, s.id);
+  for (const verb of ['allow', 'decline'] as const) {
+    const asked = await tools.update(w.runner, run.sessionId, s.id, { runLimitMinutes: verb === 'allow' ? 45 : 90 } as never);
+    const card = (asked as { card: { id: string } }).card.id;
+    const item = await widenItem(card);
+    assert.ok(item, `${verb}: the run's widen is filed in Waiting on you`);
+    assert.equal(item!.state, 'PENDING');
+    assert.equal(item!.ownerId, w.ownerId);
+    assert.equal(item!.scheduleId, s.id);
+    if (verb === 'allow') await rest.allow(w.user, card, {}, NO_SESSION);
+    else await rest.decline(w.user, card, NO_SESSION);
+    assert.equal((await widenItem(card))!.state, 'DONE', `${verb}: the press closes the item`);
+  }
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).runLimitMinutes, 45);
+});
+
+test('a widen card the press finds stale is superseded, and its Waiting on you item WITHDRAWN', { skip }, async () => {
+  const w = await world('seam-stale');
+  const s = await createdThroughCard(w);
+  const run = await runSession(w, s.id);
+  // REVISION_MOVED: the schedule changed inside its envelope after the ask.
+  const moved = await tools.update(w.runner, run.sessionId, s.id, { runLimitMinutes: 60 } as never);
+  const movedCard = (moved as { card: { id: string } }).card.id;
+  await tools.update(w.runner, w.sessionId, s.id, { title: 'Renamed after the ask' } as never);
+  await refusedWith(rest.allow(w.user, movedCard, {}, NO_SESSION), 'SCHEDULE_REQUEST_STALE');
+  assert.equal((await db.scheduleChangeRequest.findUniqueOrThrow({ where: { id: movedCard } })).state, 'SUPERSEDED');
+  assert.equal((await widenItem(movedCard))!.state, 'WITHDRAWN');
+  // WORKSPACE_GONE: the run asked to move to a workspace deleted since.
+  const away = await tools.update(w.runner, run.sessionId, s.id, { workspaceId: w.otherWorkspaceId } as never);
+  const awayCard = (away as { card: { id: string } }).card.id;
+  assert.equal((await widenItem(awayCard))!.state, 'PENDING');
+  await db.workspace.update({ where: { id: w.otherWorkspaceId }, data: { deletedAt: new Date() } });
+  await refusedWith(rest.allow(w.user, awayCard, {}, NO_SESSION), 'SCHEDULE_REQUEST_STALE');
+  assert.equal((await widenItem(awayCard))!.state, 'WITHDRAWN');
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).workspaceId, w.workspaceId);
+});
