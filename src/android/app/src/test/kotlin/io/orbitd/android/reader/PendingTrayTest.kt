@@ -108,6 +108,19 @@ class PendingTrayTest {
         assertEquals(listOf("user:fix the export", "user:then push it to main", "assistant:an older reply"), drawn(events, holds = false))
     }
 
+    @Test fun theQueuedHandoffNoteTurnIsNoRowOfTheTailTheTrayOrTheHead() {
+        // Start a new coordinator confirmed while a turn runs: the platform's note turn waits behind it (board 02 ②).
+        val note = "From Orbit · handoff note\\n\\nThe owner is handing this project over to a new coordinator conversation."
+        val rows = objects("""[{"turnId":"q-owner","kind":"prompt","placement":"queued","content":"also check the retries","attachments":[]},
+            {"turnId":"q-note","kind":"prompt","placement":"queued","authoredByOrbit":true,"content":"$note","attachments":[]},
+            {"turnId":"q-wake","kind":"prompt","placement":"queued","authoredByOrbit":true,"content":"Orbit wake: a job finished","attachments":[]}]""")
+        val tail = queuedTail(rows, listOf(opening))
+        assertEquals(listOf("q-owner", "q-wake"), tail.map { it.turnId })
+        assertEquals("the tray keeps the owner's own", listOf("q-owner"), tail.filter { it.inTray }.map { it.turnId })
+        val head = objects("""[{"turnId":"q-note","kind":"prompt","placement":"accepted","authoredByOrbit":true,"content":"$note","attachments":[]}]""")
+        assertTrue("nor the accepted head once a runner takes it", acceptedHeads(head, listOf(opening)).isEmpty())
+    }
+
     // The rows.
 
     private fun queued(json: String) = queuedTail(objects(json), emptyList())

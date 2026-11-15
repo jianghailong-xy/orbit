@@ -24,6 +24,7 @@ export * from './planUsage';
 export * from './project-progress';
 export * from './project-done';
 export * from './project-start';
+export * from './coordinator-handoff';
 export * from './providerPresets';
 export * from './openCodeKeys';
 export * from './providerEngines';
@@ -52,6 +53,7 @@ export * from './wikiRepoOps';
 export * from './wikiSystemModel';
 export * from './wikiChat';
 export * from './feishu';
+export * from './translation';
 export * from './help';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input

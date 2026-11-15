@@ -55,6 +55,8 @@ export interface Tenant {
   /** An event of the session's transcript: its id, which a page around it names, and its seq. */
   eventId: string;
   eventSeq: number;
+  /** An `assistant` reply's seq: what POST …/events/:seq/translation/retry translates again. */
+  replyEventSeq: number;
   sessionRequestId: string;
   folderId: string;
   tagId: string;
@@ -396,6 +398,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'POST /projects/:id/coordinator': { request: (of, mine) => ({ params: { id: of.projectId }, body: { workspaceId: mine.workspaceId } }) },
   'POST /projects/:id/coordinator/replace': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/coordinator/status': { request: (of) => ({ params: { id: of.projectId } }) },
+  'GET /projects/:id/coordinator/pending-waits': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/coordinator/handoff': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/coordinator/handoff/skip': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/coordinator/handoff/cancel': { request: (of) => ({ params: { id: of.projectId } }) },
+  'POST /projects/:id/coordinator/handoff/retry': { request: (of) => ({ params: { id: of.projectId } }) },
   'GET /projects/:id/pending-addressees': { request: (of) => ({ params: { id: of.projectId } }) },
   'POST /projects/:id/coordinator/rebind': {
     request: (of, mine) => ({ params: { id: of.projectId }, body: { workspaceId: mine.workspaceId } }),
@@ -609,6 +616,14 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
   },
+  'POST /sessions/:id/turns/:turnId/translation/retry': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
+  'POST /sessions/:id/turns/:turnId/translation/send-as-written': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
   'POST /sessions/:id/resume': { request: (of) => ({ params: { id: of.sessionId }, body: turn('resume') }) },
   // Session guests (docs/session-guests-design.md §7): the owner's People routes on A's session. The guest door is read
   // by hand (TENANT_ISOLATION_BY_HAND): the account that owns the session is no guest of it.
@@ -658,6 +673,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/events/page': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/events/search': { request: (of) => ({ params: { id: of.sessionId }, query: { q: 'census' } }) },
   'GET /sessions/:id/events/:seq/full': { request: (of) => ({ params: { id: of.sessionId, seq: of.eventSeq } }) },
+  'POST /sessions/:id/events/:seq/translation/retry': { request: (of) => ({ params: { id: of.sessionId, seq: of.replyEventSeq } }) },
   'GET /sessions/:id/created-tasks': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/share': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/share': { request: (of) => ({ params: { id: of.sessionId } }) },
