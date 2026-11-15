@@ -316,15 +316,22 @@ struct WorktreeBar: View {
         }
     }
 
+    /// The count is the row's reading: it takes its room before the branch name, which gives way
+    /// first. Short of room it drops words rather than truncating — "· committed" (the Merge button
+    /// beside it says as much), then the file count — so the Merge button keeps its title on a phone.
     private func statView(add: Int, del: Int, count: Int, committed: Bool) -> some View {
-        (Text("+\(add)").foregroundStyle(.green)
-            + Text(" −\(del)").foregroundStyle(.red)
-            + Text(" · \(count) \(count == 1 ? "file" : "files")\(committed ? " · committed" : "")")
-                .foregroundStyle(.secondary))
-            .font(.orbitMono)
-            .lineLimit(1)
-            // The count is the row's reading: it keeps its width and the branch name gives way first.
-            .fixedSize()
+        let lines = Text("+\(add)").foregroundStyle(.green) + Text(" −\(del)").foregroundStyle(.red)
+        let files = lines + Text(" · \(count) \(count == 1 ? "file" : "files")").foregroundStyle(.secondary)
+        return ViewThatFits(in: .horizontal) {
+            if committed {
+                (files + Text(" · committed").foregroundStyle(.secondary)).fixedSize()
+            }
+            files.fixedSize()
+            lines.fixedSize()
+        }
+        .font(.orbitMono)
+        .lineLimit(1)
+        .layoutPriority(1)
     }
 
     private func failureView(message: String, manualMergeCommand: String?) -> some View {
@@ -472,7 +479,9 @@ private struct WorktreeMergeControl: View {
         let c = busy ? Color.secondary : tint
         return HStack(spacing: 0) {
             Button { Task { await console.worktree.merge(target: primaryTarget) } } label: {
-                Text(title).font(.orbitLabel.weight(.semibold)).lineLimit(1)
+                // Middle truncation keeps both ends of a long project title readable; the row gives
+                // the button its full width first (`statView` drops words instead).
+                Text(title).font(.orbitLabel.weight(.semibold)).lineLimit(1).truncationMode(.middle)
                     .foregroundStyle(c)
                     .padding(.leading, 10).padding(.trailing, targets.isEmpty ? 10 : 9).padding(.vertical, 3)
                     .contentShape(Rectangle())

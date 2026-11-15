@@ -1,0 +1,86 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .row4 { display: flex; gap: 32px; align-items: flex-start; }
+  .row4 .col { width: 440px; }
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  .cap44.fl { z-index: 16; }
+  .ph.light .cap44.fl { box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 10px 26px rgba(0,0,0,.13); }
+  /* 系统通知（iOS 26，按通知中心量）：圆角 24、内边距 14、图标 38、两行 15pt */
+  .sysn { position: absolute; z-index: 16; border-radius: 24px; padding: 13px 14px; display: flex; gap: 12px; align-items: center;
+          background: rgba(255,255,255,.96); box-shadow: inset 0 0 0 .5px rgba(0,0,0,.06), 0 10px 26px rgba(0,0,0,.13); color: #000; }
+  .sysn .app { width: 38px; height: 38px; border-radius: 9px; background: #0A84FF; flex: none; display: flex; align-items: center; justify-content: center; color: #fff; font: 800 20px "Inter"; }
+  .sysn .w { flex: 1; min-width: 0; }
+  .sysn .h { display: flex; justify-content: space-between; gap: 8px; font: 600 15px/20px "Inter", "Noto Sans SC"; }
+  .sysn .h span { font-weight: 400; font-size: 13px; color: rgba(60,60,67,.6); flex: none; }
+  .sysn p { margin: 1px 0 0; font: 15px/20px "Inter", "Noto Sans SC"; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sysn .ico { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,149,0,.15); flex: none; display: flex; align-items: center; justify-content: center; }
+  .sysn p.sub { color: rgba(60,60,67,.6); }
+  .wall { position: absolute; inset: 0; background: linear-gradient(160deg, #cfd9ee, #eef1f8 60%); }
+  .dimv { position: absolute; z-index: 23; border-left: 1.5px solid #2860e8; }
+  .diml { position: absolute; z-index: 23; font: 700 12px "Inter"; color: #2860e8; background: rgba(255,255,255,.9); padding: 1px 5px; border-radius: 5px; }
+  .deck2 { position: absolute; z-index: 15; border-radius: 24px; background: #EDEDF2; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.08), 0 6px 14px rgba(0,0,0,.08); }
+</style>
+<body>
+<h1>needs-you · 和系统通知一样高</h1>
+<p class="lede">owner 11-15：<b>这个通知的高度比 iOS 通知中心的窄。</b>今天的胶囊高 44pt（照导航按钮的高度定的），左边 30pt 圆片，字 15/13pt。iOS 26 通知中心里一条通知约 70pt：圆角约 24 的卡片，左边 38pt 图标，标题和正文都是 15pt。下面把它做成同样的身量。</p>
+
+<h2>对照</h2>
+<div class="row4" id="cmp"></div>
+
+<h2>改后在各处</h2>
+<div class="row4" id="use"></div>
+
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const L = 'left:16px;right:16px';
+const ROWS = [
+  { t: '定时任务 v1 (Scheduled tasks)', s: 'S4 报告实现已完成：分支已合入最新的项目分…', tm: 'now' },
+  { t: 'Compact and coordinator handoff from…', s: '<span style="color:#0A84FF">Resolving a merge conflict · 19m</span>', tm: 'now' },
+  { t: 'Managed runners on other Docker hosts', s: 'Watching any 1 of 2 tasks · 1 running', tm: 'now' },
+  { t: 'Session translation (Settings › Translation)', s: '已请求把项目分支合入 main', tm: '22m' },
+];
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-develop</div>`;
+const rows = (top) => `<div class="pinhd" style="position:absolute;left:20px;top:${top}px;font:700 22px Inter;color:var(--l2);z-index:3">Pinned</div>` + ROWS.map((r, i) =>
+  `<div class="srow sep" style="top:${top + 42 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const shell = (body, h = 520) => phone('light', `${statusBar('12:44')}${listNav}${body}${edge('light', 70, 112)}<div class="home"></div>`, { h, cls: 'crop' });
+const card = (top, title, sub, age, { left = 16, right = 16, extra = '' } = {}) =>
+  `<div class="sysn" style="left:${left}px;right:${right}px;top:${top}px;${extra}"><span class="ico">${ic('hand', 21, '#FF9500', 2.1)}</span><div class="w"><div class="h">${title}<span>${age}</span></div><p class="sub">${sub}</p></div></div>`;
+const dim = (x, y1, y2, label) => `<div class="dimv" style="left:${x}px;top:${y1}px;height:${y2 - y1}px"></div><div class="diml" style="left:${x + 6}px;top:${(y1 + y2) / 2 - 9}px">${label}</div>`;
+
+const today = shell(`${rows(186)}${capA({ glyph: 'hand', title: 'orbit-develop needs you', sub: 'Android 自动更新报错', age: '5h', top: 116, style: L, cls: 'fl' })}${dim(426, 116, 160, '44')}`);
+const sys = phone('light', `<div class="wall"></div>${statusBar('12:44')}<div class="lockd" style="position:absolute;left:0;right:0;top:96px;text-align:center;font:600 19px Inter;color:#333;z-index:2">Saturday, November 15</div>
+<div class="sysn" style="left:12px;right:12px;top:150px"><div class="app">O</div><div class="w"><div class="h">orbit-develop<span>5h ago</span></div><p>Needs your reply · Bash</p></div></div>${dim(430, 150, 220, '70')}<div class="home"></div>`, { h: 520, cls: 'crop' });
+const prop = shell(`${rows(206 + 22)}${card(116, 'orbit-develop needs you', 'Android 自动更新报错', '5h')}${dim(426, 116, 186, '70')}`);
+document.getElementById('cmp').innerHTML = `
+<div class="col"><span class="tag now">今天 · 44pt 胶囊</span>${today}<div class="cap"><h3>比通知矮一截</h3>高度照导航按钮（44pt），两行挤在里面：第二行 13pt 灰字，圆片 30pt。和系统推送放在一起看像「小一号」。</div></div>
+<div class="col"><span class="tag alt">系统 · 通知中心的一条</span>${sys}<div class="cap"><h3>参照（照 iOS 26 画）</h3>约 70pt 高，圆角约 24 的卡片，左边 38pt 图标，标题 15pt 半粗、正文 15pt，时间在右上。</div></div>
+<div class="col"><span class="tag rec">改后 · 70pt 通知卡（推荐）</span>${prop}<div class="cap"><h3>和通知一样的身量</h3>圆角 24 的卡片代替胶囊，左边 38pt 琥珀圆片（标记不变），标题 15pt 半粗，第二行 15pt 次要色，时间在右上。左右边距仍对齐导航按钮（20 / 16pt）。</div></div>
+<div class="col"><span class="tag alt">折中 · 56pt 胶囊</span>${shell(`${rows(198)}${capA({ glyph: 'hand', title: 'orbit-develop needs you', sub: 'Android 自动更新报错', age: '5h', top: 116, style: L + ';height:56px;border-radius:28px', cls: 'fl' })}${dim(426, 116, 172, '56')}`)}<div class="cap"><h3>只加高、保持胶囊</h3>两行之间松一点，仍是胶囊形。比通知小，但不再挤。</div></div>`;
+
+// 改后各处
+const folded = shell(`${rows(206 + 34)}<div class="deck2" style="left:28px;right:28px;top:123px;height:70px"></div><div class="deck2" style="left:42px;right:42px;top:129px;height:70px;z-index:14;filter:brightness(.97)"></div>${card(116, '2 sessions need you', 'Android 自动更新报错', '5h')}`);
+const unfolded = shell(`${rows(206 + 34)}<div style="position:absolute;inset:0;z-index:14;background:rgba(0,0,0,.18)"></div>${card(116, 'orbit-develop needs you', 'Android 自动更新报错', '5h', { extra: 'padding-right:52px' })}<div style="position:absolute;right:30px;top:140px;z-index:17">${ic('chevu', 16, 'var(--l2)', 2.6)}</div>${card(194, 'orbit needs you', 'Task: Owner answer replayed to a new coordinator', '1d')}`, 520);
+const arriving = shell(`${rows(206 + 22)}${card(116, 'Needs your reply · task_create', 'Android 自动更新报错', '0s', { extra: 'box-shadow: inset 0 0 0 1.5px rgba(255,149,0,.75), 0 0 0 4px rgba(255,149,0,.18), 0 10px 26px rgba(0,0,0,.13)' })}`);
+const wiki = phone('light', `${statusBar('12:44')}<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div><div class="gc r">${ic('search', 20, 'var(--l1)', 2)}</div></div>
+<div style="position:absolute;left:20px;top:200px;font:700 34px Inter;z-index:3">Wiki</div>${card(116, '2 sessions need you', 'Android 自动更新报错', '5h')}${edge('light', 70, 112)}<div class="home"></div>`, { h: 520, cls: 'crop' });
+document.getElementById('use').innerHTML = `
+<div class="col"><span class="tag rec">收起 · 多件</span>${folded}<div class="cap">叠边跟着变成卡片形，露 7 / 13pt 不变。</div></div>
+<div class="col"><span class="tag rec">展开</span>${unfolded}<div class="cap">每件一张通知卡，间距 8pt；第一张右边留 ↑。</div></div>
+<div class="col"><span class="tag rec">新的一件到来</span>${arriving}<div class="cap">琥珀描边照旧，6 秒后回总数。</div></div>
+<div class="col"><span class="tag rec">其他页面（浮层）</span>${wiki}<div class="cap">Wiki、任务等页面的那张同样大小。会话页导航中间那枚不变（它是导航栏的一部分，44pt）。</div></div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>尺寸</td><td>高约 70pt（上下内边距 13，两行各 20pt 行高）；圆角 24（连续圆角）；左右边距照旧对齐导航按钮（440pt 宽 20，其余 16）。</td></tr>
+<tr><td>内容</td><td>38pt 琥珀圆片（标记 21pt）· 间距 12 · 标题 15pt 半粗 + 右上时间 13pt 次要色 · 第二行 15pt 次要色。「+N」小胶囊放在时间左边。</td></tr>
+<tr><td>材质</td><td>iOS 26 同一块 <code>glassEffect</code>，形状从胶囊换成 <code>RoundedRectangle(cornerRadius: 24, style: .continuous)</code>；阴影不变。</td></tr>
+<tr><td>列表留位</td><td>首行留位跟着变成卡高 + 6（+ 叠边 13）。</td></tr>
+<tr><td>Android</td><td>同样 70dp、24dp 圆角卡片、38dp 圆片、两行 15sp。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>待你定</b>：① 70pt 通知卡（推荐，和系统一样）还是 56pt 胶囊折中；② 形状跟系统一样用圆角 24 的卡（推荐），还是保留胶囊的全圆两端。`;
+</script>
+</body></html>

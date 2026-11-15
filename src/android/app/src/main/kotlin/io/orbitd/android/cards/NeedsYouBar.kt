@@ -9,7 +9,20 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -104,9 +117,13 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         if (shown && !shift.seen) { shift.seen = true; return@LaunchedEffect }
         if (shift.height > 0f) list.dispatchRawDelta(if (shown) shift.height else -shift.height)
     }
-    if (!shown) return
+    // What it last said, so it can lift away still saying it (08-motion ④).
+    val last = remember { arrayOfNulls<NeedsYouBanner>(1) }
+    if (banner != null) last[0] = banner
+    val waiting = last[0] ?: return
+    AnimatedVisibility(shown, enter = fadeIn(spring()) + slideInVertically(spring()) { -it / 3 } + expandVertically(spring(), Alignment.Top),
+        exit = fadeOut(spring()) + slideOutVertically(spring()) { -it / 3 } + shrinkVertically(spring(), Alignment.Top)) {
     val measured = Modifier.onSizeChanged { shift.height = it.height.toFloat() }
-    val waiting = banner ?: return
     // One of the five owner items opens the card it names; anything else the session. Folds the bar again on the way out.
     fun go(entry: NeedsYouBanner) {
         unfolded = false
@@ -130,39 +147,61 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         NeedsYouLogic.entries(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
     } else emptyList()
     val stacked = entries.size > 1
+    // The stack comes out from under the first card and goes back under it (08-motion ①②): it stays up while it goes.
+    val stackState = remember { MutableTransitionState(false) }
+    stackState.targetState = stacked
+    val stackUp = stacked || stackState.currentState || !stackState.isIdle
+    val lastEntries = remember { arrayOfNulls<List<NeedsYouBanner>>(1) }
+    if (stacked) lastEntries[0] = entries
     var top by remember { mutableStateOf(0) }
     NeedsYouBar(waiting.text, when {
         several -> NeedsYouLogic.unfoldHint(waiting.count)
         waiting.ownerItem == null -> NeedsYouLogic.sessionHint
         else -> NeedsYouLogic.itemHint
     }, measured.onGloballyPositioned { top = it.positionInWindow().y.toInt() }
-        .then(if (stacked) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier),
+        .then(if (stackUp) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier),
         detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph, deck = several,
         onSwipeAway = { NeedsYouDismissal.dismiss(context, NeedsYouLogic.dismissalKeys(TrashingSessions.without(openRows, trashing) { it.text("id") })) }) {
         if (several) unfolded = true else go(waiting)
     }
-    if (stacked) NeedsYouStack(top, { unfolded = false }) {
+    val all = lastEntries[0].orEmpty()
+    if (stackUp && all.size > 1) {
         // At most five; the last says "+N" for the ones behind it, as the folded bar does.
-        val shown = entries.take(NeedsYouLogic.unfoldedLimit)
-        shown.forEachIndexed { index, entry ->
-            NeedsYouBar(entry.text, if (entry.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint,
+        val cards = all.take(NeedsYouLogic.unfoldedLimit)
+        NeedsYouStack(top, stackState, cards.size, { unfolded = false }) { index, motion ->
+            val entry = cards[index]
+            NeedsYouBar(entry.text, if (entry.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint, motion,
                 detail = entry.detail, since = entry.since, glyph = entry.glyph,
-                more = if (index == shown.lastIndex) entries.size - shown.size else 0,
+                more = if (index == cards.lastIndex) all.size - cards.size else 0,
                 onFold = if (index == 0) ({ unfolded = false }) else null) { go(entry) }
         }
     }
+    }
 }
 
-/** The unfolded capsules over everything from [top] (the folded bar's place in the window) down, on a scrim a press on which folds
- * them — never reaching the row under it. */
+/** The unfolded cards over everything from [top] (the folded bar's place in the window) down, on a scrim a press on which folds
+ * them — never reaching the row under it. The first stands where the folded bar stood; each after it comes out from under the one
+ * above, 40 ms after it, and goes back the same way (08-motion ①②), while the scrim fades. */
 @Composable
-private fun NeedsYouStack(top: Int, fold: () -> Unit, capsules: @Composable ColumnScope.() -> Unit) {
+private fun NeedsYouStack(top: Int, state: MutableTransitionState<Boolean>, count: Int, fold: () -> Unit,
+    card: @Composable (index: Int, motion: Modifier) -> Unit) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Popup(popupPositionProvider = WholeWindow, onDismissRequest = fold, properties = PopupProperties(focusable = true)) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (dark) 0.55f else 0.18f))
-            .clickable(remember { MutableInteractionSource() }, null, onClickLabel = NeedsYouLogic.foldLabel, onClick = fold)
-            .testTag("needs-you-scrim")) {
-            Column(Modifier.offset { IntOffset(0, top) }.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp), content = capsules)
+        AnimatedVisibility(state, enter = fadeIn(spring()), exit = fadeOut(spring())) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (dark) 0.55f else 0.18f))
+                .clickable(remember { MutableInteractionSource() }, null, onClickLabel = NeedsYouLogic.foldLabel, onClick = fold)
+                .testTag("needs-you-scrim")) {
+                Column(Modifier.offset { IntOffset(0, top) }.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    repeat(count) { index ->
+                        val motion = if (index == 0) Modifier else Modifier.animateEnterExit(
+                            enter = slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { -it * index } +
+                                fadeIn(tween(200, delayMillis = 40 * (index - 1))) + scaleIn(initialScale = 0.96f),
+                            exit = slideOutVertically(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)) { -it * index } +
+                                fadeOut(tween(160)) + scaleOut(targetScale = 0.96f))
+                        card(index, motion)
+                    }
+                }
+            }
         }
     }
 }
@@ -199,15 +238,16 @@ internal fun NeedsYouBar(text: String, hint: String, modifier: Modifier = Modifi
         .testTag("needs-you-bar")) {
         if (deck) NeedsYouDeck()
         // Read as its words, a button, and what the press does (iOS `accessibilityHint`).
-        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).shadow(8.dp, CircleShape).clip(CircleShape)
+        // A notification's size and corners (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/09-height`): about 70 dp, 24 dp.
+        Row(Modifier.fillMaxWidth().heightIn(min = CARD_HEIGHT).shadow(8.dp, CardShape).clip(CardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant),
             verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).heightIn(min = 44.dp).clickable(onClickLabel = hint, role = Role.Button, onClick = press)
-                .padding(start = 7.dp, end = if (onFold == null) 16.dp else 0.dp, top = 5.dp, bottom = 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).heightIn(min = CARD_HEIGHT).clickable(onClickLabel = hint, role = Role.Button, onClick = press)
+                .padding(start = 14.dp, end = if (onFold == null) 16.dp else 0.dp, top = 13.dp, bottom = 13.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 // The one place the amber is; the words stay the surface's own — amber words on amber were the band's trap.
-                Box(Modifier.size(30.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(glyph.drawable), null, Modifier.size(16.dp).testTag("needs-you-bar-glyph:${glyph.name}"), tint = amber)
+                Box(Modifier.size(38.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(glyph.drawable), null, Modifier.size(20.dp).testTag("needs-you-bar-glyph:${glyph.name}"), tint = amber)
                 }
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -219,7 +259,7 @@ internal fun NeedsYouBar(text: String, hint: String, modifier: Modifier = Modifi
                         since?.let { NeedsYouAge(it) }
                     }
                     detail?.let {
-                        Text(it, Modifier.testTag("needs-you-bar-detail"), style = MaterialTheme.typography.bodySmall, color = muted,
+                        Text(it, Modifier.testTag("needs-you-bar-detail"), style = MaterialTheme.typography.bodyMedium, color = muted,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
@@ -245,7 +285,13 @@ private fun Modifier.swipesAway(dismiss: () -> Unit): Modifier = composed {
     val far = with(density) { 22.dp.toPx() }
     val fade = with(density) { 60.dp.toPx() }
     this.offset { IntOffset(0, lift.value.roundToInt()) }
-        .graphicsLayer { alpha = 1f - (-lift.value / fade).coerceIn(0f, 0.8f) }
+        .graphicsLayer {
+            alpha = 1f - (-lift.value / fade).coerceIn(0f, 0.8f)
+            // Going, it shrinks a little as it rises (08-motion ③).
+            val shrink = 1f - (-lift.value / (fade * 12f)).coerceIn(0f, 0.08f)
+            scaleX = shrink; scaleY = shrink
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+        }
         .draggable(rememberDraggableState { delta -> scope.launch { lift.snapTo((lift.value + delta).coerceAtMost(0f)) } },
             Orientation.Vertical, onDragStopped = { velocity ->
                 if (lift.value < -far || velocity < -1200f) {
@@ -305,6 +351,10 @@ internal fun NeedsYouMenuIcon(app: OrbitApplication, description: String) {
     }) { Icon(painterResource(R.drawable.ic_menu), description) }
 }
 
+/** The card: a notification's height and corners (iOS `cardHeight`, `card`). */
+private val CARD_HEIGHT = 70.dp
+private val CardShape = RoundedCornerShape(24.dp)
+
 /** How far the deck shows below the capsule (iOS `deckReach`). */
 private val DECK_REACH = 13.dp
 
@@ -314,9 +364,9 @@ private fun BoxScope.NeedsYouDeck() {
     // The capsule's own surface, a step and two steps back towards the page's.
     val capsule = MaterialTheme.colorScheme.surfaceVariant
     val page = MaterialTheme.colorScheme.surface
-    Box(Modifier.matchParentSize().padding(horizontal = 26.dp).offset(y = DECK_REACH).clip(CircleShape)
+    Box(Modifier.matchParentSize().padding(horizontal = 26.dp).offset(y = DECK_REACH).clip(CardShape)
         .background(lerp(capsule, page, 0.6f)).testTag("needs-you-bar-deck"))
-    Box(Modifier.matchParentSize().padding(horizontal = 12.dp).offset(y = 7.dp).shadow(4.dp, CircleShape).clip(CircleShape)
+    Box(Modifier.matchParentSize().padding(horizontal = 12.dp).offset(y = 7.dp).shadow(4.dp, CardShape).clip(CardShape)
         .background(lerp(capsule, page, 0.3f)))
 }
 

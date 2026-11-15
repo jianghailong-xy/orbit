@@ -14,13 +14,22 @@ import XCTest
 /// Swift constant to the web declaration of the same name, and renders every Swift template with
 /// sentinel values to compare the whole sentence.
 ///
-/// Names correspond one to one: a sentence added at one end and not the other fails here too.
+/// Names correspond one to one: a sentence added at one end and not the other fails here too,
+/// unless it is named below as a sentence only one client has.
 /// Shaped after `EvidenceDecisionCopyParityTests`, including that a missing counterpart is a failure
 /// and never an `XCTSkip`.
 final class RunnerPageCopyParityTests: XCTestCase {
 
     private static let webCopy = "src/web/src/lib/runnerCopy.ts"
     private static let swiftCopy = "src/macos/OrbitKit/Sources/OrbitKit/App/RunnerPageCopy.swift"
+
+    /// Sentences only the browser's machine page says, so there is nothing on this side to hold them
+    /// to. `MANAGED_RUNNER_NOT_REPORTED` is the web's pre-report state of a managed runner: its
+    /// Resources and Engines each say this one line, and no update badges or engine rows are drawn
+    /// (`MachineSettingsPage`'s `managedWaiting`, web commit 1c28b3603). These clients' machine page
+    /// has no managed-row state — a runner that has not reported keeps its Resources tiles and says
+    /// "This runner hasn’t reported its engines yet." under Engines — so this client never says it.
+    private static let webOnly: Set<String> = ["MANAGED_RUNNER_NOT_REPORTED"]
 
     private enum ParityError: Error, CustomStringConvertible {
         case noRepo
@@ -473,7 +482,7 @@ final class RunnerPageCopyParityTests: XCTestCase {
         XCTAssertEqual(tableConstants.count, Self.constants.count, "a constant is listed twice above")
         XCTAssertEqual(listedTemplates.count, Self.templates.count, "a template is listed twice above")
         XCTAssertTrue(listedTemplates.isDisjoint(with: branchingNames), "a template is listed as choosing too")
-        for name in Set(webConstants.keys).subtracting(swiftConstants).sorted() {
+        for name in Set(webConstants.keys).subtracting(swiftConstants).subtracting(Self.webOnly).sorted() {
             XCTFail("runnerCopy.ts declares \(name), which RunnerPageCopy does not")
         }
         for name in swiftConstants.subtracting(webConstants.keys).sorted() {

@@ -55,6 +55,39 @@ final class CoordinatorHandoffHeaderTests: XCTestCase {
                        "statusWord has no Handing over: the header must not lead with it")
     }
 
+    /// Board 04 (A, the owner 2026-11-15): the iPhone's nav bar has no header band, so its middle — the `.principal`
+    /// item — says "Handing over" while the handoff locks the composer, ahead of the needs-you and question capsules,
+    /// and falls back to them in every other state.
+    func testTheIPhoneBarsMiddleSaysHandingOverWhileTheHandoffLocksTheComposer() throws {
+        for state in [CoordinatorHandoffState.writing, .handingOver] {
+            XCTAssertTrue(CoordinatorContextActions.locksComposer(coordinator(state).coordinatorHandoff), "\(state)")
+        }
+        for state in [CoordinatorHandoffState.failed, .completed, .cancelled, .unknown, nil] {
+            XCTAssertFalse(CoordinatorContextActions.locksComposer(coordinator(state).coordinatorHandoff),
+                           "\(String(describing: state))")
+        }
+        let console = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        guard let start = console.range(of: "ToolbarItem(placement: .principal) {"),
+              let end = console.range(of: "#else", range: start.upperBound..<console.endIndex)
+        else { return XCTFail("the iOS .principal item was not found; move this check with it") }
+        let principal = String(console[start.upperBound..<end.lowerBound])
+        guard let handing = principal.range(of: "handingOverCapsule"),
+              let waiting = principal.range(of: "waitingCapsule(here)"),
+              let question = principal.range(of: "principalQuestion(proxy)")
+        else { return XCTFail("the .principal item must offer Handing over, the needs-you capsule and the question") }
+        XCTAssertTrue(principal[..<handing.lowerBound]
+            .contains("CoordinatorContextActions.locksComposer(app.session(id: console.sessionID)?.coordinatorHandoff)"),
+                      "Handing over shows exactly while the handoff locks the composer")
+        XCTAssertTrue(handing.lowerBound < waiting.lowerBound && handing.lowerBound < question.lowerBound,
+                      "Handing over wins over both capsules, at the tail and off it")
+        guard let capsule = console.range(of: "private var handingOverCapsule: some View {"),
+              let capsuleEnd = console.range(of: "private func questionCapsule", range: capsule.upperBound..<console.endIndex)
+        else { return XCTFail("ConsoleView.handingOverCapsule was not found") }
+        let body = String(console[capsule.upperBound..<capsuleEnd.lowerBound])
+        XCTAssertTrue(body.contains("Text(CoordinatorHandoffCopy.badgeHandingOver)"), "the web and Mac headers' word")
+        XCTAssertFalse(body.contains("Button"), "nothing to press: the transcript's row carries the actions")
+    }
+
     private func source(_ relative: String) throws -> String {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<12 {
