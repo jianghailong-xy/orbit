@@ -44,6 +44,18 @@ export type RecoveryActor = (typeof RECOVERY_ACTORS)[number];
 export const RECOVERY_USER_CONFIRMATIONS = ['REQUIRED', 'NOT_REQUIRED'] as const;
 export type RecoveryUserConfirmation = (typeof RECOVERY_USER_CONFIRMATIONS)[number];
 
+/**
+ * What kind of next step the envelope leaves the caller (contract `disposition`):
+ *
+ * - AUTOMATIC: the caller carries it out unaided: a resend, a read, or a changed request.
+ * - WAIT: the system has to move first (a prerequisite lands, a runner comes back).
+ * - CONFIRM_THEN_RUN: a person confirms, and then the caller (or the confirmation itself) carries it out.
+ * - HUMAN: a person has to act; nothing the caller sends changes the answer until they have.
+ * - STOP: send nothing more for this request.
+ */
+export const RECOVERY_DISPOSITIONS = ['AUTOMATIC', 'WAIT', 'CONFIRM_THEN_RUN', 'HUMAN', 'STOP'] as const;
+export type RecoveryDisposition = (typeof RECOVERY_DISPOSITIONS)[number];
+
 /** An action code is a token, never a tool name (`task_update`) or a command (`orbit task ...`). */
 export const RECOVERY_ACTION_CODE_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 
@@ -58,6 +70,10 @@ export const RECOVERY_ACTION_CODES = [
   'AWAIT_OWNER_DECISION',
   'FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF',
   'CREATE_PROJECT_IN_CHILD_SESSION',
+  'REREAD_AND_DECIDE',
+  'READ_GRAPH_AND_REPLAN',
+  'ASSIGN_AGENT',
+  'STAND_DOWN',
 ] as const;
 
 export const RECOVERY_DEFAULT_ACTION_BY_POLICY: Record<RecoveryRetryPolicy, string | null> = {
@@ -92,6 +108,7 @@ export interface RecoveryEnvelope {
   requiredAction: string | null;
   userConfirmation: RecoveryUserConfirmation;
   resources: RecoveryResource[];
+  disposition: RecoveryDisposition;
 }
 
 /** What the server may state outright in a body's `recovery` block. Every field is optional. */
@@ -103,6 +120,7 @@ export interface RecoveryServerBlock {
   actor?: RecoveryActor;
   userConfirmation?: RecoveryUserConfirmation;
   resources?: RecoveryResource[];
+  disposition?: RecoveryDisposition;
 }
 
 /** One failure as a client met it, before it is read. */
@@ -211,13 +229,17 @@ export const RECOVERY_ACTION_SEMANTICS: Record<string, { automaticRetry: boolean
   AWAIT_OWNER_DECISION: { automaticRetry: false, mayWrite: true },
   FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF: { automaticRetry: false, mayWrite: true },
   CREATE_PROJECT_IN_CHILD_SESSION: { automaticRetry: false, mayWrite: true },
+  REREAD_AND_DECIDE: { automaticRetry: false, mayWrite: true },
+  READ_GRAPH_AND_REPLAN: { automaticRetry: false, mayWrite: true },
+  ASSIGN_AGENT: { automaticRetry: false, mayWrite: true },
+  STAND_DOWN: { automaticRetry: false, mayWrite: false },
 };
 
 /** The actions that resend the identical request with nobody in between. */
 export const RECOVERY_AUTOMATIC_RETRY_ACTION_CODES: readonly string[] = ['RETRY', 'RETRY_SAME_REQUEST'];
 
 /** The only actions a COMMITTED envelope may carry: they read, and never lead to another write. */
-export const RECOVERY_READ_ONLY_ACTION_CODES: readonly string[] = ['VERIFY_STATE'];
+export const RECOVERY_READ_ONLY_ACTION_CODES: readonly string[] = ['VERIFY_STATE', 'STAND_DOWN'];
 
 /** The resource type that names a request id the server can read an earlier answer back by. */
 export const RECOVERY_REQUEST_ID_RESOURCE_TYPE = 'REQUEST';
@@ -287,6 +309,31 @@ export function normalizeRecovery(c: RecoveryCandidate): { policy: RecoveryRetry
   return { policy, actionCode, afterSeconds };
 }
 
+/**
+ * The disposition of a normalized envelope (contract `disposition.rules`), first rule that matches:
+ * a COMMITTED write stops; a required confirmation comes first; then a stated value; STAND_DOWN stops;
+ * a resend or a read is the caller's own; a person's decision or a USER actor is HUMAN; a SYSTEM actor,
+ * or a state change with no action, is a wait; anything else the caller carries out itself.
+ */
+export function dispositionOf(e: {
+  effect: RecoveryEffect;
+  policy: RecoveryRetryPolicy;
+  actionCode: string | null;
+  actor: RecoveryActor;
+  userConfirmation: RecoveryUserConfirmation;
+  stated?: RecoveryDisposition | null;
+}): RecoveryDisposition {
+  if (e.effect === 'COMMITTED') return 'STOP';
+  if (e.userConfirmation === 'REQUIRED') return 'CONFIRM_THEN_RUN';
+  if (e.stated) return e.stated;
+  if (e.actionCode === 'STAND_DOWN') return 'STOP';
+  if (e.policy === 'SAFE' || e.policy === 'SAME_REQUEST_ID' || e.policy === 'VERIFY_THEN_RETRY') return 'AUTOMATIC';
+  if (e.actionCode === 'AWAIT_OWNER_DECISION' || e.actor === 'USER') return 'HUMAN';
+  if (e.actor === 'SYSTEM') return 'WAIT';
+  if (e.policy === 'AFTER_STATE_CHANGE' && e.actionCode === null) return 'WAIT';
+  return 'AUTOMATIC';
+}
+
 interface EnvelopeFields {
   code: string;
   message: string;
@@ -303,6 +350,7 @@ interface EnvelopeFields {
   resources?: RecoveryResource[];
   requestIdSent?: boolean;
   success?: boolean;
+  disposition?: RecoveryDisposition | null;
 }
 
 function base(f: EnvelopeFields): RecoveryEnvelope {
@@ -317,6 +365,7 @@ function base(f: EnvelopeFields): RecoveryEnvelope {
     hasRequestId: f.requestIdSent === true || resources.some((r) => r.type === RECOVERY_REQUEST_ID_RESOURCE_TYPE),
     success: f.success === true,
   });
+  const actor = f.actor ?? 'CALLER';
   return {
     contractVersion: RECOVERY_CONTRACT_VERSION,
     code: f.code,
@@ -325,12 +374,20 @@ function base(f: EnvelopeFields): RecoveryEnvelope {
     status: f.status ?? null,
     effect: f.effect,
     retry: { policy: normalized.policy, afterSeconds: normalized.afterSeconds },
-    actor: f.actor ?? 'CALLER',
+    actor,
     owner: f.owner ?? null,
     actionCode: normalized.actionCode,
     requiredAction: f.requiredAction ?? null,
     userConfirmation,
     resources,
+    disposition: dispositionOf({
+      effect: f.effect,
+      policy: normalized.policy,
+      actionCode: normalized.actionCode,
+      actor,
+      userConfirmation,
+      stated: f.disposition ?? null,
+    }),
   };
 }
 
@@ -434,6 +491,7 @@ function parseHttp(obs: Extract<RecoveryObservation, { source: 'HTTP' }>): Recov
   return base({
     code, message, kind, status, effect, policy, actionCode, afterSeconds, actor, owner,
     requiredAction, userConfirmation, resources, requestIdSent: obs.requestIdSent, success,
+    disposition: oneOf(RECOVERY_DISPOSITIONS, stated?.disposition),
   });
 }
 

@@ -16,7 +16,8 @@
     "actionCode",
     "requiredAction",
     "userConfirmation",
-    "resources"
+    "resources",
+    "disposition"
   ],
   "enums": {
     "kind": [
@@ -47,6 +48,13 @@
     "userConfirmation": [
       "REQUIRED",
       "NOT_REQUIRED"
+    ],
+    "disposition": [
+      "AUTOMATIC",
+      "WAIT",
+      "CONFIRM_THEN_RUN",
+      "HUMAN",
+      "STOP"
     ]
   },
   "serverBlock": {
@@ -58,7 +66,8 @@
       "actionCode",
       "actor",
       "userConfirmation",
-      "resources"
+      "resources",
+      "disposition"
     ],
     "note": "What a server answer states outright, beside the legacy flat fields it keeps. Every field is optional. A stated value wins over anything the parser would infer, and is then held to the invariants below: no combination of stated fields can advise an unsafe resend."
   },
@@ -108,6 +117,28 @@
       "meaning": "This session already coordinates the project the answer names. If that is not the project being created, ask the user; once they agree, call session_create once with the answer's childSessionPrompt, and the child's own project_create makes it the new project's coordinator. Without session_create, the user starts that session by hand.",
       "automaticRetry": false,
       "mayWrite": true
+    },
+    "REREAD_AND_DECIDE": {
+      "meaning": "Read the first resource the answer names that has a reader, decide again against what it says now, and only then write: a changed request, or none. The identical request is refused again.",
+      "automaticRetry": false,
+      "mayWrite": true,
+      "reads": "RESOURCE"
+    },
+    "READ_GRAPH_AND_REPLAN": {
+      "meaning": "Read the dependency graph around the first TASK the answer names, recompute the edges against it, and write only the edges that are still missing and close no cycle.",
+      "automaticRetry": false,
+      "mayWrite": true,
+      "reads": "DEPENDENCY_GRAPH"
+    },
+    "ASSIGN_AGENT": {
+      "meaning": "Give the task a responsible agent that is bound to a runner, then send the request again.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "STAND_DOWN": {
+      "meaning": "Stop: send this request again in no form. The work it asks for is not this caller's to do, or is not to be done as asked. Read the resources it names to see where the work went.",
+      "automaticRetry": false,
+      "mayWrite": false
     }
   },
   "defaultActionByPolicy": {
@@ -193,7 +224,9 @@
       "retryPolicy SAME_REQUEST_ID => hasRequestId",
       "userConfirmation REQUIRED => retryPolicy not in [SAFE, SAME_REQUEST_ID] and actionCode is not an automaticRetry action",
       "actionCode RETRY => retryPolicy SAFE; actionCode RETRY_SAME_REQUEST => retryPolicy SAME_REQUEST_ID",
-      "retryPolicy NEVER => afterSeconds null"
+      "retryPolicy NEVER => afterSeconds null",
+      "effect COMMITTED => disposition STOP",
+      "userConfirmation REQUIRED (and effect not COMMITTED) => disposition CONFIRM_THEN_RUN"
     ]
   },
   "legacyCodes": {
@@ -296,6 +329,90 @@
     "RETRY_SAME_REQUEST"
   ],
   "readOnlyActionCodes": [
-    "VERIFY_STATE"
-  ]
+    "VERIFY_STATE",
+    "STAND_DOWN"
+  ],
+  "disposition": {
+    "note": "What kind of next step the envelope leaves the caller: carry it out unaided (AUTOMATIC), wait for the system (WAIT), have a person confirm and then carry it out (CONFIRM_THEN_RUN), hand it to a person (HUMAN), or stop (STOP). Resolved after the invariants, from the final fields, by the first rule that matches. Both parsers apply the same rules (dispositionOf).",
+    "rules": [
+      {
+        "id": "COMMITTED_STOPS",
+        "when": {
+          "effect": "COMMITTED"
+        },
+        "then": "STOP"
+      },
+      {
+        "id": "CONFIRMATION_FIRST",
+        "when": {
+          "userConfirmation": "REQUIRED"
+        },
+        "then": "CONFIRM_THEN_RUN"
+      },
+      {
+        "id": "STATED",
+        "when": {
+          "recovery.disposition": "a value of the enum"
+        },
+        "then": "the stated value"
+      },
+      {
+        "id": "STAND_DOWN_STOPS",
+        "when": {
+          "actionCode": "STAND_DOWN"
+        },
+        "then": "STOP"
+      },
+      {
+        "id": "RESEND_OR_VERIFY_IS_AUTOMATIC",
+        "when": {
+          "retryPolicy": [
+            "SAFE",
+            "SAME_REQUEST_ID",
+            "VERIFY_THEN_RETRY"
+          ]
+        },
+        "then": "AUTOMATIC"
+      },
+      {
+        "id": "A_PERSON_DECIDES",
+        "when": {
+          "anyOf": [
+            {
+              "actionCode": "AWAIT_OWNER_DECISION"
+            },
+            {
+              "actor": "USER"
+            }
+          ]
+        },
+        "then": "HUMAN"
+      },
+      {
+        "id": "THE_SYSTEM_MOVES",
+        "when": {
+          "actor": "SYSTEM"
+        },
+        "then": "WAIT"
+      },
+      {
+        "id": "STATE_CHANGE_WITH_NO_ACTION",
+        "when": {
+          "retryPolicy": "AFTER_STATE_CHANGE",
+          "actionCode": null
+        },
+        "then": "WAIT"
+      },
+      {
+        "id": "OTHERWISE",
+        "when": {},
+        "then": "AUTOMATIC"
+      }
+    ],
+    "holdsOnEveryEnvelope": [
+      "effect COMMITTED => disposition STOP",
+      "userConfirmation REQUIRED => disposition CONFIRM_THEN_RUN",
+      "disposition is one of enums.disposition"
+    ]
+  }
 }
