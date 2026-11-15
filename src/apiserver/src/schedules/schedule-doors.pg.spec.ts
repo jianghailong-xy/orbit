@@ -758,3 +758,41 @@ test('a widen card the press finds stale is superseded, and its Waiting on you i
   assert.equal((await widenItem(awayCard))!.state, 'WITHDRAWN');
   assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).workspaceId, w.workspaceId);
 });
+
+test('over the weekly budget: schedule_run_now from a session and a PAT\'s run are refused SCHEDULE_OVER_BUDGET; the owner\'s POST run starts; the run list says why', { skip }, async () => {
+  const w = await world('budget');
+  const s = await createdThroughCard(w);
+  assert.equal(s.envelopeRunsPerWeek, 7);
+  // Seven runs started in the past 7 days: the budget is used.
+  const now = Date.now();
+  for (let i = 1; i <= 7; i++) {
+    const at = new Date(now - i * 60 * 60_000);
+    await db.scheduleRun.create({
+      data: { scheduleId: s.id, scheduleRevision: 1, plannedAt: at, trigger: 'SCHEDULED', state: 'NO_CHANGE', startedAt: at, endedAt: at },
+    });
+  }
+  // A slot the start found over budget, as the run list reads it.
+  await db.scheduleRun.create({
+    data: {
+      scheduleId: s.id, scheduleRevision: 1, plannedAt: new Date(now - 60_000), trigger: 'SCHEDULED', state: 'MISSED',
+      failureReason: 'OVER_BUDGET', endedAt: new Date(now - 60_000),
+    },
+  });
+  const over = (await rest.listRuns(w.user, s.id)).runs.find((r) => r.failureReason === 'OVER_BUDGET')!;
+  assert.equal(over.reasonText, 'Not started: it had already started as many runs in the past 7 days as you allowed.');
+  const got = await tools.get(w.runner, s.id);
+  const seen = got.recentRuns.find((r) => r.failureReason === 'OVER_BUDGET')!;
+  assert.equal(seen.reasonText, over.reasonText, 'schedule_get carries the reason too');
+
+  const before = await db.scheduleRun.count({ where: { scheduleId: s.id } });
+  await refusedWith(tools.runNow(w.runner, w.sessionId, s.id), 'SCHEDULE_OVER_BUDGET');
+  await refusedWith(rest.runNow(w.user, s.id, acting(w.sessionId)), 'SCHEDULE_OVER_BUDGET');
+  await refusedWith(rest.runNow(w.pat, s.id, NO_SESSION), 'SCHEDULE_OVER_BUDGET');
+  assert.equal(await db.scheduleRun.count({ where: { scheduleId: s.id } }), before, 'a refused run now writes no run');
+
+  const pressed = await rest.runNow(w.user, s.id, NO_SESSION);
+  assert.equal(pressed.run.trigger, 'MANUAL');
+  const started = await db.scheduleRun.findUniqueOrThrow({ where: { id: pressed.run.id } });
+  assert.equal(started.state, 'RUNNING', "the owner's own press starts over budget");
+  assert.ok(started.startedAt, 'and it counts as a start');
+});
