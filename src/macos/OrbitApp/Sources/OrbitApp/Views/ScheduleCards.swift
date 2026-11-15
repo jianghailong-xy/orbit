@@ -555,13 +555,17 @@ struct ScheduleWaitingCardView: View {
     }
 
     private func primary(_ title: String, _ action: @escaping () async -> String?) -> some View {
-        Button { run(action) } label: { Text(title).frame(maxWidth: .infinity) }
+        Button { run(action) } label: {
+            Text(title).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity)
+        }
             .buttonStyle(.borderedProminent)
             .accessibilityIdentifier("schedule-waiting-\(title)")
     }
 
     private func secondary(_ title: String, _ action: @escaping () async -> String?) -> some View {
-        Button { run(action) } label: { Text(title).frame(maxWidth: .infinity) }
+        Button { run(action) } label: {
+            Text(title).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity)
+        }
             .buttonStyle(.bordered)
             .accessibilityIdentifier("schedule-waiting-\(title)")
     }

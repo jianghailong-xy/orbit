@@ -345,14 +345,17 @@ struct ScheduledPage: View {
                     .lineLimit(2)
                 }
                 Spacer(minLength: 8)
-                HStack(spacing: 8) {
-                    if let tag = row.circle.tag, row.circle.circle != .done, row.circle.circle != .muted {
-                        Text(tag.text).font(.orbitLabel.weight(.semibold)).foregroundStyle(tag.tone.color)
-                    }
+                // The time, and under it the tag: beside the title it took the room the title needs.
+                VStack(alignment: .trailing, spacing: 3) {
                     if !row.time.isEmpty {
                         Text(row.time).font(.orbitLabel).foregroundStyle(.secondary).monospacedDigit()
                     }
+                    if let tag = row.circle.tag, row.circle.circle != .done, row.circle.circle != .muted {
+                        Text(tag.text).font(.orbitMeta.weight(.semibold)).foregroundStyle(tag.tone.color)
+                            .lineLimit(1)
+                    }
                 }
+                .fixedSize()
             }
             .padding(.vertical, 4)
             .contentShape(Rectangle())
