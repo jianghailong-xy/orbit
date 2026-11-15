@@ -165,12 +165,19 @@ export function grade({ calls, replies }, scenario) {
 async function main() {
   assert.ok(process.argv[2], 'provide a candidate adapter module; no mock or skip fallback');
   const { createAgent } = await import(pathToFileURL(process.argv[2]).href);
+  let failures = 0;
   for (const surface of ['mcp', 'cli', 'legacy']) {
     for (const scenario of scenarios) {
-      const trace = await evaluate(await createAgent(), surface, scenario);
-      console.log(`PASS ${surface}/${scenario.name} ${JSON.stringify(trace)}`);
+      try {
+        const trace = await evaluate(await createAgent(), surface, scenario);
+        console.log(`PASS ${surface}/${scenario.name} ${JSON.stringify(trace)}`);
+      } catch (error) {
+        failures++;
+        console.error(`FAIL ${surface}/${scenario.name} ${error.message} ${JSON.stringify(error.evaluationTrace ?? null)}`);
+      }
     }
   }
+  process.exitCode = failures ? 1 : 0;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(error => { console.error(error); process.exitCode = 1; });

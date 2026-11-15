@@ -61,6 +61,9 @@ test('every form of the coordinator role carries the ALREADY_COORDINATING child-
       /Do not follow it with session_send/,
       /Report the project id and the child’s session id/,
       /Without session_create \(orchestration off, or the call refused\), give the account owner the manual fallback/,
+      /A structured WAIT or STOP refusal takes priority over that fallback/,
+      /the caller waits for children to finish on outstanding-child backpressure, and stops on a depth\/rate limit or invalid permission/,
+      /explicitly tell the user that the CLI cannot bypass the same permission gate/,
     ];
     let at = -1;
     for (const step of steps) {

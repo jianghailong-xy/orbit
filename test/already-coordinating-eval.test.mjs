@@ -138,6 +138,11 @@ test('candidate adapter CLI runs all interactions and refuses a missing adapter'
     const run = spawnSync(process.execPath, [evaluator, adapter], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(run.status, 0, run.stderr);
     assert.equal(run.stdout.split('\n').filter(line => line.startsWith('PASS ')).length, scenarios.length * 3);
+    writeFileSync(adapter, 'export const createAgent = () => async () => "";\n');
+    const failed = spawnSync(process.execPath, [evaluator, adapter], { encoding: 'utf8', timeout: 10_000 });
+    assert.equal(failed.status, 1);
+    assert.equal(failed.stdout, '');
+    assert.equal(failed.stderr.split('\n').filter(line => line.startsWith('FAIL ')).length, scenarios.length * 3);
     const absent = spawnSync(process.execPath, [evaluator], { encoding: 'utf8', timeout: 10_000 });
     assert.notEqual(absent.status, 0);
     assert.match(absent.stderr, /provide a candidate adapter/);

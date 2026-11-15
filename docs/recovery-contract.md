@@ -476,9 +476,15 @@ The chain, in order:
 4. **The child records it.** The child's own `project_create` binds the child as the new project's
    coordinator. The parent's binding is untouched. The child's reply names the project id and its own
    session id, and the parent reports both.
-5. **Manual fallback.** Without `session_create` (the tool is not listed, orchestration is off, or the
-   call is refused), the user starts a new session in the workspace and sends `childSessionPrompt` as
-   its first message.
+5. **Unavailable or refused.** Without `session_create` (the tool is not listed or orchestration is
+   off), or with a `HUMAN` refusal, the user starts a new session in the workspace and sends
+   `childSessionPrompt` as its first message. Provide that prompt unchanged; if wrapping it in a
+   code block, use a longer enclosing fence so its JSON fence survives. A structured `WAIT` refusal
+   (outstanding-child backpressure) means the caller waits for children to finish; a `STOP` refusal
+   (depth/rate limit or invalid permission) means the caller stops. Do not replace either with a
+   manual spawn workaround or an immediate retry. The account owner controls the switch in
+   Settings -> Session orchestration. In every unavailable or refused path, explicitly tell the
+   user that the CLI cannot bypass the same permission gate.
 
 `renderRecoveryNext` maps `CREATE_PROJECT_IN_CHILD_SESSION` to `ask_user` on every surface. Its
 reason names `session_create` when this surface exposes it, and the manual fallback when it does not.
