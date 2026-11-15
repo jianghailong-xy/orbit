@@ -344,6 +344,7 @@ model User {
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
+  createRequests    CreateRequestReceipt[]
 
   /// Cross-project crossings recorded under this account (unit L4, 0155).
   handoffApprovals ProjectHandoffApproval[]
@@ -1751,6 +1752,9 @@ model WorkspacePermissionRule {
   // long before the rule is revoked).
   createdById String?   @map("created_by_id") @db.Uuid
   approvalId  String?   @map("approval_id") @db.Uuid
+  // Written by answering Always allow on a scheduled run's card (migration 0860): the only Bash rules a CHECK_ONLY
+  // run on Claude Code carries (docs/scheduled-tasks-design.md §6.2).
+  fromScheduleRun Boolean @default(false) @map("from_schedule_run")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@unique([workspaceId, toolName, ruleContent])
@@ -5259,6 +5263,31 @@ model TaskProgress {
   @@map("task_progress")
 }
 
+/// The receipt of one project_create or session_create request (migration 0645,
+/// docs/recovery-contract.md §6). A repeat of the request under the same id reads `result` back
+/// instead of creating a second Project or Session; the same id with another payload is refused.
+model CreateRequestReceipt {
+  ownerId        String   @map("owner_id") @db.Uuid
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// `PROJECT_CREATE` or `SESSION_CREATE`.
+  actionKind     String   @map("action_kind")
+  /// The caller's X-Orbit-Request-Id.
+  requestToken   String   @map("request_token")
+  /// sha256 of the canonical payload and the session that sent it.
+  fingerprint    String
+  /// OPEN | COMPLETED | UNKNOWN.
+  status         String   @default("OPEN")
+  /// The answer, kept so a repeat returns it.
+  result         Json?
+  /// While OPEN, how long the delivery creating it is waited for.
+  leaseExpiresAt DateTime @map("lease_expires_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([ownerId, actionKind, requestToken])
+  @@map("create_request_receipt")
+}
+
 model TaskRunRequest {
   ownerId      String   @map("owner_id") @db.Uuid
   owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -7822,6 +7851,11 @@ model OwnerRequest {
   repoUrlNorm         String?   @map("repo_url_norm")
   /// WIKI_CREATE: the asking session's workspace, which the wiki's maintenance reads. History, not a foreign key.
   workspaceId         String?   @map("workspace_id") @db.Uuid
+  /// SCHEDULE_* kinds (migration 0840): the schedule and run the item is about, and what answers it. History, no FK.
+  scheduleId              String?   @map("schedule_id") @db.Uuid
+  scheduleRunId           String?   @map("schedule_run_id") @db.Uuid
+  approvalId              String?   @map("approval_id") @db.Uuid
+  scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
@@ -9903,6 +9937,13 @@ model ScheduleRun {
   summary          String?
   links            Json               @default("[]")
   failureReason    String?            @map("failure_reason")
+  /// A QUEUED run is not started before this (migration 0830): a retry's 1, 5 or 15 minutes (§7.2).
+  notBeforeAt      DateTime?          @map("not_before_at") @db.Timestamptz(3)
+  /// Why a HELD run's start checks failed (§6.1, migration 0830).
+  heldReason       String?            @map("held_reason")
+  /// The level the run started with (§6.2, migration 0860): what its session is held to, whatever the schedule
+  /// says later. NULL until the run starts.
+  accessLevel      ScheduleAccessLevel? @map("access_level")
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
 

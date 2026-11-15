@@ -16,7 +16,7 @@ import { PromptOptimizerController, PromptOptimizerService } from './prompt-opti
  * a stubbed DeepSeek: the switch (absent = off) and the key (409), `promptOptimizerAvailable` on
  * `/users/me`, the owner's own session, workspace and project (404), the draft's size (400), each 422
  * reason, `contextUsed` naming exactly the sources there were, protected code surviving, and
- * Translation on giving English with a gloss.
+ * Translation on giving the account's agent language (English by default) with a gloss in the owner's.
  */
 
 const OWNER = randomUUID();
@@ -370,7 +370,7 @@ test('code blocks, inline code and URLs never reach the model and come back byte
   assert.equal('gloss' in answer.body, false);
 });
 
-test('Translation on: English plus a gloss in the owner\'s language, from the same call', async (t) => {
+test('Translation on: the default agent language (English) plus a gloss in the owner\'s language, from the same call', async (t) => {
   const { optimize } = await boot(t);
   preferences = { promptOptimizer: true, translationEnabled: true, translationLanguage: 'ja' };
   replies = [json({
@@ -380,7 +380,7 @@ test('Translation on: English plus a gloss in the owner\'s language, from the sa
   })];
   const answer = await optimize({ draft: '`LoginPage.tsx` のサインインを直して' });
   assert.equal(answer.status, 200, JSON.stringify(answer.body));
-  assert.equal(answer.body.language, 'en', 'English whatever the model called it');
+  assert.equal(answer.body.language, 'en', 'the agent language whatever the model called it');
   assert.equal(answer.body.text, 'Fix the sign-in in `LoginPage.tsx`.');
   assert.equal(answer.body.gloss, '`LoginPage.tsx` のサインインを直してください。');
   assert.equal(asked.length, 1, 'one call');
@@ -394,4 +394,32 @@ test('Translation on: English plus a gloss in the owner\'s language, from the sa
   const noGloss = await optimize({ draft: 'なおして' });
   assert.equal(noGloss.status, 422);
   assert.equal(noGloss.body.reason, 'MALFORMED');
+});
+
+test('Translation on with a chosen agent language: the prompt in it, the gloss in the owner\'s; the same two languages give no gloss', async (t) => {
+  const { optimize } = await boot(t);
+  preferences = { promptOptimizer: true, translationEnabled: true, translationLanguage: 'zh-Hans', translationAgentLanguage: 'ja' };
+  replies = [json({
+    segments: [{ text: 'ログインページのサインインを直してください。', added: false }],
+    language: 'en',
+    gloss: '修复登录页的登录。',
+  })];
+  const answer = await optimize({ draft: '修一下登录' });
+  assert.equal(answer.status, 200, JSON.stringify(answer.body));
+  assert.equal(answer.body.language, 'ja', 'the agent language, whatever the model called it');
+  assert.equal(answer.body.gloss, '修复登录页的登录。');
+  const system = asked[0].body.messages[0].content;
+  assert.match(system, /Write the improved prompt in Japanese\./);
+  assert.match(system, /translated into Chinese \(Simplified\)/);
+  assert.match(system, /set "language" to "ja"/);
+  assert.doesNotMatch(system, /English/);
+
+  // The owner's language the agent's: nothing is translated, so the draft's own language and no gloss.
+  preferences = { promptOptimizer: true, translationEnabled: true, translationLanguage: 'ja', translationAgentLanguage: 'ja' };
+  replies = [json({ segments: [{ text: 'サインインを直してください。', added: false }], language: 'ja' })];
+  const same = await optimize({ draft: 'サインインを直して' });
+  assert.equal(same.status, 200, JSON.stringify(same.body));
+  assert.equal(same.body.language, 'ja');
+  assert.equal('gloss' in same.body, false);
+  assert.match(asked[1].body.messages[0].content, /same language as the draft/);
 });

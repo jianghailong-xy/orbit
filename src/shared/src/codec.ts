@@ -87,6 +87,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'lastSeenRunId',
   'envelopeWorkspaceId',
   'createdFromSessionId',
+  // A scheduled task's Waiting on you item (migration 0840): the change request its Allow or Decline answers.
+  'scheduleChangeRequestId',
   'authorSessionId',
   // A main checkout request's initiating session (migration 0534): where its result line is written.
   'initiatedFromSessionId',

@@ -468,4 +468,22 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'PUT /tasks/:id/share',
   'PUT /users/me/avatar',
   'PUT /wiki/spaces/:id/share',
+  // Scheduled tasks (schedules/schedules.controller.ts): read and control in the app, and the two card presses, which
+  // are the owner's own; a terminal drives sessions, not schedules.
+  'DELETE /schedules/:id',
+  'GET /schedule-requests',
+  'GET /schedule-requests/:id',
+  'GET /schedules',
+  'GET /schedules/:id',
+  'GET /schedules/:id/runs',
+  'GET /schedules/drafts',
+  'GET /sessions/:id/schedule-cards',
+  'POST /schedule-requests/:id/allow',
+  'POST /schedule-requests/:id/decline',
+  'POST /schedule-runs/:id/stop',
+  'POST /schedules/:id/pause',
+  'POST /schedules/:id/resume',
+  'POST /schedules/:id/run',
+  'POST /schedules/:id/undo',
+  'POST /schedules/drafts',
 ];

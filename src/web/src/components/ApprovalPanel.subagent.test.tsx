@@ -74,19 +74,19 @@ describe('a SubAgent card finds its delegate call', () => {
 });
 
 describe('the SubAgent approval card', () => {
-  it("shows a grey 'SubAgent · <description>' line above the card's head", () => {
+  it("shows a grey 'Agent · <description>' line above the card's head", () => {
     const html = renderToStaticMarkup(
       <ApprovalPanel approval={card} onDecide={() => undefined} subagent="Port the retry to the Go runner" />,
     );
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const line = doc.querySelector('.approval-card > .approval-subagent');
-    expect(line?.textContent).toBe('SubAgent · Port the retry to the Go runner');
+    expect(line?.textContent).toBe('Agent · Port the retry to the Go runner');
     expect(line?.nextElementSibling?.className).toBe('approval-head');
   });
 
-  it('says only SubAgent when the description is not known yet, and nothing for a card the session asked', () => {
+  it('says only Agent when the description is not known yet, and nothing for a card the session asked', () => {
     const unnamed = renderToStaticMarkup(<ApprovalPanel approval={card} onDecide={() => undefined} subagent="" />);
-    expect(new DOMParser().parseFromString(unnamed, 'text/html').querySelector('.approval-subagent')?.textContent).toBe('SubAgent');
+    expect(new DOMParser().parseFromString(unnamed, 'text/html').querySelector('.approval-subagent')?.textContent).toBe('Agent');
     const own = renderToStaticMarkup(<ApprovalPanel approval={{ ...card, subagentRunId: undefined }} onDecide={() => undefined} />);
     expect(own).not.toContain('approval-subagent');
   });

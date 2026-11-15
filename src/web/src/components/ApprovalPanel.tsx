@@ -572,7 +572,7 @@ function planText(input: unknown): string {
 // repeatable. A Bash line yields one rule per distinct sub-command prefix (so `cd x && git
 // add …` remembers both, not just the leading `cd`); other tools get a single tool-wide rule
 // (no ruleContent).
-function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
+export function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // A DAG change joins questions and plans in having no repeatable form. "Always allow
   // restructuring this campaign's dependencies" is not a rule anyone means to write, and the
   // whole point of the card is that each batch releases a different set of tasks.
@@ -794,7 +794,7 @@ export function ApprovalPanel({
       open={reviewOpen} onOpenChange={setReviewOpen}>
     <div ref={anchor} className="approval-card">
       {subagent !== null && (
-        <div className="approval-subagent">{subagent ? `SubAgent · ${subagent}` : 'SubAgent'}</div>
+        <div className="approval-subagent">{subagent ? `Agent · ${subagent}` : 'Agent'}</div>
       )}
       <div className="approval-head">
         {heading}

@@ -18,6 +18,8 @@ describe('the composer tag (6A)', () => {
     expect(translationTag('zh-Hant')).toBe('Chinese → English');
     expect(translationTag('ja')).toBe('Japanese → English');
     expect(translationTag('de')).toBe('German → English');
+    expect(translationTag('en', 'ja')).toBe('English → Japanese');
+    expect(translationTag('de', 'zh-Hans')).toBe('German → Chinese');
   });
 });
 

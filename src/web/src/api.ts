@@ -873,7 +873,7 @@ export const retryReplyTranslation = (sessionId: string, seq: number) =>
   api<ReplyTranslationRetryResponse>(`/sessions/${sessionId}/events/${seq}/translation/retry`, { method: 'POST' });
 
 /** Prompt optimizer (docs/prompt-optimizer-design.md): DeepSeek improves a composer draft. The answer is
- *  a suggestion the composer draws as a card (board frame 4); nothing changes until the owner uses it.
+ *  a suggestion the composer draws as a card (board frame 4); the box keeps the draft until the owner presses Use.
  *  Refusals: 409 PROMPT_OPTIMIZER_OFF, 404, 400, and 422 PROMPT_OPTIMIZATION_FAILED (frame 6). */
 export const optimizePrompt = (body: PromptOptimizationRequest, signal?: AbortSignal) =>
   api<PromptOptimization>('/prompt-optimizations', { method: 'POST', body, signal });
@@ -2013,6 +2013,10 @@ export interface SessionDetail {
    *  (docs/task-fork-from-session-design.md §2.3), as the server words it; null otherwise.
    *  Optional, because an older server does not send it. */
   forkSource?: string | null;
+  /** How the session was started; `SCHEDULE` is a scheduled task's run (docs/scheduled-tasks-design.md §6.3), and
+   *  `scheduleRunId` names the run. Optional, because an older server does not send them. */
+  runSource?: string | null;
+  scheduleRunId?: string | null;
   /** On an account pool: the member its last claim dispatched on (null before the first). */
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */

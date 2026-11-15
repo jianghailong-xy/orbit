@@ -206,8 +206,14 @@ public struct OwnerRequest: Codable, Equatable, Sendable, Identifiable {
 /// `GET /owner-requests?state=…`. A row this build cannot read is dropped, not the list.
 public struct OwnerRequestList: Decodable, Sendable {
     public let requests: [OwnerRequest]
+    /// The scheduled tasks' four kinds (SCHEDULE_FAILED, _HELD, _APPROVAL, _WIDEN), which `OwnerRequest` does not
+    /// read: they are answered at the schedule's own doors, and drawn by `ScheduleWaitingCards`.
+    public let scheduleItems: [ScheduleWaitingItem]
 
-    public init(requests: [OwnerRequest]) { self.requests = requests }
+    public init(requests: [OwnerRequest], scheduleItems: [ScheduleWaitingItem] = []) {
+        self.requests = requests
+        self.scheduleItems = scheduleItems
+    }
 
     private enum CodingKeys: String, CodingKey { case requests }
     private struct Lenient: Decodable {
@@ -218,6 +224,8 @@ public struct OwnerRequestList: Decodable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         requests = try c.decode([Lenient].self, forKey: .requests).compactMap(\.value)
+        scheduleItems = ((try? c.decode([ScheduleLenient<ScheduleWaitingItem>].self, forKey: .requests)) ?? [])
+            .compactMap(\.value)
     }
 }
 

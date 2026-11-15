@@ -487,6 +487,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
 		envWatches:                        watchesEnv(job.WatchesDisabled),
 		envWiki:                           wikiEnv(job.WikiDisabled),
+		envScheduleRun:                    scheduleRunEnv(job.ScheduleRun),
 		envOrchestrationToken:             job.OrchestrationToken,
 		envMCPPermissionPrompt:            "0",
 	})
@@ -918,6 +919,7 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 			envWatches:                  watchesEnv(job.WatchesDisabled),
 			envWiki:                     wikiEnv(job.WikiDisabled),
+			envScheduleRun:              scheduleRunEnv(job.ScheduleRun),
 			envOrchestrationToken:       job.OrchestrationToken,
 			envMCPPermissionPrompt:      "0",
 			envRunnerChild:              "1",

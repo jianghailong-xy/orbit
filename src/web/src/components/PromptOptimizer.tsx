@@ -269,7 +269,7 @@ function PromptOptimizerCard({
         {earlier && <span className="composer-optimized-earlier">Based on an earlier draft</span>}
         {result.gloss && (
           <button type="button" className="composer-optimize-link" onClick={onToggleGloss}>
-            {glossShown ? 'Show in English' : `Show in ${glossLanguage}`}
+            {glossShown ? `Show in ${TRANSLATION_LANGUAGE_NAMES[result.language] ?? result.language}` : `Show in ${glossLanguage}`}
           </button>
         )}
         <button type="button" className="composer-optimized-close" aria-label="Dismiss" onClick={onDismiss}>

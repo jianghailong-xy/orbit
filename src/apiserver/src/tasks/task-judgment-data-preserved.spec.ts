@@ -2994,6 +2994,8 @@ test('the ledger stays append-only, and every later migration is accounted for',
       '0641_open_list_epoch_session_waits',
       // 0642 adds five nullable subagent_run columns, an index and the subagent_relay_event table; no preserved row, trigger or DONE fence change.
       '0642_subagent_run_remote',
+      // 0645: the project_create / session_create receipts (runner-api/create-request-receipts.ts).
+      '0645_create_request_receipt',
       // 0660 adds the terminal_login and terminal_credential tables, their indexes and foreign keys to "user" and
       // "runner" only (docs/terminal-session-design.md); no preserved rows, triggers or DONE fence change, and no row
       // is written.
@@ -3045,7 +3047,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // changes, and no row is written.
       '0800_pool_login_token_subagent_credential',
       // 0810 creates `coordinator_handoff` only; no existing table, trigger or DONE fence is touched.
-      '0810_coordinator_handoff'],
+      '0810_coordinator_handoff',
+      // 0830 adds two nullable schedule_run columns (not_before_at, held_reason) and a partial index, and widens
+      // session_opened_by_check by 'SCHEDULE'; catalog-only but for the check's validating scan, `schedule_run` is none
+      // of the preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      '0830_schedule_run_start',
+      // 0840 adds four nullable owner_request columns (schedule_id, schedule_run_id, approval_id,
+      // schedule_change_request_id) and a partial index, and widens owner_request_kind_chk by the four SCHEDULE_* kinds;
+      // catalog-only but for the check's validating scan, `owner_request` is none of the preserved relations, no
+      // trigger, function or DONE fence changes, and no row is written.
+      '0840_schedule_attention',
+      // 0860 adds a nullable schedule_run.access_level, backfilled from schedule for started runs, and
+      // workspace_permission_rule.from_schedule_run (NOT NULL with a constant default, no row marked); neither table is
+      // one of the preserved relations, and no trigger, function or DONE fence changes.
+      '0860_schedule_check_only_asks'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

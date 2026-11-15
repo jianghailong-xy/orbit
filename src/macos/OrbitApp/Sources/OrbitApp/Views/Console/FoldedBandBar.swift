@@ -110,7 +110,7 @@ struct FoldedBandBar: View {
                 mark("checkmark.square", part.text, tint: part.failed ? .red : nil)
             }
             if let agents {
-                // The session's Agents (`AgentsBandRow`): how many, what they cost.
+                // The session's Agents (`AgentsBandRow`): how many, no cost.
                 mark("sparkle", agents.capsule, tint: .purple)
             }
             if let branch {

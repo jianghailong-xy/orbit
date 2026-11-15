@@ -155,7 +155,7 @@ final class SettingsStackWiringTests: XCTestCase {
         for frame in ["case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
                       "case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)",
                       "case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)",
-                      "case .settingsPage(let page):     SettingsPageView(page: page)",
+                      "case .settingsPage(let page):     SettingsPageView(page: page).navigationBarTitleDisplayMode(.inline)",
                       "case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)",
                       "case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)",
                       "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {
@@ -263,12 +263,19 @@ final class SettingsStackWiringTests: XCTestCase {
             ("Toggle(TranslationCopy.translateConversations, isOn: $translation)",
              "UpdatePreferencesRequest(translationEnabled: value)",
              "translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true"),
+            // Settings › Prompt optimizer: absent is off, and a server without a key draws it off.
+            ("Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)", "UpdatePreferencesRequest(promptOptimizer: value)",
+             "promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true"),
+            // Show both languages (02-bilingual.png, mark A): absent is off.
+            ("Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)",
+             "UpdatePreferencesRequest(translationBilingual: value)",
+             "bilingual = p?.translationBilingual == true"),
         ] {
             XCTAssertTrue(controls.contains(toggle), "the page lost \(toggle)")
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")
             XCTAssertTrue(page.contains(seed), "the page no longer seeds \(seed)")
         }
-        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 5,
+        XCTAssertEqual(page.components(separatedBy: "guard (model.user?.preferences?.").count - 1, 7,
                        "every switch's write is guarded against the account's own value")
     }
 

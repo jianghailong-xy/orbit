@@ -384,13 +384,16 @@ public enum ComposerLogic {
     /// goes out and the server places the message as it always has.
     public static func makeTurn(clientTurnId: String, text: String, shell: Bool,
                                 attachmentIds: [String], queueForNextTurn: Bool = false,
-                                wikiContext: WikiChatContext? = nil) -> SessionTurnRequest {
+                                wikiContext: WikiChatContext? = nil,
+                                skipTranslation: Bool = false) -> SessionTurnRequest {
         SessionTurnRequest(clientTurnId: clientTurnId,
                            content: text,
                            kind: shell ? "shell" : "message",
                            attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
                            intent: queueForNextTurn ? "NEXT_TURN" : nil,
-                           wikiContext: wikiContext)
+                           wikiContext: wikiContext,
+                           // Only ever `true` or absent: a body without it is what every send was.
+                           skipTranslation: skipTranslation ? true : nil)
     }
 
     /// Split a composer draft into the text to send and whether it's a raw shell command. A
@@ -420,7 +423,8 @@ public enum ComposerLogic {
               bubble.startedCard == nil,
               bubble.sessionMessage == nil,
               WatchWakeText.parse(bubble.text) == nil,
-              BackgroundWakeText.parse(bubble.text) == nil else { return nil }
+              BackgroundWakeText.parse(bubble.text) == nil,
+              SubagentFinishedText.parse(bubble.text) == nil else { return nil }
         let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return body.isEmpty ? nil : body
     }

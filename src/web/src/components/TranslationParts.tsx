@@ -1,14 +1,19 @@
 // Settings › Translation in a conversation (board docs/mocks/session-translation/01-board.png,
 // frames 4–6): the foot under a translated message, its per-message Show original toggle, and the
 // held and failed states. The server translates; these only draw what it wrote and call its doors.
-import type { ReplyTranslation, TurnTranslation } from '@orbit/shared';
+import { DEFAULT_AGENT_LANGUAGE, type ReplyTranslation, type TranslationLanguage, type TurnTranslation } from '@orbit/shared';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import { TRANSLATION_COPY as COPY } from '../lib/translation';
+import { sentToAgentLabel, TRANSLATION_COPY as COPY } from '../lib/translation';
 
 /** What the open conversation can do about a translation, provided by WorkspaceView. `on` is the
  *  account's switch with the server able to translate: a reply streaming then is greyed (2A). */
 export interface TranslationActions {
   on: boolean;
+  /** "Show both languages" (02-bilingual.png): a translated message also shows its agent-language
+   *  text, and its foot loses the flip. Absent = off, today's UI. */
+  bilingual?: boolean;
+  /** "Agents work in": the language that text is in. Absent = DEFAULT_AGENT_LANGUAGE. */
+  agentLanguage?: TranslationLanguage;
   retryTurn: (turnId: string) => Promise<unknown>;
   sendAsWritten: (turnId: string) => Promise<unknown>;
   retryReply: (seq: number) => Promise<unknown>;
@@ -55,7 +60,8 @@ export const replyTranslationKey = (seq: number) => `reply:${seq}`;
 /** Whether the turn's copy button reads a reply's original, for TurnFoot. */
 export function useReplyShownOriginal(seq: number | undefined): boolean {
   const shared = useContext(ShownOriginalCtx);
-  return seq !== undefined && !!shared?.has(replyTranslationKey(seq));
+  const bilingual = useContext(TranslationCtx)?.bilingual === true;
+  return !bilingual && seq !== undefined && !!shared?.has(replyTranslationKey(seq));
 }
 
 /** A link-styled action at the foot; disabled while its request is out. */
@@ -117,8 +123,12 @@ export function UserTranslationFoot({
         </span>
       );
     case 'DONE':
+      // Both languages on: the English is in the bubble, so there is nothing to flip to.
+      if (actions?.bilingual) {
+        return <span className="chat-translate-foot">{sentToAgentLabel(actions.agentLanguage ?? DEFAULT_AGENT_LANGUAGE)}</span>;
+      }
       return (
-        <span className="chat-translate-foot">
+        <span className="chat-translate-foot is-flip">
           <button type="button" className="chat-translate-action" onClick={onFlip}>
             {flipped ? COPY.showTranslation : COPY.showOriginal}
           </button>
@@ -154,7 +164,9 @@ export function UntranslatedDecisionFoot({
 /**
  * An agent reply: "Translated · Show original" ↔ "Original · Show translation"; failed (2A),
  * "Couldn't translate this reply · Retry"; still to be translated, the chip "Translates when the
- * reply is done".
+ * reply is done". The flip is drawn at the end of the reply's last line, shown on hover, and always
+ * while the original is on screen (docs/mocks/translation-reply-hover): the transcript hands it to
+ * the reply's markdown as its tail.
  */
 export function ReplyTranslationFoot({
   translation,
@@ -179,15 +191,22 @@ export function ReplyTranslationFoot({
       </div>
     );
   }
-  if (translation?.text !== undefined) {
+  if (translation?.text !== undefined && actions?.bilingual) {
     return (
       <div className="chat-translate-foot is-reply">
+        <span>{COPY.translated}</span>
+      </div>
+    );
+  }
+  if (translation?.text !== undefined) {
+    return (
+      <span className={flipped ? 'chat-translate-foot is-reply is-tail is-flipped' : 'chat-translate-foot is-reply is-tail'}>
         <span>{flipped ? COPY.original : COPY.translated}</span>
         <Sep />
         <button type="button" className="chat-translate-action" onClick={onFlip}>
           {flipped ? COPY.showTranslation : COPY.showOriginal}
         </button>
-      </div>
+      </span>
     );
   }
   if (pending) {
