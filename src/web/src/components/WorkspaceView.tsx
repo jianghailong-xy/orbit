@@ -9318,7 +9318,13 @@ export function WorkspaceView({
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
-  const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner)) : '';
+  // While a handoff note is written and the replacement runs, the outgoing coordinator's header
+  // says "Handing over" in place of the run word (board 02-2).
+  const headRunWord = !selected
+    ? ''
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.badgeHandingOver
+      : statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner));
   // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
   // session's bottom, and the label itself — one read of one helper, so the words and the ink are
   // not decided twice.

@@ -354,6 +354,31 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(mounted().querySelector('[data-handoff-state="HANDING_OVER"]')?.textContent).toBe('Handing over to a new coordinator…'));
   });
 
+  it.each([
+    ['WRITING', true],
+    ['HANDING_OVER', true],
+    ['FAILED', false],
+    ['COMPLETED', false],
+    [null, false],
+  ] as const)('02-2: the header reads "Handing over" only while the handoff is in flight (%s)', async (state, shown) => {
+    detail = session({
+      projectId: PROJECT,
+      projectMembership: coordinator,
+      coordinatorHandoff: state
+        ? { state, startedAt: new Date().toISOString(), failureCode: state === 'FAILED' ? 'TURN_FAILED' : null,
+          failureReason: null, handedOverToSessionId: state === 'COMPLETED' ? SUCCESSOR : null }
+        : null,
+    });
+    await mount();
+    const sub = () => mounted().querySelector('.workspace-sub')?.textContent ?? '';
+    await waitFor(() => expect(sub()).not.toBe(''));
+    if (shown) {
+      expect(sub().split(' · ')[0]).toBe('Handing over');
+    } else {
+      expect(sub()).not.toContain('Handing over');
+    }
+  });
+
   it('02-3: opens the successor with the note card and the waits that moved here', async () => {
     detail = session({
       projectId: PROJECT,
