@@ -95,19 +95,32 @@ struct OrbitEventLineView: View {
             .rotationEffect(.degrees(open ? 90 : 0))
     }
 
-    /// What the agent read, exactly as it read it.
+    /// What the agent read, exactly as it read it. A plain toggle rather than a `DisclosureGroup`: one that
+    /// starts expanded draws no content inside the Mac transcript's list.
     private var fold: some View {
-        DisclosureGroup(isExpanded: $showingRaw) {
-            Text(note)
-                .font(.orbitMono)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
-        } label: {
-            Text(OrbitEvent.whatTheAgentRead)
-                .font(.orbitMeta)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { showingRaw.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right")
+                        .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(showingRaw ? 90 : 0))
+                    Text(OrbitEvent.whatTheAgentRead)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if showingRaw {
+                Text(note)
+                    .font(.orbitMono)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(.leading, 10)
         .overlay(alignment: .leading) {
