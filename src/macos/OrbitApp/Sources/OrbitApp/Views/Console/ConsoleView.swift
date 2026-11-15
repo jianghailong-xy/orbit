@@ -1320,7 +1320,7 @@ struct TranscriptView: View {
                             .transition(reduceMotion ? .opacity : .push(from: .bottom))
                     } else if saysWaiting, let here {
                         waitingCapsule(here)
-                            .frame(idealWidth: questionWidth, maxWidth: questionWidth)
+                            .frame(maxWidth: questionWidth)
                             .transition(reduceMotion ? .opacity : .push(from: .bottom))
                     } else {
                         principalQuestion(proxy)
@@ -1665,9 +1665,10 @@ struct TranscriptView: View {
         }
     }
 
-    /// What waits in this conversation, in the nav bar's capsule: the amber circle the needs-you bar
-    /// marks with, the bar's own words ("1 waiting below", "1 open question above") and the way the
-    /// card lies. A press scrolls to the card, as the bar's did.
+    /// What waits in this conversation, in the nav bar's capsule: the needs-you mark in amber, the
+    /// bar's own words ("1 waiting below", "1 open question above") and the way the card lies, drawn
+    /// as the "Changes committed" toast pill is (`ToastPill`): a bare filled glyph, no ring, hugging
+    /// its words. A press scrolls to the card, as the bar's did.
     private func waitingCapsule(_ here: WaitingBelow) -> some View {
         CoastingButton {
             PlatformHaptics.tap()
@@ -1677,20 +1678,17 @@ struct TranscriptView: View {
         } label: { _ in
             HStack(spacing: 8) {
                 Image(systemName: here.glyph.symbol)
-                    .font(.orbitLabel)
+                    .font(.title3)
                     .foregroundStyle(.orange)
-                    .frame(width: 26, height: 26)
-                    .background(Color.orange.opacity(0.15), in: Circle())
                 Text(here.text)
                     .font(.orbitSubtext.weight(.semibold)).foregroundStyle(.primary)
                     .lineLimit(1).truncationMode(.tail)
                 Image(systemName: here.side == .above ? "chevron.up" : "chevron.down")
-                    .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
+                    .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }
-            .padding(.leading, 9)
-            .padding(.trailing, 14)
+            .padding(.leading, 10)
+            .padding(.trailing, 16)
             .questionGlass()
-            .overlay(Capsule().strokeBorder(Color.orange.opacity(0.55), lineWidth: 1.2))
             .contentShape(Capsule())
         }
         .accessibilityLabel(here.text)
