@@ -168,6 +168,15 @@ private fun inlineNodes(nodes: List<Node>, open: (String) -> Unit): AnnotatedStr
     } }
 }
 
+/** A Markdown source as one styled text — each block's inline content, a blank line between — for a preview that is cut by lines and
+ * ends in an ellipsis, which a column of blocks cannot do. */
+@Composable
+internal fun markdownInline(source: String, open: (String) -> Unit = {}): AnnotatedString {
+    val nodes = remember(source) { markdownParser.parse(mendCjkMarkdown(source)).children() }
+    val parts = nodes.map { inlineNodes(listOf(it), open) }
+    return remember(parts) { buildAnnotatedString { parts.forEachIndexed { i, part -> if (i > 0) append("\n\n"); append(part) } } }
+}
+
 /** Completed blocks stay parsed while only the unfinished paragraph changes at stream cadence. */
 internal fun streamingSplit(source: String): Pair<String, String> {
     var cut = 0; var offset = 0; var fence: Char? = null; var fenceLength = 0

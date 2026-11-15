@@ -34,6 +34,7 @@ import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.SessionMessageNote
+import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
@@ -96,6 +97,18 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
+    // A SubAgent's end is a line in the agent's stream (docs/mocks/subagent-finished-line; owner 2026-11-16: it must not look like
+    // something the reader sent): no "Orbit" heading, no row tint, no Copy message — its line and its result are the whole row, as on the
+    // web and iOS. Whatever else its note carried stays an attached entry under it.
+    if (event.type == "user" && cards.any { it.key.endsWith(":subagent") } && shown.personWords().isBlank()) {
+        val rest = SubagentFinished.parse(shown.fields.string("controlPlaneNote"))?.rest
+            ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            cards.forEach { TranscriptCardView(it, open, shown) }
+            rest?.let { AttachedNoteEntry(it.trim()) }
+        }
+        return
+    }
     // Settings › Translation (board frames 4–6): the owner's message as they wrote it and the agent's reply in their language, each
     // with its own flip to the English, held by the reader so a recycled row keeps its side.
     val shownOriginals = LocalShownOriginals.current
@@ -324,6 +337,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             val sessionNote = if (shown.fields["sessionMessage"] is JsonObject) SessionMessageNote.split(shown.fields.string("controlPlaneNote")) else null
             val note = (sessionNote?.rest ?: shown.fields.string("controlPlaneNote"))?.takeIf { it.isNotBlank() }
                 // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
+                // So is a SubAgent's end: only what else its note carried stays.
+                ?.let { if (cards.any { card -> card.key.endsWith(":subagent") }) SubagentFinished.parse(it)?.rest ?: it else it }
                 ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = shownWords(shown)
             // A reply still to be translated is the English greyed, with its chip under it (2A).
