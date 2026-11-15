@@ -561,4 +561,25 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertFalse(NeedsYouLogic.isDismissed(waiting: [a, bAgain], dismissed: dismissed), "stopped again")
         XCTAssertFalse(NeedsYouLogic.isDismissed(waiting: [], dismissed: dismissed), "nothing to put away")
     }
+
+    // MARK: here (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule)
+
+    /// The conversation's own capsule: its cards first, in their words and direction; its approvals
+    /// after them, at its tail — so alone they say "below" and press to the approval's row.
+    func testTheConversationsOwnCapsuleCountsItsCardsAndItsApprovals() throws {
+        let alone = try XCTUnwrap(NeedsYouLogic.here(rows: [], approvalIDs: ["a1"], side: nil))
+        XCTAssertEqual(alone.text, "1 waiting below")
+        XCTAssertEqual(alone.rowID, "approval-a1")
+        XCTAssertEqual(alone.side, .below)
+        XCTAssertEqual(alone.glyph, .hand)
+
+        let both = try XCTUnwrap(NeedsYouLogic.here(rows: [questionRow("q1")], approvalIDs: ["a1"], side: .above))
+        XCTAssertEqual(both.text, "2 waiting above")
+        XCTAssertEqual(both.rowID, "q1", "the oldest card first, then the tail")
+        XCTAssertEqual(both.glyph, .question)
+
+        XCTAssertEqual(NeedsYouLogic.here(rows: [questionRow("q1")], approvalIDs: [], side: .below)?.text,
+                       "1 open question below", "no approval: the words the bar always had")
+        XCTAssertNil(NeedsYouLogic.here(rows: [], approvalIDs: [], side: .below))
+    }
 }
