@@ -14,7 +14,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Settings › Translation in an Android conversation (docs/mocks/session-translation/01-board.png, frames 4–6 and 10), in the production
  * shell over [ComposerShell]: the owner's message shown as they wrote it and the agent's reply in their language, each with its own
- * Show original; the composer's "Chinese → English" tag; a message held while it is translated and one that failed, with Retry and
+ * Show original; the composer's "<Language> → <Agent language>" tag ("Chinese → English", or "Chinese → Japanese"); a message held while it is translated and one that failed, with Retry and
  * Send as written; a reply streaming, one waiting for its translation, one whose translation failed with Retry, and the live
  * translation landing. The NATIVE frames go under `src/android/build/evidence/session-translation-android/` beside their semantics.
  */
@@ -175,6 +175,18 @@ class TranslationConversationTest : ComposerShellTest() {
         await { has(text("改好了") and row(5), unmerged = true) }
         assertFalse(has(text(TranslationCopy.REPLY_FAILED) and row(5), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 5), unmerged = true))
+    }
+
+    @Test fun theComposerTagNamesANonEnglishAgentLanguage() {
+        translatedConversation()
+        ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"translationEnabled":true,"translationLanguage":"zh-Hans","translationAgentLanguage":"ja"},
+            "translationAvailable":true}""".encodeToByteArray()) }
+        signIn(); openSession()
+        await { has(hasTestTag("composer-translation-tag"), unmerged = true) }
+        assertTrue(has(hasTestTag("composer-translation-tag") and hasText("Chinese → Japanese"), unmerged = true))
+        assertFalse(has(hasText("Chinese → English"), unmerged = true))
+        shot("9-composer-tag-japanese")
     }
 
     @Test fun withTranslationOffNothingIsTaggedOrGreyed() {
