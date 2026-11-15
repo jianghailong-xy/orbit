@@ -64,6 +64,7 @@ test('every form of the coordinator role carries the ALREADY_COORDINATING child-
       /A structured WAIT or STOP refusal takes priority over that fallback/,
       /the caller waits for children to finish on outstanding-child backpressure, and stops on a depth\/rate limit or invalid permission/,
       /explicitly tell the user that the CLI cannot bypass the same permission gate/,
+      /A missing capability alone does not prove orchestration is off/,
     ];
     let at = -1;
     for (const step of steps) {

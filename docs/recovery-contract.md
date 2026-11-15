@@ -484,7 +484,9 @@ The chain, in order:
    (depth/rate limit or invalid permission) means the caller stops. Do not replace either with a
    manual spawn workaround or an immediate retry. The account owner controls the switch in
    Settings -> Session orchestration. In every unavailable or refused path, explicitly tell the
-   user that the CLI cannot bypass the same permission gate.
+   user that the CLI cannot bypass the same permission gate. A missing capability alone does not
+   prove orchestration is off; name it as disabled only when the structured reason says
+   `ORCHESTRATION_DISABLED`.
 
 `renderRecoveryNext` maps `CREATE_PROJECT_IN_CHILD_SESSION` to `ask_user` on every surface. Its
 reason names `session_create` when this surface exposes it, and the manual fallback when it does not.

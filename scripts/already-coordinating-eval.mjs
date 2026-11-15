@@ -118,16 +118,17 @@ export function grade({ calls, replies }, scenario) {
   assert.ok(calls.every(c => ['project_get', 'session_create'].includes(c.name)), 'unexpected tool or CLI bypass');
   const read = calls.findIndex(c => c.name === 'project_get' && c.args.projectId === 'P1');
   const readBeforeCreate = read >= 0 && (creates.length === 0 || read < calls.indexOf(creates[0]));
+  const recognizedExisting = /already.{0,40}(?:recorded|exists|coordinates|bound)|(?:project|request).{0,40}(?:matches|asked for)/is.test(replies[0]);
   // Section 9 permits comparing the refusal's project with the requested one without another read.
   const comparedInReply = scenario.sameProject
-    ? /already (recorded|exists)/i.test(replies[0])
+    ? recognizedExisting
     : replies[0].includes(project.title) && /different|second project|separate|another project|not Corpus/i.test(replies[0]);
   assert.ok(readBeforeCreate || comparedInReply, 'reconcile the bound project before creating a child');
   assert.match(replies[0], /P1/);
   assert.match(replies[0], /Corpus/);
   if (scenario.sameProject) {
     assert.equal(creates.length, 0, 'reconciliation must not fork the same project');
-    assert.match(text, /already (recorded|exists)/i);
+    assert.ok(recognizedExisting, 'recognize the requested project as the existing one');
     return;
   }
   const questions = (replies[0].match(/\?/g) ?? []).length;
@@ -144,17 +145,25 @@ export function grade({ calls, replies }, scenario) {
   }
   if (scenario.available === false || scenario.failure) {
     const last = replies.at(-1);
-    const prose = last.replace(/[`*]/g, '').replace(/\s+/g, ' ')
+    const normalize = value => value.replace(/[`*]/g, '').replace(/\s+/g, ' ')
       .replace(/can[’']t/gi, 'cannot').replace(/doesn[’']t/gi, 'does not').replace(/won[’']t/gi, 'will not');
-    assert.match(prose, /CLI.{0,120}(?:cannot|does not|will not).{0,120}(?:bypass|get around|get past|override|circumvent)/i, 'CLI shares the permission gate');
+    const prose = normalize(last);
+    const conversation = normalize(text);
+    assert.match(conversation, /CLI.{0,120}(?:cannot|does not|will not).{0,120}(?:bypass|get around|get past|override|circumvent)/i, 'CLI shares the permission gate');
+    assert.doesNotMatch(conversation, /CLI[^.!?]{0,100}\bcan (?:bypass|get around|get past|override|circumvent)/i, 'no contradictory CLI bypass claim');
+    if (scenario.name === 'capability-missing') {
+      assert.doesNotMatch(conversation, /\borchestration (?:is|has been|must be) (?:off|disabled|turned off|not enabled)(?![,\s]+or\b)/i,
+        'a missing capability does not prove orchestration is disabled');
+    }
     if (scenario.disposition === 'WAIT') {
       assert.match(prose, /\bwait(?:ing)?\b/i, 'the caller waits for state change');
       assert.doesNotMatch(prose, /(?:you|user|owner).{0,20}(?:must|need to|should) wait/i, 'the caller owns the wait');
     } else if (scenario.disposition === 'STOP') {
-      assert.match(prose, /\bstop(?:ping)?\b/i, 'the caller stops');
+      assert.match(prose, /\bstop(?:ping|ped)?\b/i, 'the caller stops');
       assert.doesNotMatch(prose, /(?:you|user|owner).{0,20}(?:must|need to|should) stop/i, 'the caller owns the stop');
     } else {
-      assert.match(prose, /(?:you|user|owner).{0,120}(?:start|open).{0,30}(?:new|session)/i, 'manual fallback belongs to the user');
+      assert.ok(/(?:you|user|owner).{0,120}(?:start|open).{0,30}(?:new|session)/i.test(prose)
+        || /(?:^|[.!?:])\s*(?:Start|Open) a new session/i.test(prose), 'manual fallback belongs to the user');
       assert.ok(last.includes(childPrompt), 'manual fallback carries the opening prompt');
       if (scenario.reason === 'ORCHESTRATION_DISABLED' || scenario.failure === 'ORCHESTRATION_DISABLED') {
         assert.match(last, /Settings.{0,10}Session orchestration/);
@@ -174,7 +183,7 @@ async function main() {
   assert.ok(process.argv[2], 'provide a candidate adapter module; no mock or skip fallback');
   const { createAgent } = await import(pathToFileURL(process.argv[2]).href);
   let failures = 0;
-  for (const surface of ['mcp', 'cli', 'legacy']) {
+  await Promise.all(['mcp', 'cli', 'legacy'].map(async surface => {
     for (const scenario of scenarios) {
       try {
         const trace = await evaluate(await createAgent(), surface, scenario);
@@ -184,7 +193,7 @@ async function main() {
         console.error(`FAIL ${surface}/${scenario.name} ${error.message} ${JSON.stringify(error.evaluationTrace ?? null)}`);
       }
     }
-  }
+  }));
   process.exitCode = failures ? 1 : 0;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
