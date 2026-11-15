@@ -139,6 +139,41 @@
       "meaning": "Stop: send this request again in no form. The work it asks for is not this caller's to do, or is not to be done as asked. Read the resources it names to see where the work went.",
       "automaticRetry": false,
       "mayWrite": false
+    },
+    "WAIT_FOR_SESSIONS": {
+      "meaning": "Wait for the sessions named in resources to settle (end their turn or finish), then send the request again. Never resent on a timer: the state that refuses it changes only as those sessions settle.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "POLL_STATE": {
+      "meaning": "The resource is passing through a state that ends by itself. Read it again after retry.afterSeconds, and act on what it then says. Reading is all this action does.",
+      "automaticRetry": false,
+      "mayWrite": false
+    },
+    "RETURN_TO_PARENT": {
+      "meaning": "Do not send this kind of request again from here: do the work in this session, or hand the result back to the session above it. Nothing below this point may be started.",
+      "automaticRetry": false,
+      "mayWrite": false
+    },
+    "CREATE_REPLACEMENT": {
+      "meaning": "The resource can never take this request again. Make a new one (a new session with a self-contained brief) instead of resending to it.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "AWAIT_USER_FIX": {
+      "meaning": "A person has to change something the caller may not change (restore from Trash, sign an engine in, turn a setting on). Tell them; send again only once they have.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "AWAIT_SYSTEM_FIX": {
+      "meaning": "The platform has to recover by itself (a machine coming back online). Wait retry.afterSeconds, read the resource, and ask a person once it has not recovered.",
+      "automaticRetry": false,
+      "mayWrite": true
+    },
+    "STOP_LOOP": {
+      "meaning": "The caller is repeating itself without progress. Stop sending this request and end the turn; nothing is resent automatically, whatever retry.afterSeconds says.",
+      "automaticRetry": false,
+      "mayWrite": false
     }
   },
   "defaultActionByPolicy": {
@@ -330,7 +365,10 @@
   ],
   "readOnlyActionCodes": [
     "VERIFY_STATE",
-    "STAND_DOWN"
+    "STAND_DOWN",
+    "POLL_STATE",
+    "RETURN_TO_PARENT",
+    "STOP_LOOP"
   ],
   "disposition": {
     "note": "What kind of next step the envelope leaves the caller: carry it out unaided (AUTOMATIC), wait for the system (WAIT), have a person confirm and then carry it out (CONFIRM_THEN_RUN), hand it to a person (HUMAN), or stop (STOP). Resolved after the invariants, from the final fields, by the first rule that matches. Both parsers apply the same rules (dispositionOf).",
@@ -364,6 +402,27 @@
         "then": "STOP"
       },
       {
+        "id": "LOOP_OR_DEPTH_STOPS",
+        "when": {
+          "actionCode": [
+            "STOP_LOOP",
+            "RETURN_TO_PARENT"
+          ]
+        },
+        "then": "STOP"
+      },
+      {
+        "id": "THE_STATE_MOVES",
+        "when": {
+          "actionCode": [
+            "WAIT_FOR_SESSIONS",
+            "POLL_STATE",
+            "AWAIT_SYSTEM_FIX"
+          ]
+        },
+        "then": "WAIT"
+      },
+      {
         "id": "RESEND_OR_VERIFY_IS_AUTOMATIC",
         "when": {
           "retryPolicy": [
@@ -380,6 +439,9 @@
           "anyOf": [
             {
               "actionCode": "AWAIT_OWNER_DECISION"
+            },
+            {
+              "actionCode": "AWAIT_USER_FIX"
             },
             {
               "actor": "USER"

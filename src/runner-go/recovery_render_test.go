@@ -363,6 +363,9 @@ func TestRecoveryNextNeverInvokesWhatIsNotExposed(t *testing.T) {
 	everything := fakeRecoverySurface{readable: map[string]bool{"task_get": true, "session_get": true, "project_get": true, "task_dependency_graph": true}, canAgain: true}
 	nothing := fakeRecoverySurface{}
 	allowed := map[string]bool{recoveryNextInvoke: true, recoveryNextAskUser: true, recoveryNextWait: true, recoveryNextManual: true, recoveryNextStop: true}
+	// The actions a caller may never carry out by sending anything itself: a wait, a stop, a fix only a
+	// person or the platform makes, and a replacement (a different request, never this one again).
+	neverInvoked := map[string]bool{"WAIT_FOR_SESSIONS": true, "AWAIT_SYSTEM_FIX": true, "AWAIT_USER_FIX": true, "RETURN_TO_PARENT": true, "STOP_LOOP": true, "CREATE_REPLACEMENT": true}
 	for _, env := range envs {
 		for _, sent := range []bool{false, true} {
 			full := renderRecoveryNext(env, everything, sent)
@@ -375,6 +378,12 @@ func TestRecoveryNextNeverInvokesWhatIsNotExposed(t *testing.T) {
 			}
 			if !reflect.DeepEqual(full.ActionCode, env.ActionCode) || !reflect.DeepEqual(none.ActionCode, env.ActionCode) {
 				t.Fatalf("step changed the actionCode: %+v vs %v", full, env.ActionCode)
+			}
+			if action := env.ActionCode; action != nil && neverInvoked[*action] && full.Type == recoveryNextInvoke {
+				t.Fatalf("%s rendered as something to do now: %+v", *action, full)
+			}
+			if (full.Type == recoveryNextStop) != (env.ActionCode != nil && (*env.ActionCode == "STOP_LOOP" || *env.ActionCode == "RETURN_TO_PARENT" || *env.ActionCode == "STAND_DOWN")) {
+				t.Fatalf("stop step for %v: %+v", env.ActionCode, full)
 			}
 			if full.Type != recoveryNextInvoke {
 				continue

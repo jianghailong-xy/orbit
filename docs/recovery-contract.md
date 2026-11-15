@@ -160,11 +160,13 @@ final fields, by the first rule that matches (contract `disposition.rules`):
 2. `CONFIRMATION_FIRST`: `userConfirmation` `REQUIRED` → `CONFIRM_THEN_RUN`.
 3. `STATED`: `recovery.disposition`, when it is a value of the enum.
 4. `STAND_DOWN_STOPS`: action `STAND_DOWN` → `STOP`.
-5. `RESEND_OR_VERIFY_IS_AUTOMATIC`: policy `SAFE`, `SAME_REQUEST_ID` or `VERIFY_THEN_RETRY` → `AUTOMATIC`.
-6. `A_PERSON_DECIDES`: action `AWAIT_OWNER_DECISION`, or actor `USER` → `HUMAN`.
-7. `THE_SYSTEM_MOVES`: actor `SYSTEM` → `WAIT`.
-8. `STATE_CHANGE_WITH_NO_ACTION`: policy `AFTER_STATE_CHANGE` and no action → `WAIT`.
-9. `OTHERWISE` → `AUTOMATIC`.
+5. `LOOP_OR_DEPTH_STOPS`: action `STOP_LOOP` or `RETURN_TO_PARENT` → `STOP`.
+6. `THE_STATE_MOVES`: action `WAIT_FOR_SESSIONS`, `POLL_STATE` or `AWAIT_SYSTEM_FIX` → `WAIT`.
+7. `RESEND_OR_VERIFY_IS_AUTOMATIC`: policy `SAFE`, `SAME_REQUEST_ID` or `VERIFY_THEN_RETRY` → `AUTOMATIC`.
+8. `A_PERSON_DECIDES`: action `AWAIT_OWNER_DECISION` or `AWAIT_USER_FIX`, or actor `USER` → `HUMAN`.
+9. `THE_SYSTEM_MOVES`: actor `SYSTEM` → `WAIT`.
+10. `STATE_CHANGE_WITH_NO_ACTION`: policy `AFTER_STATE_CHANGE` and no action → `WAIT`.
+11. `OTHERWISE` → `AUTOMATIC`.
 
 What each one tells an agent:
 
@@ -188,12 +190,13 @@ or a write that already went through.
   (`ANSWER_ADVICE`), writing again after a decision (`AWAIT_OWNER_DECISION`), or a handoff
   (`FILE_IN_OWN_PROJECT_OR_REQUEST_HANDOFF`).
 
-Only `VERIFY_STATE` and `STAND_DOWN` have `mayWrite: false`. A token the registry does not list counts as
+`VERIFY_STATE`, `STAND_DOWN`, `POLL_STATE`, `RETURN_TO_PARENT` and `STOP_LOOP` have `mayWrite: false`: they read
+or stop, and none of them sends this request again (§11). A token the registry does not list counts as
 `mayWrite: true`. The contract derives `automaticRetryActionCodes` and `readOnlyActionCodes` from
 these flags. Steps 3 and 4 use the first list, and step 6 uses the second.
 
 Every envelope satisfies the checks in `invariants.holdsOnEveryEnvelope`. Both test suites check
-them on every fixture, and on all 8,100 combinations a server block can state (effect × policy ×
+them on every fixture, and on all 11,880 combinations a server block can state (effect × policy ×
 action, including one unregistered token, × confirmation × request id × status × `retryable`).
 The check reads `mayWrite` and `automaticRetry` from the contract file itself rather than from the
 parser's tables, so if the parser misclassifies an action, the check still catches it.
@@ -239,8 +242,8 @@ The Go transport's text is unchanged byte for byte. That covers the `refused:` o
 the same vectors. Legacy flat fields stay on every body, and `owner` and `requiredAction` are copied
 into the envelope verbatim.
 
-The API emits the `recovery` block for the Project and Task refusals in §10. Other refusals are still
-read by inference.
+The API emits the `recovery` block for the Project and Task refusals in §10 and for the session
+lifecycle and spawn backpressure refusals in §11. Other refusals are still read by inference.
 
 ## 6. Replaying under the same request id (`SAME_REQUEST_ID`)
 
@@ -339,7 +342,7 @@ follow-up), and a different payload under the same key writes nothing.
     `USER`).
   - `wait`: wait `afterSeconds`, or until the system changes the state.
   - `manual`: change the request, or check the state by hand.
-  - `stop`: send nothing more (`STAND_DOWN`).
+  - `stop`: send nothing more of this kind (`STAND_DOWN`, `STOP_LOOP`, `RETURN_TO_PARENT`).
 
   How each action code maps to a step:
 
@@ -351,6 +354,11 @@ follow-up), and a different payload under the same key writes nothing.
   | `REREAD_AND_DECIDE` | `invoke` the reader of the first resource that has one (as `VERIFY_STATE`). `ask_user` when a confirmation is required, `manual` with no reader. |
   | `READ_GRAPH_AND_REPLAN` | `invoke` `task_dependency_graph` (`orbit task dependency-graph ID --json`) on the first `TASK`. `ask_user` when a confirmation is required, `manual` without the capability. |
   | `STAND_DOWN` | `stop`. |
+  | `POLL_STATE` | `wait` `afterSeconds`, then read the resource in `error.resources`. Never an `invoke`, so every surface gives the same step. |
+  | `WAIT_FOR_SESSIONS`, `AWAIT_SYSTEM_FIX` | `wait`. |
+  | `AWAIT_USER_FIX` | `ask_user`. |
+  | `RETURN_TO_PARENT`, `STOP_LOOP` | `stop`. |
+  | `CREATE_REPLACEMENT` | `manual`. |
   | none | `ask_user` when a confirmation is required or the actor is `USER`. `manual` on a `COMMITTED` write. `wait` when the actor is `SYSTEM` or there is an `afterSeconds`. Otherwise `manual`. |
   | anything else | `ask_user` when a confirmation is required, otherwise `manual`. |
 
@@ -527,3 +535,107 @@ refusal is `task_dependency_graph`, a delete or crossing is `ask_user`, a retire
 prerequisite is `wait`. `refusal-recovery.pg.spec.ts` serves the reachable ones from the production
 apiserver over PostgreSQL. It also shows that another account's ids, ids that name nothing and no
 credential at all get byte-identical answers, with no block and no id of the other account.
+
+## 11. Session lifecycle and spawn backpressure
+
+`src/apiserver/src/sessions/session-recovery.ts` holds one table, `SESSION_RECOVERY_RULES`. Each
+refusal keeps its status and message as before. It adds `code`, `owner`, `requiredAction` (the
+action code), `retryable`, `retryAfterSeconds` when there is a wait, and the `recovery` block with
+the blockers in `resources`. A resume refusal also keeps the session-state reason
+(`deriveSessionCapabilities`, `session-state.ts`) as `resumeBlockedReason`, and its code is
+`SESSION_<reason>`. The shared vectors named `session recovery: <code>` are these bodies exactly.
+
+### 11.1 Codes
+
+| Code | Status | Actor / owner | Policy | Action | Wait | Blockers | Where |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `ORCHESTRATION_DISABLED` | 403 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | calling session | authorizer, spawn |
+| `CALLER_SESSION_NOT_LIVE` | 403 | CALLER | NEVER | `STOP_LOOP` | | calling session | authorizer |
+| `SPAWN_DEPTH_LIMIT` | 403 | CALLER | NEVER | `RETURN_TO_PARENT` | | parent, tree root | spawn |
+| `SPAWN_TREE_OUTSTANDING_LIMIT` | 429 | CALLER | AFTER_STATE_CHANGE | `WAIT_FOR_SESSIONS` | | the tree's unsettled sessions (up to 20) | spawn |
+| `SPAWN_TREE_RATE_LIMIT` | 429 | CALLER | AFTER_STATE_CHANGE | `STOP_LOOP` | until the window admits one | tree root | spawn |
+| `WORKSPACE_NAME_AMBIGUOUS` | 400 | CALLER | NEVER | `FIX_REQUEST` | | the matching workspaces | spawn |
+| `WORKSPACE_NAME_NOT_FOUND` | 400 | CALLER | NEVER | `FIX_REQUEST` | | | spawn |
+| `ENGINE_SIGNED_OUT` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | runner | create |
+| `MANAGED_RUNNER_FAILED` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | named workspace or session, runner | spawn (before any child), resume |
+| `SESSION_TRASHED` | 409 | USER | AFTER_STATE_CHANGE | `AWAIT_USER_FIX` | | session | resume, send, interrupt with a message |
+| `SESSION_ENDING` | 409 | SYSTEM | AFTER_STATE_CHANGE | `POLL_STATE` | 5 s | session | resume |
+| `SESSION_NOT_TERMINAL` | 409 | SYSTEM | AFTER_STATE_CHANGE | `POLL_STATE` | 5 s | session | resume |
+| `SESSION_NOT_STARTED`, `SESSION_MISSING_CONTEXT`, `SESSION_NO_RUNNER` | 409 | CALLER | NEVER | `CREATE_REPLACEMENT` | | session | resume |
+| `SESSION_RUNNER_OFFLINE` | 409 | SYSTEM | AFTER_STATE_CHANGE | `AWAIT_SYSTEM_FIX` | 60 s | session, runner | resume |
+| `SESSION_ENDED` | 409 | CALLER | NEVER | `FIX_REQUEST` (send with `resumeIfEnded`, or to a new session) | | session | send, interrupt |
+| `SESSION_NEXT_TURN_STARTING` | 409 | SYSTEM | SAFE | `RETRY` | 2 s | session | interrupt |
+
+The rules behind the table:
+
+- **Backpressure is never retried on a timer.** No spawn refusal is `retryable` or carries an
+  automatic-retry action. A bare 429 would read as `SAFE` (§3 rule 6), so the policy is stated
+  outright. `WAIT_FOR_SESSIONS` names the sessions to wait on. The rate limit's `retryAfterSeconds`
+  says when the window admits another spawn, but its action is `STOP_LOOP`.
+- **The depth limit stops the descent.** Policy `NEVER` and `RETURN_TO_PARENT`: the same spawn is
+  never offered again, and nothing below this depth is started.
+- **A person's boundary stays a person's.** Trash, the orchestration switch, an engine sign-in and a
+  failed managed runner have actor `USER` and `AWAIT_USER_FIX`. They are the only codes with actor `USER`, and they render
+  as `ask_user`, never as a call.
+- **Only the next-turn race is resent as is**, after its 2 s wait.
+
+The agent tells these apart as: wait (`WAIT_FOR_SESSIONS`), poll (`POLL_STATE`), go back to the parent
+session (`RETURN_TO_PARENT`), create a replacement (`CREATE_REPLACEMENT`), a user or system fix
+(`AWAIT_USER_FIX`, `AWAIT_SYSTEM_FIX`), and stop the loop (`STOP_LOOP`).
+
+### 11.2 Disposition and rendered step
+
+The server states each code's disposition in its block, and §3.2's rules derive the same one from the
+fields alone (`LOOP_OR_DEPTH_STOPS`, `THE_STATE_MOVES`, and `AWAIT_USER_FIX` under `A_PERSON_DECIDES`).
+§7's table gives the step:
+
+| Code | Disposition | `next.type` |
+| --- | --- | --- |
+| `ORCHESTRATION_DISABLED`, `ENGINE_SIGNED_OUT`, `MANAGED_RUNNER_FAILED`, `SESSION_TRASHED` | `HUMAN` | `ask_user` |
+| `CALLER_SESSION_NOT_LIVE`, `SPAWN_DEPTH_LIMIT`, `SPAWN_TREE_RATE_LIMIT` | `STOP` | `stop` |
+| `SPAWN_TREE_OUTSTANDING_LIMIT`, `SESSION_ENDING`, `SESSION_NOT_TERMINAL`, `SESSION_RUNNER_OFFLINE` | `WAIT` | `wait` |
+| `WORKSPACE_NAME_*`, `SESSION_NOT_STARTED`, `SESSION_MISSING_CONTEXT`, `SESSION_NO_RUNNER`, `SESSION_ENDED` | `AUTOMATIC` | `manual` (the caller changes its request or makes a new session; never the same one again) |
+| `SESSION_NEXT_TURN_STARTING` | `AUTOMATIC` | `invoke` (the same call) |
+
+`CONFIRM_THEN_RUN` belongs to `AWAIT_OWNER_DECISION` and to required confirmations (§2). None of
+these codes uses it.
+
+### 11.3 Asynchronous merge
+
+`session_merge` without `waitSeconds` used to answer the agent's door with `{ok: true}`, which reads as
+"merged". It now answers:
+
+```json
+{ "ok": true, "outcome": "PENDING", "sessionId": "…", "operationId": "…", "mergeStatus": "pending",
+  "receipt": null, "receiptAbsentReason": "MERGE_STILL_RUNNING",
+  "next": { "actionCode": "POLL_STATE", "afterSeconds": 30, "resources": [{ "type": "SESSION", "id": "…" }] } }
+```
+
+A wait that runs out (`TIMED_OUT`) carries the same `next`. The runner (`merge_pending.go`) adds the
+read for its surface beside the server's fields: `tool: "session_get"`, `command: "orbit session get
+<id>"` and `arguments: {sessionId}`, the shape `session_create(wait)` uses. The owner's Merge button
+still gets `{ ok: true }` byte for byte.
+
+Tests: `runner-api/session-lifecycle-recovery-wire.spec.ts` covers every code above over HTTP (real
+guard, authorizer, pipes, interceptors and filters). `sessions/session-recovery.spec.ts` holds the
+table to the shared vectors. `recovery_session_test.go` covers each vector's disposition and rendered
+step, and `merge_pending_test.go` covers the merge `next`.
+
+### 11.4 A workspace whose machine is coming up or has failed
+
+The designed workspace `cloneState` (`PENDING | CLONING | READY | FAILED`,
+`docs/github-workspace-design.md`) has not been built. Production does have the equivalent states, on
+the managed runner a workspace runs on (`ManagedRunner.managementState`,
+`docs/managed-runner-design.md`). The managed-runner demand hook reads them (`demandAnswer`):
+
+- **Coming up** (`REQUESTED`, `WAITING_CAPACITY`, `PROVISIONING`, `STARTING`; `DRAINING` and
+  `SLEEPING` wake too): the platform brings it up by itself. A spawn into that workspace is accepted,
+  and the child waits for the machine. Unless the runner is `READY`, the answer adds
+  `runnerState: {code: "MANAGED_RUNNER_STARTING", owner: "SYSTEM", runnerId, managementState,
+  retryAfterSeconds}` and `next: {actionCode: "POLL_STATE", afterSeconds, resources: [child session,
+  runner]}`. `afterSeconds` is the manager's `nextAttemptAt`, and never less than 30.
+- **Failed** (`FAILED`, `FENCING`, deletion): it does not come back by itself. A spawn is refused with
+  `MANAGED_RUNNER_FAILED` before any child is written. A resume, which used to be refused as
+  `SESSION_RUNNER_OFFLINE` ("the system recovers it"), is refused with `MANAGED_RUNNER_FAILED`. Both
+  carry `managementState` and the manager's `managedReason`. The owner repairs the runner from its
+  machine page, or an operator does.

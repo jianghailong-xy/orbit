@@ -1841,7 +1841,7 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		if err != nil {
 			return toolResult("merge session failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(raw), false)
+		return toolResult(prettyJSON(withMergePendingCall(raw)), false)
 
 	case "session_end":
 		if !s.orchestrationEnabled() {
