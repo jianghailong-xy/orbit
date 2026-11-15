@@ -365,7 +365,10 @@ follow-up), and a different payload under the same key writes nothing.
   "Exposes" means the tool appears in this server's `tools/list` (orchestration, watch, wiki and
   `ORBIT_MCP_TOOLS` gating included), or the command is an `available` entry of
   `orbit capabilities --json`. When the capability is missing, the step degrades: it is never an
-  invoke that cannot run.
+  invoke that cannot run. `available` follows the credential in effect: under an invalid or expired
+  service token, or on a machine with no runner credential, the entries that send with it are
+  `available: false`, with the `unavailableCode` in `unavailableCapabilities`
+  (docs/orbit-agent-contract.md §2.5). A recovery step therefore never names them.
 
 **MCP.** `content[0].text` and `isError` are byte for byte what they were, so a client that reads
 only the text sees no change. The report is added as `structuredContent`, including for tools that declare an

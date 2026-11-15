@@ -583,8 +583,8 @@ func (rec *callRecord) changedFields() []string {
 // refused it itself, by what it said.
 func (rec *callRecord) failure(text string) (*receiptError, string) {
 	op := rec.op
-	keyed := strings.TrimSpace(getString(rec.args, "idempotencyKey")) != ""
-	resendIsSafe := !op.Mutates || (keyed && op.Idempotency == idempotencyCallerKey)
+	// The same rule `orbit capabilities` states as retryPolicy (capability_contract.go).
+	resendIsSafe := op.resendIsSafe(op.keyedCall(rec.args))
 	if failed := rec.lastFailedRequest(); failed != nil {
 		var httpErr *transportHTTPError
 		if errors.As(failed.Err, &httpErr) {

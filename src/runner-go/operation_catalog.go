@@ -32,7 +32,7 @@ import (
 // of the canonical catalogue and is emitted with `orbit capabilities --json`, so a client can tell
 // which catalogue answered it.
 
-const operationCatalogVersion = "1.5.0"
+const operationCatalogVersion = "1.6.0"
 
 // operationObject is the Orbit object an operation acts on (docs/orbit-agent-contract.md §1.1),
 // plus the auxiliary resources (watch, wiki, file) and the two doors that are not writes at all
@@ -3951,6 +3951,16 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	// conversation into Orbit runs it as itself. The headless door below describes it for the
 	// credential that door answers for.
 	{Tool: "session_import", Argv: []string{"orbit", "session", "import"}, Usage: "orbit session import CLAUDE_SESSION_ID [--workspace ID] [--json]", Arguments: []string{"[claude-session-id] (required)", "--workspace <id>", "--json"}, Mutates: true,
+		// No MCP tool stands beside it (catalogMCPExemptions), so its own flags are its schema.
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"claude-session-id": map[string]interface{}{"type": "string", "description": "The Claude Code session id, the transcript's file name under ~/.claude/projects."},
+				"workspace":         map[string]interface{}{"type": "string", "description": "The workspace to import into."},
+			},
+			"required":             []string{"claude-session-id"},
+			"additionalProperties": false,
+		},
 		Description: "Import a Claude Code transcript from this machine's ~/.claude/projects as an Orbit session on this runner, whose first message resumes the conversation. The workspace defaults to the one on this machine containing the transcript's recorded cwd; when several do, the import is refused with their ids and --workspace picks one."},
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},

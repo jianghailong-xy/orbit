@@ -1,4 +1,4 @@
-# Orbit operation catalogue v1.5.0
+# Orbit operation catalogue v1.6.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
 > Content hash: `d1b7c969414a650c6d56f4e34c7bbc456ff06adb2f265719798e281053051a4f`.

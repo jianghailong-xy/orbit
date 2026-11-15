@@ -583,7 +583,11 @@ read or sent, saying why and what to use instead: the ones that act for an Orbit
 in another shape or not at all (`task batch-pin`, `session create`, `session import`). No command falls back to
 the runner credential while you are logged in: the machine's other commands — `orbit task-list`, `orbit provider`,
 `orbit notify`, `orbit token` and the rest — are refused too, so run them where you are not logged in.
-`orbit capabilities --json` marks every command `available` or not under the identity in effect, with the reason.
+`orbit capabilities --json` marks every command `available` or not under the identity in effect, with the reason
+and a stable `unavailableCode`. `unavailableCapabilities` lists every command this process cannot run, each with
+its code: `ORCHESTRATION_DISABLED`, `SESSION_CONTEXT_MISSING`, `SERVICE_TOKEN_SCOPE_MISSING`, `TOKEN_INVALID`,
+`TOKEN_EXPIRED`, `RUNNER_NOT_REGISTERED`, `RUNNER_CREDENTIAL_UNUSABLE`, `NOT_AVAILABLE_AS_USER`,
+`REQUIRES_USER_LOGIN`, `HUMAN_ONLY`, `WATCHES_OFF` or `WIKI_OFF` (docs/orbit-agent-contract.md §2.5).
 
 Inside a session the session decides for every command, the session commands included: a service token in the
 session's environment is not used there.
