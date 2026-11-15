@@ -33,9 +33,9 @@ import OrbitKit
 /// FLOATING, NOT A STRIP (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`)
 /// ------------------------------------------------------------------------------------------
 /// The inset only keeps the list's first row and the pull's spinner clear while the list rests. The
-/// capsule stands on nothing and casts a shadow, so the rows scroll on behind it as they do behind
+/// capsule stands on nothing but its own glass, so the rows scroll on behind it as they do behind
 /// the nav bar's glass buttons; several waiting show as a deck under it. Unfolded, the capsules after
-/// the first hang over the page on a scrim instead of pushing it down, so the inset never changes
+/// the first hang over the page instead of pushing it down, so the inset never changes
 /// height and nothing under a finger moves.
 ///
 /// AND IT IS WHERE AN APPROVAL ARRIVES (`docs/mocks/needs-you-capsule/05-one-surface`)
@@ -58,7 +58,6 @@ struct NeedsYouBannerView: View {
     var overList = false
     /// The bar's own width, for the margin that lines it up with the nav bar's buttons.
     @State private var width: CGFloat = 0
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Unfolded to one capsule per waiting conversation. Folds again after a press goes somewhere,
     /// so the page it is left on is as it was.
@@ -80,7 +79,8 @@ struct NeedsYouBannerView: View {
             // Several waiting, unfolded (the owner, 2026-11-13, option B of
             // docs/mocks/needs-you-capsule/03-expand.html): one card per conversation, the first
             // the one the folded bar names and where the folded bar stood, carrying the ↑ that folds
-            // them back. The rest hang over the page on a scrim (04-floating), sliding out from
+            // them back. The rest hang over the page (04-floating) — on no scrim since 11-15 (10-glass:
+            // the page under them stays usable) — sliding out from
             // under the first (08-motion ①) and back under it to fold (②).
             // An arrival never unfolds: its press goes to the newcomer.
             let several = banner.count > 1 && !banner.arriving
@@ -122,8 +122,6 @@ struct NeedsYouBannerView: View {
                         .offset(y: firstHeight + Self.stackGap)
                     }
                 }
-            } scrim: {
-                if stacked { scrim.transition(.opacity) }
             }
             .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
         }
@@ -153,19 +151,6 @@ struct NeedsYouBannerView: View {
             glyph: entry.glyph, hint: hint(for: entry), fold: fold) {
             open(entry)
         }
-    }
-
-    /// Behind the unfolded stack and over everything else on the page: dimmed, and a press anywhere
-    /// on it folds the stack rather than reaching the row under it.
-    private var scrim: some View {
-        Color.black.opacity(scheme == .dark ? 0.55 : 0.18)
-            .frame(width: 4000, height: 4000)
-            .contentShape(Rectangle())
-            .onTapGesture { setUnfolded(false) }
-            .accessibilityElement()
-            .accessibilityLabel("Collapse")
-            .accessibilityAddTraits(.isButton)
-            .accessibilityAction { setUnfolded(false) }
     }
 
     private func setUnfolded(_ value: Bool) {
@@ -281,8 +266,6 @@ struct NeedsYouBannerView: View {
                 .allowsHitTesting(false)
         }
         .animation(.easeInOut(duration: 0.3), value: arriving)
-        // Lifted off the page: the rows scroll on behind it.
-        .shadow(color: .black.opacity(scheme == .dark ? 0.75 : 0.10), radius: 14, y: 10)
         .background(alignment: .top) { if deck { deckEdges } }
     }
 
@@ -293,11 +276,11 @@ struct NeedsYouBannerView: View {
     /// notifications does — 7 and 13pt below, standing in 12 and 26pt from its ends.
     private var deckEdges: some View {
         ZStack(alignment: .top) {
-            Self.card.fill(Color(uiColor: .secondarySystemBackground).opacity(0.7))
+            Self.card.fill(.thinMaterial).opacity(0.7)
                 .overlay(Self.card.strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
                 .padding(.horizontal, 26)
                 .offset(y: Self.deckReach)
-            Self.card.fill(Color(uiColor: .secondarySystemBackground))
+            Self.card.fill(.regularMaterial)
                 .overlay(Self.card.strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
                 .padding(.horizontal, 12)
                 .offset(y: 7)
@@ -313,14 +296,11 @@ struct NeedsYouBannerView: View {
     /// Where the bar stands: in from the edges by the margin the nav bar sets its own buttons in —
     /// UIKit's 20pt on a Plus- or Max-width phone, 16pt below that — so a capsule's ends line up
     /// under the back button and ⋯ (measured on the owner's 440pt phone: 20–64 and 376–420).
-    private func chrome<Content: View, Scrim: View>(deck: Bool, @ViewBuilder _ content: () -> Content,
-                                                    @ViewBuilder scrim: () -> Scrim) -> some View {
+    private func chrome<Content: View>(deck: Bool, @ViewBuilder _ content: () -> Content) -> some View {
         content()
             .padding(.horizontal, width >= 414 ? 20 : 16)
             .padding(.bottom, deck ? Self.deckReach : 0)
             .padding(.bottom, 6)
-            // Under the capsules and over the page: the unfolded stack's scrim.
-            .background { scrim() }
             .frame(maxWidth: .infinity)
             .background {
                 GeometryReader { proxy in
@@ -448,15 +428,18 @@ extension NeedsYouGlyph {
 }
 
 private extension View {
-    /// The capsule's surface: on iOS 26 the glass the nav bar's controls and the question capsule
-    /// above the transcript are (`questionGlass`); before it, a raised fill with a hairline, on the
-    /// page colour the bar stands on there.
+    /// The card's surface, the commit toast's own (`ToastHost.toastGlass`; the owner, 2026-11-15):
+    /// on iOS 26 Liquid Glass and nothing around it — a shadow laid outside the glass drew it as a flat
+    /// slab (beta.8) — and before it the regular material with a hairline edge and a soft shadow.
     @ViewBuilder func needsYouCapsule() -> some View {
         if #available(iOS 26.0, *) {
-            glassEffect(.regular.interactive(), in: NeedsYouBannerView.card)
+            glassEffect(.regular, in: NeedsYouBannerView.card)
         } else {
-            background(Color(uiColor: .secondarySystemBackground), in: NeedsYouBannerView.card)
-                .overlay(NeedsYouBannerView.card.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+            background {
+                NeedsYouBannerView.card.fill(.regularMaterial)
+                    .overlay(NeedsYouBannerView.card.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.7))
+                    .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
+            }
         }
     }
 }

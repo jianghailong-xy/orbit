@@ -54,7 +54,10 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
     func testTheBarIsAGlassCapsuleNotABand() throws {
         let view = try banner
         let surface = try slice(view, from: "func needsYouCapsule()", to: "\n    }")
-        XCTAssertTrue(surface.contains("glassEffect(.regular.interactive(), in: NeedsYouBannerView.card)"))
+        // The commit toast's own glass (`toastGlass`, the owner, 2026-11-15): nothing laid around it on
+        // iOS 26 — a shadow outside the glass drew it as a flat slab in beta.8.
+        XCTAssertTrue(surface.contains("glassEffect(.regular, in: NeedsYouBannerView.card)"))
+        XCTAssertTrue(surface.contains("NeedsYouBannerView.card.fill(.regularMaterial)"), "before iOS 26, the toast's material")
         // A notification's size and corners since 2026-11-15 (09-height): 70pt, 24pt continuous.
         XCTAssertTrue(view.contains(".frame(minHeight: Self.cardHeight)"))
         XCTAssertTrue(view.contains("static let cardHeight: CGFloat = 70"))
@@ -99,7 +102,7 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
     /// Several waiting (the owner, 2026-11-13, option B of 03-expand.html; floating since 11-15,
     /// 04-floating.html): folded, a deck under the capsule says the press unfolds; unfolded, one
     /// capsule per conversation in `entries`' order, each opening its own, the first standing where
-    /// the folded one stood with the ↑ that folds them, the rest hanging over the page on a scrim —
+    /// the folded one stood with the ↑ that folds them, the rest hanging over the page —
     /// the bar keeps the deck's room either way, so the page under it never moves.
     func testSeveralWaitingUnfoldIntoOneCapsuleEach() throws {
         let view = try banner
@@ -110,11 +113,10 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("chrome(deck: banner.count > 1) {"))
         XCTAssertTrue(view.contains("bar(entries[0], more: 0, fold: { setUnfolded(false) })"))
         let stack = try slice(view, from: ".background(alignment: .top) {\n                    if stacked {",
-                              to: "} scrim: {")
+                              to: ".transition(reduceMotion ? .opacity : .move(edge: .top)")
         XCTAssertTrue(stack.contains(".offset(y: firstHeight + Self.stackGap)"), "hung under the first, over the page")
         XCTAssertTrue(stack.contains(".transition(fromUnder(index))"), "each comes out from under it (08-motion)")
-        XCTAssertTrue(view.contains("if stacked { scrim.transition(.opacity) }"))
-        XCTAssertTrue(view.contains(".onTapGesture { setUnfolded(false) }"), "the scrim folds them")
+        XCTAssertFalse(view.contains("scrim"), "no cover over the page: what is under it stays usable (10-glass)")
         XCTAssertTrue(view.contains(".padding(.bottom, deck ? Self.deckReach : 0)"))
         XCTAssertTrue(view.contains("Image(systemName: \"chevron.up\")"))
         XCTAssertTrue(view.contains("entries.prefix(NeedsYouLogic.unfoldedLimit)"), "at most five")
@@ -137,7 +139,7 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
 
     /// A conversation carries no needs-you bar (07-console-one-capsule): what waits in it is the nav
     /// bar capsule's to say — while its card is out of sight — and what waits elsewhere the lists'.
-    /// Over the session list and over a page the bar stands on nothing, lifted by a shadow.
+    /// Over the session list and over a page the bar stands on nothing but its glass.
     func testNoBarInAConversationAndItFloatsElsewhere() throws {
         let console = code(try source("Views/Console/ConsoleView.swift"))
         XCTAssertFalse(console.contains("NeedsYouBannerView("), "no bar in a conversation")
@@ -154,7 +156,8 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(view.contains(".background { surface }"))
         XCTAssertTrue(view.contains("if overList {\n            Color.clear"))
         XCTAssertFalse(view.contains("listSoftEdge"), "no band of its own under it")
-        XCTAssertTrue(view.contains(".shadow(color: .black.opacity(scheme == .dark ? 0.75 : 0.10), radius: 14, y: 10)"))
+        XCTAssertFalse(code(try source("Views/NeedsYouBannerView.swift")).contains(".shadow(color: .black.opacity(scheme"),
+                       "no shadow laid outside the glass")
     }
 
     /// An approval that has just arrived is said by this bar (the owner, 2026-11-15,

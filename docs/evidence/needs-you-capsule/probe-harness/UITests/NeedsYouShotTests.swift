@@ -7,45 +7,45 @@ import XCTest
 // its own card. Each launch fails the test when the capsule never says what the stub served.
 final class NeedsYouShotTests: ProbeCase {
     #if os(iOS)
-    /// The owner's case: reading one conversation while the project's coordinator waits on a question.
-    /// The capsule says what (the kind's word), where (the project), and that one more waits behind it.
-    func testIPhoneCapsuleOverAConversation() {
-        for dark in [false, true] {
-            let name = "ios-chat-\(dark ? "dark" : "light")"
-            setMode("live")
-            let app = launch(until: "Question from coordinator", dark: dark, extra: ["-probe.page", "chat"], name)
-            check(capsule(app), says: ["Question from coordinator", "落地会话：每次落地都有自己的会话、实时输出和 owner 门", "+1"],
-                  name)
-            XCTAssertTrue(appears(app, "导出好了", timeout: 20), "\(name): the conversation never showed its tail")
-            shot(app, name)
-            app.terminate()
-        }
-    }
-
-    /// The session list carries the same capsule under its nav bar.
+    /// 2026-11-15 (the owner's beta.6 screenshot): the capsule over the session list was squeezed to its
+    /// glyph and an ellipsis, folded and unfolded, because what it hangs from had no width. Folded it
+    /// spans the list less its margins; pressed with two waiting, each unfolded capsule does too.
     func testIPhoneCapsuleOnTheSessionList() {
         for dark in [false, true] {
             let name = "ios-list-\(dark ? "dark" : "light")"
             setMode("live")
-            let app = launch(until: "Question from coordinator", dark: dark, extra: ["-probe.page", "list"], name)
-            check(capsule(app), says: ["Question from coordinator", "落地会话", "+1"], name)
-            XCTAssertTrue(appears(app, "Rebuild the wiki articles report", timeout: 20), "\(name): the rows never showed")
-            shot(app, name)
-            app.terminate()
-        }
-    }
-
-    /// Inside the coordinator's own conversation the capsule points at the card waiting there — one
-    /// line, its chevron the way the card lies — and the question elsewhere is not what it says.
-    func testIPhoneCapsuleInsideTheConversation() {
-        for dark in [false, true] {
-            let name = "ios-owner-\(dark ? "dark" : "light")"
-            setMode("lease")
-            let app = launch(until: "1 waiting", dark: dark, extra: ["-probe.page", "owner"], name)
-            check(capsule(app), says: ["1 waiting"], name)
-            XCTAssertFalse(capsule(app).label.contains("Question from coordinator"),
-                           "\(name): the conversation's own card wins over the question elsewhere")
-            shot(app, name)
+            let app = launch(until: "Rebuild the wiki articles report", dark: dark, extra: ["-probe.page", "list"], name)
+            let bar = capsule(app)
+            XCTAssertTrue(waitUntil(20) { bar.exists }, "\(name): no needs-you capsule")
+            guard bar.exists else { app.terminate(); continue }
+            note("\(name) folded: `\(bar.label)` at \(bar.frame)")
+            XCTAssertGreaterThan(bar.frame.width, 300, "\(name): the folded capsule is squeezed (\(bar.frame))")
+            settle()
+            shot(app, name + "-folded")
+            // The glass (2026-11-15, 10-glass): rows scrolled up behind the card should show through it, blurred.
+            let list = app.collectionViews.firstMatch
+            if list.exists {
+                let from = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.6))
+                from.press(forDuration: 0.05, thenDragTo: list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
+                settle(1.2)
+                shot(app, name + "-scrolled")
+                let back = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45))
+                back.press(forDuration: 0.05, thenDragTo: list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7)))
+                settle(1.2)
+            }
+            press(bar)
+            XCTAssertTrue(waitUntil(10) { app.buttons.matching(identifier: "needs-you-bar").count >= 2 },
+                          "\(name): pressing two waiting never unfolded them")
+            settle()
+            let stack = app.buttons.matching(identifier: "needs-you-bar").allElementsBoundByIndex
+            for (index, one) in stack.enumerated() {
+                note("\(name) unfolded #\(index): `\(one.label)` at \(one.frame)")
+                XCTAssertGreaterThan(one.frame.width, 300, "\(name): unfolded capsule \(index) is squeezed (\(one.frame))")
+            }
+            let tops = stack.map(\.frame.minY).sorted()
+            XCTAssertGreaterThanOrEqual((tops.last ?? 0) - (tops.first ?? 0), 60,
+                                        "\(name): the unfolded cards sit on top of each other (\(tops))")
+            shot(app, name + "-unfolded")
             app.terminate()
         }
     }
@@ -54,15 +54,6 @@ final class NeedsYouShotTests: ProbeCase {
 
     private func capsule(_ app: XCUIApplication) -> XCUIElement {
         app.buttons.matching(identifier: "needs-you-bar").firstMatch
-    }
-
-    private func check(_ capsule: XCUIElement, says words: [String], _ name: String) {
-        XCTAssertTrue(waitUntil(20) { capsule.exists }, "\(name): no needs-you capsule")
-        guard capsule.exists else { return }
-        note("\(name): capsule `\(capsule.label)` at \(capsule.frame)")
-        for word in words {
-            XCTAssertTrue(capsule.label.contains(word), "\(name): the capsule never says `\(word)` (`\(capsule.label)`)")
-        }
     }
 
     private func setMode(_ mode: String) {

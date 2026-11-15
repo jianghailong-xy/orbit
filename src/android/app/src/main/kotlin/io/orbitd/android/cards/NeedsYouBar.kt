@@ -1,6 +1,7 @@
 package io.orbitd.android.cards
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -27,7 +28,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -45,7 +45,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -179,37 +178,34 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     }
 }
 
-/** The unfolded cards over everything from [top] (the folded bar's place in the window) down, on a scrim a press on which folds
- * them — never reaching the row under it. The first stands where the folded bar stood; each after it comes out from under the one
- * above, 40 ms after it, and goes back the same way (08-motion ①②), while the scrim fades. */
+/** The unfolded cards, from [top] (the folded bar's place in the window) down. The first stands where the folded bar stood; each
+ * after it comes out from under the one above, 40 ms after it, and goes back the same way (08-motion ①②). No scrim (the owner,
+ * 2026-11-15, `docs/mocks/needs-you-capsule/10-glass`): the popup is only as big as the cards, so the page around them stays
+ * usable, and a press outside them folds them and still reaches what it pressed. */
 @Composable
 private fun NeedsYouStack(top: Int, state: MutableTransitionState<Boolean>, count: Int, fold: () -> Unit,
     card: @Composable (index: Int, motion: Modifier) -> Unit) {
-    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    Popup(popupPositionProvider = WholeWindow, onDismissRequest = fold, properties = PopupProperties(focusable = true)) {
+    Popup(popupPositionProvider = remember(top) { AtBar(top) }, onDismissRequest = fold,
+        properties = PopupProperties(focusable = false, dismissOnClickOutside = true)) {
         AnimatedVisibility(state, enter = fadeIn(spring()), exit = fadeOut(spring())) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (dark) 0.55f else 0.18f))
-                .clickable(remember { MutableInteractionSource() }, null, onClickLabel = NeedsYouLogic.foldLabel, onClick = fold)
-                .testTag("needs-you-scrim")) {
-                Column(Modifier.offset { IntOffset(0, top) }.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                    repeat(count) { index ->
-                        val motion = if (index == 0) Modifier else Modifier.animateEnterExit(
-                            enter = slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { -it * index } +
-                                fadeIn(tween(200, delayMillis = 40 * (index - 1))) + scaleIn(initialScale = 0.96f),
-                            exit = slideOutVertically(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)) { -it * index } +
-                                fadeOut(tween(160)) + scaleOut(targetScale = 0.96f))
-                        card(index, motion)
-                    }
+            Column(Modifier.fillMaxWidth().testTag("needs-you-stack"), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                repeat(count) { index ->
+                    val motion = if (index == 0) Modifier else Modifier.animateEnterExit(
+                        enter = slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { -it * index } +
+                            fadeIn(tween(200, delayMillis = 40 * (index - 1))) + scaleIn(initialScale = 0.96f),
+                        exit = slideOutVertically(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)) { -it * index } +
+                            fadeOut(tween(160)) + scaleOut(targetScale = 0.96f))
+                    card(index, motion)
                 }
             }
         }
     }
 }
 
-/** The popup laid over the whole window, so its scrim covers the page and its capsules stand where the bar's window position says. */
-private object WholeWindow : PopupPositionProvider {
+/** The popup laid where the folded bar stands, as wide as the window and as tall as its cards. */
+private class AtBar(private val top: Int) : PopupPositionProvider {
     override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection, popupContentSize: IntSize) =
-        IntOffset.Zero
+        IntOffset(0, top)
 }
 
 /**
@@ -239,8 +235,10 @@ internal fun NeedsYouBar(text: String, hint: String, modifier: Modifier = Modifi
         if (deck) NeedsYouDeck()
         // Read as its words, a button, and what the press does (iOS `accessibilityHint`).
         // A notification's size and corners (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/09-height`): about 70 dp, 24 dp.
+        // Material has no glass (10-glass ③): the card's surface, a touch see-through, with a hairline edge.
         Row(Modifier.fillMaxWidth().heightIn(min = CARD_HEIGHT).shadow(8.dp, CardShape).clip(CardShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f))
+            .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), CardShape),
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).heightIn(min = CARD_HEIGHT).clickable(onClickLabel = hint, role = Role.Button, onClick = press)
                 .padding(start = 14.dp, end = if (onFold == null) 16.dp else 0.dp, top = 13.dp, bottom = 13.dp),
