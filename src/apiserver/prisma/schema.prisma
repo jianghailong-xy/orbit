@@ -1129,6 +1129,10 @@ model RunnerPresence {
   /// {at, latest, samples: [[ms, cpu %, memory %, disk %], …]}. Null until the runner reports one; a beat without
   /// one leaves it as it is (runners/runner-presence.ts).
   resources     Json?     @map("resources")
+  /// The sessions that hold one of the runner's slots only through runner-hosted background jobs, as its last beat
+  /// named them (migration 0780, RunnerHeartbeatRequest.backgroundJobSessionIds): replaced on every beat, empty for a
+  /// beat that names none. The runners list counts them as running while the runner is online.
+  backgroundJobSessionIds String[] @default([]) @map("background_job_session_ids") @db.Uuid
 
   @@map("runner_presence")
 }
@@ -1947,6 +1951,13 @@ model Session {
   /// and add their own `kind: 'session'`, so a field called `kind` would be overwritten in the
   /// payload. The column keeps the short name.
   sessionKind          String    @default("CONVERSATION") @map("kind")
+  /// Who opened this conversation (migration 0670, docs/workspace-default-model-design.md §2.2):
+  /// PERSON, or the Orbit door that opened it on its own — COORDINATOR, COORDINATOR_JUDGMENT,
+  /// TASK_LIST_CONSOLE, WIKI_CHAT, FEISHU, SERVICE_TOKEN, MENTION_REPLY, or ORBIT for a row 0670 knew
+  /// was Orbit's but not through which door. Held to that set by `session_opened_by_check`. Written by
+  /// the creating door, never from a title; the workspace default (workspace-provider.ts) counts only
+  /// PERSON, through the partial index `session_workspace_person_opened_idx` (SQL only).
+  openedBy             String    @default("PERSON") @map("opened_by")
   // PENDING = created, claimable by its assigned runner.
   status               RunStatus @default(PENDING)
   // billing, accrued per turn
@@ -2349,6 +2360,8 @@ model Session {
   messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   keyGatewayTokens      KeyGatewayToken[]
+  coordinatorHandoffsFrom CoordinatorHandoff[] @relation("CoordinatorHandoffFrom")
+  coordinatorHandoffsTo   CoordinatorHandoff[] @relation("CoordinatorHandoffTo")
   keyGatewayUsage       KeyGatewayUsage[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
@@ -2767,6 +2780,9 @@ model Approval {
   /// (approval_decided_via_chk).
   decidedFeishuOpenId    String? @map("decided_feishu_open_id")
   decidedFeishuMessageId String? @map("decided_feishu_message_id")
+  /// Settings › Translation (0550, @orbit/shared ApprovalTranslation): what the card shows the owner, in
+  /// their language. `input` stays the engine's English. NULL when translation was not involved.
+  translation  Json?
   /// The machine name of the TERMINAL credential that decided it (0663), when `decidedCredentialKind` is `TERMINAL`,
   /// and only then (approval_decided_via_chk). Copied, so it outlives a revoked or expired credential.
   decidedTerminalMachineName String? @map("decided_terminal_machine_name")
@@ -2893,6 +2909,7 @@ model ConversationTurn {
   externalSenderSource String? @map("external_sender_source")
   externalSenderId     String? @map("external_sender_id")
   externalSenderName   String? @map("external_sender_name")
+  status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED | HELD (being translated, or its translation failed)
   /// Which client sent this turn (migration 0662, sessions/turn-sender-client.ts): web, ios, macos, android,
   /// terminal, feishu or runner, from the credential and the `X-Orbit-Client` / `X-Orbit-Device` headers of the
   /// door it came in through, never from a body. The detail is an ios client's device (iphone / ipad) or a
@@ -2900,7 +2917,14 @@ model ConversationTurn {
   /// platform's own deliveries, and every turn written before 0662.
   senderClient       String? @map("sender_client")
   senderClientDetail String? @map("sender_client_detail")
-  status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
+  /// Session translation (migration 0532, @orbit/shared translation.ts): what the owner wrote, when the turn was
+  /// translated for the engine — `content` is then the English delivered. Null on every turn translation was not
+  /// involved in, and so are the two below.
+  displayPrompt    String?  @map("display_prompt")
+  /// TRANSLATING | FAILED (both with status HELD: not deliverable) | DONE | SENT_AS_WRITTEN.
+  translationState String?  @map("translation_state")
+  /// The language the owner wrote in (TRANSLATION_LANGUAGES).
+  translationLang  String?  @map("translation_lang")
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
   // Random runner-engine generation that owns the current delivery lease. A
@@ -3580,6 +3604,7 @@ model Project {
   // `@unique` already is one.)
   @@index([coordinatorWorkspaceId])
   @@map("project")
+  coordinatorHandoffs CoordinatorHandoff[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -7518,6 +7543,40 @@ model PoolGatewayToken {
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
 /// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
 /// disabled or rotated revokes them (`revokedAt`).
+/// A coordinator handoff (migration 0810, docs/coordinator-handoff.md): the outgoing coordinator
+/// writes a note in a platform turn, then the replacement opens its successor with that note. One
+/// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
+model CoordinatorHandoff {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  projectId     String    @map("project_id") @db.Uuid
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  fromSessionId String    @map("from_session_id") @db.Uuid
+  fromSession   Session   @relation("CoordinatorHandoffFrom", fields: [fromSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toSessionId   String?   @map("to_session_id") @db.Uuid
+  toSession     Session?  @relation("CoordinatorHandoffTo", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// WRITING | HANDING_OVER | FAILED | CANCELLED | COMPLETED (a CHECK).
+  state         String
+  /// Advanced by Try again; the note turn's key carries it.
+  attempt       Int       @default(1)
+  /// The note turn's `conversation_turn.client_turn_id`; null once a skip took the note out.
+  clientTurnId  String?   @map("client_turn_id")
+  startedAt     DateTime  @default(now()) @map("started_at")
+  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED, only while FAILED.
+  failureCode   String?   @map("failure_code")
+  note          String?
+  /// The waits the swap moved, as `{ id, label, paused }`.
+  movedWaits    Json      @default("[]") @map("moved_waits")
+  endedAt       DateTime? @map("ended_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([fromSessionId, createdAt])
+  @@index([toSessionId])
+  @@index([projectId])
+  @@map("coordinator_handoff")
+}
+
 model KeyGatewayToken {
   id         String        @id @default(uuid(7)) @db.Uuid
   tokenHash  String        @unique @map("token_hash")

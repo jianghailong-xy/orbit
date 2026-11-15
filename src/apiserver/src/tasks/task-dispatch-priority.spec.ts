@@ -125,6 +125,8 @@ async function sweepOver(rows: Candidate[], room: Record<string, number>): Promi
         dispatchEpoch: 0n,
       }));
     },
+    // No task here belongs to a project, so none has a coordinator to start on (start-anchor.ts).
+    task: { findMany: async () => [] },
   } as never, {} as never, {} as never);
   const internals = service as any;
   internals.rearmEndedAutoRuns = async () => undefined;

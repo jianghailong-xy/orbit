@@ -347,6 +347,11 @@ struct AgentPanes: View {
     let rowNavigation: SessionRowNavigation
     @State private var view: SessionView = .open
     @State private var showSettings = false
+    #if os(iOS)
+    /// The needs-you capsule's height over this list: the room the list's first row keeps for it,
+    /// so it covers nothing at rest (see `topInsetClearOfRefresh(_:floating:)`).
+    @State private var needsYouClearance: CGFloat = 0
+    #endif
     /// The row whose "Tags…" action was tapped — drives the tag picker sheet. Owned by the list (not
     /// the row's context menu) so the sheet presents reliably.
     @State private var taggingSession: Session?
@@ -411,6 +416,19 @@ struct AgentPanes: View {
         let projectRows = grouping.projectRows
         let projectMarks = grouping.projectListing.marks
         List(selection: listSelection) {
+            #if os(iOS)
+            // The needs-you capsule floats over the list (the owner, 2026-11-15,
+            // docs/mocks/needs-you-capsule/06-list-floats): this row keeps its height clear at the top,
+            // and scrolls away with the rows, which then pass behind it.
+            if needsYouClearance > 0 {
+                Color.clear
+                    .frame(height: needsYouClearance)
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .accessibilityHidden(true)
+            }
+            #endif
             // Recency sections (Pinned / Today / Yesterday / 2–7 days ago / …), as web's list draws
             // them, on every platform. Bucketing is the pure, tested `SessionTimeGrouping`.
             // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
@@ -483,8 +501,9 @@ struct AgentPanes: View {
         // Regular iPad keeps the lifecycle scope visible instead of burying it in the filter menu.
         // It lives below the inline title/search chrome and stays fixed while the rows scroll. The
         // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
-        // "Another session needs you" follows it in the same inset. This remains the only instance at
-        // regular width (the console beside it stays quiet), so it excludes that visible console.
+        // "Another session needs you" floats over the list under it (`floating:`). This remains the only
+        // instance at regular width (the console beside it stays quiet), so it excludes that visible
+        // console.
         //
         // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
         // bar, in the band these sit in, and a pull drew it over the needs-you bar; the modifier
@@ -496,20 +515,26 @@ struct AgentPanes: View {
         // (it scrolls away, and a finished refresh left the list settled with it half under the
         // navigation bar).
         .topInsetClearOfRefresh {
-            VStack(spacing: 0) {
-                if listPresentation.showsPersistentScope {
-                    VStack(spacing: 0) {
-                        scopePicker
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                        Divider()
-                    }
-                    .background(.bar)
+            if listPresentation.showsPersistentScope {
+                VStack(spacing: 0) {
+                    scopePicker
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                    Divider()
                 }
-                NeedsYouBannerView(excluding: app.selectedAgentSessionID,
-                                   projectInColumn: rowNavigation == .selection,
-                                   overList: true)
+                .background(.bar)
             }
+        } floating: {
+            // Over the list, not inset above it, as it floats over a conversation: the sticky
+            // section headers pin under the nav bar and pass behind it (06-list-floats).
+            NeedsYouBannerView(excluding: app.selectedAgentSessionID,
+                               projectInColumn: rowNavigation == .selection,
+                               overList: true)
+                // The room follows the card on a spring, so the rows ease up after it goes and down
+                // as it comes (08-motion ③④) rather than jumping.
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    withAnimation(.spring(duration: 0.3, bounce: 0)) { needsYouClearance = height }
+                }
         }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
@@ -965,9 +990,11 @@ struct AgentPanes: View {
         }
         // A phone opens the coordinator's conversation, not the project's sessions page, which is
         // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page.
+        // column keeps the page. A row whose line says a member is waiting on you opens that member
+        // instead, at its card, on both (owner 2026-11-14).
         let onTap = {
-            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            switch SessionProjectSheet.rowTap(row, held: app.sessions + agents.allSessions, push: rowNavigation == .push) {
+            case .waitingMember(let member): app.openWaitingMember(member, project: address, push: rowNavigation == .push)
             case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
             case .sessions: app.openProjectSessions(address)
             }
@@ -1623,10 +1650,6 @@ struct NewSessionView: View {
         .onChange(of: defaultModel, initial: true) { _, model in
             draft.adoptDraftProviderContext(
                 configuredProviders, loaded: configuredProvidersLoaded, defaultModel: model)
-        }
-        .onChange(of: app.defaultModels, initial: true) { _, _ in
-            draft.adoptDraftProviderContext(
-                configuredProviders, loaded: configuredProvidersLoaded, defaultModel: defaultModel)
         }
         // Re-resolve the effort pill when the account preference lands after the draft was built
         // (async `user` prime on a restored-token launch). The model owns the edit revision, so this

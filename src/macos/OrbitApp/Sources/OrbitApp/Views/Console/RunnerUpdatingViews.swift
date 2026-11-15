@@ -118,17 +118,21 @@ struct RunnerUpdatingQueuedView: View {
 }
 
 /// The foot-row tag under the message the update holds (web `RunnerUpdatingTag`): `Queued · runner
-/// updating`, the reason underlined because a press opens why.
+/// updating`, the reason underlined because a press opens why. A session a full runner, run or batch
+/// holds is drawn the same way with `QueuedCapacity`'s words (`Queued · runner full`, web
+/// `CapacityHeldTag`, docs/mocks/queued-card-runner-full), and its popover offers nothing to press.
 struct RunnerUpdatingTagView: View {
     let foot: RunnerUpdatingFoot
     @State private var open = false
+
+    private var full: Bool { QueuedCapacity.holds(foot.session) }
 
     var body: some View {
         HStack(spacing: 4) {
             Text(RunnerUpdating.queuedWord)
             Text("·")
             Button { open = true } label: {
-                Text(RunnerUpdating.tag(foot.session))
+                Text(full ? QueuedCapacity.tag(foot.session) : RunnerUpdating.tag(foot.session))
                     .underline(pattern: .dot)
             }
             .buttonStyle(.plain)
@@ -142,13 +146,15 @@ struct RunnerUpdatingTagView: View {
     private var pop: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             VStack(alignment: .leading, spacing: 6) {
-                Text(RunnerUpdating.title(foot.session)).font(.headline)
-                Text(RunnerUpdating.messageText(foot.session, machine: foot.machine))
+                Text(full ? QueuedCapacity.title(foot.session) : RunnerUpdating.title(foot.session)).font(.headline)
+                Text(full ? QueuedCapacity.messageText(foot.session, machine: foot.machine)
+                     : RunnerUpdating.messageText(foot.session, machine: foot.machine))
                     .font(.callout)
-                if let waited = RunnerUpdating.waited(foot.session, now: context.date) {
+                if let waited = full ? QueuedCapacity.waited(foot.session, now: context.date)
+                    : RunnerUpdating.waited(foot.session, now: context.date) {
                     Text("\(waited).").font(.callout).foregroundStyle(.secondary)
                 }
-                if let runnerID = foot.runnerID, !RunnerUpdating.stopping(foot.session) {
+                if let runnerID = foot.runnerID, !full, !RunnerUpdating.stopping(foot.session) {
                     RunnerUpdateLaterControl(runnerID: runnerID,
                                              version: foot.session.queuedRunnerUpdate?.targetVersion,
                                              machine: foot.machine)

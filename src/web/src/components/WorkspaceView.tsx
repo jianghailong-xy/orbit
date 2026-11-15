@@ -1,4 +1,10 @@
-import { type MergeRecoveryAction, type ProjectSidebarTaskCounts } from '@orbit/shared';
+import {
+  COORDINATOR_HANDOFF_COPY,
+  type MergeRecoveryAction,
+  type ProjectSidebarTaskCounts,
+  type SessionCoordinatorHandoff,
+  type SessionCoordinatorHandoffReceived,
+} from '@orbit/shared';
 import {
   AppstoreOutlined,
   ArrowDownOutlined,
@@ -50,6 +56,17 @@ import {
   type ReferenceMap,
 } from '../lib/composerRefs';
 import { WAITING_ON_YOU } from '../lib/ownerRequests';
+import {
+  ContextActions,
+  CoordinatorHandedOverBanner,
+  CoordinatorHandoffConfirm,
+  CoordinatorHandoffFailure,
+  CoordinatorHandoffProgress,
+  CoordinatorHandoffReceivedCard,
+  coordinatorHandoffRequest,
+  type ContextActionsProps,
+  type CoordinatorHandoffAction,
+} from './CoordinatorHandoff';
 import {
   NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
@@ -177,7 +194,6 @@ import {
   DEFAULT_MODEL,
   defaultEngineOf,
   defaultModelFor,
-  defaultModelKey,
   effectiveSessionEffort,
   effectiveSessionModel,
   effortOptionsFor,
@@ -284,7 +300,6 @@ import {
   createMergeRepairSession,
   createInteractiveSession,
   createSessionFolder,
-  decideApproval,
   deleteSession,
   deleteSessionFolder,
   cleanUpWorkspaceRepo,
@@ -296,7 +311,6 @@ import {
   completeProjectSessions,
   mergeSessionToMain,
   type EventPageEvent,
-  type PermissionRule,
   pinSession,
   purgeSession,
   getSessionRetryMessage,
@@ -314,8 +328,15 @@ import {
   updateSessionConfig,
   switchSessionAccount,
   uploadAttachment,
+  retryTurnTranslation,
+  sendTurnAsWritten,
+  retryReplyTranslation,
 } from '../api';
 import { DshRepairCard } from './Transcript';
+import type { TranslationActionResponse } from '@orbit/shared';
+import { useApprovalDecisions } from '../lib/approvalDecisions';
+import { heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
   runNeverStarted,
@@ -596,6 +617,14 @@ import {
   waitingNoticeFor,
   waitingNoticeScope,
 } from '../lib/runnerSlots';
+import {
+  capacityHeldMessageText,
+  capacityHeldTag,
+  capacityHeldTitle,
+  capacityHeldWaited,
+  isCapacityHeld,
+  type CapacityGate,
+} from '../lib/queuedCapacity';
 import { type QueuedTurn, type RunEvent, useSessionStream } from '../lib/useSessionStream';
 import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
@@ -823,6 +852,7 @@ function ContextWindowIndicator({
   modelCatalog,
   configured,
   unavailable,
+  actions,
 }: {
   tokens: number;
   /** The window this session reported alongside its tokens, when it did. */
@@ -834,7 +864,11 @@ function ContextWindowIndicator({
   /** Why there will never be a reading: an engine that does not report context use (Cursor CLI over
    *  ACP, docs/cursor-runtime-contract.md §4.1), in a sentence. Never a 0% or a token count then. */
   unavailable?: string;
+  /** Compact and Start a new coordinator, below the gauge (board 01); absent where neither applies. */
+  actions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
 }) {
+  // Controlled, so picking an action closes the popover it was picked in.
+  const [open, setOpen] = useState(false);
   if (unavailable) {
     return (
       <Popover
@@ -842,6 +876,8 @@ function ContextWindowIndicator({
         side="top"
         align="end"
         openOnHover
+        open={open}
+        onOpenChange={setOpen}
         nativeButton={false}
         trigger={
           <span className="composer-pill composer-usage" aria-label="Context window unavailable">
@@ -859,6 +895,7 @@ function ContextWindowIndicator({
             <div className="cu-reset">{unavailable}</div>
           </div>
         </div>
+        {actions && <ContextActions {...actions} pct={0} onPicked={() => setOpen(false)} />}
       </Popover>
     );
   }
@@ -880,7 +917,7 @@ function ContextWindowIndicator({
           <span className="cu-pct">{headline}</span>
         </div>
         {sized && (
-          <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
+          <div className={`runner-util ${pct >= 90 ? 'danger' : pct >= 75 ? 'full' : ''}`}>
             <span className="runner-util-fill" style={{ width: `${pct}%` }} />
           </div>
         )}
@@ -903,6 +940,8 @@ function ContextWindowIndicator({
       side="top"
       align="end"
       openOnHover
+      open={open}
+      onOpenChange={setOpen}
       // The pill stays the span it was drawn as; the popover makes it a button for the keyboard.
       nativeButton={false}
       trigger={
@@ -922,6 +961,7 @@ function ContextWindowIndicator({
       }
     >
       {pop}
+      {actions && <ContextActions {...actions} pct={pct} onPicked={() => setOpen(false)} />}
     </Popover>
   );
 }
@@ -988,6 +1028,14 @@ const STRANDED_AFTER_MS = 400;
 // plane opened (a card carrying `data-orbit-round`) is nobody's question: the owner ruled on
 // 2026-11-14 that machine messages never appear on the bar, so over one the bar is hidden.
 const STICKY_LABEL = 'Your question';
+/** A card still waiting on the reader, in the order the transcript draws them: a tool approval or
+ *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
+ *  item. Answered and snoozed forms carry none of these. */
+export const WAITING_CARD_SELECTOR =
+  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), [data-open-item]';
+/** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
+ *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
+export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);
 
 // Shell-style composer history, kept per-session in localStorage so the Up/Down arrows
 // recall only this session's recently sent prompts (never another session's). Stored
@@ -2068,6 +2116,47 @@ export function RunnerUpdatingTag({
   );
 }
 
+/**
+ * The foot-row tag under a message a full runner, run or batch holds (board queued-card-runner-full ②③):
+ * `Queued · runner full`, drawn as RunnerUpdatingTag draws its tag (and in its classes), the popover
+ * counting how the slots are taken. Nothing to press there: a full machine has no action of its own.
+ */
+export function CapacityHeldTag({ gate, machine }: { gate: CapacityGate; machine?: string | null }) {
+  const now = useMinuteNow();
+  const [open, setOpen] = useState(false);
+  const waited = capacityHeldWaited(gate, now);
+  return (
+    <span className="chat-runner-updating">
+      Queued
+      <span className="chat-meta-sep">·</span>
+      <Popover
+        open={open}
+        onOpenChange={setOpen}
+        title={capacityHeldTitle(gate)}
+        side="bottom"
+        align="end"
+        trigger={
+          <button type="button" className="chat-runner-updating-reason">
+            {capacityHeldTag(gate)}
+          </button>
+        }
+      >
+        <div className="runner-updating-pop">
+          <p>
+            {capacityHeldMessageText(gate, machine)}
+            {waited && (
+              <>
+                <br />
+                {waited}.
+              </>
+            )}
+          </p>
+        </div>
+      </Popover>
+    </span>
+  );
+}
+
 function WaitElapsed({ since }: { since?: string | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -2136,7 +2225,9 @@ function StopSquareIcon({ className }: { className?: string }) {
  * and stays in the conversation with it.
  */
 export function inPendingTray(turn: QueuedTurn): boolean {
-  return turn.delivery == null && returnsToComposer(turn);
+  // A message held for its translation is drawn in the conversation, with its chip or its failure
+  // (Settings › Translation, board frame 6) — not in the tray, which only waits for the engine.
+  return turn.delivery == null && returnsToComposer(turn) && !heldForTranslation(turn.translation);
 }
 
 /** What a tray row shows of a message's attachments: this tab's previews, else the pictures' ids. */
@@ -2183,11 +2274,14 @@ export function QueuedTurnMeta({
   deliveryCode,
   deliveryReason,
   wake,
+  translationHeld,
   held,
   onCancel,
   onPutBack,
 }: {
   placement: Extract<SessionTurnPlacement, 'steer' | 'queued'>;
+  /** Held for its translation (Settings › Translation): the bubble's own foot says how it stands. */
+  translationHeld?: boolean;
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
@@ -2199,6 +2293,7 @@ export function QueuedTurnMeta({
   onCancel: () => void;
   onPutBack?: () => void;
 }) {
+  if (translationHeld) return null;
   const label = delivery === 'failed'
     ? 'Not delivered'
     : delivery === 'unconfirmed'
@@ -2402,17 +2497,6 @@ export function WorkspaceView({
   const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Auto');
   const [model, setModel] = useState(DEFAULT_MODEL);
-  const modelPreferenceMut = useMutation({
-    // Keep rapid picks in order, including across a composer remount.
-    scope: { id: 'model-preferences' },
-    // Remembered per engine and provider (`<engine>:<provider>`, docs/provider-engine-contract.md
-    // §6.5): one key's model on Claude Code is not its model on DeepSeek Harness.
-    mutationFn: ({ engine, provider, model }: { engine: string; provider: string; model: string }) =>
-      api('/users/me/preferences', {
-        method: 'PATCH',
-        body: { defaultModels: { [defaultModelKey(engine, provider)]: model } },
-      }),
-  });
   // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
   // touched Model within the current draft/session context so a late default can fill an untouched
   // picker without overwriting an explicit choice. Context changes deliberately reset dirty.
@@ -3970,7 +4054,7 @@ export function WorkspaceView({
     ? newSessionModelFor(
         pickedEngine,
         pickedProvider,
-        me.data?.preferences?.defaultModels,
+        { engine: lastWorkspaceEngine, provider: lastWorkspaceProvider, model: pickedWorkspace?.lastModel },
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
@@ -4297,6 +4381,11 @@ export function WorkspaceView({
     selectedIsQueued && isRunnerUpdating(selectedStartingSession)
       ? (selectedStartingSession as QueuedGate)
       : null;
+  // Held by a full runner, run or batch: each waiting message says so (board queued-card-runner-full).
+  const capacityGate: CapacityGate | null =
+    selectedIsQueued && isCapacityHeld(selectedStartingSession)
+      ? (selectedStartingSession as CapacityGate)
+      : null;
   const selectedIsStarting = selected ? sessionIsStarting(selectedStartingSession) : false;
   // Starting or compacting — see waitingNoticeFor. Its `since` is the clock the notice counts from.
   const selectedWaiting = selected ? waitingNoticeFor(selectedStartingSession) : null;
@@ -4425,6 +4514,34 @@ export function WorkspaceView({
     detachedNow,
     backToLatest: streamBackToLatest,
   } = stream;
+  // Settings › Translation (@orbit/shared translation.ts): what a translated conversation can do —
+  // retry a held message's translation or send it as written (1A), retry a reply's (2A) — and whether
+  // the account translates now, which greys a streaming reply. The queue is refetched on the stream's
+  // `queued_turns_changed` either way; the answer is written into the row so the chip moves at once.
+  const translationIsOn = translationOn(me.data);
+  const translationActions = useMemo<TranslationActions>(() => {
+    const settle = (res: TranslationActionResponse) =>
+      setQueued((current) =>
+        current.map((turn) => (turn.turnId === res.turnId ? { ...turn, translation: res.translation } : turn)),
+      );
+    const failed = (what: string) => (e: unknown) =>
+      message.error(what, e instanceof Error ? e.message : undefined);
+    return {
+      on: translationIsOn,
+      retryTurn: (turnId) =>
+        selectedId
+          ? retryTurnTranslation(selectedId, turnId).then(settle, failed("Couldn't retry the translation"))
+          : Promise.resolve(),
+      sendAsWritten: (turnId) =>
+        selectedId
+          ? sendTurnAsWritten(selectedId, turnId).then(settle, failed("Couldn't send the message"))
+          : Promise.resolve(),
+      retryReply: (seq) =>
+        selectedId
+          ? retryReplyTranslation(selectedId, seq).catch(failed("Couldn't retry the translation"))
+          : Promise.resolve(),
+    };
+  }, [translationIsOn, selectedId, setQueued, message]);
   // Walk the pages back until the session's first message is loaded, then sit at the top.
   //
   // Scrolling up alone can't get there: each page lands with the reader's position anchored
@@ -4565,18 +4682,23 @@ export function WorkspaceView({
   // The tag says it on each turn of the queued tail the update holds — what is actually waiting
   // (board queued-card-runner-updating ②⑤) — and falls back to that last message only where the
   // tail holds none.
-  const runnerUpdatingHeldTag = runnerUpdatingGate ? (
+  const queuedHeldTag = runnerUpdatingGate ? (
     <RunnerUpdatingTag
       gate={runnerUpdatingGate}
       machine={machineName(runner)}
       actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
       updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
     />
+  ) : capacityGate ? (
+    // A full runner, run or batch, said in the same places by the same rules (board queued-card-runner-full ②④).
+    <CapacityHeldTag gate={capacityGate} machine={machineName(runner)} />
   ) : null;
-  const tailHeld = !!runnerUpdatingHeldTag && queuedTailEvents.some(({ turn }) => queuedTurnWaitsItsTurn(turn));
-  const footSeq = runnerUpdatingHeldTag && !tailHeld ? lastUserEventSeq(transcriptEvents) : null;
+  // The reader's own waiting messages sit in the tray, which carries the tag itself; only where nothing
+  // anywhere is waiting does it fall back to the last message they sent.
+  const tailHeld = !!queuedHeldTag && visibleQueuedTurns.some((turn) => queuedTurnWaitsItsTurn(turn));
+  const footSeq = queuedHeldTag && !tailHeld ? lastUserEventSeq(transcriptEvents) : null;
   const queuedFoot: { seq: number; tag: ReactNode } | null =
-    footSeq !== null ? { seq: footSeq, tag: runnerUpdatingHeldTag } : null;
+    footSeq !== null ? { seq: footSeq, tag: queuedHeldTag } : null;
   // What stands in for an empty transcript — exactly one of these, so the loading skeleton can't
   // stack on top of the centered "waiting for a slot" pane. See lib/transcriptPaint.
   const placeholder = transcriptPlaceholder({
@@ -4636,6 +4758,7 @@ export function WorkspaceView({
     jumpingToStartRef.current = false; // a walk to the start belongs to the session it was run on
     setHasMoreOlder(false); // measure() re-reads it once this session's window is established
     pendingRecordRef.current = null;
+    setWaitingReveal((pending) => (pending === selectedId ? pending : null));
   }, [selectedId, landingSession]);
 
   // Tail-first prepend: after loadOlder grows older content above the viewport, restore the
@@ -5411,6 +5534,10 @@ export function WorkspaceView({
   const [chatReveal, setChatReveal] = useState<{ sessionId: string; about: ChatAbout } | null>(
     null,
   );
+  // A session opened from a project row whose line says it is waiting on you (owner 2026-11-14,
+  // docs/mocks/project-row-opens-waiting): it opens at the TOP of its waiting card rather than at
+  // the transcript's end, once. Any other way of opening a session leaves this null.
+  const [waitingReveal, setWaitingReveal] = useState<string | null>(null);
   useEffect(() => {
     if (!chatIntentItem && !chatIntentPromotion) return;
     const read = openItems.data;
@@ -5467,6 +5594,21 @@ export function WorkspaceView({
     else card.scrollIntoView?.({ block: 'center' });
     setChatReveal(null);
   }, [chatReveal, currentPromotion.data, openItems.data, seeding, selectedId, transcriptEvents]);
+  // The waiting card a project row opened this session for: its header and title brought to the top
+  // of the transcript, below the pinned bar, with the tail pin let go first as above. A card not drawn
+  // yet (its read still on the way) leaves the request standing for the next render.
+  useEffect(() => {
+    if (!waitingReveal || waitingReveal !== selectedId || seeding || eventsSessionId !== selectedId) return;
+    const root = scrollRef.current;
+    const card = root?.querySelector<HTMLElement>(WAITING_CARD_SELECTOR);
+    // Not before this session's own transcript is drawn under it, in a pane that has its size.
+    const view = root?.getBoundingClientRect();
+    if (!root || !card || !view?.height) return;
+    setWaitingReveal(null);
+    atBottomRef.current = false;
+    setAtBottom(false);
+    root.scrollTop += card.getBoundingClientRect().top - view.top - waitingCardGap(hasMoreOlder);
+  }, [waitingReveal, selectedId, seeding, eventsSessionId, transcriptEvents, transcriptInserts, approvals, hasMoreOlder]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the
@@ -5523,24 +5665,7 @@ export function WorkspaceView({
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
-  const decide = async (
-    approvalId: string,
-    behavior: 'allow' | 'deny',
-    answers?: Record<string, string[]>,
-    message?: string,
-    rememberRules?: PermissionRule[],
-    startAfterCreate?: boolean,
-  ): Promise<void> => {
-    if (!selectedId) return;
-    setApprovals((prev) => prev.filter((x) => x.id !== approvalId));
-    try {
-      await decideApproval(selectedId, approvalId, behavior, message, answers, rememberRules, startAfterCreate);
-    } catch {
-      listApprovals(selectedId)
-        .then(setApprovals)
-        .catch(() => undefined);
-    }
-  };
+  const { decide, untranslated: untranslatedDecisions } = useApprovalDecisions(selectedId, setApprovals);
 
   // If the question the composer is replying to gets answered another way (the user picks an
   // option, an SSE approval_resolved arrives, or the confirmation is settled on a phone), drop the
@@ -5664,15 +5789,17 @@ export function WorkspaceView({
           ...(vars.attachmentIds ?? []).map((id) => ({ id, mimeType: '' })),
         ];
         const queuedItem =
-          placement === 'accepted'
+          placement === 'accepted' && !res.translation
             ? undefined
             : {
                 turnId: res.turnId,
                 content,
                 shell,
-                placement,
+                // Held for its translation: on the queue, whatever its place will be once delivered.
+                placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                 ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
                 ...(attachments.length ? { attachments } : {}),
+                ...(res.translation ? { translation: res.translation } : {}),
               };
         return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
       }
@@ -5706,14 +5833,15 @@ export function WorkspaceView({
           );
           const placement = turnPlacementOf(res);
           const queuedItem =
-            placement === 'accepted'
+            placement === 'accepted' && !res.translation
               ? undefined
               : {
                   turnId: res.turnId,
                   content,
                   shell,
-                  placement,
+                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
                   ...(res.targetTurnId ? { targetTurnId: res.targetTurnId } : {}),
+                  ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
@@ -5765,13 +5893,14 @@ export function WorkspaceView({
           // row-locked placement preserves a real queued/steer state here.
           const placement = turnPlacementOf(res);
           const queuedItem =
-            placement === 'accepted'
+            placement === 'accepted' && !res.translation
               ? undefined
               : {
                   turnId: res.turnId,
                   content,
                   shell,
-                  placement,
+                  placement: res.translation ? ('queued' as const) : (placement as 'queued' | 'steer'),
+                  ...(res.translation ? { translation: res.translation } : {}),
                 };
           return { id: selected.id, turnId: res.turnId, queuedItem, clientTurnId: operation.clientTurnId };
         }
@@ -6008,6 +6137,8 @@ export function WorkspaceView({
       // and the toast below would be gone by the time anyone looks.
       if (vars.held) {
         if (vars.firstWorkspace?.runnerId === runner.id) setup.failHeld(e.message);
+        // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
+        else if (!vars.firstWorkspace) message.error("Couldn't compact", e.message);
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));
@@ -7299,6 +7430,81 @@ export function WorkspaceView({
     () => composerSlashItems(runner.commands, runner.skills, codexComposer, shownEngine, composerWorkspaceId),
     [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownEngine],
   );
+  // ── Compact and Start a new coordinator (boards 01 and 02, docs/coordinator-handoff.md) ──
+  // The handoff as the open session's detail and `session.updated` carry it: on the outgoing
+  // coordinator (`coordinatorHandoff`) and on its successor (`coordinatorHandoffReceived`).
+  const handoffRow = (selected ? (selectedSession ?? selected) : null) as any;
+  const coordinatorHandoff: SessionCoordinatorHandoff | null = handoffRow?.coordinatorHandoff ?? null;
+  const coordinatorHandoffReceived: SessionCoordinatorHandoffReceived | null =
+    handoffRow?.coordinatorHandoffReceived ?? null;
+  const handingOver = coordinatorHandoff?.state === 'WRITING' || coordinatorHandoff?.state === 'HANDING_OVER';
+  const coordinatorHandedOver = coordinatorHandoff?.state === 'COMPLETED';
+  const turnRunning = !!handoffRow && isGenerating(handoffRow, sessionRunStateOf(handoffRow));
+  // Only the project's current coordinator is its COORDINATOR member, and only while it is not completed.
+  const handoffProjectId: string | null =
+    handoffRow && !selectedTrashed && handoffRow.projectMembership?.role === 'COORDINATOR'
+      && sessionLifecycleStateOf(handoffRow) !== 'COMPLETED'
+      ? handoffRow.projectMembership.projectId
+      : null;
+  // Compact is the engine's own `/compact`, offered where the engine advertises it among its slash
+  // assets (Claude Code does; Cursor, Codex and the engines without a registry do not).
+  const compactOffered =
+    !!selected && !selectedTrashed && !selectedMissing && !handingOver && !coordinatorHandedOver
+    && slashItems.some((it) => it.type === 'command' && it.name === 'compact');
+  const [handoffConfirm, setHandoffConfirm] = useState<{ projectId: string; projectTitle: string; running: boolean } | null>(null);
+  // The outgoing coordinator the owner handed over from here: once its successor exists, go there.
+  const [followHandoff, setFollowHandoff] = useState<string | null>(null);
+  const handoffAction = useMutation({
+    mutationFn: ({ projectId, action }: { projectId: string; action: CoordinatorHandoffAction; sessionId: string }) =>
+      coordinatorHandoffRequest(projectId, action),
+    onSuccess: (view, { sessionId, action }) => {
+      qc.invalidateQueries({ queryKey: ['session', sessionId] });
+      refreshSessionLists();
+      if (action !== 'cancel') setFollowHandoff(sessionId);
+      if (view.handedOverToSessionId && selectedId === sessionId) navigate(sessionPath(view.handedOverToSessionId));
+    },
+    onError: (e: Error) => message.error(COORDINATOR_HANDOFF_COPY.refused, e.message),
+  });
+  const runHandoffAction = (action: CoordinatorHandoffAction): void => {
+    const projectId = handoffRow?.projectMembership?.projectId ?? handoffRow?.projectId;
+    if (!projectId || !selectedId || handoffAction.isPending) return;
+    handoffAction.mutate({ projectId, action, sessionId: selectedId });
+  };
+  useEffect(() => {
+    if (!followHandoff || followHandoff !== selectedId) return;
+    if (coordinatorHandoff?.state === 'COMPLETED' && coordinatorHandoff.handedOverToSessionId) {
+      setFollowHandoff(null);
+      navigate(sessionPath(coordinatorHandoff.handedOverToSessionId));
+    }
+  }, [followHandoff, selectedId, coordinatorHandoff?.state, coordinatorHandoff?.handedOverToSessionId]);
+  const composerContextActions: Omit<ContextActionsProps, 'pct' | 'onPicked'> | undefined =
+    compactOffered || (handoffProjectId && !coordinatorHandoff)
+      ? {
+          running: turnRunning,
+          compact: compactOffered
+            ? {
+                // Through the send path, as if typed — but by itself: whatever is in the composer stays.
+                onCompact: () => {
+                  if (send.isPending) return;
+                  pinToBottom();
+                  send.mutate({ content: '/compact', images: [], intent: 'NEXT_TURN', held: true });
+                },
+              }
+            : undefined,
+          startCoordinator:
+            // Hidden while the session carries any handoff, FAILED included: that row has its own doors.
+            handoffProjectId && !coordinatorHandoff
+              ? {
+                  onStart: () =>
+                    setHandoffConfirm({
+                      projectId: handoffProjectId,
+                      projectTitle: handoffRow?.projectMembership?.projectTitle ?? 'the project',
+                      running: turnRunning,
+                    }),
+                }
+              : undefined,
+        }
+      : undefined;
   // "Chat about this" on a question card hands the reply off to the main composer: show the
   // reply-context chip and focus the box. The send itself is rerouted to a deny in onSend.
   const startChatReply = (id: string, question: string): void => {
@@ -7859,6 +8065,7 @@ export function WorkspaceView({
     restoreUndelivered,
     shownEngine,
     steerOffered,
+    queuedHeldTag,
   });
   // Take back a message whose delivery settled undelivered. Nothing read it, so this bubble is
   // the only copy of what was typed: hand it back the way the transcript's own undelivered card
@@ -8093,7 +8300,8 @@ export function WorkspaceView({
     workspacesForRunner.find((a) => a.id === shownWorkspaceId)?.name ??
     selected?.workspace?.name ??
     lockedWorkspace?.name;
-  const composerDisabled = selectedTrashed || selectedMissing;
+  // While the outgoing coordinator writes its note and hands over, nothing more goes to it (board 02-2).
+  const composerDisabled = selectedTrashed || selectedMissing || handingOver;
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
@@ -8635,17 +8843,8 @@ export function WorkspaceView({
     busy: retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
   };
   const pickModel = (v: string): void => {
-    // A re-selection is still a preference, even when the session config already matches it.
-    qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
-      prev ? {
-        ...prev,
-        preferences: {
-          ...prev.preferences,
-          defaultModels: { ...prev.preferences?.defaultModels, [defaultModelKey(shownEngine, shownProvider)]: v },
-        },
-      } : prev,
-    );
-    modelPreferenceMut.mutate({ engine: shownEngine, provider: shownProvider, model: v });
+    // A pick applies to this session (or draft) only: the next draft's model is the workspace's
+    // `lastModel`, not an account-wide memory. A re-selection still marks the picker touched.
     if (v === shownModelName) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;
@@ -9119,7 +9318,13 @@ export function WorkspaceView({
   const headTime = selected
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
-  const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner)) : '';
+  // While a handoff note is written and the replacement runs, the outgoing coordinator's header
+  // says "Handing over" in place of the run word (board 02-2).
+  const headRunWord = !selected
+    ? ''
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.badgeHandingOver
+      : statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner));
   // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
   // session's bottom, and the label itself — one read of one helper, so the words and the ink are
   // not decided twice.
@@ -9150,6 +9355,8 @@ export function WorkspaceView({
         : '';
   const composerPlaceholder = selectedTrashed
     ? 'Restore this session to continue'
+    : handingOver
+      ? COORDINATOR_HANDOFF_COPY.handingOver
     : selectedMissing
       ? 'Session not found'
       : sameSessionSendBlocked
@@ -9349,9 +9556,15 @@ export function WorkspaceView({
                 setMenuOpenId(null);
                 // A phone opens the coordinator's conversation itself, with no push into the project's
                 // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
-                if (isMobile && coordinator) navigateWithPaneSlide('push', () =>
-                  navigate(sessionPath(coordinator.id), { state: stampFromList() }));
-                else enterProjectSessions(s.projectId, coordinator?.id);
+                // A row whose line says a member is waiting on you opens that member instead, at its
+                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting).
+                const waiting = s.line.tone === 'approval' && s.target.kind === 'session' &&
+                  s.target.id !== coordinator?.id ? s.target.id : null;
+                const opens = waiting ?? coordinator?.id;
+                setWaitingReveal(waiting);
+                if (isMobile && opens) navigateWithPaneSlide('push', () =>
+                  navigate(sessionPath(opens), { state: stampFromList() }));
+                else enterProjectSessions(s.projectId, opens);
               }}
               menuOpen={menuOpenId === s.id}
               onMenuOpenChange={(open) => { setMenuOpenId(open ? s.id : null); if (open) setSwipeOpen(null); }}
@@ -10322,6 +10535,7 @@ export function WorkspaceView({
             </div>
           ) : selectedId ? (
             <div className="workspace-sessions" ref={scrollRef}>
+              <TranslationCtx.Provider value={translationActions}>
               <WatchWakeNamesCtx.Provider value={wakeTargetName}>
               <ExchangeTreeCtx.Provider value={exchangeTree}>
               {/* A tail-first transcript always has more above it: while a page is in flight this
@@ -10400,6 +10614,14 @@ export function WorkspaceView({
               {/* An unvisited session's history is still in flight: hold the shape of a
                   conversation instead of a blank pane. */}
               {placeholder === 'skeleton' && <TranscriptSkeleton />}
+              {/* The successor opens with its predecessor's note and the waits that moved here (board
+                  02-3): the conversation's first lines, so drawn once its first page is. */}
+              {selected && !selectedTrashed && coordinatorHandoffReceived && !hasMoreOlder && placeholder !== 'skeleton' && (
+                <CoordinatorHandoffReceivedCard
+                  received={coordinatorHandoffReceived}
+                  onOpenPrevious={() => navigate(sessionPath(coordinatorHandoffReceived.handoffFromSessionId))}
+                />
+              )}
               {/* The transcript, in the contexts its cards read (SessionConversation). */}
               <MainCheckoutCtx.Provider value={mainCheckout.host}>
               <QueuedFootCtx.Provider value={queuedFoot}>
@@ -10614,16 +10836,37 @@ export function WorkspaceView({
               {localStatusCards.map((card) => (
                 <SessionStatusCard card={card} key={card.id} />
               ))}
+              {/* The outgoing coordinator writing its handoff note, handing over, or failing to (board
+                  02-2, 02-5). */}
+              {selected && !selectedTrashed && coordinatorHandoff && handingOver && (
+                <CoordinatorHandoffProgress
+                  handoff={coordinatorHandoff}
+                  compacting={handoffRow?.enginePhase === 'compacting'}
+                  busy={handoffAction.isPending}
+                  onSkip={() => runHandoffAction('skip')}
+                  onCancel={() => runHandoffAction('cancel')}
+                />
+              )}
+              {selected && !selectedTrashed && coordinatorHandoff?.state === 'FAILED' && (
+                <CoordinatorHandoffFailure
+                  handoff={coordinatorHandoff}
+                  busy={handoffAction.isPending}
+                  onRetry={() => runHandoffAction('retry')}
+                  onSkip={() => runHandoffAction('skip')}
+                  onKeep={() => runHandoffAction('cancel')}
+                />
+              )}
               {/* The live drafts used to render here, after everything. They render inside the
                   transcript now, at the seq the stretch began — see StreamingDraftsCtx. */}
               {!selectedTrashed && approvals.map((a) => (
                 // Only the first (oldest) still-answerable approval with a shortcut owns Enter;
                 // once it's decided the next one becomes first, so the key walks the queue in
                 // order — stepping over any card whose question is already over.
+                <div key={a.id} data-waiting-card="">
                 <ApprovalPanel
-                  key={a.id}
                   approval={a}
                   onDecide={decide}
+                  untranslated={untranslatedDecisions[a.id]}
                   active={a.id === activeApprovalId}
                   answerable={answerableApprovalIds.has(a.id)}
                   onChatAbout={startChatReply}
@@ -10631,6 +10874,7 @@ export function WorkspaceView({
                   rememberable={approvalRememberOffered(shownEngine)}
                   subagent={subagentCards.get(a.id)?.description ?? null}
                 />
+                </div>
               ))}
               <AnsweredQuestionsCtx.Provider value={answeredQuestions}>
               {!selectedTrashed && queuedTailEvents.map(({ turn: q, event }) => {
@@ -10658,7 +10902,8 @@ export function WorkspaceView({
                         deliveryCode={q.deliveryCode}
                         deliveryReason={q.deliveryReason}
                         wake={wake}
-                        held={runnerUpdatingHeldTag}
+                        translationHeld={heldForTranslation(q.translation)}
+                        held={queuedHeldTag}
                         onCancel={() => (wake ? withdrawWake(q.turnId) : cancelQueued(q.turnId))}
                         onPutBack={
                           restoreUndelivered && returnsToComposer(q) ? () => takeBackUndelivered(q) : undefined
@@ -10713,6 +10958,7 @@ export function WorkspaceView({
               )}
               </ExchangeTreeCtx.Provider>
               </WatchWakeNamesCtx.Provider>
+              </TranslationCtx.Provider>
             </div>
           ) : bareMachine ? (
             // A scroller of its own, not `scrollRef`: this is no conversation, and the card is read from
@@ -11004,6 +11250,17 @@ export function WorkspaceView({
             {composerProviderNote}
           </div>
         )}
+        {/* A coordinator that handed over takes nothing more: its composer's place says where the
+            project went (board 02-4). */}
+        {coordinatorHandedOver ? (
+          <CoordinatorHandedOverBanner
+            onOpen={
+              coordinatorHandoff?.handedOverToSessionId
+                ? () => navigate(sessionPath(coordinatorHandoff.handedOverToSessionId as string))
+                : undefined
+            }
+          />
+        ) : (
         <SessionComposer
           text={text}
           setText={setText}
@@ -11090,12 +11347,31 @@ export function WorkspaceView({
           configuredProviders={configuredProviders}
           showStop={showStop}
           onStop={() => selected && control.mutate(selected.id)}
-          canSend={canSend}
+          canSend={canSend && !handingOver}
           sending={send.isPending}
           onSend={onSend}
           queueOffered={queueOffered}
           defaultSendIntent={defaultSendIntent}
+          contextActions={composerContextActions}
         />
+        )}
+        {handoffConfirm && (
+          <CoordinatorHandoffConfirm
+            projectId={handoffConfirm.projectId}
+            projectTitle={handoffConfirm.projectTitle}
+            running={handoffConfirm.running}
+            onClose={() => setHandoffConfirm(null)}
+            onHandOver={async () => {
+              if (!selectedId) return;
+              const sessionId = selectedId;
+              const view = await coordinatorHandoffRequest(handoffConfirm.projectId, 'handoff');
+              setFollowHandoff(sessionId);
+              qc.invalidateQueries({ queryKey: ['session', sessionId] });
+              refreshSessionLists();
+              if (view.handedOverToSessionId) navigate(sessionPath(view.handedOverToSessionId));
+            }}
+          />
+        )}
       </div>
         </>
         )}
@@ -11252,6 +11528,8 @@ export interface SessionComposerProps {
   onSend: (intentOverride?: SessionTurnIntent) => void;
   queueOffered: boolean;
   defaultSendIntent: SessionTurnIntent;
+  /** Compact and Start a new coordinator in the Context popover (board 01). */
+  contextActions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
 }
 
 export function SessionComposer({
@@ -11322,7 +11600,12 @@ export function SessionComposer({
   onSend,
   queueOffered,
   defaultSendIntent,
+  contextActions,
 }: SessionComposerProps) {
+  // Settings › Translation (6A): the account's switch and language, for the composer's tag.
+  const navigate = useNavigate();
+  const me = useQuery(meQuery());
+  const translationIsOn = translationOn(me.data);
   // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
   // its auto-grow cap.
   const [composerScroll, setComposerScroll] = useState(0);
@@ -12218,7 +12501,20 @@ export function SessionComposer({
             modelCatalog={runner.modelCatalog}
             configured={configuredProviders}
             unavailable={shownEngine === AgentProvider.CURSOR ? CURSOR_CONTEXT_UNAVAILABLE : undefined}
+            actions={contextActions}
           />
+        )}
+        {/* Settings › Translation is on (6A): what is typed here is translated into English when it
+            is sent, never while it is typed. The tag opens the setting. */}
+        {translationIsOn && (
+          <button
+            type="button"
+            className="composer-translation-tag"
+            title="Messages are translated before the agent gets them. Open Settings › Translation"
+            onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
+          >
+            {translationTag(translationLanguageOf(me.data))}
+          </button>
         )}
         {showStop ? (
           <Button
@@ -12621,6 +12917,7 @@ export function usePendingTray({
   restoreUndelivered,
   shownEngine,
   steerOffered,
+  queuedHeldTag = null,
 }: {
   selectedId: string | null;
   selectedTrashed: boolean;
@@ -12633,6 +12930,9 @@ export function usePendingTray({
   restoreUndelivered: ((text: string, attachments?: readonly { id: string; mime?: string; mimeType?: string; name?: string }[]) => void) | null;
   shownEngine: AgentProvider;
   steerOffered: boolean;
+  /** What holds the session's waiting messages from their turn (a runner's update, a full runner, run or
+   *  batch), as the tag each queued row says in place of `Queued for next turn`. Null where nothing does. */
+  queuedHeldTag?: ReactNode;
 }) {
   const message = useToast();
   // The reader's steers the engine has not read yet: the transcript leaves them out, and the tray
@@ -12784,10 +13084,17 @@ export function usePendingTray({
       return {
         key: turn.turnId,
         heading: intoTurn ? 'current' : 'next',
-        text: turn.content,
+        // Translated (Settings › Translation): the words the owner wrote, not the English delivered.
+        text: turn.translation?.original ?? turn.content,
         shell: turn.shell,
         ...trayPictures(turnImages[turn.turnId], refs),
-        state: withdrawing ? 'Withdrawing…' : intoTurn ? steerDeliveryState(undefined).label : 'Queued for next turn',
+        // Held by its runner's update or by a full runner, run or batch: the tag says which, as it does
+        // on every other waiting item (boards queued-card-runner-updating ⑤, queued-card-runner-full ②).
+        state: withdrawing
+          ? 'Withdrawing…'
+          : intoTurn
+            ? steerDeliveryState(undefined).label
+            : queuedHeldTag ?? 'Queued for next turn',
         busy: withdrawing || steering,
         // Not handed to a runner yet, either way: the server takes it back alone.
         onWithdraw: turn.placement === 'steer'

@@ -187,7 +187,8 @@ func (s *supervisedSession) serve(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 		if remote != "" {
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{},
+				// As the server's openRemoteSubagentRun names it: the target workspace's own default model.
+				"runId": runID, "status": "RUNNING", "decision": map[string]interface{}{"model": "gpt-6.1-sol"},
 				"remote": map[string]interface{}{"workspaceId": "ws-" + remote, "workspaceName": remote},
 			})
 			return

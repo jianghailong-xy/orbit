@@ -1,4 +1,6 @@
+import { CoordinatorHandoffService } from '../projects/coordinator-handoff.service';
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
+import { ownerTranslationLanguage, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
@@ -184,6 +186,7 @@ import {
   type SessionMessageFrom,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
+import type { TaskRunsWith } from '../workspaces/start-anchor';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
@@ -222,6 +225,13 @@ import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
 import { recapAfterSettle } from '../sessions/recap';
 import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
+import {
+  cardHasText,
+  translatableText,
+  translateApprovalCard,
+  translateStoredEvents,
+  type TranslationDeps,
+} from '../sessions/reply-translation';
 import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
@@ -548,6 +558,7 @@ import {
   runnerLastBeatAt,
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
+import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -1654,6 +1665,12 @@ export class RunnerApiController {
      * routes answer 503.
      */
     @Optional() private readonly mainCheckout?: MainCheckoutService,
+    /**
+     * A coordinator's handoff (projects/coordinator-handoff.service.ts): the end of its note turn is
+     * settled from turnComplete. `@Optional()` like the rest: without it a note turn's end is settled
+     * by the handoff sweep instead.
+     */
+    @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1801,6 +1818,7 @@ export class RunnerApiController {
     @CurrentRunner()
     runner: {
       id: string;
+      ownerId: string;
       name: string;
       status: string;
       lastHeartbeatAt: Date | null;
@@ -1835,6 +1853,7 @@ export class RunnerApiController {
       workspaces,
       await lastProviderByWorkspace(this.prisma, workspaces.map((a) => a.id)),
     );
+    const runsWith = await this.workspaceRunsWith(runner.ownerId, workspaces.map((a) => a.id));
     return {
       id: runner.id,
       name: runner.name,
@@ -1850,8 +1869,54 @@ export class RunnerApiController {
         provider: a.provider,
         agentKey: a.agentKey ?? undefined,
         workDir: a.workDir ?? undefined,
+        ...runsWith.get(a.id),
       })),
     };
+  }
+
+  /**
+   * What `orbit status` says each workspace's unattended work starts on, by the resolution dispatch
+   * makes (SessionsService.taskRunsWith), so the two cannot disagree: `runsWith` for a task outside any
+   * project, and per open project with open work assigned here, what an unpinned task of it runs on —
+   * read off one such task with its pins set aside. Absent when it could not be read: a status line,
+   * never a reason to fail the call.
+   */
+  private async workspaceRunsWith(
+    ownerId: string,
+    workspaceIds: string[],
+  ): Promise<Map<string, { runsWith: TaskRunsWith; projects: Array<{ id: string; title: string; runsWith: TaskRunsWith }> }>> {
+    const out = new Map<string, { runsWith: TaskRunsWith; projects: Array<{ id: string; title: string; runsWith: TaskRunsWith }> }>();
+    const sessions = this.sessions;
+    if (!sessions || workspaceIds.length === 0) return out;
+    try {
+      const open = await this.prisma.task.findMany({
+        where: {
+          ownerId,
+          assigneeId: { in: workspaceIds },
+          status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+          project: { status: 'OPEN' },
+        },
+        distinct: ['assigneeId', 'projectId'],
+        select: { id: true, assigneeId: true, project: { select: { id: true, title: true } } },
+        orderBy: [{ assigneeId: 'asc' }, { projectId: 'asc' }],
+        take: 200,
+      });
+      for (const workspaceId of workspaceIds) {
+        const projects = [];
+        for (const row of open) {
+          if (row.assigneeId !== workspaceId || !row.project) continue;
+          projects.push({
+            id: row.project.id,
+            title: row.project.title,
+            runsWith: await sessions.taskRunsWith(ownerId, { id: row.id, workspaceId }),
+          });
+        }
+        out.set(workspaceId, { runsWith: await sessions.taskRunsWith(ownerId, { workspaceId }), projects });
+      }
+    } catch (e) {
+      this.logger.warn(`runner status: runsWith not read: ${(e as Error)?.message ?? e}`);
+    }
+    return out;
   }
 
   /** `orbit unregister` — the runner deletes itself from the control plane. */
@@ -1968,6 +2033,7 @@ export class RunnerApiController {
         supervisedSessionIds: supervised,
         planUsageDigest: digests.facts.planUsage ?? null,
         resources: sanitizeRunnerResources(dto?.resources),
+        backgroundJobSessionIds: sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
       });
     } catch (error) {
       // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
@@ -2215,11 +2281,16 @@ export class RunnerApiController {
     // node holding the connection (X-Orbit-Link-Gateway-Id). A link beat the beat statement recorded is
     // not recorded twice.
     if (!linkBeat) {
+      // Advisory like the reading below: a read that fails keeps none, and the list counts turns alone until the next beat.
+      const backgroundJobSessionIds = await ownBackgroundJobSessionIds(
+        this.prisma, runner.id, sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
+      ).catch(() => []);
       await recordRunnerBeat(this.prisma, {
         runnerId: runner.id,
         processId: heartbeatLeaseOwner,
         gatewayId: link?.gatewayId ?? null,
         linkState: link ? 'LINK' : 'HTTP',
+        backgroundJobSessionIds,
         at: beatAt,
       }).catch(beatLost);
       // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
@@ -6143,6 +6214,12 @@ export class RunnerApiController {
       // slow APNs round-trip can't delay the runner's approval-create response.
       if (fallback) void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName, true);
       else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
+      // Settings › Translation (3A, reply-translation.ts): the card goes out in English at once, and again in
+      // the owner's language once it is translated.
+      if (cardHasText(approval.input)) {
+        const lang = await ownerTranslationLanguage(this.prisma, session.ownerId).catch(() => null);
+        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, lang);
+      }
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
   }
@@ -7822,6 +7899,16 @@ export class RunnerApiController {
       if (finalized.regionHeld) this.queue.notifySessionQueued(runner.id);
       return { ok: true, status: finalized.status };
     }
+    // A coordinator's handoff note turn that ended (projects/coordinator-handoff.service.ts): a success
+    // runs the coordinator replacement, which the runner — blocked on this reply — must not wait for,
+    // so it is settled off the response path. Any other turn of the session is a read that finds
+    // no WRITING handoff and stops.
+    if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
+      void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
+        `coordinator handoff after turn ${dto.turnId} of ${sessionId} failed: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
+    }
     // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
     // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).
     if ('reviewToDeliver' in finalized && finalized.reviewToDeliver) {
@@ -8044,6 +8131,15 @@ export class RunnerApiController {
    * rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has already
    * answered the runner by the time this runs.
    */
+  /** What reply-translation.ts writes with and publishes on. */
+  private translationDeps(): TranslationDeps {
+    return {
+      db: this.prisma as unknown as TranslationDeps['db'],
+      publish: (sessionId, event) => this.realtime.publish(sessionId, event),
+      approvalEvent: (approval) => approvalRequestEvent(approval, new Date().toISOString()),
+    };
+  }
+
   private async recapAfterTurn(sessionId: string): Promise<void> {
     await recapAfterSettle({
       db: this.prisma,
@@ -8567,11 +8663,16 @@ export class RunnerApiController {
             select: {
               id: true, content: true, clientTurnId: true, senderSessionId: true,
               externalSenderSource: true, externalSenderName: true,
+              displayPrompt: true, translationState: true, translationLang: true,
               senderClient: true, senderClientDetail: true,
             },
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
+      // Settings › Translation: what the owner wrote, for a turn delivered in English. The echo is the
+      // English (and `authoredUserText` stays it, since that is where the delivered words end); the row
+      // previews the owner's own words.
+      const ownerUserText = new Map(userTurns.map((turn) => [turn.id, turn.displayPrompt ?? turn.content]));
       const userTurnById = new Map(userTurns.map((turn) => [turn.id, turn]));
       // The cards those turns are drawn as rather than as the owner's own message — an exception
       // item's delivery, the owner's answer handed to the coordinator, a fact the coordinator is told
@@ -8614,6 +8715,11 @@ export class RunnerApiController {
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);
+        // The owner's original beside the English the engine was given (@orbit/shared TurnTranslation).
+        // Only the turn row says so: whatever a runner put under the key is dropped.
+        delete e.payload.translation;
+        const translation = e.turnId ? turnTranslationOf(userTurnById.get(e.turnId) ?? {}) : undefined;
+        if (translation) e.payload.translation = translation;
         const sentTurn = e.turnId ? userTurnById.get(e.turnId) : undefined;
         e.payload = withSentFrom(
           e.payload,
@@ -8811,8 +8917,8 @@ export class RunnerApiController {
             (e.payload as { text?: string; content?: string } | null)?.text
             ?? (e.payload as { content?: string } | null)?.content
             ?? '';
-          const text = e.turnId && authoredUserText.has(e.turnId)
-            ? authoredUserText.get(e.turnId)
+          const text = e.turnId && ownerUserText.has(e.turnId)
+            ? ownerUserText.get(e.turnId)
             : echoed;
           pendingUserText = text?.trim() || null;
           const cards = e.turnId ? turnCards.get(e.turnId) : undefined;
@@ -9288,6 +9394,13 @@ export class RunnerApiController {
           }
         })();
       }
+    }
+    // Settings › Translation (reply-translation.ts): a reply or suggestion this batch stored whole is translated
+    // for an owner with translation on, in the background. The owner's switch is read only for a batch that holds
+    // something to translate — most hold none.
+    if (durable.some((e) => translatableText(e.type, e.payload) !== null)) {
+      const lang = await ownerTranslationLanguage(this.prisma, eventOutcome.session.ownerId).catch(() => null);
+      translateStoredEvents(this.translationDeps(), sessionId, lang, durable);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in

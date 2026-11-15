@@ -1,24 +1,49 @@
 import Foundation
 
-/// Orbit's own SubAgent — a `mcp__orbit__delegate` call (docs/subagent-design.md §6.4) — as the
-/// transcript's block draws it: the folded row's grey second line, the Background mark and the opened
-/// block's grey Why line. UI-free so the words stay unit-testable and both native clients draw them
-/// the same.
+/// Orbit's own Agent — a `mcp__orbit__delegate` call (docs/subagent-design.md §6.4; the design calls it a
+/// SubAgent, the product says Agent) — as the transcript's block draws it. UI-free so the words stay
+/// unit-testable and both native clients draw them the same (board docs/mocks/subagent-ios-highlight).
 ///
-/// iOS and macOS have no room for web's trailing meta on the row itself (board 03): the second line
-/// carries the type, tier and model, and, once the run has ended, how long it took and what it cost —
-/// the same ' · <duration> · $<cost>' web appends to its meta. A background run puts `Background` in
-/// the type's place — the same fact web draws as a tag beside the call.
+/// The folded block has three lines. The first is the row: `Agent`, the call's description, the status.
+/// The second says who did the work and where: the engine and model it ran on — led by the parent's
+/// engine and an arrow when Orbit moved the work to another one — then the tier and the type
+/// (`Background` in the type's place), `Read-only`, and `on <workspace>` for a run on another machine.
+/// The third says what came of it: how many files it changed, or the first line it handed back, with
+/// how long it took and what it cost; while it runs, the view draws what it is on instead.
 public struct SubagentBlock: Equatable, Sendable {
     public static let toolName = "mcp__orbit__delegate"
+    /// What the block's row calls it.
+    public static let label = "Agent"
 
     /// `explore`, `general`, or a definition file's name; `general` when the call named none.
     public let type: String
     public let background: Bool
-    /// `<type> · <tier> · <model> · <duration> · <cost>` (Background in the type's place), with the
-    /// duration and cost only once the run has ended. Nil when the call has not been answered yet by
-    /// a run and named no type of its own.
-    public let detailLine: String?
+    /// The engine the run is on (`codex`), for the chip's colour; nil until the run is read, and from a
+    /// server before it sent one.
+    public let engine: String?
+    /// The chip's words: the engine's short name and the model (`Codex gpt-6.1-sol`), either alone when
+    /// the other is unknown. Nil when neither is known yet.
+    public let engineName: String?
+    public let model: String?
+    /// The model's own name already says the engine (`DeepSeek Chat` on DeepSeek): the chip then shows
+    /// the engine's mark and the model, not the name twice.
+    public let modelNamesEngine: Bool
+    /// The parent's engine, by its short name, when the run is on another one: the chip's `Claude →`.
+    public let fromEngine: String?
+    /// The tier and the type, grey after the chip: `S · explore`, `M · Background`, or the type alone.
+    public let meta: String
+    public let readonly: Bool
+    /// `on orbit-macos` for a run on another workspace.
+    public let workspace: String?
+    /// The third line once the run has ended: `3 files changed`, the first line it handed back, or how
+    /// it ended (`Failed`) — nil while it runs and when it handed back nothing.
+    public let outcome: String?
+    /// The outcome is the files it changed, drawn in the primary weight.
+    public let outcomeIsFiles: Bool
+    /// The run did not finish: the outcome is how it ended, drawn in red.
+    public let outcomeIsFailure: Bool
+    /// `41s · $0.03`, once the run has ended.
+    public let numbers: String?
     /// The opened block's Why line: the server's one-line Why, or, from a server or a row from before
     /// it was kept, the router's reasons in order, joined. A run on another workspace leads with how
     /// that workspace was chosen. Nil when there is neither (web parity: `subagentWhy`).
@@ -27,29 +52,119 @@ public struct SubagentBlock: Equatable, Sendable {
     /// already those reasons), then every candidate it removed as `Removed · <provider>: <reason>`
     /// (web parity: `subagentWhyDetails` and its list). Empty when there is nothing more to show.
     public let details: [String]
+    /// The paths the run wrote, for the opened block's Changed files; empty for a read-only run.
+    public let changedFiles: [String]
     /// Whether the run is still going (a background call answers at once, so its card's status is
     /// already `ok` while the work goes on).
     public let running: Bool
+    /// When the run started, for the running line's clock.
+    public let startedAt: Date?
 
-    public static func describe(input: JSONValue, run: SubagentRunView?, status: ToolStatus) -> SubagentBlock {
+    /// `result` is what the opened block ends with (`SubagentResult.text`), whose first line the third
+    /// line shows; `parentEngine` is the session's own engine.
+    public static func describe(input: JSONValue, run: SubagentRunView?, status: ToolStatus,
+                                parentEngine: String? = nil, result: String? = nil) -> SubagentBlock {
         let callType = nonEmpty(input["type"]?.stringValue) ?? "general"
         let type = nonEmpty(run?.type) ?? callType
         let background = run?.background ?? (input["background"]?.boolValue == true)
+        let running = run?.isRunning ?? (status == .running)
+        let readonly = run?.readonly ?? false
+        let engine = nonEmpty(run?.engine)
+        let model = nonEmpty(run?.modelLabel) ?? nonEmpty(run?.model)
+        let fromEngine: String? = {
+            guard let engine, let parent = nonEmpty(parentEngine), parent != engine else { return nil }
+            return shortName(parent)
+        }()
+        let meta = ([nonEmpty(run?.level), background ? "Background" : type] as [String?])
+            .compactMap { $0 }.joined(separator: " · ")
+        let files = readonly ? [] : (run?.changedFiles ?? [])
 
-        var parts: [String] = [background ? "Background" : type]
-        if let level = nonEmpty(run?.level) { parts.append(level) }
-        if let model = nonEmpty(run?.modelLabel) ?? nonEmpty(run?.model) { parts.append(model) }
-        if let duration = duration(run) { parts.append(duration) }
-        if let cost = cost(run) { parts.append(cost) }
+        var outcome: String?
+        var isFiles = false
+        var isFailure = false
+        if let run, !running {
+            switch run.status {
+            case "DONE":
+                if !files.isEmpty {
+                    outcome = files.count == 1 ? "1 file changed" : "\(files.count) files changed"
+                    isFiles = true
+                } else {
+                    outcome = firstLine(result)
+                }
+            case "FAILED": outcome = "Failed"; isFailure = true
+            case "INTERRUPTED": outcome = "Interrupted"; isFailure = true
+            case "STOPPED": outcome = "Stopped"; isFailure = true
+            default: outcome = firstLine(result)
+            }
+        }
+        let numbers = [duration(run), cost(run)].compactMap { $0 }.joined(separator: " · ")
 
         return SubagentBlock(
             type: type,
             background: background,
-            detailLine: parts.joined(separator: " · "),
+            engine: engine,
+            engineName: engine.map(shortName),
+            model: model,
+            modelNamesEngine: {
+                guard let engine, let model else { return false }
+                return model.lowercased().hasPrefix(shortName(engine).lowercased())
+            }(),
+            fromEngine: fromEngine,
+            meta: meta,
+            readonly: readonly,
+            workspace: nonEmpty(run?.workspaceName).map { "on \($0)" },
+            outcome: outcome,
+            outcomeIsFiles: isFiles,
+            outcomeIsFailure: isFailure,
+            numbers: numbers.isEmpty ? nil : numbers,
             why: why(run),
             details: details(run),
-            running: run?.isRunning ?? (status == .running),
+            changedFiles: files,
+            running: running,
+            startedAt: run.flatMap { RelativeTime.parse($0.createdAt) },
         )
+    }
+
+    /// The engine as the chip says it: short, since the model follows it.
+    public static func shortName(_ engine: String) -> String {
+        switch engine {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "kimi": return "Kimi"
+        case "antigravity": return "Antigravity"
+        case "opencode": return "OpenCode"
+        case "dsh": return "DeepSeek"
+        case "cursor": return "Cursor"
+        default: return ProviderEngines.cliName(engine)
+        }
+    }
+
+    /// The running line's numbers: how long it has run and how many steps it has taken (`1m 12s · 9 steps`).
+    public static func runningNumbers(elapsed: TimeInterval?, steps: Int) -> String? {
+        var parts: [String] = []
+        if let elapsed { parts.append(WikiRunsLogic.duration(elapsed)) }
+        if steps > 0 { parts.append(steps == 1 ? "1 step" : "\(steps) steps") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The steps an Agent has taken: the calls in its own transcript.
+    public static func steps(_ items: [TranscriptItem]) -> Int {
+        items.reduce(0) { n, item in
+            if case .toolCall = item { return n + 1 }
+            return n
+        }
+    }
+
+    private static func firstLine(_ text: String?) -> String? {
+        guard let text else { return nil }
+        for line in text.split(whereSeparator: \.isNewline) {
+            var clean = line.trimmingCharacters(in: .whitespaces)
+            while let first = clean.first, "#>*-".contains(first) {
+                clean = String(clean.dropFirst()).trimmingCharacters(in: .whitespaces)
+            }
+            if !clean.isEmpty { return clean }
+        }
+        return nil
     }
 
     private static func why(_ run: SubagentRunView?) -> String? {
@@ -146,4 +261,109 @@ public enum SubagentRuns {
 private func nonEmpty(_ value: String?) -> String? {
     guard let value, !value.isEmpty else { return nil }
     return value
+}
+
+/// Agents started together — two or more `delegate` calls one after another, with nothing said between
+/// them — drawn as one group: a head that adds them up, then a two-line row for each (board 02).
+public struct SubagentGroup: Equatable, Sendable {
+    /// `3 Agents`.
+    public let title: String
+    /// `2 of 3 done`, or `All done` / `1 failed` once none is running.
+    public let progress: String
+    /// The engines the work moved to, led by the parent's (`Claude → Codex, DeepSeek`); nil when all of
+    /// them ran on the parent's own engine.
+    public let engines: String?
+    /// `2 machines` when some ran on another workspace.
+    public let machines: String?
+    /// `$0.03 so far` while any runs, `$0.07` once none does; nil before any has cost a cent's worth.
+    public let cost: String?
+    /// How many ended well, how many failed, how many still run: the head's bar.
+    public let done: Int
+    public let failed: Int
+    public let running: Int
+
+    public static func describe(_ blocks: [SubagentBlock], runs: [SubagentRunView?],
+                                parentEngine: String?) -> SubagentGroup {
+        let running = blocks.filter(\.running).count
+        let failed = blocks.filter(\.outcomeIsFailure).count
+        let done = blocks.count - running - failed
+        let progress: String
+        if running > 0 {
+            progress = "\(done + failed) of \(blocks.count) done"
+        } else if failed > 0 {
+            progress = failed == 1 ? "1 failed" : "\(failed) failed"
+        } else {
+            progress = "All done"
+        }
+        var moved: [String] = []
+        for block in blocks {
+            guard let engine = block.engine, engine != parentEngine else { continue }
+            let name = SubagentBlock.shortName(engine)
+            if !moved.contains(name) { moved.append(name) }
+        }
+        let engines = moved.isEmpty ? nil
+            : (parentEngine.map { "\(SubagentBlock.shortName($0)) → " } ?? "") + moved.joined(separator: ", ")
+        let places = Set(runs.map { $0?.workspaceName ?? "" })
+        let machines = places.count > 1 ? "\(places.count) machines" : nil
+        let spent = runs.reduce(0.0) { $0 + ($1?.costUsd ?? 0) }
+        let cost: String? = spent < 0.01 ? nil
+            : String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), spent) + (running > 0 ? " so far" : "")
+        return SubagentGroup(title: "\(blocks.count) Agents", progress: progress, engines: engines,
+                             machines: machines, cost: cost, done: done, failed: failed, running: running)
+    }
+}
+
+/// Every Agent a session started, as the console's capsule counts them and its sheet lists them (board 03).
+public struct SubagentSessionSummary: Equatable, Sendable {
+    public let count: Int
+    public let running: Int
+    /// What they added to the session's cost, or nil when it comes to less than a cent.
+    public let cost: String?
+    /// `4 · $0.07`: the capsule's words after its mark.
+    public let capsule: String
+    /// The engines they ran on, each with what it cost, the costliest first: the sheet's bar and legend.
+    public let byEngine: [EngineShare]
+    /// How many engines and machines: the sheet's third figure (`3 engines · 2 machines`).
+    public let spread: String
+    /// The runs, the running ones first, then the rest newest first.
+    public let rows: [SubagentRunView]
+
+    public struct EngineShare: Equatable, Sendable {
+        public let engine: String
+        public let name: String
+        public let costUsd: Double
+        public let cost: String
+    }
+
+    /// Nil when the session started no Agent: the capsule then has no place for one.
+    public static func make(_ runs: [SubagentRunView]) -> SubagentSessionSummary? {
+        guard !runs.isEmpty else { return nil }
+        let running = runs.filter(\.isRunning).count
+        let total = runs.reduce(0.0) { $0 + $1.costUsd }
+        let cost = total < 0.01 ? nil : money(total)
+        var shares: [String: Double] = [:]
+        var order: [String] = []
+        for run in runs {
+            let engine = run.engine ?? ""
+            if shares[engine] == nil { order.append(engine) }
+            shares[engine, default: 0] += run.costUsd
+        }
+        let byEngine = order.filter { !$0.isEmpty }
+            .map { EngineShare(engine: $0, name: SubagentBlock.shortName($0), costUsd: shares[$0] ?? 0,
+                               cost: (shares[$0] ?? 0) < 0.01 ? "<$0.01" : money(shares[$0] ?? 0)) }
+            .sorted { $0.costUsd > $1.costUsd }
+        let machines = Set(runs.map { $0.workspaceName ?? "" }).count
+        var spread = byEngine.count == 1 ? "1 engine" : "\(byEngine.count) engines"
+        if machines > 1 { spread += " · \(machines) machines" }
+        let rows = runs.filter(\.isRunning).sorted { $0.createdAt > $1.createdAt }
+            + runs.filter { !$0.isRunning }.sorted { $0.createdAt > $1.createdAt }
+        return SubagentSessionSummary(
+            count: runs.count, running: running, cost: cost,
+            capsule: cost.map { "\(runs.count) · \($0)" } ?? "\(runs.count)",
+            byEngine: byEngine, spread: spread, rows: rows)
+    }
+
+    private static func money(_ value: Double) -> String {
+        String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
+    }
 }

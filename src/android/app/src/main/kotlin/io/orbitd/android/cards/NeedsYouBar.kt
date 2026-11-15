@@ -8,7 +8,37 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
@@ -52,36 +82,34 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import java.time.Instant
 
-/** Which way the bar's chevron points: where the words say the card is. Only the bar pointing into this conversation has one —
- * the cross-session bar's press goes elsewhere, which its words already say, and the whole capsule is the press. */
-enum class NeedsYouChevron { UP, DOWN }
-
 /** Whether the bar was last shown, whether it has shown yet, and its last measured height: what the list is scrolled
  * by when the bar comes or goes, so the line being read stays where it was (the sticky header's `HeaderShift`). */
 private class BarShift { var shown = false; var seen = false; var height = 0f }
 
 /**
- * The bar above a conversation's transcript (iOS `ConsoleView`'s top inset): a card waiting in THIS conversation wins —
- * its destination is already here, and leaving to find the other would lose the reader's place — and otherwise what
- * waits elsewhere, the session on screen left out of it. [below] is this conversation's answer; a press on it is
- * [onBelow] with the row to show. Folded away ([hidden]) with the rest of the chrome while a phone's composer types.
- * A session list shows no single session, so its [sessionId] is null and everything waiting is elsewhere.
+ * The bar over a session list (iOS `NeedsYouBannerView`): what waits elsewhere, the session [sessionId] left out of it. A
+ * conversation carries none since 2026-11-15 (`docs/mocks/needs-you-capsule/07-console-one-capsule`): what waits in it is its
+ * header capsule's to say (`WaitingCapsule`). A session list shows no single session, so its [sessionId] is null.
  */
 @Composable
 internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, sessionId: String?, list: LazyListState,
-    hidden: Boolean, below: WaitingBelow?, onBelow: (String) -> Unit, open: (OrbitRoute) -> Unit) {
+    open: (OrbitRoute) -> Unit) {
     val openRows by remember(app, handle) {
         app.realtime.state.map { live -> if (live.handle === handle) live.directory?.sessions?.get("open").orEmpty() else emptyList() }
             .distinctUntilChanged()
     }.collectAsState(emptyList())
     // A session on its way to Trash is waiting on nobody (A05-9), as it is in none of the lists.
     val trashing by app.trashing.ids.collectAsState()
-    val banner = if (below != null) null else remember(openRows, sessionId, trashing) {
-        NeedsYouLogic.banner(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
+    // Swiped away (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/06-list-floats`): gone until something new is waiting.
+    val context = LocalContext.current
+    val dismissed by remember(context) { NeedsYouDismissal.keys(context) }.collectAsState()
+    val banner = remember(openRows, sessionId, trashing, dismissed) {
+        val rows = TrashingSessions.without(openRows, trashing) { it.text("id") }
+        if (NeedsYouLogic.isDismissed(rows, sessionId, dismissed)) null else NeedsYouLogic.banner(rows, sessionId)
     }
     val shift = remember(list) { BarShift() }
     var unfolded by remember { mutableStateOf(false) }
-    val shown = !hidden && (below != null || banner != null)
+    val shown = banner != null
     LaunchedEffect(shift, shown) {
         if (shown == shift.shown) return@LaunchedEffect
         shift.shown = shown
@@ -89,14 +117,13 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         if (shown && !shift.seen) { shift.seen = true; return@LaunchedEffect }
         if (shift.height > 0f) list.dispatchRawDelta(if (shown) shift.height else -shift.height)
     }
-    if (!shown) return
+    // What it last said, so it can lift away still saying it (08-motion ④).
+    val last = remember { arrayOfNulls<NeedsYouBanner>(1) }
+    if (banner != null) last[0] = banner
+    val waiting = last[0] ?: return
+    AnimatedVisibility(shown, enter = fadeIn(spring()) + slideInVertically(spring()) { -it / 3 } + expandVertically(spring(), Alignment.Top),
+        exit = fadeOut(spring()) + slideOutVertically(spring()) { -it / 3 } + shrinkVertically(spring(), Alignment.Top)) {
     val measured = Modifier.onSizeChanged { shift.height = it.height.toFloat() }
-    if (below != null) {
-        NeedsYouBar(below.text, if (below.side == ReaderSide.ABOVE) NeedsYouChevron.UP else NeedsYouChevron.DOWN,
-            NeedsYouLogic.belowHint, measured, glyph = below.glyph) { onBelow(below.rowId) }
-        return
-    }
-    val waiting = banner ?: return
     // One of the five owner items opens the card it names; anything else the session. Folds the bar again on the way out.
     fun go(entry: NeedsYouBanner) {
         unfolded = false
@@ -120,38 +147,61 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
         NeedsYouLogic.entries(TrashingSessions.without(openRows, trashing) { it.text("id") }, sessionId)
     } else emptyList()
     val stacked = entries.size > 1
+    // The stack comes out from under the first card and goes back under it (08-motion ①②): it stays up while it goes.
+    val stackState = remember { MutableTransitionState(false) }
+    stackState.targetState = stacked
+    val stackUp = stacked || stackState.currentState || !stackState.isIdle
+    val lastEntries = remember { arrayOfNulls<List<NeedsYouBanner>>(1) }
+    if (stacked) lastEntries[0] = entries
     var top by remember { mutableStateOf(0) }
-    NeedsYouBar(waiting.text, null, when {
+    NeedsYouBar(waiting.text, when {
         several -> NeedsYouLogic.unfoldHint(waiting.count)
         waiting.ownerItem == null -> NeedsYouLogic.sessionHint
         else -> NeedsYouLogic.itemHint
     }, measured.onGloballyPositioned { top = it.positionInWindow().y.toInt() }
-        .then(if (stacked) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier),
-        detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph, deck = several) {
+        .then(if (stackUp) Modifier.alpha(0f).clearAndSetSemantics {} else Modifier),
+        detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph, deck = several,
+        onSwipeAway = { NeedsYouDismissal.dismiss(context, NeedsYouLogic.dismissalKeys(TrashingSessions.without(openRows, trashing) { it.text("id") })) }) {
         if (several) unfolded = true else go(waiting)
     }
-    if (stacked) NeedsYouStack(top, { unfolded = false }) {
+    val all = lastEntries[0].orEmpty()
+    if (stackUp && all.size > 1) {
         // At most five; the last says "+N" for the ones behind it, as the folded bar does.
-        val shown = entries.take(NeedsYouLogic.unfoldedLimit)
-        shown.forEachIndexed { index, entry ->
-            NeedsYouBar(entry.text, null, if (entry.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint,
+        val cards = all.take(NeedsYouLogic.unfoldedLimit)
+        NeedsYouStack(top, stackState, cards.size, { unfolded = false }) { index, motion ->
+            val entry = cards[index]
+            NeedsYouBar(entry.text, if (entry.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint, motion,
                 detail = entry.detail, since = entry.since, glyph = entry.glyph,
-                more = if (index == shown.lastIndex) entries.size - shown.size else 0,
+                more = if (index == cards.lastIndex) all.size - cards.size else 0,
                 onFold = if (index == 0) ({ unfolded = false }) else null) { go(entry) }
         }
     }
+    }
 }
 
-/** The unfolded capsules over everything from [top] (the folded bar's place in the window) down, on a scrim a press on which folds
- * them — never reaching the row under it. */
+/** The unfolded cards over everything from [top] (the folded bar's place in the window) down, on a scrim a press on which folds
+ * them — never reaching the row under it. The first stands where the folded bar stood; each after it comes out from under the one
+ * above, 40 ms after it, and goes back the same way (08-motion ①②), while the scrim fades. */
 @Composable
-private fun NeedsYouStack(top: Int, fold: () -> Unit, capsules: @Composable ColumnScope.() -> Unit) {
+private fun NeedsYouStack(top: Int, state: MutableTransitionState<Boolean>, count: Int, fold: () -> Unit,
+    card: @Composable (index: Int, motion: Modifier) -> Unit) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Popup(popupPositionProvider = WholeWindow, onDismissRequest = fold, properties = PopupProperties(focusable = true)) {
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (dark) 0.55f else 0.18f))
-            .clickable(remember { MutableInteractionSource() }, null, onClickLabel = NeedsYouLogic.foldLabel, onClick = fold)
-            .testTag("needs-you-scrim")) {
-            Column(Modifier.offset { IntOffset(0, top) }.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp), content = capsules)
+        AnimatedVisibility(state, enter = fadeIn(spring()), exit = fadeOut(spring())) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (dark) 0.55f else 0.18f))
+                .clickable(remember { MutableInteractionSource() }, null, onClickLabel = NeedsYouLogic.foldLabel, onClick = fold)
+                .testTag("needs-you-scrim")) {
+                Column(Modifier.offset { IntOffset(0, top) }.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    repeat(count) { index ->
+                        val motion = if (index == 0) Modifier else Modifier.animateEnterExit(
+                            enter = slideInVertically(spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) { -it * index } +
+                                fadeIn(tween(200, delayMillis = 40 * (index - 1))) + scaleIn(initialScale = 0.96f),
+                            exit = slideOutVertically(spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessMedium)) { -it * index } +
+                                fadeOut(tween(160)) + scaleOut(targetScale = 0.96f))
+                        card(index, motion)
+                    }
+                }
+            }
         }
     }
 }
@@ -163,11 +213,9 @@ private object WholeWindow : PopupPositionProvider {
 }
 
 /**
- * The needs-you bar (iOS `NeedsYouBannerView`): a capsule under the conversation's header saying something is waiting on the
- * reader, and taking them to it. Inside a conversation holding a question that stops no turn it points into that conversation
- * ("1 open question below"); otherwise at the session — or the owner item's card — that has waited longest elsewhere. One style
- * for both: they differ in their words, their mark and their chevron only. Deliberately still — no pulse — since what it names
- * can wait for hours above a transcript somebody is reading.
+ * The needs-you bar (iOS `NeedsYouBannerView`): a capsule over the session list saying something is waiting on the reader in
+ * another session — or an owner item's card — and taking them to it; the whole capsule is the press. Deliberately still — no
+ * pulse — since what it names can wait for hours.
  *
  * A capsule, not a band (the owner, 2026-10-21, `docs/mocks/needs-you-capsule`): the amber is one 30 dp circle — the landing
  * head's (`ProjectLandingHead`) — whose mark says which kind is waiting, never a wash under the words; the words are two lines,
@@ -176,28 +224,30 @@ private object WholeWindow : PopupPositionProvider {
  * the bar, and the gap around the capsule must not show it.
  */
 @Composable
-internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, modifier: Modifier = Modifier, detail: String? = null,
+internal fun NeedsYouBar(text: String, hint: String, modifier: Modifier = Modifier, detail: String? = null,
     since: String? = null, more: Int = 0, glyph: NeedsYouGlyph = NeedsYouGlyph.QUESTION, deck: Boolean = false,
-    onFold: (() -> Unit)? = null, onPress: () -> Unit) {
+    onFold: (() -> Unit)? = null, onSwipeAway: (() -> Unit)? = null, onPress: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val amber = LocalOrbitColors.current.needsYou
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val press = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPress() }
     // Nothing under it: the rows go on behind the capsule, which a shadow lifts off them (04-floating). Several waiting, two edges
     // of the capsules behind it show under it as a stack of notifications does, and the bar keeps their room.
-    Box(modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 6.dp + if (deck) DECK_REACH else 0.dp)
+    Box(modifier.fillMaxWidth().then(if (onSwipeAway != null) Modifier.swipesAway(onSwipeAway) else Modifier)
+        .padding(start = 16.dp, end = 16.dp, bottom = 6.dp + if (deck) DECK_REACH else 0.dp)
         .testTag("needs-you-bar")) {
         if (deck) NeedsYouDeck()
         // Read as its words, a button, and what the press does (iOS `accessibilityHint`).
-        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).shadow(8.dp, CircleShape).clip(CircleShape)
+        // A notification's size and corners (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/09-height`): about 70 dp, 24 dp.
+        Row(Modifier.fillMaxWidth().heightIn(min = CARD_HEIGHT).shadow(8.dp, CardShape).clip(CardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant),
             verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).heightIn(min = 44.dp).clickable(onClickLabel = hint, role = Role.Button, onClick = press)
-                .padding(start = 7.dp, end = if (onFold == null) 16.dp else 0.dp, top = 5.dp, bottom = 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).heightIn(min = CARD_HEIGHT).clickable(onClickLabel = hint, role = Role.Button, onClick = press)
+                .padding(start = 14.dp, end = if (onFold == null) 16.dp else 0.dp, top = 13.dp, bottom = 13.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 // The one place the amber is; the words stay the surface's own — amber words on amber were the band's trap.
-                Box(Modifier.size(30.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(glyph.drawable), null, Modifier.size(16.dp).testTag("needs-you-bar-glyph:${glyph.name}"), tint = amber)
+                Box(Modifier.size(38.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(glyph.drawable), null, Modifier.size(20.dp).testTag("needs-you-bar-glyph:${glyph.name}"), tint = amber)
                 }
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -209,13 +259,9 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
                         since?.let { NeedsYouAge(it) }
                     }
                     detail?.let {
-                        Text(it, Modifier.testTag("needs-you-bar-detail"), style = MaterialTheme.typography.bodySmall, color = muted,
+                        Text(it, Modifier.testTag("needs-you-bar-detail"), style = MaterialTheme.typography.bodyMedium, color = muted,
                             maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                }
-                chevron?.let {
-                    Icon(painterResource(R.drawable.ic_chevron_down), null,
-                        Modifier.size(14.dp).rotate(if (it == NeedsYouChevron.UP) 180f else 0f).testTag("needs-you-bar-chevron:${it.name}"), tint = muted)
                 }
             }
             // The ↑ on the first capsule of the unfolded stack: a press of its own, folding them back.
@@ -230,6 +276,85 @@ internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, 
     }
 }
 
+/** Pushed up, the bar goes away (iOS `SwipeAway`): it follows the finger up and fades, and past 22 dp — or flicked — it is put away
+ * until something new is waiting; short of that it springs back. A tap is still the press. TalkBack gets a Dismiss action. */
+private fun Modifier.swipesAway(dismiss: () -> Unit): Modifier = composed {
+    val density = LocalDensity.current
+    val lift = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val far = with(density) { 22.dp.toPx() }
+    val fade = with(density) { 60.dp.toPx() }
+    this.offset { IntOffset(0, lift.value.roundToInt()) }
+        .graphicsLayer {
+            alpha = 1f - (-lift.value / fade).coerceIn(0f, 0.8f)
+            // Going, it shrinks a little as it rises (08-motion ③).
+            val shrink = 1f - (-lift.value / (fade * 12f)).coerceIn(0f, 0.08f)
+            scaleX = shrink; scaleY = shrink
+            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+        }
+        .draggable(rememberDraggableState { delta -> scope.launch { lift.snapTo((lift.value + delta).coerceAtMost(0f)) } },
+            Orientation.Vertical, onDragStopped = { velocity ->
+                if (lift.value < -far || velocity < -1200f) {
+                    lift.animateTo(-fade * 1.4f, spring())
+                    dismiss()
+                    lift.snapTo(0f)
+                } else lift.animateTo(0f, spring())
+            })
+        .semantics { customActions = listOf(CustomAccessibilityAction(NeedsYouLogic.dismissLabel) { dismiss(); true }) }
+}
+
+/** What the bar was swiped away from (`NeedsYouLogic.dismissalKeys`), kept on this device only — a swipe tells the server nothing. */
+internal object NeedsYouDismissal {
+    private const val PREFS = "orbit.needs-you"
+    private const val KEY = "dismissed"
+    private var owner: Context? = null
+    private val state = MutableStateFlow<Set<String>>(emptySet())
+
+    fun keys(context: Context): StateFlow<Set<String>> {
+        val app = context.applicationContext
+        if (owner !== app) {
+            owner = app
+            state.value = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet(KEY, emptySet()).orEmpty().toSet()
+        }
+        return state
+    }
+
+    fun dismiss(context: Context, keys: Set<String>) {
+        keys(context)
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putStringSet(KEY, keys).apply()
+        state.value = keys
+    }
+}
+
+/** The menu button's icon, carrying how many are waiting on you while the bar is swiped away (iOS `DrawerToggleButton`), so what
+ * the bar said is not lost. */
+@Composable
+internal fun NeedsYouMenuIcon(app: OrbitApplication, description: String) {
+    val context = LocalContext.current
+    val openRows by remember(app) {
+        app.realtime.state.map { it.directory?.sessions?.get("open").orEmpty() }.distinctUntilChanged()
+    }.collectAsState(emptyList())
+    val trashing by app.trashing.ids.collectAsState()
+    val dismissed by remember(context) { NeedsYouDismissal.keys(context) }.collectAsState()
+    val waiting = remember(openRows, trashing, dismissed) {
+        val rows = TrashingSessions.without(openRows, trashing) { it.text("id") }
+        if (NeedsYouLogic.isDismissed(rows, null, dismissed)) rows.count(NeedsYouLogic::needsYou) else 0
+    }
+    if (waiting == 0) {
+        Icon(painterResource(R.drawable.ic_menu), description)
+        return
+    }
+    BadgedBox(badge = {
+        Badge(Modifier.testTag("needs-you-menu-badge"), containerColor = LocalOrbitColors.current.needsYou, contentColor = Color.White) {
+            Text("$waiting")
+        }
+    }) { Icon(painterResource(R.drawable.ic_menu), description) }
+}
+
+/** The card: a notification's height and corners (iOS `cardHeight`, `card`). */
+private val CARD_HEIGHT = 70.dp
+private val CardShape = RoundedCornerShape(24.dp)
+
 /** How far the deck shows below the capsule (iOS `deckReach`). */
 private val DECK_REACH = 13.dp
 
@@ -239,9 +364,9 @@ private fun BoxScope.NeedsYouDeck() {
     // The capsule's own surface, a step and two steps back towards the page's.
     val capsule = MaterialTheme.colorScheme.surfaceVariant
     val page = MaterialTheme.colorScheme.surface
-    Box(Modifier.matchParentSize().padding(horizontal = 26.dp).offset(y = DECK_REACH).clip(CircleShape)
+    Box(Modifier.matchParentSize().padding(horizontal = 26.dp).offset(y = DECK_REACH).clip(CardShape)
         .background(lerp(capsule, page, 0.6f)).testTag("needs-you-bar-deck"))
-    Box(Modifier.matchParentSize().padding(horizontal = 12.dp).offset(y = 7.dp).shadow(4.dp, CircleShape).clip(CircleShape)
+    Box(Modifier.matchParentSize().padding(horizontal = 12.dp).offset(y = 7.dp).shadow(4.dp, CardShape).clip(CardShape)
         .background(lerp(capsule, page, 0.3f)))
 }
 
@@ -257,7 +382,7 @@ private fun NeedsYouAge(since: String) {
 }
 
 /** The drawable for each mark (iOS `NeedsYouGlyph.symbol`). */
-private val NeedsYouGlyph.drawable: Int get() = when (this) {
+internal val NeedsYouGlyph.drawable: Int get() = when (this) {
     NeedsYouGlyph.MERGE -> R.drawable.ic_merge
     NeedsYouGlyph.QUESTION -> R.drawable.ic_question_bubble
     NeedsYouGlyph.WARNING -> R.drawable.ic_warning

@@ -324,9 +324,13 @@ jobs:
         id: probe
         continue-on-error: true
         env:
-          # XCUITest's clicks, the same path a user's press takes. The probe driver inside the app
-          # (`MODE=probe`) is the fallback for a host whose automation mode is off.
-          MODE: ui
+          # The in-app driver: it selects the source list's rows the way a click does (the same
+          # selection change SwiftUI's outline coordinator reads), which is what the sidebar fix's
+          # own evidence ran. The XCUITest driver (`MODE=ui`) cannot be used here: on this Mac the
+          # app's accessibility session goes empty once the Wiki page opens (every query answers
+          # nothing while the app keeps serving the page), so a UI run presses three rows and then
+          # has nothing left to press.
+          MODE: probe
           CLICKS: "200"
           CHURN: "0.1"
           WIKI_FLICKER: "1"
@@ -344,8 +348,10 @@ jobs:
           echo "probe=${{ steps.probe.outcome }}" > "$RUN/outcomes.txt"
           echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$RUN/outcomes.txt"
           echo "sha=${{ github.sha }}" >> "$RUN/outcomes.txt"
-          # The whole xcodebuild log is tens of megabytes; the summary and the driver's own lines
-          # are what a reader needs, and the branch that carries them is rewritten each run.
+          # The whole xcodebuild log is tens of megabytes, and the result bundle is thousands of
+          # files; the summary and the driver's own lines are what a reader needs, and the branch
+          # that carries them is rewritten each run.
+          rm -rf "$RUN"/*.xcresult
           find "$RUN" -name '*.log' -size +1M -exec gzip -9 {} \;
           ls -la "$RUN"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

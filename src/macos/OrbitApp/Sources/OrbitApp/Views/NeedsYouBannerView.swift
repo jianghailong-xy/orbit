@@ -12,21 +12,11 @@ import OrbitKit
 /// where the thing is, so finding it shouldn't be the user's job. The drawer's per-agent badge stays
 /// as the quiet answer to "which workspace", and nothing else repeats this fact.
 ///
-/// IT NOW ALSO POINTS DOWN, INSIDE THE SESSION YOU ARE READING
-/// -----------------------------------------------------------
-/// The bar used to have nothing to say about the session on screen, and the reason written here was
-/// that "its own approval card already renders inline at the tail of its transcript, so a bar
-/// pointing at it would point at itself". That reason belongs to an APPROVAL: it stops the turn, so
-/// nothing can arrive below it and it cannot leave the screen. The two cards a project's ruler is
-/// decided from stop nothing — the coordinator keeps working and its messages push them up — so a
-/// question delivered forty messages ago is off-screen and unfindable, which is precisely what this
-/// bar exists to fix. A press reveals that card and opens its review when available.
-///
-/// The in-conversation question WINS when both exist. Not because it is more urgent — a session
-/// blocked elsewhere is stopped work — but because the bar can only carry one destination, this
-/// one's destination is already on screen, and the other signal is still on every list, every other
-/// console and the drawer's own badge. Leaving the conversation to find it would also lose the
-/// reader's place in the one they are in.
+/// NOT IN A CONVERSATION (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/07-console-one-capsule`)
+/// -------------------------------------------------------------------------------------------
+/// A conversation shows only what waits in it, and says that in the capsule in its nav bar
+/// (`TranscriptView.waitingCapsule`, from `ConsoleModel.waitingBelow`), where the bar used to point
+/// down into the transcript. What waits elsewhere is this bar's, on the lists and pages around them.
 ///
 /// A CAPSULE, NOT A BAND (the owner, 2026-10-21, board `docs/mocks/needs-you-capsule`)
 /// ---------------------------------------------------------------------------------
@@ -37,10 +27,8 @@ import OrbitKit
 /// do: the amber is the 30pt circle the Landing head marks with (`ProjectLandingRow.mark`), one mark
 /// per kind, and the words are two lines — what is waiting, and where — with how long it has waited.
 ///
-/// Mounted at the top of the screen it is about: a conversation's safe-area bar on iOS 26, which the
-/// transcript's scroll-edge effect runs on under as it does under the nav bar
-/// (`floatsOverTranscript`), and a top inset over the Sessions list. With nothing waiting the body is
-/// empty, which insets by zero — the bar is absent from the layout rather than present at zero height.
+/// Mounted at the top of the Sessions list and, from the shell, over pages with none of their own.
+/// With nothing waiting the body is empty — the bar is absent rather than present at zero height.
 ///
 /// FLOATING, NOT A STRIP (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`)
 /// ------------------------------------------------------------------------------------------
@@ -58,19 +46,10 @@ import OrbitKit
 /// same view over the page (`needsYouOverPage`).
 struct NeedsYouBannerView: View {
     @Environment(AppModel.self) private var model
-    /// Whether the transcript scrolls on under the bar with the system's scroll-edge effect softening
-    /// it (a conversation's safe-area bar, iOS 26). Anywhere else the rows would read through the gap
-    /// around the capsule, so it stands on the page's own colour.
-    @Environment(\.floatsOverTranscript) private var floats
     /// The session on screen, left out of the cross-session count — its own approval card already
     /// renders inline at the tail of its transcript, so a bar pointing at it would point at itself.
     /// nil from a list, which shows no one session.
     var excluding: String?
-    /// Questions in THIS conversation that stop no turn, if any. Nil from a list, and from a console
-    /// holding none.
-    var below: WaitingBelow? = nil
-    /// The console reveals this row and opens its existing review, if it has one.
-    var onOpenBelow: ((String) -> Void)? = nil
     /// Whether a project's sessions page opens in this shell's session column (an iPad's wide
     /// shell) rather than as a page of its own — where the merge into main's card is.
     var projectInColumn = false
@@ -80,72 +59,98 @@ struct NeedsYouBannerView: View {
     /// The bar's own width, for the margin that lines it up with the nav bar's buttons.
     @State private var width: CGFloat = 0
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Unfolded to one capsule per waiting conversation. Folds again after a press goes somewhere,
     /// so the page it is left on is as it was.
     @State private var unfolded = false
+    /// The first card's height, which the unfolded stack hangs below.
+    @State private var firstHeight: CGFloat = NeedsYouBannerView.cardHeight
 
     var body: some View {
-        if let below {
-            // The chevron points where the words say the card is: a card placed by its own moment
-            // can be up the conversation from a reader at the live tail, which is the ordinary case
-            // here. Unknown (nothing has reported the reader's place) keeps the old down — the
-            // press scrolls to the row either way.
-            chrome {
-                bar(text: below.text, detail: nil, since: nil, more: 0, glyph: below.glyph,
-                    chevron: below.side == .above ? "chevron.up" : "chevron.down",
-                    // "what is waiting", not "the question": the bar counts the exceptions too (an
-                    // escalation that became the owner's, a pause only they can lift), and a reader
-                    // told to look for a question finds a card reading "Escalated to you" — the same
-                    // wrong noun the line above stopped using.
-                    hint: "Shows what is waiting in this conversation") {
-                    onOpenBelow?(below.rowID)
-                }
-            }
-        } else if let banner = model.needsYouBanner(excluding: excluding) {
+        let banner = model.needsYouBanner(excluding: excluding)
+        content(banner)
+            // ④ It drops in from behind the nav bar and lifts away again (the owner, 2026-11-15,
+            // docs/mocks/needs-you-capsule/08-motion), rather than appearing on the spot.
+            .animation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.3, bounce: 0),
+                       value: banner != nil)
+    }
+
+    @ViewBuilder private func content(_ banner: NeedsYouBanner?) -> some View {
+        if let banner {
             // Several waiting, unfolded (the owner, 2026-11-13, option B of
-            // docs/mocks/needs-you-capsule/03-expand.html): one capsule per conversation, the first
+            // docs/mocks/needs-you-capsule/03-expand.html): one card per conversation, the first
             // the one the folded bar names and where the folded bar stood, carrying the ↑ that folds
-            // them back. The rest hang over the page on a scrim (04-floating) rather than pushing it.
+            // them back. The rest hang over the page on a scrim (04-floating), sliding out from
+            // under the first (08-motion ①) and back under it to fold (②).
             // An arrival never unfolds: its press goes to the newcomer.
             let several = banner.count > 1 && !banner.arriving
-            let entries = unfolded && several ? model.needsYouEntries(excluding: excluding) : []
-            if entries.count > 1 {
-                // At most five; the last says "+N" for the ones behind it, as the folded bar does.
-                let shown = Array(entries.prefix(NeedsYouLogic.unfoldedLimit))
-                chrome(deck: true) {
-                    bar(entries[0], more: 0, fold: { setUnfolded(false) })
-                        .overlay(alignment: .top) {
-                            VStack(spacing: 6) {
-                                ForEach(Array(shown.enumerated().dropFirst()), id: \.element.target.id) { index, entry in
-                                    bar(entry, more: index == shown.count - 1 ? entries.count - shown.count : 0)
-                                }
-                            }
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, 44 + 6)
+            let entries = several ? model.needsYouEntries(excluding: excluding) : []
+            let stacked = unfolded && entries.count > 1
+            // At most five; the last says "+N" for the ones behind it, as the folded bar does.
+            let shown = Array(entries.prefix(NeedsYouLogic.unfoldedLimit))
+            chrome(deck: banner.count > 1) {
+                Group {
+                    if stacked {
+                        bar(entries[0], more: 0, fold: { setUnfolded(false) })
+                    } else {
+                        // No chevron: the whole card is the press, as the nav bar's question
+                        // capsule is — and where it goes is somewhere else, which the words already
+                        // say. With more than one waiting the press unfolds them instead, and the
+                        // deck under it says so.
+                        bar(text: banner.text, detail: banner.detail, since: banner.since, more: banner.more,
+                            glyph: banner.glyph,
+                            hint: several ? "Shows all \(banner.count) waiting on you" : hint(for: banner),
+                            deck: banner.count > 1, arriving: banner.arriving) {
+                            if several { setUnfolded(true) } else { open(banner) }
                         }
-                } scrim: {
-                    scrim
-                }
-            } else {
-                // No chevron: the whole capsule is the press, as the nav bar's question capsule is —
-                // and where it goes is somewhere else, which the words already say. With more than
-                // one waiting the press unfolds them instead, and the deck under it says so.
-                chrome(deck: banner.count > 1) {
-                    bar(text: banner.text, detail: banner.detail, since: banner.since, more: banner.more,
-                        glyph: banner.glyph, chevron: nil,
-                        hint: several ? "Shows all \(banner.count) waiting on you" : hint(for: banner),
-                        deck: banner.count > 1, arriving: banner.arriving) {
-                        if several { setUnfolded(true) } else { open(banner) }
+                        .swipesAway { model.dismissNeedsYou() }
                     }
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { firstHeight = $0 }
+                // Behind the first card, so the rest come out from under it; hung a card and a gap
+                // below its top. (An alignment guide on this background was ignored on the phone:
+                // the stack sat behind the first card, unseen — the 11-15 probe's frames.)
+                .background(alignment: .top) {
+                    if stacked {
+                        VStack(spacing: Self.stackGap) {
+                            ForEach(Array(shown.enumerated().dropFirst()), id: \.element.target.id) { index, entry in
+                                bar(entry, more: index == shown.count - 1 ? entries.count - shown.count : 0)
+                                    .transition(fromUnder(index))
+                            }
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                        .offset(y: firstHeight + Self.stackGap)
+                    }
+                }
+            } scrim: {
+                if stacked { scrim.transition(.opacity) }
             }
+            .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
         }
     }
+
+    /// Each card after the first comes out from under the one above it — from under the first,
+    /// a card's height and a gap per place — a touch smaller and clear, one after another (08-motion
+    /// ①); folding takes the same way back. With reduced motion, a fade.
+    private func fromUnder(_ index: Int) -> AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return AnyTransition.offset(y: -CGFloat(index) * (Self.cardHeight + Self.stackGap))
+            .combined(with: .scale(scale: 0.96, anchor: .top))
+            .combined(with: .opacity)
+            .animation(.spring(duration: 0.32, bounce: 0.15).delay(Double(index - 1) * 0.04))
+    }
+
+    /// The card's height, as iOS's own notifications are (09-height): two 15pt lines in 13pt of air.
+    static let cardHeight: CGFloat = 70
+    /// Between the unfolded cards.
+    private static let stackGap: CGFloat = 8
+    /// The card's corners, as a notification's.
+    static let cardCorner: CGFloat = 24
 
     /// One conversation's capsule in the unfolded stack: it opens its own.
     private func bar(_ entry: NeedsYouBanner, more: Int, fold: (() -> Void)? = nil) -> some View {
         bar(text: entry.text, detail: entry.detail, since: entry.since, more: more,
-            glyph: entry.glyph, chevron: nil, hint: hint(for: entry), fold: fold) {
+            glyph: entry.glyph, hint: hint(for: entry), fold: fold) {
             open(entry)
         }
     }
@@ -164,7 +169,9 @@ struct NeedsYouBannerView: View {
     }
 
     private func setUnfolded(_ value: Bool) {
-        withAnimation(.easeInOut(duration: 0.25)) { unfolded = value }
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.32, bounce: 0.15)) {
+            unfolded = value
+        }
     }
 
     private func hint(for entry: NeedsYouBanner) -> String {
@@ -188,7 +195,7 @@ struct NeedsYouBannerView: View {
     /// shows them all; `arriving` rings it amber while it says an approval that has just come;
     /// `fold` is the ↑ on the first capsule of the unfolded stack, a press of its own.
     private func bar(text: String, detail: String?, since: String?, more: Int, glyph: NeedsYouGlyph,
-                     chevron: String?, hint: String, deck: Bool = false, arriving: Bool = false,
+                     hint: String, deck: Bool = false, arriving: Bool = false,
                      fold: (() -> Void)? = nil, action: @escaping () -> Void) -> some View {
         HStack(spacing: 0) {
             Button {
@@ -197,17 +204,17 @@ struct NeedsYouBannerView: View {
                 PlatformHaptics.tap()
                 action()
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
                     // The Landing head's circle (`ProjectLandingRow.mark`): the one place the amber is.
                     // Never on the words — amber text on an amber wash was the legibility trap of the
-                    // band this replaced.
+                    // band this replaced. 38pt, as a notification's icon (09-height).
                     Image(systemName: glyph.symbol)
-                        .font(.orbitGlyph)
+                        .font(.orbitControl)
                         .foregroundStyle(.orange)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 38, height: 38)
                         .background(Color.orange.opacity(0.15), in: Circle())
                         .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 1) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(text)
                                 .font(.orbitSubtext.weight(.semibold))
@@ -225,22 +232,18 @@ struct NeedsYouBannerView: View {
                         }
                         if let detail {
                             Text(detail)
-                                .font(.orbitLabel)
+                                .font(.orbitSubtext)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                     }
-                    if let chevron {
-                        Image(systemName: chevron)
-                            .font(.orbitLabel.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
                 }
-                // Concentric: the circle stands in 7pt from the capsule's round end.
-                .padding(.leading, 7)
+                // A notification's proportions (the owner, 2026-11-15, 09-height): 14pt in, 13pt
+                // above and below two 15pt lines — about 70pt, as iOS's own.
+                .padding(.leading, 14)
                 .padding(.trailing, fold == nil ? 16 : 0)
-                .padding(.vertical, 5)
-                .frame(minHeight: 44)
+                .padding(.vertical, 13)
+                .frame(minHeight: Self.cardHeight)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -268,11 +271,14 @@ struct NeedsYouBannerView: View {
         .overlay {
             // An approval that has just arrived: the amber it came in with, round the glass
             // rather than over it, for the seconds the bar says it.
-            if arriving {
-                Capsule().strokeBorder(Color.orange.opacity(0.75), lineWidth: 1.5)
-                    .shadow(color: .orange.opacity(0.35), radius: 6)
-                    .allowsHitTesting(false)
-            }
+            // It breathes once as it comes in (08-motion ④), then holds; always drawn, so the
+            // change of `arriving` is what the breath runs on.
+            Self.card.strokeBorder(Color.orange.opacity(0.75), lineWidth: 1.5)
+                .shadow(color: .orange.opacity(0.35), radius: 6)
+                .phaseAnimator(reduceMotion ? [1.0] : [1.0, 0.35, 1.0], trigger: arriving) { ring, glow in
+                    ring.opacity(arriving ? glow : 0)
+                } animation: { _ in .easeInOut(duration: 0.3) }
+                .allowsHitTesting(false)
         }
         .animation(.easeInOut(duration: 0.3), value: arriving)
         // Lifted off the page: the rows scroll on behind it.
@@ -280,20 +286,22 @@ struct NeedsYouBannerView: View {
         .background(alignment: .top) { if deck { deckEdges } }
     }
 
-    /// Several waiting: two edges of the capsules behind this one, showing under it as a stack of
+    /// The card's shape: a notification's continuous corners.
+    static let card = RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
+
+    /// Several waiting: two edges of the cards behind this one, showing under it as a stack of
     /// notifications does — 7 and 13pt below, standing in 12 and 26pt from its ends.
     private var deckEdges: some View {
         ZStack(alignment: .top) {
-            Capsule().fill(Color(uiColor: .secondarySystemBackground).opacity(0.7))
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+            Self.card.fill(Color(uiColor: .secondarySystemBackground).opacity(0.7))
+                .overlay(Self.card.strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
                 .padding(.horizontal, 26)
                 .offset(y: Self.deckReach)
-            Capsule().fill(Color(uiColor: .secondarySystemBackground))
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+            Self.card.fill(Color(uiColor: .secondarySystemBackground))
+                .overlay(Self.card.strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
                 .padding(.horizontal, 12)
                 .offset(y: 7)
         }
-        .frame(height: 44)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -305,10 +313,6 @@ struct NeedsYouBannerView: View {
     /// Where the bar stands: in from the edges by the margin the nav bar sets its own buttons in —
     /// UIKit's 20pt on a Plus- or Max-width phone, 16pt below that — so a capsule's ends line up
     /// under the back button and ⋯ (measured on the owner's 440pt phone: 20–64 and 376–420).
-    private func chrome<Content: View>(deck: Bool = false, @ViewBuilder _ content: () -> Content) -> some View {
-        chrome(deck: deck, content) { EmptyView() }
-    }
-
     private func chrome<Content: View, Scrim: View>(deck: Bool, @ViewBuilder _ content: () -> Content,
                                                     @ViewBuilder scrim: () -> Scrim) -> some View {
         content()
@@ -328,11 +332,10 @@ struct NeedsYouBannerView: View {
             .background { surface }
     }
 
-    /// Nothing under it where it floats — over the transcript, over the Sessions list (04-floating:
-    /// the rows go on behind it, under the nav bar's own soft edge) and over a page. Only a
-    /// conversation before iOS 26, where it is the inset it always was, stands on the page's colour.
+    /// Nothing under it where it floats — over the Sessions list (04-floating: the rows go on behind
+    /// it, under the nav bar's own soft edge) and over a page.
     @ViewBuilder private var surface: some View {
-        if floats || overList {
+        if overList {
             Color.clear
         } else {
             Color(uiColor: .systemBackground)
@@ -371,6 +374,50 @@ private struct NeedsYouOverPage: ViewModifier {
     }
 }
 
+/// Pushed up, the bar goes away (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/06-list-floats`):
+/// it follows the finger up and fades, and past half its height — or flicked — it is put away until
+/// something new is waiting (`AppModel.dismissNeedsYou`); short of that it springs back. A tap is
+/// still the press, and a sideways or downward drag does nothing.
+private struct SwipeAway: ViewModifier {
+    let dismiss: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var lift: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: lift)
+            // Going, it shrinks a little as it rises (08-motion ③).
+            .scaleEffect(1 - min(0.08, -lift / 1000), anchor: .top)
+            .opacity(1 - min(0.8, Double(-lift) / 60))
+            .gesture(
+                DragGesture(minimumDistance: 10)
+                    .onChanged { value in
+                        guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                        lift = min(0, value.translation.height)
+                    }
+                    .onEnded { value in
+                        let away = value.translation.height < -22 || value.predictedEndTranslation.height < -60
+                        if away {
+                            PlatformHaptics.tap()
+                            // On up and away, and only then is it put away — the list closes the
+                            // room it kept once the card has gone (the first row's own animation).
+                            // Not set back: the card leaves with it.
+                            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .spring(duration: 0.3, bounce: 0)) {
+                                lift = -80
+                            } completion: { dismiss() }
+                        } else {
+                            withAnimation(.spring(duration: 0.3)) { lift = 0 }
+                        }
+                    }
+            )
+            .accessibilityAction(named: "Dismiss") { dismiss() }
+    }
+}
+
+private extension View {
+    func swipesAway(_ dismiss: @escaping () -> Void) -> some View { modifier(SwipeAway(dismiss: dismiss)) }
+}
+
 /// How long the thing the bar names has waited — "12m", "2h" — kept current while it sits there.
 /// The words of a duration that is still running (`RelativeTime.elapsed`), not of an event.
 private struct NeedsYouAge: View {
@@ -387,7 +434,7 @@ private struct NeedsYouAge: View {
     }
 }
 
-private extension NeedsYouGlyph {
+extension NeedsYouGlyph {
     /// The SF Symbol for each mark, filled where the symbol has a fill, as the Landing head's are.
     var symbol: String {
         switch self {
@@ -406,10 +453,10 @@ private extension View {
     /// page colour the bar stands on there.
     @ViewBuilder func needsYouCapsule() -> some View {
         if #available(iOS 26.0, *) {
-            glassEffect(.regular.interactive(), in: .capsule)
+            glassEffect(.regular.interactive(), in: NeedsYouBannerView.card)
         } else {
-            background(Color(uiColor: .secondarySystemBackground), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+            background(Color(uiColor: .secondarySystemBackground), in: NeedsYouBannerView.card)
+                .overlay(NeedsYouBannerView.card.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
         }
     }
 }

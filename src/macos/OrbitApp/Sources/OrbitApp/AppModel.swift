@@ -49,11 +49,6 @@ final class AppModel {
     var user: User? {
         didSet { refreshAvatar() }
     }
-    private var pendingDefaultModels: [String: String] = [:]
-    @ObservationIgnored private var defaultModelWrite: Task<Void, Never>?
-    var defaultModels: [String: String] {
-        (user?.preferences?.defaultModels ?? [:]).merging(pendingDefaultModels) { _, picked in picked }
-    }
     /// The account's profile photo, once fetched — drawn wherever the account's avatar is
     /// (`AccountAvatar`). Nil while the account has none, or before it has arrived; the name's first
     /// letter stands in.
@@ -332,6 +327,14 @@ final class AppModel {
     /// amber card of its own beside the bar. Cleared again once those seconds have passed, which is
     /// the body pass that puts the bar back to the count.
     private(set) var needsYouArrival: NeedsYouArrival?
+    /// What the needs-you bar was swiped away from (`NeedsYouLogic.dismissalKeys`, the owner,
+    /// 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats): it stays away until something new is
+    /// waiting. Kept on this device only — a swipe is "not now", and tells the server nothing.
+    private(set) var needsYouDismissed: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: AppModel.needsYouDismissedKey) ?? []) {
+        didSet { UserDefaults.standard.set(Array(needsYouDismissed), forKey: AppModel.needsYouDismissedKey) }
+    }
+    private static let needsYouDismissedKey = "needsYou.dismissed"
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
@@ -655,7 +658,6 @@ final class AppModel {
         consoleRegistry?.rememberDefaultPermissionMode = { [weak self] raw in
             self?.rememberDefaultPermissionMode(raw)
         }
-        consoleRegistry?.accountDefaultModels = { [weak self] in self?.defaultModels ?? [:] }
         consoleRegistry?.managedRunner = managedRunnerModel
         consoleRegistry?.seedSessionContext = { [weak self] console in
             guard let self, let session = self.session(id: console.sessionID) else { return }
@@ -694,34 +696,6 @@ final class AppModel {
         guard let api else { return }
         do { user = try await api.updatePreferences(req) }
         catch { errorText = "Couldn't save preferences." }
-    }
-
-    /// Keep a model pick available to the next draft immediately, then sync it. Remembered per engine
-    /// and provider — `<engine>:<provider>` (docs/provider-engine-contract.md §6.5): one key's model on
-    /// Claude Code is not its model on DeepSeek Harness. Serialize writes so quickly choosing two models
-    /// cannot leave the account remembering the older choice.
-    func rememberDefaultModel(_ model: String, engine: String, provider: String) {
-        let key = AgentDefaults.defaultModelKey(engine: engine, provider: provider)
-        rememberDefaultModel(model, key: key)
-    }
-
-    private func rememberDefaultModel(_ model: String, key provider: String) {
-        guard let api, defaultModels[provider] != model else { return }
-        pendingDefaultModels[provider] = model
-        let previous = defaultModelWrite
-        let generation = apiGeneration
-        defaultModelWrite = Task {
-            await previous?.value
-            guard generation == apiGeneration else { return }
-            if let updated = try? await api.updatePreferences(
-                UpdatePreferencesRequest(defaultModels: [provider: model])),
-               generation == apiGeneration {
-                user = updated
-                if pendingDefaultModels[provider] == model {
-                    pendingDefaultModels.removeValue(forKey: provider)
-                }
-            }
-        }
     }
 
     /// Persist the composer's last-picked reasoning effort as the account default (synced across
@@ -919,9 +893,6 @@ final class AppModel {
 
     func logout() {
         apiGeneration &+= 1
-        pendingDefaultModels = [:]
-        defaultModelWrite?.cancel()
-        defaultModelWrite = nil
         pollTask?.cancel()
         pollTask = nil
         appPoll = nil
@@ -1516,7 +1487,26 @@ final class AppModel {
     /// the caller should nudge a refresh.
     private func mergeSessionSummary(_ summary: ControlSessionSummary) -> Bool {
         patchSessionProjectRelation(summary)
-        return applySessionRow(OpenRowChange.merging(summary, into: sessions))
+        let merged = applySessionRow(OpenRowChange.merging(summary, into: sessions))
+        patchCoordinatorHandoff(summary)
+        return merged
+    }
+
+    /// The coordinator handoff (docs/coordinator-handoff.md) on every loaded copy of the row, by the
+    /// project relation's rule: the outgoing coordinator leaves Open as its handoff completes, and its
+    /// open console still has to show the banner that leads to the successor. A row held nowhere is
+    /// read again when a console has it open.
+    private func patchCoordinatorHandoff(_ summary: ControlSessionSummary) {
+        guard summary.coordinatorHandoff != nil || summary.coordinatorHandoffReceived != nil else { return }
+        if let index = sessions.firstIndex(where: { $0.id == summary.id }) {
+            let merged = sessions[index].applyingCoordinatorHandoff(summary)
+            if merged != sessions[index] { applySessionRow(.replace(index: index, row: merged)) }
+        }
+        if let cached = sessionDetails.resolve(summary.id) {
+            sessionDetails.store(cached.applyingCoordinatorHandoff(summary))
+        } else if consoleRegistry?.peek(summary.id) != nil {
+            refreshUnlistedSession(summary.id, adoptingAgent: false)
+        }
     }
 
     /// Relation metadata has a different membership rule from run/lifecycle state: a Project can
@@ -2277,8 +2267,26 @@ final class AppModel {
     /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
     /// the Open list, which `applySessionSnapshot` already narrowed.
     func needsYouBanner(excluding focused: String?) -> NeedsYouBanner? {
-        NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused, now: Date())
-            ?? NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+        if let arriving = NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused,
+                                                 now: Date()) {
+            return arriving
+        }
+        if NeedsYouLogic.isDismissed(waiting: needsYouSessions, excluding: focused, dismissed: needsYouDismissed) {
+            return nil
+        }
+        return NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+    }
+
+    /// The bar swiped away: everything waiting now is put away until something new joins it.
+    func dismissNeedsYou() {
+        needsYouDismissed = NeedsYouLogic.dismissalKeys(waiting: needsYouSessions)
+        needsYouArrival = nil
+    }
+
+    /// How many are waiting while the bar is swiped away — the count the drawer's button carries
+    /// then, so what the bar said is not lost. Zero while the bar is showing.
+    var needsYouPutAwayCount: Int {
+        NeedsYouLogic.isDismissed(waiting: needsYouSessions, dismissed: needsYouDismissed) ? needsYouSessions.count : 0
     }
 
     #if os(iOS)
@@ -2296,6 +2304,8 @@ final class AppModel {
     func noteNeedsYouArrival(sessionID: String, line: String) {
         let arrival = NeedsYouArrival(sessionID: sessionID, line: line, at: Date())
         needsYouArrival = arrival
+        // Something new: a bar swiped away comes back for it.
+        needsYouDismissed = []
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(NeedsYouLogic.arrivalSeconds * 1_000_000_000))
             if self?.needsYouArrival == arrival { self?.needsYouArrival = nil }
@@ -3351,6 +3361,17 @@ final class AppModel {
             if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
             nav.selectConsole(node)
         }
+    }
+
+    /// A project row whose line says a member is waiting on you (owner 2026-11-14,
+    /// `SessionProjectSheet.RowTap.waitingMember`): that member's conversation, opened at the top of
+    /// its waiting card rather than at the transcript's end. A phone pushes it over the list, as it
+    /// pushes the coordinator; a column shell opens the project's page in its session column and
+    /// selects the member beside it, as the web desktop does.
+    func openWaitingMember(_ session: Session, project: SessionProjectAddress, push: Bool) {
+        consoleRegistry?.model(for: session.id, agentID: session.agent?.id ?? session.agentId).focusWaitingCard()
+        if !push { openProjectSessions(project) }
+        openProjectMember(session, push: push)
     }
 
     // MARK: session folders (docs/session-folders-move-design.md §3–4)

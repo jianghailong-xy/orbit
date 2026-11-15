@@ -20,6 +20,9 @@ import {
   REPORT_CLAMP,
 } from './OwnerConfirmationCard';
 import { bashCommandRules } from '@orbit/shared';
+import { shownQuestions } from '../lib/translation';
+import type { HeldDecision } from '../lib/approvalDecisions';
+import { UntranslatedDecisionFoot } from './TranslationParts';
 
 /**
  * What the card says once nothing is listening for its answer.
@@ -627,7 +630,35 @@ type OnDecide = (
   rememberRules?: PermissionRule[],
   /** The single-task card's Create and start (`CREATE_AND_START`); every other press leaves it out. */
   startAfterCreate?: boolean,
-) => void;
+  /** Settings › Translation's Send as written, after the decision was refused 422 TRANSLATION_FAILED. */
+  sendAsWritten?: boolean,
+) => unknown;
+
+/** "Couldn't translate, so it wasn't sent · Retry · Send as written" under a card whose decision the
+ *  server refused 422 TRANSLATION_FAILED: each press posts the held decision again. */
+function UntranslatedFoot({ id, held, onDecide }: { id: string; held: HeldDecision; onDecide: OnDecide }) {
+  const post = (sendAsWritten: boolean) => async () =>
+    onDecide(id, held.behavior, held.answers, held.message, held.rememberRules, held.startAfterCreate, sendAsWritten || undefined);
+  return <UntranslatedDecisionFoot onRetry={post(false)} onSendAsWritten={post(true)} />;
+}
+
+/** A question form's picks and typed answers seeded from a held decision's answers, so the card
+ *  that comes back after a 422 TRANSLATION_FAILED still shows what the owner answered. */
+function seededAnswers(questions: QItem[], held: HeldDecision | undefined) {
+  const sel: Record<string, string[]> = {};
+  const custom: Record<string, string> = {};
+  if (!held?.answers) return { sel, custom };
+  for (const qq of questions) {
+    const q = qq.question ?? '';
+    const given = held.answers[q];
+    if (!given) continue;
+    const labels = new Set((qq.options ?? []).map((o) => o?.label ?? ''));
+    sel[q] = given.filter((a) => labels.has(a));
+    const typed = given.filter((a) => !labels.has(a));
+    if (typed.length) custom[q] = typed.join(', ');
+  }
+  return { sel, custom };
+}
 
 /** An inline card for a pending tool-permission request: an interactive multiple-choice
  *  form for AskUserQuestion, otherwise a plain allow/deny (with a rich render for plans). */
@@ -640,12 +671,15 @@ export function ApprovalPanel({
   onDecline,
   rememberable = true,
   subagent = null,
+  untranslated,
 }: {
   approval: ApprovalInfo;
   /** For a card a SubAgent asked: its delegate call's description, '' when unknown. Drawn as a grey line above the
    *  card (docs/subagent-design.md §5.3). Null for a card the session asked itself. */
   subagent?: string | null;
   onDecide: OnDecide;
+  /** The decision last pressed here, refused 422 TRANSLATION_FAILED (`useApprovalDecisions`). */
+  untranslated?: HeldDecision;
   /** Whether this session's runtime honours remember rules (`approvalRememberOffered`). False
    *  drops "Always allow" and its shortcut: the card is Approve / Reject only. */
   rememberable?: boolean;
@@ -691,10 +725,14 @@ export function ApprovalPanel({
         onDecide={onDecide}
         answerable={answerable}
         onChatAbout={onChatAbout}
+        untranslated={untranslated}
       />
     );
   }
-  const plan = isPlan(approval) ? planText(approval.input) : '';
+  // Settings › Translation (3A): the plan and a tool card's description as the owner reads them.
+  const shown = approval.translation && !approval.translation.failed ? approval.translation : undefined;
+  const plan = isPlan(approval) ? (shown?.plan || planText(approval.input)) : '';
+  const translatedDescription = shown?.description;
   const dag = isDagChange(approval) ? dagInput(approval.input) : null;
   const batch = isBatch(approval) ? batchPreview(approval.input) : null;
   const create = createInput(approval);
@@ -791,10 +829,14 @@ export function ApprovalPanel({
         ) : provider ? (
           <ProviderWriteBody input={provider} />
         ) : (
-          <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
+          <>
+            {translatedDescription && <div className="approval-translated-desc">{translatedDescription}</div>}
+            <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
+          </>
         )}
       </div>
       {!answerable && <UnanswerableNote />}
+      {untranslated && answerable && <UntranslatedFoot id={approval.id} held={untranslated} onDecide={onDecide} />}
       <CardActions className="approval-actions">
         <CardActionButton
           tone="primary"
@@ -1394,18 +1436,24 @@ function QuestionForm({
   onDecide,
   answerable,
   onChatAbout,
+  untranslated,
 }: {
   approval: ApprovalInfo;
   onDecide: OnDecide;
   answerable: boolean;
   onChatAbout?: (id: string, question: string) => void;
+  untranslated?: HeldDecision;
 }): JSX.Element {
   const [reviewOpen, setReviewOpen] = useState(false);
-  const questions = questionsOf(approval.input);
-  const [sel, setSel] = useState<Record<string, string[]>>({});
+  // Shown in the owner's language once the server has translated the card (Settings › Translation, 3A).
+  // Answers are keyed by what is shown; the server maps them back to the English the engine asked in.
+  const questions = shownQuestions(questionsOf(approval.input), approval.translation);
+  // A card back after its answer could not be translated starts from that answer (1A).
+  const [seed] = useState(() => seededAnswers(questions, untranslated));
+  const [sel, setSel] = useState<Record<string, string[]>>(seed.sel);
   // Free-text answers, keyed by question text — claude's AskUserQuestion always lets
   // the user type their own answer instead of picking a listed option.
-  const [custom, setCustom] = useState<Record<string, string>>({});
+  const [custom, setCustom] = useState<Record<string, string>>(seed.custom);
   // "Chat about this": rather than picking an option, the user replies conversationally
   // in the main composer (handled by WorkspaceView via onChatAbout). The reply still rides back
   // as a `deny` message so claude reads it as in-turn feedback instead of a forced option.
@@ -1499,6 +1547,7 @@ function QuestionForm({
         </div>
       </div>
       {!answerable && <UnanswerableNote />}
+      {untranslated && answerable && <UntranslatedFoot id={approval.id} held={untranslated} onDecide={onDecide} />}
       <CardActions className="approval-actions">
         {/* Unanswered questions cannot be submitted, so the control that would submit them is not
             pressable — the same rule the decision card's Confirm is under. */}

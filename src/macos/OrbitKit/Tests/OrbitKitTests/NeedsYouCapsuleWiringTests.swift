@@ -54,8 +54,12 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
     func testTheBarIsAGlassCapsuleNotABand() throws {
         let view = try banner
         let surface = try slice(view, from: "func needsYouCapsule()", to: "\n    }")
-        XCTAssertTrue(surface.contains("glassEffect(.regular.interactive(), in: .capsule)"))
-        XCTAssertTrue(view.contains(".frame(minHeight: 44)"), "the height of the nav bar's controls")
+        XCTAssertTrue(surface.contains("glassEffect(.regular.interactive(), in: NeedsYouBannerView.card)"))
+        // A notification's size and corners since 2026-11-15 (09-height): 70pt, 24pt continuous.
+        XCTAssertTrue(view.contains(".frame(minHeight: Self.cardHeight)"))
+        XCTAssertTrue(view.contains("static let cardHeight: CGFloat = 70"))
+        XCTAssertTrue(view.contains("static let card = RoundedRectangle(cornerRadius: cardCorner, style: .continuous)"))
+        XCTAssertTrue(view.contains("static let cardCorner: CGFloat = 24"))
         XCTAssertFalse(view.contains("needsYouTint"), "the amber wash is gone")
         XCTAssertFalse(view.contains(".background(.bar)"), "and the band material with it")
         XCTAssertFalse(view.contains("Circle()\n                    .fill(.orange)"), "the 7pt dot is the circle now")
@@ -64,10 +68,10 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
     /// The amber is the Landing head's circle and nothing else — the words stay primary/secondary.
     func testTheAmberIsTheCircleAlone() throws {
         let view = try banner
-        XCTAssertTrue(view.contains(".frame(width: 30, height: 30)"))
+        XCTAssertTrue(view.contains(".frame(width: 38, height: 38)"), "a notification's icon size")
         XCTAssertTrue(view.contains(".background(Color.orange.opacity(0.15), in: Circle())"),
                       "`ProjectLandingRow.mark`'s own recipe")
-        let lines = try slice(view, from: "VStack(alignment: .leading, spacing: 0) {", to: "if let chevron {")
+        let lines = try slice(view, from: "VStack(alignment: .leading, spacing: 1) {", to: ".padding(.leading, 14)")
         XCTAssertFalse(lines.contains(".orange"), "never amber words")
     }
 
@@ -105,10 +109,11 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertFalse(view.contains("Image(systemName: \"chevron.down\").imageScale(.small)"), "the ⌄ pill is the deck now")
         XCTAssertTrue(view.contains("chrome(deck: banner.count > 1) {"))
         XCTAssertTrue(view.contains("bar(entries[0], more: 0, fold: { setUnfolded(false) })"))
-        let stack = try slice(view, from: ".overlay(alignment: .top) {\n                            VStack(spacing: 6) {",
+        let stack = try slice(view, from: ".background(alignment: .top) {\n                    if stacked {",
                               to: "} scrim: {")
-        XCTAssertTrue(stack.contains(".padding(.top, 44 + 6)"), "hung under the first, over the page")
-        XCTAssertTrue(view.contains("chrome(deck: true) {"), "unfolded keeps the folded bar's height")
+        XCTAssertTrue(stack.contains(".offset(y: firstHeight + Self.stackGap)"), "hung under the first, over the page")
+        XCTAssertTrue(stack.contains(".transition(fromUnder(index))"), "each comes out from under it (08-motion)")
+        XCTAssertTrue(view.contains("if stacked { scrim.transition(.opacity) }"))
         XCTAssertTrue(view.contains(".onTapGesture { setUnfolded(false) }"), "the scrim folds them")
         XCTAssertTrue(view.contains(".padding(.bottom, deck ? Self.deckReach : 0)"))
         XCTAssertTrue(view.contains("Image(systemName: \"chevron.up\")"))
@@ -117,27 +122,37 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)"))
     }
 
-    /// Where the press goes elsewhere the capsule carries no chevron — the whole of it is the press;
-    /// in the conversation on screen the chevron stays, pointing the way the card lies.
-    func testOnlyTheInConversationBarPoints() throws {
+    /// The bar's press goes elsewhere, so it carries no chevron — the whole of it is the press. What
+    /// waits in the conversation on screen is said by the nav bar's capsule (07-console-one-capsule),
+    /// which points the way its card lies.
+    func testOnlyTheConversationsOwnCapsulePoints() throws {
         let view = try banner
-        XCTAssertTrue(view.contains("glyph: banner.glyph, chevron: nil,"))
-        XCTAssertTrue(view.contains(#"chevron: below.side == .above ? "chevron.up" : "chevron.down""#))
+        XCTAssertFalse(view.contains("chevron.down"), "no chevron on the bar")
+        let console = code(try source("Views/Console/ConsoleView.swift"))
+        let capsule = try slice(console, from: "private func waitingCapsule(_ here: WaitingBelow) -> some View {",
+                                to: ".accessibilityHint(")
+        XCTAssertTrue(capsule.contains(#"here.side == .above ? "chevron.up" : "chevron.down""#))
+        XCTAssertTrue(capsule.contains("console.requestScroll(to: here.rowID)"))
     }
 
-    /// On iOS 26 a conversation's bar is a safe-area BAR, so the transcript's scroll-edge effect
-    /// runs on under the capsule as it does under the composer band; the capsule then stands on
-    /// nothing. Over the session list and over a page it stands on nothing either (04-floating),
-    /// lifted by a shadow; only an older system's conversation stands it on the page's colour.
-    func testItFloatsOverTheTranscriptOnIOS26() throws {
+    /// A conversation carries no needs-you bar (07-console-one-capsule): what waits in it is the nav
+    /// bar capsule's to say — while its card is out of sight — and what waits elsewhere the lists'.
+    /// Over the session list and over a page the bar stands on nothing, lifted by a shadow.
+    func testNoBarInAConversationAndItFloatsElsewhere() throws {
         let console = code(try source("Views/Console/ConsoleView.swift"))
-        let top = try slice(console, from: "func needsYouTop<Bar: View>(", to: "\n    }\n")
-        XCTAssertTrue(top.contains("safeAreaBar(edge: .top, spacing: 0) { content.environment(\\.floatsOverTranscript, true) }"))
-        XCTAssertTrue(top.contains("safeAreaInset(edge: .top, spacing: 0, content: bar)"))
-        XCTAssertTrue(console.contains(".needsYouTop {\n            if hSize == .compact {"))
+        XCTAssertFalse(console.contains("NeedsYouBannerView("), "no bar in a conversation")
+        let principal = try slice(console, from: "ToolbarItem(placement: .principal) {", to: "principalQuestion(proxy)")
+        XCTAssertTrue(principal.contains("let here = hidesStickyQuestion ? nil : console.waitingBelow"))
+        XCTAssertTrue(principal.contains("$0.side == .above || !atBottom || console.detached"),
+                      "said while its card is out of sight")
+        XCTAssertTrue(principal.contains(".transition(reduceMotion ? .opacity : .push(from: .bottom))"),
+                      "one capsule changing, not two swapped (08-motion)")
+        let model = code(try source("ConsoleModel.swift"))
+        XCTAssertTrue(model.contains("NeedsYouLogic.here(rows: rows, approvalIDs: state.pendingApprovals.map(\\.id),"),
+                      "its own approvals too")
         let view = try banner
         XCTAssertTrue(view.contains(".background { surface }"))
-        XCTAssertTrue(view.contains("if floats || overList {\n            Color.clear"))
+        XCTAssertTrue(view.contains("if overList {\n            Color.clear"))
         XCTAssertFalse(view.contains("listSoftEdge"), "no band of its own under it")
         XCTAssertTrue(view.contains(".shadow(color: .black.opacity(scheme == .dark ? 0.75 : 0.10), radius: 14, y: 10)"))
     }
@@ -148,7 +163,8 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
     func testAnArrivalIsSaidHereAndPagesWithoutABarCarryIt() throws {
         let view = try banner
         XCTAssertTrue(view.contains("deck: banner.count > 1, arriving: banner.arriving) {"))
-        XCTAssertTrue(view.contains("Capsule().strokeBorder(Color.orange.opacity(0.75), lineWidth: 1.5)"))
+        XCTAssertTrue(view.contains("Self.card.strokeBorder(Color.orange.opacity(0.75), lineWidth: 1.5)"))
+        XCTAssertTrue(view.contains("[1.0, 0.35, 1.0], trigger: arriving"), "it breathes once as it comes in")
         let host = try slice(view, from: "private struct NeedsYouOverPage: ViewModifier {", to: "\n}\n")
         XCTAssertTrue(host.contains("model.pageHasNoNeedsYouBar(wide: wide)"))
         XCTAssertTrue(host.contains("NeedsYouBannerView(excluding: nil, overList: true)"))
@@ -160,5 +176,45 @@ final class NeedsYouCapsuleWiringTests: XCTestCase {
         let rule = try slice(model, from: "func pageHasNoNeedsYouBar(wide: Bool) -> Bool {", to: "\n    }")
         XCTAssertTrue(rule.contains("return !(nav.sectionAtRoot || nav.focusedConsoleSessionID != nil)"),
                       "a phone's Sessions list and conversation carry their own")
+    }
+
+    /// Over the Sessions list it floats as it does over a conversation (the owner, 2026-11-15,
+    /// 06-list-floats.html): hung under the inset rather than in it, so the sticky section headers
+    /// pass behind it; the list's first row keeps its height clear at rest; the pull's spinner still
+    /// clears it.
+    func testOverTheListItFloatsAndAFirstRowKeepsItClear() throws {
+        let agents = code(try source("Views/AgentsView.swift"))
+        let mount = try slice(agents, from: ".topInsetClearOfRefresh {", to: "#endif")
+        let floating = try slice(mount, from: "} floating: {", to: "needsYouClearance = height }")
+        XCTAssertTrue(floating.contains("NeedsYouBannerView(excluding: app.selectedAgentSessionID,"))
+        XCTAssertFalse(try slice(mount, from: ".topInsetClearOfRefresh {", to: "} floating: {")
+            .contains("NeedsYouBannerView"), "not in the inset")
+        XCTAssertTrue(agents.contains("if needsYouClearance > 0 {\n                Color.clear\n                    .frame(height: needsYouClearance)"))
+        let modifier = code(try source("Views/TopInsetClearOfRefresh.swift"))
+        XCTAssertTrue(modifier.contains(".alignmentGuide(.bottom) { $0[.top] }"), "hung from the bands' lower edge")
+        XCTAssertTrue(modifier.contains("VStack(spacing: 0) { bands }\n                    .frame(maxWidth: .infinity)\n                    .overlay(alignment: .bottom) {"),
+                      "the full width, even with no bands: an empty stack offered the capsule zero width")
+        XCTAssertTrue(modifier.contains("bandsBottom: bands.maxY + floatingHeight"), "the spinner clears it")
+    }
+
+    /// Pushed up, it is put away until something new is waiting; the hamburger carries the count
+    /// meanwhile, and a swipe tells the server nothing.
+    func testASwipePutsItAwayAndTheHamburgerKeepsTheCount() throws {
+        let view = try banner
+        XCTAssertTrue(view.contains(".swipesAway { model.dismissNeedsYou() }"))
+        let swipe = try slice(view, from: "private struct SwipeAway: ViewModifier {", to: "\n}\n")
+        XCTAssertTrue(swipe.contains("value.translation.height < -22 || value.predictedEndTranslation.height < -60"))
+        XCTAssertTrue(swipe.contains(".accessibilityAction(named: \"Dismiss\") { dismiss() }"))
+        let model = code(try source("AppModel.swift"))
+        let dismiss = try slice(model, from: "func dismissNeedsYou() {", to: "\n    }")
+        XCTAssertTrue(dismiss.contains("needsYouDismissed = NeedsYouLogic.dismissalKeys(waiting: needsYouSessions)"))
+        XCTAssertFalse(dismiss.contains("api") || dismiss.contains("Task {"), "nothing is sent")
+        XCTAssertTrue(model.contains("NeedsYouLogic.isDismissed(waiting: needsYouSessions, excluding: focused, dismissed: needsYouDismissed)"))
+        let arrival = try slice(model, from: "func noteNeedsYouArrival(", to: "\n    }\n")
+        XCTAssertTrue(arrival.contains("needsYouDismissed = []"), "something new brings it back")
+        let shell = code(try source("Views/CompactShell.swift"))
+        let toggle = try slice(shell, from: "private struct DrawerToggleButton: View {", to: "\n}\n")
+        XCTAssertTrue(toggle.contains("let waiting = model.needsYouPutAwayCount"))
+        XCTAssertTrue(toggle.contains(".background(Color.orange, in: Capsule())"))
     }
 }

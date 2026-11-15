@@ -763,8 +763,8 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     rows = [{ ...LOOSE, lastTurnAt: '2026-10-05T08:00:00Z' }, COORDINATOR, TASK];
     await mount();
     expect(titles()).toEqual(['Loose conversation', 'Project Alpha']);
+    // Wider than a phone, stepping onto the project's row opens its column beside the coordinator, as a click does.
     await press('ArrowDown');
-    // Wider than a phone the arrow keys onto a project row open its column beside the coordinator (ab5802271).
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${encodeId(PROJECT_ID)}`));
   });
 
