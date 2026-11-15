@@ -258,6 +258,16 @@ above goes through). Steps 1 to 3 changed; the changes to steps 1 and 3 were mea
 - **Step 3 refreshes before it resets.** `git reset --hard` rewrites every entry whose stat data does not match its
   file. That is every clone, so on its own the reset undoes the cloning. `git update-index -q --refresh` runs first.
   After it, the reset rewrites only the files that differ from the commit.
+- **The index is filled first** (`fillClonedIndexStats`, `index_stat.go`). After the clones and before the refresh,
+  the runner writes the clones' stat data (ctime, mtime, dev, ino, mode, uid, gid, size) into the checkout's index,
+  so the refresh finds those entries clean without reading their contents. It does that only for an entry the checkout
+  keeps with no assume-unchanged or skip-worktree mark, whose template entry has the same mode and blob and no such
+  mark either, whose path the template's working tree has not changed (`git diff-index HEAD`, read-only), and whose
+  cloned file has the commit's size and executable bit. Everything else is left with zero stat data and is hashed by
+  the refresh as before: a template edit, a different base, a mode that the reset must fix, or an index the runner
+  cannot rewrite (version 4, split, sparse, fsmonitor). The index is written through `index.lock` and a rename; a
+  failure leaves it untouched and the refresh runs as if the fast path had not been tried. The clone also takes the
+  template file's mtime, so a just-cloned file is not racily clean when git reads the index.
 - **The reset is to the checkout's own `HEAD`.** That is the commit `git worktree add` put the checkout on. For a
   checkout recreated on an existing branch it is the branch's tip, not the session's fork point.
 - **A failure after `git worktree add`** removes the checkout, which is then made again plainly. A branch the failed
@@ -276,12 +286,16 @@ above goes through). Steps 1 to 3 changed; the changes to steps 1 and 3 were mea
 
   An errno goes by its name: `EOPNOTSUPP` on a Linux filesystem that cannot clone, `ENOTSUP` from macOS. When the
   worktrees root is probed, it gets a line of its own: `checkouts: cloned: ...` or
-  `checkouts: plain: probe failed (<errno>): ...`.
+  `checkouts: plain: probe failed (<errno>): ...`. A cloned checkout whose index entries were filled first adds
+  `checkout index: filled <n> stat entries, left <m> for git`; one whose fast path was refused adds
+  `checkout index: fast path skipped: <reason>`.
 - **On darwin** the clone is `unix.Clonefile` from `golang.org/x/sys` v0.30.0 (`docs/dependency-security.md`).
 
-**Cost.** Step 3 rehashes the checked-out bytes: 15–17 s for the full Orbit tree in the experiments, and about 1 s with
-the Orbit exclusion list in place. A later optimization can write the index stat data directly for files cloned from
-clean template entries (§10).
+**Cost.** Step 3 rehashed the checked-out bytes before the index fast path: 15–17 s for the full Orbit tree in the
+experiments, and about 1 s with the Orbit exclusion list in place. Filling the stat data first leaves only the entries
+the runner cannot prove to be hashed. On the HDD-backed Ceph volume measured on 2026-11-15, the rehash of a
+23,515-file, 890 MiB sparse checkout had not finished after 300 s; the fast path replaces it with one `lstat` per
+cloned file and one `git diff-index` over the template.
 
 **Platforms.** macOS on APFS works out of the box (verified). Linux works on XFS (reflink is the default of `mkfs.xfs`
 since xfsprogs 5.1; check `xfs_info` for `reflink=1`), btrfs, and OpenZFS with block cloning (on by default in 2.3.9,
@@ -315,7 +329,6 @@ P1 does not depend on P2 or P3. P3 benefits from P2 (smaller rehash) but does no
 
 ## 10. Later, outside this project
 
-- Write the index stat data for cloned clean entries directly, skipping the rehash.
 - Clone ignored dependency directories (`node_modules` and the like) from a retained checkout with the same lockfile
   hash. The 32 retained checkouts are kept for these directories already.
 - Physical accounting in the channel (D3 B), and `xfs` PVCs (D4 B).
