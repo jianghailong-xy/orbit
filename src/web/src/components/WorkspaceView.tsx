@@ -368,7 +368,7 @@ import {
 } from './CriteriaDecisionCard';
 import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
-import { ScheduleRunCrumb, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
+import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
   OWNER_REQUEST_CHAT_PLACEHOLDER,
   OWNER_REQUEST_CHAT_PREFIX,
@@ -9363,7 +9363,7 @@ export function WorkspaceView({
     : selected && isScheduleRun && scheduleRun
       ? scheduleRunHeadText({
           state: headLifecycleWord,
-          engine: ENGINE_CLI_NAMES[selectedEngine] ?? null,
+          engine: scheduleRunAgentName(scheduleRun, ENGINE_CLI_NAMES[selectedEngine] ?? null),
           run: scheduleRun.run,
           now: new Date(),
         })

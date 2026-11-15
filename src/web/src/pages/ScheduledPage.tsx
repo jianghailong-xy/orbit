@@ -211,7 +211,7 @@ export function ScheduledPage(): JSX.Element {
         circle: scheduleRunCircle(run, { newFinding: facts.newFinding }),
         title: schedule.title,
         line: underWay
-          ? scheduleRowLine(schedule, { runningMinutes: minutes })
+          ? scheduleRowLine(schedule, { agentName: schedule.agentName, runningMinutes: minutes })
           : scheduleRunLine(run, { notified: facts.notified }),
         repeats: underWay && scheduleRuleRepeats(schedule.rule),
         time: scheduleClock(run.plannedAt, timezone),
@@ -228,7 +228,11 @@ export function ScheduledPage(): JSX.Element {
       key: `${group.key}:${schedule.id}`,
       circle,
       title: schedule.title,
-      line: scheduleRowLine(schedule, { pausedAt: schedule.pausedAt ? new Date(schedule.pausedAt) : null, timezone }),
+      line: scheduleRowLine(schedule, {
+        agentName: schedule.agentName,
+        pausedAt: schedule.pausedAt ? new Date(schedule.pausedAt) : null,
+        timezone,
+      }),
       repeats: scheduleRuleRepeats(schedule.rule),
       time: failing && schedule.lastRun
         ? scheduleWhenText(new Date(schedule.lastRun.plannedAt), now, timezone)
