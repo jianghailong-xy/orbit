@@ -22,7 +22,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
-import { PermissionMode } from '@orbit/shared';
+import { PermissionMode, SCHEDULE_COPY } from '@orbit/shared';
 import { Prisma, PrismaClient, RunnerStatus, SessionDispatchOrigin, SessionRunSource, type Runner } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -779,7 +779,7 @@ test('over the weekly budget: schedule_run_now from a session and a PAT\'s run a
     },
   });
   const over = (await rest.listRuns(w.user, s.id)).runs.find((r) => r.failureReason === 'OVER_BUDGET')!;
-  assert.equal(over.reasonText, 'Not started: it had already started as many runs in the past 7 days as you allowed.');
+  assert.equal(over.reasonText, SCHEDULE_COPY.runReasonTexts.OVER_BUDGET, 'the sentence the clients share');
   const got = await tools.get(w.runner, s.id);
   const seen = got.recentRuns.find((r) => r.failureReason === 'OVER_BUDGET')!;
   assert.equal(seen.reasonText, over.reasonText, 'schedule_get carries the reason too');

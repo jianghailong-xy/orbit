@@ -26,6 +26,7 @@
  * Pushes are sent after the transaction commits, through the ScheduleNotifier port, so a spec reads what was sent and
  * production sends it through PushService.
  */
+import { SCHEDULE_COPY } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
 
 export const SCHEDULE_ITEM_KINDS = ['SCHEDULE_FAILED', 'SCHEDULE_HELD', 'SCHEDULE_APPROVAL', 'SCHEDULE_WIDEN'] as const;
@@ -117,8 +118,9 @@ export function runReasonText(run: { state: string; failureReason: string | null
   if (!run.failureReason) return null;
   switch (run.failureReason) {
     case 'OVER_BUDGET':
-      // No count: the envelope may have changed since, and the row should stay true.
-      return 'Not started: it had already started as many runs in the past 7 days as you allowed.';
+      // No count: the envelope may have changed since, and the row should stay true. One sentence for the server and
+      // the clients (@orbit/shared SCHEDULE_COPY).
+      return SCHEDULE_COPY.runReasonTexts.OVER_BUDGET;
     case 'RUNNER_UNAVAILABLE':
       return run.state === 'MISSED' ? 'Not started: the runner was not available in time.' : 'The runner was not available.';
     case 'QUOTA':

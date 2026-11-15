@@ -192,6 +192,10 @@ export const SCHEDULE_COPY = {
     CANCELLED_BY_OWNER: 'was stopped by you',
     OVER_BUDGET: 'was over what you allowed this week',
   },
+  /** A run's reasonText as the server writes it (ScheduleRunView.reasonText), for the reasons whose sentence is shared. */
+  runReasonTexts: {
+    OVER_BUDGET: 'Not started: it had already started as many runs in the past 7 days as you allowed.',
+  },
   /** Why a schedule is held, as a clause; `until` is what has to change before Resume. */
   heldReasons: {
     WORKSPACE_NOT_OWNED: { clause: 'the workspace {workspace} is no longer yours', until: 'it is yours again' },
