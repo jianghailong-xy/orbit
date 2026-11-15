@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -58,6 +59,8 @@ import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.LocalSmartSelection
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.personalPermissions
 import io.orbitd.android.reader.ComposerFold
@@ -74,6 +77,7 @@ import kotlinx.serialization.json.*
 internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessionId: String, session: SessionState?, target: DraftTarget? = null, focusRequest: Int = 0,
     inputFocusChanged: (Boolean) -> Unit = {}, foldsChrome: Boolean = false,
     openTask: ((String) -> Unit)? = null, openRunner: ((runner: String, engine: String) -> Unit)? = null,
+    openTranslationSettings: (() -> Unit)? = null,
     /** The page's own placeholder, over the composer's: a new account's welcome card (WelcomeCopy.WELCOME_PLACEHOLDER). */
     placeholder: String? = null) {
     val model = remember(app, handle, sessionId) { app.composer(handle, sessionId, target) }
@@ -103,7 +107,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     var withdrawingWake by remember { mutableStateOf<String?>(null) }
     var slashScope by remember { mutableStateOf<String?>(null) }
     var selectionNotice by remember { mutableStateOf<String?>(null) }
-    val usable = state.loaded && session.canCompose()
+    // Board 02 ②: while the coordinator writes its handoff note, and while it hands over, nothing is sent into it.
+    val handingOver = target == null && CoordinatorHandoff.outgoing(session?.snapshot?.detail)?.locksComposer == true
+    val usable = state.loaded && session.canCompose() && !handingOver
     val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         uris.forEach { importAttachment(context, model, it, "file") }
     }
@@ -147,6 +153,7 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     // which fills the box and sends nothing (docs/prompt-suggestions-design.md §4). A message just sent answers
     // it before its `user` event arrives, so the one standing at the send is held back until the transcript moves on.
     val standing = session?.transcript?.promptSuggestion
+    val translation = LocalTranslation.current
     var spent by remember(model) { mutableStateOf<String?>(null) }
     LaunchedEffect(standing) { if (standing == null) spent = null }
     val suggestion = if (target != null || standing == spent) null else offeredPromptSuggestion(standing, detail,
@@ -235,18 +242,28 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                             if (it.type == KeyEventType.KeyDown && it.key == Key.Enter && (it.isCtrlPressed || it.isMetaPressed) && field.composition == null && usable) {
                                 send(false); true
                             } else false
-                        }, enabled = state.loaded,
+                        }, enabled = state.loaded && !handingOver,
                     placeholder = {
                         if (suggestion != null) SuggestionPlaceholder(suggestion)
                         // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (iOS 5 ⑥).
                         else Text(when {
                             placeholder != null -> placeholder
+                            handingOver -> CoordinatorHandoffCopy.HANDING_OVER
                             target?.isMachineDraft == true || (target != null && MachineSetup.standsInForMachine(detail)) ->
                                 detail.text("name")?.takeIf { it.isNotEmpty() }?.let(MachineSetupCopy::composerPlaceholderFor) ?: "Message…"
                             target == null && running && engine == CursorRuntime.ENGINE -> CursorRuntime.RUNNING_PLACEHOLDER
                             else -> "Message…"
                         }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
+                    // Settings › Translation (6A): while it is on, the box says which way its words go — "Chinese → English" —
+                    // and the tag opens Settings › Sessions, where the switch and the language are.
+                    trailingIcon = translation.takeIf { it.on }?.let { on -> {
+                        Text(Translation.tag(on.language), Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
+                            .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
+                            .then(if (openTranslationSettings != null) Modifier.clickable(role = Role.Button, onClick = openTranslationSettings) else Modifier)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } },
                     minLines = 1, maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
             }

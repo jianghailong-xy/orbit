@@ -31,11 +31,11 @@ const USER = ENGINE_SESSION_USER_ROUTES;
 const RUNNER = ENGINE_SESSION_RUNNER_ROUTES;
 const DOORS = ENGINE_SESSION_DOORS;
 
-test('the user door is exactly the 39 session-naming routes the registries hold', () => {
+test('the user door is exactly the 42 session-naming routes the registries hold', () => {
   // The count is a statement, not a convenience: when a route is added the number and the list both
-  // change in one diff, which is what makes "38 → 39" reviewable (main's POST /sessions/:id/restart
-  // and the project's GET /sessions/:id/task-moves, merged).
-  assert.equal(USER.length, 39, `derived user routes: ${USER.join(', ')}`);
+  // change in one diff, which is what makes "41 → 42" reviewable (main's routes and the project's
+  // GET /sessions/:id/task-moves, merged).
+  assert.equal(USER.length, 42, `derived user routes: ${USER.join(', ')}`);
   const mapped = Object.keys(DOORS).filter((key) => !key.includes(' /runner/sessions/'));
   assert.deepEqual([...mapped].sort(), USER, 'a user route has no line in ENGINE_SESSION_DOORS, or a line names no route');
 });

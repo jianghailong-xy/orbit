@@ -126,13 +126,13 @@ class TerminalRequestsShotsTest {
         show {
             Column(Modifier.padding(vertical = 8.dp)) {
                 Text("One terminal, nothing else waiting", Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.labelMedium)
-                NeedsYouBar(one.text, null, TerminalNeedsYou.hint, detail = one.detail, since = one.since, glyph = one.glyph) {}
+                NeedsYouBar(one.text, TerminalNeedsYou.hint, detail = one.detail, since = one.since, glyph = one.glyph) {}
                 Text("One terminal and two sessions waiting (folded)", Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.labelMedium)
                 val folded = one.copy(count = 3)
-                NeedsYouBar(folded.text, null, TerminalNeedsYou.hint, detail = folded.detail, since = folded.since, glyph = folded.glyph,
+                NeedsYouBar(folded.text, TerminalNeedsYou.hint, detail = folded.detail, since = folded.since, glyph = folded.glyph,
                     more = folded.more, deck = true) {}
                 Text("Two terminals on one machine", Modifier.padding(16.dp, 8.dp), style = MaterialTheme.typography.labelMedium)
-                NeedsYouBar(two.text, null, TerminalNeedsYou.hint, detail = two.detail, since = two.since, glyph = two.glyph) {}
+                NeedsYouBar(two.text, TerminalNeedsYou.hint, detail = two.detail, since = two.since, glyph = two.glyph) {}
             }
         }
         compose.onAllNodesWithText("Approve a terminal", useUnmergedTree = true).assertCountEquals(2)

@@ -118,7 +118,10 @@ function fakePrisma(
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
     // The open owner requests and waiting task moves the same row counts (none here).
-    ownerRequest: { findMany: async () => [] },
+    // …and no coordinator handoff (projects/coordinator-handoff.ts).
+    coordinatorHandoff: { findFirst: async () => null },
+    ownerRequest: { findMany: async () => [], groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
     projectHandoffApproval: { findMany: async () => [] },
     projectOpenItem: { findMany: async () => [] },
   } as unknown as PrismaService;

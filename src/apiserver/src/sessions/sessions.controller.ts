@@ -308,7 +308,8 @@ export class SessionsController {
     return this.sessions.create(
       user.userId,
       { ...dto, workspaceId: dto.workspaceId ?? dto.agentId },
-      { credential: user.credential },
+      // The owner's own words: Settings › Translation applies (sessions/turn-translation.ts).
+      { credential: user.credential, translate: true },
     );
   }
 
@@ -618,6 +619,7 @@ export class SessionsController {
     assertClientTurnIdNotReserved(dto.clientTurnId);
     // Which client sent it, from the credential and the app's own headers (turn-sender-client.ts), never the body.
     return this.sessions.createTurn(user.userId, id, dto, {
+      translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
     });
   }
@@ -636,6 +638,7 @@ export class SessionsController {
     assertClientTurnIdNotReserved(dto.clientTurnId);
     // Which client sent it, from the credential and the app's own headers (turn-sender-client.ts), never the body.
     return this.sessions.createTurn(user.userId, id, dto, {
+      translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
     });
   }
@@ -663,6 +666,44 @@ export class SessionsController {
     @Param('turnId', PublicIdPipe) turnId: string,
   ) {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
+  }
+
+  // Settings › Translation (@orbit/shared translation.ts): translate a held message again — one whose
+  // translation failed or timed out, so it was not sent. The same raw turnId as the DELETE beside it.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/translation/retry')
+  retryTurnTranslation(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.retryTurnTranslation(user.userId, id, turnId);
+  }
+
+  // ...or deliver it as the owner wrote it, untranslated.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/translation/send-as-written')
+  sendTurnAsWritten(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.sendTurnAsWritten(user.userId, id, turnId);
+  }
+
+  // Settings › Translation (@orbit/shared translation.ts, reply-translation.ts): translate an agent reply
+  // (or a suggestion) again, one whose translation failed. Answers at once; the result is a live
+  // `translation` event and the event's own payload.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/events/:seq/translation/retry')
+  retryReplyTranslation(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('seq') seq: string,
+  ) {
+    const n = Number(seq);
+    if (!Number.isInteger(n) || n < 1) throw new BadRequestException('seq must be a positive integer');
+    return this.sessions.retryReplyTranslation(user.userId, id, n);
   }
 
   // Send a message queued for the next turn into the one running now (the tray's Steer). The same
@@ -693,6 +734,7 @@ export class SessionsController {
     return this.sessions.resume(user.userId, id, dto, {
       routeToCurrentRun: true,
       credential: user.credential,
+      translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
     });
   }
@@ -765,7 +807,7 @@ export class SessionsController {
     @Body(PublicIdPipe.forFields('attachmentIds')) dto?: SessionInterruptDto,
   ) {
     assertClientTurnIdNotReserved(dto?.clientTurnId);
-    return this.sessions.interrupt(user.userId, id, dto);
+    return this.sessions.interrupt(user.userId, id, dto, { translate: true });
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })

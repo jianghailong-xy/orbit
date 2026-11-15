@@ -105,7 +105,7 @@ final class ListHeaderEdgeWiringTests: XCTestCase {
         XCTAssertTrue(sessions.contains("overList: true"), "the Sessions list mounts it over the list")
         let banner = try source(views + "NeedsYouBannerView.swift")
         let surface = section(banner, from: "@ViewBuilder private var surface", to: "\n    }")
-        XCTAssertTrue(surface.contains("if floats || overList {"))
+        XCTAssertTrue(surface.contains("if overList {"))
         XCTAssertFalse(banner.contains("SoftEdgeLayer"))
     }
 

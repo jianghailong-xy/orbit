@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 438 |
+| `user` | 446 |
 | `admin` | 28 |
 | `runner` | 186 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **687** |
+| **Total** | **695** |
 
 ## Public routes
 
@@ -177,6 +177,11 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/projects/:id/acceptance/merge-evidence` | body `RecordMergeEvidenceDto`; path `id` | `ProjectsController.recordMergeEvidence` |
 | `POST` | `/api/projects/:id/blockers/:blockerId/resolve` | body `ResolveProjectBlockerDto`; path `blockerId`, `id` | `ProjectsController.resolveBlocker` |
 | `POST` | `/api/projects/:id/coordinator` | body `OpenProjectCoordinatorDto`; path `id` | `ProjectsController.openCoordinator` |
+| `POST` | `/api/projects/:id/coordinator/handoff` | path `id` | `CoordinatorHandoffController.start` |
+| `POST` | `/api/projects/:id/coordinator/handoff/cancel` | path `id` | `CoordinatorHandoffController.cancel` |
+| `POST` | `/api/projects/:id/coordinator/handoff/retry` | path `id` | `CoordinatorHandoffController.retry` |
+| `POST` | `/api/projects/:id/coordinator/handoff/skip` | path `id` | `CoordinatorHandoffController.skip` |
+| `GET` | `/api/projects/:id/coordinator/pending-waits` | path `id` | `CoordinatorHandoffController.pendingWaits` |
 | `POST` | `/api/projects/:id/coordinator/rebind` | body `RebindProjectCoordinatorDto`; path `id` | `ProjectsController.rebindCoordinator` |
 | `POST` | `/api/projects/:id/coordinator/replace` | body `ReplaceProjectCoordinatorDto`; path `id` | `ProjectsController.replaceCoordinator` |
 | `GET` | `/api/projects/:id/coordinator/status` | path `id` | `ProjectsController.coordinatorStatus` |
@@ -340,6 +345,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/end` | path `id` | `SessionsController.end` |
 | `GET` | `/api/sessions/:id/events` | path `id`; query `maxPayload`, `sinceSeq` | `SessionsController.events` |
 | `GET` | `/api/sessions/:id/events/:seq/full` | path `id`, `seq` | `SessionsController.eventFull` |
+| `POST` | `/api/sessions/:id/events/:seq/translation/retry` | path `id`, `seq` | `SessionsController.retryReplyTranslation` |
 | `GET` | `/api/sessions/:id/events/page` | path `id`; query `after`, `around`, `before`, `limit`, `maxPayload`, `tail` | `SessionsController.eventPage` |
 | `GET` | `/api/sessions/:id/events/search` | path `id`; query `limit`, `q` | `SessionsController.eventSearch` |
 | `GET` | `/api/sessions/:id/guests` | path `id` | `SessionGuestsController.list` |
@@ -375,6 +381,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/sessions/:id/turns` | body `Object`; path `id` | `SessionsController.turn` |
 | `DELETE` | `/api/sessions/:id/turns/:turnId` | path `id`, `turnId` | `SessionsController.cancelTurn` |
 | `POST` | `/api/sessions/:id/turns/:turnId/steer` | path `id`, `turnId` | `SessionsController.steerTurn` |
+| `POST` | `/api/sessions/:id/turns/:turnId/translation/retry` | path `id`, `turnId` | `SessionsController.retryTurnTranslation` |
+| `POST` | `/api/sessions/:id/turns/:turnId/translation/send-as-written` | path `id`, `turnId` | `SessionsController.sendTurnAsWritten` |
 | `POST` | `/api/sessions/:id/turns/current-work-routing` | body `Object`; path `id` | `SessionsController.routedTurn` |
 | `GET` | `/api/sessions/:id/worktree-file` | path `id`; query `path` | `SessionsController.worktreeFile` |
 | `GET` | `/api/sessions/compact` | query `parentSessionId`, `status` | `SessionsController.listCompact` |
