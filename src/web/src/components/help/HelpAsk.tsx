@@ -367,7 +367,9 @@ export function AskConversation({
   const toast = useToast();
   const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
-  useEffect(() => bottom.current?.scrollIntoView?.({ block: 'end' }), [exchanges.length, stream.streamingText]);
+  useEffect(() => {
+    bottom.current?.scrollIntoView?.({ block: 'end' });
+  }, [exchanges.length, stream.streamingText]);
   const machine = choices?.machines.find((m) => m.id === row?.assignedRunnerId)?.name;
   const engine = row?.engine ? helpAskEngineLabel(row.engine) : null;
   const meta = [machine, [engine, row?.model].filter(Boolean).join(' · '), typeof row?.costUsd === 'number' ? `$${row.costUsd.toFixed(2)}` : null]

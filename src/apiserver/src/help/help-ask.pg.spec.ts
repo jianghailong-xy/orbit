@@ -159,7 +159,7 @@ test('Ask is a read-only session on a machine the person picks, in no workspace\
     assert.equal((await api('GET', '/api/help/ask/choices', ownerToken)).json.remembered, null, 'and nothing remembered');
 
     const made = await api('POST', '/api/help/ask', ownerToken, {
-      content: `${QUESTION}\n\nIt was fine yesterday.`, runnerId: pub(ask.runnerId), engine: 'claude', page: PAGE,
+      content: `${QUESTION} It was fine yesterday.`, runnerId: pub(ask.runnerId), engine: 'claude', page: PAGE,
     });
     assert.equal(made.status, 201, made.text);
     askId = toUuid(made.json.sessionId);
@@ -240,6 +240,8 @@ test('Ask is a read-only session on a machine the person picks, in no workspace\
     assert.deepEqual(claim.json.helpAsk, { page: PAGE }, 'the runner is told it is an Ask, and the page');
     assert.equal(claim.json.workDir, undefined, 'and is handed no folder to work in');
     assert.equal(claim.json.branch, undefined);
+    // Titled by its first question and by no model (board 03): the engine is not asked to name it either.
+    assert.equal(claim.json.naming, undefined, 'and is not asked to name the Ask');
   });
 
   await t.test('6. the four reads answer an Ask session of the runner\'s own, and nobody else', async () => {

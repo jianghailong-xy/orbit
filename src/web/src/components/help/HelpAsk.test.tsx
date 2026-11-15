@@ -71,6 +71,10 @@ beforeEach(() => {
   streamed.events = [];
   streamed.idle = true;
   streamed.streamingText = '';
+  // As Chromium answers it: a Promise. An effect that returns it hands React a cleanup that is not a function.
+  Element.prototype.scrollIntoView = function scrollIntoView() {
+    return Promise.resolve();
+  } as unknown as Element['scrollIntoView'];
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: RequestInit) => {

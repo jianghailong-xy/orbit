@@ -1149,8 +1149,9 @@ export class QueueService {
         ? ((await forkAuthorityBindings(this.prisma, [session])).get(session.id) ?? null)
         : await this.sourceBinding(session.sourceCodebaseId),
     );
-    // A session nothing else will name is named by the engine about to run it (engineNamingJob).
-    const naming = engineNamingJob(session, provider, configuredRow);
+    // A session nothing else will name is named by the engine about to run it (engineNamingJob). An Ask is not:
+    // its title is its first question, and no model is asked for another (help-ask.ts; board 03).
+    const naming = session.helpAsk == null ? engineNamingJob(session, provider, configuredRow) : undefined;
     return {
       sessionId: session.id,
       provider,
