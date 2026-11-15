@@ -1731,7 +1731,7 @@ struct TranscriptView: View {
             return Text(console.state.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
                 .foregroundColor(.secondary)
         }
-        let word = SessionHeader.statusWord(for: session, watching: watching, now: now, machine: console.runnerName)
+        let word = SessionHeader.headerWord(for: session, watching: watching, now: now, machine: console.runnerName)
         guard subtitle.hasPrefix(word) else { return Text(subtitle).foregroundColor(.secondary) }
         let tone = SessionStatusGlyph.make(for: session, watching: watching, now: now, machine: console.runnerName).tone
         return Text(word).fontWeight(.semibold).foregroundColor(Self.statusWordColor(tone))

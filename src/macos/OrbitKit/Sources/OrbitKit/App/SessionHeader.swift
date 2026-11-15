@@ -104,6 +104,17 @@ public enum SessionHeader {
     /// (`Session.resumesOnItsOwn`; web `SESSION_ACTIVITY_WORD.WAITING`).
     public static let waitingToResume = "Waiting to resume"
 
+    /// The word the conversation header leads with: `statusWord`, except on a coordinator whose
+    /// handoff note is being written or whose replacement is running, which reads "Handing over"
+    /// (board 02-2). Only the header: list rows and the menu bar keep `statusWord`.
+    public static func headerWord(for s: Session, watching: WatchSessionSummary? = nil,
+                                  now: Date = Date(), machine: String? = nil) -> String {
+        if CoordinatorContextActions.locksComposer(s.coordinatorHandoff) {
+            return CoordinatorHandoffCopy.badgeHandingOver
+        }
+        return statusWord(for: s, watching: watching, now: now, machine: machine)
+    }
+
     /// The full "run state · lifecycle · when" subtitle. Keeping both dimensions visible prevents
     /// "Succeeded" from being mistaken for Completed. `now` is injectable for deterministic tests.
     /// Returns nil when there's no session to describe (a fresh deep link) so the caller can fall
@@ -111,7 +122,7 @@ public enum SessionHeader {
     public static func subtitle(for session: Session?, watching: WatchSessionSummary? = nil,
                                 now: Date = Date(), machine: String? = nil) -> String? {
         guard let s = session else { return nil }
-        let word = statusWord(for: s, watching: watching, now: now, machine: machine)
+        let word = headerWord(for: s, watching: watching, now: now, machine: machine)
         let lifecycle = lifecycleWord(for: s)
         // The two axes no longer share any vocabulary — a filed session reads "Ended · Completed",
         // which is exactly the split this subtitle exists to show — so there is nothing to collapse.
