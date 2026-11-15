@@ -109,5 +109,7 @@ final class CoordinatorContextCopyParityTests: XCTestCase {
         assertSays(ts, "COORDINATOR_HANDOFF_SECTIONS = [ \(sections) ] as const;", in: Self.shared)
         assertSays(ts, "COORDINATOR_HANDOFF_TURN_PREFIX = '\(CoordinatorContextActions.handoffTurnPrefix)';",
                    in: Self.shared)
+        assertSays(ts, "COORDINATOR_HANDOFF_PROMPT_HEAD = '\(CoordinatorContextActions.handoffPromptHead)';",
+                   in: Self.shared)
     }
 }
