@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { HELP_PATH, useHelpDrawer, type HelpTab } from '../lib/helpDrawer';
 import { helpArticlePath, helpIndexQuery } from '../lib/help/helpQueries';
 import { HelpArticlesPane } from './help/HelpArticlesPane';
+import { HelpAskPane } from './help/HelpAsk';
 import { Segmented } from './ui/Segmented';
 import { Tooltip } from './ui/Tooltip';
 import './HelpDrawer.css';
@@ -73,19 +74,5 @@ export function HelpDrawer() {
         </button>
       </footer>
     </aside>
-  );
-}
-
-/** The Ask tab: a placeholder until Ask lands. */
-function HelpAskPane({ query, article }: { query: string | null; article: string | null }) {
-  return (
-    <div
-      className="help-drawer-placeholder"
-      data-help-pane="ask"
-      data-help-query={query ?? undefined}
-      data-help-article={article ?? undefined}
-    >
-      Ask will appear here.
-    </div>
   );
 }

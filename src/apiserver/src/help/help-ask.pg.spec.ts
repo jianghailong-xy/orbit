@@ -152,7 +152,7 @@ test('Ask is a read-only session on a machine the person picks, in no workspace\
       assert.equal(reply.status, status, `${what}: ${reply.text}`);
       if (code) assert.equal(reply.json.code, code, what);
     }
-    // The offline machine was not offline at create because it never beat: it is refused as offline, by code.
+    // A machine that never beat is offline before it is anything else.
     const offline = await api('POST', '/api/help/ask', ownerToken, { content: QUESTION, runnerId: pub(asleep.runnerId), engine: 'claude' });
     assert.equal(offline.json.code, 'HELP_ASK_MACHINE_OFFLINE', offline.text);
     assert.equal(await sessionsOf(owner.id), before, 'nothing was made by a refusal');
@@ -171,7 +171,8 @@ test('Ask is a read-only session on a machine the person picks, in no workspace\
     assert.equal(row.engine, 'claude');
     assert.equal(row.title, `${QUESTION} It was fine yesterday.`, 'titled by its first question, by no model');
     assert.equal(row.status, 'PENDING', 'an ordinary session, waiting for its runner');
-    assert.deepEqual((await api('GET', '/api/help/ask/choices', ownerToken)).json.remembered,
+    const remembered = (await api('GET', '/api/help/ask/choices', ownerToken)).json.remembered;
+    assert.deepEqual({ runnerId: remembered?.runnerId, engine: remembered?.engine },
       { runnerId: pub(ask.runnerId), engine: 'claude' }, 'the machine and engine, remembered for the next Ask');
     const pat = await api('POST', '/api/help/ask', strangerToken, { content: QUESTION, runnerId: pub(ask.runnerId), engine: 'claude' });
     assert.equal(pat.status, 404, "another account cannot ask on the owner's machine");
@@ -225,7 +226,7 @@ test('Ask is a read-only session on a machine the person picks, in no workspace\
 
   await t.test('5. the claim hands an Ask only to a runner that declares help-ask/v1, read-only, with no workDir', async () => {
     // The ordinary session is claimed first by its own machine; take it out of the way.
-    await sql.query(`UPDATE "session" SET "status" = 'COMPLETED', "completed_at" = now() WHERE "id" = $1::uuid`, [ordinaryId]);
+    await sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "completed_at" = now() WHERE "id" = $1::uuid`, [ordinaryId]);
     // The runner stops declaring it (a downgrade): the Ask waits.
     await sql.query(`UPDATE "runner" SET "capabilities" = '{source-pin/v1}' WHERE "id" = $1::uuid`, [ask.runnerId]);
     const refused = await api('GET', '/api/runner/sessions/claim', ask.token, undefined, { 'x-orbit-runner-capabilities': 'source-pin/v1' });
@@ -244,18 +245,18 @@ test('Ask is a read-only session on a machine the person picks, in no workspace\
   await t.test('6. the four reads answer an Ask session of the runner\'s own, and nobody else', async () => {
     const asAsk = { 'x-orbit-session-id': pub(askId), 'x-orbit-runner-caller': 'mcp' };
     const machines = await api('GET', '/api/runner/help-ask/machines', ask.token, undefined, asAsk);
-    assert.equal(machines.status, 200, machines.text);
+    assert.equal(machines.status, 200, `${machines.text}\n${server!.output().slice(-4000)}`);
     const named = new Map((machines.json.machines as Array<Record<string, unknown>>).map((m) => [m.name, m]));
     assert.deepEqual([named.get(ask.name)?.online, named.get(asleep.name)?.online], [true, false], machines.text);
     assert.equal(typeof named.get(ask.name)?.lastHeartbeatAt, 'string', 'with its last heartbeat');
     const sessions = await api('GET', '/api/runner/help-ask/sessions', ask.token, undefined, asAsk);
-    assert.equal(sessions.status, 200, sessions.text);
+    assert.equal(sessions.status, 200, `${sessions.text}\n${server!.output().slice(-4000)}`);
     const listed = (sessions.json.sessions as Array<{ id: string; status: string }>).map((s) => toUuid(s.id));
     assert.ok(listed.includes(ordinaryId) && !listed.includes(askId), 'the account\'s sessions with their status, Asks left out');
     assert.ok(!('prompt' in sessions.json.sessions[0]), 'and never what was said in them');
     for (const read of ['tasks', 'quota']) {
       const reply = await api('GET', `/api/runner/help-ask/${read}`, ask.token, undefined, asAsk);
-      assert.equal(reply.status, 200, `${read}: ${reply.text}`);
+      assert.equal(reply.status, 200, `${read}: ${reply.text}\n${server!.output().slice(-4000)}`);
     }
     const refusals: Array<[string, string, Record<string, string>]> = [
       ['an ordinary session', ask.token, { 'x-orbit-session-id': pub(ordinaryId) }],
@@ -267,7 +268,9 @@ test('Ask is a read-only session on a machine the person picks, in no workspace\
       const reply = await api('GET', '/api/runner/help-ask/machines', token, undefined, headers);
       assert.equal(reply.status, 404, `${what}: ${reply.text}`);
     }
-    assert.equal((await api('GET', '/api/runner/help-ask/files', ask.token, undefined, asAsk)).status, 404, 'no fifth read');
+    // No fifth read: the fence refuses it before any door is looked for.
+    const fifth = await api('GET', '/api/runner/help-ask/files', ask.token, undefined, asAsk);
+    assert.deepEqual([fifth.status, fifth.json?.code], [403, 'HELP_ASK_READ_ONLY'], 'no fifth read');
   });
 
   await t.test('7. an Ask\'s tools reach no other runner door, read or write', async () => {

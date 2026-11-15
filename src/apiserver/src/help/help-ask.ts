@@ -118,16 +118,16 @@ export class HelpAsk {
     const runner = await this.prisma.runner.findFirst({ where: { id: input.runnerId, ownerId }, select: RUNNER_SELECT });
     if (!runner) throw new NotFoundException('no such machine');
     const machine = machineOf(runner, Date.now());
-    if (!machine.supported) {
-      throw new ConflictException({
-        code: 'HELP_ASK_RUNNER_UPGRADE',
-        message: `${machine.name} runs an Orbit runner too old to answer questions read-only. Update it, or pick another machine.`,
-      });
-    }
     if (!machine.online) {
       throw new ConflictException({
         code: 'HELP_ASK_MACHINE_OFFLINE',
         message: `${machine.name} is offline, so it cannot answer now. Pick a machine that is online.`,
+      });
+    }
+    if (!machine.supported) {
+      throw new ConflictException({
+        code: 'HELP_ASK_RUNNER_UPGRADE',
+        message: `${machine.name} runs an Orbit runner too old to answer questions read-only. Update it, or pick another machine.`,
       });
     }
     const content = input.content;

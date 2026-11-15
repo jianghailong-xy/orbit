@@ -140,7 +140,7 @@ export async function readMachines(prisma: PrismaService, ownerId: string, now =
 /** Session status: the account's newest sessions not in Trash (Asks left out), with where each runs and where it stands. */
 export async function readSessions(prisma: PrismaService, ownerId: string) {
   const sessions = await prisma.session.findMany({
-    where: { ownerId, deletedAt: null, helpAsk: { equals: Prisma.DbNull }, kind: 'CONVERSATION' },
+    where: { ownerId, deletedAt: null, helpAsk: { equals: Prisma.DbNull } },
     orderBy: [{ updatedAt: 'desc' }],
     take: READ_ROWS,
     select: {
@@ -170,7 +170,7 @@ export async function readSessions(prisma: PrismaService, ownerId: string) {
 /** Task status: the account's newest tasks that have not ended, and the newest that failed. */
 export async function readTasks(prisma: PrismaService, ownerId: string) {
   const tasks = await prisma.task.findMany({
-    where: { ownerId, deletedAt: null, status: { in: ['OPEN', 'IN_PROGRESS', 'FAILED'] } },
+    where: { ownerId, status: { in: ['OPEN', 'IN_PROGRESS', 'FAILED'] } },
     orderBy: [{ updatedAt: 'desc' }],
     take: READ_ROWS,
     select: { id: true, title: true, status: true, updatedAt: true, dispatchHold: true, project: { select: { title: true } } },

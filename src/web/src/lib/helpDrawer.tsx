@@ -17,6 +17,8 @@ export interface HelpDrawerAt {
   tab?: HelpTab;
   slug?: string | null;
   query?: string | null;
+  /** On Ask: the Ask session to continue (/help → Your questions), or null for a new question. */
+  askSession?: string | null;
 }
 
 export interface HelpDrawerState {
@@ -26,6 +28,8 @@ export interface HelpDrawerState {
   slug: string | null;
   /** The question the Ask tab starts from, when the drawer was opened with one. */
   query: string | null;
+  /** The Ask conversation the Ask tab shows, or null for a new question. Kept while the drawer is closed. */
+  askSession: string | null;
 }
 
 export interface HelpDrawerApi extends HelpDrawerState {
@@ -37,9 +41,11 @@ export interface HelpDrawerApi extends HelpDrawerState {
   toggleHelp: () => void;
   closeHelp: () => void;
   setTab: (tab: HelpTab) => void;
+  /** Show this Ask conversation on the Ask tab, or null to start a new question. */
+  setAskSession: (sessionId: string | null) => void;
 }
 
-const CLOSED: HelpDrawerState = { open: false, tab: 'articles', slug: null, query: null };
+const CLOSED: HelpDrawerState = { open: false, tab: 'articles', slug: null, query: null, askSession: null };
 const noop = () => {};
 
 /** Outside a provider (a share page, a component test) the drawer is closed and asks do nothing. */
@@ -49,6 +55,7 @@ const HelpDrawerCtx = createContext<HelpDrawerApi>({
   toggleHelp: noop,
   closeHelp: noop,
   setTab: noop,
+  setAskSession: noop,
 });
 
 export const useHelpDrawer = (): HelpDrawerApi => useContext(HelpDrawerCtx);
@@ -75,9 +82,13 @@ export function HelpDrawerProvider({ enabled = true, children }: { enabled?: boo
 
   const openHelp = useCallback((at?: HelpDrawerAt) => {
     setState((prev) => {
-      if (at?.slug) return { open: true, tab: 'articles', slug: at.slug, query: prev.query };
-      if (at?.tab === 'ask') return { open: true, tab: 'ask', slug: prev.slug, query: at.query ?? null };
-      if (at?.tab === 'articles') return { open: true, tab: 'articles', slug: null, query: prev.query };
+      if (at?.slug) return { ...prev, open: true, tab: 'articles', slug: at.slug };
+      if (at?.tab === 'ask') {
+        // A question or an article handed over starts a new Ask; a session named continues that one.
+        const askSession = at.askSession !== undefined ? at.askSession : at.query ? null : prev.askSession;
+        return { ...prev, open: true, tab: 'ask', query: at.query ?? null, askSession };
+      }
+      if (at?.tab === 'articles') return { ...prev, open: true, tab: 'articles', slug: null };
       return { ...prev, open: true };
     });
   }, []);
@@ -91,6 +102,7 @@ export function HelpDrawerProvider({ enabled = true, children }: { enabled?: boo
   const closeHelp = useCallback(() => setState((prev) => (prev.open ? { ...prev, open: false } : prev)), []);
   const toggleHelp = useCallback(() => setState((prev) => ({ ...prev, open: !prev.open })), []);
   const setTab = useCallback((tab: HelpTab) => setState((prev) => ({ ...prev, tab })), []);
+  const setAskSession = useCallback((askSession: string | null) => setState((prev) => ({ ...prev, askSession })), []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -118,8 +130,8 @@ export function HelpDrawerProvider({ enabled = true, children }: { enabled?: boo
   }, [enabled]);
 
   const api = useMemo<HelpDrawerApi>(
-    () => ({ ...state, open: enabled && state.open, openHelp, toggleHelp, closeHelp, setTab }),
-    [state, enabled, openHelp, toggleHelp, closeHelp, setTab],
+    () => ({ ...state, open: enabled && state.open, openHelp, toggleHelp, closeHelp, setTab, setAskSession }),
+    [state, enabled, openHelp, toggleHelp, closeHelp, setTab, setAskSession],
   );
   return <HelpDrawerCtx.Provider value={api}>{children}</HelpDrawerCtx.Provider>;
 }
