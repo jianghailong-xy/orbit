@@ -67,7 +67,7 @@ import {
   type SubagentRunView,
   type TaskProgress,
 } from '@orbit/shared';
-import { DELEGATE_TOOL, delegateResultText, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
+import { DELEGATE_TOOL, delegateResultText, delegateRunId, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import {
@@ -96,6 +96,7 @@ import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
+import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
@@ -111,6 +112,7 @@ import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { parseSubagentFinished, subagentFinishedOk } from '../lib/subagentFinished';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
@@ -203,6 +205,7 @@ import {
 /** What `Markdown` accepts as `remarkPlugins`: the array `MD` builds is annotated with it so that
  *  the plugins written into its literal cannot narrow its element type and refuse the next one. */
 type RemarkPlugins = NonNullable<ComponentProps<typeof Markdown>['remarkPlugins']>;
+type MarkdownComponents = NonNullable<ComponentProps<typeof Markdown>['components']>;
 
 // One normalized run event (subset the transcript cares about). Mirrors the SSE
 // payload the runner emits; see src/runner-go/claude.go + @orbit/shared enums.
@@ -996,7 +999,8 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
-  && !parseBackgroundWake(node.note);
+  && !parseBackgroundWake(node.note)
+  && !parseSubagentFinished(node.note);
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   return buildTranscript(events, turnImages).nodes;
@@ -2132,6 +2136,17 @@ function orbitTurnOf(
       target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
     };
   }
+  // A SubAgent's end folds like a job's news: a session running several should not read as a run of
+  // rounds the reader opened. One that did not finish stays drawn, as a failed job does.
+  const subagent = parseSubagentFinished(node.note);
+  if (subagent) {
+    if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;
+    const jobs = parseBackgroundWake(subagent.rest);
+    if (jobs?.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+    const title = subagentFinishedTitle(subagent);
+    const name = subagent.runs.length === 1 ? subagent.runs[0].description : null;
+    return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
+  }
   const background = parseBackgroundWake(node.note);
   if (background) {
     if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
@@ -2598,6 +2613,43 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // A job that ended while a turn ran is written into that turn as a steer: the same line, in
       // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
       // would — never the bubble itself.
+      //
+      // A SubAgent's end is the same kind of turn, in a block of its own (SubagentFinishedCard). A note
+      // that carries a background job's news beside it draws that line too, after the SubAgent's, as
+      // the control plane wrote them; the job's line then says how the turn went, once.
+      const subagent = parseSubagentFinished(node.note);
+      if (subagent) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        const steer = node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined;
+        const jobs = parseBackgroundWake(subagent.rest);
+        const rest = jobs ? jobs.rest : subagent.rest;
+        const attached = rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />;
+        return (
+          <>
+            <SubagentFinishedCard
+              wake={subagent}
+              seq={seq}
+              ts={node.ts}
+              undelivered={undelivered && !jobs}
+              steer={jobs ? undefined : steer}
+              queued={jobs ? undefined : queued}
+              attached={!jobs && attached}
+            />
+            {jobs && (
+              <BackgroundWakeCard
+                wake={jobs}
+                seq={seq}
+                ts={node.ts}
+                undelivered={undelivered}
+                steer={steer}
+                queued={queued}
+                attached={attached}
+              />
+            )}
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+          </>
+        );
+      }
       const background = parseBackgroundWake(node.note);
       if (background) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
@@ -3347,6 +3399,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
     translation && translation.state !== 'SENT_AS_WRITTEN' ? (
       <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
     ) : null;
+  const flipFoot = translation?.state === 'DONE';
   // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
   // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
   const noteKind = node.note ? describeNote(node.note) : '';
@@ -3417,9 +3470,15 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
               {copied ? <CheckOutlined /> : <CopyOutlined />}
             </button>
           )}
+          {/* A delivered translation's flip sits before the time, which ends the row
+              (docs/mocks/translation-user-hover). */}
+          {flipFoot && translationFoot}
+          {flipFoot && typed && node.ts && <span className="chat-meta-sep">·</span>}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note || held || translationFoot) && <span className="chat-meta-sep">·</span>}
-          {translationFoot}
+          {typed && node.ts && (status || note || held || (!flipFoot && translationFoot)) && (
+            <span className="chat-meta-sep">·</span>
+          )}
+          {!flipFoot && translationFoot}
           {status}
           {held}
           {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
@@ -4136,14 +4195,48 @@ function remarkHtmlBlocks() {
   };
 }
 
+/** The tag `remarkTail` puts the tail on; `block` when it had no line to end. */
+const MD_TAIL_TAG = 'md-tail';
+const MdTailCtx = createContext<ReactNode>(null);
+
+// Stable, so a press inside the tail keeps its focus when the reply re-renders.
+function MdTail({ block }: { block?: string }) {
+  const tail = useContext(MdTailCtx);
+  return block ? <div className="md-tail-block">{tail}</div> : <>{tail}</>;
+}
+
+/** Appends the tail to the end of the last line: the last paragraph or heading, inside the last
+ *  item of a closing list. When the text ends in anything else (code, a table, a quote), on a line
+ *  of its own below. */
+function remarkTail() {
+  return (tree: any) => {
+    const place = (parent: any): boolean => {
+      const last = parent.children?.at(-1);
+      if (!last) return false;
+      if (last.type === 'paragraph' || last.type === 'heading') {
+        last.children.push({ type: 'mdTail', data: { hName: MD_TAIL_TAG } });
+        return true;
+      }
+      if (last.type === 'list' || last.type === 'listItem') return place(last);
+      return false;
+    };
+    if (!place(tree)) {
+      tree.children.push({ type: 'mdTail', data: { hName: MD_TAIL_TAG, hProperties: { block: 'true' } } });
+    }
+  };
+}
+
 export const MD = memo(function MD({
   children,
   highlight = true,
   breaks = false,
+  tail,
 }: {
   children: string;
   highlight?: boolean;
   breaks?: boolean;
+  /** Drawn at the end of the text's last line, e.g. a translated reply's flip. */
+  tail?: ReactNode;
 }) {
   // Links that name an object of this deployment become cards — but only where a conversation view
   // has asked for them, which is what `OrbitLinkCardsProvider` says. The shared page and the
@@ -4158,16 +4251,25 @@ export const MD = memo(function MD({
   // plugin handed over already called would be installed as one and asked to read a tree it was
   // never given.
   if (cards && !exporting) plugins.push([orbitLinkRemarkPlugin, { host: cards.host }]);
+  if (tail) plugins.push(remarkTail);
   return (
     <div className="md">
-      <Markdown
-        remarkPlugins={plugins}
-        rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
-        urlTransform={transcriptUrlTransform}
-        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink, ...orbitLinkCardComponents }}
-      >
-        {children}
-      </Markdown>
+      <MdTailCtx.Provider value={tail}>
+        <Markdown
+          remarkPlugins={plugins}
+          rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
+          urlTransform={transcriptUrlTransform}
+          components={{
+            pre: CodeBlock,
+            img: MarkdownImage,
+            a: MarkdownLink,
+            ...orbitLinkCardComponents,
+            ...({ [MD_TAIL_TAG]: MdTail } as unknown as MarkdownComponents),
+          }}
+        >
+          {children}
+        </Markdown>
+      </MdTailCtx.Provider>
     </div>
   );
 });
@@ -4180,18 +4282,20 @@ export function AssistantBubble({
   text,
   streaming,
   seq,
+  tail,
 }: {
   text: string;
   streaming?: boolean;
   // Absent for the live draft, which has no persisted event to point at yet.
   seq?: number;
+  tail?: ReactNode;
 }) {
   return (
     <div
       className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
       data-seq={seq}
     >
-      <MD highlight={!streaming}>{text}</MD>
+      <MD highlight={!streaming} tail={tail}>{text}</MD>
     </div>
   );
 }
@@ -4206,8 +4310,19 @@ function TranslatedReply({ node }: { node: TextNode }) {
   const pending = !translation && node.awaitsTranslation;
   return (
     <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
-      <AssistantBubble text={translated} seq={node.seq} />
-      <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+      {translation?.text !== undefined && !translation.failed ? (
+        // Delivered: the flip rides at the end of the reply's last line.
+        <AssistantBubble
+          text={translated}
+          seq={node.seq}
+          tail={<ReplyTranslationFoot translation={translation} seq={node.seq} flipped={flipped} onFlip={flip} />}
+        />
+      ) : (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      )}
     </div>
   );
 }
@@ -4516,6 +4631,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     <>
       <div
         data-seq={node.seq}
+        // Where a SubAgent's finished line finds the card it was started from (SubagentFinishedCard).
+        data-subagent-run={isDelegate && node.result ? delegateRunId(resultContent) ?? undefined : undefined}
         className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
           hasDetail && open ? ' is-open' : ''
         }`}
@@ -5065,11 +5182,11 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
           </div>
         ) : undefined,
       };
-    // Orbit's SubAgent (docs/subagent-design.md §6.4): the same purple card as Agent. Its tier, model, time
+    // Orbit's SubAgent (docs/subagent-design.md §6.4), named Agent on screen as on iOS and macOS: the same purple card as Agent. Its tier, model, time
     // and cost come from its run (ToolView); opened, it is the child's steps and the result — no prompt.
     case DELEGATE_TOOL:
       return {
-        label: 'SubAgent',
+        label: 'Agent',
         icon: <span className="chat-subagent-icon">✦</span>,
         tone: 'agent',
         summary: [i.type || 'general', i.description].filter(Boolean).join(' · '),

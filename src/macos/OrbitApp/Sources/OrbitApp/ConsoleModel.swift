@@ -1975,6 +1975,15 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
+    /// The `delegate` call a SubAgent run was started from, by the run its result names — what a
+    /// SubAgent's finished line links back to — or nil where the loaded transcript holds none.
+    func delegateCard(forRun runId: String) -> String? {
+        for case .toolCall(let card) in reducer.state.items where card.name == SubagentBlock.toolName {
+            if SubagentFinishedText.delegateRunId(card.result) == runId { return card.id }
+        }
+        return nil
+    }
+
     /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
     /// transcript appearing again later does not jump back to it.
     func recordRequestFollowed(_ request: ScrollRequest) {

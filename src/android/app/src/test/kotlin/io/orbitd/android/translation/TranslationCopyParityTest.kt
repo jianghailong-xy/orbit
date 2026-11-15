@@ -30,12 +30,19 @@ class TranslationCopyParityTest {
         .replace(Regex("\"\\s*\\+\\s*\""), "").replace(Regex("'\\s*\\+\\s*'"), "")
         .replace(Regex("</?(code|b|strong|em|i)>"), "").replace(Regex("\\s+"), " ")
 
+    /** The switch's line is built around the agent language: what comes before and after its name, each said by every client. */
+    private fun hintParts(): Map<String, String> = TranslationCopy.translateConversationsHint("en").split("English").let { (before, after) ->
+        mapOf("translateConversationsHint before the language" to before.trim(), "translateConversationsHint after the language" to after.trim())
+    }
+
     private fun missing(source: String): Map<String, String> =
-        (words() + Translation.LANGUAGES.associate { (code, name) -> code to name }).filterValues { !source.contains(it) }
+        (words() + hintParts() + Translation.LANGUAGES.associate { (code, name) -> code to name }).filterValues { !source.contains(it) }
 
     @Test fun theCopyHoldsEveryWordTheBoardNames() {
         val all = words()
-        assertTrue("TranslationCopy holds no words", all.size >= 19)
+        assertTrue("TranslationCopy holds no words", all.size >= 16)
+        assertEquals("Agents read and write in Japanese; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are.",
+            TranslationCopy.translateConversationsHint("ja"))
         // English only (CLAUDE.md §5).
         all.forEach { (name, value) -> assertTrue("$name is not English: $value", value.none { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }) }
         assertEquals("Couldn't translate, so it wasn't sent", TranslationCopy.SEND_FAILED)
@@ -55,7 +62,7 @@ class TranslationCopyParityTest {
         assertEquals("Android words iOS/macOS does not say", emptyMap<String, String>(), missing(swift))
     }
 
-    @Test fun theLanguagesAreTheSharedSeven() {
+    @Test fun theLanguagesAreTheSharedOnes() {
         val shared = File(root, "src/shared/src/translation.ts").readText()
         Translation.LANGUAGES.forEach { (_, name) -> assertTrue("\"$name\" is not in src/shared", shared.contains("'$name'")) }
     }

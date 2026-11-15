@@ -196,7 +196,7 @@ public struct SubagentBlock: Equatable, Sendable {
     }
 
     /// How long the run took, once it has ended. A run still going has no duration to show yet.
-    private static func duration(_ run: SubagentRunView?) -> String? {
+    public static func duration(_ run: SubagentRunView?) -> String? {
         guard let run, !run.isRunning, let endedAt = run.endedAt,
               let start = RelativeTime.parse(run.createdAt), let end = RelativeTime.parse(endedAt) else {
             return nil
@@ -314,56 +314,28 @@ public struct SubagentGroup: Equatable, Sendable {
 }
 
 /// Every Agent a session started, as the console's capsule counts them and its sheet lists them (board 03).
+/// It carries no cost: the owner does not want what the Agents spent shown on the band or in the sheet.
 public struct SubagentSessionSummary: Equatable, Sendable {
     public let count: Int
     public let running: Int
-    /// What they added to the session's cost, or nil when it comes to less than a cent.
-    public let cost: String?
-    /// `4 · $0.07`: the capsule's words after its mark.
+    /// `4`: the capsule's words after its mark.
     public let capsule: String
-    /// The engines they ran on, each with what it cost, the costliest first: the sheet's bar and legend.
-    public let byEngine: [EngineShare]
-    /// How many engines and machines: the sheet's third figure (`3 engines · 2 machines`).
+    /// How many engines and machines: the sheet's second figure (`3 engines · 2 machines`).
     public let spread: String
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
-
-    public struct EngineShare: Equatable, Sendable {
-        public let engine: String
-        public let name: String
-        public let costUsd: Double
-        public let cost: String
-    }
 
     /// Nil when the session started no Agent: the capsule then has no place for one.
     public static func make(_ runs: [SubagentRunView]) -> SubagentSessionSummary? {
         guard !runs.isEmpty else { return nil }
         let running = runs.filter(\.isRunning).count
-        let total = runs.reduce(0.0) { $0 + $1.costUsd }
-        let cost = total < 0.01 ? nil : money(total)
-        var shares: [String: Double] = [:]
-        var order: [String] = []
-        for run in runs {
-            let engine = run.engine ?? ""
-            if shares[engine] == nil { order.append(engine) }
-            shares[engine, default: 0] += run.costUsd
-        }
-        let byEngine = order.filter { !$0.isEmpty }
-            .map { EngineShare(engine: $0, name: SubagentBlock.shortName($0), costUsd: shares[$0] ?? 0,
-                               cost: (shares[$0] ?? 0) < 0.01 ? "<$0.01" : money(shares[$0] ?? 0)) }
-            .sorted { $0.costUsd > $1.costUsd }
+        let engines = Set(runs.compactMap(\.engine).filter { !$0.isEmpty }).count
         let machines = Set(runs.map { $0.workspaceName ?? "" }).count
-        var spread = byEngine.count == 1 ? "1 engine" : "\(byEngine.count) engines"
+        var spread = engines == 1 ? "1 engine" : "\(engines) engines"
         if machines > 1 { spread += " · \(machines) machines" }
         let rows = runs.filter(\.isRunning).sorted { $0.createdAt > $1.createdAt }
             + runs.filter { !$0.isRunning }.sorted { $0.createdAt > $1.createdAt }
-        return SubagentSessionSummary(
-            count: runs.count, running: running, cost: cost,
-            capsule: cost.map { "\(runs.count) · \($0)" } ?? "\(runs.count)",
-            byEngine: byEngine, spread: spread, rows: rows)
-    }
-
-    private static func money(_ value: Double) -> String {
-        String(format: "$%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
+        return SubagentSessionSummary(count: runs.count, running: running, capsule: "\(runs.count)",
+                                      spread: spread, rows: rows)
     }
 }

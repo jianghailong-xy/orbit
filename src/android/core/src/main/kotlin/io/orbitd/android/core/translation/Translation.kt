@@ -14,8 +14,10 @@ import kotlinx.serialization.json.longOrNull
  * (src/shared/src/translation.ts). The server translates; a client only reads what it wrote and calls its doors.
  */
 object Translation {
-    /** "Your language": the seven the owner may write and read in, each with its English name (TRANSLATION_LANGUAGE_NAMES). */
+    /** The one curated list both pickers offer, "Your language" and "Agents work in", in the order of TRANSLATION_LANGUAGES, each with
+     * its English name (TRANSLATION_LANGUAGE_NAMES). */
     val LANGUAGES: List<Pair<String, String>> = listOf(
+        "en" to "English",
         "zh-Hans" to "Chinese (Simplified)",
         "zh-Hant" to "Chinese (Traditional)",
         "ja" to "Japanese",
@@ -23,21 +25,51 @@ object Translation {
         "es" to "Spanish",
         "fr" to "French",
         "de" to "German",
+        "ru" to "Russian",
+        "pt" to "Portuguese",
+        "it" to "Italian",
+        "nl" to "Dutch",
+        "ar" to "Arabic",
+        "hi" to "Hindi",
+        "tr" to "Turkish",
+        "vi" to "Vietnamese",
+        "th" to "Thai",
+        "id" to "Indonesian",
+        "pl" to "Polish",
+        "uk" to "Ukrainian",
+        "he" to "Hebrew",
+        "sv" to "Swedish",
+        "cs" to "Czech",
+        "da" to "Danish",
+        "fi" to "Finnish",
+        "el" to "Greek",
+        "hu" to "Hungarian",
+        "ro" to "Romanian",
+        "ms" to "Malay",
+        "bn" to "Bengali",
     )
-    /** What a preference without a language means (DEFAULT_TRANSLATION_LANGUAGE). */
+    /** What a preference without an owner language means (DEFAULT_TRANSLATION_LANGUAGE). */
     const val DEFAULT_LANGUAGE = "zh-Hans"
+    /** What a preference without an agent language means: English, as before it could be chosen (DEFAULT_AGENT_LANGUAGE). */
+    const val DEFAULT_AGENT_LANGUAGE = "en"
     /** The 422 code of a question answer whose words could not be translated: nothing was recorded (TRANSLATION_FAILED_CODE). */
     const val FAILED_CODE = "TRANSLATION_FAILED"
 
     fun isLanguage(value: String?): Boolean = LANGUAGES.any { it.first == value }
     fun name(lang: String): String = LANGUAGES.firstOrNull { it.first == lang }?.second ?: lang
+    /** The name without its parenthesis: "Chinese (Simplified)" reads "Chinese". */
+    fun shortName(lang: String): String = name(lang).replace(Regex("\\s*\\(.*\\)$"), "")
 
-    /** The composer tag (6A): "<Language> → English", the language without its parenthesis — "Chinese → English". */
-    fun tag(lang: String): String = name(lang).replace(Regex("\\s*\\(.*\\)$"), "") + " → English"
+    /** The composer tag (6A): "<Language> → <Agent language>", both without their parenthesis — "Chinese → English". */
+    fun tag(lang: String, agentLang: String = DEFAULT_AGENT_LANGUAGE): String = "${shortName(lang)} → ${shortName(agentLang)}"
 
     /** The account's language: `preferences.translationLanguage`, absent (or unknown) = the default pick. */
     fun language(preferences: JsonObject?): String =
         preferences?.string("translationLanguage")?.takeIf(::isLanguage) ?: DEFAULT_LANGUAGE
+
+    /** The language agents work in: `preferences.translationAgentLanguage`, absent (or unknown) = English. */
+    fun agentLanguage(preferences: JsonObject?): String =
+        preferences?.string("translationAgentLanguage")?.takeIf(::isLanguage) ?: DEFAULT_AGENT_LANGUAGE
 
     /** `preferences.translationEnabled`: on only for an explicit true. */
     fun enabled(preferences: JsonObject?): Boolean = (preferences?.get("translationEnabled") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true

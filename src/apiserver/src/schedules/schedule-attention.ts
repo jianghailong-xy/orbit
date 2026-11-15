@@ -9,6 +9,7 @@
  *   | HELD, AWAITING_APPROVAL          | yes      | push and Waiting on you                |
  *   | the run ended its own schedule   | once     | push, opens the schedule               |
  *   | a ONCE slot MISSED (§5.2)        | once     | push, opens the schedule               |
+ *   | a slot MISSED over budget (§4)   | once     | push, opens the schedule; once a row   |
  *
  * WAITING ON YOU is the owner-request channel (owner-requests/): four kinds no session can file, written here in the
  * transaction that decides them, each keyed so a replay writes one row (`clientRequestId` under its asking session):
@@ -26,6 +27,7 @@
  * production sends it through PushService.
  */
 import {
+  SCHEDULE_COPY,
   bashCommandRules,
   scheduleApprovalWaiting,
   scheduleEnvelopeTitle,
@@ -55,7 +57,8 @@ export type ScheduleAlertKind =
   | 'AWAITING_APPROVAL'
   | 'WIDEN'
   | 'GOAL_REACHED'
-  | 'ONCE_MISSED';
+  | 'ONCE_MISSED'
+  | 'OVER_BUDGET';
 
 /** One push. `opens` is where a tap goes: the run's session, or the schedule. */
 export interface ScheduleAlert {
@@ -105,6 +108,24 @@ const WHY_MAX = 1_000;
 function line(text: string, max = BODY_MAX): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length <= max ? flat : `${flat.slice(0, max - 1).trimEnd()}…`;
+}
+
+/** A run's reasonText (§4): the shared sentence for a slot over budget; null otherwise, so a client words the rest. */
+export function runReasonText(run: { failureReason: string | null }): string | null {
+  // No count: the envelope may have changed since, and the row should stay true.
+  return run.failureReason === 'OVER_BUDGET' ? SCHEDULE_COPY.runReasonTexts.OVER_BUDGET : null;
+}
+
+/** The push for a slot over budget, told once (§4, §7.3). */
+export function overBudgetCopy(title: string, runsPerWeek: number): { title: string; body: string } {
+  const runs = `${runsPerWeek} run${runsPerWeek === 1 ? '' : 's'}`;
+  return {
+    title: line(`${title} skipped a run`, 120),
+    body: line(
+      `A run was not started: it had already started ${runs} in the past 7 days, as many as you allowed. `
+      + 'Its slots run again as older runs leave the 7 days; Run now still starts one.',
+    ),
+  };
 }
 
 /**

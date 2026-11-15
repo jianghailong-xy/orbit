@@ -107,6 +107,10 @@ func TestSessionSendAsksForAReplyTheSameWayThroughBothDoors(t *testing.T) {
 		{"/api/runner/sessions/child/turns", asksForReply(nil, nil)},
 		{"/api/runner/sessions/child/turns", plain},
 	}
+	// Each logical call carried a key the runner drew for it (call_identity_test.go).
+	for _, c := range *calls {
+		takeDrawnKey(t, c.body)
+	}
 	if !reflect.DeepEqual(*calls, want) {
 		t.Fatalf("requests =\n%#v\nwant\n%#v", *calls, want)
 	}
@@ -242,6 +246,10 @@ func TestProjectSendAsksTheCoordinatorForAReplyTheSameWayThroughBothDoors(t *tes
 	want := []recordedCall{
 		{"/api/runner/projects/proj-1/coordinator/messages", body},
 		{"/api/runner/projects/proj-1/coordinator/messages", body},
+	}
+	// Each logical call carried a key the runner drew for it (call_identity_test.go).
+	for _, c := range *calls {
+		takeDrawnKey(t, c.body)
 	}
 	if !reflect.DeepEqual(*calls, want) {
 		t.Fatalf("requests =\n%#v\nwant\n%#v", *calls, want)
