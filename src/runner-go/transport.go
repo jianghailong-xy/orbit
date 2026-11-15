@@ -121,6 +121,7 @@ func init() {
 		taskForkCapabilityV1,
 		codelessCheckoutCapabilityV1,
 		machineResourcesCapabilityV1,
+		helpAskCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
