@@ -12,10 +12,12 @@
  *    TRANSLATION_LANGUAGES ("Your language" and "Agents work in" alike). `translationAvailable: false` is board frame 2: the switch is
  *    drawn disabled with the DEEPSEEK_API_KEY notice, and nothing is translated whatever the
  *    preference says.
+ *    When the two languages are the same, nothing is translated either: messages, replies and
+ *    cards go exactly as with translation off (no `translation` on any of them).
  *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage?,
  *    translationAgentLanguage? }`. Either language outside TRANSLATION_LANGUAGES is a 400. The answer is the same shape as
  *    `/users/me`.
- *  - The owner's message, once translated, travels as a turn whose `content` is the English the
+ *  - The owner's message, once translated, travels as a turn whose `content` is the translation the
  *    engine receives and whose `translation.original` is what the owner typed (TurnTranslation).
  *    It is on:
  *      · the queued/active turn list, `GET /sessions/:id/turns[?view=active]` — every row may carry
@@ -25,7 +27,7 @@
  *        `/resume`, `/interrupt` with a follow-up): `translation` with state TRANSLATING when the
  *        message is being translated, absent when translation was not involved;
  *      · the transcript: the runner's `user` run event for that turn carries `translation`
- *        (state DONE or SENT_AS_WRITTEN) beside its `text`, which is the English delivered.
+ *        (state DONE or SENT_AS_WRITTEN) beside its `text`, which is the translation delivered.
  *  - Every change of a held turn's state (TRANSLATING → DONE / FAILED, Retry, Send as written) is
  *    announced on the session's event stream with the existing QUEUED_TURNS_CHANGED run event
  *    (RunEventType.QUEUED_TURNS_CHANGED, RealtimeService.publishQueuedTurnsChanged);
@@ -54,7 +56,7 @@
  *    TranslationEventPayload, `of` the seq of the event it belongs to. Fold it into that event's
  *    payload as `translation`, exactly as a replay would have delivered it.
  *  - The streaming reply (2A): between the first `text_delta` and the TRANSLATION for its block,
- *    the English is what there is; the client greys it with "Translates when the reply is done".
+ *    the agent's own words are what there is; the client greys it with "Translates when the reply is done".
  *  - Failure (2A): `{ failed: true }` draws "Couldn't translate this reply · Retry". Retry is
  *    `POST /sessions/:id/events/:seq/translation/retry` (no body), answered at once with
  *    ReplyTranslationRetryResponse; the result arrives as another TRANSLATION. A 409 means
@@ -70,7 +72,7 @@
  *    question as shown and the option labels as shown — the original or the translated, either one;
  *    the server maps a translated question and a translated label back to the original before the
  *    engine reads it. Any other answer (the owner's own words) and the decision's `message` are
- *    translated into English like a message. If that translation fails the decision is NOT
+ *    translated into the agent language like a message. If that translation fails the decision is NOT
  *    recorded (1A): 422 with `code: 'TRANSLATION_FAILED'`; the client offers Retry (send it again)
  *    and Send as written (send it again with `sendAsWritten: true`).
  */
@@ -186,7 +188,7 @@ export interface MeTranslation {
  *  - TRANSLATING: being translated; not delivered to the engine yet (chip "Translating…").
  *  - FAILED: translation failed or took longer than 20 s; NOT delivered (decision 1A). The client
  *    shows "Couldn't translate, so it wasn't sent · Retry · Send as written".
- *  - DONE: delivered in English; `original` is what the owner wrote.
+ *  - DONE: delivered in the account's agent language; `original` is what the owner wrote.
  *  - SENT_AS_WRITTEN: the owner chose Send as written; delivered untranslated, so `content` and
  *    `original` are the same words.
  */
@@ -196,10 +198,10 @@ export type TurnTranslationState = 'TRANSLATING' | 'FAILED' | 'DONE' | 'SENT_AS_
  *  Absent on every message translation was not involved in. */
 export interface TurnTranslation {
   state: TurnTranslationState;
-  /** The language the owner wrote in. The target is always AGENT_LANGUAGE. */
+  /** The language the owner wrote in. The target is the account's agent language (`translationAgentLanguage`). */
   from: TranslationLanguage;
   /** What the owner typed, as typed. Draw this in the bubble by default; "Show original" on a DONE
-   *  message flips to the turn's `content` / the event's `text` (the English the agent got). */
+   *  message flips to the turn's `content` / the event's `text` (what the agent got). */
   original: string;
 }
 
@@ -251,7 +253,7 @@ export interface TranslatedQuestion {
  *  owner's language. Absent until it is translated, and on every card translation is off for. */
 export interface ApprovalTranslation {
   lang: TranslationLanguage;
-  /** The card could not be translated: draw it in English. Nothing else is set. */
+  /** The card could not be translated: draw it as the agent wrote it. Nothing else is set. */
   failed?: true;
   /** `input.description` translated (a tool card's one-line "what this does"). */
   description?: string;
