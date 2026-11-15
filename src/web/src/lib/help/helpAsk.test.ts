@@ -23,6 +23,12 @@ describe('parseAnswer', () => {
     expect(parsed.body).toBe('Open build-box, then build-box again. See https://x.test.');
   });
 
+  it('a line of in-app links alone becomes the buttons, not text as well', () => {
+    const parsed = parseAnswer('It sleeps.\n\n[Open build-box](orbit:/settings/machines/r1) · [Register a machine](orbit:/settings/machines/new)\n\nThat is all.');
+    expect(parsed.buttons.map((b) => b.label)).toEqual(['Open build-box', 'Register a machine']);
+    expect(parsed.body).toBe('It sleeps.\n\nThat is all.');
+  });
+
   it('takes a bold heading and a list item marker', () => {
     const parsed = parseAnswer('Yes [1].\n\n**Sources:**\n- [1] [Connect a model](orbit:/help/get-started/connect-a-model)');
     expect(parsed.sources.map((s) => s.slug)).toEqual(['connect-a-model']);

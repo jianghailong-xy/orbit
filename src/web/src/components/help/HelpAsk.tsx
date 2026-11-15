@@ -32,6 +32,7 @@ import { sessionQuery } from '../../lib/queries';
 import { isSessionLive, isSessionTerminal, sessionRunStatusOf } from '../../lib/sessionState';
 import { useSessionStream } from '../../lib/useSessionStream';
 import { useToast } from '../../lib/toast';
+import { claudeModelName } from '../../lib/workspaceDefaults';
 import './HelpAsk.css';
 
 /** The three Get started articles the no-machine state offers (board 02 ③A), in this order. */
@@ -367,15 +368,16 @@ export function AskConversation({
   const toast = useToast();
   const [sending, setSending] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    bottom.current?.scrollIntoView?.({ block: 'end' });
-  }, [exchanges.length, stream.streamingText]);
   const machine = choices?.machines.find((m) => m.id === row?.assignedRunnerId)?.name;
   const engine = row?.engine ? helpAskEngineLabel(row.engine) : null;
-  const meta = [machine, [engine, row?.model].filter(Boolean).join(' · '), typeof row?.costUsd === 'number' ? `$${row.costUsd.toFixed(2)}` : null]
+  const meta = [machine, [engine, row?.model ? claudeModelName(row.model) : null].filter(Boolean).join(' · '), typeof row?.costUsd === 'number' ? `$${row.costUsd.toFixed(2)}` : null]
     .filter(Boolean)
     .join(' · ');
   const working = !stream.idle || sessionRunStatusOf((row ?? {}) as never) === 'PENDING';
+  // Down to the newest words, and once more when the answer ends and "Did this answer it?" appears under it.
+  useEffect(() => {
+    bottom.current?.scrollIntoView?.({ block: 'end' });
+  }, [exchanges.length, stream.streamingText, working]);
   const followUp = async (content: string) => {
     setSending(true);
     try {

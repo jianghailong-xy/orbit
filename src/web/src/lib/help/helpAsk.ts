@@ -157,7 +157,22 @@ export function parseAnswer(text: string): ParsedAnswer {
     sources.push({ n: Number(m[1]), title: m[2].trim(), path, slug: path.split('/').pop() ?? '' });
   }
   const buttons: AskLinkButton[] = [];
-  let body = lines.slice(0, end).join('\n').trimEnd();
+  // A line that is nothing but in-app links is said by the buttons below the answer, so it leaves the body.
+  const linksAlone = (line: string) => APP_LINK.test(line) && line.replace(APP_LINK, '').replace(/[\s·•|,-]/gu, '') === '';
+  let body = lines
+    .slice(0, end)
+    .flatMap((line) => {
+      APP_LINK.lastIndex = 0;
+      if (!linksAlone(line)) return [line];
+      for (const [, label, href] of line.matchAll(APP_LINK)) {
+        if (!buttons.some((b) => b.href === href)) buttons.push({ label: label.trim(), href });
+      }
+      return [];
+    })
+    .join('\n')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trimEnd();
+  APP_LINK.lastIndex = 0;
   body = body.replace(APP_LINK, (_all, label: string, href: string) => {
     if (!buttons.some((b) => b.href === href)) buttons.push({ label: label.trim(), href });
     return label;
