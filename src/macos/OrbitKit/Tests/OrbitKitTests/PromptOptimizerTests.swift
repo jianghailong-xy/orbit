@@ -36,7 +36,8 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertTrue(o.segments[1].added)
         XCTAssertEqual(o.text, o.segments.map(\.text).joined())
         XCTAssertEqual(o.language, "en")
-        XCTAssertTrue(o.isEnglish)
+        XCTAssertEqual(o.promptLanguage, .en)
+        XCTAssertTrue(o.isInAgentLanguage)
         XCTAssertEqual(o.gloss, "登录后用户落在错误的页面。")
         XCTAssertEqual(o.contextUsed, [.turns(count: 6), .recap, .project(title: "Auth cleanup"),
                                        .wiki(count: 2), .workspace(name: "orbit")])
@@ -50,7 +51,8 @@ final class PromptOptimizerTests: XCTestCase {
         """)
         XCTAssertNil(o.gloss)
         XCTAssertEqual(o.language, "zh-Hans")
-        XCTAssertFalse(o.isEnglish)
+        XCTAssertEqual(o.promptLanguage, .zhHans)
+        XCTAssertFalse(o.isInAgentLanguage)
         XCTAssertTrue(o.chips.isEmpty)
     }
 
@@ -152,6 +154,16 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertEqual(PromptOptimizerCopy.showIn(.ja), "Show in Japanese")
     }
 
+    func testBackFromTheGlossNamesThePromptsLanguageNotEnglish() throws {
+        XCTAssertEqual(PromptOptimizerCopy.showPrompt(.en), "Show in English")
+        XCTAssertEqual(PromptOptimizerCopy.showPrompt(.ja), "Show in Japanese")
+        XCTAssertEqual(PromptOptimizerCopy.showPrompt(nil), "Show original")
+        let o = try decode(PromptOptimization.self, """
+        {"segments":[{"text":"x","added":false}],"language":"xx-unknown","gloss":"y"}
+        """)
+        XCTAssertNil(o.promptLanguage)
+    }
+
     // MARK: - Use and Undo (frames 4–5)
 
     private func suggested(_ json: String? = nil, draft: String = "fix the login redirect bug") throws -> PromptOptimizerState {
@@ -219,7 +231,7 @@ final class PromptOptimizerTests: XCTestCase {
 
     // MARK: - skipTranslation (D2)
 
-    func testSkipTranslationOnlyForUneditedOptimizedEnglish() throws {
+    func testSkipTranslationOnlyForUneditedOptimizedAgentLanguageText() throws {
         var state = try suggested()
         let inserted = try XCTUnwrap(state.use(current: "draft"))
         XCTAssertTrue(state.skipTranslation(sending: inserted))
@@ -228,6 +240,15 @@ final class PromptOptimizerTests: XCTestCase {
         XCTAssertFalse(state.skipTranslation(sending: "something else"))
         state.sent()
         XCTAssertFalse(state.skipTranslation(sending: inserted), "spent by the send")
+    }
+
+    func testSkipTranslationForAChosenAgentLanguageNotOnlyEnglish() throws {
+        var state = try suggested("""
+        {"segments":[{"text":"ログインのリダイレクトを直して","added":false}],"language":"ja","gloss":"修复登录跳转","contextUsed":[]}
+        """)
+        let inserted = try XCTUnwrap(state.use(current: "draft"))
+        XCTAssertTrue(state.skipTranslation(sending: inserted))
+        XCTAssertFalse(state.skipTranslation(sending: inserted + "!"))
     }
 
     func testNoSkipForAPromptInTheDraftsOwnLanguage() throws {

@@ -415,6 +415,16 @@ describe('the suggestion card (frame 4)', () => {
     expect(card()!.textContent).toContain(OPTIMIZED);
   });
 
+  it('"Show in" names the agent language the prompt was written in, not English', async () => {
+    optimizeMock.mockImplementation(async () => ({ ...RESULT, language: 'ja' }));
+    await ready();
+    await openCard();
+    await act(async () => cardButton('Show in Chinese (Simplified)').click());
+    expect(card()!.textContent).toContain('GLOSS-IN-READER-LANGUAGE');
+    await act(async () => cardButton('Show in Japanese').click());
+    expect(card()!.textContent).toContain(OPTIMIZED);
+  });
+
   it('offers no "Show in" without a gloss', async () => {
     optimizeMock.mockImplementation(async () => ({ ...RESULT, gloss: undefined }));
     await ready();

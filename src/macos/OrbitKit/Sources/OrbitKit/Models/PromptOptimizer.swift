@@ -83,7 +83,8 @@ public struct PromptOptimization: Decodable, Equatable, Sendable {
     public let segments: [PromptOptimizationSegment]
     /// The concatenation of `segments`.
     public let text: String
-    /// `"en"` exactly when the owner's Translation is on; otherwise the draft's own language.
+    /// The account's agent language ("Agents work in", English by default) when the owner's
+    /// Translation is on; otherwise the draft's own language. A `TranslationLanguage` raw value.
     public let language: String
     /// Present only when Translation is on: the same prompt in the owner's language, for reading.
     public let gloss: String?
@@ -112,8 +113,12 @@ public struct PromptOptimization: Decodable, Equatable, Sendable {
         contextUsed = (try? c.decodeIfPresent([PromptOptimizationContext].self, forKey: .contextUsed)) ?? []
     }
 
-    /// Whether the prompt is English (D2): the only case a send may skip translation.
-    public var isEnglish: Bool { language == "en" }
+    /// The prompt's language, or nil for a code this client does not know.
+    public var promptLanguage: TranslationLanguage? { TranslationLanguage(rawValue: language) }
+
+    /// Whether the prompt was written in the agent language for a translating account (D2): the
+    /// server writes a gloss exactly then, and it is the only case a send may skip translation.
+    public var isInAgentLanguage: Bool { gloss != nil }
 
     /// The "Used: …" chips, in the server's order.
     public var chips: [String] { contextUsed.compactMap(\.chip) }
@@ -146,7 +151,11 @@ public enum PromptOptimizerCopy {
     public static let tryAgain = "Try again"
     public static let dismiss = "Dismiss"
     public static let escDismisses = "Esc dismisses · your draft is kept"
-    public static let showOriginal = "Show English"
+    /// Back from the gloss: the prompt's own language ("Show in English"), or "Show original" for a
+    /// code this client does not know.
+    public static func showPrompt(_ language: TranslationLanguage?) -> String {
+        language.map(showIn) ?? TranslationCopy.showOriginal
+    }
     public static func showIn(_ language: TranslationLanguage) -> String { "Show in \(language.bareName)" }
 
     // After Use (frame 5) and failure (frame 6)
@@ -238,8 +247,8 @@ public struct PromptOptimizerState: Equatable, Sendable {
     /// After Use: the owner's own draft (Undo puts it back) and the text Use put in the box.
     public private(set) var undoDraft: String?
     public private(set) var inserted: String?
-    /// Whether `inserted` is English, the one case a send may skip translation.
-    private var insertedEnglish = false
+    /// Whether `inserted` is in the agent language, the one case a send may skip translation.
+    private var insertedInAgentLanguage = false
 
     public init() {}
 
@@ -291,7 +300,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
         guard let s = suggestion else { return nil }
         undoDraft = current
         inserted = s.text
-        insertedEnglish = s.isEnglish
+        insertedInAgentLanguage = s.isInAgentLanguage
         phase = .idle
         showingGloss = false
         return s.text
@@ -307,7 +316,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
         guard offersUndo(current: current), let draft = undoDraft else { return nil }
         undoDraft = nil
         inserted = nil
-        insertedEnglish = false
+        insertedInAgentLanguage = false
         return draft
     }
 
@@ -316,9 +325,9 @@ public struct PromptOptimizerState: Equatable, Sendable {
     public mutating func forgetUndo() { undoDraft = nil }
 
     /// D2: a send carries `skipTranslation` only when its text is still exactly the optimized
-    /// English Use put in the box. Edited by one character, it is translated as usual.
+    /// agent-language text Use put in the box. Edited by one character, it is translated as usual.
     public func skipTranslation(sending raw: String) -> Bool {
-        guard let inserted, insertedEnglish else { return false }
+        guard let inserted, insertedInAgentLanguage else { return false }
         return raw.trimmingCharacters(in: .whitespacesAndNewlines)
             == inserted.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -327,6 +336,6 @@ public struct PromptOptimizerState: Equatable, Sendable {
     public mutating func sent() {
         undoDraft = nil
         inserted = nil
-        insertedEnglish = false
+        insertedInAgentLanguage = false
     }
 }

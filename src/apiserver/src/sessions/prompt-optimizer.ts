@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { IsOptional, IsString } from 'class-validator';
 import {
-  AGENT_LANGUAGE,
+  DEFAULT_AGENT_LANGUAGE,
   isTranslationLanguage,
   PROMPT_OPTIMIZATION_FAILED_CODE,
   PROMPT_OPTIMIZER_MAX_DRAFT_CHARS,
@@ -39,7 +39,7 @@ import { WikiRetrieval } from '../wiki/wiki-retrieval';
 import { deepSeekCall } from './naming';
 import { estimateTokens, fitRecapActivity, RECAP_INPUT_TOKEN_BUDGET, type RecapEventRow } from './recap';
 import { protectVerbatim, restoreVerbatim } from './translation';
-import { ownerTranslationLanguage } from './turn-translation';
+import { translationLanguages, type TranslationLanguages } from './turn-translation';
 
 /**
  * Prompt optimizer (docs/prompt-optimizer-design.md, @orbit/shared prompt-optimizer.ts): DeepSeek
@@ -101,12 +101,12 @@ function languageName(code: TranslationLanguage): string {
 }
 
 /** The instruction (design, last bullet of the wire contract). */
-export function optimizerSystemPrompt(translationLang: TranslationLanguage | null): string {
-  const language = translationLang
-    ? 'Write the improved prompt in English. Also write "gloss": the same improved prompt translated into ' +
-      `${languageName(translationLang)}, for the owner to read; set "language" to "en".`
-    : 'Write the improved prompt in the same language as the draft. Set "language" to the draft\'s language code: ' +
-      `"en" for English, or one of ${TRANSLATION_LANGUAGES.map((code) => `"${code}"`).join(', ')}. Do not write "gloss".`;
+export function optimizerSystemPrompt(languages: TranslationLanguages | null): string {
+  const language = languages
+    ? `Write the improved prompt in ${languageName(languages.agent)}. Also write "gloss": the same improved prompt ` +
+      `translated into ${languageName(languages.owner)}, for the owner to read; set "language" to "${languages.agent}".`
+    : 'Write the improved prompt in the same language as the draft. Set "language" to the draft\'s language code, ' +
+      `one of ${TRANSLATION_LANGUAGES.map((code) => `"${code}"`).join(', ')}. Do not write "gloss".`;
   return (
     'You improve prompts that a person is about to send to an AI coding agent. Rewrite the draft so the request is ' +
     'clear and complete. Keep the owner\'s intent and every concrete detail of the draft. Add only facts that the ' +
@@ -116,7 +116,7 @@ export function optimizerSystemPrompt(translationLang: TranslationLanguage | nul
     'shell commands, code identifiers and error messages. ' +
     `${language} ` +
     'Reply with ONLY a JSON object: {"segments": [{"text": string, "added": boolean}], "language": string' +
-    (translationLang ? ', "gloss": string' : '') +
+    (languages ? ', "gloss": string' : '') +
     '}. Concatenated, the segments are the improved prompt; mark "added": true on text you drew from the context ' +
     'rather than from the draft, and "added": false on everything else.'
   );
@@ -167,7 +167,7 @@ function restoreSegments(segments: PromptOptimizationSegment[], spans: readonly 
 function parseOptimization(
   content: string,
   spans: readonly string[],
-  translationLang: TranslationLanguage | null,
+  languages: TranslationLanguages | null,
 ): Omit<PromptOptimization, 'contextUsed'> {
   let data: unknown;
   try {
@@ -188,7 +188,7 @@ function parseOptimization(
   }
   const restored = restoreSegments(segments, spans);
   const text = restored.map((segment) => segment.text).join('');
-  if (translationLang) {
+  if (languages) {
     const gloss = typeof reply.gloss === 'string' ? reply.gloss.trim() : '';
     if (!gloss) throw new PromptOptimizationFailed('MALFORMED', 'The optimizer returned no reading copy.');
     let restoredGloss: string;
@@ -197,11 +197,10 @@ function parseOptimization(
     } catch {
       throw new PromptOptimizationFailed('MALFORMED', 'The optimizer changed the code or links in the reading copy.');
     }
-    return { segments: restored, text, language: AGENT_LANGUAGE, gloss: restoredGloss };
+    return { segments: restored, text, language: languages.agent, gloss: restoredGloss };
   }
-  // The draft's own language. A language outside the seven reads as English, the one other code the
-  // contract has.
-  const language = isTranslationLanguage(reply.language) ? reply.language : AGENT_LANGUAGE;
+  // The draft's own language. A code outside TRANSLATION_LANGUAGES reads as the default agent language.
+  const language = isTranslationLanguage(reply.language) ? reply.language : DEFAULT_AGENT_LANGUAGE;
   return { segments: restored, text, language };
 }
 
@@ -215,14 +214,14 @@ function parseOptimization(
 export async function optimizePrompt(
   draft: string,
   context: PromptOptimizerContext,
-  opts: { translationLang: TranslationLanguage | null; timeoutMs?: number },
+  opts: { languages: TranslationLanguages | null; timeoutMs?: number },
 ): Promise<PromptOptimization> {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) throw new ConflictException({ code: PROMPT_OPTIMIZER_OFF_CODE, message: 'This server has no DeepSeek key.' });
   const { masked, spans } = protectVerbatim(draft);
-  const call = deepSeekCall(apiKey, optimizerSystemPrompt(opts.translationLang), optimizerTask(masked, context), {
+  const call = deepSeekCall(apiKey, optimizerSystemPrompt(opts.languages), optimizerTask(masked, context), {
     json: true,
-    maxTokens: maxTokensFor(masked, opts.translationLang !== null),
+    maxTokens: maxTokensFor(masked, opts.languages !== null),
   });
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -252,7 +251,7 @@ export async function optimizePrompt(
     }
     const content = typeof choice?.message?.content === 'string' ? choice.message.content.trim() : '';
     if (!content) throw new PromptOptimizationFailed('EMPTY', 'The optimizer returned nothing.');
-    return { ...parseOptimization(content, spans, opts.translationLang), contextUsed: contextUsedOf(context) };
+    return { ...parseOptimization(content, spans, opts.languages), contextUsed: contextUsedOf(context) };
   })();
   const timedOut = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
@@ -300,9 +299,9 @@ export class PromptOptimizerService {
       throw new BadRequestException(`The draft is longer than ${PROMPT_OPTIMIZER_MAX_DRAFT_CHARS} characters.`);
     }
     const context = await this.gatherContext(ownerId, draft, dto);
-    const translationLang = await ownerTranslationLanguage(this.prisma, ownerId);
+    const languages = await translationLanguages(this.prisma, ownerId);
     try {
-      return await promptOptimizerQueue.run(() => optimizePrompt(draft, context, { translationLang, timeoutMs: opts.timeoutMs }));
+      return await promptOptimizerQueue.run(() => optimizePrompt(draft, context, { languages, timeoutMs: opts.timeoutMs }));
     } catch (err) {
       if (err instanceof PromptOptimizationFailed) {
         throw new UnprocessableEntityException({ code: PROMPT_OPTIMIZATION_FAILED_CODE, reason: err.reason, message: err.message });

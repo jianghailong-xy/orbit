@@ -18,12 +18,15 @@ recommendation on 2026-11-15 ("As suggested").
   fitted to `RECAP_INPUT_TOKEN_BUDGET` with `fitRecapActivity`), the workspace name, the Orbit
   project's goal and acceptance criteria when the session belongs to one, and up to three wiki entries
   (title and summary) that the wiki search finds for the draft in the session's workspace.
-- **D2 A: English when Translation is on.** With the owner's Translation on, the optimizer writes
-  English and also returns a reading copy (`gloss`) in the owner's language, in the same call. The
+- **D2 A: the agent language when Translation is on.** With the owner's Translation on, the optimizer
+  writes the agent language (Settings › Translation's "Agents work in", `preferences.translationAgentLanguage`,
+  English by default) and `language` is that code. It also returns a reading copy (`gloss`) in the owner's
+  language, in the same call; when the two languages are the same nothing is translated, so there is no
+  gloss and the prompt is in the draft's own language, as with Translation off. The
   card's "Show in <language>" flips to the gloss. A send whose text is still exactly the inserted
   optimized text carries `skipTranslation: true`, so the server does not hold it for translation.
   Once the owner edits the text, the flag is dropped and the send is translated as usual. A translation
-  keeps text that is already English unchanged.
+  keeps text that is already in the agent language unchanged.
 - **D3 A: the card above the composer.** Text added from context is tinted. Actions are Use, Edit then
   use, Try again, and × / Esc (dismiss, draft kept). After Use, an "Undo" toast (and ⌘Z in the box)
   restores the owner's draft. On the phone the card is a sheet over the composer with the same actions.

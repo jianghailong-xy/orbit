@@ -76,7 +76,7 @@ struct PromptOptimizationCard: View {
             if optimization.gloss != nil || !optimization.chips.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     if optimization.gloss != nil {
-                        Button(showingGloss ? PromptOptimizerCopy.showOriginal
+                        Button(showingGloss ? PromptOptimizerCopy.showPrompt(optimization.promptLanguage)
                                             : PromptOptimizerCopy.showIn(glossLanguage)) {
                             showingGloss.toggle()
                         }

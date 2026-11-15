@@ -25,7 +25,7 @@ import type { TranslationLanguage } from './translation';
  *        frame 6, "Couldn't optimize this draft · Try again".
  *  - Sends. `POST /sessions/:id/turns`, a new session's opening message (`POST /sessions`) and a
  *    revive (`POST /sessions/:id/resume`) accept `skipTranslation?: boolean` (D2). A send whose text
- *    is still exactly the inserted optimized English carries it: the turn is never held for
+ *    is still exactly the inserted optimized text carries it: the turn is never held for
  *    Translation and carries no `translation`. Once the owner edits the text, drop the flag.
  *
  * CONTEXT (D1 A)
@@ -37,9 +37,10 @@ import type { TranslationLanguage } from './translation';
  *
  * LANGUAGE (D2 A)
  * ===============
- *  With the owner's Translation on, the optimized prompt is English (`language: 'en'`) and `gloss`
- *  is the same prompt in the owner's language, for reading ("Show in <language>"). Otherwise the
- *  prompt is in the draft's own language and there is no gloss.
+ *  With the owner's Translation on, the optimized prompt is in the account's agent language
+ *  (`preferences.translationAgentLanguage`, English by default; `language` is that code) and `gloss`
+ *  is the same prompt in the owner's language, for reading ("Show in <language>"). Otherwise — Translation
+ *  off, or the owner's language the agent's — the prompt is in the draft's own language and there is no gloss.
  */
 
 /** The key of `User.preferences` (UserPreferences) this feature owns. Account-wide. */
@@ -90,8 +91,8 @@ export interface PromptOptimization {
   segments: PromptOptimizationSegment[];
   /** The concatenation of `segments`, for clients that do not tint. */
   text: string;
-  /** `'en'` exactly when the owner's Translation is on; otherwise the draft's own language. */
-  language: 'en' | TranslationLanguage;
+  /** The account's agent language when the owner's Translation is on; otherwise the draft's own language. */
+  language: TranslationLanguage;
   /** Present only when Translation is on: the same prompt in the owner's language, for reading. */
   gloss?: string;
   /** Exactly the sources that contributed, in the order the card draws them. */
