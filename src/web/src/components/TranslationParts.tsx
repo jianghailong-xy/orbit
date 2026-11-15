@@ -80,8 +80,8 @@ function FootAction({ label, onPress }: { label: string; onPress?: () => Promise
 const Sep = () => <span className="chat-translate-sep">·</span>;
 
 /**
- * The owner's message: "Translated · Show original" ↔ "Sent to the agent in English · Show
- * translation" once delivered; the "Translating…" chip while held; and, held because the translation
+ * The owner's message: "Show original" ↔ "Show translation" once delivered, the press alone after
+ * the copy button and time (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation
  * failed (1A), "Couldn't translate, so it wasn't sent · Retry · Send as written".
  */
 export function UserTranslationFoot({
@@ -119,8 +119,6 @@ export function UserTranslationFoot({
     case 'DONE':
       return (
         <span className="chat-translate-foot">
-          <span>{flipped ? COPY.sentInEnglish : COPY.translated}</span>
-          <Sep />
           <button type="button" className="chat-translate-action" onClick={onFlip}>
             {flipped ? COPY.showTranslation : COPY.showOriginal}
           </button>

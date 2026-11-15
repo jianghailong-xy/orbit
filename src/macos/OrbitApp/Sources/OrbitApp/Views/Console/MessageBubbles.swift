@@ -113,7 +113,7 @@ struct UserBubbleView: View {
                 }
                 meta
                 why
-                translationFoot
+                if !delivered { translationFoot }
                 if noteOpen, let attached = bubble.attached {
                     // What the line in the meta row opened, in the bubble's column on a quiet panel of
                     // its own (web's `.chat-user-wrap > .chat-injected-panel`).
@@ -318,6 +318,13 @@ struct UserBubbleView: View {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                         .opacity(timeShown ? 1 : 0)
                 }
+                // A delivered translation's Show original / Show translation ends the copy/time line
+                // rather than taking one of its own (docs/mocks/translation-foot-one-line, B). The dot
+                // goes with the time, so on macOS at rest the press keeps its place at the edge.
+                if delivered {
+                    Text("·").font(.orbitMeta).foregroundStyle(.tertiary).opacity(timeShown ? 1 : 0)
+                    translationFoot
+                }
                 // What holds this message (web `QueuedFootCtx`): always shown, unlike the time.
                 if let heldFoot {
                     RunnerUpdatingTagView(foot: heldFoot)
@@ -360,8 +367,12 @@ struct UserBubbleView: View {
         }
     }
 
-    /// Settings › Translation: "Translated · Show original" and its flip, the "Translating…" chip, or
-    /// "Couldn't translate, so it wasn't sent · Retry · Send as written" (`SessionTranslation.userFoot`).
+    /// A delivered translation, whose press rides in the meta row.
+    private var delivered: Bool { bubble.translation?.state == .done }
+
+    /// Settings › Translation: "Show original" and its flip (in the meta row, `delivered`), or on a line
+    /// of its own the "Translating…" chip or "Couldn't translate, so it wasn't sent · Retry · Send as
+    /// written" (`SessionTranslation.userFoot`).
     @ViewBuilder
     private var translationFoot: some View {
         let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped)
