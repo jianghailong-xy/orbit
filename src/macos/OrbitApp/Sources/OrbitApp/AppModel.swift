@@ -1182,6 +1182,9 @@ final class AppModel {
         // the same frame is the Scheduled section's right-hand column (`ScheduledMacDetail`), with Scheduled lit in
         // the sidebar and the timeline beside it (web board 02 ⑤): never a row of a workspace's list.
         nav.path = [.console(sessionID: sessionID, origin: .list)]
+        // A run's session is in no list, so its own record is read as a link's is: the console's state band and
+        // its toolbar read that record.
+        refreshUnlistedSession(sessionID, adoptingAgent: false)
     }
 
     /// `orbit://owner-request/<id>`, a push's "Provide key": the inbox, that card open on its input.

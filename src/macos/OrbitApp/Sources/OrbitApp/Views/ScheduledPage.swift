@@ -65,7 +65,16 @@ extension Color {
         #if os(iOS)
         Color(uiColor: .systemGroupedBackground)
         #else
-        Color(nsColor: .windowBackgroundColor)
+        Color.secondary.opacity(0.06)
+        #endif
+    }
+
+    /// The edge a block and a door have on the Mac's panel (web inspector's bordered blocks); none on a phone.
+    static var scheduleCardEdge: Color {
+        #if os(iOS)
+        Color.clear
+        #else
+        Color.secondary.opacity(0.25)
         #endif
     }
 
@@ -611,6 +620,7 @@ extension ScheduleDetailPanel {
                     .fixedSize()
                     .padding(.horizontal, 10).padding(.vertical, 9)
                     .background(Color.scheduleCardFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.scheduleCardEdge))
                     .accessibilityLabel("More")
                     #endif
                 }
@@ -663,6 +673,8 @@ extension ScheduleDetailPanel {
                 .foregroundStyle(prominent ? Color.white : Color.accentColor)
                 .background(prominent ? Color.accentColor : Color.scheduleCardFill,
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(prominent ? Color.clear : Color.scheduleCardEdge))
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("schedule-door-\(title)")
@@ -673,6 +685,7 @@ extension ScheduleDetailPanel {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
             .background(Color.scheduleCardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.scheduleCardEdge))
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {

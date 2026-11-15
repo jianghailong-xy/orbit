@@ -179,7 +179,8 @@ struct ScheduledMacPage: View {
             .background(selected ? Color.accentColor.opacity(0.12) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay(alignment: .bottom) {
-                Divider().padding(.leading, 36).opacity(selected ? 0 : 1)
+                Rectangle().fill(Color.secondary.opacity(0.18)).frame(height: 0.5)
+                    .padding(.leading, 36).opacity(selected ? 0 : 1)
             }
             .contentShape(Rectangle())
         }
