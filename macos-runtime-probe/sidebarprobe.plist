@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>io.orbit.sidebarprobe.ci_</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/runner/work/orbit/orbit/docs/evidence/macos-sidebar-crash/probe-harness/.dd-ci/Build/Products/Release/Orbit.app/Contents/MacOS/Orbit</string>
+    <string>-orbit.instance</string><string>http://127.0.0.1:8765</string>
+    <string>-probe.driver</string><string>-probe.out</string><string>/Users/runner/work/orbit/orbit/docs/evidence/macos-sidebar-crash/probe-harness/runs/ci/driver.log</string>
+    <string>-probe.clicks</string><string>200</string>
+    <string>-probe.gap</string><string>30</string>
+    <string>-ApplePersistenceIgnoreState</string><string>YES</string>
+  </array>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/runner/work/orbit/orbit/docs/evidence/macos-sidebar-crash/probe-harness/runs/ci/app.out</string>
+  <key>StandardErrorPath</key><string>/Users/runner/work/orbit/orbit/docs/evidence/macos-sidebar-crash/probe-harness/runs/ci/app.err</string>
+</dict></plist>

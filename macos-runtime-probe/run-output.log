@@ -1,0 +1,18 @@
+==> stub ready on 127.0.0.1:8765 (pid 3504)
+==> tree: head=69bf78d524c5c4c9fdf3261378f3e25366be0229 branch=main app_sources_dirty=0 
+==> run start 2026-11-15T04:38:08; 0 existing Orbit report(s)
+==> app pid 26664 (job io.orbit.sidebarprobe.ci_); clicking 200 times
+label=ci
+mode=probe
+status=0
+run_start=2026-11-15T04:38:08
+tree=head=69bf78d524c5c4c9fdf3261378f3e25366be0229 branch=main app_sources_dirty=0 
+existing_reports=0
+new_reports=0
+driver_done=04:49:53.859 DRIVER_DONE clicked=200 skipped=0 rows=6 alive=true
+clicks_asked=200
+clicks_completed=200
+click_lines=20
+app_exit=
+alive_samples=17
+==> new reports: 

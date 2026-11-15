@@ -1,0 +1,28 @@
+04:49:38.832 didFinishLaunching policy=0
+04:49:39.739 window=(0.0, 63.0, 1024.0, 674.0) visible=true windows=2
+04:49:39.773 viewtree: NSHostingView<AnyView>[1024x642] >PlatformContainer[1100x720] >>HostingScrollView[1100x720] >>>BackdropView[1100x78] >>>NSClipView[1100x720] >>>>DocumentView[1024x642] >>>>>PlatformGroupContainer[1024x642] >>>>>>AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<PlatformTextFieldAdaptor>>[328x17] >>>>>>>AppKitTextField[332x17] >>>>>>>>NSTextFieldSimpleLabel[332x17] >>>>>>>>_NSKeyboardFocusClipView[337x23] >>>>>>>>>_SystemTextFieldFieldEditor[332x17] >>>>>>AppKitPlatformViewHost<PlatformViewRepresentableAdaptor<SecureFieldAdaptor>>[299x17] >>>>>>>AppKitSecureTextField[303x17] >>>>>>>>NSTextFieldSimpleLabel[303x17] >>>>>>_FocusRingView[21x14] >>>>>>_FocusRingView[360x50] >>>>KeyViewProxy[21x14] >>>NSScrollPocket[1100x78] >>>>PocketMask[1100x106] >>>>>NSView[1100x106] >>>>>>NSView[0x0] >>>>PocketBlur[1100x106] >>>>>PortalView[1100x106] >>>>NSHardPocketView[1100x78] >>>>>BackdropView[1100x78] >>>>>_NSLayerBasedFillColorView[1100x1] >>>>LuminanceAdjustment[1100x106] >>>>>NSView[1100x106] >>>>>>NSView[1100x106] >>>>>>>BackdropView[1100x106] >>>>>>>_NSScrollViewContentBackgroundView[1100x106] >>>>>>NSView[1100x106] >>>>>>>NSView[1100x106] >>>>>>>NSView[1100x106] >>>>>PortalView[1100x106] >>>>NSView[1100x78] >>>>>AdditionalDimmingView[0x0] >>>NSScroller[17x488]
+04:49:40.819 signedIn=true error=- base=http://127.0.0.1:8765
+04:49:41.556 activation active=true key=true
+04:49:43.411 READY rows=10 window=(40.0, 60.0, 1100.0, 677.0) agents=3 tables=2rows@328,0,300x585 10rows@8,57,320x560
+04:49:43.897 shot: /Users/runner/work/orbit/orbit/docs/evidence/macos-sidebar-crash/probe-harness/runs/ci/window.png 70407 bytes
+04:49:45.313 CLICK 10/200 row=3/6 selected=3 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:45.705 CLICK 20/200 row=1/6 selected=1 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:46.093 CLICK 30/200 row=5/6 selected=5 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:46.473 CLICK 40/200 row=3/6 selected=3 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:46.856 CLICK 50/200 row=1/6 selected=1 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:47.227 CLICK 60/200 row=5/6 selected=5 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:47.606 CLICK 70/200 row=3/6 selected=3 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:47.979 CLICK 80/200 row=1/6 selected=1 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:48.378 CLICK 90/200 row=5/6 selected=5 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:48.725 CLICK 100/200 row=3/6 selected=3 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:49.097 CLICK 110/200 row=1/6 selected=1 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:49.443 CLICK 120/200 row=5/6 selected=5 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:49.770 CLICK 130/200 row=3/6 selected=3 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:50.127 CLICK 140/200 row=1/6 selected=1 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:50.626 CLICK 150/200 row=5/6 selected=5 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:51.127 CLICK 160/200 row=3/6 selected=3 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:51.661 CLICK 170/200 row=1/6 selected=1 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:52.242 CLICK 180/200 row=5/6 selected=5 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:53.027 CLICK 190/200 row=3/6 selected=3 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:53.774 CLICK 200/200 row=1/6 selected=1 section=wiki agent=a1 hit=SwiftUIOutlineListView
+04:49:53.859 DRIVER_DONE clicked=200 skipped=0 rows=6 alive=true
