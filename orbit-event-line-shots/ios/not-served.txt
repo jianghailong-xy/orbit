@@ -1,0 +1,11 @@
+   5 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=S4 HTTP/1.1" 404 -
+   4 "GET /api/sessions/S4/background HTTP/1.1" 404 -
+   4 "GET /api/sessions/S4/approvals?status=PENDING HTTP/1.1" 404 -
+   4 "GET /api/projects/P1/acceptance/criteria-decisions/pending HTTP/1.1" 404 -
+   4 "GET /api/projects/P1/acceptance/confirmation HTTP/1.1" 404 -
+   2 "GET /api/wiki/trash HTTP/1.1" 404 -
+   2 "GET /api/sessions/S4/schedule-cards HTTP/1.1" 404 -
+   1 "GET /api/schedules HTTP/1.1" 404 -
+   1 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+   1 "GET /api/guest-sessions HTTP/1.1" 404 -
+   1 "GET /api/auth/capabilities HTTP/1.1" 404 -

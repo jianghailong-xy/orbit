@@ -1,0 +1,7 @@
+mac-oe: no window after launch; pressing ⌘N
+mac-oe: 1 window(s)
+mac-oe: shows Noted. Carrying on with the card fix.
+mac-oe: shows Ship it
+mac-oe: shows Orbit attached: context
+mac-oe: shows What the agent read
+mac-oe: shows Something the control plane will say one day.

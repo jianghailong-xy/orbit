@@ -1,0 +1,6 @@
+Test Case '-[LandingSessionMacProbeUITests.OrbitEventLineTests testFromOrbitLine]' started.
+Test Case '-[LandingSessionMacProbeUITests.OrbitEventLineTests testFromOrbitLine]' passed (41.270 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 41.270 (41.271) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 41.270 (41.273) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 41.270 (41.276) seconds
+** TEST SUCCEEDED **

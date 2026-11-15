@@ -1,0 +1,62 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "a80e99c4ca20486c1f6010cc3bde77f2bc456f42",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "6579B63A-763F-4FD8-BF5E-5CF404B23648.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "OrbitEventLineTeststestFromOrbitLine-notes_0_F59658DE-EA28-4526-8A93-1B30E3E837ED.txt",
+        "timestamp" : 1794784538.758
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "a80e99c4ca20486c1f6010cc3bde77f2bc456f42",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "2BFB7A97-75EE-412F-86A5-6FC3EF6D78D3.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-oe-open_0_05E211FB-C3AA-4A3B-85FB-3A87AFFCDA69.txt",
+        "timestamp" : 1794784536.652
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "a80e99c4ca20486c1f6010cc3bde77f2bc456f42",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "08792D3A-FEA7-4E51-B972-840FA758EDE6.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-2-from-orbit-details_0_B6A7FF9A-8A9D-4A03-8B30-50423B1D81DC.png",
+        "timestamp" : 1794784536.278
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "a80e99c4ca20486c1f6010cc3bde77f2bc456f42",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "2BC08AA4-7861-48B5-8A55-13FF21BBC2BB.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "tree-mac-oe_0_EC937F6E-B671-4651-8EB2-3AE2CFBA041E.txt",
+        "timestamp" : 1794784533.352
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "a80e99c4ca20486c1f6010cc3bde77f2bc456f42",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "8CADC9BF-81E0-4AC6-AA7B-63F4CD0F5F88.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-1-from-orbit_0_0C9F75FD-B592-421E-830B-F9C46E4438B2.png",
+        "timestamp" : 1794784532.572
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "a80e99c4ca20486c1f6010cc3bde77f2bc456f42",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "0B7240DC-84B8-412F-82C3-1E1A94CB26E3.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-mac-oe_0_6DEB2A5F-343D-4F57-8F57-09CA7174183A.txt",
+        "timestamp" : 1794784518.789
+      }
+    ],
+    "testIdentifier" : "OrbitEventLineTests/testFromOrbitLine()",
+    "testIdentifierURL" : "test://com.apple.xcode/LandingSessionProbe/LandingSessionMacProbeUITests/OrbitEventLineTests/testFromOrbitLine"
+  }
+]

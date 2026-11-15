@@ -1,0 +1,46 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+==> stub ready on 127.0.0.1:8765 (pid 9268, after 6s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> mac
+Test Case '-[LandingSessionMacProbeUITests.OrbitEventLineTests testFromOrbitLine]' started.
+Test Case '-[LandingSessionMacProbeUITests.OrbitEventLineTests testFromOrbitLine]' passed (41.270 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 41.270 (41.271) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 41.270 (41.273) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 41.270 (41.276) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 18046, after 2s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> ios
+Test Case '-[LandingSessionProbeUITests.OrbitEventLineTests testFromOrbitLine]' started.
+Test Case '-[LandingSessionProbeUITests.OrbitEventLineTests testFromOrbitLine]' passed (46.723 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 46.723 (46.726) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 46.723 (46.727) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 46.723 (46.728) seconds
+** TEST SUCCEEDED **
+.ls-probe/run.sh: line 82: 18046 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.ls-probe/shots/ios:
+total 2440
+drwxr-xr-x  13 runner  staff     416 Nov 15 23:25 .
+drwxr-xr-x   4 runner  staff     128 Nov 15 23:04 ..
+drwxr-xr-x   9 runner  staff     288 Nov 15 23:25 attachments
+-rw-r--r--   1 runner  staff  206000 Nov 15 23:24 ios-1-from-orbit.png
+-rw-r--r--   1 runner  staff  234354 Nov 15 23:24 ios-2-from-orbit-details.png
+-rw-r--r--   1 runner  staff     648 Nov 15 23:25 not-served.txt
+-rw-r--r--@  1 runner  staff     205 Nov 15 23:24 OrbitEventLineTeststestFromOrbitLine-notes.txt
+-rw-r--r--   1 runner  staff    8774 Nov 15 23:24 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 15 23:15 requests.log.out
+-rw-r--r--@  1 runner  staff   23250 Nov 15 23:24 tree-ios-oe-open.txt
+-rw-r--r--@  1 runner  staff   22617 Nov 15 23:24 tree-ios-oe.txt
+-rw-r--r--   1 runner  staff      40 Nov 15 23:25 writes.txt
+-rw-r--r--   1 runner  staff  725464 Nov 15 23:25 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.ls-probe/shots/mac:
+total 1800
+drwxr-xr-x  10 runner  staff     320 Nov 15 23:25 .
+drwxr-xr-x   4 runner  staff     128 Nov 15 23:04 ..
+drwxr-xr-x   9 runner  staff     288 Nov 15 23:15 attachments
+-rw-r--r--   1 runner  staff   83576 Nov 15 23:15 mac-1-from-orbit.png
+-rw-r--r--   1 runner  staff   91668 Nov 15 23:15 mac-2-from-orbit-details.png
+-rw-r--r--   1 runner  staff     648 Nov 15 23:25 not-served.txt
+-rw-r--r--   1 runner  staff    8341 Nov 15 23:15 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 15 23:07 requests.log.out
+-rw-r--r--   1 runner  staff      40 Nov 15 23:25 writes.txt
+-rw-r--r--   1 runner  staff  718622 Nov 15 23:15 xcodebuild-mac.log
