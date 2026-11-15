@@ -869,6 +869,34 @@ button.toast--pill:focus-visible {
   background: var(--brand);
   box-shadow: 0 0 0 1.5px var(--bg-raised);
 }
+/* The account's managed runner when it is not simply ready (ManagedRunnerMark): asleep or coming up is
+   a quiet grey dot, never the Offline mark; a state that needs the owner is orange. */
+.tp-workspace-icon-managed,
+.tp-rail-managed {
+  position: absolute;
+  z-index: 2;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+  box-shadow: 0 0 0 1.5px var(--bg-raised);
+}
+.tp-workspace-icon-managed {
+  right: -3px;
+  bottom: -2px;
+}
+.tp-rail-managed {
+  right: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+}
+.managed-mark--attention {
+  background: var(--warning-solid);
+}
+.managed-mark--ready {
+  background: var(--success-solid);
+}
 .tp-item:hover .tp-workspace-icon-running {
   box-shadow: 0 0 0 1.5px var(--bg-hover);
 }
@@ -3414,6 +3442,9 @@ button.toast--pill:focus-visible {
 }
 .workspace-status-dot.online {
   background: var(--success-solid);
+}
+.workspace-status-dot.managed-mark--progress {
+  background: var(--brand);
 }
 .workspace-header-main {
   flex: 1;
@@ -25397,6 +25428,7 @@ button.project-open-item-action:disabled {
   .wk-trash-acts { grid-column: 2; }
   .wk-trash-row .wk-trash-error { grid-column: 2; }
 }
+.tp-group-wiki .tp-wiki-new { color: var(--text-3); }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }

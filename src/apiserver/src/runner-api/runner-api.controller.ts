@@ -549,6 +549,7 @@ import {
   runnerLastBeatAt,
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
+import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -2017,6 +2018,7 @@ export class RunnerApiController {
         supervisedSessionIds: supervised,
         planUsageDigest: digests.facts.planUsage ?? null,
         resources: sanitizeRunnerResources(dto?.resources),
+        backgroundJobSessionIds: sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
       });
     } catch (error) {
       // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
@@ -2264,11 +2266,16 @@ export class RunnerApiController {
     // node holding the connection (X-Orbit-Link-Gateway-Id). A link beat the beat statement recorded is
     // not recorded twice.
     if (!linkBeat) {
+      // Advisory like the reading below: a read that fails keeps none, and the list counts turns alone until the next beat.
+      const backgroundJobSessionIds = await ownBackgroundJobSessionIds(
+        this.prisma, runner.id, sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
+      ).catch(() => []);
       await recordRunnerBeat(this.prisma, {
         runnerId: runner.id,
         processId: heartbeatLeaseOwner,
         gatewayId: link?.gatewayId ?? null,
         linkState: link ? 'LINK' : 'HTTP',
+        backgroundJobSessionIds,
         at: beatAt,
       }).catch(beatLost);
       // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.

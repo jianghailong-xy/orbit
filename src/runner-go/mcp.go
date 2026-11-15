@@ -3360,10 +3360,16 @@ func ownerRequestBody(args map[string]interface{}, now time.Time) (map[string]in
 	kind := getString(args, "kind")
 	title := strings.TrimSpace(getString(args, "title"))
 	why := strings.TrimSpace(getString(args, "why"))
-	if kind == "" || title == "" || why == "" {
-		return nil, errors.New("kind, title and why are required")
+	if kind == "" || why == "" {
+		return nil, errors.New("kind and why are required")
 	}
-	body := map[string]interface{}{"kind": kind, "title": title, "why": why}
+	body := map[string]interface{}{"kind": kind, "why": why}
+	// A WIKI_CREATE's title is Orbit's to write (design §3.6); every other kind needs one.
+	if title != "" {
+		body["title"] = title
+	} else if kind != "WIKI_CREATE" {
+		return nil, errors.New("title is required for every kind but WIKI_CREATE")
+	}
 	copyIfPresent(body, args, "ifUnanswered", "steps", "secretSpec", "options", "recommendedOption", "clientRequestId")
 	if blocked := getStringSlice(args, "blocksTaskIds"); len(blocked) > 0 {
 		body["blocksTaskIds"] = blocked

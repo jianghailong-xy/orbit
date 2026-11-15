@@ -185,6 +185,7 @@ import { reachesPastOneMcpTool } from './remember-rules';
 import {
   batchActiveTurns,
   runnerActiveTurns,
+  runnerBackgroundHeldSessions,
   treeActiveTurns,
   treeCeiling,
 } from '../common/session-tree-sql';
@@ -4064,6 +4065,7 @@ export class SessionsService {
       queuedReason: string | null;
       queuedActive: number | null;
       queuedLimit: number | null;
+      queuedHeldByJobs: number | bigint | null;
       queuedRunnerSelfUpdate: Prisma.JsonValue;
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
       queuedSince: Date | null;
@@ -4246,6 +4248,7 @@ export class SessionsService {
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit",
+        q.held    AS "queuedHeldByJobs",
         -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
         -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
         -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
@@ -4278,7 +4281,7 @@ export class SessionsService {
       -- second copy would drift, and confidently naming the wrong gate is worse than naming
       -- none. Only PENDING rows carry an answer; for the rest the lateral yields NULLs.
       LEFT JOIN LATERAL (
-        SELECT reason, active, "limit" FROM (
+        SELECT reason, active, "limit", held FROM (
           SELECT
             CASE
               -- First, because it subsumes every gate below: a runner that is not polling will
@@ -4293,7 +4296,11 @@ export class SessionsService {
               -- here would send the reader to the wrong cause. Ends only when the update does.
               WHEN r.heartbeat_draining IS TRUE
                 THEN 'runner_updating'
-              WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
+              -- Turns plus the sessions its background jobs hold a slot for: what the runner itself
+              -- admits against (runnerBackgroundHeldSessions). Turns alone read 10 of 16 on a machine
+              -- whose other 6 slots were held by bg_run jobs, and this row said nothing at all.
+              WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
+                   + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
                 THEN 'runner_at_capacity'
               WHEN s.root_session_id IS NOT NULL
                    AND ${treeActiveTurns('s')} >= ${treeCeiling(Prisma.sql`s.assigned_runner_id`)}
@@ -4308,6 +4315,7 @@ export class SessionsService {
                 THEN 'worktree_op_pending'
             END AS reason,
             ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
+            ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
             r.max_concurrent AS runner_limit,
             ${treeActiveTurns('s')} AS tree_active,
             ${treeCeiling(Prisma.sql`s.assigned_runner_id`)} AS tree_limit,
@@ -4319,7 +4327,7 @@ export class SessionsService {
             CASE g.reason
               -- The turns the drain waits for: every one in flight on the runner.
               WHEN 'runner_updating'    THEN g.runner_active
-              WHEN 'runner_at_capacity' THEN g.runner_active
+              WHEN 'runner_at_capacity' THEN g.runner_active + g.runner_held
               WHEN 'tree_at_capacity'   THEN g.tree_active
               WHEN 'batch_at_capacity'  THEN g.batch_active
             END AS active,
@@ -4327,7 +4335,10 @@ export class SessionsService {
               WHEN 'runner_at_capacity' THEN g.runner_limit
               WHEN 'tree_at_capacity'   THEN g.tree_limit
               WHEN 'batch_at_capacity'  THEN g.batch_limit
-            END AS "limit"
+            END AS "limit",
+            -- Of active, the slots background jobs hold (runner_at_capacity only): the part of a
+            -- full runner its list of running turns does not show.
+            CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
         ) n
       ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
       WHERE s.owner_id = ${ownerId}::uuid
@@ -4425,6 +4436,8 @@ export class SessionsService {
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
         queuedLimit: r.queuedLimit == null ? null : Number(r.queuedLimit),
+        // Of queuedActive, the slots background jobs hold; beside runner_at_capacity only.
+        queuedHeldByJobs: r.queuedHeldByJobs == null ? null : Number(r.queuedHeldByJobs),
         // Only beside queuedReason 'runner_updating'; null on every other row.
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
       }),

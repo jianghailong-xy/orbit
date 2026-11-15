@@ -326,6 +326,12 @@ final class AppModel {
     /// blocked rows, not the list.
     private(set) var needsYouSessions: [Session] = []
     private(set) var agentNeedsYou: [String: Int] = [:]
+    /// An approval that has just reached this device with the app open (iOS): the needs-you bar says
+    /// it for its first seconds (`NeedsYouLogic.arriving`) — the one surface for it since the owner's
+    /// 2026-11-15 board `docs/mocks/needs-you-capsule/05-one-surface`, where the app used to put up an
+    /// amber card of its own beside the bar. Cleared again once those seconds have passed, which is
+    /// the body pass that puts the bar back to the count.
+    private(set) var needsYouArrival: NeedsYouArrival?
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
@@ -1011,15 +1017,15 @@ final class AppModel {
         notifications.configure()
         notifications.onIntent = { [weak self] intent in self?.handle(intent) }
         #if os(iOS)
-        // An approval that arrives while you're in the app shows as Orbit's own card rather than a
-        // system banner (see `NotificationManager.willPresent`). A `.warning`, so it stays until
-        // it's dealt with — that's the whole point of it, and it's what a banner's persistence in
-        // Notification Center was doing before. Tapping it opens the session it's blocking on.
-        // The push names the session by its stored UUID; the card takes the lists' spelling, or its
-        // title lookup and the needs-you check that takes it down both miss the row.
+        // An approval that arrives while you're in the app is said by the needs-you bar rather than
+        // a system banner (see `NotificationManager.willPresent`): for its first seconds the bar
+        // carries the push's line and an amber ring, then goes back to the count, and it stays until
+        // the last thing waiting is dealt with. It used to be an amber card of its own beside the bar
+        // — one fact in two shapes (the owner, 2026-11-15, docs/mocks/needs-you-capsule/05). The
+        // push names the session by its stored UUID; the bar finds it among the needs-you rows by
+        // the lists' spelling, or it would never find it.
         notifications.onForegroundApproval = { [weak self] sessionID, line in
-            self?.showToast(line, sessionID: PublicID.toPublic(sessionID), tone: .warning,
-                            icon: "bell.badge.fill", awaitsApproval: true)
+            self?.noteNeedsYouArrival(sessionID: PublicID.toPublic(sessionID), line: line)
         }
         #endif
         #if os(macOS)
@@ -1865,10 +1871,6 @@ final class AppModel {
             lastNeedsYou = needsYou
             // A server banner's thread id is the session's stored UUID; `needsYou` is list-spelled.
             NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains(PublicID.toPublic($0)) })
-            // The foreground card standing in for one of those banners has to come down with them.
-            // It's persistent by design, so an approval answered on web or macOS would otherwise
-            // leave a card asking for something that's already been decided.
-            toasts.clearApprovals(stillWaiting: needsYou)
         }
     }
     #endif
@@ -2275,7 +2277,29 @@ final class AppModel {
     /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
     /// the Open list, which `applySessionSnapshot` already narrowed.
     func needsYouBanner(excluding focused: String?) -> NeedsYouBanner? {
-        NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+        NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused, now: Date())
+            ?? NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+    }
+
+    #if os(iOS)
+    /// Whether the page on screen has no needs-you bar of its own, so the shell carries one over it
+    /// (`needsYouOverPage`, the owner, 2026-11-15, 05-one-surface). The bar is the Sessions list's
+    /// and a phone's conversation's; a wide shell keeps the list beside whatever Agents shows.
+    func pageHasNoNeedsYouBar(wide: Bool) -> Bool {
+        guard selectedSection == .agents else { return true }
+        if wide { return false }
+        return !(nav.sectionAtRoot || nav.focusedConsoleSessionID != nil)
+    }
+    #endif
+
+    /// An approval push that landed while the app is in front: the bar says it for its first seconds.
+    func noteNeedsYouArrival(sessionID: String, line: String) {
+        let arrival = NeedsYouArrival(sessionID: sessionID, line: line, at: Date())
+        needsYouArrival = arrival
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(NeedsYouLogic.arrivalSeconds * 1_000_000_000))
+            if self?.needsYouArrival == arrival { self?.needsYouArrival = nil }
+        }
     }
 
     /// The banner unfolded: one line per waiting conversation, the first the one the banner names.
@@ -2548,12 +2572,11 @@ final class AppModel {
     func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
                    sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
                    icon: String? = nil, canUndo: Bool = false, undo: (@MainActor () -> Void)? = nil,
-                   awaitsApproval: Bool = false,
                    mergeConflict: ToastMergeConflict? = nil,
                    key: String? = nil, inProgress: Bool = false) {
         let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
         let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
-                             sessionID: sessionID, canUndo: canUndo || undo != nil, awaitsApproval: awaitsApproval,
+                             sessionID: sessionID, canUndo: canUndo || undo != nil,
                              key: key, inProgress: inProgress, mergeConflict: mergeConflict)
         guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
         if let undo { toastUndo = (id, undo) }
@@ -3328,6 +3351,17 @@ final class AppModel {
             if let agentID = session.agent?.id ?? session.agentId { selectedAgentID = agentID }
             nav.selectConsole(node)
         }
+    }
+
+    /// A project row whose line says a member is waiting on you (owner 2026-11-14,
+    /// `SessionProjectSheet.RowTap.waitingMember`): that member's conversation, opened at the top of
+    /// its waiting card rather than at the transcript's end. A phone pushes it over the list, as it
+    /// pushes the coordinator; a column shell opens the project's page in its session column and
+    /// selects the member beside it, as the web desktop does.
+    func openWaitingMember(_ session: Session, project: SessionProjectAddress, push: Bool) {
+        consoleRegistry?.model(for: session.id, agentID: session.agent?.id ?? session.agentId).focusWaitingCard()
+        if !push { openProjectSessions(project) }
+        openProjectMember(session, push: push)
     }
 
     // MARK: session folders (docs/session-folders-move-design.md §3–4)

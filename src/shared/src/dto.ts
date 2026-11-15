@@ -807,6 +807,12 @@ export interface RunnerHeartbeatRequest {
   /** Every session currently registered in this process's local supervisor pool,
    *  including cold sessions that do not poll an inbox. */
   supervisedSessionIds?: string[];
+  /** The sessions that hold a slot of this runner's admission count only through runner-hosted
+   *  background jobs of their own (bg_run, kind job; a watch takes none): no turn runs, yet the
+   *  runner takes no work in their place. Kept on the runner's presence row with each beat; the
+   *  runners list counts them as running beside the sessions in a turn. Absent when there are
+   *  none, and on older runners, which are counted by turns alone. */
+  backgroundJobSessionIds?: string[];
   /** Commits this runner reported as failed that no longer fail for the reason they gave: the
    *  index lock they met is gone, or the branch has moved since. The control plane drops each
    *  settled error it still holds for that exact operation, so the worktree bar offers Commit
@@ -2484,8 +2490,12 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
   /** The engine's own words, for an attempt that hit a limit; truncated. */
   error?: string;
   /** The account of an account pool it ran on, chosen for this SubAgent alone: never written onto the parent
-   *  session, whose own pool member stays as it was. */
-  poolMember?: { providerId: string; label: string };
+   *  session, whose own pool member stays as it was. A Claude pool's member provider, or a Codex pool's ChatGPT
+   *  account or API key. */
+  poolMember?:
+    | { providerId: string; label: string }
+    | { accountId: string; label: string }
+    | { keyId: string; label: string };
   startedAt: string;
   endedAt?: string;
 }

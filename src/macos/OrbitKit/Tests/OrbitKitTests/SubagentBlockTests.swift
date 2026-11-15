@@ -11,12 +11,13 @@ final class SubagentBlockTests: XCTestCase {
         type: String = "explore", background: Bool = false, status: String = "DONE",
         level: String? = "S", model: String? = "deepseek-chat", modelLabel: String? = "DeepSeek Chat",
         effort: String? = nil, reasons: [String] = [], costUsd: Double = 0.21, resultSummary: String? = nil,
-        createdAt: String = "2026-11-11T08:00:00.000Z", endedAt: String? = "2026-11-11T08:00:41.000Z"
+        createdAt: String = "2026-11-11T08:00:00.000Z", endedAt: String? = "2026-11-11T08:00:41.000Z",
+        why: String? = nil, workspaceName: String? = nil
     ) -> SubagentRunView {
         SubagentRunView(toolUseId: "toolu_sa", type: type, background: background, status: status,
                         level: level, model: model, modelLabel: modelLabel, effort: effort,
                         reasons: reasons, costUsd: costUsd, resultSummary: resultSummary,
-                        createdAt: createdAt, endedAt: endedAt)
+                        createdAt: createdAt, endedAt: endedAt, why: why, workspaceName: workspaceName)
     }
 
     private let call = JSONValue.object([
@@ -137,6 +138,68 @@ final class SubagentBlockTests: XCTestCase {
 
     func testAWhyWithNoReasonsIsAbsent() {
         XCTAssertNil(SubagentBlock.describe(input: call, run: run(), status: .ok).why)
+    }
+
+    // The server's one-line Why (`SubagentRunView.why`), decoded from GET /sessions/:id/subagents.
+    private let reasons = ["Tier S, set by the caller", "Optimize For: Cost",
+                           "Cheapest of 29 candidates: gpt-6.1-sol · low on codex, subscription with 84% quota left"]
+    private let oneLine = "Tier S, set by the caller · Cost: gpt-6.1-sol · low on codex,"
+        + " subscription with 84% quota left · 28 others removed"
+
+    private func decode(_ json: String) throws -> [SubagentRunView] {
+        try JSONDecoder().decode([SubagentRunView].self, from: Data(json.utf8))
+    }
+
+    func testTheServersWhyIsDecodedAndIsTheWhyLine() throws {
+        let rows = try decode(#"""
+        [{"toolUseId":"toolu_sa","type":"explore","background":false,"status":"DONE","level":"S",
+          "model":"gpt-6.1-sol","modelLabel":null,"effort":"low",
+          "reasons":["Tier S, set by the caller","Optimize For: Cost","Cheapest of 29 candidates: gpt-6.1-sol · low on codex, subscription with 84% quota left"],
+          "why":"Tier S, set by the caller · Cost: gpt-6.1-sol · low on codex, subscription with 84% quota left · 28 others removed",
+          "removed":[{"provider":"claude","engine":"claude","model":"claude-opus-5-5","effort":"high","reason":"Tier S excludes it"},
+                     {"provider":"team-codex","engine":"codex","model":null,"effort":null,"reason":"No quota left"}],
+          "costUsd":0.03,"resultSummary":null,"workspaceName":null,
+          "createdAt":"2026-11-11T08:00:00.000Z","endedAt":"2026-11-11T08:00:41.000Z"}]
+        """#)
+        let run = try XCTUnwrap(rows.first)
+        XCTAssertEqual(run.why, oneLine)
+        XCTAssertEqual(run.removed?.count, 2)
+        let block = SubagentBlock.describe(input: call, run: run, status: .ok)
+        XCTAssertEqual(block.why, oneLine)
+        XCTAssertEqual(block.details, reasons + [
+            "Removed · claude, claude-opus-5-5 · high: Tier S excludes it",
+            "Removed · team-codex (codex): No quota left",
+        ])
+    }
+
+    func testAnOlderServerWithoutWhyStillDecodesAndFallsBackToTheReasons() throws {
+        let rows = try decode(#"""
+        [{"toolUseId":"toolu_sa","type":"explore","background":false,"status":"DONE","level":"S",
+          "model":"deepseek-chat","modelLabel":"DeepSeek Chat","effort":null,
+          "reasons":["Tier S, set by the built-in explore default","Optimize For: Cost"],
+          "costUsd":0.03,"resultSummary":null,"createdAt":"2026-11-11T08:00:00.000Z","endedAt":null}]
+        """#)
+        let run = try XCTUnwrap(rows.first)
+        XCTAssertNil(run.why)
+        XCTAssertNil(run.removed)
+        XCTAssertNil(run.workspaceName)
+        let block = SubagentBlock.describe(input: call, run: run, status: .ok)
+        XCTAssertEqual(block.why, "Tier S, set by the built-in explore default · Optimize For: Cost")
+        XCTAssertEqual(block.details, [], "the reasons are already the Why line: Details has nothing more")
+    }
+
+    func testANullWhyFallsBackToTheReasons() {
+        let block = SubagentBlock.describe(input: call, run: run(reasons: reasons), status: .ok)
+        XCTAssertEqual(block.why, reasons.joined(separator: " · "))
+        XCTAssertEqual(block.details, [])
+    }
+
+    func testARunOnAnotherWorkspaceLeadsWithHowItWasChosen() {
+        let chosen = "Workspace orbit-macos, named by the caller"
+        let block = SubagentBlock.describe(
+            input: call, run: run(reasons: [chosen] + reasons, why: oneLine, workspaceName: "orbit-macos"), status: .ok)
+        XCTAssertEqual(block.why, chosen + " · " + oneLine)
+        XCTAssertEqual(block.details, [chosen] + reasons)
     }
 
     // MARK: - the result

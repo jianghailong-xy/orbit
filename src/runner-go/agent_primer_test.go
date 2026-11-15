@@ -32,10 +32,10 @@ func TestAgentPrimerSnapshots(t *testing.T) {
 	const exe = "/usr/local/bin/orbit"
 	snapshots := map[string]string{
 		"mcp-instructions.txt":                agentPrimer,
-		"engine-instructions-free.txt":        orbitCLIInstructions(exe, false, true),
-		"engine-instructions-free-nowait.txt": orbitCLIInstructions(exe, false, false),
-		"engine-instructions-task.txt":        orbitCLIInstructions(exe, true, true),
-		"engine-instructions-task-nowait.txt": orbitCLIInstructions(exe, true, false),
+		"engine-instructions-free.txt":        orbitCLIInstructions(exe, false, true, true),
+		"engine-instructions-free-nowait.txt": orbitCLIInstructions(exe, false, false, true),
+		"engine-instructions-task.txt":        orbitCLIInstructions(exe, true, true, true),
+		"engine-instructions-task-nowait.txt": orbitCLIInstructions(exe, true, false, true),
 	}
 	names := make([]string, 0, len(snapshots))
 	for name := range snapshots {
@@ -96,7 +96,7 @@ func TestAgentPrimerBudgets(t *testing.T) {
 	// An executable path longer than any runner's, so a paragraph that names it still fits one value.
 	long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
-		instructions := orbitCLIInstructions(long, form.inside, form.watches)
+		instructions := orbitCLIInstructions(long, form.inside, form.watches, true)
 		if n := len(instructions); n > orbitInstructionsMaxBytes {
 			t.Errorf("instructions (inside=%v, watches=%v) are %d bytes, over their %d-byte budget", form.inside, form.watches, n, orbitInstructionsMaxBytes)
 		}

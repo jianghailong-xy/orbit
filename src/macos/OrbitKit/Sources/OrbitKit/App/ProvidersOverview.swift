@@ -57,7 +57,7 @@ public enum ProvidersOverview {
 
     // MARK: a Codex pool, by who reads it (web's `PoolCard` head, docs/mocks/account-pool-access/03-6)
 
-    /// Whether the row wears SHARED: anybody but its owner can use the pool — which is so for everybody it
+    /// Whether the row wears Shared: anybody but its owner can use the pool — which is so for everybody it
     /// was shared with.
     public static func isShared(_ pool: ProviderPool) -> Bool {
         pool.shared.map(SharedPoolPage.hasPeople) ?? false
@@ -66,7 +66,7 @@ public enum ProvidersOverview {
     /// A Codex pool's line under its name: to somebody its owner added, whose it is and how many keys they
     /// can run on — its accounts and its gauge are on its page; a pool its owner keeps to themselves, "Just
     /// me" and how many of its accounts are left to run on; once shared, how many of them a session could
-    /// start on now, beside SHARED.
+    /// start on now, beside Shared.
     public static func codexPoolLine(_ pool: ProviderPool) -> String {
         if ProviderPools.readByMember(pool) {
             let owner = pool.shared.flatMap(SharedPoolPage.owner)?.name ?? ""

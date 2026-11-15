@@ -2,6 +2,7 @@ import { useMemo, useState, type JSX, type ReactNode } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
+  BookOutlined,
   KeyOutlined,
   OrderedListOutlined,
   QuestionOutlined,
@@ -44,6 +45,7 @@ const ACTION: Readonly<Record<OwnerRequest['kind'], string>> = {
   SECRET: 'Provide',
   MANUAL_STEP: 'Open steps',
   CONFIRM: 'Review',
+  WIKI_CREATE: 'Review',
 };
 
 const ICON: Readonly<Record<OwnerRequest['kind'], ReactNode>> = {
@@ -51,6 +53,7 @@ const ICON: Readonly<Record<OwnerRequest['kind'], ReactNode>> = {
   SECRET: <KeyOutlined />,
   MANUAL_STEP: <OrderedListOutlined />,
   CONFIRM: <SafetyCertificateOutlined />,
+  WIKI_CREATE: <BookOutlined />,
 };
 
 /** "holds 2 tasks", and for how long once that has passed a day: the part of the row that is overdue. */

@@ -56,6 +56,7 @@ import {
 } from './project-promotion';
 
 import { readDerivedProjectDoneReading } from './project-done-derived';
+import { taskLanding } from './project-criterion-landing';
 
 const logger = new Logger('ProjectPromotion');
 
@@ -318,12 +319,15 @@ export class ProjectPromotionService {
             result: { in: ['MERGED', 'ALREADY_MERGED'] },
             targetBranch: { in: [input.integrationBranch, input.upstreamBranch] },
           },
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-          select: { targetBranch: true, sourceSha: true, detail: true },
+          select: { result: true, targetBranch: true, sourceSha: true, createdAt: true, detail: true },
         },
       },
     });
-    return tasks.filter((task) => !onTheUpstream(task.mergeReceipts, input)).map((task) => task.id);
+    // The same fold `integration.state` and a criterion's landing read, so a rework landed on the
+    // line after its earlier revision reached the upstream is carried again (F1-4, 2026-11-08).
+    const branches = { upstream: [input.upstreamBranch], integration: [input.integrationBranch] };
+    return tasks.filter((task) => taskLanding(task.mergeReceipts, branches) !== 'ON_UPSTREAM')
+      .map((task) => task.id);
   }
 
   // ── the owner's doors (M-F3) ──────────────────────────────────────────────────────────────────
@@ -2091,30 +2095,6 @@ export async function requeuePromotionCheck(
     generation: queued.generation,
     landingSessionId: landing?.sessionId ?? null,
   };
-}
-
-/**
- * Whether a task on the project line is on the upstream already, by its receipts (newest first):
- * `tasksOnTheLine`'s exclusion. A receipt a landing or a promotion wrote says so. One an
- * observation wrote (`landing-observation-result.ts`, `detail.observed`) says only that the commit
- * the task's identity was frozen as is on the upstream, and that identity can be wrong: the 0.1.253
- * bump (task 34vJmfV0DZk5cySoXlB3r, 2026-11-10) was frozen at a stale tip already on main, its own
- * commit landed on the project line only, and an observed receipt about the stale commit kept it
- * out of every promotion. So an observed receipt counts only when it names the commit the task's
- * newest project-line receipt landed; one about another commit leaves the task on the line, where
- * a promotion that finds it on the upstream after all answers ALREADY_LANDED.
- */
-function onTheUpstream(
-  receipts: ReadonlyArray<{ targetBranch: string; sourceSha: string; detail: Prisma.JsonValue }>,
-  branches: { integrationBranch: string; upstreamBranch: string },
-): boolean {
-  const onLine = receipts.find((receipt) => receipt.targetBranch === branches.integrationBranch);
-  return receipts.some((receipt) => receipt.targetBranch === branches.upstreamBranch
-    && (!observedReceipt(receipt.detail) || receipt.sourceSha === onLine?.sourceSha));
-}
-
-function observedReceipt(detail: Prisma.JsonValue): boolean {
-  return !!detail && typeof detail === 'object' && !Array.isArray(detail) && detail.observed === true;
 }
 
 /**

@@ -158,6 +158,7 @@ struct WikiHomeView: View {
             pickSpace: { slug in wiki.selectedSlug = slug },
             search: { query in await wiki.search(query) },
             openSettings: { open(.wikiSettings) },
+            createWiki: { wiki.creating = true },
             openContents: { contentsShown = true },
             openActivity: { open(.wikiActivity) },
             openShare: { sharing = true },

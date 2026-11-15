@@ -764,7 +764,7 @@ describe('project members outside the coordinator’s workspace, the arrow keys 
     await mount();
     expect(titles()).toEqual(['Loose conversation', 'Project Alpha']);
     await press('ArrowDown');
-    // Wider than a phone it opens with its project's column beside it, as the row's click does.
+    // Wider than a phone the arrow keys onto a project row open its column beside the coordinator (ab5802271).
     await until(() => expect(location).toBe(`/sessions/${COORDINATOR.id}?project=${encodeId(PROJECT_ID)}`));
   });
 

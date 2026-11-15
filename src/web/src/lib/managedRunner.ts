@@ -10,12 +10,15 @@ import {
   MANAGED_RUNNER_STATUS_POLL_SECONDS,
   firstSessionProvider,
   managedRunnerDisplay,
+  managedRunnerRow,
   managedRunnersOffered,
   type ManagedRunnerDisplay,
+  type ManagedRunnerRow,
   type ManagedRunnerStatus,
   type ServerCapabilities,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
+import { routeId } from './idCodec';
 import { useToast } from './toast';
 import { compatibleUuid } from './uuid';
 
@@ -85,6 +88,17 @@ export function useManagedRunner(ask = true): { managed: ManagedRunner | null; s
     managed: display && status.data ? { status: status.data, display } : null,
     settled: capabilities.isFetched && (!offered || status.isFetched),
   };
+}
+
+/**
+ * How a place that shows a runner by its heartbeat shows the account's managed runner instead
+ * (docs/managed-runner-existing-account-entry-design.md, D4): the shared short label and tone, Asleep
+ * rather than Offline. Null for any other runner, and for every runner with the feature off.
+ */
+export function managedRowOf(managed: ManagedRunner | null, runnerId: string | null | undefined): ManagedRunnerRow | null {
+  const id = managed?.status.runnerId;
+  if (!id || !runnerId || routeId(id) !== routeId(runnerId)) return null;
+  return managedRunnerRow(id, managed.status);
 }
 
 /**

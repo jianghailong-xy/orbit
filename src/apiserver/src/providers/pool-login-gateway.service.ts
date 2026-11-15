@@ -248,7 +248,7 @@ export class PoolLoginGatewayService {
     }
     if (login.state !== 'ACTIVE') {
       // Every session it refuses is told, once, whichever of them saw it signed out first.
-      await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel, byContributor));
+      await this.owe(caller, loginSignedOutNotice(login, caller.poolLabel, byContributor));
       answer(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
       this.log.log(`session ${caller.sessionId} account ${account}: signed out — refused`);
       return null;
@@ -408,6 +408,8 @@ export class PoolLoginGatewayService {
         sessionId: true,
         expiresAt: true,
         revokedAt: true,
+        accountId: true,
+        keyId: true,
         pool: { select: { slug: true, label: true, engine: true, ownerId: true, shared: true } },
         session: {
           select: {
@@ -420,6 +422,9 @@ export class PoolLoginGatewayService {
     });
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { pool, session } = row;
+    // A SubAgent's token (mintSubagentPoolLoginToken) names its own credential, and its child runs codex on this
+    // pool whatever the parent session runs: only the codex gateway serves it, on a pool its owner did not share.
+    const subagent = Boolean(row.accountId || row.keyId);
     const current =
       pool.engine === AgentProvider.CODEX &&
       OPEN_SESSION_STATUSES.includes(session.status) &&
@@ -428,8 +433,10 @@ export class PoolLoginGatewayService {
       // Nobody's session but the pool's owner's: the token's person is the owner (its foreign key), and
       // the session has to be theirs too.
       session.ownerId === row.userId &&
-      // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
-      session.provider === pool.slug &&
+      (subagent
+        ? engine === AgentProvider.CODEX && !pool.shared && pool.ownerId === row.userId
+        // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
+        : session.provider === pool.slug &&
       (engine === AgentProvider.CLAUDE
         ? session.engine === AgentProvider.CLAUDE &&
           claudeCodexLoginEnabled() &&
@@ -438,7 +445,7 @@ export class PoolLoginGatewayService {
           // An end asked for (SessionsService.end): the runner has yet to stop it, but it serves no more turns.
           !session.cancelRequestedAt &&
           !session.endReason
-        : session.engine !== AgentProvider.CLAUDE);
+        : session.engine !== AgentProvider.CLAUDE));
     if (!current) return null;
     // Asked last, as the runner credential asks it: the token itself is good, and works again once the
     // account is enabled.
@@ -450,16 +457,17 @@ export class PoolLoginGatewayService {
       userId: row.userId,
       sessionId: row.sessionId,
       sessionOwnerId: session.ownerId,
-      accountId: session.poolCodexAccountId,
-      keyId: session.poolKeyId,
+      accountId: subagent ? row.accountId : session.poolCodexAccountId,
+      keyId: subagent ? row.keyId : session.poolKeyId,
       sessionModel: session.model,
+      ...(subagent ? { subagent: true } : {}),
     };
   }
 
   /** The usage limit is reached until `resetAt`: recorded on the account, and the session told why it waits. */
   private async spent(caller: GatewayCaller, login: GatewayLogin, resetAt: Date, reading: ReturnType<typeof codexUsageSnapshot>, now: Date) {
     await this.logins.markSpent(caller.poolId, login.accountId, resetAt, reading, now);
-    await this.owe(caller.sessionId, loginSpentNotice(login, reading, resetAt));
+    await this.owe(caller, loginSpentNotice(login, reading, resetAt));
     this.log.log(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: usage limit reached — waits until ${resetAt.toISOString()}`);
   }
 
@@ -467,7 +475,7 @@ export class PoolLoginGatewayService {
   private async signedOut(res: Response, caller: GatewayCaller, login: GatewayLogin, reason: string, answer: LoginRefusal): Promise<void> {
     const byContributor = caller.userId === login.userId;
     await this.logins.markSignedOut(caller.poolId, login.accountId, reason);
-    await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel, byContributor));
+    await this.owe(caller, loginSignedOutNotice(login, caller.poolLabel, byContributor));
     answer(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byContributor));
     this.log.log(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: refused by OpenAI — signed out`);
   }
@@ -492,7 +500,10 @@ export class PoolLoginGatewayService {
   }
 
   /** The line the session's transcript is owed; a failure to owe it never fails the request. */
-  private async owe(sessionId: string, notice: string): Promise<void> {
+  private async owe(caller: GatewayCaller, notice: string): Promise<void> {
+    // A SubAgent's child is not its parent session: the parent's transcript is owed nothing about its credential.
+    if (caller.subagent) return;
+    const sessionId = caller.sessionId;
     await this.notices.owe(sessionId, notice).catch((e) =>
       this.log.warn(`could not owe session ${sessionId} its pool notice: ${(e as Error).message}`),
     );
