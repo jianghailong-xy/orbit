@@ -538,6 +538,22 @@ Mocks first, with iOS as the reference. Client work starts after the owner appro
 A run's session stays reachable by id (`GET /sessions/:id`, `session_get`), which is how the schedule's history and
 the notification open it.
 
+*Implemented in S3 (2026-11-15):* `run_source <> 'SCHEDULE'` in `listRows` (so `list` in every view and folder or
+project read, `listOpenSince` and `listRowsByIds`), in every branch of `search` (title, metadata, transcript and the
+recents), in `workspaceSessionCounts`, `listForOrchestration` and the folder counts of `moveTargets`; the realtime
+`session.created` of a run's session is dropped. `searchEvents` is left as it is: it is find *inside* one session named
+by id (`GET /sessions/:id/events/search`), as reachable as `GET /sessions/:id`, and leaving a run's session out of it
+would break find on the page the notification opens. The push side of §7.3 lives in `schedules/schedule-attention.ts`:
+a run's session rings no "finished" or "needs your reply" banner of its own (`PushService.notifySessionSettled`,
+`notifyApprovalRequest`); what it found, how it failed or what it waits on is pushed by the schedule
+(`PushService.notifySchedule`). Waiting on you carries four owner-request kinds no session can file —
+`SCHEDULE_FAILED` (one per schedule, the newest failure), `SCHEDULE_HELD`, `SCHEDULE_APPROVAL` (one per card),
+`SCHEDULE_WIDEN` — with `schedule_id`, `schedule_run_id`, `approval_id` and `schedule_change_request_id` on the row
+(migration 0840). They close by themselves (WITHDRAWN, with why) when a later run succeeds, the run ends, the schedule
+is resumed or ends, or a newer request replaces one; DONE when the card or request they point at is answered. Closing
+one delivers no turn to the run's session. A run's history (`ScheduleRunsService.history`) gives each run's session
+id with OPEN, COMPLETED, TRASH or GONE.
+
 **2. The mode each engine runs for each access level**, measured on the real CLIs on 2026-11-15; the full record,
 with the commands and their output, is [scheduled-tasks-engine-modes.md](./scheduled-tasks-engine-modes.md). The
 table in §6.2 is the result. What the measurement found:

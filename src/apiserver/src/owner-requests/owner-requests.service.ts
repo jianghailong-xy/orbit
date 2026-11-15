@@ -17,6 +17,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { WatchDeliveryService } from '../watches/watch-delivery.service';
 import type { AuthCredential } from '../common/current-user.decorator';
 import { WikiRefusalError, WikiService, normalizeRepoUrl } from '../wiki/wiki.service';
+import { isScheduleItemKind } from '../schedules/schedule-attention';
 import { endUndeliveredGrants, enqueueResolutions } from './owner-request-endings';
 import { OwnerSecretsService, type OwnerSecretGrantView } from './owner-secrets.service';
 import {
@@ -69,6 +70,11 @@ const VIEW = {
   verifyHint: true,
   repoUrlNorm: true,
   workspaceId: true,
+  // SCHEDULE_* items (migration 0840, schedules/schedule-attention.ts): what they are about and what answers them.
+  scheduleId: true,
+  scheduleRunId: true,
+  approvalId: true,
+  scheduleChangeRequestId: true,
   expiresAt: true,
   clientRequestId: true,
   askedBySessionId: true,
@@ -351,6 +357,17 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'WIKI_CREATE') {
       throw new BadRequestException('a WIKI_CREATE request is done when its repository has a wiki: create it with POST /owner-requests/:id/create-wiki');
     }
+    // A scheduled task's items close when what they point at is settled (schedules/schedule-attention.ts); only a
+    // failure is the owner's to dismiss here.
+    if (request.kind === 'SCHEDULE_APPROVAL') {
+      throw new BadRequestException('a SCHEDULE_APPROVAL item is answered on its approval card: POST /sessions/:id/approvals/:approvalId');
+    }
+    if (request.kind === 'SCHEDULE_WIDEN') {
+      throw new BadRequestException("a SCHEDULE_WIDEN item is answered with the scheduled task's Allow or Decline");
+    }
+    if (request.kind === 'SCHEDULE_HELD') {
+      throw new BadRequestException('a SCHEDULE_HELD item closes when the scheduled task is resumed or deleted');
+    }
     const text = given.text?.trim();
     const option = given.option ?? undefined;
     if (option !== undefined) {
@@ -472,7 +489,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   /** The asking session no longer needs it. Only the session that filed a request may withdraw it. */
   async withdraw(ownerId: string, sessionId: string, id: string, reason: string | undefined): Promise<OwnerRequestView> {
     const request = await this.get(ownerId, id);
-    if (request.askedBySessionId !== sessionId) {
+    if (request.askedBySessionId !== sessionId || isScheduleItemKind(request.kind)) {
       throw new ForbiddenException({
         code: OWNER_REQUEST_NOT_ASKER,
         message: 'only the session that filed this request may withdraw it',
@@ -532,7 +549,9 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
         data: { ...data, state: to, resolvedAt: now },
       });
       if (written.count === 1) {
-        await enqueueResolutions(tx, [id]);
+        // A scheduled task's item was written by the schedule, not asked by its session: nobody is waiting to hear.
+        const kind = await tx.ownerRequest.findUnique({ where: { id }, select: { kind: true } });
+        if (!kind || !isScheduleItemKind(kind.kind)) await enqueueResolutions(tx, [id]);
         await endUndeliveredGrants(tx, [id], to === 'WITHDRAWN' ? 'WITHDRAWN' : 'REVOKED');
       }
       return written;

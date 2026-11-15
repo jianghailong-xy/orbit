@@ -2941,6 +2941,8 @@ export class SessionsService {
         // conversations. Landing containers are reached by their link, or through the project
         // grouping's `includeLanding` (a later task), never here.
         sessionKind: SESSION_KIND_CONVERSATION,
+        // A scheduled task's run is reached by id (session_get), not listed (scheduled-tasks-design.md §7.4).
+        runSource: { not: SessionRunSource.SCHEDULE },
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
         ...runnerScopeWhere(filters.scope),
@@ -3204,7 +3206,7 @@ export class SessionsService {
               LEFT JOIN conversation_turn ct
                 ON ct.id = e.turn_id AND ct.session_id = e.session_id
               WHERE s.owner_id = ${ownerId}::uuid
-                AND s.kind = 'CONVERSATION'
+                AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
                 AND e.type IN ('user', 'assistant')
                 -- Keep the exact indexed expression as the cheap candidate filter. On an ordinary
                 -- delivery it contains the authored user text. A reclaimed continuation can
@@ -3317,7 +3319,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND s.id = ${norm.sessionId}::uuid
             UNION
             -- Workspaces and logs commonly shorten a UUID to its first 8–12 hex characters. At this
@@ -3326,7 +3328,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND replace(s.id::text, '-', '') LIKE ${
                 norm.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null
               }
@@ -3339,7 +3341,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND ${sessionPredicate}
             UNION
             -- Joined names resolve against their own tiny tables first (~10 workspaces, ~500 tasks),
@@ -3347,14 +3349,14 @@ export class SessionsService {
             -- index instead would mean reindexing every session whenever a workspace is renamed.
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND s.workspace_id IN (
                 SELECT id FROM workspace WHERE ${matches(stripMarks(Prisma.sql`name`))}
               )
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.kind = 'CONVERSATION'
+              AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
               AND s.task_id IN (
                 SELECT id FROM task WHERE ${matches(stripMarks(Prisma.sql`title`))}
               )
@@ -3520,7 +3522,7 @@ export class SessionsService {
           LEFT JOIN workspace a ON a.id = s.workspace_id
           LEFT JOIN task  t ON t.id = s.task_id
           WHERE s.owner_id = ${ownerId}::uuid
-            AND s.kind = 'CONVERSATION'
+            AND s.kind = 'CONVERSATION' AND s.run_source <> 'SCHEDULE'
             AND s.deleted_at IS NULL
           ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
           LIMIT ${take}::int
@@ -3580,6 +3582,8 @@ export class SessionsService {
       // LS6: a landing in flight is not a conversation waiting on anybody, and its AWAITING_INPUT
       // means only that its subject is open. It counts in no workspace tally.
       sessionKind: SESSION_KIND_CONVERSATION,
+      // Nor does a scheduled task's run, which is in no list (docs/scheduled-tasks-design.md §7.4).
+      runSource: { not: SessionRunSource.SCHEDULE },
     } as const;
     const [active, running, jobs, blocked, jobCards] = await Promise.all([
       this.prisma.session.groupBy({
@@ -4351,6 +4355,10 @@ export class SessionsService {
       WHERE s.owner_id = ${ownerId}::uuid
         ${scope}
         AND (${visibility})
+        -- A scheduled task's run is reached from its schedule's history and its notification, never from a
+        -- list (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, the delta and the
+        -- rows by id all read here.
+        AND s.run_source <> 'SCHEDULE'
       ORDER BY ${orderBy}
       ${pageLimit}
     `);
@@ -11634,7 +11642,7 @@ export class SessionsService {
     const filed = folders.length
       ? await this.prisma.session.groupBy({
           by: ['folderId'],
-          where: { ownerId, deletedAt: null, folderId: { in: folders.map((f) => f.id) } },
+          where: { ownerId, deletedAt: null, runSource: { not: SessionRunSource.SCHEDULE }, folderId: { in: folders.map((f) => f.id) } },
           _count: { _all: true },
         })
       : [];

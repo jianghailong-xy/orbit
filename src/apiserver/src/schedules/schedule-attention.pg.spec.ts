@@ -439,6 +439,18 @@ test('§8.3/Waiting on you: a run asking for a wider envelope files an item; All
   assert.deepEqual(await pendingItems(schedule.id), [], 'Allow closes it');
   assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: pending[0].id } })).state, 'DONE');
 
+  // Decline closes it the same way, through the same decide code S4's door calls.
+  const declinedAsk = await schedules.update(asRun, schedule.id, { runLimitMinutes: 90 });
+  assert.equal(declinedAsk.outcome, 'PENDING');
+  const [toDecline] = await pendingItems(schedule.id);
+  assert.equal(toDecline.kind, 'SCHEDULE_WIDEN');
+  await assert.rejects(ownerRequests.complete(w.ownerId, toDecline.id, {}), 'Waiting on you cannot mark it done: the answer is Allow or Decline');
+  await schedules.decide(w.owner, toDecline.scheduleChangeRequestId!, 'DECLINE');
+  assert.deepEqual(await pendingItems(schedule.id), [], 'Decline closes it');
+  const declinedItem = await db.ownerRequest.findUniqueOrThrow({ where: { id: toDecline.id } });
+  assert.equal(declinedItem.state, 'DONE');
+  assert.equal(declinedItem.resolutionNote, 'Declined.');
+
   // A person's own ask from a conversation is the card in that conversation, not an item in Waiting on you.
   const person = await conversation(w);
   const own = await schedules.update({ kind: 'SESSION', ownerId: w.ownerId, sessionId: person }, schedule.id, { runLimitMinutes: 60 });

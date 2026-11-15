@@ -51,6 +51,21 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RUNNER_BEATS, runnerIsOnline } from '../runners/runner-presence';
 import { openingTurnKey } from '../sessions/orbit-authored-turn';
+import {
+  SCHEDULE_NOTIFIER,
+  approvalCopy,
+  closeScheduleItems,
+  failedCopy,
+  failureClause,
+  fileScheduleItem,
+  findingCopy,
+  heldCopy,
+  onceMissedCopy,
+  scheduleHomeSession,
+  sendAlerts,
+  type ScheduleAlert,
+  type ScheduleNotifier,
+} from './schedule-attention';
 import { scheduledRunTurn } from './schedule-run-block';
 import { scheduleStartCheck, type StartPlan } from './schedule-start-check';
 import { nextDueAt, parseRule, type ScheduleRule } from './schedule-time';
@@ -137,6 +152,12 @@ export interface ScheduleRunSessionPort {
 
 export const SCHEDULE_RUN_SESSIONS = Symbol('SCHEDULE_RUN_SESSIONS');
 
+/** Where a run's session stands, as its history shows it (§7.4). */
+export interface RunSessionView {
+  id: string;
+  state: 'OPEN' | 'COMPLETED' | 'TRASH' | 'GONE';
+}
+
 export type FireOutcome = 'FIRED' | 'MISSED' | 'SETTLED_ELSEWHERE';
 /** How a failure was settled: retried, waiting, MISSED, CANCELLED (its schedule paused), SKIPPED or FAILED. */
 export type FailOutcome = 'RETRY' | 'FAILED' | 'MISSED' | 'CANCELLED' | 'SKIPPED';
@@ -212,8 +233,14 @@ export class ScheduleRunsService {
     private readonly prisma: PrismaService,
     @Inject(SCHEDULE_RUN_SESSIONS) private readonly sessions: ScheduleRunSessionPort,
     @Optional() @Inject(SCHEDULE_CLOCK) clock?: () => Date,
+    /** Who hears (§7.3). Absent, the rows are written and nothing is pushed. */
+    @Optional() @Inject(SCHEDULE_NOTIFIER) private readonly notifier?: ScheduleNotifier,
   ) {
     this.clock = clock ?? (() => new Date());
+  }
+
+  private async alert(alerts: readonly ScheduleAlert[]): Promise<void> {
+    await sendAlerts(this.notifier, alerts, (m) => this.logger.warn(m));
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -242,9 +269,11 @@ export class ScheduleRunsService {
 
   /** Fire one schedule's due slots, in one transaction. */
   async fire(scheduleId: string): Promise<FireOutcome> {
-    return withTransactionRetry(
+    const alerts: ScheduleAlert[] = [];
+    const fired = await withTransactionRetry(
       this.prisma,
       async (tx) => {
+        alerts.length = 0;
         const schedule = await this.lock(tx, scheduleId);
         const now = this.clock();
         if (!schedule || schedule.state !== 'ACTIVE' || !schedule.nextDueAt || schedule.nextDueAt > now) {
@@ -263,7 +292,8 @@ export class ScheduleRunsService {
         const caughtUp = now.getTime() - latest.getTime() <= catchUpWindowMs(rule, schedule.timezone, latest);
         const missed = caughtUp ? slots.slice(0, -1) : slots;
         for (const slot of missed) {
-          await this.insertSlotRun(tx, schedule, slot, 'SCHEDULED', 'MISSED', now);
+          const id = await this.insertSlotRun(tx, schedule, slot, 'SCHEDULED', 'MISSED', now);
+          if (id && rule.kind === 'ONCE') alerts.push(this.onceMissed(schedule, id));
         }
         let outcome: FireOutcome = 'MISSED';
         if (caughtUp) {
@@ -291,6 +321,8 @@ export class ScheduleRunsService {
       },
       loggedRetry(this.logger, 'scheduleRuns.fire'),
     );
+    await this.alert(alerts);
+    return fired;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -334,7 +366,12 @@ export class ScheduleRunsService {
   async start(runId: string, retiredStrays = false): Promise<StartOutcome> {
     const step = await withTransactionRetry(
       this.prisma,
-      async (tx): Promise<{ outcome: StartOutcome; open?: OpenRunSession; strays?: Array<{ id: string; ownerId: string }> }> => {
+      async (tx): Promise<{
+        outcome: StartOutcome;
+        open?: OpenRunSession;
+        strays?: Array<{ id: string; ownerId: string }>;
+        alerts?: ScheduleAlert[];
+      }> => {
         const head = await tx.scheduleRun.findUnique({ where: { id: runId }, select: { scheduleId: true } });
         if (!head) return { outcome: 'SETTLED_ELSEWHERE' };
         const schedule = await this.lock(tx, head.scheduleId);
@@ -365,13 +402,15 @@ export class ScheduleRunsService {
         const check = await scheduleStartCheck(tx, schedule);
         if (!check.ok) {
           await this.holdRun(tx, run, check.reason, now);
+          const alerts: ScheduleAlert[] = [];
           if (schedule.state !== 'ENDED') {
             await tx.schedule.update({
               where: { id: schedule.id },
               data: { state: 'HELD', heldReason: check.reason, nextDueAt: null },
             });
+            await this.fileHeld(tx, schedule, run, check.reason, alerts);
           }
-          return { outcome: 'HELD' };
+          return { outcome: 'HELD', alerts };
         }
         const workspace = await tx.workspace.findUnique({
           where: { id: schedule.workspaceId },
@@ -387,7 +426,7 @@ export class ScheduleRunsService {
               where: { id: runId },
               data: { state: 'MISSED', failureReason: 'RUNNER_UNAVAILABLE', endedAt: now, notBeforeAt: null },
             });
-            return { outcome: 'MISSED' };
+            return { outcome: 'MISSED', alerts: this.onceMissedIf(schedule, run) };
           }
           await tx.scheduleRun.update({
             where: { id: runId },
@@ -405,6 +444,7 @@ export class ScheduleRunsService {
       },
       loggedRetry(this.logger, 'scheduleRuns.start'),
     );
+    if (step.alerts) await this.alert(step.alerts);
     if (step.strays) {
       for (const stray of step.strays) {
         try {
@@ -437,9 +477,11 @@ export class ScheduleRunsService {
 
   /** A create door refused the run's session: the run and its schedule are HELD (SESSION_REFUSED) for the owner. */
   private async holdRefused(runId: string, sessionId: string): Promise<StartOutcome> {
-    return withTransactionRetry(
+    const alerts: ScheduleAlert[] = [];
+    const outcome = await withTransactionRetry(
       this.prisma,
       async (tx) => {
+        alerts.length = 0;
         const head = await tx.scheduleRun.findUnique({ where: { id: runId }, select: { scheduleId: true } });
         const schedule = head ? await this.lock(tx, head.scheduleId) : null;
         const run = await tx.scheduleRun.findUnique({ where: { id: runId } });
@@ -451,11 +493,14 @@ export class ScheduleRunsService {
             where: { id: schedule.id },
             data: { state: 'HELD', heldReason: 'SESSION_REFUSED', nextDueAt: null },
           });
+          await this.fileHeld(tx, schedule, run, 'SESSION_REFUSED', alerts);
         }
         return 'HELD' as const;
       },
       loggedRetry(this.logger, 'scheduleRuns.holdRefused'),
     );
+    await this.alert(alerts);
+    return outcome;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -545,10 +590,15 @@ export class ScheduleRunsService {
         orderBy: { createdAt: 'asc' },
         select: { createdAt: true, decidedAt: true, status: true },
       });
+    if (card && now.getTime() - card.createdAt.getTime() >= SCHEDULE_APPROVAL_TIMEOUT_MS) {
+      return this.fail(runId, 'APPROVAL_TIMEOUT', { sessionId, interrupt: true });
+    }
+    // §6.4: each card the run stopped at waits in Waiting on you until it is answered; an answered one leaves it.
+    const filed = card ? 1 : await this.prisma.ownerRequest.count({
+      where: { scheduleRunId: runId, kind: 'SCHEDULE_APPROVAL', state: 'PENDING' },
+    });
+    if (filed > 0 && !(await this.syncApprovalItems(runId, sessionId))) return 'SETTLED_ELSEWHERE';
     if (card) {
-      if (now.getTime() - card.createdAt.getTime() >= SCHEDULE_APPROVAL_TIMEOUT_MS) {
-        return this.fail(runId, 'APPROVAL_TIMEOUT', { sessionId, interrupt: true });
-      }
       if (run.state === 'RUNNING') return this.moveInProgress(runId, 'RUNNING', 'AWAITING_APPROVAL');
       return 'UNCHANGED';
     }
@@ -621,6 +671,7 @@ export class ScheduleRunsService {
           );
         }
         const now = this.clock();
+        const alerts: ScheduleAlert[] = [];
         const ended = await tx.scheduleRun.update({
           where: { id: run.id },
           data: {
@@ -651,6 +702,7 @@ export class ScheduleRunsService {
               data: { lastSeenRunId: run.id, links: links as Prisma.InputJsonValue },
             });
           } else {
+            // Told once, now: `notifiedAt` is written with the finding, so a replay of this report finds it known.
             await tx.scheduleFinding.create({
               data: {
                 scheduleId: schedule.id,
@@ -659,16 +711,33 @@ export class ScheduleRunsService {
                 firstRunId: run.id,
                 lastSeenRunId: run.id,
                 links: report.links as Prisma.InputJsonValue,
+                notifiedAt: now,
                 createdAt: now,
               },
             });
             newFinding = true;
+            alerts.push({
+              kind: 'FINDING',
+              ownerId: schedule.ownerId,
+              scheduleId: schedule.id,
+              runId: run.id,
+              opens: { sessionId },
+              ownerRequestId: null,
+              ...findingCopy(schedule.title, report.summary),
+              collapseId: `schedule-finding-${schedule.id}-${report.key}`,
+            });
           }
         }
-        return { run: ended, newFinding, scheduleId: schedule.id };
+        await this.settleItems(tx, schedule, run, report.outcome === 'FAILED' ? 'FAILED' : 'SUCCEEDED', now, alerts, {
+          reason: 'REPORTED_FAILED',
+          summary: report.summary,
+          consecutiveFailures: report.outcome === 'FAILED' ? schedule.consecutiveFailures + 1 : 0,
+        });
+        return { run: ended, newFinding, scheduleId: schedule.id, alerts };
       },
       loggedRetry(this.logger, 'scheduleRuns.report'),
     );
+    await this.alert(result.alerts);
     if (result.run.state === 'NO_CHANGE') await this.completeIfSettled(ownerId, sessionId);
     await this.startNext(result.scheduleId);
     return { run: result.run, newFinding: result.newFinding };
@@ -717,6 +786,11 @@ export class ScheduleRunsService {
           where: { id: runId },
           data: { state: 'CANCELLED', failureReason: 'CANCELLED_BY_OWNER', endedAt: this.clock() },
         });
+        await closeScheduleItems(
+          tx,
+          { scheduleId: schedule.id, kinds: ['SCHEDULE_APPROVAL'], scheduleRunId: runId },
+          { state: 'WITHDRAWN', note: 'You stopped the run.', now: this.clock() },
+        );
         return { stopped, interrupt: run.state !== 'QUEUED' ? run.sessionId : null, ownerId: schedule.ownerId };
       },
       loggedRetry(this.logger, 'scheduleRuns.stop'),
@@ -756,20 +830,23 @@ export class ScheduleRunsService {
         }
       }
     }
+    const alerts: ScheduleAlert[] = [];
     const result = await withTransactionRetry(
       this.prisma,
       async (tx) => {
+        alerts.length = 0;
         const head = await tx.scheduleRun.findUnique({ where: { id: runId }, select: { scheduleId: true } });
         const schedule = head ? await this.lock(tx, head.scheduleId) : null;
         const run = await tx.scheduleRun.findUnique({ where: { id: runId } });
         if (!schedule || !run || (run.state !== 'RUNNING' && run.state !== 'AWAITING_APPROVAL') || run.sessionId !== opts.sessionId) {
           return { outcome: 'SETTLED_ELSEWHERE' as const, ownerId: null, scheduleId: head?.scheduleId ?? null };
         }
-        const outcome = await this.failLocked(tx, schedule, run, reason, this.clock());
+        const outcome = await this.failLocked(tx, schedule, run, reason, this.clock(), alerts);
         return { outcome, ownerId: schedule.ownerId, scheduleId: schedule.id };
       },
       loggedRetry(this.logger, 'scheduleRuns.fail'),
     );
+    await this.alert(alerts);
     if (result.outcome !== 'SETTLED_ELSEWHERE' && result.ownerId && opts.sessionId && opts.interrupt) {
       const ownerId = result.ownerId;
       const sessionId = opts.sessionId;
@@ -791,16 +868,28 @@ export class ScheduleRunsService {
     run: ScheduleRun,
     reason: ScheduleFailureReason,
     now: Date,
+    alerts: ScheduleAlert[],
   ): Promise<FailOutcome> {
     const end = (state: 'FAILED' | 'MISSED' | 'CANCELLED' | 'SKIPPED') =>
       tx.scheduleRun.update({
         where: { id: run.id },
         data: { state, failureReason: reason, endedAt: now, notBeforeAt: null },
       });
+    // Whatever happens to the run, the cards of the session it had are no longer a question (§6.4).
+    await closeScheduleItems(
+      tx,
+      { scheduleId: schedule.id, kinds: ['SCHEDULE_APPROVAL'], scheduleRunId: run.id },
+      { state: 'WITHDRAWN', note: 'The run ended.', now },
+    );
     if (!RETRIED_FAILURES.has(reason)) {
       await end('FAILED');
       // Counted, never acted on: a schedule is not paused by its failures (§7.2, owner decision).
       await tx.schedule.update({ where: { id: schedule.id }, data: { consecutiveFailures: { increment: 1 } } });
+      await this.settleItems(tx, schedule, run, 'FAILED', now, alerts, {
+        reason,
+        summary: null,
+        consecutiveFailures: schedule.consecutiveFailures + 1,
+      });
       return 'FAILED';
     }
     const stopped = schedule.state === 'HELD'
@@ -821,6 +910,7 @@ export class ScheduleRunsService {
     const retryAt = new Date(now.getTime() + wait);
     if (retryAt.getTime() > this.deadline(schedule, run)) {
       await end('MISSED');
+      alerts.push(...this.onceMissedIf(schedule, run));
       return 'MISSED';
     }
     await tx.scheduleRun.update({
@@ -850,12 +940,13 @@ export class ScheduleRunsService {
       if (!run || run.state !== 'QUEUED') return;
       const now = this.clock();
       const missed = now.getTime() > this.deadline(run.schedule, run);
-      await this.prisma.scheduleRun.updateMany({
+      const moved = await this.prisma.scheduleRun.updateMany({
         where: { id: runId, state: 'QUEUED' },
         data: missed
           ? { state: 'MISSED', endedAt: now, notBeforeAt: null }
           : { notBeforeAt: new Date(now.getTime() + SCHEDULE_ERROR_COOLDOWN_MS) },
       });
+      if (missed && moved.count === 1) await this.alert(this.onceMissedIf(run.schedule, run));
     } catch (error) {
       this.coolDown(runId);
       this.logger.error(`schedule run ${runId} could not be put aside: ${messageOf(error)}`);
@@ -875,6 +966,210 @@ export class ScheduleRunsService {
   // -------------------------------------------------------------------------------------------------------------
   // Inside
   // -------------------------------------------------------------------------------------------------------------
+
+  /**
+   * What a run's end settles in Waiting on you (§7.3). A failure is pushed and waits there — one item per schedule,
+   * the newest, so three failures in a row are one item that says so — and a run that succeeded closes it.
+   */
+  private async settleItems(
+    tx: Tx,
+    schedule: Schedule,
+    run: ScheduleRun,
+    how: 'FAILED' | 'SUCCEEDED',
+    now: Date,
+    alerts: ScheduleAlert[],
+    failure: { reason: string; summary: string | null; consecutiveFailures: number },
+  ): Promise<void> {
+    await closeScheduleItems(
+      tx,
+      { scheduleId: schedule.id, kinds: ['SCHEDULE_APPROVAL'], scheduleRunId: run.id },
+      { state: 'WITHDRAWN', note: 'The run ended.', now },
+    );
+    await closeScheduleItems(
+      tx,
+      { scheduleId: schedule.id, kinds: ['SCHEDULE_FAILED'] },
+      { state: 'WITHDRAWN', note: how === 'FAILED' ? 'A later run failed too.' : 'A later run succeeded.', now },
+    );
+    if (how !== 'FAILED') return;
+    const copy = failedCopy(
+      schedule.title,
+      failure.consecutiveFailures,
+      failureClause(failure.reason, { summary: failure.summary, runLimitMinutes: schedule.runLimitMinutes }),
+    );
+    const askedBy = run.sessionId ?? (await scheduleHomeSession(tx, schedule));
+    const itemId = askedBy
+      ? await fileScheduleItem(tx, {
+          kind: 'SCHEDULE_FAILED',
+          ownerId: schedule.ownerId,
+          askedBySessionId: askedBy,
+          scheduleId: schedule.id,
+          scheduleRunId: run.id,
+          workspaceId: schedule.workspaceId,
+          key: `schedule-failed:${run.id}`,
+          title: copy.title,
+          why: copy.body,
+        })
+      : null;
+    alerts.push({
+      kind: 'FAILED',
+      ownerId: schedule.ownerId,
+      scheduleId: schedule.id,
+      runId: run.id,
+      opens: run.sessionId ? { sessionId: run.sessionId } : { scheduleId: schedule.id },
+      ownerRequestId: itemId,
+      ...copy,
+      collapseId: `schedule-failed-${run.id}`,
+    });
+  }
+
+  /** A schedule moved to HELD by this run's start: pushed, and waiting on the owner until it is resumed (§6.1). */
+  private async fileHeld(tx: Tx, schedule: Schedule, run: ScheduleRun, reason: string, alerts: ScheduleAlert[]): Promise<void> {
+    const copy = heldCopy(schedule.title, reason);
+    const askedBy = await scheduleHomeSession(tx, schedule);
+    const itemId = askedBy
+      ? await fileScheduleItem(tx, {
+          kind: 'SCHEDULE_HELD',
+          ownerId: schedule.ownerId,
+          askedBySessionId: askedBy,
+          scheduleId: schedule.id,
+          scheduleRunId: run.id,
+          workspaceId: schedule.workspaceId,
+          key: `schedule-held:${run.id}`,
+          title: copy.title,
+          why: copy.body,
+        })
+      : null;
+    alerts.push({
+      kind: 'HELD',
+      ownerId: schedule.ownerId,
+      scheduleId: schedule.id,
+      runId: run.id,
+      opens: { scheduleId: schedule.id },
+      ownerRequestId: itemId,
+      ...copy,
+      collapseId: `schedule-held-${run.id}`,
+    });
+  }
+
+  /** §5.2: a missed ONCE notifies, because nothing else will run. A MANUAL run is not its slot. */
+  private onceMissedIf(schedule: Schedule, run: ScheduleRun): ScheduleAlert[] {
+    try {
+      if (parseRule(schedule.rule).kind !== 'ONCE' || run.trigger === 'MANUAL') return [];
+    } catch {
+      return [];
+    }
+    return [this.onceMissed(schedule, run.id)];
+  }
+
+  private onceMissed(schedule: Schedule, runId: string): ScheduleAlert {
+    return {
+      kind: 'ONCE_MISSED',
+      ownerId: schedule.ownerId,
+      scheduleId: schedule.id,
+      runId,
+      opens: { scheduleId: schedule.id },
+      ownerRequestId: null,
+      ...onceMissedCopy(schedule.title),
+      collapseId: `schedule-once-missed-${schedule.id}`,
+    };
+  }
+
+  /**
+   * One item per card the run's session is waiting on, filed once and pushed once; a card no longer PENDING closes
+   * its item — DONE when it was answered. Under the schedule lock, and only while the run is still in progress with
+   * this session, so an item is never filed for a run that has already ended. False when it no longer is.
+   */
+  private async syncApprovalItems(runId: string, sessionId: string): Promise<boolean> {
+    const alerts: ScheduleAlert[] = [];
+    const live = await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        alerts.length = 0;
+        const head = await tx.scheduleRun.findUnique({ where: { id: runId }, select: { scheduleId: true } });
+        const schedule = head ? await this.lock(tx, head.scheduleId) : null;
+        const run = await tx.scheduleRun.findUnique({ where: { id: runId } });
+        if (!schedule || !run || !(IN_PROGRESS as readonly string[]).includes(run.state) || run.sessionId !== sessionId) {
+          return false;
+        }
+        const now = this.clock();
+        const pending = await tx.approval.findMany({
+          where: { sessionId, status: 'PENDING' },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, toolName: true },
+        });
+        await closeScheduleItems(
+          tx,
+          { scheduleId: schedule.id, kinds: ['SCHEDULE_APPROVAL'], scheduleRunId: runId, approvalIdsNotIn: pending.map((c) => c.id) },
+          { state: 'DONE', note: 'The approval was answered.', byUserId: schedule.ownerId, now },
+        );
+        for (const card of pending) {
+          const copy = approvalCopy(schedule.title, card.toolName);
+          const itemId = await fileScheduleItem(tx, {
+            kind: 'SCHEDULE_APPROVAL',
+            ownerId: schedule.ownerId,
+            askedBySessionId: sessionId,
+            scheduleId: schedule.id,
+            scheduleRunId: runId,
+            approvalId: card.id,
+            workspaceId: schedule.workspaceId,
+            key: `schedule-approval:${card.id}`,
+            title: copy.title,
+            why: copy.why,
+          });
+          if (!itemId) continue;
+          alerts.push({
+            kind: 'AWAITING_APPROVAL',
+            ownerId: schedule.ownerId,
+            scheduleId: schedule.id,
+            runId,
+            opens: { sessionId },
+            ownerRequestId: itemId,
+            title: copy.title,
+            body: copy.body,
+            collapseId: `owner-request-${itemId}`,
+          });
+        }
+        return true;
+      },
+      loggedRetry(this.logger, 'scheduleRuns.syncApprovalItems'),
+    );
+    await this.alert(alerts);
+    return live;
+  }
+
+  /**
+   * A schedule's runs, newest first, each with where its session stands (§7.4): OPEN, COMPLETED, TRASH, or GONE when
+   * the session was purged — the run is kept and still names it. Null for a run that never had one.
+   */
+  async history(ownerId: string, scheduleId: string, take = 50): Promise<Array<ScheduleRun & { session: RunSessionView | null }>> {
+    const schedule = await this.prisma.schedule.findFirst({ where: { id: scheduleId, ownerId }, select: { id: true } });
+    if (!schedule) throw refusal('NOT_FOUND', 'SCHEDULE_NOT_FOUND', 'No such schedule.');
+    const list = await this.prisma.scheduleRun.findMany({
+      where: { scheduleId },
+      orderBy: [{ plannedAt: 'desc' }, { createdAt: 'desc' }],
+      take: Math.min(Math.max(take, 1), 200),
+    });
+    const ids = list.flatMap((r) => (r.sessionId ? [r.sessionId] : []));
+    const sessions = ids.length
+      ? await this.prisma.session.findMany({
+          where: { id: { in: ids }, ownerId },
+          select: { id: true, completedAt: true, archivedAt: true, deletedAt: true },
+        })
+      : [];
+    const byId = new Map(sessions.map((s) => [s.id, s]));
+    return list.map((r) => {
+      if (!r.sessionId) return { ...r, session: null };
+      const s = byId.get(r.sessionId);
+      const state: RunSessionView['state'] = !s
+        ? 'GONE'
+        : s.deletedAt
+          ? 'TRASH'
+          : (s.completedAt ?? s.archivedAt)
+            ? 'COMPLETED'
+            : 'OPEN';
+      return { ...r, session: { id: r.sessionId, state } };
+    });
+  }
 
   /** The per-account lock, then the schedule row FOR UPDATE: SchedulesService's order. */
   private async lock(tx: Tx, scheduleId: string, ownerId?: string): Promise<Schedule | null> {
