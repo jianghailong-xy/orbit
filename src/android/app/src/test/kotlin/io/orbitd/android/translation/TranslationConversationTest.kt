@@ -99,6 +99,28 @@ class TranslationConversationTest : ComposerShellTest() {
         await { has(text(askedZh) and row(1), unmerged = true) }
     }
 
+    /** Translation D2: scrolled back off the tail, the bar's capsule quotes what the owner wrote, as the bubble does — not the English. */
+    @Test fun theStickyQuestionQuotesTheOwnersOwnWords() {
+        translatedConversation()
+        ComposerShell.events = ComposerShell.events.take(1) + (2..16).map { seq ->
+            ComposerShell.obj(buildString {
+                append("""{"type":"assistant","seq":$seq,"turnId":"t-1","payload":{"text":""")
+                append(kotlinx.serialization.json.JsonPrimitive(replyEn)); append(""","translation":{"lang":"zh-Hans","text":""")
+                append(kotlinx.serialization.json.JsonPrimitive(replyZh)); append("}}}")
+            })
+        } + ComposerShell.obj("""{"type":"turn_end","seq":17,"turnId":"t-1","payload":{"subtype":"success"}}""")
+        signIn(); openSession()
+        await { has(hasTestTag("event:16")) && has(hasTestTag("app-bar")) }
+        compose.waitForIdle()
+        compose.onNodeWithTag("transcript-list").performTouchInput {
+            down(center); repeat(10) { moveBy(androidx.compose.ui.geometry.Offset(0f, 30f)) }; advanceEventTime(200); up()
+        }
+        val capsule = hasAnyAncestor(hasTestTag("question-capsule"))
+        await { has(text(askedZh) and capsule, unmerged = true) }
+        assertFalse("not the English the engine received", has(text("does nothing in Safari") and capsule, unmerged = true))
+        shot("3-sticky-question")
+    }
+
     @Test fun heldMessagesWaitingRepliesAndFailuresSayWhereTheyAreAndOfferTheWayOut() {
         translatedConversation()
         signIn(); openSession()
