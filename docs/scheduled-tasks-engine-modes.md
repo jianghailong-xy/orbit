@@ -320,13 +320,163 @@ From the server's table only:
   says "In every mode a write inside the workspace runs without asking", and in Plan "Orbit refuses every request"
   (commands, MCP, web fetch). Whether Cursor's own plan mode refuses a workspace write is not stated there.
 
+## 7. Claude Code `CHECK_ONLY` in `dontAsk` (follow-up, 2026-11-15, host clock 2026-11-14T22:4x–22:5xZ)
+
+Question: §1 found that headless `plan` never permission-checks Bash. Is there a mode, with lists the claim can send,
+in which a `CHECK_ONLY` run fetches a URL and runs `git log` / `ls` without a card, and every writing shell command is
+refused or asks? Same host, same `claude` 2.1.325, model `claude-sonnet-5`. Scratch repos
+`/mnt/data/checkonly-probe/<name>` (one commit; `README.md` = "hello", `victim.txt` = "old"). Probe scripts:
+`run.sh`, `measure.sh`, `summ.py`, `stub_mcp.py` and the prompts, kept in the task's uploads, not in the repository.
+
+**Plan as a baseline, again.** With the runner's stream-json input and the five writing commands of the prompt below,
+the model this time declined on its own (it wrote its plan to `~/.claude/plans/…md`, looked for `ExitPlanMode`:
+"No matching deferred tools found") and `DENIALS []`: nothing in the harness refused anything, as in §1.
+
+**`dontAsk` alone** (`--allowedTools 'mcp__orbit__*'`): `git log --oneline -1`, `ls`, `cat README.md`, `grep -rn hello .`
+ran with no ask; `date > probe3.txt; ls`, `touch probe2.txt && ls`, `rm -f victim.txt && ls`, `echo x >> README.md`,
+`curl -s -o probe4.html …` all came back "Permission to use Bash has been denied because Claude Code is running in
+don't ask mode." But `WebFetch` was denied too ("Permission to use WebFetch has been denied because Claude Code is
+running in don't ask mode."), and so was a plain `curl -s https://example.com`. So a fetch needs an allow rule.
+
+**What ships** (`schedule-access.ts`): the runner's argv (`claude_spawn.go`) with what the claim now hands it for a
+`CHECK_ONLY` run on Claude Code. `--mcp-config` points the `orbit` server at a stub (`stub_mcp.py`) whose only tool,
+`permission_prompt`, logs every call and answers **allow**, so a prompt-tool call would show and would let a write
+through. The runner's own allow rule for the Orbit CLI is reproduced with a stand-in `orbit` that only echoes.
+
+```
+P=<uploads>/probe; ./run.sh <name> dontAsk <prompt> \
+  --allowedTools 'mcp__orbit__*,WebFetch,WebSearch,Bash(/mnt/data/checkonly-probe/bin/orbit task create *)' \
+  --disallowedTools 'Edit,Write,NotebookEdit,mcp__orbit__task_create,mcp__orbit__task_create_batch,mcp__orbit__project_create,mcp__orbit__session_create,Bash(* task create *),Bash(* task create-batch *),Bash(* project create *),Bash(* session create *),TaskCreate,TaskUpdate,TaskGet,TaskList,TaskOutput,TaskStop,TodoWrite,TodoRead' \
+  --mcp-config $P/mcp.json --permission-prompt-tool mcp__orbit__permission_prompt
+# run.sh: claude -p --input-format stream-json --output-format stream-json --include-partial-messages
+#         --replay-user-messages --verbose --model claude-sonnet-5 --permission-mode dontAsk <the flags above>
+```
+
+Prompt 1 (each step its own call, "do not skip a step because you expect it to be refused"): (a) WebFetch
+https://example.com, (b) `git log --oneline -1`, (c) `ls`, (d) `cat README.md`, (e) `grep -rn hello .`,
+(f) `date > probe3.txt; ls`, (g) `touch probe2.txt && ls`, (h) `rm -f victim.txt && ls`, (i) `echo x >> README.md`,
+(j) `curl -s -o probe4.html https://example.com`, (k) `curl -s https://example.com`, (l) the Write tool,
+(m) `/mnt/data/checkonly-probe/bin/orbit task create --title probe`.
+
+```
+INIT permissionMode= dontAsk
+TOOL_USE WebFetch {"url": "https://example.com", ...}
+RESULT err= None The provided content doesn't include a `<title>` tag. The closest match is the first line of the page, "Example Domain," ...
+TOOL_USE Bash {"command": "git log --oneline -1"}      RESULT err= False 6c2316f probe initial commit
+TOOL_USE Bash {"command": "ls"}                        RESULT err= False README.md | victim.txt
+TOOL_USE Bash {"command": "cat README.md"}             RESULT err= False hello
+TOOL_USE Bash {"command": "grep -rn hello ."}          RESULT err= False README.md:1:hello
+TOOL_USE Bash {"command": "date > probe3.txt; ls"}     RESULT err= True Permission to use Bash has been denied because Claude Code is running in don't ask mode. ...
+TOOL_USE Bash {"command": "touch probe2.txt && ls"}    RESULT err= True (same)
+TOOL_USE Bash {"command": "rm -f victim.txt && ls"}    RESULT err= True (same)
+TOOL_USE Bash {"command": "echo x >> README.md"}       RESULT err= True (same)
+TOOL_USE Bash {"command": "curl -s -o probe4.html https://example.com"}   RESULT err= True (same)
+TOOL_USE Bash {"command": "curl -s https://example.com"}                  RESULT err= True (same)
+TOOL_USE Write {"file_path": ".../final/probe.txt", ...}
+RESULT err= True <tool_use_error>Error: No such tool available: Write. Write is disabled for this session, in subagents as well as here.</tool_use_error>
+TOOL_USE Bash {"command": "/mnt/data/checkonly-probe/bin/orbit task create --title probe"}
+RESULT err= True Permission to use Bash with command /mnt/data/checkonly-probe/bin/orbit task create --title probe has been denied.
+DENIALS [date > probe3.txt; ls], [touch probe2.txt && ls], [rm -f victim.txt && ls], [echo x >> README.md], [curl -s -o probe4.html …], [curl -s https://example.com], [/mnt/data/checkonly-probe/bin/orbit task create --title probe]
+FILES: README.md victim.txt
+victim.txt: old
+===== prompt tool calls =====
+(end: 0 calls)
+```
+
+Prompt 2, writers the shell classifier has to recognise without a `>`: (a) `sed -i s/hello/bye/ README.md`,
+(b) `find . -name victim.txt -delete`, (c) `git -c user.email=p@p -c user.name=p commit --allow-empty -m probe`,
+(d) `python3 -c "open('probe5.txt','w').write('x')"`, (e) `cp README.md probe6.txt`, (f) `tee probe7.txt < README.md`,
+(g) `git status --short`, (h) `git diff HEAD`.
+
+```
+(a)–(f)  RESULT err= True Permission to use Bash has been denied because Claude Code is running in don't ask mode. ...
+(g) git status --short   RESULT err= False (Bash completed with no output)
+(h) git diff HEAD        RESULT err= False (Bash completed with no output)
+FILES: README.md victim.txt     victim.txt: old     git log: one commit     README.md: hello
+===== prompt tool calls =====
+(end: 0 calls)
+```
+
+### Orbit's own tools (revision 2 of the lists)
+
+The lists above still allowed `mcp__orbit__*`, so Orbit's own tools were a way round the shell rule: `bg_run` starts a
+shell command on the runner outside Claude Code's check, and the other Orbit writes Plan's runner gate refused
+(`session_merge`, `task_start`, `task_update`, `session_send`, …) would run. So the run's allow list is now explicit
+(design §6.2) and the Orbit CLI is denied outright. Probe script `measure2.sh`; `stub_mcp.py` now offers Orbit's tool
+names (`bg_run`, `session_merge`, `task_start`, `task_update`, `session_send`, `schedule_run_report`, `task_get`, and
+`permission_prompt`) and logs every call that reaches it, so a call missing from its log was refused by Claude Code
+before the tool ran. The runner's own allow rules for the CLI are added as `agent_instructions.go` writes them, both
+forms (`Bash('<orbit>' task update *)`, `Bash(<orbit> task update *)`, the same for `session merge`, `task create`,
+`capabilities --json`).
+
+```
+--allowedTools mcp__orbit__schedule_run_report,mcp__orbit__schedule_get,mcp__orbit__schedule_list,mcp__orbit__schedule_update,
+  mcp__orbit__schedule_end,mcp__orbit__notify,mcp__orbit__task_get,mcp__orbit__task_list,mcp__orbit__session_get,
+  mcp__orbit__session_search,mcp__orbit__project_get,mcp__orbit__wiki_search,mcp__orbit__wiki_get,mcp__orbit__file_fetch,
+  mcp__orbit__file_list,WebFetch,WebSearch,<the runner's CLI rules>
+--disallowedTools Edit,Write,NotebookEdit,Bash(*/orbit *),Bash('*/orbit' *),TaskCreate,…,TodoRead
+--mcp-config <stub> --permission-prompt-tool mcp__orbit__permission_prompt      (+ the stream-json flags of run.sh)
+```
+
+Prompt 3: (a) `mcp__orbit__bg_run {"command": "touch probe-bg.txt && date > probe-bg2.txt", "kind": "job"}`,
+(b) `session_merge`, (c) `task_start`, (d) `task_update`, (e) `session_send`,
+(f) `/mnt/data/checkonly-probe/bin/orbit task update probe --title x`,
+(g) `'/mnt/data/checkonly-probe/bin/orbit' session merge probe`, (h) `task_get`, (i) `schedule_run_report
+{"outcome": "NO_CHANGE", "summary": "probe"}`, (j) `git log --oneline -1`.
+
+```
+TOOL_USE mcp__orbit__bg_run {"command": "touch probe-bg.txt && date > probe-bg2.txt", "kind": "job"}
+RESULT err= True Permission to use mcp__orbit__bg_run has been denied because Claude Code is running in don't ask mode. ...
+TOOL_USE mcp__orbit__session_merge {"sessionId": "probe"}   RESULT err= True Permission to use mcp__orbit__session_merge has been denied because Claude Code is running in don't ask mode. ...
+TOOL_USE mcp__orbit__task_start {"taskId": "probe"}         RESULT err= True Permission to use mcp__orbit__task_start has been denied ...
+TOOL_USE mcp__orbit__task_update {"taskId": "probe", ...}   RESULT err= True Permission to use mcp__orbit__task_update has been denied ...
+TOOL_USE mcp__orbit__session_send {"sessionId": "probe", ...} RESULT err= True Permission to use mcp__orbit__session_send has been denied ...
+TOOL_USE Bash {"command": "/mnt/data/checkonly-probe/bin/orbit task update probe --title x"}
+RESULT err= True Permission to use Bash with command /mnt/data/checkonly-probe/bin/orbit task update probe --title x has been denied.
+TOOL_USE Bash {"command": "'/mnt/data/checkonly-probe/bin/orbit' session merge probe"}
+RESULT err= True Permission to use Bash with command '/mnt/data/checkonly-probe/bin/orbit' session merge probe has been denied.
+TOOL_USE mcp__orbit__task_get {"taskId": "probe"}           RESULT err= None {"ok": true, "tool": "task_get"}
+TOOL_USE mcp__orbit__schedule_run_report {...}              RESULT err= None {"ok": true, "tool": "schedule_run_report"}
+TOOL_USE Bash {"command": "git log --oneline -1"}           RESULT err= False 1c957d9 probe initial commit
+FILES: README.md victim.txt     victim.txt: old
+===== calls that reached the orbit stub =====
+TOOL_REACHED task_get {"taskId": "probe"}
+TOOL_REACHED schedule_run_report {"outcome": "NO_CHANGE", "summary": "probe"}
+(end: 2 lines)
+```
+
+`bg_run`, `session_merge`, `task_start`, `task_update` and `session_send` are refused by Claude Code's permission
+layer before the tool is called (none reached the stub, so the stub cannot have stood in for `bg_run`'s effect: no
+job was started and no file written), and so are both CLI forms, though the runner's rules allow them: the deny rules
+win. `task_get` and `schedule_run_report` run; the permission prompt tool is never called. Prompts 1 and 2 were run
+again under these lists in the same job, step for step with the outcome shown above for them: WebFetch, `git log`,
+`ls`, `cat`, `grep`, `git status`, `git diff` ran; every writing command, the Write tool and `orbit task create` were
+refused; no file changed; 0 calls reached the stub. On the runner `bg_run` is refused a second time
+by its own gate in `dontAsk` (`background_gate.go`), which this probe does not exercise.
+
+So in `dontAsk`, with these lists:
+
+- the fetch (`WebFetch`) and the read-only commands (`git log`, `ls`, `cat`, `grep`, `git status`, `git diff`) run with
+  no ask and no card;
+- every writing shell command tried is refused by Claude Code's own check before it runs, the Write tool is not
+  offered, and the deny rule `Bash(* task create *)` wins over the runner's allow rule for the Orbit CLI;
+- the permission prompt tool is never called (0 calls on a stub that would have allowed), so nothing waits on a
+  card and an Orbit-side answer cannot let a write through;
+- of Orbit's tools only the listed ones run (`task_get`, `schedule_run_report`); `bg_run` with a writing command,
+  `session_merge`, `task_start`, `task_update`, `session_send` and the Orbit CLI are refused before they are called;
+- `curl` is refused even as a GET: in `CHECK_ONLY` on Claude a URL is fetched with `WebFetch`.
+
+Both prompts were run twice with the same outcome: first by hand without `--mcp-config`/`--permission-prompt-tool`,
+then as a runner-hosted job with them (the output above); the Plan baseline was not re-run under the job. This is the claim payload only (`queue.service.ts`, `runner-api.controller.ts`), so it
+needs no runner release.
+
 ---
 
 ## Summary table
 
 | engine | CHECK_ONLY mode to use | can fetch URL without card? (plan) | can run read-only command without card? (plan) | write refused? (plan) | OPEN_PR mode to use | notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| claude 2.1.325 | `plan` | yes (WebFetch and curl, no ask) | yes | Edit/Write: yes (hard refusal). Bash writes: **no**, `touch`/`date >` ran | `acceptEdits` | Plan does not gate Bash at all; "edits nothing" via shell rests on the model. acceptEdits: write ok; `curl`, `git add`, `git commit` ask (card) |
+| claude 2.1.325 | `dontAsk` + lists (§7; was `plan`) | yes (WebFetch and curl, no ask) | yes | Edit/Write: yes (hard refusal). Bash writes: **no**, `touch`/`date >` ran | `acceptEdits` | Plan does not gate Bash at all; "edits nothing" via shell rests on the model. acceptEdits: write ok; `curl`, `git add`, `git commit` ask (card) |
 | codex 0.169.0 | `plan` | yes (built-in web search `openPage`, no request) | **no** before §8: even `ls`/`git log` request approval under `untrusted` and were declined; **yes** in a scheduled CHECK_ONLY run from the runner release with §8 (read-only sandbox, no card) | yes (runner declines patch) | `acceptEdits` | Plan is enforced but leaves no way to read files (Codex reads via shell). acceptEdits: file change auto-accepted; every command → card |
 | kimi 2.5.3 | `plan` | yes (FetchURL, no ask) | **no**: Bash asks → a card per command | yes (Kimi plan mode refuses, no ask) | `acceptEdits` (Kimi `default`) | acceptEdits write ran without an ask; shell not measured in `default` |
 | agy 1.5.9 | (unmeasured) `plan` | not measured | not measured | not measured | (unmeasured) `acceptEdits` | not signed in: "error: authentication failed or timed out" |
@@ -342,6 +492,7 @@ Applying "nearest mode that is not wider; none → `SCHEDULE_ACCESS_NOT_ENFORCEA
   "edits nothing" claim is only partially enforced. Either accept that (the run has no worktree, but it does run
   in the workspace checkout) or close it in CHECK_ONLY's `disallowedTools` / a stricter choice such as `dontAsk` plus a
   read-only allowlist (WebFetch, Read/Grep/Glob, `Bash(git log:*)`, `Bash(ls:*)`…), which must be measured before use.
+  **Settled in §7:** `dontAsk` with a WebFetch/WebSearch allow list and the file tools and create doors denied.
   OPEN_PR needs `git`/`gh` pre-approved (workspace rule or `allowedTools`) or it stops at a card for every commit.
 - **Codex**: CHECK_ONLY → `plan` (enforced, not wider) but it can only fetch: it cannot read the checkout. To make it
   useful the runner would have to accept `commandExecution` requests whose `commandActions` are all read/list/search

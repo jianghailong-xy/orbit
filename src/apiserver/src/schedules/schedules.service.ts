@@ -67,6 +67,7 @@ import {
   closeScheduleItems,
   fileScheduleItem,
   goalReachedCopy,
+  heldClause,
   sendAlerts,
   widenCopy,
   type ScheduleAlert,
@@ -595,7 +596,11 @@ export class SchedulesService {
           if (s.state !== 'HELD') return;
           const check = await scheduleStartCheck(tx, s);
           if (!check.ok) {
-            throw refusal('CONFLICT', 'SCHEDULE_START_CHECK_FAILED', `The schedule is still held: ${check.reason}.`);
+            throw refusal(
+              'CONFLICT',
+              'SCHEDULE_START_CHECK_FAILED',
+              `The schedule is still held: ${check.reason} (${heldClause(check.reason)}).`,
+            );
           }
         });
         await closeScheduleItems(
