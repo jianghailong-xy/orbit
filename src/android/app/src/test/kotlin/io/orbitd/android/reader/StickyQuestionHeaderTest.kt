@@ -136,11 +136,14 @@ class StickyQuestionHeaderTest : ComposerShellTest() {
         fun handoff(state: String) { ComposerShell.session = mapOf("coordinatorHandoff" to buildJsonObject {
             put("state", state); put("startedAt", java.time.Instant.now().minusSeconds(24).toString()) }) }
         val handingOver = hasTestTag("handing-over-capsule")
-        handoff("WRITING")
         session()
+        handoff("WRITING"); app().realtime.refreshSession()
+        await { has(handingOver) }
+        assertFalse("at the tail the bar had no question to give up", has(capsule))
         dragBack(300f)
         await { has(hasTestTag("transcript-jump")) }
-        await { has(handingOver) }
+        compose.waitForIdle()
+        assertTrue("off the tail it still says it", has(handingOver))
         assertTrue("it reads Handing over", has(hasText("Handing over") and hasAnyAncestor(handingOver), unmerged = true))
         assertFalse("off the tail the question gives way", has(capsule))
 
