@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -188,6 +189,10 @@ fun SessionCardsReads(cards: SessionCardsModel) {
     }
 }
 
+/** The height of the list the rail is drawn in, in px, less what floats over its top; 0 where nobody says. A card asked for top first is brought in as a span of
+ * nearly that height, which the list scrolls to by the card's top edge, whichever side of the screen the card is on. */
+val LocalCardViewport = compositionLocalOf { 0 }
+
 /** A04 is the only live-state owner. Reconnection/foreground/REST invalidations all feed this rail. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -203,7 +208,8 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
             TextButton(onClick = { app.realtime.refreshSession() }) { Text("Check status") }
             if (!session.fresh) Text("Reconnecting · actions are unavailable until the server is checked.", style = MaterialTheme.typography.bodySmall)
         }
-        val focus = CardFocus.pending(session.id)
+        val asked = CardFocus.pending(session.id)
+        val focus = CardFocus.resolve(asked, shown)
         // A merge that happened is its record's line below, not a candidate that is no longer on offer (iOS closes its card).
         val mergedIds = cards.merged.mapNotNull { it.text("promotionId") }.toSet()
         // The merge candidate whose line this conversation draws: an exception's Review goes to it, and is drawn only while it is here.
@@ -213,8 +219,12 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
         shown.filterNot { it.family == CardFamily.PROMOTION && it.status == CardPreviews.stale && it.objectId in mergedIds }.forEach { card -> key(cards.handle, card.key, card.binding) {
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
             val requester = remember { BringIntoViewRequester() }
+            val viewport = LocalCardViewport.current
             if (focus != null && CardFocus.matches(focus, card.key)) LaunchedEffect(focus, card.key) {
-                requester.bringIntoView(); CardFocus.spend(session.id)
+                // The waiting card a project row opened onto shows its top, not its foot: a span from its top nearly the list's height.
+                if (asked == CardFocus.WAITING && viewport > 0) requester.bringIntoView(Rect(0f, 0f, 1f, viewport * 0.9f))
+                else requester.bringIntoView()
+                CardFocus.spend(session.id)
             }
             Box(Modifier.bringIntoViewRequester(requester)) {
                 val preview = CardPreviews.preview(card)

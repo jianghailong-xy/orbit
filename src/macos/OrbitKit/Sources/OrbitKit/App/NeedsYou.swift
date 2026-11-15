@@ -293,6 +293,27 @@ public enum NeedsYouLogic {
                               arriving: true)
     }
 
+    /// What a swipe on the bar puts away (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/06-list-floats`):
+    /// each conversation waiting at that moment, keyed by the instant it started waiting — its oldest
+    /// owner item's, or its last turn's. A swipe is "not now", not an answer: nothing is sent and no
+    /// session changes. Recorded from the whole set (no conversation excluded), so the bar stays put
+    /// away on every page.
+    public static func dismissalKeys(waiting: [Session]) -> Set<String> {
+        Set(waiting.map { session in
+            let since = oldestOwnerItem([session])?.item.since
+                ?? session.lastTurnAt ?? session.updatedAt ?? session.createdAt ?? ""
+            return "\(session.id)|\(since)"
+        })
+    }
+
+    /// Whether the bar stays put away: everything waiting elsewhere was already waiting when it was
+    /// swiped. Something new — another conversation, or one that stopped again — brings it back.
+    public static func isDismissed(waiting: [Session], excluding focused: String? = nil,
+                                   dismissed: Set<String>) -> Bool {
+        let keys = dismissalKeys(waiting: waiting.filter { $0.id != focused })
+        return !keys.isEmpty && keys.isSubset(of: dismissed)
+    }
+
     /// At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest.
     public static let unfoldedLimit = 5
 
