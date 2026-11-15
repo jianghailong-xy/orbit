@@ -1004,15 +1004,26 @@ func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 // codexReadonlySubagentMode is the mode a read-only SubAgent's Codex child runs in, in place of plan. Plan on
 // Codex refuses every command, and Codex reads a repository only through its shell, so a read-only child
 // could read nothing. This mode runs every command in Codex's own read-only sandbox (no writes, no network)
-// without asking. A session's plan mode keeps its meaning: only a child claim carries readonlySubagent.
+// without asking. A session's plan mode keeps its meaning: only a child claim carries readonlySubagent, and
+// only a scheduled CHECK_ONLY run's claim carries scheduledCheckOnly (codexScheduledCheckOnly).
 const codexReadonlySubagentMode = "orbitReadonlySubagent"
 
 // codexPermissionMode is the permission mode Codex is configured from for this claim.
 func codexPermissionMode(job *ClaimedSession) string {
-	if job.readonlySubagent {
+	if job.readonlySubagent || codexScheduledCheckOnly(job) {
 		return codexReadonlySubagentMode
 	}
 	return job.Agent.PermissionMode
+}
+
+// codexScheduledCheckOnly is a scheduled CHECK_ONLY run's Plan session, as the control plane says on the
+// claim (agent.scheduledCheckOnly). Under the `untrusted` policy every other Plan session runs on, Codex asks
+// about every command, `ls` included, and Plan declines them all, so a check could fetch but not read its
+// checkout. This one session runs in the read-only sandbox instead: commands run without asking, the OS
+// refuses every write, the shell has no network, and the built-in web search still fetches
+// (docs/scheduled-tasks-engine-modes.md §8).
+func codexScheduledCheckOnly(job *ClaimedSession) bool {
+	return job.Agent.ScheduledCheckOnly && job.Agent.PermissionMode == "plan"
 }
 
 // codexApprovalPolicy is the `approvalPolicy` Codex is started with, derived from the session's

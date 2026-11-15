@@ -499,7 +499,6 @@ final class ConsoleModel {
     /// asynchronously, so a console built before it lands must still read the current one.
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
-    @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
     var effort: Effort = .default
     /// Account preferences can arrive after a restored-token launch has already presented the
     /// draft. They may refine the legacy workspace seed only until the user touches the picker;
@@ -2627,8 +2626,8 @@ final class ConsoleModel {
 
     /// Pick the engine and a credential of it for this draft: an engine on the new-session hero, landing
     /// where it says, or a credential of the draft's engine in the composer's Provider menu. The model
-    /// space is the pair's, so the model can't survive the switch — it is re-seeded from what was last
-    /// picked for the incoming pair, or its default, and the mode/effort pills are re-clamped to what it
+    /// space is the pair's, so the model can't survive the switch — it is re-seeded from the workspace's
+    /// lastModel when the incoming pair is the one it last ran on, else the pair's default, and the mode/effort pills are re-clamped to what it
     /// accepts. The seed is marked pristine again on purpose: a model chosen for the outgoing pair is not
     /// a choice about this one, and keeping it would pin an id the new one may not even offer.
     func pickDraft(engine: String, provider slug: String) {
@@ -2737,11 +2736,11 @@ final class ConsoleModel {
             configured: configuredProviders)
     }
 
-    /// The model a draft starts on: the last one picked for its engine and provider (`<engine>:<provider>`
-    /// in the account's remembered models, read in contract §6.5's order), else `fallback`.
+    /// The model a draft starts on: its workspace's `lastModel` while it is on that workspace's
+    /// `lastEngine`/`lastProvider`, else `fallback`.
     private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
         AgentDefaults.newSessionModel(
-            engine: engine, provider: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            engine: engine, provider: provider, workspace: draftAgent, fallback: fallback,
             catalog: modelCatalog, configured: configuredProviders,
             runtimeDefaults: runtimeDefaults ?? runtimeDefaultModels)
     }
@@ -4513,15 +4512,17 @@ final class ConsoleModel {
             .map(\.element.row)
     }
 
-    /// What the needs-you bar above this transcript says, or nil when nothing in it is waiting.
+    /// What waits on the reader in THIS conversation, for the capsule in its nav bar, or nil when
+    /// nothing does (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule): its
+    /// open cards, and its own approvals at the tail (`NeedsYouLogic.here`).
     ///
     /// The direction word is the one part of the line this conversation cannot answer by itself: it
     /// is about the reader's own place, reported by the transcript (`topVisibleItemID`). Everything
-    /// else is the count and what kind of thing it points at (`NeedsYouLogic.below`).
+    /// else is the count and what kind of thing it points at.
     var waitingBelow: WaitingBelow? {
         let rows = openBelowRows
-        guard let first = rows.first else { return nil }
-        return NeedsYouLogic.below(rows: rows, side: side(ofRow: first.rowID))
+        return NeedsYouLogic.here(rows: rows, approvalIDs: state.pendingApprovals.map(\.id),
+                                  side: rows.first.flatMap { side(ofRow: $0.rowID) })
     }
 
     /// Where one delivered card sits in the conversation RIGHT NOW, as an index into `state.items`:

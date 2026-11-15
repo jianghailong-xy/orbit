@@ -158,7 +158,9 @@ AGENT_MESSAGE (a) DONE — fetched https://example.com; title: `Example Domain`.
 probe.txt: absent. Fetch via Codex's built-in web search (`openPage`) needs no approval. Under `untrusted` **every**
 shell command asks, even `ls` and `git log` (wrapped as `/bin/bash -lc …`), and in Plan the runner declines them
 without a card. Codex reads files only through shell, so a CHECK_ONLY run on Codex Plan can fetch but cannot read
-the checkout or run `git log` — enforced, but too narrow to do a check.
+the checkout or run `git log` — enforced, but too narrow to do a check. **Changed by the runner (§8)**: a scheduled
+CHECK_ONLY run's Plan now runs in Codex's own read-only sandbox with no approvals, so it reads the checkout and the OS
+refuses writes; every other Plan session is unchanged.
 
 ### acceptEdits
 
@@ -475,7 +477,7 @@ needs no runner release.
 | engine | CHECK_ONLY mode to use | can fetch URL without card? (plan) | can run read-only command without card? (plan) | write refused? (plan) | OPEN_PR mode to use | notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | claude 2.1.325 | `dontAsk` + lists (§7; was `plan`) | yes (WebFetch and curl, no ask) | yes | Edit/Write: yes (hard refusal). Bash writes: **no**, `touch`/`date >` ran | `acceptEdits` | Plan does not gate Bash at all; "edits nothing" via shell rests on the model. acceptEdits: write ok; `curl`, `git add`, `git commit` ask (card) |
-| codex 0.169.0 | `plan` | yes (built-in web search `openPage`, no request) | **no**: even `ls`/`git log` request approval under `untrusted`; runner declines them in Plan, no card | yes (runner declines patch) | `acceptEdits` | Plan is enforced but leaves no way to read files (Codex reads via shell). acceptEdits: file change auto-accepted; every command → card |
+| codex 0.169.0 | `plan` | yes (built-in web search `openPage`, no request) | **no** before §8: even `ls`/`git log` request approval under `untrusted` and were declined; **yes** in a scheduled CHECK_ONLY run from the runner release with §8 (read-only sandbox, no card) | yes (runner declines patch) | `acceptEdits` | Plan is enforced but leaves no way to read files (Codex reads via shell). acceptEdits: file change auto-accepted; every command → card |
 | kimi 2.5.3 | `plan` | yes (FetchURL, no ask) | **no**: Bash asks → a card per command | yes (Kimi plan mode refuses, no ask) | `acceptEdits` (Kimi `default`) | acceptEdits write ran without an ask; shell not measured in `default` |
 | agy 1.5.9 | (unmeasured) `plan` | not measured | not measured | not measured | (unmeasured) `acceptEdits` | not signed in: "error: authentication failed or timed out" |
 | opencode 1.19.5 | `plan` | **no**: auto-rejected, no card possible | **no**: auto-rejected | yes (write tool not offered) | `acceptEdits` only nominally | acceptEdits: write ok, every command auto-rejected → cannot commit/push/open a PR |
@@ -494,7 +496,7 @@ Applying "nearest mode that is not wider; none → `SCHEDULE_ACCESS_NOT_ENFORCEA
   OPEN_PR needs `git`/`gh` pre-approved (workspace rule or `allowedTools`) or it stops at a card for every commit.
 - **Codex**: CHECK_ONLY → `plan` (enforced, not wider) but it can only fetch: it cannot read the checkout. To make it
   useful the runner would have to accept `commandExecution` requests whose `commandActions` are all read/list/search
-  in Plan. OPEN_PR → `acceptEdits`; commands go to the card.
+  in Plan (done differently for scheduled CHECK_ONLY runs: Codex's read-only sandbox, §8). OPEN_PR → `acceptEdits`; commands go to the card.
 - **Kimi**: CHECK_ONLY → `plan` (fetch free, writes refused, each command a card; with no human present a command
   ends in `APPROVAL_TIMEOUT` unless a workspace rule exists). OPEN_PR → `acceptEdits` (Kimi `default`).
 - **OpenCode**: CHECK_ONLY → `plan` (enforced; reads files, no fetch, no commands). OPEN_PR: `acceptEdits` enforces the
@@ -511,3 +513,140 @@ Applying "nearest mode that is not wider; none → `SCHEDULE_ACCESS_NOT_ENFORCEA
 Answer to §12's open question: `plan` lets a CHECK_ONLY run fetch a URL and run read-only commands without a card only
 on **Claude** (and there it also lets writing commands through). Kimi fetches but asks for every command, Codex fetches
 but its commands are declined, OpenCode can do neither.
+
+---
+
+## 8. Codex in a scheduled CHECK_ONLY run: Codex's own read-only sandbox (runner change, measured 2026-11-15)
+
+§2 found that Codex in Plan can fetch but not read the checkout: under `approvalPolicy: "untrusted"` every shell
+command, `ls` and `git log` included, comes as `item/commandExecution/requestApproval`, and the runner declines them
+all in Plan. What changed, for a session serving a **scheduled `CHECK_ONLY` run only** (owner, 2026-11-15:
+"Scheduled runs only"):
+
+- **The control plane says which session.** The claim and the reclaim put `agent.scheduledCheckOnly: true` on a
+  session whose `scheduleRun.schedule.accessLevel` is `CHECK_ONLY` (`scheduleRunAgentFields`,
+  `schedules/schedule-access.ts`; `AgentExecConfig.scheduledCheckOnly`).
+- **The runner starts that Plan session in Codex's read-only sandbox.** `codexScheduledCheckOnly`
+  (`src/runner-go/codex_appserver.go`) is the flag plus `permissionMode: plan`. For it, `codexPermissionMode` gives the
+  mode a read-only SubAgent's Codex child already runs in (`codexReadonlySubagentMode`, from main). That makes
+  `thread/start` carry `approvalPolicy: "never"`, `sandbox: "read-only"`, and every `turn/start` carry
+  `approvalPolicy: "never"`, `sandboxPolicy: {type: "readOnly", networkAccess: false}` (`codexThreadParams`,
+  `codexTurnParams`). The bridge then consents to Orbit's own MCP tools and refuses everything else that still asks.
+  Commands run without asking, and the OS refuses every write. The runner judges no command itself.
+- **Everything else is unchanged.** An ordinary Plan session (no flag, or claimed from an older apiserver) stays on
+  `untrusted` + `danger-full-access` and declines every command. The flag on any mode but Plan changes nothing. Any
+  approval request that still reaches a scheduled run's bridge is declined, as in every Plan session.
+
+An earlier revision of this change had the runner parse each command string and accept the read-only ones. §8.2
+measured that the parser would have been the only guard; §8.3–§8.4 measured the sandbox. The parser was removed in
+favour of the sandbox.
+
+**Runner version.** This is in runner-go and in no release yet: it needs the first runner release after
+v0.1.261-beta.5. On an older runner the flag is ignored, and a Codex `CHECK_ONLY` run is the §2 Plan: it can fetch
+with the built-in web search, but it cannot read the checkout (every command declined, no card).
+
+All probes: `src/runner-go/codex_scheduled_check_only_live_test.go`, against the real `codex app-server` (codex-cli
+0.169.0) on this host (Linux). Each spawns it with the runner's own argv (`codexAppServerCommandArgs`), in a fresh git
+repo with one commit and a `README.md`. Unless a probe overrides them, `thread/start` and `turn/start` come from
+`codexThreadParams` and `codexTurnParams`, and approval requests are answered through the runner's own bridge
+(`bridgeCodexApprovalWithContext`). Where a probe attaches Orbit's MCP server, it is the installed runner binary
+(`/usr/local/bin/orbit mcp`, as `appendCodexOrbitMCPConfig` configures it) running as the measuring session.
+Orbit's agent context is not injected.
+
+```
+ORBIT_CODEX_PLAN_LIVE=1 ORBIT_CODEX_PLAN_LIVE_TASK=<task id> go test -run 'TestCodex.*Live' -v -count=1 -timeout 30m .   # in src/runner-go
+```
+
+### 8.1 The shipped path (`TestCodexScheduledCheckOnlyLive`)
+
+`permissionMode: plan`, `scheduledCheckOnly: true`, no override, Orbit's MCP server attached. The prompt asks, in
+order: `ls`; `cat README.md`; `git log --oneline -1`; open https://example.com with the built-in web tool;
+`curl -sI https://example.com`; Orbit MCP `task_get` with a task id; `touch x`; `date > x`; create `probe.txt` with
+the file-edit (apply_patch) tool.
+
+```
+thread/start {"approvalPolicy":"never","cwd":"…/001","runtimeWorkspaceRoots":["…/001","…/003"],"sandbox":"read-only","threadSource":"user"}
+turn/start (input omitted) {"approvalPolicy":"never","clientUserMessageId":"probe-turn","cwd":"…/001","runtimeWorkspaceRoots":["…/001","…/003"],"sandboxPolicy":{"networkAccess":false,"type":"readOnly"},"threadId":"01a1dc7b-…"}
+ITEM commandExecution command="/bin/bash -lc ls" status=completed exitCode=0 output="README.md\n"
+ITEM commandExecution command="/bin/bash -lc 'cat README.md'" status=completed exitCode=0 output="probe readme line\n"
+ITEM commandExecution command="/bin/bash -lc 'git log --oneline -1'" status=completed exitCode=0 output="f27de38 probe commit\n"
+ITEM webSearch {"action":{"type":"openPage","url":"https://example.com"}, … "results":[{"domain":"example.com", … "title":"Example Domain", … "url":"https://example.com/"}], … }
+ITEM commandExecution command="/bin/bash -lc 'curl -sI https://example.com'" status=failed exitCode=6 output=""
+ITEM mcpToolCall {"arguments":{"taskId":"34xgq3AdDxFOa7LkldY12"}, "durationMs":163, "error":null, "readOnlyHint":true, "result":{"content":[{"text":"{\n  \"id\": \"34xgq3AdDxFOa7LkldY12\", \"title\": …
+AGENT MESSAGE … 7. FAILED — `touch x`: touch: cannot touch 'x': Read-only file system
+  8. FAILED — `date > x`: /bin/bash: line 1: x: Read-only file system
+  9. DENIED — `apply_patch`: patch rejected: writing is blocked by read-only sandbox; rejected by user approval settings
+x: absent (stat …/001/x: no such file or directory)
+probe.txt: absent (stat …/001/probe.txt: no such file or directory)
+approval requests reaching the runner: 0
+--- PASS: TestCodexScheduledCheckOnlyLive (30.76s)
+```
+
+So a scheduled `CHECK_ONLY` run on Codex can do all of the following, with no card:
+
+- read the checkout (`ls`, `cat`, `git log`);
+- fetch a URL with the built-in web tool;
+- call Orbit's MCP server: the call reached the control plane and returned the task, and `schedule_run_report`
+  goes the same way.
+
+It cannot reach the network from the shell (`curl` exit 6), and it cannot write, whether by shell or by a file edit.
+
+The ordinary Plan session is unchanged (`TestCodexOrdinaryPlanLive`, no flag):
+
+```
+thread/start {"approvalPolicy":"untrusted", … "sandbox":"danger-full-access", …}
+APPROVAL REQUEST command="/bin/bash -lc ls" commandActions=[{"command":"ls","path":null,"type":"listFiles"}] fileChange=false -> decline
+ITEM commandExecution command="/bin/bash -lc ls" status=declined exitCode=<nil> output=""
+AGENT MESSAGE DENIED exec_command failed: CreateProcess { message: "Rejected(\"rejected by user\")" }
+--- PASS: TestCodexOrdinaryPlanLive (22.61s)
+```
+
+### 8.2 Why the runner does not judge commands: Plan's sandbox once a command is approved
+
+`TestCodexPlanSandboxWhenApprovedLive` keeps the ordinary Plan parameters (`sandbox: danger-full-access`,
+`sandboxPolicy: dangerFullAccess`) and accepts every request, as a runner-side parser would if it misjudged a write as
+a read:
+
+```
+APPROVAL REQUEST command="/bin/bash -lc 'touch x'" commandActions=[{"command":"touch x","type":"unknown"}] -> accept
+ITEM commandExecution command="/bin/bash -lc 'touch x'" status=completed exitCode=0 output=""
+APPROVAL REQUEST command="/bin/bash -lc 'date > x'" commandActions=[{"command":"date \u003e x","type":"unknown"}] -> accept
+ITEM commandExecution command="/bin/bash -lc 'date > x'" status=completed exitCode=0 output=""
+x: PRESENT (a writing command ran)
+```
+
+Under Plan's parameters nothing at the OS level stops an approved command: a parser would have been the only guard.
+
+### 8.3 What the read-only sandbox reaches, with `networkAccess` off and on (`TestCodexReadOnlySandboxNetworkLive`)
+
+The probe overrides `approvalPolicy: "never"`, `sandbox: "read-only"` and `sandboxPolicy: {type: "readOnly",
+networkAccess: <false|true>}`. `readOnly` takes `networkAccess` (boolean, default false) in the app-server's own
+schema (`codex app-server generate-json-schema`, `ReadOnlySandboxPolicy`). Orbit's MCP server is attached. Prompt, in
+order: open https://example.com with the built-in web tool; `curl -sI https://example.com`; Orbit MCP `task_get`
+with no arguments; `touch x`.
+
+| step | `networkAccess: false` | `networkAccess: true` |
+| --- | --- | --- |
+| built-in web search, `openPage https://example.com` | completed, title "Example Domain" | completed, title "Example Domain" |
+| `curl -sI https://example.com` | `status=failed exitCode=6 output=""` | `status=completed exitCode=0`, `HTTP/2 200` |
+| Orbit MCP `task_get` (no id) | answered by Orbit's server (`TASK_ID_REQUIRED`: the measuring job had no `ORBIT_TASK_ID`) | same |
+| `touch x` | `touch: cannot touch 'x': Read-only file system` | same |
+
+The built-in tool fetches whether `networkAccess` is on or off. The shell reaches the network only with it on.
+Writes are refused in both. The runner uses `networkAccess: false`, the narrower setting: it closes shell network
+writes such as `curl -X POST` and leaves fetching to the built-in tool. §8.1 shows the MCP call with a task id
+reaching the control plane under this setting.
+
+### 8.4 Not measured
+
+- macOS (Seatbelt) and Windows: Codex's read-only sandbox there is not measured. Nothing here claims it works on a
+  macOS runner.
+- A host where Codex's Linux sandbox cannot start (for example, inside a container without the kernel features it
+  needs) is not measured. How a command fails there is unknown.
+- Whether the built-in web tool reaches a page only the runner host can reach (an intranet page, say) is not
+  measured. It is Codex's own tool, not a shell command, so the sandbox's network setting does not govern it (§8.3).
+  The shell cannot reach such a page either way (`networkAccess: false`).
+
+The Go tests (`codex_scheduled_check_only_test.go`) pin the parameters for the flagged Plan session. They also pin
+that every other mode, with or without the flag, and the unflagged Plan session are byte-for-byte as before, and that
+an unflagged Plan session's bridge still declines `ls`.

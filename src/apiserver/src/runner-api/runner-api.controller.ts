@@ -550,7 +550,7 @@ import {
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
 import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
-import { scheduleRunAllowedTools, scheduleRunDisallowedTools } from '../schedules/schedule-access';
+import { scheduleRunAgentFields, scheduleRunAllowedTools, scheduleRunDisallowedTools } from '../schedules/schedule-access';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -4242,6 +4242,8 @@ export class RunnerApiController {
           s.scheduleRun?.schedule.accessLevel,
           provider,
         ),
+        // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
+        ...scheduleRunAgentFields(s.scheduleRun?.schedule.accessLevel),
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,

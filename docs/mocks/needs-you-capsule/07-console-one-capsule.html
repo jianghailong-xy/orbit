@@ -1,0 +1,98 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .row4 { display: flex; gap: 32px; align-items: flex-start; }
+  .row4 .col { width: 440px; }
+  .cap44.fl { z-index: 16; }
+  .ph.light .cap44.fl { box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 10px 26px rgba(0,0,0,.13); }
+  /* 导航栏中间那枚：今天的「↑ 你的问题」 */
+  .qcap { position: absolute; top: 62px; left: 89px; width: 198px; height: 44px; border-radius: 22px; z-index: 13; background: var(--navg);
+          box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 2px 10px rgba(0,0,0,.08);
+          display: flex; align-items: center; gap: 8px; padding: 0 14px; color: var(--l1); font-size: 16px; white-space: nowrap; overflow: hidden; }
+  .qcap .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .qcap .mk { position: static; border: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--tile); display: flex; align-items: center; justify-content: center; flex: none; }
+  .qcap.amb { box-shadow: inset 0 .75px 0 var(--glass-hi), inset 0 0 0 1.2px rgba(255,149,0,.55), 0 2px 10px rgba(0,0,0,.08); padding-left: 8px; }
+  .qcap .seg { margin-left: auto; display: flex; align-items: center; gap: 4px; padding-left: 8px; border-left: .5px solid var(--sep); color: #C46A00; font-weight: 600; }
+  .qcap.two { height: 44px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; padding: 0 14px; }
+  .qcap.two .l1 { font-size: 13px; line-height: 17px; color: var(--l2); display: flex; gap: 4px; align-items: center; max-width: 100%; overflow: hidden; }
+  .qcap.two .l2 { font-size: 13px; line-height: 17px; font-weight: 600; color: #C46A00; display: flex; gap: 4px; align-items: center; }
+  .rgrp { position: absolute; top: 62px; right: 20px; width: 128px; height: 44px; border-radius: 22px; z-index: 12; background: var(--navg);
+          box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 2px 10px rgba(0,0,0,.08);
+          display: flex; align-items: center; justify-content: space-between; padding: 0 14px; font: 600 17px "Inter"; color: var(--l1); }
+  .grid { display: grid; grid-template-columns: 8px 8px; gap: 3px; }
+  .grid i { width: 8px; height: 8px; border: 1.8px solid var(--l1); border-radius: 2px; }
+  .bdg { position: absolute; left: 50px; top: 60px; z-index: 14; min-width: 18px; height: 18px; border-radius: 9px; background: #FF9500; color: #fff; font: 700 11px/18px "Inter"; text-align: center; padding: 0 5px; box-shadow: 0 0 0 2px #fff; }
+  /* 转录里的审批卡（示意） */
+  .acard { position: absolute; left: 16px; right: 16px; z-index: 4; border-radius: 18px; padding: 12px 14px; color: #000; background: #FFF6EA; box-shadow: inset 0 0 0 1px rgba(255,149,0,.45); }
+  .acard .hd { display: flex; align-items: center; gap: 8px; font: 600 13px "Inter"; color: #C46A00; }
+  .acard h5 { margin: 6px 0 2px; font: 600 16px/21px "Inter", "Noto Sans SC"; }
+  .acard p { margin: 0; font: 13px/18px "JetBrains Mono", monospace; color: rgba(60,60,67,.75); }
+  .acard .bt { display: flex; gap: 8px; margin-top: 10px; }
+  .acard .bt span { height: 32px; border-radius: 16px; padding: 0 14px; display: flex; align-items: center; font: 600 14px "Inter"; background: rgba(120,120,128,.14); }
+  .acard .bt span.p { background: #0A84FF; color: #fff; }
+  .note { position: absolute; z-index: 22; font: 600 12.5px/1.35 "Inter", "Noto Sans SC"; color: #0A60D0; background: rgba(214,228,255,.95); padding: 4px 8px; border-radius: 8px; }
+  .ubub { position: absolute; right: 16px; z-index: 3; }
+</style>
+<body>
+<h1>needs-you · 会话里只说这个会话的事，并入顶上那枚「↑ 你的问题」</h1>
+<p class="lede">owner 11-15（亮色截图）：<b>session 里只展示当前 session 的通知，并且和上一条消息合并。</b>今天会话页顶上有两枚：导航中间的「↑ 把两个尾巴建成任务」（读历史时跳回你问的那句）和它下面的「orbit-develop needs you」（别的会话在等你）。改后：别的会话的事不在会话里出现；这个会话自己在等你的事（审批、问题、例外）不再单独一条，而是由导航中间那一枚来说。没有新词：用今天已有的「1 open question below / 1 waiting below」。</p>
+
+<h2>改成什么样</h2>
+<div class="row4" id="main"></div>
+
+<h2>并进那一枚的三种写法（推荐 B）</h2>
+<div class="row4" id="merge"></div>
+
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const L = 'left:16px;right:16px';
+const Q = '把两个尾巴建成任务';
+const nav = (center = '', { badge = 0 } = {}) => `<div class="nav"><div class="gc l">${ic('chevl', 22, 'var(--l1)', 2.6)}</div></div>
+${badge ? `<div class="bdg">${badge}</div>` : ''}${center}<div class="rgrp"><span class="grid"><i></i><i></i><i></i><i></i></span><span>36</span>${dots()}</div>`;
+const qcap = (txt = Q) => `<div class="qcap">${ic('chevu', 15, 'var(--l2)', 2.4)}<span class="t">${txt}</span></div>`;
+const hand = `<span class="mk">${ic('hand', 16, 'var(--or)', 2.1)}</span>`;
+const waitCap = (txt, dir = 'chevd') => `<div class="qcap amb">${hand}<span class="t" style="font-weight:600">${txt}</span>${ic(dir, 14, 'var(--l2)', 2.6)}</div>`;
+const TXT = `<div class="tx" style="top:118px">
+<p>真实程序里的走查：A–D 四条路径都过了，</p><p>附 8 张截图，然后确认。你确认后项目就完成了。</p></div>
+<div class="ubub" style="top:178px">把两个尾巴建成任务</div>
+<div class="tx" style="top:242px"><p>You want both follow-ups filed as tasks. Before I file them, here is what each one would say, so you can change the wording first.</p>
+<p style="margin-top:14px">1. Android: land the waiting-row change on the release branch, with the device shots.</p>
+<p style="margin-top:14px">2. Feishu: the last step of the bot project — the group-chat path, end to end on the real tenant.</p></div>`;
+const card = (top) => `<div class="acard" style="top:${top}px"><div class="hd">${ic('hand', 14, '#C46A00', 2.2)}Waiting for your approval</div><h5>Create 2 tasks?</h5><p>task_create_batch · 2 tasks</p><div class="bt"><span class="p">Create them</span><span>Chat about this</span></div></div>`;
+const shell = (center, body, h = 560, o = {}) => phone('light', `${statusBar('10:19')}${nav(center, o)}${body}${edge('light', 70, 112)}<div class="home"></div>`, { h, cls: 'crop' });
+const note = (txt, x, y) => `<div class="note" style="left:${x}px;top:${y}px">${txt}</div>`;
+
+const today = shell(qcap(), `${TXT}${capA({ glyph: 'hand', title: 'orbit-develop needs you', sub: 'Android 自动更新报错', age: '6h', top: 116, style: L, cls: 'fl' })}`);
+const quiet = shell(qcap(), TXT);
+const waiting = shell(waitCap('1 waiting below'), TXT + note('按下 → 滚到下面的审批卡', 150, 116));
+const atCard = shell('', `<div class="tx" style="top:118px"><p>2. Feishu: the last step of the bot project — the group-chat path, end to end on the real tenant.</p></div>${card(230)}`);
+document.getElementById('main').innerHTML = `
+<div class="col"><span class="tag now">今天</span>${today}<div class="cap"><h3>两枚叠着</h3>上：读历史时的「↑ 你的问题」。下：别的会话在等你（这里是 orbit-develop 的 Android 自动更新报错）——和你正在看的这条无关，却占着转录最上面一截。</div></div>
+<div class="col"><span class="tag rec">改后 · 这个会话没在等你</span>${quiet}<div class="cap"><h3>只剩一枚</h3>别的会话的事不在会话里出现：会话列表、抽屉里的角标、离开会话后列表上的胶囊都还在说它。转录一直通到导航下面。</div></div>
+<div class="col"><span class="tag rec">改后 · 这个会话有事等你，卡不在屏幕上</span>${waiting}<div class="cap"><h3>中间那枚改说这件事</h3>琥珀圆片 + 今天的词（「1 waiting below」/「1 open question below」/往上时「above」）+ 箭头；按下滚到那张卡并打开它（和今天胶囊按下一样）。处理掉以后变回「↑ 你的问题」。</div></div>
+<div class="col"><span class="tag rec">改后 · 卡就在屏幕上</span>${atCard}<div class="cap"><h3>看得见就不说</h3>卡在屏幕里（比如你停在最新处、审批卡就在尾部）时，中间那枚不提它；和今天一样，停在最新处时这枚不出现。</div></div>`;
+
+const segA = shell(`<div class="qcap">${ic('chevu', 15, 'var(--l2)', 2.4)}<span class="t">${Q}</span><span class="seg">${ic('hand', 14, '#C46A00', 2.2)}1${ic('chevd', 12, '#C46A00', 2.6)}</span></div>`, TXT, 330);
+const segB = shell(waitCap('1 waiting below'), TXT, 330);
+const segC = shell(`<div class="qcap two"><span class="l1">${ic('chevu', 12, 'var(--l2)', 2.4)}${Q}</span><span class="l2">${ic('hand', 13, '#C46A00', 2.2)}1 waiting below ${ic('chevd', 11, '#C46A00', 2.6)}</span></div>`, TXT, 330);
+const back = shell(qcap(), TXT, 330, { badge: 1 });
+document.getElementById('merge').innerHTML = `
+<div class="col"><span class="tag alt">A · 一枚两段</span>${segA}<div class="cap"><h3>左「↑ 问题」右「✋1↓」</h3>两个按处挤在 198pt 里，问题只剩几个字；右段太小，手指容易按错。</div></div>
+<div class="col"><span class="tag rec">B · 有事时换成这件事（推荐）</span>${segB}<div class="cap"><h3>一次只说一件</h3>等你的事比「跳回问题」急，所以有事时它占这一枚；处理掉就换回「↑ 问题」。字够长、按处够大。</div></div>
+<div class="col"><span class="tag alt">C · 一枚两行</span>${segC}<div class="cap"><h3>上问题、下等你</h3>两件都在，但 44pt 高塞两行 13pt，字小；按一下去哪里不明确。</div></div>
+<div class="col"><span class="tag alt">附加 · 返回键上的数（不推荐）</span>${back}<div class="cap"><h3>别的会话：返回键上一个橙色数</h3>可以在 ‹ 上标「还有 1 个会话在等你」。不推荐：你要的是「会话里只说这个会话」，回到列表时那里的胶囊就会说。</div></div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>别的会话</td><td>iPhone 会话页不再挂跨会话的 needs-you 胶囊（<code>ConsoleView.needsYouTop</code> 里 <code>excluding:</code> 那一路去掉）。会话列表、抽屉角标、没有胶囊位的页面（<code>needsYouOverPage</code>）不变。iPad / Mac 本来就不在会话里挂它。</td></tr>
+<tr><td>这个会话</td><td>导航中间那一枚的内容按顺序取：① 这个会话里有等你的卡、且不在屏幕上 → 琥珀圆片 + 今天 <code>WaitingBelow</code> 的词和方向箭头，按下滚到卡并打开；② 否则读历史时 → 「↑ 你的问题」；③ 都没有就不显示。</td></tr>
+<tr><td>算哪些卡</td><td>今天「below」那几种（问题、例外、owner 项）+ 这个会话自己的审批卡（今天它不在 bar 里，因为它在尾部；读历史时它也会在屏幕外）。</td></tr>
+<tr><td>样子</td><td>同一枚导航玻璃胶囊；有事时左边加 26pt 琥珀圆片、细琥珀描边，字半粗。不新增词。</td></tr>
+<tr><td>Android</td><td>同样：会话页不挂别的会话的条；这个会话的事并进它页头里对应「↑ 你的问题」的那一处（照 iOS 做，实现时按 Android 现状对齐）。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>和早先决定的关系</b>：10-21 起会话页一直挂跨会话的条，11-15 04 板把它做成浮层——这次把它从会话页拿掉。今天「这个会话有问题在下面」那条（也是这枚胶囊的样子）并进导航中间那一枚。<br>
+<b>待你定</b>：① 会话里不显示别的会话的事（推荐，即你说的）；② 并入方式选 B「有事时换成这件事」（推荐）/ A 两段 / C 两行；③ 返回键上要不要留别的会话的数（推荐不要）。`;
+</script>
+</body></html>
