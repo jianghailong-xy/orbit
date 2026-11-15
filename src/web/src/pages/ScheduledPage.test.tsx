@@ -4,12 +4,14 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SCHEDULE_COPY, scheduleFill } from '@orbit/shared';
 import {
   DRAFT_CARD,
   LIST_ROWS,
   SCHEDULE_NOW,
   SCHEDULE_TZ,
   WS,
+  listAnswer,
   scheduleDetail,
 } from '../test/scheduleFixtures';
 
@@ -41,7 +43,7 @@ function serve({ schedules = LIST_ROWS, drafts = [DRAFT_CARD] }: Served = {}) {
     calls.push({ path, method, body: options.body });
     if (method === 'POST' && path === '/schedules/drafts') return { sessionId: 'sess-new', session: {} };
     if (method !== 'GET') return {};
-    if (path.startsWith('/schedules?') || path === '/schedules') return { schedules };
+    if (path.startsWith('/schedules?') || path === '/schedules') return listAnswer(schedules);
     if (path === '/schedules/drafts') return { drafts };
     const detail = /^\/schedules\/([^/?]+)$/.exec(path);
     if (detail) return scheduleDetail(decodeURIComponent(detail[1]!));
@@ -117,6 +119,20 @@ afterEach(() => {
 });
 
 describe('the Scheduled page: a timeline by date (board 1/2 ①)', () => {
+  it('loads its 9 schedules with one schedules read, and reads a detail only when a row is opened', async () => {
+    serve();
+    await open();
+    expect(LIST_ROWS).toHaveLength(9);
+    const reads = () => calls.filter((c) => c.method === 'GET' && c.path.startsWith('/schedules')).map((c) => c.path);
+    expect(reads().filter((p) => p !== '/schedules/drafts')).toEqual(['/schedules']);
+    // The past runs and findings the timeline draws came with that one read.
+    await click(host.querySelector('.sched-past-toggle [role="switch"]')!);
+    expect(rows(group('TODAY')).filter((r) => r.classList.contains('is-past'))).toHaveLength(3);
+    expect(reads().filter((p) => p !== '/schedules/drafts')).toEqual(['/schedules']);
+    await click(row(group('TOMORROW'), 'Codex stable check'));
+    expect(reads().filter((p) => p !== '/schedules/drafts')).toEqual(['/schedules', '/schedules/sch-codex']);
+  });
+
   it('has the title, the total and the tools', async () => {
     serve();
     await open();
@@ -308,12 +324,40 @@ describe('the inspector (board 1/2 ②)', () => {
     expect(host.querySelector('[data-where]')!.textContent).toBe('/sessions/sess-codex-run-nov13');
   });
 
-  it('deletes from ⋯', async () => {
-    await openCodex();
+  async function chooseDelete() {
     await click(button(block('doors'), '⋯'));
     const remove = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((m) => m.textContent === 'Delete')!;
     await click(remove);
-    expect(calls.some((c) => c.method === 'DELETE' && c.path === '/schedules/sch-codex')).toBe(true);
+  }
+  const deletes = () => calls.filter((c) => c.method === 'DELETE');
+  const dialog = () => document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+
+  it('asks before deleting from ⋯: the dialog names the schedule and says what is lost, and sends nothing', async () => {
+    await openCodex();
+    await chooseDelete();
+    expect(deletes()).toEqual([]);
+    const shown = dialog()!;
+    expect(shown.textContent).toContain(scheduleFill(SCHEDULE_COPY.deleteConfirm.title, { title: 'Codex stable check' }));
+    expect(shown.textContent).toContain(SCHEDULE_COPY.deleteConfirm.body);
+    expect([...shown.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Cancel', 'Delete']);
+    // The menu closed first: the dialog is not inside a popover.
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('Cancel deletes nothing', async () => {
+    await openCodex();
+    await chooseDelete();
+    await click(button(dialog()!, 'Cancel'));
+    expect(dialog()).toBeNull();
+    expect(deletes()).toEqual([]);
+  });
+
+  it('Delete in the dialog sends exactly one DELETE', async () => {
+    await openCodex();
+    await chooseDelete();
+    await click(button(dialog()!, 'Delete'));
+    expect(deletes()).toEqual([{ path: '/schedules/sch-codex', method: 'DELETE', body: undefined }]);
+    expect(dialog()).toBeNull();
   });
 });
 

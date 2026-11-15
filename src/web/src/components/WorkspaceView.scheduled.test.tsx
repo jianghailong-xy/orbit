@@ -40,9 +40,10 @@ describe('a conversation', () => {
 });
 
 describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
-  it('is known by the detail’s runSource and names its run', () => {
+  it('is known by the detail’s runSource and finds its run from the session alone', () => {
     expect(SOURCE).toContain("const isScheduleRun = detailForSelected?.runSource === 'SCHEDULE';");
-    expect(SOURCE).toContain('useScheduleRunOfSession(isScheduleRun ? detailForSelected?.scheduleRunId : null');
+    expect(SOURCE).toContain('useScheduleRunOfSession(isScheduleRun && !selectedTrashed ? selectedId : null)');
+    expect(SOURCE).not.toContain("searchParams.get('schedule')");
   });
 
   it('has the crumb at the head of the header', () => {
@@ -50,6 +51,11 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     const crumb = SOURCE.indexOf('<ScheduleRunCrumb of={scheduleRun} />');
     expect(crumb).toBeGreaterThan(header);
     expect(crumb - header).toBeLessThan(200);
+  });
+
+  it('has no Follow chip, and its header line is the run’s: state · agent · duration', () => {
+    expect(SOURCE).toContain('!selectedMissing && !isScheduleRun && (\n                <SessionWatchBadges sessionId={selectedId} />');
+    expect(SOURCE).toMatch(/: selected && isScheduleRun && scheduleRun\n\s+\? scheduleRunHeadText\(\{\n\s+state: headLifecycleWord,\n\s+engine: ENGINE_CLI_NAMES\[selectedEngine\]/);
   });
 
   it('folds the session column away', () => {

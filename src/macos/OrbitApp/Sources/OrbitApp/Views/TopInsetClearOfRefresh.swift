@@ -78,6 +78,10 @@ private struct TopInsetClearOfRefresh<Bands: View, Floating: View>: ViewModifier
                 // too: an `if` with nothing to show has no geometry to report, and the last frame
                 // would go on moving the control for bands no longer there.
                 VStack(spacing: 0) { bands }
+                    // As wide as the list even with no bands (an iPhone's list has none): what hangs
+                    // below is offered this width, and an empty stack is zero wide — the capsule was
+                    // squeezed to its glyph and an ellipsis (the owner's beta.6 screenshot, 11-15).
+                    .frame(maxWidth: .infinity)
                     // Hung from the bands' lower edge, over the list: no part of the inset, so the
                     // list's sticky headers pin above it and pass behind it. Its height joins the
                     // bands' for the spinner (`floatingHeight`).
