@@ -10,7 +10,12 @@
  *    `translationEnabled` is OFF. `translationAvailable: false` is board frame 2: the switch is
  *    drawn disabled with the DEEPSEEK_API_KEY notice, and nothing is translated whatever the
  *    preference says.
- *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage? }`. A
+ *  - `preferences.translationBilingual` ("Show both languages", board 02-bilingual.png): absent is
+ *    OFF. On, every translated message ALSO shows the English the agent read or wrote, below a
+ *    dashed divider (bilingualEnglish, bilingualLineCount). Off, the clients draw exactly what they
+ *    drew before it existed. Display only: the server translates the same either way.
+ *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage?,
+ *    translationBilingual? }`. A
  *    `translationLanguage` outside TRANSLATION_LANGUAGES is a 400. The answer is the same shape as
  *    `/users/me`.
  *  - The owner's message, once translated, travels as a turn whose `content` is the English the
@@ -107,6 +112,8 @@ export interface TranslationPreferences {
   translationEnabled?: boolean;
   /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
   translationLanguage?: TranslationLanguage;
+  /** "Show both languages": absent = off. Only drawn while translationEnabled is on. */
+  translationBilingual?: boolean;
 }
 
 /** Added to `GET /users/me` (and every answer shaped like it). */
@@ -198,3 +205,32 @@ export interface ApprovalTranslation {
 
 /** The 422 a decision whose words could not be translated is refused with: nothing was recorded. */
 export const TRANSLATION_FAILED_CODE = 'TRANSLATION_FAILED' as const;
+
+/**
+ * "Show both languages" (board 02-bilingual.png, frame 3 option B). An agent reply's English is drawn
+ * in full when it runs to at most BILINGUAL_COLLAPSE_LINES lines; longer, it collapses to a two-line
+ * faded preview with "Show English · N lines". A line is counted the same way on every client — a
+ * source line wraps every BILINGUAL_LINE_CHARS characters, blank lines do not count — so N is the
+ * same number on the web, an iPhone and an Android phone.
+ */
+export const BILINGUAL_COLLAPSE_LINES = 6;
+export const BILINGUAL_LINE_CHARS = 60;
+
+/** The English drawn under a translated reply: its prose only. A fenced code block is drawn once, in
+ *  the translation above it, never again in the English (board mark D). */
+export function bilingualEnglish(text: string): string {
+  return text
+    .replace(/^ {0,3}(```|~~~)[^\n]*\n[\s\S]*?^ {0,3}\1[^\n]*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** How many lines `english` runs to, by the rule above. */
+export function bilingualLineCount(english: string): number {
+  let lines = 0;
+  for (const line of english.split('\n')) {
+    const length = [...line.trim()].length;
+    if (length > 0) lines += Math.ceil(length / BILINGUAL_LINE_CHARS);
+  }
+  return lines;
+}

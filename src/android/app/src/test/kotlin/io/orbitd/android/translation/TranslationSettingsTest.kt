@@ -112,7 +112,9 @@ class TranslationSettingsTest {
         compose.onNodeWithText(TranslationCopy.TITLE).assertIsDisplayed()
         assertTrue(top("Default permission") < top(TranslationCopy.TITLE) && top(TranslationCopy.TITLE) < top("Session orchestration"))
         compose.onNodeWithText(TranslationCopy.TRANSLATE_CONVERSATIONS_HINT).assertIsDisplayed()
-        compose.onNodeWithText(TranslationCopy.FOOTER).assertIsDisplayed()
+        compose.onNodeWithText(TranslationCopy.BILINGUAL_FOOTER + " " + TranslationCopy.FOOTER).assertIsDisplayed()
+        // "Show both languages" is offered only while translation is on.
+        compose.onAllNodesWithText(TranslationCopy.SHOW_BOTH_LANGUAGES).assertCountEquals(0)
         toggle.assertIsOff()
         compose.onNodeWithText(Translation_name_default).assertIsDisplayed()
         compose.onNodeWithText(TranslationCopy.ENGLISH).assertIsDisplayed()
@@ -135,6 +137,37 @@ class TranslationSettingsTest {
         assertEquals(buildJsonObject { put("translationLanguage", "ja") }, writes[1])
         compose.waitUntil(60_000) { compose.onAllNodesWithText("Japanese").fetchSemanticsNodes().size == 1 }
         compose.onAllNodesWithText(SESSION_RECAPS).assertCountEquals(1)
+    }
+
+    /** "Show both languages" (docs/mocks/session-translation/02-bilingual.png, mark A): under the group's rows while translation is on,
+     *  off until the account says otherwise, written alone as it moves, and read back from the account. */
+    @Test fun showBothLanguagesIsOfferedWhileTranslatingAndWrittenAlone() {
+        preferences = JsonObject(preferences + ("translationEnabled" to JsonPrimitive(true)))
+        open()
+        val both = compose.onNode(hasText(TranslationCopy.SHOW_BOTH_LANGUAGES) and isToggleable(), useUnmergedTree = false)
+        compose.waitUntil(60_000) { runCatching { both.assertExists() }.isSuccess }
+        both.assertIsOff()
+        assertTrue(top(TranslationCopy.AGENTS_WORK_IN) < top(TranslationCopy.SHOW_BOTH_LANGUAGES))
+        both.performClick()
+        compose.waitUntil(60_000) { writes.isNotEmpty() }
+        assertEquals(buildJsonObject { put("translationBilingual", true) }, writes.single())
+        compose.waitUntil(60_000) { runCatching { both.assertIsOn() }.isSuccess }
+        shot("7-settings-show-both-languages")
+        both.performClick()
+        compose.waitUntil(60_000) { writes.size == 2 }
+        assertEquals(buildJsonObject { put("translationBilingual", false) }, writes[1])
+        // Translation off: the row goes, whatever the preference says.
+        toggle.performClick()
+        compose.waitUntil(60_000) { writes.size == 3 }
+        compose.waitUntil(60_000) { compose.onAllNodesWithText(TranslationCopy.SHOW_BOTH_LANGUAGES).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test fun showBothLanguagesReadsTheAccountsValue() {
+        preferences = JsonObject(preferences + ("translationEnabled" to JsonPrimitive(true)) + ("translationBilingual" to JsonPrimitive(true)))
+        open()
+        val both = compose.onNode(hasText(TranslationCopy.SHOW_BOTH_LANGUAGES) and isToggleable())
+        compose.waitUntil(60_000) { runCatching { both.assertIsOn() }.isSuccess }
+        assertTrue(writes.isEmpty())
     }
 
     @Test fun theBoardsFrameNine() {

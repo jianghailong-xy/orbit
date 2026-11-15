@@ -24,14 +24,31 @@ final class TranslationWiringTests: XCTestCase {
 
     func testTheBubblesDrawTheFootAndTheToggle() throws {
         let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
-        XCTAssertTrue(bubbles.contains("SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped)"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped && !bilingual)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual)"))
         XCTAssertTrue(bubbles.contains("PlatformPasteboard.copyString(words)"), "copy hands back the words on screen")
         XCTAssertTrue(bubbles.contains("SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,"))
-        XCTAssertTrue(bubbles.contains("SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped)"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,"))
         XCTAssertTrue(bubbles.contains("case .retryTurn: if let id = bubble.turnId { translationActions?.retryTurn(id) }"))
         XCTAssertTrue(bubbles.contains("case .sendAsWritten: if let id = bubble.turnId { translationActions?.sendAsWritten(id) }"))
         XCTAssertTrue(bubbles.contains("case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }"))
+    }
+
+    /// "Show both languages" (02-bilingual.png): both bubbles draw the English OrbitKit hands them, a
+    /// reply's collapsible, and the console reads the account's switch.
+    func testTheBubblesDrawBothLanguagesWhenTheAccountSaysSo() throws {
+        let bubbles = try source(app + "Views/Console/MessageBubbles.swift")
+        XCTAssertTrue(bubbles.contains("private var bilingual: Bool { translationActions?.bilingual == true }"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual)"))
+        XCTAssertTrue(bubbles.contains("if let english { BilingualEnglishView(english: english) }"))
+        XCTAssertTrue(bubbles.contains("SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual)"))
+        XCTAssertTrue(bubbles.contains("BilingualEnglishView(english: english, collapsible: true)"))
+        let views = try source(app + "Views/Console/TranslationViews.swift")
+        XCTAssertTrue(views.contains("let collapsed = collapsible && !open && lines > BilingualEnglish.collapseLines"))
+        XCTAssertTrue(views.contains(".lineLimit(collapsed ? 2 : nil)"))
+        XCTAssertTrue(views.contains("Text(TranslationCopy.showEnglishLabel(lines: lines))"))
+        let console = try source(app + "Views/Console/ConsoleView.swift")
+        XCTAssertTrue(console.contains("bilingual: SessionTranslation.bilingual(appModel.user?.preferences),"))
     }
 
     func testTheTrayDrawsAHeldMessagesFoot() throws {
@@ -83,5 +100,15 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(mac.contains(".accessibilityIdentifier(TranslationCopy.toggleIdentifier)"))
         XCTAssertTrue(mac.contains(".accessibilityIdentifier(TranslationCopy.languageIdentifier)"))
         XCTAssertTrue(ios.contains(".accessibilityIdentifier(TranslationCopy.toggleIdentifier)"))
+        // Show both languages: only while translation is on, written the moment it flips, and the
+        // footer's sentence on both.
+        for src in [ios, mac] {
+            XCTAssertTrue(src.contains("if translation {"))
+            XCTAssertTrue(src.contains("Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)"))
+            XCTAssertTrue(src.contains(".accessibilityIdentifier(TranslationCopy.bilingualIdentifier)"))
+            XCTAssertTrue(src.contains("UpdatePreferencesRequest(translationBilingual:"))
+            XCTAssertTrue(src.contains("TranslationCopy.bilingualFootnote"))
+            XCTAssertTrue(src.contains("bilingual = p?.translationBilingual == true"))
+        }
     }
 }

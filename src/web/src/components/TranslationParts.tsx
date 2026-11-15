@@ -9,6 +9,9 @@ import { TRANSLATION_COPY as COPY } from '../lib/translation';
  *  account's switch with the server able to translate: a reply streaming then is greyed (2A). */
 export interface TranslationActions {
   on: boolean;
+  /** "Show both languages" (02-bilingual.png): a translated message also shows its English, and its
+   *  foot loses the flip. Absent = off, today's UI. */
+  bilingual?: boolean;
   retryTurn: (turnId: string) => Promise<unknown>;
   sendAsWritten: (turnId: string) => Promise<unknown>;
   retryReply: (seq: number) => Promise<unknown>;
@@ -55,7 +58,8 @@ export const replyTranslationKey = (seq: number) => `reply:${seq}`;
 /** Whether the turn's copy button reads a reply's original, for TurnFoot. */
 export function useReplyShownOriginal(seq: number | undefined): boolean {
   const shared = useContext(ShownOriginalCtx);
-  return seq !== undefined && !!shared?.has(replyTranslationKey(seq));
+  const bilingual = useContext(TranslationCtx)?.bilingual === true;
+  return !bilingual && seq !== undefined && !!shared?.has(replyTranslationKey(seq));
 }
 
 /** A link-styled action at the foot; disabled while its request is out. */
@@ -117,6 +121,8 @@ export function UserTranslationFoot({
         </span>
       );
     case 'DONE':
+      // Both languages on: the English is in the bubble, so there is nothing to flip to.
+      if (actions?.bilingual) return <span className="chat-translate-foot">{COPY.sentToAgent}</span>;
       return (
         <span className="chat-translate-foot">
           <button type="button" className="chat-translate-action" onClick={onFlip}>
@@ -176,6 +182,13 @@ export function ReplyTranslationFoot({
         <span>{COPY.replyFailed}</span>
         <Sep />
         <FootAction label={COPY.retry} onPress={actions && seq !== undefined ? () => actions.retryReply(seq) : undefined} />
+      </div>
+    );
+  }
+  if (translation?.text !== undefined && actions?.bilingual) {
+    return (
+      <div className="chat-translate-foot is-reply">
+        <span>{COPY.translated}</span>
       </div>
     );
   }

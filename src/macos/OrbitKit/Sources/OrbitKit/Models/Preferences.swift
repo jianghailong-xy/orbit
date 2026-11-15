@@ -43,6 +43,9 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// "Your language" (a `TranslationLanguage` raw value), kept as a String so an unknown future
     /// language decodes; `SessionTranslation.language` maps it, absent or unknown being the default pick.
     public let translationLanguage: String?
+    /// "Show both languages": each translated message also shows the English the agent read or
+    /// wrote. Absent means off; drawn only while `translationEnabled` is on. Tolerant like the above.
+    public let translationBilingual: Bool?
     /// The providers SubAgents may not use, by slug (docs/subagent-design.md §7). Absent: none blocked.
     public let subagentBlockedProviders: [String]?
 
@@ -56,7 +59,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case theme, defaultModel, defaultPermissionMode, defaultEffort
         case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting, promptSuggestions
-        case recaps, translationEnabled, translationLanguage, subagentBlockedProviders
+        case recaps, translationEnabled, translationLanguage, translationBilingual, subagentBlockedProviders
     }
 
     public init(from decoder: Decoder) throws {
@@ -73,6 +76,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         recaps = (try? c.decodeIfPresent(Bool.self, forKey: .recaps)) ?? nil
         translationEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .translationEnabled)) ?? nil
         translationLanguage = (try? c.decodeIfPresent(String.self, forKey: .translationLanguage)) ?? nil
+        translationBilingual = (try? c.decodeIfPresent(Bool.self, forKey: .translationBilingual)) ?? nil
         subagentBlockedProviders = (try? c.decodeIfPresent([String].self, forKey: .subagentBlockedProviders)) ?? nil
     }
 }
@@ -92,6 +96,7 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var recaps: Bool?
     public var translationEnabled: Bool?
     public var translationLanguage: String?
+    public var translationBilingual: Bool?
     /// Replaces the whole blocked list.
     public var subagentBlockedProviders: [String]?
     public init(theme: String? = nil, defaultModel: String? = nil,
@@ -100,6 +105,7 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
                 notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil,
                 modelRouting: Bool? = nil, promptSuggestions: Bool? = nil, recaps: Bool? = nil,
                 translationEnabled: Bool? = nil, translationLanguage: String? = nil,
+                translationBilingual: Bool? = nil,
                 subagentBlockedProviders: [String]? = nil) {
         self.theme = theme
         self.defaultModel = defaultModel
@@ -113,6 +119,7 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
         self.recaps = recaps
         self.translationEnabled = translationEnabled
         self.translationLanguage = translationLanguage
+        self.translationBilingual = translationBilingual
         self.subagentBlockedProviders = subagentBlockedProviders
     }
 }

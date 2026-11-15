@@ -145,7 +145,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
                 "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
                 "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
                 "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
-                "translationEnabled", "translationLanguage" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
+                "translationEnabled", "translationLanguage", "translationBilingual" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
             }
         }
     }
@@ -391,7 +391,7 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
     val enabled = ready && !unavailable
     val language = Translation.language(preferences)
     var picking by remember { mutableStateOf(false) }
-    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.FOOTER) {
+    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.BILINGUAL_FOOTER + " " + TranslationCopy.FOOTER) {
         val on = !unavailable && Translation.enabled(preferences)
         ListItem(headlineContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS) }, colors = settingsRowColors(),
             supportingContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS_HINT) },
@@ -405,6 +405,14 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
             modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = true }.alpha(if (unavailable) 0.5f else 1f))
         ListItem(headlineContent = { Text(TranslationCopy.AGENTS_WORK_IN) }, colors = settingsRowColors(),
             supportingContent = { Text(TranslationCopy.ENGLISH) }, modifier = Modifier.alpha(if (unavailable) 0.5f else 1f))
+        // "Show both languages" (02-bilingual.png, mark A): only while translation is on.
+        if (on) {
+            val both = Translation.bilingual(preferences)
+            ListItem(headlineContent = { Text(TranslationCopy.SHOW_BOTH_LANGUAGES) }, colors = settingsRowColors(),
+                trailingContent = { Switch(checked = both, onCheckedChange = null, enabled = enabled) },
+                modifier = Modifier.testTag("translation-bilingual")
+                    .toggleable(value = both, enabled = enabled, role = Role.Switch) { write("translationBilingual", JsonPrimitive(it)) })
+        }
     }
     if (picking) ModalBottomSheet(onDismissRequest = { picking = false }) {
         Text(TranslationCopy.YOUR_LANGUAGE, Modifier.padding(horizontal = 24.dp, vertical = 8.dp).semantics { heading() },

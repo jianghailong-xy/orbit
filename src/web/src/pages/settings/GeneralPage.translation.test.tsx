@@ -190,3 +190,37 @@ describe('Settings › Translation', () => {
     expect(patches()).toEqual([]);
   });
 });
+
+describe('Settings › Translation › Show both languages', () => {
+  const bothSwitch = () => card().querySelector<HTMLElement>('[role="switch"][aria-label="Show both languages"]');
+
+  it('is offered only while Translate conversations is on, off by default, with the footer sentence', async () => {
+    await mount(me({}));
+    expect(bothSwitch()).toBeNull();
+    expect(card().textContent).toContain(
+      'With both languages on, each translated message also shows the English the agent read or wrote.',
+    );
+    await act(async () => root!.unmount());
+    root = null;
+    container.remove();
+    await mount(me({ translationEnabled: true }));
+    expect(bothSwitch()?.getAttribute('aria-checked')).toBe('false');
+    expect(card().textContent).toContain('Show both languages');
+  });
+
+  it('reads the account preference, and turning it on and off saves translationBilingual', async () => {
+    // The server answers with the whole account: translation stays on across the writes.
+    apiMock.mockImplementation(((_path: string, options?: { method?: string; body?: UserPreferences }) =>
+      options?.method === 'PATCH'
+        ? Promise.resolve(me({ translationEnabled: true, ...options.body }))
+        : new Promise(() => {})) as never);
+    await mount(me({ translationEnabled: true, translationBilingual: true }));
+    expect(bothSwitch()!.getAttribute('aria-checked')).toBe('true');
+    await act(async () => bothSwitch()!.click());
+    await settle();
+    expect(patches()).toEqual([{ translationBilingual: false }]);
+    await act(async () => bothSwitch()!.click());
+    await settle();
+    expect(patches()).toEqual([{ translationBilingual: false }, { translationBilingual: true }]);
+  });
+});

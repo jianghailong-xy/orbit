@@ -34,6 +34,8 @@ struct SettingsView: View {
     /// Settings › Translation: the account's switch (absent = off) and Your language.
     @State private var translation = false
     @State private var translationLanguage: TranslationLanguage = .default
+    /// "Show both languages" (02-bilingual.png, mark A). Absent = off.
+    @State private var bilingual = false
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -151,7 +153,12 @@ struct SettingsView: View {
                 LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
                 Text(TranslationCopy.agentsWorkInHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                Text(TranslationCopy.footnote)
+                // Only while translation is on (mark A).
+                if translation {
+                    Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
+                        .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+                }
+                Text(TranslationCopy.bilingualFootnote + " " + TranslationCopy.footnote)
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
             .disabled(SessionTranslation.unavailable(model.user))
@@ -212,6 +219,9 @@ struct SettingsView: View {
         .onChange(of: recaps) { saveRecaps() }
         .onChange(of: translation) { saveTranslation() }
         .onChange(of: translationLanguage) { saveTranslationLanguage() }
+        .onChange(of: bilingual) { saveBilingual() }
+        // Another client changed it: follow the account.
+        .onChange(of: model.user?.preferences?.translationBilingual) { bilingual = model.user?.preferences?.translationBilingual == true }
         .task { await model.accessTokens?.load() }
         .task { await model.runners?.load() }
         .onAppear {
@@ -229,6 +239,7 @@ struct SettingsView: View {
             recaps = p?.showRecaps ?? true
             translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
             translationLanguage = SessionTranslation.language(p)
+            bilingual = p?.translationBilingual == true
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -289,6 +300,11 @@ struct SettingsView: View {
     private func saveTranslation() {
         guard (model.user?.preferences?.translationEnabled ?? false) != translation else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: translation)) }
+    }
+
+    private func saveBilingual() {
+        guard (model.user?.preferences?.translationBilingual ?? false) != bilingual else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationBilingual: bilingual)) }
     }
 
     private func saveTranslationLanguage() {

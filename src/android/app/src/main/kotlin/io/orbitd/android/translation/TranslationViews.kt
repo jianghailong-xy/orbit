@@ -1,21 +1,35 @@
 package io.orbitd.android.translation
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextDecoration
@@ -32,6 +46,9 @@ object TranslationCopy {
     const val YOUR_LANGUAGE = "Your language"
     const val AGENTS_WORK_IN = "Agents work in"
     const val ENGLISH = "English"
+    // "Show both languages" (docs/mocks/session-translation/02-bilingual.png, marks A and B).
+    const val SHOW_BOTH_LANGUAGES = "Show both languages"
+    const val BILINGUAL_FOOTER = "With both languages on, each translated message also shows the English the agent read or wrote."
     const val FOOTER = "Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a conversation stays as it was."
 
     // The conversation (board frames 4–6).
@@ -45,6 +62,51 @@ object TranslationCopy {
     const val SEND_AS_WRITTEN = "Send as written"
     const val REPLY_PENDING = "Translates when the reply is done"
     const val REPLY_FAILED = "Couldn't translate this reply"
+    // Both languages in a conversation (frames 2–4).
+    const val SENT_TO_AGENT = "Sent to the agent in English"
+    const val SHOW_ENGLISH = "Show English"
+    const val LINES = "lines"
+
+    /** The collapsed English's press (frame 3): "Show English · 9 lines" (web `showEnglishLabel`). */
+    fun showEnglishLabel(lines: Int): String = "$SHOW_ENGLISH · $lines $LINES"
+}
+
+/** The English under a translated message with both languages on: null draws no block (held, failed, pending, sent as written, or off). */
+object BilingualShown {
+    fun userEnglish(english: String, turn: Translation.Turn?, bilingual: Boolean): String? =
+        if (bilingual && turn?.state == Translation.TurnState.DONE) Translation.bilingualEnglish(english).ifEmpty { null } else null
+
+    fun replyEnglish(english: String, reply: Translation.Reply?, bilingual: Boolean): String? =
+        if (bilingual && reply?.text != null) Translation.bilingualEnglish(english).ifEmpty { null } else null
+
+    fun collapses(english: String): Boolean = Translation.bilingualLineCount(english) > Translation.BILINGUAL_COLLAPSE_LINES
+}
+
+/**
+ * "Show both languages" (02-bilingual.png): the English the agent read or wrote, under a dashed divider, a size smaller and grey. A
+ * reply's English over [Translation.BILINGUAL_COLLAPSE_LINES] lines starts as a two-line faded preview with "Show English · N lines",
+ * which opens it in place (frame 3); per message, never kept.
+ */
+@Composable
+fun BilingualEnglish(english: String, collapsible: Boolean = false, modifier: Modifier = Modifier) {
+    var open by remember(english) { mutableStateOf(false) }
+    val lines = Translation.bilingualLineCount(english)
+    val collapsed = collapsible && !open && lines > Translation.BILINGUAL_COLLAPSE_LINES
+    val muted = footColor()
+    val divider = MaterialTheme.colorScheme.outlineVariant
+    Column(modifier.testTag("translation-english").padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Canvas(Modifier.fillMaxWidth().height(1.dp)) {
+            drawLine(divider, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 1.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx())))
+        }
+        Text(english, Modifier.testTag(if (collapsed) "translation-english-collapsed" else "translation-english-text")
+            .then(if (collapsed) Modifier.graphicsLayer { alpha = 0.99f }.drawWithContent {
+                drawContent()
+                drawRect(Brush.verticalGradient(0.4f to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+            } else Modifier),
+            color = muted, style = MaterialTheme.typography.bodySmall, maxLines = if (collapsed) 2 else Int.MAX_VALUE)
+        if (collapsed) FootAction(TranslationCopy.showEnglishLabel(lines), muted) { open = true }
+    }
 }
 
 /**
@@ -100,8 +162,13 @@ fun TranslationChip(text: String) {
  */
 @Composable
 fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?, sendAsWritten: (() -> Unit)?,
-    modifier: Modifier = Modifier) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false) {
     val muted = footColor()
+    // Both languages on: the English is in the message, so there is nothing to flip to (mark C).
+    if (bilingual && turn.state == Translation.TurnState.DONE) {
+        Row(modifier.testTag("translation-foot")) { Text(TranslationCopy.SENT_TO_AGENT, color = muted, style = MaterialTheme.typography.labelSmall) }
+        return
+    }
     when (turn.state) {
         Translation.TurnState.TRANSLATING -> Row(modifier.testTag("translation-foot")) { TranslationChip(TranslationCopy.TRANSLATING) }
         Translation.TurnState.FAILED -> {
@@ -125,9 +192,12 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
  */
 @Composable
 fun ReplyTranslationFoot(reply: Translation.Reply?, pending: Boolean, flipped: Boolean, onFlip: () -> Unit, retry: (() -> Unit)?,
-    modifier: Modifier = Modifier) {
+    modifier: Modifier = Modifier, bilingual: Boolean = false) {
     val muted = footColor()
     when {
+        bilingual && reply?.text != null -> Row(modifier.testTag("translation-foot")) {
+            Text(TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
+        }
         reply?.failed == true -> {
             val error = MaterialTheme.colorScheme.error
             Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {

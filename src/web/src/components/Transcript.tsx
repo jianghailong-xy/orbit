@@ -188,7 +188,8 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
 import type { ReplyTranslation, TurnTranslation } from '@orbit/shared';
-import { replyTranslationOf, turnTranslationOf } from '../lib/translation';
+import { BILINGUAL_COLLAPSE_LINES, bilingualEnglish, bilingualLineCount } from '@orbit/shared';
+import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
 import {
   ReplyTranslationFoot,
   ShownOriginalProvider,
@@ -3341,7 +3342,10 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // Settings › Translation: a delivered message shows what the owner wrote, or — flipped — the English
   // the agent got (`node.text`). A held one has nothing but what they wrote. Copy follows the screen.
   const translation = node.translation;
-  const [flipped, flip] = useShownOriginal(userTranslationKey(node.seq, node.turnId));
+  const [shownOriginal, flip] = useShownOriginal(userTranslationKey(node.seq, node.turnId));
+  // "Show both languages": what they wrote on top, the English the agent got under it; no flip.
+  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.state === 'DONE';
+  const flipped = shownOriginal && !bilingual;
   const typed = translation?.state === 'DONE' && !flipped ? translation.original : node.text;
   const translationFoot =
     translation && translation.state !== 'SENT_AS_WRITTEN' ? (
@@ -3395,6 +3399,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         ) : (
           shownText && <MD breaks>{shownText}</MD>
         )}
+        {bilingual && !node.shell && <BilingualEnglish text={node.text} />}
         {queued}
       </div>
       {longText && !exp && (
@@ -4200,14 +4205,46 @@ export function AssistantBubble({
 // a per-message flip to the English the agent wrote; greyed, with its chip, until the translation
 // arrives; and with a Retry when it failed — in English, which is all there is.
 function TranslatedReply({ node }: { node: TextNode }) {
-  const [flipped, flip] = useShownOriginal(replyTranslationKey(node.seq));
+  const [shownOriginal, flip] = useShownOriginal(replyTranslationKey(node.seq));
   const translation = node.replyTranslation;
+  // "Show both languages": the translation on top, the English the agent wrote under it; no flip.
+  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
+  const flipped = shownOriginal && !bilingual;
   const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
   const pending = !translation && node.awaitsTranslation;
   return (
     <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
       <AssistantBubble text={translated} seq={node.seq} />
+      {bilingual && (
+        <div className="chat-bilingual-reply">
+          <BilingualEnglish text={node.text} collapsible />
+        </div>
+      )}
       <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+    </div>
+  );
+}
+
+// "Show both languages" (docs/mocks/session-translation/02-bilingual.png): the English the agent read
+// or wrote, under a dashed divider in smaller grey text — its prose only, a code block being drawn once
+// above. A reply's English that runs over BILINGUAL_COLLAPSE_LINES lines starts as a two-line faded
+// preview with "Show English · N lines", which opens it in place (frame 3); per message, not kept.
+function BilingualEnglish({ text, collapsible = false }: { text: string; collapsible?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const english = bilingualEnglish(text);
+  if (!english) return null;
+  const lines = bilingualLineCount(english);
+  const collapsed = collapsible && !open && lines > BILINGUAL_COLLAPSE_LINES;
+  return (
+    <div className={collapsed ? 'chat-bilingual is-collapsed' : 'chat-bilingual'} lang="en">
+      <div className="chat-bilingual-text">
+        <MD breaks>{english}</MD>
+      </div>
+      {collapsed && (
+        <button type="button" className="chat-translate-action chat-bilingual-more" onClick={() => setOpen(true)}>
+          {showEnglishLabel(lines)}
+        </button>
+      )}
     </div>
   );
 }

@@ -20,7 +20,7 @@ const writes: unknown[] = [];
     { provide: JwtService, useValue: { verifyAsync: async () => ({ sub: USER_ID }) } },
     { provide: PrismaService, useValue: {
       user: {
-        findUnique: async () => ({ preferences }),
+        findUnique: async () => ({ id: USER_ID, email: 'owner@example.test', preferences, avatar: null, passwordHash: 'scrypt-hash', identities: [] }),
         update: async (args: { where: unknown; data: { preferences: Record<string, unknown> } }) => {
           writes.push({ where: args.where, data: args.data });
           preferences = args.data.preferences;
@@ -132,6 +132,37 @@ test('Settings › Translation: the switch and the language persist, absent stay
   assert.equal(preferences.translationLanguage, 'ja', 'a refused write changed nothing');
   // The other preferences stood throughout.
   assert.equal(preferences.theme, 'light');
+});
+
+test('Show both languages: one account preference, off when absent, read back by every client through me', async (t) => {
+  const patch = await boot(t);
+  const base = (await patch({ theme: 'light' })).url.replace(/\/users\/me\/preferences$/, '');
+  // Another client (an iPhone, an Android phone) reads the account through GET /users/me.
+  const me = async () => {
+    const response = await fetch(`${base}/users/me`, { headers: { authorization: 'Bearer signed-in' } });
+    assert.equal(response.status, 200, await response.clone().text());
+    return (await response.json() as { preferences: Record<string, unknown> }).preferences;
+  };
+  assert.equal('translationBilingual' in (await me()), false, 'absent until written: off');
+
+  const on = await patch({ translationBilingual: true });
+  assert.equal(on.status, 200, await on.clone().text());
+  assert.equal((await on.json() as { preferences: Record<string, unknown> }).preferences.translationBilingual, true);
+  assert.deepEqual(writes.at(-1), { where: { id: USER_ID }, data: { preferences } });
+  assert.equal((await me()).translationBilingual, true, 'the web turned it on: the other clients read it on');
+
+  // Writing the other translation keys leaves it alone.
+  await patch({ translationEnabled: true, translationLanguage: 'ko' });
+  assert.equal((await me()).translationBilingual, true);
+
+  const malformed = await patch({ translationBilingual: 'yes' });
+  assert.equal(malformed.status, 400, await malformed.text());
+  assert.equal(preferences.translationBilingual, true, 'a refused write changed nothing');
+
+  const off = await patch({ translationBilingual: false });
+  assert.equal(off.status, 200, await off.text());
+  assert.equal((await me()).translationBilingual, false, 'a phone turned it off: the web reads it off');
+  assert.equal(preferences.translationLanguage, 'ko');
 });
 
 test('me says whether the server can translate: without DEEPSEEK_API_KEY it cannot', async (t) => {

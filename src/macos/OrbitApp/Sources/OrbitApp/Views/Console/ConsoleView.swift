@@ -418,6 +418,7 @@ struct ConsoleView: View {
                 // Settings › Translation: what a translated message's foot can do (frames 4–6).
                 .environment(\.translationActions, TranslationActions(
                     on: SessionTranslation.isOn(appModel.user),
+                    bilingual: SessionTranslation.bilingual(appModel.user?.preferences),
                     retryTurn: { id in Task { await console.retryTurnTranslation(id) } },
                     sendAsWritten: { id in Task { await console.sendTurnAsWritten(id) } },
                     retryReply: { seq in Task { await console.retryReplyTranslation(seq) } }))

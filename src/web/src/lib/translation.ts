@@ -24,7 +24,16 @@ export const TRANSLATION_COPY = {
   sendAsWritten: 'Send as written',
   replyPending: 'Translates when the reply is done',
   replyFailed: "Couldn't translate this reply",
+  // "Show both languages" (docs/mocks/session-translation/02-bilingual.png).
+  sentToAgent: 'Sent to the agent in English',
+  showEnglish: 'Show English',
+  lines: 'lines',
 } as const;
+
+/** The collapsed English's press (board frame 3): "Show English · 9 lines". */
+export function showEnglishLabel(lines: number): string {
+  return `${TRANSLATION_COPY.showEnglish} · ${lines} ${TRANSLATION_COPY.lines}`;
+}
 
 /** The language the account writes and reads in, absent = the default pick. */
 export function translationLanguageOf(me: Me | undefined): TranslationLanguage {
@@ -35,6 +44,12 @@ export function translationLanguageOf(me: Me | undefined): TranslationLanguage {
 /** Whether the owner's messages are being translated now: switched on, and the server able to. */
 export function translationOn(me: Me | undefined): boolean {
   return me?.preferences?.translationEnabled === true && me.translationAvailable === true;
+}
+
+/** Whether translated messages also show the English the agent read or wrote ("Show both
+ *  languages"): the account's switch, drawn only while translation itself is switched on. */
+export function bilingualOn(me: Me | undefined): boolean {
+  return me?.preferences?.translationEnabled === true && me.preferences.translationBilingual === true;
 }
 
 /** The composer tag (6A): "<Language> → English", the language without its parenthesis. */

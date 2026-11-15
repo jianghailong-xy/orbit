@@ -42,6 +42,47 @@ object Translation {
     /** `preferences.translationEnabled`: on only for an explicit true. */
     fun enabled(preferences: JsonObject?): Boolean = (preferences?.get("translationEnabled") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 
+    /** "Show both languages" (`preferences.translationBilingual`, docs/mocks/session-translation/02-bilingual.png): on only for an
+     *  explicit true, and drawn only while [enabled] (web `bilingualOn`). */
+    fun bilingual(preferences: JsonObject?): Boolean =
+        enabled(preferences) && (preferences?.get("translationBilingual") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
+
+    /** Over this many lines a reply's English starts collapsed to a two-line preview (frame 3, B): BILINGUAL_COLLAPSE_LINES. */
+    const val BILINGUAL_COLLAPSE_LINES = 6
+    /** A source line wraps every this many characters, for the count: BILINGUAL_LINE_CHARS. */
+    const val BILINGUAL_LINE_CHARS = 60
+
+    /** The English drawn under a translated message: its prose only — a fenced code block is drawn once, above (board mark D). An
+     *  unclosed fence is left as it is. The same rule as @orbit/shared `bilingualEnglish`. */
+    fun bilingualEnglish(text: String): String {
+        val lines = text.split("\n")
+        val out = mutableListOf<String>()
+        var i = 0
+        while (i < lines.size) {
+            val fence = fenceOpener(lines[i])
+            val close = if (fence == null) -1 else (i + 1 until lines.size).firstOrNull { isFence(lines[it], fence) } ?: -1
+            if (close >= 0) { out.add(""); i = close + 1; continue }
+            out.add(lines[i]); i += 1
+        }
+        return out.joinToString("\n").replace(Regex("\n{3,}"), "\n\n").trim()
+    }
+
+    /** How many lines [english] runs to: each non-blank source line, wrapped every [BILINGUAL_LINE_CHARS] (`bilingualLineCount`). */
+    fun bilingualLineCount(english: String): Int = english.split("\n").sumOf { line ->
+        val t = line.trim()
+        val length = t.codePointCount(0, t.length)
+        (length + BILINGUAL_LINE_CHARS - 1) / BILINGUAL_LINE_CHARS
+    }
+
+    private fun leadingSpaces(line: String): String? {
+        val n = line.takeWhile { it == ' ' }.length
+        return if (n <= 3) line.substring(n) else null
+    }
+    private fun fenceOpener(line: String): String? = leadingSpaces(line)?.let { rest ->
+        when { rest.startsWith("```") -> "```"; rest.startsWith("~~~") -> "~~~"; else -> null }
+    }
+    private fun isFence(line: String, fence: String): Boolean = leadingSpaces(line)?.startsWith(fence) == true
+
     /** `GET /users/me`'s `translationAvailable`: the server holds a DeepSeek key. Absent (an older server) reads as unable. */
     fun available(user: JsonObject?): Boolean = (user?.get("translationAvailable") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 

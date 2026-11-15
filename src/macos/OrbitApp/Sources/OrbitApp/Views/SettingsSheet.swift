@@ -734,6 +734,8 @@ private struct SessionSettingsPage: View {
     @State private var recaps = true
     /// Settings › Translation: the account's switch. Absent on the server means off.
     @State private var translation = false
+    /// "Show both languages" (02-bilingual.png, mark A). Absent on the server means off.
+    @State private var bilingual = false
     @State private var seeded = false
 
     var body: some View {
@@ -779,6 +781,12 @@ private struct SessionSettingsPage: View {
             guard (model.user?.preferences?.translationEnabled ?? false) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: value)) }
         }
+        .onChange(of: bilingual) { _, value in
+            guard (model.user?.preferences?.translationBilingual ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(translationBilingual: value)) }
+        }
+        // Another client changed it: follow the account.
+        .onChange(of: model.user?.preferences?.translationBilingual) { _, value in bilingual = value == true }
     }
 
     /// A row's own control: the mode is a menu on the row, as the list's Appearance is; the other four
@@ -819,10 +827,16 @@ private struct SessionSettingsPage: View {
                                value: SessionTranslation.language(model.user?.preferences).name)
             }
             LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
+            // Only while translation is on (mark A).
+            if translation {
+                Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
+                    .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+            }
         } header: {
             SettingsHeader(TranslationCopy.title)
         } footer: {
-            Text(TranslationCopy.translateConversationsHint + " " + TranslationCopy.footnote)
+            Text(TranslationCopy.translateConversationsHint + " " + TranslationCopy.bilingualFootnote
+                 + " " + TranslationCopy.footnote)
         }
         .disabled(unavailable)
     }
@@ -839,6 +853,7 @@ private struct SessionSettingsPage: View {
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
         translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+        bilingual = p?.translationBilingual == true
     }
 }
 

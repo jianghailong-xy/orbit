@@ -68,7 +68,13 @@ struct UserBubbleView: View {
 
     /// The words on screen: what the owner wrote, or — a delivered message flipped — the English the
     /// agent got. Copy hands back the same (`SessionTranslation.shownUserText`).
-    private var words: String { SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped) }
+    private var words: String {
+        SessionTranslation.shownUserText(bubble.text, bubble.translation, flipped: flipped && !bilingual)
+    }
+    /// "Show both languages" is on (02-bilingual.png): a delivered message also shows its English.
+    private var bilingual: Bool { translationActions?.bilingual == true }
+    /// The English under the owner's words, when both languages are shown (mark C).
+    private var english: String? { SessionTranslation.userEnglish(bubble.text, bubble.translation, bilingual: bilingual) }
 
     var body: some View {
         let words = self.words
@@ -98,7 +104,10 @@ struct UserBubbleView: View {
                 // The bubble is the person's words and nothing else: what delivery appended is named
                 // on a line in the meta row under it (`AttachedNoteLine`), never in it.
                 if !bubble.text.isEmpty {
-                    typedText(shown, showsCard: showsCard)
+                    VStack(alignment: .leading, spacing: 8) {
+                        typedText(shown, showsCard: showsCard)
+                        if let english { BilingualEnglishView(english: english) }
+                    }
                         .padding(.horizontal, bubbleInset(showsCard))
                         .padding(.vertical, showsCard ? 5 : 8)
                         .background(.tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
@@ -375,7 +384,7 @@ struct UserBubbleView: View {
     /// written" (`SessionTranslation.userFoot`).
     @ViewBuilder
     private var translationFoot: some View {
-        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped)
+        let parts = SessionTranslation.userFoot(bubble.translation, flipped: flipped, bilingual: bilingual)
         if !parts.isEmpty {
             TranslationFootView(parts: parts, alignment: .trailing) { action in
                 switch action {
@@ -403,6 +412,8 @@ struct AssistantBubbleView: View {
     /// Settings › Translation: this reply flipped to the English the agent wrote (board frame 5).
     @State private var flipped = false
     @Environment(\.translationActions) private var translationActions
+    /// "Show both languages" is on: a translated reply also shows the English the agent wrote.
+    private var bilingual: Bool { translationActions?.bilingual == true }
 
     /// Waiting for its translation (2A): streaming while the account translates, or settled in a
     /// translated turn before the server's `translation` event has come.
@@ -421,7 +432,7 @@ struct AssistantBubbleView: View {
             Group {
                 if bubble.isFinalized {
                     MarkdownView(source: SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,
-                                                                    flipped: flipped))
+                                                                    flipped: flipped && !bilingual))
                 } else {
                     StreamingProse(text: bubble.displayText)
                 }
@@ -433,7 +444,12 @@ struct AssistantBubbleView: View {
             .textSelection(.enabled)
             .environment(\.previewOwnerID, bubble.id)
             if !bubble.isFinalized { TypingDots() }
-            TranslationFootView(parts: SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped)) { action in
+            if bubble.isFinalized,
+               let english = SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual) {
+                BilingualEnglishView(english: english, collapsible: true)
+            }
+            TranslationFootView(parts: SessionTranslation.replyFoot(bubble.translation, pending: awaiting, flipped: flipped,
+                                                                    bilingual: bilingual)) { action in
                 switch action {
                 case .flip: flipped.toggle()
                 case .retryReply: if let seq = bubble.seq { translationActions?.retryReply(seq) }

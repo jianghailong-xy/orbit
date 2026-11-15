@@ -209,6 +209,8 @@ export interface UserPreferences {
   translationEnabled?: boolean;
   /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
   translationLanguage?: TranslationLanguage;
+  /** "Show both languages": absent means OFF. */
+  translationBilingual?: boolean;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
 }
