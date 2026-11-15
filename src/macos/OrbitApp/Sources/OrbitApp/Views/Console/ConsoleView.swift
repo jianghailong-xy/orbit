@@ -1667,8 +1667,8 @@ struct TranscriptView: View {
 
     /// What waits in this conversation, in the nav bar's capsule: the needs-you mark in amber, the
     /// bar's own words ("1 waiting below", "1 open question above") and the way the card lies, drawn
-    /// as the "Changes committed" toast pill is (`ToastPill`): a bare filled glyph, no ring, hugging
-    /// its words. A press scrolls to the card, as the bar's did.
+    /// as the "Changes committed" toast pill is (`ToastPill`): its surface (`toastGlass`), a bare
+    /// filled glyph, no ring, hugging its words. A press scrolls to the card, as the bar's did.
     private func waitingCapsule(_ here: WaitingBelow) -> some View {
         CoastingButton {
             PlatformHaptics.tap()
@@ -1688,11 +1688,17 @@ struct TranscriptView: View {
             }
             .padding(.leading, 10)
             .padding(.trailing, 16)
-            .questionGlass()
+            // The nav bar's height (questionGlass's), on the toast's own surface.
+            .frame(height: Self.waitingCapsuleHeight)
+            .toastGlass(Capsule(), tint: nil)
             .contentShape(Capsule())
         }
         .accessibilityLabel(here.text)
         .accessibilityHint("Shows what is waiting in this conversation")
+    }
+
+    private static var waitingCapsuleHeight: CGFloat {
+        if #available(iOS 26.0, *) { return 44 } else { return 32 }
     }
 
     /// "Handing over" in the nav bar's capsule while the handoff locks the composer (board 04): the
