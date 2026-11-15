@@ -3,6 +3,7 @@
  * declare what passes the global whitelist, nothing more. There is no REST body that creates or changes a schedule:
  * those come only from a session's tools (`ScheduleCreateDto`, `ScheduleUpdateDto` are the runner doors').
  */
+import { IsPublicId } from '../common/public-id';
 import { IsDateString, IsIn, IsInt, IsObject, IsOptional, IsString, MaxLength, Min, ValidateIf } from 'class-validator';
 
 export class ScheduleCreateDto {
@@ -29,7 +30,7 @@ export class ScheduleUpdateDto {
   @IsOptional() @IsIn(['CHECK_ONLY', 'OPEN_PR']) accessLevel?: 'CHECK_ONLY' | 'OPEN_PR';
   @IsOptional() @IsInt() @Min(1) runLimitMinutes?: number;
   /** Another workspace of the owner's: always outside the envelope, so it waits on a card. */
-  @IsOptional() @IsString() workspaceId?: string;
+  @IsOptional() @IsPublicId() workspaceId?: string;
 }
 
 export class ScheduleRunReportDto {
@@ -52,6 +53,6 @@ export class ScheduleDecisionDto {
 
 /** The Scheduled page's quick-add line (§8.1): a sentence, and the workspace the line shows. */
 export class ScheduleDraftDto {
-  @IsString() workspaceId!: string;
+  @IsPublicId() workspaceId!: string;
   @IsString() @MaxLength(4000) text!: string;
 }
