@@ -77,3 +77,13 @@ export function scheduleRunDisallowedTools(base: string[], accessLevel: AccessLe
   if (accessLevel !== 'OPEN_PR') return base;
   return [...new Set([...base, ...OPEN_PR_DISALLOWED_TOOLS])];
 }
+
+/**
+ * What the claim adds to the agent config of a session serving a schedule's run. `scheduledCheckOnly` tells the
+ * runner that this Plan session is a CHECK_ONLY run, which on Codex then runs in Codex's own read-only sandbox with
+ * no approvals, so it can read the checkout (design §6.2; record §8). Absent on every other session, and an older
+ * runner ignores it: both keep Codex's ordinary Plan, which declines every command.
+ */
+export function scheduleRunAgentFields(accessLevel: AccessLevel | null | undefined): { scheduledCheckOnly?: true } {
+  return accessLevel === 'CHECK_ONLY' ? { scheduledCheckOnly: true } : {};
+}

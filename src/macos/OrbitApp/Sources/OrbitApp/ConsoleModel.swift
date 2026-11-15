@@ -4512,15 +4512,17 @@ final class ConsoleModel {
             .map(\.element.row)
     }
 
-    /// What the needs-you bar above this transcript says, or nil when nothing in it is waiting.
+    /// What waits on the reader in THIS conversation, for the capsule in its nav bar, or nil when
+    /// nothing does (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule): its
+    /// open cards, and its own approvals at the tail (`NeedsYouLogic.here`).
     ///
     /// The direction word is the one part of the line this conversation cannot answer by itself: it
     /// is about the reader's own place, reported by the transcript (`topVisibleItemID`). Everything
-    /// else is the count and what kind of thing it points at (`NeedsYouLogic.below`).
+    /// else is the count and what kind of thing it points at.
     var waitingBelow: WaitingBelow? {
         let rows = openBelowRows
-        guard let first = rows.first else { return nil }
-        return NeedsYouLogic.below(rows: rows, side: side(ofRow: first.rowID))
+        return NeedsYouLogic.here(rows: rows, approvalIDs: state.pendingApprovals.map(\.id),
+                                  side: rows.first.flatMap { side(ofRow: $0.rowID) })
     }
 
     /// Where one delivered card sits in the conversation RIGHT NOW, as an index into `state.items`:

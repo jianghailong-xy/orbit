@@ -279,7 +279,7 @@ The mode each engine gets (`schedules/schedule-access.ts`; measured on the real 
 | Engine | `CHECK_ONLY` | `OPEN_PR` | Measured |
 | --- | --- | --- | --- |
 | Claude Code | `plan` | `acceptEdits` | 2.1.325 |
-| Codex | `plan` | `acceptEdits` | 0.169.0 |
+| Codex | `plan`, in Codex's read-only sandbox (below) | `acceptEdits` | 0.169.0 |
 | Kimi | `plan` | `acceptEdits` | 2.5.3 |
 | OpenCode | `plan` (denies everything but reads) | refused: `SCHEDULE_ACCESS_NOT_ENFORCEABLE` | 1.19.5 |
 | Antigravity | `plan` | `acceptEdits` | not measured (no signed-in account on the host) |
@@ -300,6 +300,20 @@ the workspace's own at claim.
   Harness has no Plan or Accept Edits) gets the nearest mode that is not wider, and when there is none
   `schedule_create` is refused with `SCHEDULE_ACCESS_NOT_ENFORCEABLE`. The agent tells the person which engine
   can.
+- Codex reads files only through the shell. Under the `untrusted` policy Plan runs on, it asks about every command,
+  `ls` included, and Plan declines them all. So for a `CHECK_ONLY` run only, the claim sets
+  `agent.scheduledCheckOnly`, and the runner then starts that Plan session in Codex's own read-only sandbox:
+  `approvalPolicy: never`, `sandbox: read-only`, `sandboxPolicy {readOnly, networkAccess: false}`. The run then
+  reaches the following, with no card:
+  - it can read the checkout (any command runs; the OS refuses every write, shell or file edit);
+  - it can fetch a URL with Codex's built-in web tool;
+  - it can call Orbit's MCP tools (`schedule_run_report` included; measured: an Orbit MCP read reached the control plane);
+  - it cannot reach the network from the shell (`curl` fails) or write anywhere.
+
+  The runner judges no command string itself. Every other Codex Plan session is unchanged and declines every command.
+  This needs the first runner release after v0.1.261-beta.5. On an older runner the flag is ignored, and a Codex
+  `CHECK_ONLY` run can fetch but not read the checkout, so the card should not promise more there. Measured on
+  Linux only; macOS (Seatbelt) is not measured (record §8).
 - Deploy is not a level in v1.
 
 ### 6.3 Session
@@ -566,8 +580,20 @@ table in §6.2 is the result. What the measurement found:
   commit unless a workspace rule (Always allow) covers it.
 - *Codex 0.169.0* (app-server, `approvalPolicy: untrusted`, runner answers as for Plan): the built-in web search
   opened `https://example.com` with no request; `git log` and even `ls` came as `commandExecution/requestApproval`,
-  which in Plan the runner declines with no card; the patch was declined. Plan is enforced, but a check that needs to
-  read the checkout cannot: reads go through the shell.
+  which in Plan the runner declined with no card; the patch was declined. Plan was enforced, but a check that needed
+  to read the checkout could not: reads go through the shell. **Settled by a runner change for scheduled runs only**
+  (owner, 2026-11-15; record §8). A `CHECK_ONLY` run's Plan (`agent.scheduledCheckOnly` on the claim) runs in Codex's
+  own read-only sandbox with `approvalPolicy: never`. Measured on the real app-server with the runner's own
+  parameters, with 0 approval requests reaching the runner:
+  - `ls`, `cat README.md` and `git log` ran;
+  - the built-in web tool opened `https://example.com`;
+  - Orbit's MCP `task_get` returned its task;
+  - `curl` had no network;
+  - `touch x`, `date > x` and an apply_patch edit were refused by the OS.
+
+  A runner-side parser of command strings was tried first and dropped: under Plan's `danger-full-access` an approved
+  `touch x` writes, so the parser would have been the only guard (record §8.2). Every other Codex Plan session is
+  unchanged. It needs the first runner release after v0.1.261-beta.5.
 - *Kimi 2.5.3* (ACP, mode `plan`): `FetchURL` ran with no ask; `Bash` asked (`session/request_permission`), so each
   command is a card; the write was refused by Kimi ("Plan mode is active…").
 - *OpenCode 1.19.5* (`opencode run` with the runner's permission map): in plan, `webfetch` and `bash` were
@@ -580,8 +606,10 @@ table in §6.2 is the result. What the measurement found:
 
 So `plan` lets a `CHECK_ONLY` run fetch a URL **and** run read-only commands without a card only on Claude Code;
 on Kimi each command is a card (answered "Always allow" once, the workspace rule carries it to later runs, §6.4),
-and on Codex and OpenCode a `CHECK_ONLY` run can fetch or read but not both. Two follow-ups are filed: closing
-Claude's shell-write gap in `plan`, and letting Codex Plan run read-only commands.
+and on OpenCode a `CHECK_ONLY` run can read but not fetch. Codex fetches and, in a scheduled run on a runner with
+record §8, also reads the checkout in its read-only sandbox with no card (on an older runner it can fetch but not
+read). Two follow-ups were filed: closing Claude's shell-write gap in `plan`, and letting Codex Plan read the
+checkout (done for scheduled runs with Codex's read-only sandbox, record §8).
 
 **3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes, then hourly inside the
 catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without

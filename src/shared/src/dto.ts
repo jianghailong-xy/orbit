@@ -222,6 +222,10 @@ export interface AgentExecConfig {
    *  plane on claim and reclaim; absent means off, so an older control plane never turns it on.
    *  Like fastMode it is read once, at spawn. */
   promptSuggestions?: boolean;
+  /** The session serves a scheduled CHECK_ONLY run (docs/scheduled-tasks-design.md §6.2): in Plan, Codex then runs
+   *  in its own read-only sandbox with no approvals, so it reads the checkout and the OS refuses writes. Absent on
+   *  every other session, which keeps Codex's ordinary Plan (every command declined); an older runner ignores it. */
+  scheduledCheckOnly?: boolean;
   maxTurns?: number;
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */

@@ -109,7 +109,12 @@ final class TailPinningWiringTests: XCTestCase {
     /// shows at the tail too.
     func testThePhonesQuestionShowsOnlyOffTheLiveTail() throws {
         let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
-        let phone = try section(source, from: "ToolbarItem(placement: .principal) {", to: "#else")
+        // The question is the nav capsule's fallback when nothing in this conversation waits out of
+        // sight (07-console-one-capsule); either way it waits for the reader to leave the live tail.
+        let principal = try section(source, from: "ToolbarItem(placement: .principal) {", to: "#else")
+        XCTAssertTrue(principal.contains("principalQuestion(proxy)"), "the question is the capsule's fallback")
+        let phone = try section(source, from: "@ViewBuilder private func principalQuestion(_ proxy: ScrollViewProxy)",
+                                to: "private func waitingCapsule(")
         XCTAssertTrue(phone.contains("stickyQuestion(q, proxy: proxy)"), "this is the phone's question")
         XCTAssertTrue(phone.contains("!atBottom || console.detached"),
                       "the phone's question must wait for the reader to leave the live tail")

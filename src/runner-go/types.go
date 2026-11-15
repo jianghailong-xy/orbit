@@ -1367,10 +1367,15 @@ type AgentExecConfig struct {
 	// (`--prompt-suggestions`), which this runner files as a prompt_suggestion event. The
 	// control plane decides it per session; absent is off, so an older control plane never turns
 	// it on. A spawn flag like FastMode's settings key: it moves only across a re-spawn.
-	PromptSuggestions bool                   `json:"promptSuggestions,omitempty"`
-	MaxTurns          *int                   `json:"maxTurns"`
-	MaxBudgetUsd      *float64               `json:"maxBudgetUsd"`
-	McpConfig         map[string]interface{} `json:"mcpConfig"`
+	PromptSuggestions bool `json:"promptSuggestions,omitempty"`
+	// ScheduledCheckOnly says the session serves a scheduled CHECK_ONLY run (design §6.2). In Plan,
+	// Codex then runs in its own read-only sandbox with no approvals (codexScheduledCheckOnly), so
+	// it can read the checkout and the OS refuses every write. Absent, as from an older control
+	// plane, Plan is as for every other session: every command is declined.
+	ScheduledCheckOnly bool                   `json:"scheduledCheckOnly,omitempty"`
+	MaxTurns           *int                   `json:"maxTurns"`
+	MaxBudgetUsd       *float64               `json:"maxBudgetUsd"`
+	McpConfig          map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
 	Env map[string]string `json:"env"`
 }

@@ -29,7 +29,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -63,7 +62,6 @@ import io.orbitd.android.cards.rememberSessionCards
 import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
-import io.orbitd.android.cards.SessionNeedsYouBar
 import io.orbitd.android.cards.SessionRunStartCard
 import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.cards.LocalWatchTargetNames
@@ -316,6 +314,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val belowRows = remember(state.session?.snapshot, cards.answered) {
         state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it, cards.answered) }.orEmpty()
     }
+    // …and its own approvals still asking, at the tail: the header's capsule counts them too (07-console-one-capsule).
+    val approvalRows = remember(state.session?.snapshot, cards.answered) {
+        state.session?.snapshot?.let { NeedsYouLogic.approvalRows(state.session!!.id, it, cards.answered) }.orEmpty()
+    }
     // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet — but the reader's own
     // messages still on their way, which the tray above the composer holds; what Orbit queued keeps its card here. After them, the
     // reader's steers only the server's receipt says were not delivered, until Put back takes one away.
@@ -360,6 +362,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
     } }
     val scope = rememberCoroutineScope()
+    // A press on what waits in this conversation: unpin the reader and show the waiting card, which the card rail brings into
+    // view; a card answered in a review opens it, over the card it scrolled to (A08-3, iOS 419fa780b).
+    val showWaiting: (String) -> Unit = { row ->
+        follow = false
+        scope.launch {
+            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
+            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+            CardFocus.request(route.id!!, row)
+            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
+                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
+        }
+    }
     // The conversation's last row while it is at rest (RecapCard). It steps aside for the rest of this visit once the conversation
     // starts a new turn — the reader is in it now, and a card arriving under each answer would push the answer up — and is back the
     // next time the session is opened (the owner, 2026-10-22).
@@ -532,8 +546,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val question = rememberStuckQuestion(shownRows, list)
         val offTail by rememberUpdatedState(!state.denied && (!follow || state.window.newerAfter != null))
         // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8), bound while this page shows.
+        // One capsule there (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/07-console-one-capsule`, B): what waits on the
+        // reader in THIS conversation takes it while its card is out of sight — above them, or anywhere once they are off the tail
+        // (at the tail the card is the tail); otherwise the question. What waits elsewhere is not said here; the lists say it.
+        val here = NeedsYouLogic.here(belowRows, approvalRows, readerSide)
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
-            if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+            if (here != null && (here.side == ReaderSide.ABOVE || offTail)) WaitingCapsule(here) { showWaiting(here.rowId) }
+            else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
@@ -559,9 +578,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
-                // The needs-you bar floats over the transcript (after it, below); the rows keep its height clear at their top.
-                var barHeight by remember { mutableIntStateOf(0) }
-                val barTop = with(LocalDensity.current) { barHeight.toDp() }
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = shownRows
                 val displayedWindow = state.window
@@ -591,7 +607,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     awaitEachGesture { awaitFirstDown(requireUnconsumed = false); follow = false }
                 }.testTag("transcript-list").lastPageProbe(lastPage, list, view), state = list,
                     // No room under the rows but the tail row's own: every follow and jump lands on it (iOS 9d3751ec2).
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp + barTop), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
@@ -682,7 +698,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     item(key = "interaction-cards") {
                         Box(Modifier.onSizeChanged { if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
                             // The list's height below the floating needs-you bar: a card brought in by its top lands under the bar, not behind it.
-                            CompositionLocalProvider(LocalCardViewport provides (listHeight - barHeight).coerceAtLeast(0)) { SessionCards(cards, openLink, discuss = discussCard) }
+                            CompositionLocalProvider(LocalCardViewport provides listHeight.coerceAtLeast(0)) { SessionCards(cards, openLink, discuss = discussCard) }
                         }
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
@@ -701,24 +717,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // A06-12: the room the fade lies over, so a list at its tail has nothing in it — and the 1 dp anchor it always was.
                     item(key = "tail") { Spacer(Modifier.height(COMPOSER_BAND_FADE + 1.dp).testTag("transcript-tail")) }
-                }
-                Box(Modifier.zIndex(1f).onSizeChanged { barHeight = it.height }) {
-                // The needs-you bar, under the header and floating over the transcript (iOS `NeedsYouBannerView` in the console's
-                // safe-area bar; the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`): the rows go on behind it. Its
-                // press here unpins the reader and shows the waiting card, which the card rail brings into view.
-                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = foldsChrome,
-                    below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
-                        follow = false
-                        scope.launch {
-                            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
-                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
-                            CardFocus.request(route.id!!, row)
-                            // A08-3: a card answered in a review opens it, over the card it scrolled to (iOS 419fa780b). Evidence and
-                            // exceptions are answered in place, so the press only shows them.
-                            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
-                                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
-                        }
-                    })
                 }
                 }
                 // Android's jump stays a row under the list (iOS floats a disc 6 pt above the fade): below the list, so never in its fade.

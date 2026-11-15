@@ -167,9 +167,9 @@ export class ProjectSettledUnmergedProducer {
       select: {
         id: true,
         title: true,
-        // The fold's own input, widened with the two columns that let this fact NAME the commit —
-        // the fold reads neither, and a reader that wrote its own copy of this select would be a
-        // second author of what the fold sees.
+        // The fold's own input, widened with the columns that let this fact NAME the commit — the
+        // fold reads `targetShaAfter` (`upstreamReceiptCarriesLine`) but not `id`, and a reader that
+        // wrote its own copy of this select would be a second author of what the fold sees.
         ...LANDING_SERVING_WORK_SELECT,
         mergeReceipts: {
           where: { result: { in: [...LANDED_RESULTS] } },

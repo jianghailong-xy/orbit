@@ -119,7 +119,7 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
-import { scheduleRunDisallowedTools } from '../schedules/schedule-access';
+import { scheduleRunAgentFields, scheduleRunDisallowedTools } from '../schedules/schedule-access';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -1216,6 +1216,8 @@ export class QueueService {
           (workspace?.disallowedTools as string[] | null) ?? [],
           session.scheduleRun?.schedule.accessLevel,
         ),
+        // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
+        ...scheduleRunAgentFields(session.scheduleRun?.schedule.accessLevel),
         // Configured providers still borrow one of these runtimes, so the same runtime-level
         // guard applies to API/MCP/old-client input as it does to built-in identities; their
         // vendor-defined model space is exempt from the Claude allow-list though.
