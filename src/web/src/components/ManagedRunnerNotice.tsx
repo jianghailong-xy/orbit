@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
-import { MANAGED_RUNNER_COPY } from '@orbit/shared';
+import { MANAGED_RUNNER_COPY, type ManagedRunnerStatus } from '@orbit/shared';
 import { encodeId } from '../lib/idCodec';
 import { useManagedRunnerActions, type ManagedRunner } from '../lib/managedRunner';
 import { Button } from './ui/Button';
+import { useConfirm } from './ui/ConfirmDialog';
 import { Spinner } from './ui/Spinner';
 import './ManagedRunnerNotice.css';
 
@@ -15,9 +16,36 @@ const ATTENTION = new Set(['failed', 'waitingOperator', 'removed', 'removing', '
  * the runner's runtimes when what it lacks is one signed in. Above the composer of a workspace on
  * the managed runner, and on the default landing of an account with nothing to open yet.
  */
-export function ManagedRunnerNotice({ managed, className }: { managed: ManagedRunner; className?: string }) {
+export function ManagedRunnerNotice({
+  managed,
+  className,
+  confirmEnsure = false,
+  onEnsured,
+}: {
+  managed: ManagedRunner;
+  className?: string;
+  /**
+   * Ask before Set up (D3 of docs/managed-runner-existing-account-entry-design.md): an account that already
+   * has a runner or a workspace is told what it adds. The new account's landing sets up at one click.
+   */
+  confirmEnsure?: boolean;
+  /** The server's answer to Set up, when it took it. */
+  onEnsured?: (status: ManagedRunnerStatus) => void;
+}) {
   const { retry, ensure } = useManagedRunnerActions();
+  const [confirm, confirmation] = useConfirm();
   const { status, display } = managed;
+  const setUp = () => ensure.mutate(undefined, { onSuccess: (answer) => onEnsured?.(answer) });
+  const pressSetUp = () => {
+    if (!confirmEnsure) return setUp();
+    void confirm({
+      title: MANAGED_RUNNER_COPY.confirm.title,
+      description: MANAGED_RUNNER_COPY.confirm.body,
+      cancelText: MANAGED_RUNNER_COPY.confirm.cancel,
+      confirmText: MANAGED_RUNNER_COPY.confirm.confirm,
+      onConfirm: setUp,
+    });
+  };
   const tone = ATTENTION.has(display.kind) ? ' attention' : '';
   return (
     <div
@@ -45,12 +73,13 @@ export function ManagedRunnerNotice({ managed, className }: { managed: ManagedRu
             </Button>
           )}
           {display.ensure && (
-            <Button size="small" variant="primary" loading={ensure.isPending} onClick={() => ensure.mutate()}>
+            <Button size="small" variant="primary" loading={ensure.isPending} onClick={pressSetUp}>
               {MANAGED_RUNNER_COPY.ensure}
             </Button>
           )}
         </div>
       )}
+      {confirmation}
     </div>
   );
 }

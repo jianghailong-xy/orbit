@@ -22,6 +22,8 @@ You are running one task Orbit has already recorded, so newly discovered work ha
 
 When this task's position changes -- a new phase, or another item of a known total done -- report it with task_progress_report. Orbit reads progress only from that report, never from your Bash output or transcript, and only a change of phase, current or total counts as progress; a message alone does not. If a report is refused with 409 PROGRESS_REVISION_CONFLICT, read the progress again, then report.
 
+Use delegate to hand a self-contained piece of work to a cheaper or stronger model than yours, to run it on another machine (needs: ["os:darwin"], or workspace), or to run an independent piece in the background while you go on. Prefer it to your engine's built-in subagent or Agent tool when Orbit should pick the model, record the cost or run the work elsewhere. In Claude Code, load it first with ToolSearch select:mcp__orbit__delegate.
+
 Before changing a file, use wiki_search with its path to look up known pitfalls, if your tool list has it.
 
 Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and they need no shell. Inside a session the Orbit CLI at `'/usr/local/bin/orbit'` takes the same approvals and attributes the work to you; it needs `'/usr/local/bin/orbit' capabilities --json` first to discover its commands, then run the returned argv with that exact absolute path. Pass `--receipt` to read the receipt its MCP tool answers with; `--json` prints the entity alone. Do not run `'/usr/local/bin/orbit' mcp` directly.

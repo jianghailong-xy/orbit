@@ -11,6 +11,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
 import { AgentProvider, ENGINE_CLI_NAMES, type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -1196,6 +1197,8 @@ function NewWorkspacePage() {
   const [params, setParams] = useSearchParams();
   const runnersQ = useQuery(runnersQuery());
   const runners = (runnersQ.data ?? []) as Runner[];
+  // The account's managed runner reads its shared state here (Asleep, Waking up…), never Offline.
+  const { managed } = useManagedRunner();
   const machineId = routeId(params.get('machine'));
   const runner = runners.find((r) => r.id === machineId) ?? null;
 
@@ -1273,7 +1276,7 @@ function NewWorkspacePage() {
                   >
                     <SettingsRow
                       title={runnerName(r)}
-                      description={offline ? 'Offline' : 'Online'}
+                      description={managedRowOf(managed, r.id)?.label ?? (offline ? 'Offline' : 'Online')}
                       control={<RightOutlined />}
                     />
                   </button>

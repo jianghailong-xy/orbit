@@ -1,0 +1,139 @@
+<!doctype html>
+<!-- Design mock: Compact and Start a new coordinator in the composer's Context popover
+     (ContextWindowIndicator, src/web/src/components/WorkspaceView.tsx; macOS/iOS ComposerView.swift).
+     The gauge rows are the real .cu-pop / .cu-head / .runner-util classes. Not shipped code. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Context popover · Compact and Start a new coordinator</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="boards.css">
+</head>
+<body class="m">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-compact" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h16M4 15h16"/><path d="M9 4l3 3 3-3M9 20l3-3 3 3"/></symbol>
+  <symbol id="i-handoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-5"/><path d="M3 12h11M10 8l4 4-4 4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+</svg>
+
+<div class="m-sheet">
+  <h1 class="m-h1 zh">01 · Context 弹出面板：Compact 与 Start a new coordinator</h1>
+  <p class="m-sub zh">上半部分沿用现在的 Context window 读数，下面隔一条线加操作行。普通会话只有 Compact；当前 coordinator 会话再加 Start a new coordinator。Web 和 macOS 是同一个面板，手机端见 03。</p>
+
+  <div class="m-grid3">
+    <!-- A: coordinator, idle, 82% -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">A</span><span class="zh">Coordinator 会话 · 空闲 · 82%</span></div>
+      <div class="dock tall">
+        <div class="pop m-mark">
+          <span class="m-n">1</span>
+          <div class="pop-t">Context</div>
+          <div class="cu-pop">
+            <div class="cu-row">
+              <div class="cu-head"><span class="cu-label">Context window</span><span class="cu-pct">82%</span></div>
+              <div class="runner-util warn"><span class="runner-util-fill" style="width:82%"></span></div>
+              <div class="cu-reset">820k / 1M tokens</div>
+            </div>
+          </div>
+          <div class="acts-sep"></div>
+          <div class="act lead hover">
+            <span class="ic"><svg><use href="#i-compact"/></svg></span>
+            <span class="tx"><b>Compact</b><span>Summarize earlier turns and keep going here.</span></span>
+          </div>
+          <div class="act m-mark" style="outline-offset:1px">
+            <span class="m-n">2</span>
+            <span class="ic"><svg><use href="#i-handoff"/></svg></span>
+            <span class="tx"><b>Start a new coordinator</b><span>This one writes a handoff note, then the project continues in a fresh conversation.</span></span>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="ph">Message…</div>
+          <div class="foot">
+            <span class="model"><b>Opus 5.5</b><span>Default</span></span>
+            <span class="usage"><span class="bar"><i style="width:79%"></i></span>79%</span>
+            <span class="ring-pill on"><svg class="context-ring context-ring-warn" width="14" height="14" viewBox="0 0 14 14"><circle class="context-ring-track" cx="7" cy="7" r="5.5" fill="none" stroke-width="2.5"/><circle class="context-ring-fill" cx="7" cy="7" r="5.5" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.56" stroke-dashoffset="6.22" transform="rotate(-90 7 7)"/></svg>82%</span>
+            <span class="send"><svg><use href="#i-up"/></svg></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B: coordinator, running -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k new">B</span><span class="zh">Coordinator 会话 · 正在运行</span></div>
+      <div class="dock tall">
+        <div class="pop m-mark">
+          <span class="m-n">3</span>
+          <div class="pop-t">Context</div>
+          <div class="cu-pop">
+            <div class="cu-row">
+              <div class="cu-head"><span class="cu-label">Context window</span><span class="cu-pct">41%</span></div>
+              <div class="runner-util"><span class="runner-util-fill" style="width:41%"></span></div>
+              <div class="cu-reset">410k / 1M tokens</div>
+            </div>
+          </div>
+          <div class="acts-sep"></div>
+          <div class="act dis">
+            <span class="ic"><svg><use href="#i-compact"/></svg></span>
+            <span class="tx"><b>Compact</b><span class="why">Available when this turn ends.</span></span>
+          </div>
+          <div class="act">
+            <span class="ic"><svg><use href="#i-handoff"/></svg></span>
+            <span class="tx"><b>Start a new coordinator</b><span>Begins after this turn ends: a handoff note, then a fresh conversation.</span></span>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="ph">Message…</div>
+          <div class="foot">
+            <span class="model"><b>Opus 5.5</b><span>Default</span></span>
+            <span class="usage"><span class="bar"><i style="width:79%"></i></span>79%</span>
+            <span class="ring-pill on"><svg class="context-ring" width="14" height="14" viewBox="0 0 14 14"><circle class="context-ring-track" cx="7" cy="7" r="5.5" fill="none" stroke-width="2.5"/><circle class="context-ring-fill" cx="7" cy="7" r="5.5" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.56" stroke-dashoffset="20.39" transform="rotate(-90 7 7)"/></svg>41%</span>
+            <span class="send stop"><i></i></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- C: ordinary session -->
+    <div class="m-stage">
+      <div class="m-stage-l"><span class="m-k">C</span><span class="zh">普通会话 · 空闲 · 7%</span></div>
+      <div class="dock">
+        <div class="pop m-mark">
+          <span class="m-n">4</span>
+          <div class="pop-t">Context</div>
+          <div class="cu-pop">
+            <div class="cu-row">
+              <div class="cu-head"><span class="cu-label">Context window</span><span class="cu-pct">7%</span></div>
+              <div class="runner-util"><span class="runner-util-fill" style="width:7%"></span></div>
+              <div class="cu-reset">72k / 1M tokens</div>
+            </div>
+          </div>
+          <div class="acts-sep"></div>
+          <div class="act">
+            <span class="ic"><svg><use href="#i-compact"/></svg></span>
+            <span class="tx"><b>Compact</b><span>Summarize earlier turns and keep going here.</span></span>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="ph">Message…</div>
+          <div class="foot">
+            <span class="model"><b>Opus 5.5</b><span>Default</span></span>
+            <span class="usage"><span class="bar"><i style="width:79%"></i></span>79%</span>
+            <span class="ring-pill on"><svg class="context-ring" width="14" height="14" viewBox="0 0 14 14"><circle class="context-ring-track" cx="7" cy="7" r="5.5" fill="none" stroke-width="2.5"/><circle class="context-ring-fill" cx="7" cy="7" r="5.5" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="34.56" stroke-dashoffset="32.14" transform="rotate(-90 7 7)"/></svg>7%</span>
+            <span class="send"><svg><use href="#i-up"/></svg></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="m-notes zh">
+    <li><span class="m-n">1</span><span><b>只有到 75% 以上，Compact 才加强调</b>（蓝底图标、默认悬停）；读数行的颜色和现在的圆环一致：75% 起橙色，90% 起红色。低于 75% 时两行都用普通样式，见 C。不再另加提示文字，橙色的进度条已经说明快满了。</span></li>
+    <li><span class="m-n">2</span><span><b>Start a new coordinator 只在「该项目当前的 coordinator、且未完成」时出现。</b>点击后先弹确认（02-1），不会直接执行。看的是旧代 coordinator 或已完成的会话时不显示。</span></li>
+    <li><span class="m-n">3</span><span><b>运行中：</b>Compact 灰掉，说明 "Available when this turn ends."；Start a new coordinator 仍可点，确认后排在当前这一轮之后执行（后端本来就会等进行中的这一轮跑完）。</span></li>
+    <li><span class="m-n">4</span><span><b>普通会话只有 Compact。</b>引擎不支持 compact（例如 Cursor 显示 Unavailable，Codex 没有接入）就不显示操作区，面板和今天一样。Compact 会发出 <code>/compact</code>，压缩过程中沿用现有的 "Compacting…" 提示，不需要确认。</span></li>
+  </ul>
+</div>
+</body>
+</html>
