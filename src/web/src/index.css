@@ -1333,6 +1333,17 @@ button.toast--pill:focus-visible {
 .tp-account-current-theme {
   margin-left: auto;
 }
+/* A machine's state in the account menu's Machines level: green online, grey otherwise. */
+.tp-account-machine-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.tp-account-machine-dot[data-online='true'] {
+  background: var(--success-solid);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {

@@ -9,8 +9,7 @@ import { TasksSidePanel } from './TasksSidePanel';
 /**
  * Where an admin finds user management: a row of the account menu at the sidebar's foot, right
  * under Settings — not an entry among the fixed destinations up top, which are the same for every
- * account. A member's menu is the one it always was. Machines & models has no row there: it is a part
- * of Settings.
+ * account. A member's menu is the one it always was.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -120,7 +119,7 @@ describe('Admin, for an admin', () => {
     expect(topEntries()).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
 
     await openAccountMenu();
-    expect(menuRows()).toEqual(['Settings', 'Admin', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Admin', 'Log out']);
   });
 
   it('opens the Users page', async () => {
@@ -151,6 +150,6 @@ describe('Admin, for a member', () => {
     expect(topEntries()).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
 
     await openAccountMenu();
-    expect(menuRows()).toEqual(['Settings', 'Log out']);
+    expect(menuRows()).toEqual(['MachinesNone', 'Settings', 'Log out']);
   });
 });
