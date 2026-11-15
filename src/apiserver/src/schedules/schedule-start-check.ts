@@ -109,3 +109,22 @@ export async function scheduleStartCheck(db: Db, schedule: Schedule): Promise<St
   }
   return { ok: true, plan: { mode, engine, provider } };
 }
+
+/** The window the weekly budget is counted over: a trailing 7×24 hours, not a calendar week. */
+export const SCHEDULE_BUDGET_WINDOW_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * Whether the schedule has already used its envelope's runs per week (§4): the runs that actually started (a
+ * session was opened, `startedAt`) in the trailing 7 days, of every trigger, against `envelopeRunsPerWeek`. A retry of
+ * a start that never reached its engine is the same row back in QUEUED with `startedAt` cleared (§7.2), so its
+ * attempts are one start. Read under the schedule lock the start takes, so two replicas cannot both pass.
+ */
+export async function scheduleOverBudget(db: Db, schedule: Schedule, now: Date): Promise<boolean> {
+  const started = await db.scheduleRun.count({
+    where: {
+      scheduleId: schedule.id,
+      startedAt: { gt: new Date(now.getTime() - SCHEDULE_BUDGET_WINDOW_MS) },
+    },
+  });
+  return started >= schedule.envelopeRunsPerWeek;
+}

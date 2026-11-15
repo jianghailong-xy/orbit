@@ -9,6 +9,7 @@
  *   | HELD, AWAITING_APPROVAL          | yes      | push and Waiting on you                |
  *   | the run ended its own schedule   | once     | push, opens the schedule               |
  *   | a ONCE slot MISSED (§5.2)        | once     | push, opens the schedule               |
+ *   | a slot MISSED over budget (§4)   | once     | push, opens the schedule; once a row   |
  *
  * WAITING ON YOU is the owner-request channel (owner-requests/): four kinds no session can file, written here in the
  * transaction that decides them, each keyed so a replay writes one row (`clientRequestId` under its asking session):
@@ -41,7 +42,8 @@ export type ScheduleAlertKind =
   | 'AWAITING_APPROVAL'
   | 'WIDEN'
   | 'GOAL_REACHED'
-  | 'ONCE_MISSED';
+  | 'ONCE_MISSED'
+  | 'OVER_BUDGET';
 
 /** One push. `opens` is where a tap goes: the run's session, or the schedule. */
 export interface ScheduleAlert {
@@ -107,6 +109,41 @@ export function failureClause(reason: string, ctx: { summary?: string | null; ru
     default:
       return `it failed (${reason})`;
   }
+}
+
+/** Why a run did not start or ended, as its row in the run list says it; null for a run with no reason. */
+export function runReasonText(run: { state: string; failureReason: string | null; heldReason: string | null }): string | null {
+  if (run.state === 'HELD' && run.heldReason) return `Held: ${heldClause(run.heldReason)}.`;
+  if (!run.failureReason) return null;
+  switch (run.failureReason) {
+    case 'OVER_BUDGET':
+      // No count: the envelope may have changed since, and the row should stay true.
+      return 'Not started: it had already started as many runs in the past 7 days as you allowed.';
+    case 'RUNNER_UNAVAILABLE':
+      return run.state === 'MISSED' ? 'Not started: the runner was not available in time.' : 'The runner was not available.';
+    case 'QUOTA':
+      return run.state === 'MISSED' ? "Not started: the engine's usage limit was reached." : "The engine's usage limit was reached.";
+    case 'ENGINE_CRASHED_BEFORE_START':
+      return run.state === 'MISSED' ? 'Not started: the engine stopped before the run began.' : 'The engine stopped before the run began.';
+    case 'CANCELLED_BY_OWNER':
+      return 'You stopped this run.';
+    default:
+      return `Failed: ${failureClause(run.failureReason, { summary: null })}.`;
+  }
+}
+
+function overBudgetClause(runsPerWeek: number): string {
+  return `it had already started ${runsPerWeek} run${runsPerWeek === 1 ? '' : 's'} in the past 7 days, as many as you allowed`;
+}
+
+export function overBudgetCopy(title: string, runsPerWeek: number): { title: string; body: string } {
+  return {
+    title: line(`${title} skipped a run`, 120),
+    body: line(
+      `A run was not started: ${overBudgetClause(runsPerWeek)}. `
+      + 'Its slots run again as older runs leave the 7 days; Run now still starts one.',
+    ),
+  };
 }
 
 /** Why a schedule is held, in a clause (§6.1's reasons). */

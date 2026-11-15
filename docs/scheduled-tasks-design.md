@@ -200,6 +200,16 @@ The rule, checked by the server on every `schedule_create` and `schedule_update`
 The budget is counted in runs and minutes, not in money, because a subscription account reports no cost per run.
 The inspector shows what was used: "This month: 14 runs · 41 min", with a cost where the engine reports one.
 
+**Runs per week bounds the runs that start, not only the rule.** Moving the time of day or the weekdays is inside
+the envelope, and a session that moved its rule to "a few minutes from now" after every run would otherwise run back
+to back. So before a run starts (§6.1) the server counts the schedule's runs that actually started (a session was
+opened: `startedAt`) in the trailing 7×24 hours, of every trigger, under the schedule lock the start takes, so two
+replicas cannot both pass. At `envelope.runsPerWeek` or more, the slot is not started: it is MISSED with
+`failureReason = OVER_BUDGET`, the schedule stays ACTIVE (not HELD, not paused) and its next slot is computed as
+usual. A start retried because it never reached its engine (§7.2) is one start. The owner is told once, by push,
+for a slot over budget, and not again for the next ones in a row; the run list says "Not started: it had already
+started as many runs in the past 7 days as you allowed." Run now follows §8.4.
+
 A run that reaches its limit is interrupted and fails with `RUN_LIMIT`. The schedule goes on.
 
 ## 5. Firing
@@ -213,7 +223,9 @@ A worker reads `Schedule WHERE state = 'ACTIVE' AND nextDueAt <= now()`. For eac
 3. Apply overlap: when a run is RUNNING or AWAITING_APPROVAL, the new run is QUEUED. When one is already QUEUED, the
    older queued run becomes SKIPPED and the new one takes its place. There is never more than one waiting.
 
-A QUEUED run starts when the run ahead of it ends. Starting a run (§6) happens outside this transaction.
+A QUEUED run starts when the run ahead of it ends. Starting a run (§6) happens outside this transaction, and is
+where the weekly budget is enforced (§4): a slot fires as usual, and its run is MISSED (`OVER_BUDGET`) instead of
+started when the schedule already started its runs per week in the trailing 7 days.
 
 ### 5.1 Time
 
@@ -400,6 +412,7 @@ findings and the note.
 | FAILED | yes | push and **Waiting on you** |
 | HELD, AWAITING_APPROVAL | yes | push and **Waiting on you** |
 | the run ended its own schedule (§8.3) | once | push, opens the schedule |
+| a slot MISSED over the weekly budget (§4) | once, not for the next slots in a row | push, opens the schedule |
 
 - "Tell me every day" needs no setting: the agent writes a prompt that reports each run as CHANGED with a key per day
   (`summary@2026-11-15`).
@@ -484,7 +497,7 @@ Each is a `ScheduleRevision` with `changedBy = RUN` and **Undo**. A run asking t
 | --- | --- |
 | Pause | ACTIVE → PAUSED, `nextDueAt` = NULL, a QUEUED run becomes CANCELLED. A RUNNING run continues. |
 | Resume | PAUSED or HELD → ACTIVE, next slot after now. From HELD the §6.1 checks run first. Slots missed while paused are not caught up. |
-| Run now | Writes a MANUAL run under the overlap rule. Allowed when PAUSED; refused when ENDED. Does not count against runs per week. |
+| Run now | Writes a MANUAL run under the overlap rule. Allowed when PAUSED; refused when ENDED. The owner's Run now (the owner channel, or a personal access token, recorded as the person) is the owner's own press: it starts even over the weekly budget. A session's is refused over budget (`SCHEDULE_OVER_BUDGET`). Either counts as a start toward later automatic runs (§4). |
 | Stop this run | Interrupts the run's session, run → CANCELLED (`CANCELLED_BY_OWNER`). The schedule is unchanged. |
 | Delete | ENDED (`DELETED`), a QUEUED run is cancelled, a RUNNING one continues. Runs and findings are kept. |
 
@@ -635,6 +648,14 @@ and on OpenCode a `CHECK_ONLY` run can read but not fetch. Codex fetches and, in
 record §8, also reads the checkout in its read-only sandbox with no card (on an older runner it can fetch but not
 read). Two follow-ups were filed: closing Claude's shell-write gap in `plan`, and letting Codex Plan read the
 checkout (done for scheduled runs with Codex's read-only sandbox, record §8).
+
+**Weekly budget (S2d, 2026-11-15).** The envelope's runs per week was first enforced only on the rule
+(`judgeEnvelopeChange` and the start check compare `runsPerWeek(rule)` with the envelope), so a rule moved inside
+the envelope after every run started without limit. It is now also a count of real starts in the trailing 7 days,
+read at each start under the schedule lock (`scheduleOverBudget` in `schedule-start-check.ts`, §4): a slot over it
+is MISSED (`OVER_BUDGET`), told once, and the schedule goes on; the owner's Run now starts over it and counts; a
+session's Run now over it is refused (`SCHEDULE_OVER_BUDGET`); a retried undelivered start is one start (the retry
+reuses the run row and clears `startedAt`). No migration: `schedule_run.started_at` and `failure_reason` carry it.
 
 **3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes, then hourly inside the
 catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without

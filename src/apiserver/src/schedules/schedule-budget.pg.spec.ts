@@ -233,7 +233,7 @@ test('1. a rule moved to a few minutes from now after every run starts at most r
   const history = (await runs.history(w.ownerId, s.id)) as Array<{ id: string; state: string; failureReason: string | null; reasonText?: string | null }>;
   const row = history.find((r) => r.id === over[0].id)!;
   assert.equal(row.failureReason, 'OVER_BUDGET');
-  assert.match(row.reasonText ?? '', /^Not started: it had already started 7 runs in the past 7 days/);
+  assert.match(row.reasonText ?? '', /^Not started: it had already started as many runs in the past 7 days as you allowed/);
   assert.ok(!/[一-鿿]/.test(row.reasonText ?? ''), 'English');
   const ok = history.find((r) => r.state === 'NO_CHANGE')!;
   assert.equal(ok.reasonText, null, 'a run without a reason has no reason text');
