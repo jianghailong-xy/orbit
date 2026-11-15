@@ -62,6 +62,16 @@ test('a CHECK_ONLY run on Claude Code is allowed exactly what a check needs: no 
   ]) {
     assert.ok(!allowed.includes(`mcp__orbit__${tool}`), tool);
   }
+  // Every listed Orbit tool is one the runner offers (S4's schedule_* tools included), so none is a dead rule.
+  const catalogue = readFileSync(join(__dirname, '..', '..', '..', 'runner-go', 'operation_catalog.go'), 'utf8');
+  for (const tool of allowed.filter((t) => t.startsWith('mcp__orbit__'))) {
+    const name = tool.slice('mcp__orbit__'.length);
+    assert.ok(catalogue.includes(`"${name}"`), `${name} is in runner-go's operation catalogue`);
+  }
+  for (const tool of ['schedule_create', 'schedule_pause', 'schedule_resume', 'schedule_run_now', 'schedule_run_stop', 'schedule_delete', 'schedule_wakeup']) {
+    assert.ok(catalogue.includes(`"${tool}"`), tool);
+    assert.ok(!allowed.includes(`mcp__orbit__${tool}`), `${tool} is not a CHECK_ONLY run's`);
+  }
   // Only Orbit tools that read, report the run, or touch the run's own schedule.
   for (const tool of allowed.filter((t) => t.startsWith('mcp__orbit__'))) {
     assert.match(tool, /^mcp__orbit__(schedule_(run_report|get|list|update|end)|notify|[a-z]+_(get|list|search|fetch))$/, tool);

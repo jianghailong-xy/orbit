@@ -305,7 +305,10 @@ hands the runner, for that run only:
   read-only, so there is no `mcp__orbit__*` wildcard and none of the workspace's "Always allow" rules (one could
   cover `npm install` or `Edit`):
   - the run's own schedule: `schedule_run_report`, `schedule_get`, `schedule_list`, `schedule_update`,
-    `schedule_end` (the server holds a run to the schedule it serves and to its envelope, §8.3);
+    `schedule_end` (the server holds a run to the schedule it serves and to its envelope, §8.3: an update or end of
+    any other schedule, and a create, pause, delete or run-now of any, is refused `SCHEDULE_RUN_SESSION_SCOPE`);
+    `schedule_create`, `schedule_pause`, `schedule_resume`, `schedule_run_now`, `schedule_run_stop`,
+    `schedule_delete` and `schedule_wakeup` are not on the list;
   - `notify`;
   - reads: `task_get`, `task_list`, `session_get`, `session_search`, `project_get`, `wiki_search`, `wiki_get`,
     `file_fetch`, `file_list`;
