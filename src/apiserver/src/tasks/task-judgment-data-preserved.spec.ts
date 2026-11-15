@@ -3009,6 +3009,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // approval_decided_via_chk and lets activity_credential_chk say TERMINAL; no preserved rows, triggers or DONE
       // fence change, and no row is written.
       '0663_approval_decided_terminal_machine',
+      // 0670 adds session.opened_by (who opened a conversation), its CHECK and a partial index, and backfills it on
+      // conversations with no task and no parent; no preserved table, trigger or DONE fence changes.
+      '0670_session_opened_by',
       // 0700 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
       '0700_session_settings',
       // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the

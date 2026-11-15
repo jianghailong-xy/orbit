@@ -58,8 +58,6 @@ import io.orbitd.android.core.cards.WatchWakeQueue
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.realtime.SessionState
 import io.orbitd.android.management.EngineAccounts
-import io.orbitd.android.management.LocalDefaultModels
-import io.orbitd.android.management.LocalRememberModel
 import io.orbitd.android.management.LocalSmartSelection
 import io.orbitd.android.management.LocalTranslation
 import io.orbitd.android.core.translation.Translation
@@ -121,14 +119,16 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     val clipboard = context.getSystemService(ClipboardManager::class.java)
     val detail = session?.snapshot?.detail ?: JsonObject(emptyMap())
     val picked = JsonObject(detail + draft.resumeConfig)
-    // A07-19 (e): a new session that names no model starts on the one last picked for its engine and credential (iOS
-    // `draftModelSeed`) while the runner still offers it — read once the account remembers any.
-    val remembered = LocalDefaultModels.current
-    LaunchedEffect(model, remembered.isNotEmpty()) {
-        if (target != null && remembered.isNotEmpty() && model.state.value.let { it.catalog == null && !it.catalogLoading }) model.loadCatalog()
+    // A new session that names no model starts on its workspace's `lastModel` when it runs on the workspace's lastEngine and
+    // lastProvider, while the runner still offers it (docs/workspace-default-model-design.md) — read once the workspace has one.
+    val lastModel = detail.text("lastModel") != null
+    LaunchedEffect(model, lastModel) {
+        if (target != null && lastModel && model.state.value.let { it.catalog == null && !it.catalogLoading }) model.loadCatalog()
     }
     val seed = if (target == null || draft.resumeConfig["model"] != null) null else state.catalog?.let { catalog ->
-        catalog.engineOf(picked).let { engine -> catalog.liveRememberedModel(engine, picked.text("provider") ?: engine, remembered) }
+        catalog.engineOf(picked).let { engine ->
+            catalog.liveLastModel(engine, draft.resumeConfig.text("provider") ?: detail.text("lastProvider") ?: engine, detail)
+        }
     }
     val effective = if (seed == null) picked else JsonObject(picked + ("model" to JsonPrimitive(seed)))
     // What is still waiting, as the transcript's tail draws it (A07-14): never the accepted head — the runner's now, which nothing
@@ -531,7 +531,6 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
     val engine = catalog?.engineOf(detail) ?: ProviderEngines.sessionEngine(detail.text("engine") ?: detail.text("lastEngine"), provider, emptyList())
     val chosen = detail.text("model") ?: ""
     val enabled = usable && !state.busy && catalog != null && state.draft.pending == null
-    val rememberModel = LocalRememberModel.current
     fun change(key: String, value: String) { model.config(buildJsonObject { put(key, value) }) }
     AlertDialog(onDismissRequest = close, title = {
         // The engine this session runs on for good (iOS 0557592f8), over everything below that picks for the next turn — in the
@@ -554,9 +553,6 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             rows.forEach { row ->
                 TextButton(enabled = enabled, onClick = {
                     val id = row.text("value") ?: return@TextButton
-                    // A07-19 (e): the next new session on this engine and credential starts on it (`<engine>:<provider>`, contract
-                    // §6.5): one key's model on Claude Code is not its model on DeepSeek Harness.
-                    if (provider.isNotEmpty()) rememberModel(engine, provider, id)
                     model.config(buildJsonObject {
                         put("model", id)
                         val effort = detail.text("effort") ?: ""
@@ -633,15 +629,14 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
     val runnerName = RunnerPage.displayName(catalog.runner)
     val amber = LocalOrbitColors.current.needsYou
     val draft = model.target != null
-    val remembered = LocalDefaultModels.current
     // A Cursor CLI session that has talked, on a runner that can't carry its conversation: its other accounts and keys are listed but
     // can't be picked, and the menu says why (D5, iOS 6 ④⑤) — the move the server would refuse.
     val moveBlocked = CursorRuntime.moveBlocked(engine, detail, catalog.runner, draft)
     fun pick(option: ProviderOption, account: String? = null) = model.config(buildJsonObject {
         put("provider", option.id); put("engine", engine)
         account?.let { put("account", it) }
-        // A draft lands on the model last picked for the engine and this credential (A07-19 (e)).
-        put("model", if (draft) catalog.newSessionModel(engine, option.id, remembered) else catalog.defaultModel(engine, option.id)); put("effort", "")
+        // A draft lands on its workspace's lastModel where that is this engine and credential's, else their default.
+        put("model", if (draft) catalog.newSessionModel(engine, option.id, detail) else catalog.defaultModel(engine, option.id)); put("effort", "")
     })
     @Composable fun header(text: String) = Text(text, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -739,7 +734,6 @@ internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: J
     val catalog = state.catalog
     val uri = LocalUriHandler.current
     val current = catalog?.engineOf(detail)
-    val remembered = LocalDefaultModels.current
     // Where each engine lands: the draft's pick, then what the workspace last ran there.
     val preferred = listOf(detail.text("engine") to detail.text("provider"), detail.text("lastEngine") to (detail.text("lastProvider") ?: detail.text("provider")))
     AlertDialog(onDismissRequest = close, title = { Text(EngineCopy.ENGINE) }, text = {
@@ -764,8 +758,8 @@ internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: J
                     else if (repair != null) catalog.runner.text("id")?.let { runner -> openRunner?.invoke(runner, repair) }
                     else if (landing != null && option.engine != current) model.config(buildJsonObject {
                         put("engine", option.engine); put("provider", landing.id)
-                        // The model last picked for the engine and where it lands, while still offered (A07-19 (e), iOS `pickDraft`).
-                        val next = catalog.newSessionModel(option.engine, landing.id, remembered)
+                        // The workspace's lastModel where the engine lands on its lastEngine and lastProvider, else their default.
+                        val next = catalog.newSessionModel(option.engine, landing.id, detail)
                         put("model", next); put("effort", "")
                         // A mode the new engine refuses is not carried over: DeepSeek Harness takes Default, Auto and Don't Ask; Cursor CLI
                         // has no Default, and starts in Accept Edits (D6).

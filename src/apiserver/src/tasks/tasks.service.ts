@@ -9,6 +9,7 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import { taskRunAnchor, taskRunAnchors } from '../workspaces/start-anchor';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
@@ -9376,7 +9377,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // and a row with work of its own is one whose detail has a verifier state like any other.
     const [
       dependencyFacts, supersession, autoRunSkipped, workState, progress, verifier, routes, modelHintOptions, integrations,
-      forkSource,
+      forkSource, runsWith,
     ] =
       await Promise.all([
         this.dependencyFactsFor(ownerId, [id]),
@@ -9394,6 +9395,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.modelHintOptions(ownerId, task),
         task.projectId ? readTaskIntegrationViews(this.prisma, ownerId, task.projectId, [id]) : new Map(),
         forkSourceLine(this.prisma, task),
+        this.runsWith(ownerId, task),
       ]);
     const dependencyState = computeDependencyState(dependencyFacts.get(id) ?? []);
     return {
@@ -9428,6 +9430,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       progress,
       // What each suggested tier runs as for this task, so no client keeps a tier table of its own.
       modelHintOptions,
+      // What the next fresh run starts on, by the resolution dispatch makes (SessionsService.taskRunsWith):
+      // "Runs with" on every client reads this rather than the assignee's lastEngine/lastProvider.
+      runsWith,
       // Where the work stands between DONE and main, with its newest LAND_TASK (§2.7a): the read
       // the project's task rows make, so the task's page and the project's cannot disagree.
       integration: integrations.get(id) ?? {
@@ -9446,6 +9451,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       forkSource,
       ...supersession,
     };
+  }
+
+  /** The task's TaskRunsWith, or null when it could not be read: a decoration, never a reason to fail the read. */
+  private async runsWith(
+    ownerId: string,
+    task: { id: string; engine: string | null; provider: string | null; assigneeId: string | null },
+  ) {
+    try {
+      return await this.sessions.taskRunsWith(ownerId, {
+        id: task.id, engine: task.engine, provider: task.provider, workspaceId: task.assigneeId,
+      });
+    } catch (e) {
+      this.logger.warn(`task ${task.id}: runsWith not read: ${(e as Error)?.message ?? e}`);
+      return null;
+    }
   }
 
   /**
@@ -9655,6 +9675,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           provider: dto.provider ?? before.provider,
           model: dto.model ?? before.model,
           workspaceId: dto.assigneeId ?? before.assigneeId,
+          anchor: () => taskRunAnchor(this.prisma, id),
         },
         'A schedule or auto-run would start this task in the account default, so nothing was written. ' +
           'A person can press Start on the task page, or switch this session to Auto.',
@@ -12303,6 +12324,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (candidates.length === 0) return engines;
     // One batched lookup for the whole sweep rather than one per row.
     const seeds = await lastProviderByWorkspace(this.prisma, candidates.map((c) => c.workspaceId));
+    // A project's task runs on its coordinator's pair before the workspace's (start-anchor.ts).
+    const anchors = await taskRunAnchors(this.prisma, candidates.map((c) => c.id));
     const taskIds = [...new Set(
       candidates.filter((c) => c.modelRouting === true && c.runnerId).map((c) => c.id),
     )];
@@ -12323,7 +12346,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const task = tasks.get(c.id);
       let credential = dispatchCredentialOf(
         { engine: c.taskEngine ?? null, provider: c.taskProvider ?? null },
-        seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
+        anchors.get(c.id) ?? seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER,
       );
       if (task && c.runnerId) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
@@ -14528,6 +14551,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: sessionId,
         // The opening is the mention as the platform hands it on, not the owner's words (0493, design §3.5).
         promptByOrbit: true,
+        openedBy: 'MENTION_REPLY',
         // A conversation about a task needs no branch and no worktree. Creating one would leave an
         // unmerged branch behind for a reply to a comment, which reads as work nobody finished.
         noWorktree: true,
@@ -14897,6 +14921,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // and asserting it here rather than per-caller is what keeps a future fifth caller from
         // quietly inheriting the salvage exemption.
         startsTaskWork: true,
+        // Unpinned and unrouted, a project's task runs on its coordinator's pair, not the
+        // workspace's newest conversation (docs/workspace-default-model-design.md §2.1).
+        anchor: () => taskRunAnchor(this.prisma, task.id),
       },
     );
     await this.clearStaleDispatchRefusal(task.id, session.id);
@@ -15378,7 +15405,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.sessions.assertMayStartAtAccountDefault(
         ownerId,
         actingSessionId,
-        { ...taskRunDispatch(task, route), workspaceId: task.assignee!.id },
+        { ...taskRunDispatch(task, route), workspaceId: task.assignee!.id, anchor: () => taskRunAnchor(this.prisma, task.id) },
         'This task would start in the account default. A person can press Start on the task page, or ' +
           'switch this session to Auto.',
       );
