@@ -2337,6 +2337,8 @@ struct DeliveredDecisionCardView: View {
                                  onChat: { console.startOwnerRequestReply($0) })
             case .crossingBatch(let batchID):
                 CrossingDecisionCard(console: console, batchID: batchID)
+            case .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+                ScheduleConsoleCard(console: console, kind: card.kind)
             }
         }
         .environment(\.approvalReviewTarget, .delivered(card))

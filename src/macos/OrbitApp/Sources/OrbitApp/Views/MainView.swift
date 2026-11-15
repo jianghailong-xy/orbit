@@ -627,6 +627,13 @@ struct SectionContent: View {
             TasksListView()
         case .wiki:
             WikiContentsColumn()
+        case .scheduled:
+            // The phone's drawer and the iPad's sidebar open Scheduled; the Mac's source list does not list it yet.
+            #if os(iOS)
+            ScheduledPage()
+            #else
+            ComingSoon(section: section, note: "")
+            #endif
         case .following:
             FollowingListView()
         case .agents:
@@ -676,6 +683,9 @@ struct SectionDetail: View {
             TaskDetailView()
         case .wiki:
             WikiDetailPane().wikiChatHost()   // the chat's third column beside the page (wiki-chat design §9)
+        case .scheduled:
+            // The detail is the page's own bottom panel.
+            ContentUnavailableView(section.title, systemImage: section.systemImage)
         case .following:
             WatchDetailView()
         case .agents:
