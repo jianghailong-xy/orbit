@@ -94,10 +94,12 @@ fun toastTitle(title: String?): String? = title?.lineSequence()?.firstOrNull()?.
  * the composer nor the keyboard. A phone shows the newest of the toasts that wait for you — a tinted card that folds into
  * a pill after six seconds and opens again from it — and the one transient toast under it: a pill that hugs its words,
  * or a card when it carries an Undo or a diagnostic. A toast naming a session is the way into it ([open]); flicking a
- * toast up takes it away early; a finger resting on a transient toast keeps it until it is let go.
+ * toast up takes it away early; a finger resting on a transient toast keeps it until it is let go. Over them all, [needsYou]:
+ * the notices of what has just started waiting on you.
  */
 @Composable
-fun ToastHost(open: (ToastItem) -> Unit, undo: (ToastItem) -> Unit, resolve: (ToastItem) -> Unit, modifier: Modifier = Modifier) {
+fun ToastHost(open: (ToastItem) -> Unit, undo: (ToastItem) -> Unit, resolve: (ToastItem) -> Unit, modifier: Modifier = Modifier,
+    needsYou: @Composable () -> Unit = {}) {
     val feed by OrbitToasts.feed.collectAsState()
     val held by OrbitToasts.held.collectAsState()
     val transient = feed.transient
@@ -117,6 +119,8 @@ fun ToastHost(open: (ToastItem) -> Unit, undo: (ToastItem) -> Unit, resolve: (To
     }
     Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // What has just started waiting on you, first (`NeedsYouToasts`; the owner, 2026-11-15, needs-you-capsule/12-once).
+        needsYou()
         val front = feed.front?.let { Front(it, feed.expanded == it.id, feed.behindFront) }
         AnimatedContent(front, contentKey = { it?.toast?.id }, transitionSpec = { arrival() }, label = "pinned toast") { shown ->
             if (shown != null) SwipeAway(shown.toast.id, hold = false) {

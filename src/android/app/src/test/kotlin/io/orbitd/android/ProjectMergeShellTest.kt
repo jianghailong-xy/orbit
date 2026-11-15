@@ -334,20 +334,19 @@ class ProjectMergeShellTest {
         await { exists(hasText("git revert -m 1 8d5a868e90df") and hasAnyAncestor(hasTestTag("promotion-receipt"))) }
     }
 
-    /** The needs-you bar's merge waiting elsewhere opens its project's sessions page, where its card is (iOS 6b4bef713), and not the
-     * coordinator conversation. Two wait here (the merge and "Quota retry"), so since 31a1adad3 the first press unfolds the bar into one
-     * capsule each and the merge's capsule is the one that goes. */
-    @Test fun theNeedsYouBarOpensAWaitingMergeOnItsProjectsSessionsPage() {
-        ProjectShell.promotion = candidate("READY"); ProjectShell.mergeWaiting = true
-        // Over the session list: a conversation carries no bar for what waits elsewhere (07-console-one-capsule).
+    /** A merge that starts waiting is noticed once at the top (the owner, 2026-11-15, needs-you-capsule/12-once), and the notice
+     * opens its project's sessions page, where its card is (iOS 6b4bef713), and not the coordinator conversation. What already waited
+     * at sign-in ("Quota retry") is not news. */
+    @Test fun theNoticeOfAWaitingMergeOpensItsProjectsSessionsPage() {
+        ProjectShell.promotion = candidate("READY")
         signIn()
         await { exists(hasText("Plain notes") and hasClickAction()) }
-        await { exists(hasTestTag("needs-you-bar-text") and hasText("Approve merge to main"), unmerged = true) &&
-            exists(hasTestTag("needs-you-bar-detail") and hasText("Launch"), unmerged = true) }
-        compose.onNodeWithTag("needs-you-bar").performClick()
-        await { exists(hasTestTag("needs-you-bar-fold")) }
-        assertFalse("unfolding goes nowhere", exists(hasTestTag("project-sessions")))
-        compose.onNode(hasClickAction() and hasText("Approve merge to main")).performClick()
+        assertFalse("what waited at sign-in is not noticed", exists(hasTestTag("needs-you-toast")))
+        ProjectShell.mergeWaiting = true
+        app().realtime.refreshDirectory()
+        await { exists(hasTestTag("needs-you-toast-line") and hasText("Approve merge to main", substring = true), unmerged = true) }
+        compose.onAllNodesWithTag("needs-you-toast").assertCountEquals(1)
+        compose.onNode(hasTestTag("needs-you-toast") and hasText("Approve merge to main", substring = true)).performClick()
         await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("project-merge-card:asking")) }
         assertFalse("the coordinator conversation is not where it opens", ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}"))
         compose.onNodeWithContentDescription("Back").assertExists()

@@ -210,16 +210,11 @@ final class NavigationEntrancesWiringTests: XCTestCase {
                        "no comparison of the two spellings as strings is left")
     }
 
-    /// The approval push's other two readers. The foreground card (now the needs-you bar's arrival)
-    /// looked its title up by the UUID and found nothing, and the needs-you rows are list-spelled. The Notification Center reconcile
-    /// read every server banner's thread id (the UUID) as "no longer needs you" and cleared them all.
+    /// The approval push's other reader. The Notification Center reconcile read every server
+    /// banner's thread id (the UUID) as "no longer needs you" and cleared them all. (The foreground
+    /// card it fed is gone: a wait is noticed from the needs-you rows, 12-once.)
     func testAnApprovalPushIsReadInTheListsSpelling() throws {
         let app = code(try appSource("AppModel.swift"))
-        let card = try slice(app, from: "notifications.onForegroundApproval = {",
-                             to: "line: line)")
-        XCTAssertTrue(card.contains("noteNeedsYouArrival(sessionID: PublicID.toPublic(sessionID)"),
-                      "the needs-you bar looks the pushed session up in the lists' spelling")
-
         let reconcile = try slice(app, from: "private func reconcileDeliveredApprovals(_ needsYou: Set<String>) {",
                                   to: "#endif")
         XCTAssertTrue(reconcile.contains(
