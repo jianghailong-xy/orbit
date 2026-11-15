@@ -351,8 +351,9 @@ struct ConsoleView: View {
             // A coordinator handing itself over (board 02): the note being written, the handover, or
             // its failure above the composer; the composer locked while it runs; and once it is done,
             // the way to the successor in the composer's place.
-            let handoff = appModel.session(id: console.sessionID)?.coordinatorHandoff
-            let handoffRow = CoordinatorHandoffRow.resolve(handoff)
+            let handoffSession = appModel.session(id: console.sessionID)
+            let handoff = handoffSession?.coordinatorHandoff
+            let handoffRow = CoordinatorHandoffRow.resolve(handoff, enginePhase: handoffSession?.enginePhase)
             if let handoffRow {
                 if case .completed = handoffRow {} else {
                     CoordinatorHandoffStatusView(row: handoffRow) { handoffPress(console, $0) }

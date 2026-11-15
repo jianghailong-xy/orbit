@@ -135,11 +135,11 @@ struct CoordinatorHandoffStatusView: View {
 
     var body: some View {
         switch row {
-        case .writing(let startedAt):
+        case .writing(let startedAt, let label):
             box(tint: .accentColor) {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text(CoordinatorHandoffCopy.writing).foregroundStyle(Color.accentColor)
+                    Text(label).foregroundStyle(Color.accentColor)
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text(CoordinatorHandoffRow.clock(since: startedAt, now: context.date))
                             .monospacedDigit().foregroundStyle(.secondary)

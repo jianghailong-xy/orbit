@@ -34,6 +34,7 @@ class CoordinatorHandoffCopyParityTest {
             "handOver" to CoordinatorHandoffCopy.HAND_OVER,
             "badgeHandingOver" to CoordinatorHandoffCopy.BADGE_HANDING_OVER,
             "writing" to CoordinatorHandoffCopy.WRITING,
+            "compacting" to CoordinatorHandoffCopy.COMPACTING,
             "skipNote" to CoordinatorHandoffCopy.SKIP_NOTE,
             "cancelHandover" to CoordinatorHandoffCopy.CANCEL_HANDOVER,
             "handingOver" to CoordinatorHandoffCopy.HANDING_OVER,

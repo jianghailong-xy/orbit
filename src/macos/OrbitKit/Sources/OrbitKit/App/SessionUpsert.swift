@@ -88,7 +88,9 @@ public extension Session {
             // Owned by the summary like `retryAt`: every transition publishes `session.updated`,
             // and the one that cancels a handoff is a null that has to take its row away.
             coordinatorHandoff: summary.coordinatorHandoff,
-            coordinatorHandoffReceived: summary.coordinatorHandoffReceived
+            coordinatorHandoffReceived: summary.coordinatorHandoffReceived,
+            // Owned by the summary like the handoff: the summary that ends a compaction is a null.
+            enginePhase: summary.enginePhase
         )
     }
 
@@ -188,7 +190,8 @@ public extension Session {
                          folderId: String?? = nil,
                          // Doubly optional for the same reason: `.some(nil)` is "no handoff".
                          coordinatorHandoff: SessionCoordinatorHandoff?? = nil,
-                         coordinatorHandoffReceived: SessionCoordinatorHandoffReceived?? = nil) -> Session {
+                         coordinatorHandoffReceived: SessionCoordinatorHandoffReceived?? = nil,
+                         enginePhase: String?? = nil) -> Session {
         let mergedProjectId = projectId ?? self.projectId
         let mergedProjectTitle = mergedProjectId == nil ? nil : (projectTitle ?? self.projectTitle)
         var merged = Session(id: id,
@@ -271,6 +274,7 @@ public extension Session {
         // still queued, and dropped once it is not, so a later queue does not read an old gate.
         merged.coordinatorHandoff = coordinatorHandoff ?? self.coordinatorHandoff
         merged.coordinatorHandoffReceived = coordinatorHandoffReceived ?? self.coordinatorHandoffReceived
+        merged.enginePhase = enginePhase ?? self.enginePhase
         if merged.effectiveRunState == .queued {
             merged.queuedReason = queuedReason
             merged.queuedActive = queuedActive

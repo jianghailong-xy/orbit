@@ -55,6 +55,8 @@ internal object CoordinatorHandoffCopy {
     const val HAND_OVER = "Hand over"
     const val BADGE_HANDING_OVER = "Handing over"
     const val WRITING = "Writing the handoff note"
+    /** Board 02 ⑥: in WRITING's place while the engine compacts before it can write the note. */
+    const val COMPACTING = "Compacting…"
     const val SKIP_NOTE = "Skip the note"
     const val CANCEL_HANDOVER = "Cancel handover"
     const val HANDING_OVER = "Handing over to a new coordinator…"
@@ -78,9 +80,9 @@ internal object CoordinatorHandoffCopy {
     const val NOTE_PROMPT_HEAD = "From Orbit · handoff note"
 }
 
-/** The handoff on a session (`coordinatorHandoff`, on the outgoing coordinator). */
+/** The handoff on a session (`coordinatorHandoff`, on the outgoing coordinator); [compacting] is the session's `enginePhase`. */
 internal data class OutgoingHandoff(val state: String, val startedAt: String?, val failureCode: String?, val failureReason: String?,
-    val handedOverTo: String?) {
+    val handedOverTo: String?, val compacting: Boolean = false) {
     val locksComposer get() = state == "WRITING" || state == "HANDING_OVER"
 }
 
@@ -118,8 +120,19 @@ internal object CoordinatorHandoff {
 
     fun outgoing(detail: JsonObject?): OutgoingHandoff? = (detail?.get("coordinatorHandoff") as? JsonObject)?.let { h ->
         val state = h.text("state") ?: return null
-        OutgoingHandoff(state, h.text("startedAt"), h.text("failureCode"), h.text("failureReason"), h.text("handedOverToSessionId"))
+        OutgoingHandoff(state, h.text("startedAt"), h.text("failureCode"), h.text("failureReason"), h.text("handedOverToSessionId"),
+            compacting = detail.text("enginePhase") == "compacting")
     }
+
+    /** The in-hand row's words: WRITING's, or "Compacting…" while the engine compacts first (board 02 ⑥); null for any other state. */
+    fun progressLabel(handoff: OutgoingHandoff?): String? = when (handoff?.state) {
+        "WRITING" -> if (handoff.compacting) CoordinatorHandoffCopy.COMPACTING else CoordinatorHandoffCopy.WRITING
+        "HANDING_OVER" -> CoordinatorHandoffCopy.HANDING_OVER
+        else -> null
+    }
+
+    /** The clock runs for as long as the note is asked for, compacting or not. */
+    fun showsTimer(handoff: OutgoingHandoff?) = handoff?.state == "WRITING"
 
     fun received(detail: JsonObject?): ReceivedHandoff? = (detail?.get("coordinatorHandoffReceived") as? JsonObject)?.let { h ->
         val from = h.text("handoffFromSessionId") ?: return null
@@ -244,7 +257,7 @@ private fun ConfirmFact(icon: Int, title: String, detail: String?) {
 internal fun HandoffStatus(handoff: OutgoingHandoff?, act: (String) -> Unit, busy: Boolean) {
     when (handoff?.state) {
         "WRITING", "HANDING_OVER" -> {
-            val writing = handoff.state == "WRITING"
+            val writing = CoordinatorHandoff.showsTimer(handoff)
             var now by remember { mutableStateOf(Instant.now()) }
             LaunchedEffect(handoff.startedAt, writing) { while (writing) { now = Instant.now(); delay(1_000) } }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("handoff-progress")
@@ -253,7 +266,7 @@ internal fun HandoffStatus(handoff: OutgoingHandoff?, act: (String) -> Unit, bus
                 CircularProgressIndicator(Modifier.size(16.dp).padding(top = 2.dp), strokeWidth = 2.dp)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (writing) CoordinatorHandoffCopy.WRITING else CoordinatorHandoffCopy.HANDING_OVER,
+                        Text(CoordinatorHandoff.progressLabel(handoff).orEmpty(),
                             color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
                         if (writing) Text(CoordinatorHandoff.elapsed(handoff.startedAt, now), Modifier.testTag("handoff-timer"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)

@@ -134,8 +134,9 @@ public enum CoordinatorContextActions {
 
 /// What the outgoing coordinator's conversation shows of its handoff (board 02 ②, ④, ⑤).
 public enum CoordinatorHandoffRow: Equatable, Sendable {
-    /// ② "Writing the handoff note 0:24", with Skip the note and Cancel handover.
-    case writing(startedAt: Date?)
+    /// ② "Writing the handoff note 0:24", with Skip the note and Cancel handover — or "Compacting…"
+    /// with the same clock while the engine compacts before it can write the note (⑥).
+    case writing(startedAt: Date?, label: String)
     /// ② "Handing over to a new coordinator…" — the note is in and the replacement runs.
     case handingOver
     /// ⑤ The reason, and the presses that can still work.
@@ -143,11 +144,15 @@ public enum CoordinatorHandoffRow: Equatable, Sendable {
     /// ④ "Handed over to a new coordinator." with Open it, in place of the composer.
     case completed(successorSessionID: String)
 
-    public static func resolve(_ handoff: SessionCoordinatorHandoff?) -> CoordinatorHandoffRow? {
+    /// `enginePhase` is the session's (`Session.enginePhase`): `compacting` turns the WRITING label.
+    public static func resolve(_ handoff: SessionCoordinatorHandoff?,
+                               enginePhase: String? = nil) -> CoordinatorHandoffRow? {
         guard let handoff else { return nil }
         switch handoff.state {
         case .writing:
-            return .writing(startedAt: RelativeTime.parse(handoff.startedAt))
+            return .writing(startedAt: RelativeTime.parse(handoff.startedAt),
+                            label: enginePhase == "compacting" ? CoordinatorHandoffCopy.compacting
+                                                               : CoordinatorHandoffCopy.writing)
         case .handingOver:
             return .handingOver
         case .failed:
