@@ -514,7 +514,7 @@ for (const check of CHECKS) {
 // =============================================================================================================
 
 test('§6.2 a level each engine can enforce gets the nearest mode that is not wider; none is refused at create', { skip }, async () => {
-  assert.equal(scheduleRunMode('CHECK_ONLY', 'claude'), PermissionMode.DONT_ASK, 'Claude Code\'s Plan does not check Bash (schedule-access.ts)');
+  assert.equal(scheduleRunMode('CHECK_ONLY', 'claude'), PermissionMode.DEFAULT, 'Claude Code\'s Plan does not check Bash; in Default a shell command asks (schedule-access.ts)');
   assert.equal(scheduleRunMode('OPEN_PR', 'claude'), PermissionMode.ACCEPT_EDITS);
   assert.equal(scheduleRunMode('CHECK_ONLY', 'dsh'), PermissionMode.DONT_ASK, 'DeepSeek Harness has no Plan: its read-only sandbox');
   assert.equal(scheduleRunMode('OPEN_PR', 'dsh'), PermissionMode.DEFAULT, 'and no Accept Edits: Default asks before each write');
@@ -569,7 +569,7 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
   assert.equal(session.runSource, SessionRunSource.SCHEDULE);
   assert.equal(session.scheduleRunId, run.id);
   assert.equal(session.workspaceId, w.workspaceId);
-  assert.equal(session.permissionMode, PermissionMode.DONT_ASK, 'CHECK_ONLY on Claude Code runs in Don\'t Ask (schedule-access.ts)');
+  assert.equal(session.permissionMode, PermissionMode.DEFAULT, 'CHECK_ONLY on Claude Code runs in Default (schedule-access.ts)');
   assert.equal(session.branch, null, 'with no worktree');
   assert.equal(session.promptByOrbit, true, 'the control plane wrote its first turn');
   assert.equal(session.openedBy, 'SCHEDULE', 'not a person\'s conversation, so never the workspace default');

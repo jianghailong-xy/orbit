@@ -3056,7 +3056,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // schedule_change_request_id) and a partial index, and widens owner_request_kind_chk by the four SCHEDULE_* kinds;
       // catalog-only but for the check's validating scan, `owner_request` is none of the preserved relations, no
       // trigger, function or DONE fence changes, and no row is written.
-      '0840_schedule_attention'],
+      '0840_schedule_attention',
+      // 0860 adds a nullable schedule_run.access_level, backfilled from schedule for started runs, and
+      // workspace_permission_rule.from_schedule_run (NOT NULL with a constant default, no row marked); neither table is
+      // one of the preserved relations, and no trigger, function or DONE fence changes.
+      '0860_schedule_check_only_asks'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

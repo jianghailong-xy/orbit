@@ -119,7 +119,13 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
-import { scheduleRunAgentFields, scheduleRunAllowedTools, scheduleRunDisallowedTools } from '../schedules/schedule-access';
+import {
+  runAccessLevel,
+  scheduleRunAgentFields,
+  scheduleRunPermissionMode,
+  scheduleRunAllowedTools,
+  scheduleRunDisallowedTools,
+} from '../schedules/schedule-access';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -856,7 +862,7 @@ export class QueueService {
         // approval a human already answered into one this session never has to ask again.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
         // A scheduled task's run: its level decides the tools it may and may not call (§6.2, schedule-access.ts).
-        scheduleRun: { select: { schedule: { select: { accessLevel: true } } } },
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
         task: {
           select: {
             codeless: true,
@@ -1216,18 +1222,22 @@ export class QueueService {
         model: runnerModel,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
+        // A scheduled run is held to the level it started with (runAccessLevel, design §6.2).
         allowedTools: scheduleRunAllowedTools(
           dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
-          session.scheduleRun?.schedule.accessLevel,
+          runAccessLevel(session.scheduleRun),
           provider,
+          workspace?.permissionRules ?? [],
+          session.assignedRunner?.capabilities,
         ),
         disallowedTools: scheduleRunDisallowedTools(
           (workspace?.disallowedTools as string[] | null) ?? [],
-          session.scheduleRun?.schedule.accessLevel,
+          runAccessLevel(session.scheduleRun),
           provider,
+          session.assignedRunner?.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
-        ...scheduleRunAgentFields(session.scheduleRun?.schedule.accessLevel),
+        ...scheduleRunAgentFields(runAccessLevel(session.scheduleRun)),
         // Configured providers still borrow one of these runtimes, so the same runtime-level
         // guard applies to API/MCP/old-client input as it does to built-in identities; their
         // vendor-defined model space is exempt from the Claude allow-list though.
@@ -1236,7 +1246,10 @@ export class QueueService {
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          permissionMode,
+          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
+          scheduleRunPermissionMode(
+            permissionMode, runAccessLevel(session.scheduleRun), provider, session.assignedRunner?.capabilities,
+          ),
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
           session.assignedRunner?.modelCatalog,

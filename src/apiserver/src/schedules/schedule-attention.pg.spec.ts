@@ -6,6 +6,9 @@
  *     a creation baseline is not news, and neither is the first run reporting the same key;
  *   * Waiting on you: the four SCHEDULE_* items (failed, held, a run's approval, a run's widen) filed and closed;
  *   * §6.4: Always allow on a run's card writes the workspace rule the next run's session is dispatched with;
+ *   * §6.2 (S2e): through the runner's approval door, a CHECK_ONLY run on Claude Code asks only about a shell command;
+ *     anything else it asks about is DENIED at once with no card, item or push, and its next claim carries only the
+ *     workspace's Bash rules;
  *   * §7.4 / §12.1: run sessions are in none of the session queries, the run still names its session, and a run
  *     whose session was trashed or purged is kept and says so.
  *
@@ -17,7 +20,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
-import { PrismaClient, RunnerStatus, RunStatus } from '@prisma/client';
+import { PermissionMode } from '@orbit/shared';
+import { PrismaClient, RunnerStatus, RunStatus, SessionDispatchOrigin } from '@prisma/client';
 import { Client } from 'pg';
 import { firstValueFrom, take, timeout, toArray } from 'rxjs';
 
@@ -33,9 +37,22 @@ import {
 import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { factsSql, wikiSessionsOfSpace } from '../wiki/wiki-maintenance';
 import { lastActiveByWorkspace, workspaceSessionCount } from '../workspaces/workspace-usage';
+import {
+  CHECK_ONLY_CLAUDE_ALLOWED_TOOLS,
+  CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS,
+  CHECK_ONLY_REFUSED_MESSAGE,
+  CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1,
+  runAccessLevel,
+  SCHEDULE_CHECK_ONLY_RULE_REFUSED,
+  scheduleRunAgentFields,
+  scheduleRunAllowedTools,
+  scheduleRunDisallowedTools,
+  scheduleRunPermissionMode,
+} from './schedule-access';
 import type { ScheduleAlert, ScheduleNotifier } from './schedule-attention';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
@@ -422,6 +439,268 @@ test('§6.4/§7.3 AWAITING_APPROVAL: push and an item that says what Always allo
   assert.equal(dispatched.workspaceId, w.workspaceId, 'the next run is a session of the same workspace');
   const allowed = dispatchAllowedTools(dispatched.provider ?? 'claude', ALWAYS_ALLOWED_TOOLS, dispatched.workspace!.permissionRules);
   assert.ok(allowed.includes('Bash(curl:*)'), `the next run's session is dispatched with the rule: ${allowed.join(', ')}`);
+});
+
+/** The runner's approval door with spies where a card is announced: the session's stream and the push. */
+function approvalDoor() {
+  const published: Array<{ sessionId: string; type: string }> = [];
+  const pushed: Array<{ sessionId: string; toolName: string }> = [];
+  const realtimeSpy = new Proxy({}, {
+    get: (_t, key) => key === 'publish'
+      ? (sessionId: string, event: { type: string }) => void published.push({ sessionId, type: event.type })
+      : () => undefined,
+  });
+  const pushSpy = new Proxy({}, {
+    get: (_t, key) => key === 'notifyApprovalRequest'
+      ? async (sessionId: string, _approvalId: string, toolName: string) => void pushed.push({ sessionId, toolName })
+      : () => undefined,
+  });
+  const inert = new Proxy({}, { get: () => () => undefined });
+  const controller = new RunnerApiController(
+    db as unknown as PrismaService, inert as never, realtimeSpy as never, pushSpy as never, inert as never, inert as never,
+  );
+  return { controller, published, pushed };
+}
+
+/** The run's session as a runner holds it: assigned to the world's runner, on Claude Code. */
+async function heldByRunner(w: World, sessionId: string, engine = 'claude') {
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.update({ where: { id: sessionId }, data: { assignedRunnerId: w.runnerId, engine, provider: engine } });
+  });
+}
+
+test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command; Always allow reaches the next claim, Bash rules only', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('s2e-check-only');
+  const { schedule } = await created(w);
+  const { run, sessionId } = await nextRun(schedule.id);
+  assert.equal((await db.session.findUniqueOrThrow({ where: { id: sessionId } })).permissionMode, PermissionMode.DEFAULT,
+    'CHECK_ONLY on Claude Code runs in Default, where a shell command that is not read-only asks');
+  await heldByRunner(w, sessionId);
+  const door = approvalDoor();
+  const ask = (toolName: string, input: Record<string, unknown>, extra: Record<string, string> = {}) =>
+    door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, sessionId,
+      { toolName, input, toolUseId: `tu-${randomUUID()}`, ...extra } as never);
+  advance(MINUTE);
+
+  // A shell command: the ordinary card, announced and pushed, and the run's Waiting on you item.
+  const bash = await ask('Bash', { command: 'npm test' });
+  assert.equal(bash.status, 'PENDING');
+  assert.deepEqual(door.published.map((p) => p.type), ['approval_request']);
+  assert.deepEqual(door.pushed, [{ sessionId, toolName: 'Bash' }]);
+  assert.equal(await runs.reconcileRun(run.id), 'AWAITING_APPROVAL');
+  const [item] = await pendingItems(schedule.id);
+  assert.equal(item.kind, 'SCHEDULE_APPROVAL');
+  assert.equal(item.approvalId, bash.id);
+  assert.match(item.why, / in .+: later runs won't ask for this\.$/, 'the item says Always allow is a workspace rule');
+  assert.equal(alertsOf(schedule.id).filter((a) => a.kind === 'AWAITING_APPROVAL').length, 1);
+
+  // Anything else: DENIED at once, with the refusal the engine reads; no card, no item, no push.
+  for (const [toolName, input, extra] of [
+    ['Edit', { file_path: 'README.md', old_string: 'hello', new_string: 'x' }, {}],
+    ['Write', { file_path: 'x.txt', content: 'x' }, {}],
+    ['mcp__orbit__bg_run', { command: 'touch x', kind: 'job' }, {}],
+    ['mcp__orbit__task_update', { taskId: 'x', title: 'y' }, {}],
+    ['mcp__docs__write', { page: 'x' }, {}],
+    ['AskUserQuestion', { questions: [{ question: 'Go on?', options: [{ label: 'Yes' }] }] }, {}],
+    ['Bash', { command: 'touch x' }, { backgroundJobId: 'bgj_s2e' }],
+  ] as const) {
+    const refused = await ask(toolName, input, extra);
+    assert.equal(refused.status, 'DENIED', toolName);
+    const row = await db.approval.findUniqueOrThrow({ where: { id: refused.id } });
+    assert.equal(row.message, CHECK_ONLY_REFUSED_MESSAGE, toolName);
+    assert.equal(row.decidedById, null, `${toolName}: nobody decided it`);
+    assert.ok(row.decidedAt, toolName);
+  }
+  assert.equal(door.published.length, 1, 'no card was announced for any of them');
+  assert.equal(door.pushed.length, 1, 'and no push');
+  assert.equal(await runs.reconcileRun(run.id), 'UNCHANGED', 'still waiting on the shell command\'s card only');
+  assert.deepEqual((await pendingItems(schedule.id)).map((i) => i.approvalId), [bash.id], 'no item for any of them');
+  assert.equal(alertsOf(schedule.id).filter((a) => a.kind === 'AWAITING_APPROVAL').length, 1);
+
+  // The workspace already holds rules a person's interactive sessions wrote, and rules for other tools.
+  await db.workspacePermissionRule.createMany({
+    data: [
+      { workspaceId: w.workspaceId, toolName: 'Edit', ruleContent: '' },
+      { workspaceId: w.workspaceId, toolName: 'mcp__orbit__bg_run', ruleContent: '' },
+      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: '' },
+      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'python:*' },
+      { workspaceId: w.workspaceId, toolName: 'Bash', ruleContent: 'npm test:*' },
+    ],
+  });
+  // H5: Always allow on this card writes only this card's command's rule. Anything else is refused by name, and the
+  // card is not decided.
+  for (const rule of [
+    { toolName: 'Bash', ruleContent: 'python:*' },
+    { toolName: 'Bash', ruleContent: '' },
+    { toolName: 'Edit', ruleContent: '' },
+    { toolName: 'mcp__orbit__bg_run', ruleContent: '' },
+  ]) {
+    await assert.rejects(
+      sessionsService.decideApproval(w.ownerId, sessionId, bash.id, { behavior: 'allow', rememberRules: [rule] }),
+      (e: { getResponse?: () => { code?: string } }) => e.getResponse?.().code === SCHEDULE_CHECK_ONLY_RULE_REFUSED,
+      JSON.stringify(rule),
+    );
+  }
+  assert.equal((await db.approval.findUniqueOrThrow({ where: { id: bash.id } })).status, 'PENDING', 'a refused answer decides nothing');
+  await sessionsService.decideApproval(w.ownerId, sessionId, bash.id, {
+    behavior: 'allow',
+    rememberRules: [{ toolName: 'Bash', ruleContent: 'npm test:*' }],
+  });
+  // H1: the rule is now marked as a scheduled card's (an interactive session had written the same row first); the
+  // interactive python:* is not.
+  const marked = await db.workspacePermissionRule.findMany({ where: { workspaceId: w.workspaceId, toolName: 'Bash' } });
+  assert.deepEqual(
+    marked.map((r) => [r.ruleContent, r.fromScheduleRun]).sort(),
+    [['', false], ['npm test:*', true], ['python:*', false]],
+  );
+  assert.equal(await runs.reconcileRun(run.id), 'RUNNING');
+  await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Same.' });
+
+  // The next run's claim: the same rows and the same expressions both claim paths use (QueueService.buildSession and
+  // the reclaim in RunnerApiController; schedule-access.spec.ts pins them in their source).
+  const next = await nextRun(schedule.id);
+  const lists = await claimLists(next.sessionId);
+  assert.equal(lists.permissionMode, PermissionMode.DEFAULT);
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)'],
+    'the run\'s allow list and the rule a scheduled card wrote; not python:*, Edit, bg_run, the whole shell or mcp__orbit__*');
+  for (const tool of ['Edit', 'Write', 'NotebookEdit', 'mcp__orbit__bg_run', 'mcp__orbit__task_update', 'mcp__orbit__session_merge', 'Bash(*/orbit *)']) {
+    assert.ok(lists.denied.includes(tool), `${tool} is denied`);
+  }
+  assert.deepEqual(lists.agentFields, { scheduledCheckOnly: true });
+});
+
+/** What both claim paths hand the runner for a session claimed by a runner with these capabilities. */
+async function claimLists(sessionId: string, runnerCapabilities: readonly string[] = [CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1]) {
+  const dispatched = await db.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    include: {
+      workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+      scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
+    },
+  });
+  const provider = dispatched.provider ?? 'claude';
+  const level = runAccessLevel(dispatched.scheduleRun);
+  const rules = dispatched.workspace?.permissionRules ?? [];
+  return {
+    permissionMode: scheduleRunPermissionMode(dispatched.permissionMode as PermissionMode, level, provider, runnerCapabilities),
+    level,
+    allowed: scheduleRunAllowedTools(
+      dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, rules), level, provider, rules, runnerCapabilities,
+    ),
+    denied: scheduleRunDisallowedTools(
+      (dispatched.workspace?.disallowedTools as string[] | null) ?? [], level, provider, runnerCapabilities,
+    ),
+    agentFields: scheduleRunAgentFields(level),
+  };
+}
+
+test('§6.2 S2e H6: a check is held to the level it started with when the schedule moves to OPEN_PR or is deleted mid-run', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('s2e-started-level');
+  const { schedule } = await created(w);
+  const { run, sessionId } = await nextRun(schedule.id);
+  await heldByRunner(w, sessionId);
+  assert.equal((await runOf(run.id)).accessLevel, 'CHECK_ONLY', 'the run records the level it started with');
+  const door = approvalDoor();
+  const ask = (toolName: string, extra: Record<string, string> = {}) =>
+    door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, sessionId,
+      { toolName, input: { file_path: 'x' }, toolUseId: `tu-${randomUUID()}`, ...extra } as never);
+
+  // The schedule is moved to OPEN_PR while the check runs: the check is still a check.
+  await db.schedule.update({ where: { id: schedule.id }, data: { accessLevel: 'OPEN_PR', envelopeAccessLevel: 'OPEN_PR' } });
+  assert.equal((await ask('Edit')).status, 'DENIED', 'no card for Edit');
+  assert.equal((await ask('mcp__orbit__bg_run')).status, 'DENIED');
+  let lists = await claimLists(sessionId);
+  assert.equal(lists.level, 'CHECK_ONLY');
+  assert.ok(!lists.allowed.includes('mcp__orbit__*'), 'a reclaim does not hand back the Orbit wildcard');
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
+
+  // A SubAgent of the run asks under its session: its Edit is refused the same way.
+  const sub = await db.subagentRun.create({ data: {
+    ownerId: w.ownerId, sessionId, toolUseId: 'toolu_sub', type: 'general', definitionSource: 'builtin', decision: {},
+    targetRunnerId: w.runnerId,
+  } });
+  const subEdit = await ask('Edit', { subagentRunId: sub.id });
+  assert.equal(subEdit.status, 'DENIED', 'a SubAgent of a check gets no card for Edit');
+  assert.equal((await db.approval.findUniqueOrThrow({ where: { id: subEdit.id } })).subagentRunId, sub.id);
+
+  // The schedule is deleted while the check runs: its session is not an ordinary session on reclaim.
+  await schedules.remove(w.owner, schedule.id);
+  assert.equal((await scheduleOf(schedule.id)).state, 'ENDED');
+  const linked = await db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { scheduleRunId: true } });
+  assert.equal(linked.scheduleRunId, run.id, 'the session still names its run');
+  lists = await claimLists(sessionId);
+  assert.equal(lists.level, 'CHECK_ONLY');
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
+  assert.deepEqual(lists.agentFields, { scheduledCheckOnly: true });
+  assert.equal((await ask('Write')).status, 'DENIED');
+  assert.equal(door.published.length, 0, 'no card was announced');
+  assert.equal(door.pushed.length, 0, 'and nothing was pushed');
+});
+
+test('§6.2 S2e: an OPEN_PR run\'s Always allow is never carried by a check, and a runner without the capability gets Don\'t Ask', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('s2e-open-pr-rule');
+  const pr = await created(w, { accessLevel: 'OPEN_PR' });
+  const prRun = await nextRun(pr.schedule.id);
+  await heldByRunner(w, prRun.sessionId);
+  const door = approvalDoor();
+  const card = await door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, prRun.sessionId,
+    { toolName: 'Bash', input: { command: 'git push origin HEAD' }, toolUseId: `tu-${randomUUID()}` } as never);
+  assert.equal(card.status, 'PENDING');
+  // The client sends whatever it likes for an OPEN_PR card: stored as before, and not marked.
+  await sessionsService.decideApproval(w.ownerId, prRun.sessionId, card.id, {
+    behavior: 'allow', rememberRules: [{ toolName: 'Bash', ruleContent: 'git:*' }],
+  });
+  const rule = await db.workspacePermissionRule.findFirstOrThrow({ where: { workspaceId: w.workspaceId, ruleContent: 'git:*' } });
+  assert.equal(rule.fromScheduleRun, false, 'an OPEN_PR card\'s rule is not a check\'s');
+
+  const check = await created(w);
+  const checkRun = await nextRun(check.schedule.id);
+  const lists = await claimLists(checkRun.sessionId);
+  assert.equal(lists.permissionMode, PermissionMode.DEFAULT);
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS], 'git:* from the OPEN_PR card is not carried');
+
+  // The same check claimed by a runner that does not advertise the capability: S2b's Don't Ask, nothing asks.
+  const old = await claimLists(checkRun.sessionId, ['claude-account-move/v1']);
+  assert.equal(old.permissionMode, PermissionMode.DONT_ASK);
+  assert.deepEqual(old.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
+  assert.deepEqual(old.denied, [...CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS]);
+  assert.ok(old.denied.includes('EnterWorktree') && old.denied.includes('CronCreate'));
+  assert.deepEqual(old.agentFields, { scheduledCheckOnly: true });
+});
+
+test('§6.2 S2e: an ordinary session and an OPEN_PR run ask as before: an Edit or bg_run request is a card', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('s2e-unaffected');
+  const door = approvalDoor();
+  const ordinary = await db.session.create({
+    data: {
+      id: randomUUID(), ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: w.workspaceId, title: 'ordinary',
+      prompt: 'p', provider: 'claude', engine: 'claude', providerBuiltin: true, dispatchOrigin: SessionDispatchOrigin.USER,
+      permissionMode: PermissionMode.DEFAULT, assignedRunnerId: w.runnerId,
+    },
+  });
+  const { schedule } = await created(w, { accessLevel: 'OPEN_PR' });
+  const { run, sessionId: prSession } = await nextRun(schedule.id);
+  await heldByRunner(w, prSession);
+  for (const sessionId of [ordinary.id, prSession]) {
+    for (const toolName of ['Edit', 'mcp__orbit__bg_run']) {
+      const card = await door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, sessionId,
+        { toolName, input: { file_path: 'x' }, toolUseId: `tu-${randomUUID()}` } as never);
+      assert.equal(card.status, 'PENDING', `${toolName} on ${sessionId === ordinary.id ? 'an ordinary session' : 'an OPEN_PR run'}`);
+    }
+  }
+  assert.equal(door.published.length, 4);
+  assert.equal(door.pushed.length, 4);
+  assert.equal(await runs.reconcileRun(run.id), 'AWAITING_APPROVAL');
+  assert.equal((await pendingItems(schedule.id)).filter((i) => i.kind === 'SCHEDULE_APPROVAL').length, 2, 'the OPEN_PR run\'s two cards are items');
 });
 
 test('§6.4 an approval item closes when its run ends, even with the card unanswered', { skip }, async () => {
