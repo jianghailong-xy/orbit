@@ -335,7 +335,7 @@ import {
 import { DshRepairCard } from './Transcript';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
-import { agentLanguageOf, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { agentLanguageOf, bilingualOn, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
 import { TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
@@ -4525,6 +4525,8 @@ export function WorkspaceView({
   // the account translates now, which greys a streaming reply. The queue is refetched on the stream's
   // `queued_turns_changed` either way; the answer is written into the row so the chip moves at once.
   const translationIsOn = translationOn(me.data);
+  const translationBilingual = bilingualOn(me.data);
+  const translationAgentLanguage = agentLanguageOf(me.data);
   const translationActions = useMemo<TranslationActions>(() => {
     const settle = (res: TranslationActionResponse) =>
       setQueued((current) =>
@@ -4534,6 +4536,8 @@ export function WorkspaceView({
       message.error(what, e instanceof Error ? e.message : undefined);
     return {
       on: translationIsOn,
+      bilingual: translationBilingual,
+      agentLanguage: translationAgentLanguage,
       retryTurn: (turnId) =>
         selectedId
           ? retryTurnTranslation(selectedId, turnId).then(settle, failed("Couldn't retry the translation"))
@@ -4547,7 +4551,7 @@ export function WorkspaceView({
           ? retryReplyTranslation(selectedId, seq).catch(failed("Couldn't retry the translation"))
           : Promise.resolve(),
     };
-  }, [translationIsOn, selectedId, setQueued, message]);
+  }, [translationIsOn, translationBilingual, translationAgentLanguage, selectedId, setQueued, message]);
   // Walk the pages back until the session's first message is loaded, then sit at the top.
   //
   // Scrolling up alone can't get there: each page lands with the reader's position anchored

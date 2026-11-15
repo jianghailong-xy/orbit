@@ -145,7 +145,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
                 "theme" -> appearance(saved?.text("theme")?.ifBlank { null } ?: "system")
                 "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
                 "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
-                "translationEnabled", "translationLanguage", "translationAgentLanguage" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
+                "translationEnabled", "translationLanguage", "translationAgentLanguage", "translationBilingual" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
             }
         }
     }
@@ -393,7 +393,7 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
     val agentLanguage = Translation.agentLanguage(preferences)
     // Which picker's sheet is open: the preference key it writes, or null.
     var picking by remember { mutableStateOf<String?>(null) }
-    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.FOOTER) {
+    SettingsGroup(TranslationCopy.TITLE, footer = TranslationCopy.BILINGUAL_FOOTER + " " + TranslationCopy.FOOTER) {
         val on = !unavailable && Translation.enabled(preferences)
         ListItem(headlineContent = { Text(TranslationCopy.TRANSLATE_CONVERSATIONS) }, colors = settingsRowColors(),
             supportingContent = { Text(TranslationCopy.translateConversationsHint(agentLanguage)) },
@@ -408,6 +408,14 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
         ListItem(headlineContent = { Text(TranslationCopy.AGENTS_WORK_IN) }, colors = settingsRowColors(),
             supportingContent = { Text(Translation.name(agentLanguage)) },
             modifier = Modifier.clickable(enabled = enabled, role = Role.DropdownList) { picking = "translationAgentLanguage" }.alpha(if (unavailable) 0.5f else 1f))
+        // "Show both languages" (02-bilingual.png, mark A): only while translation is on.
+        if (on) {
+            val both = Translation.bilingual(preferences)
+            ListItem(headlineContent = { Text(TranslationCopy.SHOW_BOTH_LANGUAGES) }, colors = settingsRowColors(),
+                trailingContent = { Switch(checked = both, onCheckedChange = null, enabled = enabled) },
+                modifier = Modifier.testTag("translation-bilingual")
+                    .toggleable(value = both, enabled = enabled, role = Role.Switch) { write("translationBilingual", JsonPrimitive(it)) })
+        }
     }
     val key = picking ?: return
     val (title, current) = if (key == "translationAgentLanguage") TranslationCopy.AGENTS_WORK_IN to agentLanguage else TranslationCopy.YOUR_LANGUAGE to language

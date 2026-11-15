@@ -37,6 +37,8 @@ struct SettingsView: View {
     @State private var promptOptimizer = false
     @State private var translationLanguage: TranslationLanguage = .default
     @State private var translationAgentLanguage: TranslationLanguage = .agentDefault
+    /// "Show both languages" (02-bilingual.png, mark A). Absent = off.
+    @State private var bilingual = false
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -170,7 +172,12 @@ struct SettingsView: View {
                 .accessibilityIdentifier(TranslationCopy.agentLanguageIdentifier)
                 Text(TranslationCopy.agentsWorkInHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                Text(TranslationCopy.footnote)
+                // Only while translation is on (mark A).
+                if translation {
+                    Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
+                        .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+                }
+                Text(TranslationCopy.bilingualFootnote + " " + TranslationCopy.footnote)
                     .font(.orbitLabel).foregroundStyle(.secondary)
             }
             .disabled(SessionTranslation.unavailable(model.user))
@@ -233,6 +240,9 @@ struct SettingsView: View {
         .onChange(of: promptOptimizer) { savePromptOptimizer() }
         .onChange(of: translationLanguage) { saveTranslationLanguage() }
         .onChange(of: translationAgentLanguage) { saveTranslationAgentLanguage() }
+        .onChange(of: bilingual) { saveBilingual() }
+        // Another client changed it: follow the account.
+        .onChange(of: model.user?.preferences?.translationBilingual) { bilingual = model.user?.preferences?.translationBilingual == true }
         .task { await model.accessTokens?.load() }
         .task { await model.runners?.load() }
         .onAppear {
@@ -252,6 +262,7 @@ struct SettingsView: View {
             promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true
             translationLanguage = SessionTranslation.language(p)
             translationAgentLanguage = SessionTranslation.agentLanguage(p)
+            bilingual = p?.translationBilingual == true
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -317,6 +328,11 @@ struct SettingsView: View {
     private func savePromptOptimizer() {
         guard (model.user?.preferences?.promptOptimizer ?? false) != promptOptimizer else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: promptOptimizer)) }
+    }
+
+    private func saveBilingual() {
+        guard (model.user?.preferences?.translationBilingual ?? false) != bilingual else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationBilingual: bilingual)) }
     }
 
     private func saveTranslationLanguage() {

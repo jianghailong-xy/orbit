@@ -92,6 +92,11 @@ public enum TranslationCopy {
     public static let toggleIdentifier = "settings.translation.enabled"
     public static let languageIdentifier = "settings.translation.language"
     public static let agentLanguageIdentifier = "settings.translation.agentLanguage"
+    /// "Show both languages" (docs/mocks/session-translation/02-bilingual.png, mark A): shown only
+    /// while the switch above is on; the footer gains `bilingualFootnote` (mark B).
+    public static let showBothLanguages = "Show both languages"
+    public static let bilingualFootnote = "With both languages on, each translated message also shows the words the agent read or wrote, in the language agents work in."
+    public static let bilingualIdentifier = "settings.translation.bilingual"
 
     // MARK: In a conversation (frames 4–6)
     public static let translated = "Translated"
@@ -104,6 +109,80 @@ public enum TranslationCopy {
     public static let sendAsWritten = "Send as written"
     public static let replyPending = "Translates when the reply is done"
     public static let replyFailed = "Couldn't translate this reply"
+    // "Show both languages" in a conversation (02-bilingual.png, frames 2–4).
+    public static let sentToAgent = "Sent to the agent in"
+    public static let show = "Show"
+    public static let lines = "lines"
+
+    /// Under the owner's bilingual message: "Sent to the agent in English", naming the agent
+    /// language (web `sentToAgentLabel`).
+    public static func sentToAgentLabel(_ agentLanguage: TranslationLanguage) -> String {
+        "\(sentToAgent) \(agentLanguage.name)"
+    }
+
+    /// The collapsed original's press (frame 3): "Show English · 9 lines", naming the agent language
+    /// (web `showEnglishLabel`).
+    public static func showEnglishLabel(lines count: Int, _ agentLanguage: TranslationLanguage = .agentDefault) -> String {
+        "\(show) \(agentLanguage.name) · \(count) \(lines)"
+    }
+}
+
+/// "Show both languages" (02-bilingual.png): the English drawn under a translated message, and when
+/// a reply's English collapses. The same rule as @orbit/shared `bilingualEnglish` /
+/// `bilingualLineCount`, so every client counts the same N.
+public enum BilingualEnglish {
+    /// Over this many lines a reply's English starts collapsed to a two-line preview (frame 3, B).
+    public static let collapseLines = 6
+    /// A source line wraps every this many characters, for the count.
+    public static let lineChars = 60
+
+    /// The English's prose: a fenced code block is drawn once, in the translation, never again here
+    /// (board mark D). An unclosed fence is left as it is.
+    public static func prose(_ text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        var out: [String] = []
+        var i = 0
+        while i < lines.count {
+            if let fence = fenceOpener(lines[i]),
+               let close = lines[(i + 1)...].firstIndex(where: { isFence($0, fence) }) {
+                out.append("")
+                i = close + 1
+                continue
+            }
+            out.append(lines[i])
+            i += 1
+        }
+        var joined = out.joined(separator: "\n")
+        while joined.contains("\n\n\n") { joined = joined.replacingOccurrences(of: "\n\n\n", with: "\n\n") }
+        return joined.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// How many lines `english` runs to: each non-blank source line, wrapped every `lineChars`.
+    public static func lineCount(_ english: String) -> Int {
+        english.components(separatedBy: "\n").reduce(0) { sum, line in
+            let length = line.trimmingCharacters(in: .whitespaces).unicodeScalars.count
+            return sum + (length + lineChars - 1) / lineChars
+        }
+    }
+
+    /// Whether a reply's English starts collapsed.
+    public static func collapses(_ english: String) -> Bool { lineCount(english) > collapseLines }
+
+    private static func leadingSpaces(_ line: String) -> Substring? {
+        let spaces = line.prefix { $0 == " " }
+        return spaces.count <= 3 ? line.dropFirst(spaces.count) : nil
+    }
+
+    private static func fenceOpener(_ line: String) -> String? {
+        guard let rest = leadingSpaces(line) else { return nil }
+        if rest.hasPrefix("```") { return "```" }
+        if rest.hasPrefix("~~~") { return "~~~" }
+        return nil
+    }
+
+    private static func isFence(_ line: String, _ fence: String) -> Bool {
+        leadingSpaces(line)?.hasPrefix(fence) == true
+    }
 }
 
 /// Where one of the owner's messages is in translation (`TurnTranslationState`).
@@ -281,6 +360,28 @@ public enum SessionTranslation {
         user?.preferences?.translationEnabled == true && user?.translationAvailable == true
     }
 
+    /// Whether translated messages also show their English ("Show both languages"): the account's
+    /// switch, drawn only while translation itself is switched on (web: `bilingualOn`).
+    public static func bilingual(_ prefs: UserPreferences?) -> Bool {
+        prefs?.translationEnabled == true && prefs?.translationBilingual == true
+    }
+
+    /// The English under the owner's message with both languages on: what the agent got, once
+    /// delivered in translation. Nil draws no block (held, failed, sent as written, or off).
+    public static func userEnglish(_ text: String, _ translation: TurnTranslation?, bilingual: Bool) -> String? {
+        guard bilingual, translation?.state == .done else { return nil }
+        let english = BilingualEnglish.prose(text)
+        return english.isEmpty ? nil : english
+    }
+
+    /// The English under an agent reply with both languages on: the event's own text, once there is
+    /// a translation to sit above it. Nil draws no block (pending, failed, or off).
+    public static func replyEnglish(_ text: String, _ translation: ReplyTranslation?, bilingual: Bool) -> String? {
+        guard bilingual, translation?.text != nil else { return nil }
+        let english = BilingualEnglish.prose(text)
+        return english.isEmpty ? nil : english
+    }
+
     /// Whether Settings draws the switch disabled with the notice (board frame 2). Only a `me` that
     /// says so: a login payload (no field at all) is not a server without a key.
     public static func unavailable(_ user: User?) -> Bool {
@@ -314,8 +415,12 @@ public enum SessionTranslation {
     /// it was translated (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and,
     /// held because the translation failed (1A), "Couldn't translate, so it wasn't sent · Retry ·
     /// Send as written". Nothing for a message sent as written.
-    public static func userFoot(_ translation: TurnTranslation?, flipped: Bool) -> [FootPart] {
+    /// With both languages on (`bilingual`) a delivered message's English is in the bubble, so its foot
+    /// reads "Sent to the agent in English" (naming `agentLanguage`) and offers no flip (02-bilingual.png, mark C).
+    public static func userFoot(_ translation: TurnTranslation?, flipped: Bool, bilingual: Bool = false,
+                                agentLanguage: TranslationLanguage = .agentDefault) -> [FootPart] {
         guard let translation else { return [] }
+        if bilingual, translation.state == .done { return [.text(TranslationCopy.sentToAgentLabel(agentLanguage))] }
         switch translation.state {
         case .translating:
             return [.chip(TranslationCopy.translating)]
@@ -334,10 +439,13 @@ public enum SessionTranslation {
     /// The line under an agent reply: "Translated · Show original" ↔ "Original · Show translation";
     /// failed (2A), "Couldn't translate this reply · Retry"; still to come, the chip "Translates when
     /// the reply is done".
-    public static func replyFoot(_ translation: ReplyTranslation?, pending: Bool, flipped: Bool) -> [FootPart] {
+    /// With both languages on, a translated reply's foot is "Translated" alone (mark D).
+    public static func replyFoot(_ translation: ReplyTranslation?, pending: Bool, flipped: Bool,
+                                 bilingual: Bool = false) -> [FootPart] {
         if let translation, translation.failed {
             return [.text(TranslationCopy.replyFailed), .action(TranslationCopy.retry, .retryReply)]
         }
+        if bilingual, translation?.text != nil { return [.text(TranslationCopy.translated)] }
         if translation?.text != nil {
             return flipped
                 ? [.text(TranslationCopy.original), .action(TranslationCopy.showTranslation, .flip)]

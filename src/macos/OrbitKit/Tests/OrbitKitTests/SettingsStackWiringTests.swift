@@ -266,6 +266,10 @@ final class SettingsStackWiringTests: XCTestCase {
             // Settings › Prompt optimizer: absent is off, and a server without a key draws it off.
             ("Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)", "UpdatePreferencesRequest(promptOptimizer: value)",
              "promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true"),
+            // Show both languages (02-bilingual.png, mark A): absent is off.
+            ("Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)",
+             "UpdatePreferencesRequest(translationBilingual: value)",
+             "bilingual = p?.translationBilingual == true"),
         ] {
             XCTAssertTrue(controls.contains(toggle), "the page lost \(toggle)")
             XCTAssertTrue(page.contains(write), "the page no longer writes \(write)")

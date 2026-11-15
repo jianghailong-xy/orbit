@@ -214,6 +214,8 @@ export interface UserPreferences {
   /** Settings › General › Prompt optimizer (@orbit/shared prompt-optimizer.ts): the composer's
    *  ✦ Optimize button. Absent means OFF; only turning it on has to be written. */
   promptOptimizer?: boolean;
+  /** "Show both languages": absent means OFF. */
+  translationBilingual?: boolean;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
 }

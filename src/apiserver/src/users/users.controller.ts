@@ -171,6 +171,7 @@ export class UsersController {
     if (dto.translationLanguage !== undefined) merged.translationLanguage = dto.translationLanguage;
     if (dto.translationAgentLanguage !== undefined) merged.translationAgentLanguage = dto.translationAgentLanguage;
     if (dto.promptOptimizer !== undefined) merged.promptOptimizer = dto.promptOptimizer;
+    if (dto.translationBilingual !== undefined) merged.translationBilingual = dto.translationBilingual;
     if (dto.subagentBlockedProviders !== undefined) merged.subagentBlockedProviders = [...new Set(dto.subagentBlockedProviders)];
     return asMe(await this.prisma.user.update({
       where: { id: user.userId },

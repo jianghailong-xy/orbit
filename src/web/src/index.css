@@ -8242,6 +8242,33 @@ button.chat-jump-start:hover {
 .chat-translated-reply.is-pending .chat-assistant {
   color: var(--text-2);
 }
+/* "Show both languages" (docs/mocks/session-translation/02-bilingual.png): the English under a dashed
+   divider, a size smaller and grey. In the owner's bubble it sits inside the bubble; under a reply it
+   takes the reply text's 12px inset. A long reply's English starts as two faded lines (frame 3). */
+.chat-bilingual {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.chat-bilingual-reply {
+  padding: 0 12px;
+}
+.chat-bilingual-reply .chat-bilingual {
+  margin-top: 2px;
+}
+.chat-bilingual.is-collapsed .chat-bilingual-text {
+  max-height: calc(2 * 1.55em);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+.chat-bilingual-more {
+  margin-top: 2px;
+  font-size: 12px;
+}
 /* The composer's "<Language> → English" tag (6A): a quiet pill that opens Settings › Translation. */
 .composer-translation-tag {
   flex: none;
@@ -10478,6 +10505,13 @@ button.chat-jump-start:hover {
      lines and inflate the spacing. */
   white-space: normal;
 }
+
+/* The English is Markdown (.md sets its own 14px): a size smaller than the words above it. Kept after .md itself, whose rule it narrows. */
+.chat-bilingual .md {
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
 .md > *:first-child {
   margin-top: 0;
 }

@@ -148,4 +148,37 @@ class TranslationTest {
         assertEquals("ファイル一覧", shownTool["description"]!!.jsonPrimitive.content)
         assertEquals("the command is never translated", "ls", shownTool["command"]!!.jsonPrimitive.content)
     }
+
+    /** "Show both languages" (docs/mocks/session-translation/02-bilingual.png): off until the account says so, only while translating. */
+    @Test fun bilingualIsAnExplicitTrueWhileTranslating() {
+        assertEquals(false, Translation.bilingual(obj("""{"translationEnabled":true}""")))
+        assertEquals(true, Translation.bilingual(obj("""{"translationEnabled":true,"translationBilingual":true}""")))
+        assertEquals(false, Translation.bilingual(obj("""{"translationEnabled":false,"translationBilingual":true}""")))
+        assertEquals(false, Translation.bilingual(obj("""{"translationEnabled":true,"translationBilingual":"true"}""")))
+        assertEquals(false, Translation.bilingual(null))
+    }
+
+    /** The same English and the same N as the web and iOS for the same reply (Transcript.translation.test.tsx, TranslationTests.swift). */
+    @Test fun aLongRepliesEnglishIsCountedAsEveryClientCountsIt() {
+        val long = listOf(
+            "Done. The popup now opens synchronously on click:",
+            "1. The script preloads on page load in a useEffect;",
+            "2. The click handler no longer awaits before signInWithPopup;",
+            "```ts",
+            "useEffect(() => { void loadGoogleScript(); }, []);",
+            "```",
+            "3. A new LoginPage.safari.test.tsx covers this case.",
+            "All tests pass.",
+            "The fix is on the branch.",
+            "Safari keeps blocking popups that are opened after an await.",
+            "Chrome and Firefox were never affected.",
+            "Want me to open a pull request?",
+        ).joinToString("\n")
+        val english = Translation.bilingualEnglish(long)
+        assertEquals(false, english.contains("loadGoogleScript(); }"))
+        assertEquals(10, Translation.bilingualLineCount(english))
+        assertEquals(2, Translation.bilingualLineCount("Found it: Safari blocks popups that aren't opened directly by a click."))
+        assertEquals(4, Translation.bilingualLineCount("a".repeat(121) + "\n\n\nb"))
+        assertEquals("a\n```\nb", Translation.bilingualEnglish("a\n```\nb"))
+    }
 }

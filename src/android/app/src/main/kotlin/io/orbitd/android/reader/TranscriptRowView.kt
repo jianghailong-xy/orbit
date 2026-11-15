@@ -41,6 +41,9 @@ import io.orbitd.android.cards.DetailFold
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.directory.ExternalSender
 import io.orbitd.android.translation.LocalShownOriginals
+import io.orbitd.android.translation.BilingualEnglish
+import io.orbitd.android.translation.BilingualShown
+import io.orbitd.android.management.LocalTranslation
 import io.orbitd.android.translation.ReplyTranslationFoot
 import io.orbitd.android.translation.ShownOriginals
 import io.orbitd.android.translation.TranslationShown
@@ -99,7 +102,9 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val turnTranslation = if (event.type == "user") Translation.turn(shown.fields["translation"]) else null
     val replyTranslation = if (event.type == "assistant" && event.parent().isNullOrEmpty()) Translation.reply(shown.fields["translation"]) else null
     val translationKey = if (event.type == "user") ShownOriginals.user(event.seq, event.turnId) else ShownOriginals.reply(event.seq)
-    val flipped = shownOriginals?.has(translationKey) == true
+    // "Show both languages" (02-bilingual.png): your language on top, the English under it, no flip.
+    val bilingual = LocalTranslation.current.bilingual
+    val flipped = !bilingual && shownOriginals?.has(translationKey) == true
     fun shownWords(source: RunEvent): String = when {
         source.type == "user" -> TranslationShown.userWords(source.personWords(), Translation.turn(source.fields["translation"]), flipped)
         source.type == "assistant" && source.parent().isNullOrEmpty() -> TranslationShown.replyWords(source.body(), Translation.reply(source.fields["translation"]), flipped)
@@ -328,6 +333,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
                     MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
                 } else MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
+                // The English the agent read or wrote, below its dashed divider; a long reply's collapsed (frame 3).
+                (if (event.type == "user") BilingualShown.userEnglish(shown.personWords(), turnTranslation, bilingual)
+                    else if (event.type == "assistant") BilingualShown.replyEnglish(shown.body(), replyTranslation, bilingual) else null)
+                    ?.let { BilingualEnglish(it, collapsible = event.type == "assistant") }
             } }
             // Another session's words, and what delivery attached, are its bubble's.
             else if (bubble != null) Unit
@@ -338,10 +347,12 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
                 val turnId = event.turnId
                 UserTranslationFoot(turn, flipped, toggle,
                     retry = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/retry") }) else null,
-                    sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null)
+                    sendAsWritten = if (doors != null && turnId != null) ({ doors.translationAction("turns/$turnId/translation/send-as-written") }) else null,
+                    bilingual = bilingual)
             }
             if (event.type == "assistant") ReplyTranslationFoot(replyTranslation, pendingReply, flipped, toggle,
-                retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null)
+                retry = if (doors != null && event.seq > 0) ({ doors.translationAction("events/${event.seq}/translation/retry") }) else null,
+                bilingual = bilingual)
             atts.forEach { attachment -> attachment.string("id")?.let { id ->
                 val name = attachment.string("name") ?: "Attachment"
                 if (attachment.string("mime")?.startsWith("image/") == true) TranscriptImage("orbit-attachment:$id", name, open)
