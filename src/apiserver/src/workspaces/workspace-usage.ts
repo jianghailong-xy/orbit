@@ -21,7 +21,8 @@ export async function lastActiveByWorkspace(
     CROSS JOIN LATERAL (
       SELECT created_at, last_turn_at
       FROM "session"
-      WHERE workspace_id = a.id AND kind = 'CONVERSATION'
+      -- A scheduled task's run is not a conversation a person used (docs/scheduled-tasks-design.md §7.4, §12.1).
+      WHERE workspace_id = a.id AND kind = 'CONVERSATION' AND run_source <> 'SCHEDULE'
       ORDER BY created_at DESC
       LIMIT 1
     ) s
@@ -35,6 +36,7 @@ export async function lastActiveByWorkspace(
  *  from another: the "N sessions" in its Settings page's header. Read for one workspace only. */
 export async function workspaceSessionCount(prisma: Prisma.TransactionClient, workspaceId: string): Promise<number> {
   return prisma.session.count({
-    where: { workspaceId, sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null },
+    // Nor is it one of the workspace's conversations (scheduled-tasks-design.md §7.4, §12.1).
+    where: { workspaceId, sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null, runSource: { not: 'SCHEDULE' } },
   });
 }

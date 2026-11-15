@@ -3877,7 +3877,10 @@ export class SessionsService {
         : Prisma.sql`(s.pinned_at IS NOT NULL) DESC, COALESCE(s.last_turn_at, s.created_at) DESC, s.created_at DESC`;
     const build = () => this.listRows(ownerId, {
       scope: Prisma.sql`${runnerFilter} ${workspaceFilter} ${confinedFilter} ${tagFilter} ${projectFilter}`,
-      visibility,
+      // A scheduled task's run is reached from its schedule's history and its notification, never from a list
+      // (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, and the delta that reads this.
+      // `listRowsByIds` names its sessions and is left as it is: a link card to a run is by id.
+      visibility: Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
     });
@@ -4355,10 +4358,6 @@ export class SessionsService {
       WHERE s.owner_id = ${ownerId}::uuid
         ${scope}
         AND (${visibility})
-        -- A scheduled task's run is reached from its schedule's history and its notification, never from a
-        -- list (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, the delta and the
-        -- rows by id all read here.
-        AND s.run_source <> 'SCHEDULE'
       ORDER BY ${orderBy}
       ${pageLimit}
     `);

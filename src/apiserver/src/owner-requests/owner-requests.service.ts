@@ -343,6 +343,23 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /**
+   * A scheduled task's items close when what they point at is settled (schedules/schedule-attention.ts): the card, the
+   * change request or the hold has one door of its own, and ending the item here would leave that one PENDING behind an
+   * item that can never be filed again. Only a failure is the owner's to dismiss (done or declined) here.
+   */
+  private refuseAnsweredElsewhere(kind: string): void {
+    if (kind === 'SCHEDULE_APPROVAL') {
+      throw new BadRequestException('a SCHEDULE_APPROVAL item is answered on its approval card: POST /sessions/:id/approvals/:approvalId');
+    }
+    if (kind === 'SCHEDULE_WIDEN') {
+      throw new BadRequestException("a SCHEDULE_WIDEN item is answered with the scheduled task's Allow or Decline");
+    }
+    if (kind === 'SCHEDULE_HELD') {
+      throw new BadRequestException('a SCHEDULE_HELD item closes when the scheduled task is resumed or deleted');
+    }
+  }
+
   /** The owner did what was asked. A DECISION records the option chosen or the owner's words. */
   async complete(
     ownerId: string,
@@ -357,17 +374,7 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
     if (request.kind === 'WIKI_CREATE') {
       throw new BadRequestException('a WIKI_CREATE request is done when its repository has a wiki: create it with POST /owner-requests/:id/create-wiki');
     }
-    // A scheduled task's items close when what they point at is settled (schedules/schedule-attention.ts); only a
-    // failure is the owner's to dismiss here.
-    if (request.kind === 'SCHEDULE_APPROVAL') {
-      throw new BadRequestException('a SCHEDULE_APPROVAL item is answered on its approval card: POST /sessions/:id/approvals/:approvalId');
-    }
-    if (request.kind === 'SCHEDULE_WIDEN') {
-      throw new BadRequestException("a SCHEDULE_WIDEN item is answered with the scheduled task's Allow or Decline");
-    }
-    if (request.kind === 'SCHEDULE_HELD') {
-      throw new BadRequestException('a SCHEDULE_HELD item closes when the scheduled task is resumed or deleted');
-    }
+    this.refuseAnsweredElsewhere(request.kind);
     const text = given.text?.trim();
     const option = given.option ?? undefined;
     if (option !== undefined) {
@@ -482,7 +489,8 @@ export class OwnerRequestsService implements OnModuleInit, OnModuleDestroy {
   async decline(ownerId: string, id: string, reason: string, client: OwnerRequestClient | null = null): Promise<OwnerRequestView> {
     const note = reason?.trim();
     if (!note) throw new BadRequestException('reason is required: say why, so the session asking can act on it');
-    await this.get(ownerId, id);
+    const request = await this.get(ownerId, id);
+    this.refuseAnsweredElsewhere(request.kind);
     return this.settle(ownerId, id, 'DECLINED', { resolvedByUserId: ownerId, resolvedClient: client, resolutionNote: note });
   }
 

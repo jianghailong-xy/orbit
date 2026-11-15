@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
-import { PrismaClient, RunnerStatus } from '@prisma/client';
+import { PrismaClient, RunnerStatus, RunStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { firstValueFrom, take, timeout, toArray } from 'rxjs';
 
@@ -30,8 +30,12 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { readOwnerDecisionsBySession } from '../projects/owner-decision-signal';
+import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { factsSql, wikiSessionsOfSpace } from '../wiki/wiki-maintenance';
+import { lastActiveByWorkspace, workspaceSessionCount } from '../workspaces/workspace-usage';
 import type { ScheduleAlert, ScheduleNotifier } from './schedule-attention';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
 import { ScheduleRunsService, type ScheduleRunSessionPort } from './schedule-runs.service';
@@ -339,6 +343,7 @@ test('§7.3 HELD: push opens the schedule and Waiting on you holds it until the 
   assert.equal((await items(schedule.id)).length, 1);
 
   await assert.rejects(schedules.resume(w.owner, schedule.id));
+  await assert.rejects(ownerRequests.decline(w.ownerId, held.id, 'ignore it'), 'a hold is ended by resuming, not by declining its item');
   assert.equal((await pendingItems(schedule.id)).length, 1, 'still held: the item stays');
   await db.workspace.update({ where: { id: w.workspaceId }, data: { enabled: true } });
   await schedules.resume(w.owner, schedule.id);
@@ -369,6 +374,23 @@ test('§6.4/§7.3 AWAITING_APPROVAL: push and an item that says what Always allo
   assert.equal(pushed[0].ownerRequestId, item.id);
   await runs.reconcileRun(run.id);
   assert.equal(alertsOf(schedule.id).length, 1, 'the next pass does not ring again');
+  // Waiting on you cannot end it in place of the card: done and declined are both refused, and the item still waits.
+  await assert.rejects(ownerRequests.complete(w.ownerId, item.id, {}));
+  await assert.rejects(ownerRequests.decline(w.ownerId, item.id, 'not now'));
+  assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: item.id } })).state, 'PENDING');
+
+  // Needs you counts the run once: the badge's sessions hold it once, and its row counts the card, not the card and its item.
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  });
+  const badges = new PushService(db as unknown as PrismaService, { get: () => undefined } as never);
+  const needing = await badges.needsYouSessions(w.ownerId);
+  assert.equal(needing.filter((id) => id === sessionId).length, 1, 'the badge counts the run once');
+  const decisions = await readOwnerDecisionsBySession(db as never, w.ownerId, { sessionIds: [sessionId] });
+  assert.equal(decisions.get(sessionId)?.count ?? 0, 0, 'its SCHEDULE_APPROVAL item is not a second count beside the card');
+  const waiting = (await ownerRequests.list(w.ownerId, 'open')).requests.filter((r) => r.scheduleRunId === run.id);
+  assert.equal(waiting.length, 1, 'and Waiting on you shows it once');
 
   // The owner answers the card itself with Always allow: the workspace rule, as in any session.
   await sessionsService.decideApproval(w.ownerId, sessionId, card.id, {
@@ -376,6 +398,7 @@ test('§6.4/§7.3 AWAITING_APPROVAL: push and an item that says what Always allo
     rememberRules: [{ toolName: 'Bash', ruleContent: 'curl:*' }],
   });
   assert.equal(await runs.reconcileRun(run.id), 'RUNNING');
+  assert.ok(!(await badges.needsYouSessions(w.ownerId)).includes(sessionId), 'answered: the badge lets it go');
   const answered = await db.ownerRequest.findUniqueOrThrow({ where: { id: item.id } });
   assert.equal(answered.state, 'DONE', 'the card was answered');
   await report(w, sessionId, { outcome: 'NO_CHANGE', summary: 'Same.' });
@@ -445,6 +468,8 @@ test('§8.3/Waiting on you: a run asking for a wider envelope files an item; All
   const [toDecline] = await pendingItems(schedule.id);
   assert.equal(toDecline.kind, 'SCHEDULE_WIDEN');
   await assert.rejects(ownerRequests.complete(w.ownerId, toDecline.id, {}), 'Waiting on you cannot mark it done: the answer is Allow or Decline');
+  await assert.rejects(ownerRequests.decline(w.ownerId, toDecline.id, 'no'), 'nor decline the item beside a request left PENDING');
+  assert.equal((await db.scheduleChangeRequest.findUniqueOrThrow({ where: { id: toDecline.scheduleChangeRequestId! } })).state, 'PENDING');
   await schedules.decide(w.owner, toDecline.scheduleChangeRequestId!, 'DECLINE');
   assert.deepEqual(await pendingItems(schedule.id), [], 'Decline closes it');
   const declinedItem = await db.ownerRequest.findUniqueOrThrow({ where: { id: toDecline.id } });
@@ -548,7 +573,7 @@ test('§7.4/§12.1 a run\'s session is in no list, search, count, orchestration 
   assert.equal(delta.full, true);
   assert.ok(!ids((delta as { sessions: Array<{ id: string }> }).sessions).includes(sessionId), 'listOpenSince');
   const byIds = await sessionsService.listRowsByIds(w.ownerId, [sessionId, manual]);
-  assert.deepEqual(ids(byIds), [manual], 'listRowsByIds');
+  assert.deepEqual(new Set(ids(byIds)), new Set([sessionId, manual]), 'listRowsByIds names its sessions: a link card to a run is by id');
 
   const found = await sessionsService.search(w.ownerId, 'Hiddenrun', 20);
   assert.ok(found.hits.some((h) => h.id === manual), 'search finds the person\'s conversation');
@@ -563,6 +588,18 @@ test('§7.4/§12.1 a run\'s session is in no list, search, count, orchestration 
   });
   assert.equal(row?.active ?? 0, people, 'workspaceSessionCounts counts only the people\'s');
 
+  assert.equal(await workspaceSessionCount(db as never, w.workspaceId), await db.session.count({
+    where: { workspaceId: w.workspaceId, parentSessionId: null, deletedAt: null, runSource: { not: 'SCHEDULE' } },
+  }), 'the workspace page\'s "N sessions" leaves the run out');
+  await db.session.update({ where: { id: sessionId }, data: { lastTurnAt: new Date('2026-12-01T00:00:00Z') } });
+  const lastActive = (await lastActiveByWorkspace(db as never, [w.workspaceId])).get(w.workspaceId);
+  assert.ok(!lastActive || lastActive < new Date('2026-12-01T00:00:00Z'), 'a run does not make the workspace "last used"');
+  // v1 feeds no run to the wiki: no session_settled fact, and a backfill does not read it.
+  await db.session.update({ where: { id: sessionId }, data: { status: 'AWAITING_INPUT' } });
+  const scope = { ownerId: w.ownerId, spaceId: randomUUID(), workspaceIds: [w.workspaceId], projectIds: [], foreignSessionIds: [], maintenanceListId: null };
+  const facts = await db.$queryRaw<Array<{ kind: string; sessionId: string | null }>>(factsSql(scope, null));
+  assert.ok(!facts.some((f) => f.sessionId === sessionId), 'no wiki fact names the run');
+  assert.deepEqual([...await wikiSessionsOfSpace(db as never, scope, [sessionId])], [], 'wikiSessionsOfSpace leaves it out');
   const orchestration = await sessionsService.listForOrchestration(w.ownerId, {});
   assert.ok(!ids(orchestration).includes(sessionId), 'listForOrchestration (session_list)');
 
@@ -609,4 +646,52 @@ test('§7.4 trashing or purging a run\'s session keeps the run, which says its s
   assert.equal(kept.sessionId, sessionId, 'and still names the session it had');
   h = (await runs.history(w.ownerId, schedule.id)).find((r) => r.id === run.id)!;
   assert.deepEqual(h.session, { id: sessionId, state: 'GONE' });
+});
+
+test('§7.3 a run that outlives its ended schedule and then fails is pushed but files no item nothing would close', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('ended-then-failed');
+  const { schedule } = await created(w);
+  const { sessionId } = await nextRun(schedule.id);
+  await schedules.remove(w.owner, schedule.id);
+  assert.equal((await scheduleOf(schedule.id)).state, 'ENDED');
+  await report(w, sessionId, { outcome: 'FAILED', summary: 'Gave up.' });
+  assert.deepEqual(alertsOf(schedule.id).map((a) => [a.kind, a.ownerRequestId]), [['FAILED', null]]);
+  assert.deepEqual(await items(schedule.id), [], 'no SCHEDULE_FAILED for a deleted schedule');
+});
+
+test('§7.3 two reports racing on the same new key push once', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('race');
+  const { schedule } = await created(w);
+  const { sessionId } = await nextRun(schedule.id);
+  const r = { outcome: 'CHANGED' as const, key: 'codex@0.50.0', summary: 'Codex 0.50.0 is out.' };
+  const settled = await Promise.allSettled([report(w, sessionId, r), report(w, sessionId, r)]);
+  assert.equal(settled.filter((x) => x.status === 'fulfilled').length, 1, 'one report wins; the other is refused');
+  assert.equal(alertsOf(schedule.id).filter((a) => a.kind === 'FINDING').length, 1, 'one push');
+  assert.equal(await db.scheduleFinding.count({ where: { scheduleId: schedule.id, key: 'codex@0.50.0' } }), 1);
+});
+
+test('Waiting on you: an item whose run session was purged stays readable and still closes', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('purged');
+  const { schedule } = await created(w);
+  const one = await nextRun(schedule.id);
+  await report(w, one.sessionId, { outcome: 'FAILED', summary: 'Down.' });
+  const [failed] = await pendingItems(schedule.id);
+  await db.session.delete({ where: { id: one.sessionId } });
+  const open = (await ownerRequests.list(w.ownerId, 'open')).requests.map((r) => r.id);
+  assert.ok(open.includes(failed.id), 'the item outlives its session');
+  assert.equal((await ownerRequests.get(w.ownerId, failed.id)).scheduleRunId, one.run.id);
+  const two = await nextRun(schedule.id);
+  await report(w, two.sessionId, { outcome: 'NO_CHANGE', summary: 'Up.' });
+  assert.equal((await db.ownerRequest.findUniqueOrThrow({ where: { id: failed.id } })).state, 'WITHDRAWN');
+  // A failure may be dismissed with a reason; that is the one item kind Waiting on you ends itself.
+  const three = await nextRun(schedule.id);
+  await report(w, three.sessionId, { outcome: 'FAILED', summary: 'Down again.' });
+  const [again] = await pendingItems(schedule.id);
+  assert.equal((await ownerRequests.decline(w.ownerId, again.id, 'known outage')).state, 'DECLINED');
 });

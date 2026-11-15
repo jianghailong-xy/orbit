@@ -991,12 +991,15 @@ export class ScheduleRunsService {
       { state: 'WITHDRAWN', note: how === 'FAILED' ? 'A later run failed too.' : 'A later run succeeded.', now },
     );
     if (how !== 'FAILED') return;
+    // An ended or deleted schedule has nothing left to wait on the owner for: a run that outlived it and then failed is
+    // still pushed, but files no item nothing would ever close.
+    const file = schedule.state !== 'ENDED';
     const copy = failedCopy(
       schedule.title,
       failure.consecutiveFailures,
       failureClause(failure.reason, { summary: failure.summary, runLimitMinutes: schedule.runLimitMinutes }),
     );
-    const askedBy = run.sessionId ?? (await scheduleHomeSession(tx, schedule));
+    const askedBy = file ? (run.sessionId ?? (await scheduleHomeSession(tx, schedule))) : null;
     const itemId = askedBy
       ? await fileScheduleItem(tx, {
           kind: 'SCHEDULE_FAILED',
