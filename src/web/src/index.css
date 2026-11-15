@@ -8163,6 +8163,35 @@ button.chat-jump-start:hover {
   /* Under the reply's text, which .chat-assistant insets by 12px. */
   padding: 0 12px;
 }
+/* A delivered reply's flip, at the end of its last line (docs/mocks/translation-reply-hover):
+   invisible but in the line, so a hover never re-wraps the text; shown while the reply is hovered,
+   the flip has focus, or the original is on screen. Without hover (touch), its own line as before. */
+.chat-translate-foot.is-reply.is-tail {
+  display: inline-flex;
+  margin: 0 0 0 8px;
+  padding: 0;
+  vertical-align: baseline;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.chat-translated-reply:hover .chat-translate-foot.is-tail,
+.chat-translate-foot.is-tail:focus-within,
+.chat-translate-foot.is-tail.is-flipped {
+  opacity: 1;
+}
+.md-tail-block {
+  margin-top: 2px;
+}
+.md-tail-block > .chat-translate-foot.is-reply.is-tail {
+  margin: 0;
+}
+@media (hover: none) {
+  .chat-translate-foot.is-reply.is-tail {
+    display: flex;
+    margin: 2px 0 0;
+    opacity: 1;
+  }
+}
 .chat-translate-foot.is-error {
   color: var(--error-solid);
 }

@@ -154,7 +154,9 @@ export function UntranslatedDecisionFoot({
 /**
  * An agent reply: "Translated · Show original" ↔ "Original · Show translation"; failed (2A),
  * "Couldn't translate this reply · Retry"; still to be translated, the chip "Translates when the
- * reply is done".
+ * reply is done". The flip is drawn at the end of the reply's last line, shown on hover, and always
+ * while the original is on screen (docs/mocks/translation-reply-hover): the transcript hands it to
+ * the reply's markdown as its tail.
  */
 export function ReplyTranslationFoot({
   translation,
@@ -181,13 +183,13 @@ export function ReplyTranslationFoot({
   }
   if (translation?.text !== undefined) {
     return (
-      <div className="chat-translate-foot is-reply">
+      <span className={flipped ? 'chat-translate-foot is-reply is-tail is-flipped' : 'chat-translate-foot is-reply is-tail'}>
         <span>{flipped ? COPY.original : COPY.translated}</span>
         <Sep />
         <button type="button" className="chat-translate-action" onClick={onFlip}>
           {flipped ? COPY.showTranslation : COPY.showOriginal}
         </button>
-      </div>
+      </span>
     );
   }
   if (pending) {
