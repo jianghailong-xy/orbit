@@ -427,7 +427,8 @@ export class PromptOptimizerController {
   constructor(private readonly optimizer: PromptOptimizerService) {}
 
   /** Optimize a composer draft (docs/prompt-optimizer-design.md, PromptOptimization). Nothing is sent. */
-  @PatScope('sessions:write', { workspaceConfinable: { body: { sessionId: 'session', workspaceId: 'workspace' } } })
+  // Not workspace-confinable: it reads a project's goal and criteria and the wiki, which no workspace vouches for.
+  @PatScope('sessions:write', { workspaceConfinable: false })
   @Post()
   @HttpCode(200)
   optimize(@CurrentUser() user: AuthUser, @Body() dto: PromptOptimizationDto): Promise<PromptOptimization> {
