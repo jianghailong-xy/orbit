@@ -957,13 +957,14 @@ struct RunnerDetailContent: View {
                                 .keyboardType(.numberPad)
                                 #endif
                                 .onChange(of: maxDraft) { _, value in
-                                    if value < 1 { maxDraft = 1 }
+                                    maxDraft = min(max(value, 1), 64)
                                 }
                             Button {
                                 maxDraft += 1
                             } label: {
                                 Text(verbatim: "+").frame(width: 28)
                             }
+                            .disabled(maxDraft >= 64)
                             .accessibilityLabel(RunnerPageCopy.RUNNER_MAX_CONCURRENT_INCREASE)
                         }
                         .buttonStyle(.bordered)

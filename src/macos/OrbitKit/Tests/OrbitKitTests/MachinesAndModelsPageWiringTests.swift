@@ -370,11 +370,17 @@ final class MachinesAndModelsPageWiringTests: XCTestCase {
     }
 
     /// ③ Capacity: Max Concurrent is a meter as Disk is — `3 of 16 running` over a bar — changed from
-    /// Edit in a sheet saved on Save; Keep Free saves as it is picked.
+    /// Edit in the web's sheet (− field +, the unit, the running count, Save once changed, the warning
+    /// below what runs now); Keep Free saves as it is picked.
     func testCapacitySavesAsItChanges() throws {
         let page = try detail()
         let capacity = try slice(page, from: "private func capacitySection(", to: "private func enginesSection(")
-        for piece in ["Stepper(value: $maxDraft, in: 1...64)", ".sheet(isPresented: $editingMax) { maxConcurrentSheet }",
+        for piece in [".accessibilityLabel(RunnerPageCopy.RUNNER_MAX_CONCURRENT_DECREASE)",
+                      ".accessibilityLabel(RunnerPageCopy.RUNNER_MAX_CONCURRENT_INCREASE)",
+                      "Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT_UNIT)",
+                      "RunnerPageCopy.runnerRunningNow(active: running.active)",
+                      "RunnerPageCopy.runnerMaxBelowRunning(active: running.active, max: maxDraft)",
+                      ".disabled(unchanged)", ".sheet(isPresented: $editingMax) { maxConcurrentSheet }",
                       "RunnerPageCopy.runnerRunningOf(active: $0.active, max: $0.max)",
                       "Button(RunnerPageCopy.RUNNER_EDIT) {",
                       "Picker(RunnerPageCopy.RUNNER_KEEP_FREE, selection: $keepFree)",
