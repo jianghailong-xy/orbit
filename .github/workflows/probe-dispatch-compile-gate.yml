@@ -5,7 +5,8 @@
 # using the repository token, which GitHub excepts from the no-recursion rule for
 # workflow_dispatch.
 #
-# Re-pushed (revision 2) after main advanced to a3bf725ad; the dispatch always follows `main`.
+# Re-pushed (revision 3) after the copy-parity fixes landed on main; the dispatch always follows
+# whatever `main` is at the moment it runs.
 name: Probe dispatch (client.yml on main)
 
 on:
