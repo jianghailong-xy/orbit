@@ -78,6 +78,7 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
+import { workspaceCloneHoldSql } from '../common/workspace-clone-gate';
 import { engineNamingJob } from '../sessions/naming';
 import {
   batchActiveTurns,
@@ -682,6 +683,10 @@ export class QueueService {
             -- runner also fails it via failAbandonedWorktreeOperations). Shared with the
             -- session list, which names this gate to the user, so the two cannot drift.
             AND NOT ${worktreeOperationFenceSql('s')}
+            -- A GitHub workspace's sessions wait for its clone (docs/github-workspace-design.md §6): until the runner
+            -- reports it READY the work dir is not there, and an engine started in it would fail. Shared with the
+            -- session list, which names this gate (WORKSPACE_CLONING / WORKSPACE_CLONE_FAILED) to the person waiting.
+            AND NOT ${workspaceCloneHoldSql(Prisma.sql`s."workspace_id"`)}
           -- Fair-queue across spawn trees, then oldest first. A hard sub-cap can only make a
           -- runner idle while work waits; ordering gives the same protection without that —
           -- the tree already holding the most active turns is picked last, so one tree may use

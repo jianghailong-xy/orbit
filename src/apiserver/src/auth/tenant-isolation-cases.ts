@@ -268,6 +268,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── workspaces, under both of their names ────────────────────────────────────────────────────
   ...workspaceRoutes('agents', (t) => t.agentRuleId, (t) => t.spare.agentId),
   ...workspaceRoutes('workspaces', (t) => t.workspaceRuleId, (t) => t.spare.workspaceId),
+  // A GitHub workspace's Retry (docs/github-workspace-design.md §5.3): read by (id, the caller, not deleted), so another
+  // account's id is 404 with nothing written; the owner's own workspace, which has no failed clone, is 409.
+  'POST /workspaces/:id/clone/retry': { request: (of) => ({ params: { id: of.workspaceId }, body: {} }) },
 
   // ── attachments ──────────────────────────────────────────────────────────────────────────────
   'GET /attachments/:id': { request: (of) => ({ params: { id: of.attachmentId } }) },

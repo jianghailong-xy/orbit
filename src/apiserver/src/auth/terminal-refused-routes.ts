@@ -447,6 +447,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/verifications/reopen',
   'POST /wiki/spaces/:id/workspaces',
   'POST /workspaces',
+  'POST /workspaces/:id/clone/retry',
   'POST /workspaces/:id/main-checkout/actions',
   'POST /workspaces/:id/main-checkout/actions/:requestId/cancel',
   'POST /workspaces/:id/repo-cleanup',

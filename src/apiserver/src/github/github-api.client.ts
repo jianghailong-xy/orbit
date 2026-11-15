@@ -189,6 +189,25 @@ export class GithubClient {
     return names.slice(0, MAX_LISTED_BRANCHES);
   }
 
+  /**
+   * An installation token for one repository (§5.4): `repository_ids: [repoId]` and `contents: write`,
+   * `metadata: read`, nothing else, signed for with the App's JWT. GitHub answers 404 for an installation
+   * that is gone and 422 for a repository it no longer covers.
+   */
+  async installationToken(input: { appId: string; privateKey: string; installationId: string; repoId: string }): Promise<{ token: string; expiresAt: Date }> {
+    const answer = await this.api<{ token?: unknown; expires_at?: unknown }>(
+      'POST',
+      `/app/installations/${encodeURIComponent(input.installationId)}/access_tokens`,
+      `Bearer ${appJwt(input.appId, input.privateKey)}`,
+      { repository_ids: [Number(input.repoId)], permissions: { contents: 'write', metadata: 'read' } },
+    );
+    const expiresAt = typeof answer.expires_at === 'string' ? new Date(answer.expires_at) : null;
+    if (typeof answer.token !== 'string' || answer.token === '' || !expiresAt || Number.isNaN(expiresAt.getTime())) {
+      throw new GithubCallError(502, 'unexpected answer');
+    }
+    return { token: answer.token, expiresAt };
+  }
+
   /** Revoke a user token (§5.2 DELETE). Already revoked or expired (404) is done too. */
   async revoke(input: { clientId: string; clientSecret: string; accessToken: string }): Promise<void> {
     const basic = Buffer.from(`${input.clientId}:${input.clientSecret}`).toString('base64');

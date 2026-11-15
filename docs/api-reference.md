@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 32 |
-| `user` | 441 |
+| `user` | 442 |
 | `admin` | 30 |
-| `runner` | 186 |
+| `runner` | 187 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **693** |
+| **Total** | **695** |
 
 ## Public routes
 
@@ -525,6 +525,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `DELETE` | `/api/workspaces/:id` | path `id` | `WorkspacesController.remove` |
 | `GET` | `/api/workspaces/:id` | path `id` | `WorkspacesController.get` |
 | `PATCH` | `/api/workspaces/:id` | body `UpdateWorkspaceDto`; path `id` | `WorkspacesController.update` |
+| `POST` | `/api/workspaces/:id/clone/retry` | path `id` | `GithubWorkspaceController.retry` |
 | `GET` | `/api/workspaces/:id/main-checkout` | path `id`; query `diff` | `WorkspacesController.mainCheckoutRead` |
 | `POST` | `/api/workspaces/:id/main-checkout/actions` | body `Object`; path `id` | `WorkspacesController.mainCheckoutAct` |
 | `POST` | `/api/workspaces/:id/main-checkout/actions/:requestId/cancel` | path `id`, `requestId` | `WorkspacesController.mainCheckoutCancel` |
@@ -585,6 +586,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/deregister` | — | `RunnerApiController.deregister` |
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
+| `POST` | `/api/runner/git-credential` | body `RunnerGitCredentialDto` | `RunnerGitCredentialController.credential` |
 | `POST` | `/api/runner/heartbeat` | body `Object` | `RunnerApiController.heartbeat` |
 | `POST` | `/api/runner/install-result` | body `Object` | `RunnerApiController.installResult` |
 | `POST` | `/api/runner/integration-jobs/:jobId/output` | body `Object`; path `jobId` | `RunnerApiController.integrationJobOutput` |

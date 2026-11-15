@@ -252,6 +252,20 @@ export class GithubConnectionService {
     return { defaultBranch: repo.defaultBranch, branches: matched };
   }
 
+  /**
+   * The repository `repoId` as the account sees it now on GitHub, read with the account's own user-to-server token,
+   * or null when the account cannot see it (§5.3's GITHUB_REPO_FORBIDDEN, §5.4's access re-check). `fresh` reads
+   * GitHub again rather than the minute-old listing. GitHub off answers GITHUB_NOT_CONFIGURED; no connection, or one
+   * GitHub no longer takes, GITHUB_NOT_CONNECTED; GitHub not answering, GITHUB_UNAVAILABLE.
+   */
+  async reachableRepository(ownerId: string, repoId: string, options: { fresh: boolean }): Promise<GithubRepository | null> {
+    const app = await this.config.credentials();
+    if (!app) throw notConfigured();
+    if (options.fresh) this.listings.delete(ownerId);
+    const listing = await this.listing(ownerId, app);
+    return listing.repositories.find((repo) => String(repo.id) === repoId) ?? null;
+  }
+
   /** The account's installations and repositories, read from GitHub at most once a minute. */
   private async listing(ownerId: string, app: GithubAppCredentials): Promise<Listing> {
     const cached = this.listings.get(ownerId);

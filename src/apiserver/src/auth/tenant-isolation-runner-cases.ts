@@ -940,6 +940,17 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ agentDirProbes: [{ agentId: of.workspaceId, exists: true, isGitRepo: false }] }) }),
   },
+  // A clone report about A's workspace from B's runner moves nothing (github/github-workspace.service.ts applyCloneReports).
+  'POST /runner/heartbeat body cloneReports[].workspaceId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: heartbeat({ cloneReports: [{ workspaceId: of.workspaceId, state: 'FAILED', error: 'census' }] }) }),
+  },
+  // A GitHub workspace's token (docs/github-workspace-design.md §5.4): only for a workspace on the calling runner. The
+  // owner's own workspace is not from GitHub, which is 409; B naming A's is the 404 of an id that names nothing.
+  'POST /runner/git-credential body workspaceId': {
+    as: RUNNER,
+    request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId, host: 'github.com', path: 'census/none' } }),
+  },
   // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
   'POST /runner/link/welcome body sessionIds[]': {
     as: RUNNER,

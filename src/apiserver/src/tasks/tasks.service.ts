@@ -9,6 +9,7 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
+import { workspaceCloneReason } from '../common/workspace-clone-gate';
 import { PushService } from '../push/push.service';
 import { ProjectOrphanSweepService } from '../projects/project-orphan-sweep.service';
 import {
@@ -11573,6 +11574,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runnerId: string | null;
         freeBytes: bigint | null;
         minFreeDiskMb: number | null;
+        cloneState: string | null;
         listId: string | null;
         dispatchEpoch: bigint | null;
         priority: number;
@@ -11583,7 +11585,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
              t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
              t.project_id AS "projectId", t.engine AS "taskEngine", t.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('t.owner_id')} AS "modelRouting"
@@ -11644,7 +11646,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       -- with nothing to wake it, waiting for a person or INTERRUPTED by one.
       WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb", a.clone_state AS "cloneState",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
              c.project_id AS "projectId", c.engine AS "taskEngine", c.provider AS "taskProvider",
              a.model_routing AND ${modelRoutingEnabledSql('c.owner_id')} AS "modelRouting"
@@ -11695,6 +11697,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         workspaceId: row.workspaceId,
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
+      // A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): no run starts on it.
+      cloneHeld: workspaceCloneReason(row.cloneState) !== null,
       listId: row.listId,
       projectId: row.projectId,
       // Read here so the dispatch below can prove it is still acting on this row. Scheduling a
@@ -11734,6 +11738,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const projectRoom = await this.projectBudget(ready.map((t) => t.projectId));
     let quotaHeld = 0;
     let diskHeld = 0;
+    let cloneHeld = 0;
     let atCapacity = 0;
     let projectFull = 0;
     let overtaken = 0;
@@ -11772,6 +11777,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         diskHeld += 1;
         const e = holdFor(t.listId);
         if (e) e.disk += 1;
+        continue;
+      }
+      // The clone gate, beside the disk gate and for the same reason: the run would start in a work dir that is not
+      // there yet. It lifts on the sweep after the runner reports the clone READY; a FAILED clone waits for Retry.
+      if (t.cloneHeld) {
+        cloneHeld += 1;
         continue;
       }
       if (heldOff.has(t.id)) continue;
@@ -11818,6 +11829,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(
         `auto-run: ${quotaHeld} ready task(s) held — provider quota exhausted, earliest reset ${resumesAt?.toISOString()}`,
       );
+    }
+    if (cloneHeld > 0) {
+      this.logger.log(`auto-run: ${cloneHeld} ready task(s) held — their GitHub workspace has not finished cloning`);
     }
     if (diskHeld > 0) {
       this.logger.log(

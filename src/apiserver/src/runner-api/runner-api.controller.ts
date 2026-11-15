@@ -3,6 +3,7 @@ import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
 import { OWNER_SECRET_CAPABILITY, OwnerSecretsService } from '../owner-requests/owner-secrets.service';
+import { GithubWorkspaceService } from '../github/github-workspace.service';
 import {
   BadRequestException,
   Body,
@@ -182,6 +183,7 @@ import {
   type ExternalMessageFrom,
   type OrbitMessageFrom,
   type SessionMessageFrom,
+  CLONE_WORKDIR_CAPABILITY,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -1655,6 +1657,12 @@ export class RunnerApiController {
      * routes answer 503.
      */
     @Optional() private readonly mainCheckout?: MainCheckoutService,
+    /**
+     * GitHub workspaces' clones (github/github-workspace.service.ts, docs/github-workspace-design.md §5.4): the reports
+     * a heartbeat brings are applied, and every full answer to a runner that declares clone-workdir/v1 lists what it is
+     * to clone. `@Optional()` like the rest: without it nothing is applied and nothing is listed.
+     */
+    @Optional() private readonly githubWorkspaces?: GithubWorkspaceService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -2550,6 +2558,21 @@ export class RunnerApiController {
         unwritten.add('agentDirProbes');
       }
     }
+    // Where each clone the runner was asked for stands (§5.4): moves this runner's own GitHub workspaces only, before
+    // the answer below lists what is still to clone, so a clone reported done is not handed out again.
+    if (this.githubWorkspaces && Array.isArray(dto?.cloneReports) && dto.cloneReports.length > 0) {
+      try {
+        await this.githubWorkspaces.applyCloneReports({ id: runner.id, ownerId: updated.ownerId }, dto.cloneReports);
+      } catch {
+        // A report not applied is sent again by the runner until its clone is no longer listed.
+        unwritten.add('cloneReports');
+      }
+    }
+    let cloneRequests: RunnerHeartbeatResponse['cloneRequests'];
+    if (this.githubWorkspaces && runnerSupportsCapability(capabilities, CLONE_WORKDIR_CAPABILITY)) {
+      // A read that fails leaves the field out, which the runner reads as "nothing stated", never as "stop every clone".
+      cloneRequests = await this.githubWorkspaces.cloneRequestsFor(runner.id).catch(() => undefined);
+    }
     let cancelSessionIds: string[] = [];
     let mergeRequests: RunnerHeartbeatResponse['mergeRequests'] = [];
     let commitRequests: RunnerHeartbeatResponse['commitRequests'] = [];
@@ -2718,6 +2741,8 @@ export class RunnerApiController {
       ...(forkSnapshotsOpen ? { forkSnapshotsOpen } : {}),
       // Only to a runner that declared owner-secret/v1: ids and expiries, never a value.
       ...(secretReconcile ?? {}),
+      // Only to a runner that declared clone-workdir/v1: every GitHub workspace it is to clone, URLs without a credential.
+      ...(cloneRequests ? { cloneRequests } : {}),
       // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
       ...(linkHints ? { linkHints } : {}),
     };

@@ -3,7 +3,7 @@ import { createHash, createPublicKey, generateKeyPairSync, randomBytes, verify }
 import { GITHUB_API, GITHUB_WEB } from '../github/github-api.client';
 
 /**
- * GitHub, as far as GitHub-backed workspaces P0 reach it (docs/github-workspace-design.md §5.1, §5.2),
+ * GitHub, as far as GitHub-backed workspaces P0 and P1 reach it (docs/github-workspace-design.md §5.1, §5.2, §5.4),
  * in-process: a spec hands `fake.fetch` to `GithubClient`, so nothing reaches the network, and any
  * address it does not know fails the request loudly.
  *
@@ -68,6 +68,16 @@ export class FakeGithub {
   readonly revoked: string[] = [];
   /** How long an access token lives, in seconds; null hands out tokens that do not expire. */
   accessLifetime: number | null = 8 * 3600;
+  /** Every installation token asked for (P1, §5.4): the installation and the body as sent. */
+  readonly installationTokenRequests: Array<{ installationId: number; repositoryIds: unknown; permissions: unknown }> = [];
+  /** Every installation token handed out. */
+  readonly installationTokens: string[] = [];
+  /** How long an installation token lives, in seconds: GitHub's hour unless a spec says otherwise. */
+  installationTokenLifetime = 3600;
+  /** Installations removed from their account on GitHub: a token for one is 404. */
+  readonly uninstalled = new Set<number>();
+  /** Every user who authorized the App, so an installation can be found by its id alone. */
+  private readonly known = new Set<FakeGithubUser>();
   private readonly grants = new Map<string, Grant>();
   private readonly tokens = new Map<string, UserToken>();
   private readonly refreshTokens = new Map<string, FakeGithubUser>();
@@ -84,6 +94,7 @@ export class FakeGithub {
     if (`${url.origin}${url.pathname}` !== `${GITHUB_WEB}/login/oauth/authorize`) throw new Error(`not GitHub's authorization page: ${authorizationUrl}`);
     if (url.searchParams.get('code_challenge_method') !== 'S256') throw new Error('no S256 challenge');
     const code = randomBytes(10).toString('hex');
+    this.known.add(user);
     this.grants.set(code, {
       user,
       clientId: url.searchParams.get('client_id') ?? '',
@@ -112,6 +123,8 @@ export class FakeGithub {
     }
     if (url.origin !== GITHUB_API) throw new Error(`the fake GitHub does not serve ${url.href}`);
     if (method === 'GET' && url.pathname === '/app') return this.app(auth);
+    const minting = /^\/app\/installations\/(\d+)\/access_tokens$/.exec(url.pathname);
+    if (method === 'POST' && minting) return this.installationToken(auth, Number(minting[1]), String(init?.body ?? '{}'));
     if (method === 'DELETE' && url.pathname === `/applications/${this.clientId}/token`) {
       if (auth !== `Basic ${Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')}`) return json(401, { message: 'Bad credentials' });
       const token = (JSON.parse(String(init?.body ?? '{}')) as { access_token?: string }).access_token ?? '';
@@ -153,6 +166,31 @@ export class FakeGithub {
     }
     throw new Error(`the fake GitHub does not serve ${method} ${url.pathname}`);
   };
+
+  /**
+   * POST /app/installations/:id/access_tokens with the App's JWT: a token for the repositories asked for, each of
+   * which the installation must cover (422 otherwise), and 404 for an installation that is gone.
+   */
+  private installationToken(auth: string, installationId: number, body: string): Response {
+    const denied = this.app(auth);
+    if (denied.status !== 200) return denied;
+    const asked = JSON.parse(body) as { repository_ids?: unknown; permissions?: unknown };
+    this.installationTokenRequests.push({ installationId, repositoryIds: asked.repository_ids, permissions: asked.permissions });
+    const installation = [...this.known].flatMap((user) => user.installations).find((i) => i.id === installationId);
+    if (!installation || this.uninstalled.has(installationId)) return json(404, { message: 'Not Found' });
+    const ids = Array.isArray(asked.repository_ids) ? asked.repository_ids : [];
+    if (ids.some((id) => !installation.repos.some((repo) => repo.id === id))) {
+      return json(422, { message: 'There is at least one repository that does not exist or is not accessible to the parent installation.' });
+    }
+    const token = `ghs_${randomBytes(18).toString('hex')}`;
+    this.installationTokens.push(token);
+    return json(201, {
+      token,
+      expires_at: new Date(Date.now() + this.installationTokenLifetime * 1000).toISOString(),
+      permissions: asked.permissions,
+      repository_selection: 'selected',
+    });
+  }
 
   private app(auth: string): Response {
     const jwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';

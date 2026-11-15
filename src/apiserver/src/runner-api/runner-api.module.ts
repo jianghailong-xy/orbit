@@ -26,6 +26,8 @@ import { RunnerServiceTokensController } from './runner-service-tokens.controlle
 import { RunnerWatchesController } from './runner-watches.controller';
 import { RunnerOwnerRequestsController } from './runner-owner-requests.controller';
 import { RunnerSecretGrantsController } from './runner-secret-grants.controller';
+import { RunnerGitCredentialController } from './runner-git-credential.controller';
+import { GithubModule } from '../github/github.module';
 import { RunnerReleaseController } from './runner-release.controller';
 import { RunnerLinkGatewayGuard, RunnerLinkTokenController } from './runner-link-token.controller';
 import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
@@ -91,6 +93,9 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     // RunnerEngineInstallController starts and reads the engine relay through the RunnersService the
     // web's Install uses.
     RunnersModule,
+    // RunnerGitCredentialController mints a GitHub workspace's token, and the heartbeat reconciles its clone, through
+    // the one GithubWorkspaceService, whose in-memory token cache is the only place a token is kept.
+    GithubModule,
   ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
@@ -120,6 +125,8 @@ import { AdminRoleGuard } from '../users/admin-role.guard';
     RunnerWatchesController,
     RunnerOwnerRequestsController,
     RunnerSecretGrantsController,
+    // A GitHub workspace's installation token, for the runner's own git commands (docs/github-workspace-design.md §5.4).
+    RunnerGitCredentialController,
     // Which runner release each runner is to run (runner-release.ts).
     RunnerReleaseController,
     RunnerWikiController,
