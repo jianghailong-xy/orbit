@@ -91,7 +91,8 @@ struct CoordinatorChangeSheet: View {
     }
 
     private func label(_ row: CoordinatorChangeRow) -> some View {
-        HStack(spacing: 12) {
+        let managed = managedRunner(row)
+        return HStack(spacing: 12) {
             ProviderMark(provider: row.provider, size: 30)
                 .opacity(row.way == nil ? 0.45 : 1)
                 .accessibilityHidden(true)
@@ -110,11 +111,22 @@ struct CoordinatorChangeSheet: View {
             if row.isCurrent {
                 Text(CoordinatorChangeCopy.current).foregroundStyle(.secondary)
             }
-            if row.runnerOffline {
+            if let managed, row.runnerOffline {
+                // The managed runner's shared state, never "Runner offline": asleep is Asleep, and
+                // a message wakes it (D4).
+                Text(managed.label).font(.orbitLabel).foregroundStyle(managed.ink)
+            } else if row.runnerOffline {
                 Text(CoordinatorChangeCopy.runnerOffline).font(.orbitLabel).foregroundStyle(.secondary)
             }
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
+    }
+
+    /// The account's managed runner, when this row's workspace runs on it.
+    private func managedRunner(_ row: CoordinatorChangeRow) -> ManagedRunnerRow? {
+        guard let workspace = app.agents?.items.first(where: { $0.id == row.workspaceId }),
+              let runnerID = workspace.runnerId else { return nil }
+        return ManagedRunnerLogic.row(runnerID: runnerID, status: app.managedRunner?.status)
     }
 }

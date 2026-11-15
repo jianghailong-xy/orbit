@@ -184,8 +184,8 @@ as COORDINATOR_MESSAGE_UNDELIVERED instead, carrying the sentence that refused t
 
 --client-turn-id is the key the message is written under, and what makes a retry safe: repeat a
 call whose answer you never saw — a dropped connection, a timeout — with the same key and the same
-message, and you get that same turn back instead of a second copy of the message. Omitted, the
-server mints a key of its own and every call is a new message.
+message, and you get that same turn back instead of a second copy of the message. Omitted, a new
+key is drawn for the call and printed with the answer or the error, and every call is a new message.
 
 --expect-reply makes the message a request to the coordinator it is DELIVERED to: the call still
 returns at once, with "requestId" and "replyBy", and the outcome comes back to this session as a
@@ -347,6 +347,7 @@ Options:
   --content-hash SHA256  sha256 of the observed CONTENT — 64 hex characters
   --source TEXT          who observed it (default MERGE_EVIDENCE_WRITER)
   --detail JSON          the raw observation: the command, its output, the blob ids
+  --detail-file -        read that JSON from stdin instead
   --json                 emit compact JSON
 
 By CONTENT, never by ` + "`git branch --contains`" + `: after a squash merge that answer is a
@@ -382,6 +383,9 @@ Options:
   --landing-check-timeout-seconds N  landing check budget in seconds
   --merge-check-timeout-seconds N  that check's budget
   --escalate-after-seconds N       how long an exception waits on the coordinator (300–604800)
+  --request-id ID                  only to repeat a create whose answer you never saw: the id its
+                                   failure named. The same id answers with the project it created,
+                                   or creates it once
   --json                           emit compact JSON
 
 The whole integration object is the account owner's at creation — the line AND the merge check —
@@ -796,12 +800,13 @@ func cliProjectSend(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// The key rides only when there is one, exactly as `session send` sends it: omitted, the request
-	// is the one it always was, and the server mints the key itself.
-	body := map[string]interface{}{"message": messageText}
-	if key := strings.TrimSpace(*clientTurnID); key != "" {
-		body["clientTurnId"] = key
+	// Keyed per invocation, as `session send` is, so a lost answer can be replayed. Not resent
+	// here: the coordinator it resolves to can change between deliveries.
+	key, err := callIDOrNew(*clientTurnID)
+	if err != nil {
+		return fmt.Errorf("send to project coordinator: %w", err)
 	}
+	body := map[string]interface{}{"message": messageText, "clientTurnId": key}
 	if err := request.apply(body); err != nil {
 		return err
 	}
@@ -812,9 +817,10 @@ func cliProjectSend(args []string, in io.Reader, out io.Writer) error {
 		body,
 	)
 	if err != nil {
-		return fmt.Errorf("send to project coordinator: %w", err)
+		return fmt.Errorf("send to project coordinator: %w",
+			messageReplayError(err, false, "orbit project send", "", id, body))
 	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
+	return writeCLIRawJSON(out, withCallID(raw, "clientTurnId", key), *jsonOut)
 }
 
 // cliProjectResolveBlocker ends one open blocker with the reason it no longer blocks.
@@ -1399,6 +1405,7 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	fs.Int("landing-check-timeout-seconds", 0, "the landing check budget in seconds")
 	mergeCheckTimeoutSeconds := fs.Int("merge-check-timeout-seconds", 0, "that check's budget in seconds")
 	escalateAfterSeconds := fs.Int("escalate-after-seconds", 0, "how long an exception waits on the coordinator before it becomes yours")
+	requestIDFlag := fs.String("request-id", "", "repeat a create whose answer you never saw: the request id its failure named")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1500,14 +1507,26 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("create project: %s", declinedText("the human rejected this project", declined))
 		}
 	}
+	requestID, err := createRequestID(*requestIDFlag)
+	if err != nil {
+		return err
+	}
+	// The owner's own door (user mode) keeps no receipts: a failure there is told to look before creating again.
+	if _, runnerDoor := t.(*Transport); !runnerDoor {
+		if *requestIDFlag != "" {
+			return fmt.Errorf("--request-id needs the runner's door; this Orbit login creates through the user API, which keeps no create receipts")
+		}
+		requestID = ""
+	}
 	cliRecord().sentBody(body)
 	raw, err := t.createProject(
 		sessionID,
 		strings.TrimSpace(os.Getenv(envOrchestrationToken)),
+		requestID,
 		body,
 	)
 	if err != nil {
-		return fmt.Errorf("create project: %w", err)
+		return describeCreateFailure("project", "`orbit project create` (--request-id)", "`orbit task list` or the project list in Orbit", requestID, err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

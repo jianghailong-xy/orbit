@@ -75,6 +75,9 @@ struct OrbitiOSApp: App {
                         // read timeout. Coming back from a banner has nothing to repair.
                         guard didBackground else { break }
                         didBackground = false
+                        // What started waiting while away is the lists' to show, not a burst of
+                        // notices on the way back in (docs/mocks/needs-you-capsule/12-once).
+                        model.retakeNeedsYouStock()
                         model.consoleRegistry?.reconnectAll()
                         model.kickControlPlane()
                     default:

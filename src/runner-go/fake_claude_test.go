@@ -132,7 +132,7 @@ func TestMain(m *testing.M) {
 // a `!` shell inherits too, and which passes over the login the CLI tests save.
 var callingSessionEnv = []string{
 	"ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth, envMCPOrchestration,
-	envOrchestrationToken, envMCPPermissionPrompt, envWatches, envWiki, envBgSocket, envBgToken, envBgJobID,
+	envOrchestrationToken, envMCPPermissionPrompt, envWatches, envWiki, envScheduleRun, envScheduledCheckOnly, envBgSocket, envBgToken, envBgJobID,
 	envRunnerChild,
 }
 

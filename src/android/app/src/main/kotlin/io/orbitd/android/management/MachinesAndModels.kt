@@ -118,8 +118,9 @@ internal object MachinesAndModels {
      * web's machine card draws it nothing: the machine's own page says so, and signs it in (OrbitKit `MachinesAndModels.attention`).
      * [workspaces] are the account's, each on the machine it names. */
     fun attention(runners: List<JsonObject>, workspaces: List<JsonObject>, memberPools: List<Pool>, ownPools: List<Pool>,
-                  nowMs: Long): List<Attention> {
-        val offline = runners.filter { it.bool("online") != true }.map { runner ->
+                  nowMs: Long, managedRunnerId: String? = null): List<Attention> {
+        // The account's managed runner says where it stands by its own row's label (asleep is not offline), never as a machine away.
+        val offline = runners.filter { it.bool("online") != true && !ObjectId.same(it.text("id"), managedRunnerId) }.map { runner ->
             val machine = RunnerPage.displayName(runner)
             Attention(Kind.Offline(runner.text("id")), offlineLine(machine), listOf(machine), offlineDetail(runner.str("lastHeartbeatAt"), nowMs))
         }

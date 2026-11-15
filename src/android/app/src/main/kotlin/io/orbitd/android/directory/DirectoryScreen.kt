@@ -12,16 +12,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -30,7 +25,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
-import io.orbitd.android.cards.SessionNeedsYouBar
+import io.orbitd.android.cards.CardFocus
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.management.LocalSessionRecaps
 import io.orbitd.android.management.RunnerPage
@@ -73,7 +68,6 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
     var action by remember { mutableStateOf<DirectoryDialog?>(null) }
     var projectMenu by remember { mutableStateOf<SessionProjectRow?>(null) }
     var pulling by remember { mutableStateOf(false) }
-    val refreshState = rememberPullToRefreshState()
     var pinnedCollapsed by rememberPinnedCollapsed()
     val sidebar by rememberProjectSidebar(app, handle, api)
     val asks by app.realtime.directoryAsks.collectAsState()
@@ -135,14 +129,10 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
         }
     })
 
-    // The needs-you bar floats over the list (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`): the rows keep
-    // its height clear only at rest, then go on behind it, and the pull's spinner comes out under it.
-    var barHeight by remember { mutableIntStateOf(0) }
-    val barTop = with(LocalDensity.current) { barHeight.toDp() }
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
             if (query.isNotBlank()) {
-                Box(Modifier.padding(top = barTop)) { SearchResultsList(query, api, open, bottom = SEARCH_FIELD_ROOM) }
+                SearchResultsList(query, api, open, bottom = SEARCH_FIELD_ROOM)
             } else {
                 // Its rows are the folders and the session and project rows, keyed by id; not the headings.
                 ReportDirectoryDrawn(data, list) { (it.key as? String)?.startsWith("heading:") == false }
@@ -155,11 +145,9 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                             else if (!data.offline) withTimeoutOrNull(PULL_WAIT_MS) { app.realtime.rereadDirectory() }
                         } finally { pulling = false }
                     }
-                }, modifier = Modifier.fillMaxSize(), state = refreshState, indicator = {
-                    PullToRefreshDefaults.Indicator(refreshState, pulling, Modifier.align(Alignment.TopCenter).padding(top = barTop))
-                }) {
+                }, modifier = Modifier.fillMaxSize()) {
                     LazyColumn(Modifier.fillMaxSize().testTag("directory-list"), state = list,
-                        contentPadding = PaddingValues(top = barTop, bottom = if (isFolder) 24.dp else SEARCH_FIELD_ROOM)) {
+                        contentPadding = PaddingValues(bottom = if (isFolder) 24.dp else SEARCH_FIELD_ROOM)) {
                         if (data.ready && isFolder && folder == null) {
                             item { StatusMessage("Folder unavailable", "It may have been deleted or moved.", refresh) }
                         } else {
@@ -183,9 +171,14 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                                 if (!pinned || !pinnedCollapsed) items(group.sessions, key = { it.id }) { session ->
                                     val project = content.projects[session.id]
                                     // A project's row opens its coordinator's conversation (owner 2026-11-11, docs/mocks/project-sessions-column
-                                    // board 5), whose bar opens the project's sessions; a project with no coordinator opens them as a page.
-                                    if (project != null) SessionProjectRowView(project, { open(project.coordinator?.let { OrbitRoute(Destination.SESSION, it.id, workspace, folderId) }
-                                        ?: OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST)) }) {
+                                    // board 5), whose bar opens the project's sessions; a project with no coordinator opens them as a page. A row
+                                    // whose line says a member waits on you opens that member, onto its waiting card (owner 2026-11-14).
+                                    if (project != null) SessionProjectRowView(project, {
+                                        val member = project.waitingMember
+                                        if (member != null) CardFocus.request(member, CardFocus.WAITING)
+                                        open((member ?: project.coordinator?.id)?.let { OrbitRoute(Destination.SESSION, it, workspace, folderId) }
+                                            ?: OrbitRoute(Destination.PROJECT_SESSIONS, project.projectId, workspace, origin = Origin.LIST))
+                                    }) {
                                         projectMenu = project
                                     }
                                     else SessionRow(session, machine, { open(OrbitRoute(Destination.SESSION, session.id, workspace, folderId)) },
@@ -215,9 +208,6 @@ internal fun DirectoryScreen(route: OrbitRoute, data: DirectoryData, api: Direct
                 }
             }
             if (!isFolder) Box(Modifier.align(Alignment.BottomCenter)) { BottomSearch(list, query) { query = it } }
-        }
-        if (!isFolder) Box(Modifier.zIndex(1f).onSizeChanged { barHeight = it.height }) {
-            SessionNeedsYouBar(app, handle, null, list, hidden = false, below = null, onBelow = {}, open = open)
         }
     }
     // A row's menu does not wait for a read either (iOS): what the server refuses comes back in its own words. A marked member's

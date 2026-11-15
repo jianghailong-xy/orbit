@@ -1,0 +1,101 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .strip { display: flex; gap: 18px; align-items: flex-start; margin-bottom: 8px; }
+  .strip .col { width: 440px; }
+  .t { font: 600 13px "Inter", "Noto Sans SC"; color: #14428f; margin: 8px 0 4px; }
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  .cap44.fl { z-index: 16; }
+  .ph.light .cap44.fl { box-shadow: inset 0 .75px 0 var(--glass-hi), 0 0 0 .5px var(--glass-edge), 0 10px 26px rgba(0,0,0,.13); }
+  .cap44.ring { box-shadow: inset 0 .75px 0 var(--glass-hi), inset 0 0 0 1.5px rgba(255,149,0,.75), 0 0 0 4px rgba(255,149,0,.18), 0 10px 26px rgba(0,0,0,.13); }
+  .deck { position: absolute; height: 44px; border-radius: 22px; z-index: 15; background: #EDEDF2; box-shadow: inset 0 0 0 .5px rgba(0,0,0,.08), 0 6px 14px rgba(0,0,0,.08); }
+  .scrim { position: absolute; inset: 0; z-index: 14; background: rgba(0,0,0,.18); }
+  .ghost { position: absolute; left: 16px; right: 16px; height: 44px; border-radius: 22px; z-index: 17; border: 1.5px dashed rgba(10,132,255,.6); }
+  .arrow { position: absolute; z-index: 22; font: 700 12px "Inter", "Noto Sans SC"; color: #0A60D0; background: rgba(214,228,255,.95); padding: 3px 7px; border-radius: 7px; }
+  .finger { position: absolute; z-index: 23; width: 26px; height: 26px; border-radius: 50%; background: rgba(10,132,255,.25); box-shadow: 0 0 0 2px rgba(10,132,255,.7); }
+  table.tok td:first-child { width: 120px; }
+</style>
+<body>
+<h1>needs-you 胶囊 · 加上中间动画</h1>
+<p class="lede">owner 11-15：<b>现在的交互太硬，需要有中间动画。</b>今天：展开时一串胶囊「啪」地出现、收起「啪」地消失；上滑收走后列表一下跳上去；新的一件到来时胶囊直接冒出来。下面每种交互画 4 帧（从左到右是时间），右上角是这一帧的时刻。全部用系统弹簧（不做线性/缓动曲线），开了「减弱动态效果」时一律改成 0.2 秒淡入淡出。</p>
+<div id="rows"></div>
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const L = 'left:16px;right:16px';
+const ROWS = [
+  { t: 'Task: Android: land the waiting row change', s: 'Background process running…', tm: 'now' },
+  { t: '单机 Ceph 部署方案设计', s: 'Running · writing ceph-plan.md', tm: '2m' },
+  { t: 'Android 自动更新报错', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '5h' },
+  { t: 'Orbit 接入 Ollama（本地模型供应商）', s: 'Completed · merged to main', tm: '6h' },
+];
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-develop</div>`;
+const rows = (top) => `<div class="sec" style="top:${top}px">Today</div>` + ROWS.map((r, i) =>
+  `<div class="srow sep" style="top:${top + 30 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const A = { glyph: 'hand', title: '2 sessions need you', sub: 'Android 自动更新报错', age: '5h' };
+const E1 = { glyph: 'hand', title: 'orbit-develop needs you', sub: 'Android 自动更新报错', age: '5h' };
+const E2 = { glyph: 'hand', title: 'orbit needs you', sub: 'Task: Owner answer replayed to a new coordinator', age: '1d' };
+const cap = (o, top, extra = '', cls = 'fl') => capA({ ...o, top, style: L + ';' + extra, cls });
+const deck = (top, op = 1) => `<div class="deck" style="left:28px;right:28px;top:${top + 7}px;opacity:${op}"></div><div class="deck" style="left:42px;right:42px;top:${top + 13}px;opacity:${op};z-index:14;filter:brightness(.97)"></div>`;
+const fr = (body, t, h = 330) => `<div class="col"><div class="t">${t}</div>${phone('light', `${statusBar('12:44')}${listNav}${body}${edge('light', 70, 112)}`, { h, cls: 'crop' })}</div>`;
+const scrim = (op) => `<div class="scrim" style="opacity:${op}"></div>`;
+const arr = (txt, x, y) => `<div class="arrow" style="left:${x}px;top:${y}px">${txt}</div>`;
+
+const sec = (title, desc, frames) => `<h2>${title}</h2><p class="lede" style="margin-bottom:6px">${desc}</p><div class="strip">${frames.join('')}</div>`;
+let html = '';
+// 1 展开
+html += sec('① 按下展开：叠边「抽」成一串', '第一枚原地不动；后面那几枚从它<b>身下</b>依次滑出（每枚晚 40ms），像把叠着的卡片拉开；遮罩同时淡入。', [
+  fr(`${rows(196)}${deck(116)}${cap(A, 116)}`, '0 ms · 按下'),
+  fr(`${rows(196)}${scrim(.35)}${cap(E2, 136, 'opacity:.6;transform:scale(.96)')}${cap(E1, 116)}${arr('第二枚从身下出来', 150, 190)}`, '90 ms'),
+  fr(`${rows(196)}${scrim(.8)}${cap(E2, 162, 'transform:scale(.99)')}${cap(E1, 116)}`, '180 ms'),
+  fr(`${rows(196)}${scrim(1)}${cap(E2, 166)}${cap(E1, 116)}`, '320 ms · 停稳（弹簧略过冲 2pt）'),
+]);
+// 2 收起
+html += sec('② 收起：倒着收回去', '点 ↑ 或点遮罩：后面的胶囊滑回第一枚身下、缩小淡出，叠边在最后 80ms 重新露出来；遮罩淡出。', [
+  fr(`${rows(196)}${scrim(1)}${cap(E2, 166)}${cap(E1, 116)}`, '0 ms · 点 ↑'),
+  fr(`${rows(196)}${scrim(.6)}${cap(E2, 146, 'opacity:.8;transform:scale(.98)')}${cap(E1, 116)}`, '100 ms'),
+  fr(`${rows(196)}${scrim(.2)}${deck(116, .5)}${cap(E2, 124, 'opacity:.3;transform:scale(.95)')}${cap(E1, 116)}`, '200 ms'),
+  fr(`${rows(196)}${deck(116)}${cap(A, 116)}`, '280 ms · 回到收起态'),
+]);
+// 3 上滑
+html += sec('③ 上滑收走：跟手 → 甩出去 → 列表补位', '拖动时胶囊跟手、越往上越透明（今天已有）；松手后继续往上飞出并缩到 0.92；<b>然后</b>列表开头空出来的那一截才收起（行平滑上移，而不是一下跳上去）。', [
+  fr(`${rows(196)}${deck(104)}${cap(A, 104)}<div class="finger" style="left:207px;top:132px"></div>`, '拖动中（跟手）'),
+  fr(`${rows(196)}${cap(A, 70, 'opacity:.5;transform:scale(.95)')}`, '松手后 120 ms'),
+  fr(`${rows(176)}${arr('行补位上移', 150, 160)}`, '240 ms · 胶囊已走，列表开始上移'),
+  fr(`${rows(126)}`, '420 ms · 停稳；☰ 上出现数字'),
+]);
+// 4 出现 / 到达
+html += sec('④ 出现 / 新的一件到来：从导航下面落下来', '胶囊从导航栏后面往下落（-20pt → 0，淡入），列表同时让出位置；新到的那件再带一次琥珀圈的「呼吸」（亮 → 暗 → 亮，只一次），6 秒后描边淡出。', [
+  fr(`${rows(126)}`, '0 ms'),
+  fr(`${rows(150)}${cap(E1, 96, 'opacity:.4')}`, '120 ms'),
+  fr(`${rows(196)}${cap({ ...E1, title: 'Needs your reply · task_create', age: '0s' }, 116, '', 'fl ring')}`, '300 ms · 落定，琥珀圈'),
+  fr(`${rows(196)}${cap(E1, 116)}`, '6 s · 描边淡出，换回总数'),
+]);
+// 5 会话页中间那枚
+const qcap = (inner, extra = '') => `<div style="position:absolute;top:62px;left:89px;width:198px;height:44px;border-radius:22px;z-index:13;background:#fff;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.06),0 2px 10px rgba(0,0,0,.08);display:flex;align-items:center;gap:8px;padding:0 14px;font:16px Inter,'Noto Sans SC';white-space:nowrap;overflow:hidden;${extra}">${inner}</div>`;
+const consoleNav = `<div class="nav"><div class="gc l">${ic('chevl', 22, 'var(--l1)', 2.6)}</div><div class="gc r">${dots()}</div></div>`;
+const cfr = (center, t) => `<div class="col"><div class="t">${t}</div>${phone('light', `${statusBar('12:44')}${consoleNav}${center}${tx(118)}${edge('light', 70, 112)}`, { h: 330, cls: 'crop' })}</div>`;
+const q = `${ic('chevu', 15, 'var(--l2)', 2.4)}<span>把两个尾巴建成任务</span>`;
+const w = `<span style="width:26px;height:26px;border-radius:50%;background:rgba(255,149,0,.15);display:flex;align-items:center;justify-content:center;margin-left:-6px">${ic('hand', 15, '#FF9500', 2.1)}</span><b style="font-weight:600">1 waiting below</b>${ic('chevd', 13, 'var(--l2)', 2.6)}`;
+html += sec('⑤ 会话页导航中间那枚：「↑ 问题」⇄「✋ 1 waiting below」', '同一枚胶囊变形：宽度弹簧过渡，旧字向上淡出、新字从下淡入，琥珀圆片放大进场；不是两枚之间硬切。', [
+  cfr(qcap(q), '0 ms · 读历史，显示问题'),
+  cfr(qcap(`<span style="opacity:.4;transform:translateY(-6px);display:flex;gap:8px">${q}</span>`), '80 ms · 旧字上移淡出'),
+  cfr(qcap(`<span style="opacity:.5;transform:translateY(5px);display:flex;gap:8px;align-items:center">${w}</span>`, 'box-shadow:inset 0 0 0 1.2px rgba(255,149,0,.4),0 2px 10px rgba(0,0,0,.08)'), '160 ms · 新字从下进来'),
+  cfr(qcap(w, 'box-shadow:inset 0 0 0 1.2px rgba(255,149,0,.55),0 2px 10px rgba(0,0,0,.08)'), '260 ms · 停稳'),
+]);
+document.getElementById('rows').innerHTML = html;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>曲线</td><td>全部系统弹簧：展开/收起 <code>.spring(duration: 0.32, bounce: 0.15)</code>；落下/飞走 <code>.spring(duration: 0.3, bounce: 0)</code>；会话页那枚变形 <code>.smooth(duration: 0.26)</code>。Android 用 <code>spring(dampingRatio = 0.8, stiffness = Medium)</code>。</td></tr>
+<tr><td>①②</td><td>展开的胶囊用 <code>.transition(.asymmetric(insertion: .move(edge: .top).combined(with: .scale(0.96)).combined(with: .opacity), …))</code>，逐枚延迟 40ms；遮罩 <code>.opacity</code> 过渡；收起时叠边延后 80ms 出现。</td></tr>
+<tr><td>③</td><td>松手后胶囊继续上移到 -80 并缩到 0.92 淡出，<b>结束后</b>才把列表首行留位从胶囊高度动画到 0（同一个弹簧），行平滑上移。</td></tr>
+<tr><td>④</td><td>胶囊出现：<code>.move(edge: .top) + .opacity</code>；列表首行留位从 0 动画到胶囊高度。到达时琥珀圈一次「呼吸」（0.6s）。</td></tr>
+<tr><td>⑤</td><td>同一个视图里切换内容：<code>.contentTransition</code> + 文字 <code>.transition(.push(from: .bottom))</code>，宽度随内容弹簧过渡。</td></tr>
+<tr><td>减弱动态</td><td>「减弱动态效果」打开时：以上全部换成 0.2s 淡入淡出，不位移、不缩放、不呼吸。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>待你定</b>：① 展开用「从身下依次抽出」（推荐），还是整串一起往下展开；② 上滑后列表「等胶囊走了再补位」（推荐），还是同时补位；③ 到达时琥珀圈呼吸一次（推荐），还是不呼吸只亮着。`;
+</script>
+</body></html>

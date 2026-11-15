@@ -344,6 +344,7 @@ model User {
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
+  createRequests    CreateRequestReceipt[]
 
   /// Cross-project crossings recorded under this account (unit L4, 0155).
   handoffApprovals ProjectHandoffApproval[]
@@ -1751,6 +1752,9 @@ model WorkspacePermissionRule {
   // long before the rule is revoked).
   createdById String?   @map("created_by_id") @db.Uuid
   approvalId  String?   @map("approval_id") @db.Uuid
+  // Written by answering Always allow on a scheduled run's card (migration 0860): the only Bash rules a CHECK_ONLY
+  // run on Claude Code carries (docs/scheduled-tasks-design.md §6.2).
+  fromScheduleRun Boolean @default(false) @map("from_schedule_run")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@unique([workspaceId, toolName, ruleContent])
@@ -2360,6 +2364,8 @@ model Session {
   messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   keyGatewayTokens      KeyGatewayToken[]
+  coordinatorHandoffsFrom CoordinatorHandoff[] @relation("CoordinatorHandoffFrom")
+  coordinatorHandoffsTo   CoordinatorHandoff[] @relation("CoordinatorHandoffTo")
   keyGatewayUsage       KeyGatewayUsage[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
@@ -2778,6 +2784,9 @@ model Approval {
   /// (approval_decided_via_chk).
   decidedFeishuOpenId    String? @map("decided_feishu_open_id")
   decidedFeishuMessageId String? @map("decided_feishu_message_id")
+  /// Settings › Translation (0550, @orbit/shared ApprovalTranslation): what the card shows the owner, in
+  /// their language. `input` stays the engine's English. NULL when translation was not involved.
+  translation  Json?
   /// The machine name of the TERMINAL credential that decided it (0663), when `decidedCredentialKind` is `TERMINAL`,
   /// and only then (approval_decided_via_chk). Copied, so it outlives a revoked or expired credential.
   decidedTerminalMachineName String? @map("decided_terminal_machine_name")
@@ -2904,6 +2913,7 @@ model ConversationTurn {
   externalSenderSource String? @map("external_sender_source")
   externalSenderId     String? @map("external_sender_id")
   externalSenderName   String? @map("external_sender_name")
+  status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED | HELD (being translated, or its translation failed)
   /// Which client sent this turn (migration 0662, sessions/turn-sender-client.ts): web, ios, macos, android,
   /// terminal, feishu or runner, from the credential and the `X-Orbit-Client` / `X-Orbit-Device` headers of the
   /// door it came in through, never from a body. The detail is an ios client's device (iphone / ipad) or a
@@ -2911,7 +2921,14 @@ model ConversationTurn {
   /// platform's own deliveries, and every turn written before 0662.
   senderClient       String? @map("sender_client")
   senderClientDetail String? @map("sender_client_detail")
-  status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
+  /// Session translation (migration 0532, @orbit/shared translation.ts): what the owner wrote, when the turn was
+  /// translated for the engine — `content` is then the English delivered. Null on every turn translation was not
+  /// involved in, and so are the two below.
+  displayPrompt    String?  @map("display_prompt")
+  /// TRANSLATING | FAILED (both with status HELD: not deliverable) | DONE | SENT_AS_WRITTEN.
+  translationState String?  @map("translation_state")
+  /// The language the owner wrote in (TRANSLATION_LANGUAGES).
+  translationLang  String?  @map("translation_lang")
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
   // Random runner-engine generation that owns the current delivery lease. A
@@ -3591,6 +3608,7 @@ model Project {
   // `@unique` already is one.)
   @@index([coordinatorWorkspaceId])
   @@map("project")
+  coordinatorHandoffs CoordinatorHandoff[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -5243,6 +5261,31 @@ model TaskProgress {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("task_progress")
+}
+
+/// The receipt of one project_create or session_create request (migration 0645,
+/// docs/recovery-contract.md §6). A repeat of the request under the same id reads `result` back
+/// instead of creating a second Project or Session; the same id with another payload is refused.
+model CreateRequestReceipt {
+  ownerId        String   @map("owner_id") @db.Uuid
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// `PROJECT_CREATE` or `SESSION_CREATE`.
+  actionKind     String   @map("action_kind")
+  /// The caller's X-Orbit-Request-Id.
+  requestToken   String   @map("request_token")
+  /// sha256 of the canonical payload and the session that sent it.
+  fingerprint    String
+  /// OPEN | COMPLETED | UNKNOWN.
+  status         String   @default("OPEN")
+  /// The answer, kept so a repeat returns it.
+  result         Json?
+  /// While OPEN, how long the delivery creating it is waited for.
+  leaseExpiresAt DateTime @map("lease_expires_at") @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([ownerId, actionKind, requestToken])
+  @@map("create_request_receipt")
 }
 
 model TaskRunRequest {
@@ -7529,6 +7572,40 @@ model PoolGatewayToken {
 /// each claim, reclaim and provider-switch reload; earlier tokens of the same session and key stay good, their
 /// expiry pushed out with each claim. Deleting the session, the key or the person deletes its tokens; a key
 /// disabled or rotated revokes them (`revokedAt`).
+/// A coordinator handoff (migration 0810, docs/coordinator-handoff.md): the outgoing coordinator
+/// writes a note in a platform turn, then the replacement opens its successor with that note. One
+/// live row (WRITING, HANDING_OVER, FAILED) per outgoing coordinator; COMPLETED names the successor.
+model CoordinatorHandoff {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  ownerId       String    @map("owner_id") @db.Uuid
+  projectId     String    @map("project_id") @db.Uuid
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  fromSessionId String    @map("from_session_id") @db.Uuid
+  fromSession   Session   @relation("CoordinatorHandoffFrom", fields: [fromSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  toSessionId   String?   @map("to_session_id") @db.Uuid
+  toSession     Session?  @relation("CoordinatorHandoffTo", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  /// WRITING | HANDING_OVER | FAILED | CANCELLED | COMPLETED (a CHECK).
+  state         String
+  /// Advanced by Try again; the note turn's key carries it.
+  attempt       Int       @default(1)
+  /// The note turn's `conversation_turn.client_turn_id`; null once a skip took the note out.
+  clientTurnId  String?   @map("client_turn_id")
+  startedAt     DateTime  @default(now()) @map("started_at")
+  /// TURN_FAILED | TURN_STOPPED | TIMED_OUT | EMPTY_NOTE | REPLACE_FAILED, only while FAILED.
+  failureCode   String?   @map("failure_code")
+  note          String?
+  /// The waits the swap moved, as `{ id, label, paused }`.
+  movedWaits    Json      @default("[]") @map("moved_waits")
+  endedAt       DateTime? @map("ended_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([fromSessionId, createdAt])
+  @@index([toSessionId])
+  @@index([projectId])
+  @@map("coordinator_handoff")
+}
+
 model KeyGatewayToken {
   id         String        @id @default(uuid(7)) @db.Uuid
   tokenHash  String        @unique @map("token_hash")
@@ -7774,6 +7851,11 @@ model OwnerRequest {
   repoUrlNorm         String?   @map("repo_url_norm")
   /// WIKI_CREATE: the asking session's workspace, which the wiki's maintenance reads. History, not a foreign key.
   workspaceId         String?   @map("workspace_id") @db.Uuid
+  /// SCHEDULE_* kinds (migration 0840): the schedule and run the item is about, and what answers it. History, no FK.
+  scheduleId              String?   @map("schedule_id") @db.Uuid
+  scheduleRunId           String?   @map("schedule_run_id") @db.Uuid
+  approvalId              String?   @map("approval_id") @db.Uuid
+  scheduleChangeRequestId String?   @map("schedule_change_request_id") @db.Uuid
   expiresAt           DateTime? @map("expires_at") @db.Timestamptz(3)
   clientRequestId     String?   @map("client_request_id")
   resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(3)
@@ -9855,6 +9937,13 @@ model ScheduleRun {
   summary          String?
   links            Json               @default("[]")
   failureReason    String?            @map("failure_reason")
+  /// A QUEUED run is not started before this (migration 0830): a retry's 1, 5 or 15 minutes (§7.2).
+  notBeforeAt      DateTime?          @map("not_before_at") @db.Timestamptz(3)
+  /// Why a HELD run's start checks failed (§6.1, migration 0830).
+  heldReason       String?            @map("held_reason")
+  /// The level the run started with (§6.2, migration 0860): what its session is held to, whatever the schedule
+  /// says later. NULL until the run starts.
+  accessLevel      ScheduleAccessLevel? @map("access_level")
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
 

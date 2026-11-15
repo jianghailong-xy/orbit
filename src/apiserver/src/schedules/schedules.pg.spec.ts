@@ -428,11 +428,14 @@ test('§4 the run\'s own back-off leaves the envelope as it was, and returning n
   assert.equal(byPerson.outcome, 'APPLIED');
   assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).envelopeRunsPerWeek, 7);
 
-  // A session serving another schedule's run is an ordinary session here: its narrowing shrinks.
+  // A session serving another schedule's run may not change this one at all (§8.3, S4): refused, nothing written.
   const other = await created(w);
   const foreign = await runSession(w, other.id);
-  await service.update(foreign, s.id, { rule: { kind: 'WEEKLY', time: '10:00', weekdays: ['MON', 'TUE'] } });
-  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).envelopeRunsPerWeek, 2);
+  await refusedWith(
+    service.update(foreign, s.id, { rule: { kind: 'WEEKLY', time: '10:00', weekdays: ['MON', 'TUE'] } }),
+    'SCHEDULE_RUN_SESSION_SCOPE',
+  );
+  assert.equal((await db.schedule.findUniqueOrThrow({ where: { id: s.id } })).envelopeRunsPerWeek, 7);
   // And a run asking to widen its own envelope waits like anyone else.
   const widen = await service.update(run, s.id, { accessLevel: 'OPEN_PR' });
   assert.equal(widen.outcome, 'PENDING');

@@ -499,7 +499,6 @@ final class ConsoleModel {
     /// asynchronously, so a console built before it lands must still read the current one.
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
-    @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
     var effort: Effort = .default
     /// Account preferences can arrive after a restored-token launch has already presented the
     /// draft. They may refine the legacy workspace seed only until the user touches the picker;
@@ -1123,6 +1122,17 @@ final class ConsoleModel {
         /// The door took it. The card is not coming back, so the sheet draws it as its record from
         /// what was pressed (`AnsweredApproval`).
         case sent(AnsweredApproval)
+    }
+
+    /// Settings › Translation (1A): decisions refused because the owner's own words could not be
+    /// translated (422 TRANSLATION_FAILED), by approval id. Nothing was recorded; the card that came
+    /// back offers Retry and Send as written, each sending the same press again.
+    private(set) var untranslatedDecisions: [String: UntranslatedDecision] = [:]
+
+    struct UntranslatedDecision: Equatable {
+        let behavior: ApprovalBehavior
+        let answers: [String: [String]]?
+        let remember: Bool
     }
 
     /// An approval as it was answered here: the card as it was asked, and the press that answered
@@ -1952,6 +1962,28 @@ final class ConsoleModel {
                                       tick: scrollTick)
     }
 
+    /// Scroll the transcript to an Agent's block, from the session's list of Agents: its own row, or the
+    /// group it was drawn in. One the loaded window no longer holds is left where it is.
+    func revealAgent(_ toolUseID: String) {
+        let state = reducer.state
+        guard state.items.contains(where: { $0.id == toolUseID }) else { return }
+        revealedItemID = toolUseID
+        let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
+        scrollTick += 1
+        recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: toolUseID, in: rows) ?? toolUseID,
+                                      tick: scrollTick)
+    }
+
+    /// The `delegate` call a SubAgent run was started from, by the run its result names — what a
+    /// SubAgent's finished line links back to — or nil where the loaded transcript holds none.
+    func delegateCard(forRun runId: String) -> String? {
+        for case .toolCall(let card) in reducer.state.items where card.name == SubagentBlock.toolName {
+            if SubagentFinishedText.delegateRunId(card.result) == runId { return card.id }
+        }
+        return nil
+    }
+
     /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
     /// transcript appearing again later does not jump back to it.
     func recordRequestFollowed(_ request: ScrollRequest) {
@@ -2220,6 +2252,12 @@ final class ConsoleModel {
         contextLoaded = true
         adoptServerSnapshot(s)
         agentName = s.agent?.name
+        // A scheduled task's run: its strip, its report and the cards it asked, drawn from the schedule reads.
+        scheduleRunID = s.scheduleRunId
+        // The run's head line reads this session's own state and engine: a run's session is in none of the app's
+        // lists, so this read is the only one that has them.
+        if s.scheduleRunId != nil { scheduleRunSession = s }
+        Task { [weak self] in await self?.refreshScheduleCards(force: true) }
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
         if let aid = s.agent?.id { agentID = aid }
@@ -2627,8 +2665,8 @@ final class ConsoleModel {
 
     /// Pick the engine and a credential of it for this draft: an engine on the new-session hero, landing
     /// where it says, or a credential of the draft's engine in the composer's Provider menu. The model
-    /// space is the pair's, so the model can't survive the switch — it is re-seeded from what was last
-    /// picked for the incoming pair, or its default, and the mode/effort pills are re-clamped to what it
+    /// space is the pair's, so the model can't survive the switch — it is re-seeded from the workspace's
+    /// lastModel when the incoming pair is the one it last ran on, else the pair's default, and the mode/effort pills are re-clamped to what it
     /// accepts. The seed is marked pristine again on purpose: a model chosen for the outgoing pair is not
     /// a choice about this one, and keeping it would pin an id the new one may not even offer.
     func pickDraft(engine: String, provider slug: String) {
@@ -2737,11 +2775,11 @@ final class ConsoleModel {
             configured: configuredProviders)
     }
 
-    /// The model a draft starts on: the last one picked for its engine and provider (`<engine>:<provider>`
-    /// in the account's remembered models, read in contract §6.5's order), else `fallback`.
+    /// The model a draft starts on: its workspace's `lastModel` while it is on that workspace's
+    /// `lastEngine`/`lastProvider`, else `fallback`.
     private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
         AgentDefaults.newSessionModel(
-            engine: engine, provider: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            engine: engine, provider: provider, workspace: draftAgent, fallback: fallback,
             catalog: modelCatalog, configured: configuredProviders,
             runtimeDefaults: runtimeDefaults ?? runtimeDefaultModels)
     }
@@ -3086,7 +3124,8 @@ final class ConsoleModel {
                 // written into that turn (a steer) rather than queued behind it, and the bubble
                 // has to stop saying "Queued" and trade the queue's Cancel for a steer's Withdraw.
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
-                                            steer: SteerDelivery.isSteerKind(accepted.kind))
+                                            steer: SteerDelivery.isSteerKind(accepted.kind),
+                                            translation: accepted.turnTranslation)
                 publishStateNow()
             }
         } catch {
@@ -3797,6 +3836,27 @@ final class ConsoleModel {
         catch { statusMessage = "Interrupt failed" }
     }
 
+    // MARK: coordinator handoff (docs/coordinator-handoff.md)
+
+    /// The waits a handover would move, for the confirm. A failed read is no row rather than no
+    /// confirm: the waits move either way, the row only names them.
+    func coordinatorPendingWaits(projectID: String) async -> [CoordinatorPendingWait] {
+        (try? await api.coordinatorPendingWaits(projectID)) ?? []
+    }
+
+    /// One of the handoff's presses. What it changed reaches this conversation as `session.updated`
+    /// (every transition publishes it), so the answer is read only for a refusal.
+    func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction) async {
+        do { _ = try await api.coordinatorHandoff(projectID, action) }
+        catch { statusMessage = CoordinatorHandoffCopy.refusal(APIClient.failureReason(error)) }
+    }
+
+    /// Compact: the engine's own command, sent as if typed — no confirm, and the composer's draft
+    /// stays where it is.
+    func compactConversation() async {
+        await send(overrideText: CoordinatorContextActions.compactCommand)
+    }
+
     /// "Stop the current turn and send THIS instead" — one request, not a stop followed by a send
     /// (web parity, `interruptAndSend`). Two requests could not express it: the interrupt drops the
     /// follow-ups queued behind the running turn, so a send racing it might be deleted by it, and a
@@ -3844,7 +3904,8 @@ final class ConsoleModel {
                                         attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             if let tid = accepted.turnId {
-                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid)
+                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
+                                            translation: accepted.turnTranslation)
             }
             publishStateNow()
         } catch {
@@ -3865,6 +3926,42 @@ final class ConsoleModel {
     /// the server DELETE. Gated in the UI on a known `turnId` (the DELETE needs it); if the runner has
     /// already leased the message the server rejects the withdraw (409) and its durable `user` event
     /// lands it in the transcript as usual — so a lost race is a no-op, not an error.
+    // MARK: Settings › Translation (board frames 4–6)
+
+    /// Retry a held message whose translation failed (FAILED → TRANSLATING). The answer is the new
+    /// state, drawn at once; the turn list's nudge brings the rest.
+    func retryTurnTranslation(_ turnId: String) async {
+        do {
+            let answer = try await api.retryTurnTranslation(sessionID: sessionID, turnId: turnId)
+            reducer.setTurnTranslation(turnId: turnId, answer.translation)
+            publishStateNow()
+        } catch {
+            statusMessage = "Retry failed — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Send as written: deliver a held message untranslated.
+    func sendTurnAsWritten(_ turnId: String) async {
+        do {
+            let answer = try await api.sendTurnAsWritten(sessionID: sessionID, turnId: turnId)
+            reducer.setTurnTranslation(turnId: turnId, answer.translation)
+            publishStateNow()
+        } catch {
+            statusMessage = "Send as written failed — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Retry a reply whose translation failed: it waits again until the live `translation` event.
+    func retryReplyTranslation(_ seq: Int) async {
+        do {
+            try await api.retryReplyTranslation(sessionID: sessionID, seq: seq)
+            reducer.markReplyRetrying(seq: seq)
+            publishStateNow()
+        } catch {
+            statusMessage = "Retry failed — \(APIClient.failureReason(error))."
+        }
+    }
+
     func cancelQueued(_ bubble: UserBubble) async {
         guard let turnId = bubble.turnId else { return }
         reducer.removeQueued(id: bubble.id)
@@ -4213,7 +4310,7 @@ final class ConsoleModel {
     /// the new task's run.
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
                 answers: [String: [String]]? = nil, remember: Bool = false,
-                startAfterCreate: Bool = false) async {
+                startAfterCreate: Bool = false, sendAsWritten: Bool = false) async {
         var rules: [PermissionRule]?
         if remember, behavior == .allow, !executesDsh, let input = approval.input {
             rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
@@ -4227,11 +4324,21 @@ final class ConsoleModel {
         // no startAfterCreate key in it at all.
         let req = startAfterCreate
             ? Approvals.createAndStartRequest
-            : ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
+            : ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules,
+                                      sendAsWritten: sendAsWritten ? true : nil)
         do {
             try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req)
+            untranslatedDecisions[approval.id] = nil
             approvalAnswers[approval.id] = .sent(AnsweredApproval(approval: approval, behavior: behavior,
                                                                   answers: answers, at: Date()))
+        }
+        catch where SessionTranslation.refusedUntranslated(error) {
+            // The owner's words could not be translated, so nothing was recorded (1A): the card comes
+            // back with Retry / Send as written rather than a failure line.
+            approvalAnswers[approval.id] = nil
+            untranslatedDecisions[approval.id] = UntranslatedDecision(behavior: behavior, answers: answers,
+                                                                      remember: remember)
+            await refreshApprovals()
         }
         catch {
             // Nothing was decided: the press is not what took this card away, and the re-seed below
@@ -4492,6 +4599,11 @@ final class ConsoleModel {
             case .crossingBatch(let batchID):
                 // Answered on its card, by pressing.
                 return waiting(crossingBatch(batchID)?.isLive == true, question: false)
+            case .scheduleCard(let requestID):
+                // Create or Allow on the card itself, by pressing.
+                return waiting(scheduleCard(requestID)?.isPending == true, question: false)
+            case .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+                return nil
             }
         }
         // Oldest in the CONVERSATION first — which is not the order these were delivered in, now
@@ -4513,15 +4625,17 @@ final class ConsoleModel {
             .map(\.element.row)
     }
 
-    /// What the needs-you bar above this transcript says, or nil when nothing in it is waiting.
+    /// What waits on the reader in THIS conversation, for the capsule in its nav bar, or nil when
+    /// nothing does (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule): its
+    /// open cards, and its own approvals at the tail (`NeedsYouLogic.here`).
     ///
     /// The direction word is the one part of the line this conversation cannot answer by itself: it
     /// is about the reader's own place, reported by the transcript (`topVisibleItemID`). Everything
-    /// else is the count and what kind of thing it points at (`NeedsYouLogic.below`).
+    /// else is the count and what kind of thing it points at.
     var waitingBelow: WaitingBelow? {
         let rows = openBelowRows
-        guard let first = rows.first else { return nil }
-        return NeedsYouLogic.below(rows: rows, side: side(ofRow: first.rowID))
+        return NeedsYouLogic.here(rows: rows, approvalIDs: state.pendingApprovals.map(\.id),
+                                  side: rows.first.flatMap { side(ofRow: $0.rowID) })
     }
 
     /// Where one delivered card sits in the conversation RIGHT NOW, as an index into `state.items`:
@@ -5041,6 +5155,108 @@ final class ConsoleModel {
     /// The owner requests of this conversation still pending, by storage key.
     private(set) var pendingOwnerRequests: Set<String> = []
 
+    // MARK: scheduled tasks (docs/scheduled-tasks-design.md §8.1, §4, §7.4)
+
+    /// The scheduled tasks' cards this conversation asked and the changes it made, as last read.
+    private(set) var scheduleCards: SessionScheduleCardsResponse?
+    /// The scheduled task's run this session is, from its own read; nil for every other session.
+    private(set) var scheduleRunID: String?
+    /// That run and its schedule, once found; the detail for whether its finding was new and told.
+    private(set) var scheduleRun: (schedule: ScheduleView, run: ScheduleRunView)?
+    private(set) var scheduleRunDetail: ScheduleDetailResponse?
+    /// This run's session as its own read answered, for the head line's state and engine.
+    private(set) var scheduleRunSession: Session?
+    private var loadingScheduleCards = false
+    private var lastScheduleRead = Date.distantPast
+
+    func scheduleCard(_ requestID: String) -> ScheduleCard? {
+        let key = PublicID.storageKey(requestID)
+        return scheduleCards?.cards.first { PublicID.storageKey($0.id) == key }
+    }
+
+    func scheduleRecord(scheduleID: String, revision: Int) -> ScheduleChangeRecord? {
+        let key = PublicID.storageKey(scheduleID)
+        return scheduleCards?.records.first { PublicID.storageKey($0.scheduleId) == key && $0.revision == revision }
+    }
+
+    /// Read the conversation's schedule cards and records, and draw each where it happened (its `createdAt`),
+    /// in the order they happened; a run's session also gets its strip at the head and its report after its end.
+    /// Runs when the session's context loads, with the evidence reads (reconnect, a row's waiting count moving),
+    /// and after every press on one of them.
+    func refreshScheduleCards(force: Bool = false) async {
+        guard !isDraft, !loadingScheduleCards else { return }
+        if !force, Date().timeIntervalSince(lastScheduleRead) < Self.rulerReadThrottle { return }
+        lastScheduleRead = Date()
+        loadingScheduleCards = true
+        defer { loadingScheduleCards = false }
+        let read = try? await api.sessionScheduleCards(sessionID: sessionID)
+        if let read {
+            if scheduleCards != read { scheduleCards = read }
+            var said: [(at: String, kind: DeliveredDecisionCard.Kind)] = []
+            for card in read.cards {
+                said.append((at: card.createdAt, kind: DeliveredDecisionCard.Kind.scheduleCard(requestID: card.id)))
+            }
+            for record in read.records {
+                said.append((at: record.createdAt,
+                             kind: DeliveredDecisionCard.Kind.scheduleRecord(scheduleID: record.scheduleId,
+                                                                             revision: record.revision)))
+            }
+            let order: (String) -> Date = { RelativeTime.parse($0) ?? Date.distantPast }
+            for item in said.sorted(by: { order($0.at) < order($1.at) }) {
+                deliver(item.kind, placement: .at(item.at))
+            }
+        }
+        if let run = read?.run {
+            await adoptScheduleRun(run)
+        } else {
+            await findScheduleRun()
+        }
+    }
+
+    /// The run the session read named (W2): its schedule and findings from the schedule's own read.
+    private func adoptScheduleRun(_ run: ScheduleRunView) async {
+        guard let detail = try? await api.schedule(run.scheduleId) else { return }
+        scheduleRun = (detail.schedule, run)
+        scheduleRunDetail = detail
+        deliver(.scheduleRunStrip(runID: run.id), placement: .at(run.plannedAt))
+        if let ended = run.endedAt, ScheduleDisplay.runEnded(run.state) {
+            deliver(.scheduleRunReport(runID: run.id), placement: .at(ended))
+        }
+    }
+
+    /// The run this session is, found among the account's schedules, for a server whose session read names no run
+    /// (a run's session is in no list: it is reached from the schedule's history or a notification, §7.4).
+    private func findScheduleRun() async {
+        guard let runID = scheduleRunID else { return }
+        let key = PublicID.storageKey(runID)
+        var found: (ScheduleView, ScheduleRunView)?
+        if let current = scheduleRun, PublicID.storageKey(current.run.id) == key {
+            if let runs = try? await api.scheduleRuns(current.schedule.id),
+               let run = runs.first(where: { PublicID.storageKey($0.id) == key }) {
+                found = (current.schedule, run)
+            }
+        } else if let schedules = try? await api.schedules(state: "all") {
+            for schedule in schedules {
+                if let last = schedule.lastRun, PublicID.storageKey(last.id) == key {
+                    found = (schedule, last)
+                    break
+                }
+                guard let runs = try? await api.scheduleRuns(schedule.id) else { continue }
+                if let run = runs.first(where: { PublicID.storageKey($0.id) == key }) {
+                    found = (schedule, run)
+                    break
+                }
+            }
+        }
+        guard let found else { return }
+        scheduleRun = (found.0, found.1)
+        scheduleRunDetail = try? await api.schedule(found.0.id)
+        deliver(.scheduleRunStrip(runID: found.1.id), placement: .at(found.1.plannedAt))
+        if let ended = found.1.endedAt, ScheduleDisplay.runEnded(found.1.state) {
+            deliver(.scheduleRunReport(runID: found.1.id), placement: .at(ended))
+        }
+    }
+
     // MARK: cross-project requests into this project
 
     /// The project's handoffs as last read, both directions; nil while unread.
@@ -5451,6 +5667,9 @@ final class ConsoleModel {
     /// event, and there may not be one.
     func refreshEvidenceDecisions(force: Bool = false) async {
         guard !isDraft else { return }
+        // The schedule cards ride every door this read does: a card is asked or a change made while the reader
+        // is elsewhere, and only reading again finds it.
+        Task { [weak self] in await self?.refreshScheduleCards() }
         if loadingEvidence {
             if force { evidenceReadOwed = true }
             return
@@ -6169,7 +6388,8 @@ final class ConsoleModel {
         guard let infos = try? await api.approvals(sessionID: sessionID) else { return }
         reducer.reconcileApprovals(infos.map {
             PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
-                            toolName: $0.toolName, input: $0.input)
+                            toolName: $0.toolName, input: $0.input,
+                            translation: ApprovalTranslation.parse($0.translation))
         }, knownBefore: knownBefore)
         publishStateNow()
     }

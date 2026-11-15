@@ -75,10 +75,17 @@ final class ManagedRunnerModel {
         await act { try await self.api.retryManagedRunner(revision: status.revision) }
     }
 
-    /// Ask for a managed runner where the server offers one.
-    func ensure() async {
-        guard display?.ensure == true, !acting else { return }
-        if await act({ try await self.api.ensureManagedRunner() }) { onEnsured() }
+    /// Ask for a managed runner where the server offers one. `open` gets the runner the answer names,
+    /// once the server has accepted it: Machines & models lands on that machine's page (D1).
+    @discardableResult
+    func ensure(then open: ((String) -> Void)? = nil) async -> Bool {
+        guard display?.ensure == true, !acting else { return false }
+        let accepted = await act { try await self.api.ensureManagedRunner() }
+        if accepted {
+            onEnsured()
+            if let runnerID = status?.runnerId { open?(runnerID) }
+        }
+        return accepted
     }
 
     /// Signed out: nothing of this account's is shown to the next one.

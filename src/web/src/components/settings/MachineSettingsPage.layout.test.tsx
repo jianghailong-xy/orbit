@@ -388,9 +388,23 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(value.getAttribute('aria-label')).toBe('Edit Max Concurrent');
     expect(document.querySelector('.rd-max-concurrent')).toBeNull();
 
-    // Cancel sends nothing.
+    // The dialog: − 12 + sessions at once, and what runs now; Save waits for a change.
     await click(value);
     expect($<HTMLInputElement>('.rd-max-concurrent input').value).toBe('12');
+    expect(text($('.machine-max-concurrent-unit'))).toBe('sessions at once');
+    expect(text($('.machine-max-concurrent-now'))).toBe('4 running');
+    expect(text($('.machine-max-concurrent-hint'))).toBe('Applies to the next session it picks up — no restart.');
+    expect(button('Save').disabled).toBe(true);
+    await click($('[aria-label="Increase Max Concurrent"]'));
+    expect($<HTMLInputElement>('.rd-max-concurrent input').value).toBe('13');
+    expect(button('Save').disabled).toBe(false);
+    await click($('[aria-label="Decrease Max Concurrent"]'));
+    expect(button('Save').disabled).toBe(true);
+    // Below what runs now, it says the running ones carry on.
+    await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '2', 'blur');
+    expect($('.machine-max-concurrent-hint').className).toContain('warn');
+    expect(text($('.machine-max-concurrent-hint'))).toBe('The 4 running now carry on; new ones wait until fewer than 2 are running.');
+    // Cancel sends nothing.
     await typeNumber($<HTMLInputElement>('.rd-max-concurrent input'), '5', 'blur');
     await click(button('Cancel'));
     expect(sent).toEqual([]);

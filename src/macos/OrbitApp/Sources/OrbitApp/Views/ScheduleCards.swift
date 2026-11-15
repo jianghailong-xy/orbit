@@ -1,0 +1,616 @@
+import SwiftUI
+import OrbitKit
+
+// Scheduled tasks' cards (docs/mocks/scheduled-tasks/02-agent-first.png ① ② ④ ⑤, 01-board.png ④ ⑤ ⑦): the create
+// card and the envelope card a conversation asks, the line a change leaves where it was made, a run's strip and
+// report in its own session, and the four Waiting on you cards. Drawn the same in every conversation, so on the Mac
+// too; the words and rules are OrbitKit's (`ScheduleCopy`, `ScheduleDisplay`), and the web's cards
+// (`ScheduleCards.tsx`, `ScheduleWaitingCard.tsx`) behave the same: a decided card stays, without its buttons; a
+// withdrawn one says so and is never pressed again.
+
+private typealias SC = ScheduleCopy
+
+/// The boards' blue for the schedule cards' primary press and links.
+extension Color {
+    static let scheduleAccent = Color.accentColor
+    static let scheduleWarn = Color.orange
+}
+
+/// One fact row of a card: a grey label column and its value (board ① "When / Runs in / May / Costs / Today").
+struct ScheduleFactRow<Value: View>: View {
+    let label: String
+    @ViewBuilder let value: Value
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .foregroundStyle(.secondary)
+                .frame(width: 72, alignment: .leading)
+            value
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.orbitSubtext)
+    }
+}
+
+/// "Check only · reads and reports, edits nothing", the label in bold.
+func scheduleMayText(_ level: String) -> Text {
+    let access = ScheduleDisplay.accessCopy(level)
+    return Text(access.label).bold() + Text("\(SC.separator)\(access.detail)")
+}
+
+/// "Up to 7 runs a week, 30 min each", the runs in bold.
+func scheduleCostsText(runsPerWeek: Int, runLimitMinutes: Int) -> Text {
+    let parts = ScheduleDisplay.costsParts(runsPerWeek: runsPerWeek, runLimitMinutes: runLimitMinutes)
+    return Text(parts.before) + Text(parts.emphasis).bold() + Text(parts.after)
+}
+
+/// The two buttons that end a card, side by side across its foot (board ①: Not now · Create).
+struct ScheduleCardFoot: View {
+    let decline: String
+    let allow: String
+    let busy: Bool
+    let onDecline: () -> Void
+    let onAllow: () -> Void
+    var idPrefix: String
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: onDecline) {
+                Text(decline).font(.orbitControl.weight(.medium)).frame(maxWidth: .infinity).padding(.vertical, 11)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.scheduleAccent)
+            .accessibilityIdentifier("\(idPrefix)-decline")
+            Button(action: onAllow) {
+                Text(allow).font(.orbitControl.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 11)
+                    .foregroundStyle(.white)
+                    .background(Color.scheduleAccent)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("\(idPrefix)-allow")
+        }
+        .disabled(busy)
+        .opacity(busy ? 0.6 : 1)
+        .overlay(alignment: .top) { Divider() }
+    }
+}
+
+/// The card chrome: a rounded box, a hairline border (amber for a card about growing what a schedule may do).
+private struct ScheduleCardBox: ViewModifier {
+    var warn = false
+    func body(content: Content) -> some View {
+        content
+            .background(Color.secondary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(warn ? Color.scheduleWarn.opacity(0.6) : Color.secondary.opacity(0.25)))
+    }
+}
+
+/// The create card (board 02 ①): the title, the read-back, When, Runs in, May, Costs and Today, then Not now and
+/// Create. Create on a card that names no zone sends this device's. `panel` puts the first run under the rule and
+/// leaves the title to the panel, as the draft panel does (board 01 ⑧).
+struct ScheduleCreateCardView: View {
+    let card: ScheduleCard
+    var panel = false
+    /// What a press came to.
+    let decide: (_ allow: Bool) async -> ScheduledModel.PressResult
+    @State private var busy = false
+    @State private var said: String?
+    @State private var pressed = false
+
+    var body: some View {
+        let when = card.when.map { ScheduleDisplay.createWhen($0, now: Date(), viewerTimezone: TimeZone.current.identifier) }
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label { Text(SC.CreateCard.title).font(.orbitControl.weight(.semibold)) } icon: {
+                    Image(systemName: "calendar").foregroundStyle(Color.scheduleAccent)
+                }
+                if !panel, let title = card.title {
+                    Text(title).font(.orbitControl.weight(.semibold))
+                }
+                if let readBack = card.readBack, !readBack.isEmpty {
+                    Text(readBack).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    if let when {
+                        ScheduleFactRow(label: SC.CreateCard.when) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text([when.rule, when.zone].joined(separator: SC.separator))
+                                if let first = when.firstRun {
+                                    Text(first).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    if let runsIn = card.runsIn {
+                        ScheduleFactRow(label: SC.CreateCard.runsIn) {
+                            Text(ScheduleDisplay.runsInText(workspaceName: runsIn.workspaceName ?? runsIn.workspaceId,
+                                                            engine: runsIn.engine))
+                        }
+                    }
+                    if let may = card.may {
+                        ScheduleFactRow(label: SC.CreateCard.may) { scheduleMayText(may.accessLevel) }
+                    }
+                    if let costs = card.costs {
+                        ScheduleFactRow(label: SC.CreateCard.costs) {
+                            scheduleCostsText(runsPerWeek: costs.runsPerWeek, runLimitMinutes: costs.runLimitMinutes)
+                        }
+                    }
+                    if let today = card.today {
+                        ScheduleFactRow(label: SC.CreateCard.today) { Text(today.summary ?? today.key) }
+                    }
+                }
+                .padding(.top, 2)
+                // The server words it from what the task finds (S5 `scheduleCreateNotice`); else the plain notice.
+                Text(card.notice ?? ScheduleDisplay.createNotice(findings: nil))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                if let said {
+                    Text(said).font(.orbitLabel).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(14)
+            if card.isPending && !pressed {
+                ScheduleCardFoot(decline: SC.Actions.notNow, allow: SC.Actions.create, busy: busy,
+                                 onDecline: { press(false) }, onAllow: { press(true) },
+                                 idPrefix: "schedule-create-\(card.id)")
+            }
+        }
+        .modifier(ScheduleCardBox())
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("schedule-create-card")
+    }
+
+    private func press(_ allow: Bool) {
+        busy = true
+        Task { @MainActor in
+            let result = await decide(allow)
+            // A refusal leaves the card to press again; a withdrawn card or a decision leaves it without buttons.
+            said = result.said
+            pressed = result.settled
+            busy = false
+        }
+    }
+}
+
+/// The envelope card (board 02 ②, 01 ⑤): a change that grows what the schedule may do waits on the owner. Allow
+/// applies it; Keep … declines.
+struct ScheduleEnvelopeCardView: View {
+    let card: ScheduleCard
+    let scheduleTitle: String?
+    let ruleNow: ScheduleRule?
+    let decide: (_ allow: Bool) async -> ScheduledModel.PressResult
+    @State private var busy = false
+    @State private var said: String?
+    @State private var pressed = false
+
+    var body: some View {
+        if let text = ScheduleDisplay.envelopeCard(card, scheduleTitle: scheduleTitle, ruleNow: ruleNow) {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label {
+                        Text(text.title).font(.orbitControl.weight(.semibold)).foregroundStyle(Color.scheduleWarn)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle").foregroundStyle(Color.scheduleWarn)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let now = text.now {
+                            ScheduleFactRow(label: SC.EnvelopeCard.now) { Text(now.text) }
+                        }
+                        ScheduleFactRow(label: SC.EnvelopeCard.asked) { askedText(text.asked) }
+                    }
+                    Text(text.note).font(.orbitLabel).foregroundStyle(.secondary)
+                    if let said {
+                        Text(said).font(.orbitLabel).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(14)
+                if card.isPending && !pressed {
+                    ScheduleCardFoot(decline: text.keep, allow: SC.Actions.allow, busy: busy,
+                                     onDecline: { press(false) }, onAllow: { press(true) },
+                                     idPrefix: "schedule-envelope-\(card.id)")
+                }
+            }
+            .modifier(ScheduleCardBox(warn: true))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("schedule-envelope-card")
+        }
+    }
+
+    /// Asked, its lead in bold: "**Daily 10:00** · up to 7 runs a week, 30 min each".
+    private func askedText(_ side: ScheduleDisplay.EnvelopeSide) -> Text {
+        guard !side.lead.isEmpty, side.text.hasPrefix(side.lead) else { return Text(side.text) }
+        return Text(side.lead).bold() + Text(String(side.text.dropFirst(side.lead.count)))
+    }
+
+    private func press(_ allow: Bool) {
+        busy = true
+        Task { @MainActor in
+            let result = await decide(allow)
+            said = result.said
+            pressed = result.settled
+            busy = false
+        }
+    }
+}
+
+/// "📅 Changed **Codex stable check**: time 10:00 → 09:00 · Undo" (board 01 ⑤ ①, 02 ② ①): the line a change leaves
+/// where it was made. Undo goes through the door the record names; one already undone keeps its line.
+struct ScheduleRecordLineView: View {
+    let record: ScheduleChangeRecord
+    let undo: (() async -> String?)?
+    let open: (() -> Void)?
+    @State private var busy = false
+    @State private var undone = false
+    @State private var said: String?
+
+    var body: some View {
+        let parts = ScheduleDisplay.changeLineParts(record)
+        let undoable = ScheduleDisplay.recordUndoable(record) && !undone
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "calendar").foregroundStyle(Color.scheduleAccent)
+                (Text(parts.lead) + Text(parts.title).bold() + Text(parts.rest))
+                    .foregroundStyle(undoable || record.undo == nil ? .primary : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                if record.undo != nil, let undo {
+                    Button(SC.Actions.undo) {
+                        busy = true
+                        Task { @MainActor in
+                            said = await undo()
+                            undone = said == nil
+                            busy = false
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.scheduleAccent)
+                    .disabled(!undoable || busy)
+                    .accessibilityIdentifier("schedule-record-undo-\(record.revision)")
+                }
+                if let open {
+                    Button(SC.Actions.open, action: open)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.scheduleAccent)
+                }
+            }
+            if let said {
+                Text(said).font(.orbitLabel).foregroundStyle(.red)
+            }
+        }
+        .font(.orbitSubtext)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("schedule-record-line")
+    }
+}
+
+/// The head of a run's session (board 02 ④, 01 ⑦): the crumb back to its schedule, what run this is, its head line
+/// (state · agent · how long), and when it was planned and started with what access. Drawn from the conversation's
+/// own reads, so it is the same opened from the schedule, a push or a link.
+struct ScheduleRunStripView: View {
+    @Environment(AppModel.self) private var appModel
+    let console: ConsoleModel
+    let schedule: ScheduleView
+    let run: ScheduleRunView
+
+    var body: some View {
+        let zone = TimeZone.current.identifier
+        let session = console.scheduleRunSession ?? appModel.session(id: console.sessionID)
+        let head = ScheduleDisplay.runHeadText(session: session, run: run, scheduleEngine: schedule.engine, now: Date())
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                appModel.openSchedule(schedule.id)
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "chevron.left").font(.orbitLabel.weight(.semibold))
+                    Text(schedule.title).lineLimit(1)
+                }
+                .font(.orbitSubtext)
+                .foregroundStyle(Color.scheduleAccent)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("schedule-run-crumb")
+            Text(ScheduleDisplay.capitalizedRunOf(plannedAt: run.plannedAt, timezone: zone))
+                .font(.title3.weight(.bold))
+            if !head.isEmpty {
+                Text(head).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            Label {
+                Text(ScheduleDisplay.runStripText(plannedAt: run.plannedAt, startedAt: run.startedAt,
+                                                  accessLevel: schedule.accessLevel, timezone: zone))
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: "calendar").foregroundStyle(Color.scheduleAccent)
+            }
+            .font(.orbitSubtext)
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("schedule-run-strip")
+    }
+}
+
+/// What the run reported (board 02 ④, 01 ⑦ ②): "Reported: Changed · codex@0.49.0", its summary and its links; a run
+/// that failed says why instead.
+struct ScheduleRunReportView: View {
+    let run: ScheduleRunView
+    let findings: [ScheduleFindingView]
+
+    var body: some View {
+        let failed = ScheduleDisplay.runReportFailed(run.state)
+        let facts = ScheduleDisplay.runFindingFacts(run, findings: findings)
+        let head = failed
+            ? ScheduleDisplay.runLine(state: run.state, summary: run.summary, failureReason: run.failureReason,
+                                      reasonText: run.reasonText)
+            : ScheduleDisplay.reportedText(state: run.state, key: run.key, notified: facts.notified)
+        let tint: Color = failed ? .red : .green
+        VStack(alignment: .leading, spacing: 4) {
+            Label { Text(head).font(.orbitSubtext.weight(.semibold)) } icon: {
+                Image(systemName: failed ? "exclamationmark.triangle" : "checkmark.circle").foregroundStyle(tint)
+            }
+            if !failed, let summary = run.summary, !summary.isEmpty {
+                Text(summary).font(.orbitSubtext).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(tint).frame(width: 3)
+        }
+        .background(tint.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("schedule-run-report")
+    }
+}
+
+/// A scheduled task's row in a conversation (`DeliveredDecisionCard`): drawn from the console's read on every
+/// render; every press goes through `ScheduledModel` and reads the conversation's cards back.
+struct ScheduleConsoleCard: View {
+    @Environment(AppModel.self) private var appModel
+    let console: ConsoleModel
+    let kind: DeliveredDecisionCard.Kind
+
+    var body: some View {
+        switch kind {
+        case .scheduleCard(let requestID):
+            if let card = console.scheduleCard(requestID) {
+                if card.isCreate {
+                    ScheduleCreateCardView(card: card, decide: { await decide(card, $0) })
+                } else {
+                    let schedule = card.scheduleId.flatMap { appModel.scheduled?.schedule($0) }
+                    ScheduleEnvelopeCardView(card: card, scheduleTitle: schedule?.title, ruleNow: schedule?.rule,
+                                             decide: { await decide(card, $0) })
+                        .task { if let id = card.scheduleId, schedule == nil { await appModel.scheduled?.loadDetail(id) } }
+                }
+            }
+        case .scheduleRecord(let scheduleID, let revision):
+            if let record = console.scheduleRecord(scheduleID: scheduleID, revision: revision) {
+                ScheduleRecordLineView(
+                    record: record,
+                    undo: {
+                        guard let scheduled = appModel.scheduled else { return nil }
+                        let said = await scheduled.undo(record.scheduleId, revision: record.revision)
+                        await console.refreshScheduleCards(force: true)
+                        return said
+                    },
+                    open: { appModel.openSchedule(record.scheduleId) })
+            }
+        case .scheduleRunStrip:
+            if let found = console.scheduleRun {
+                ScheduleRunStripView(console: console, schedule: found.schedule, run: found.run)
+            }
+        case .scheduleRunReport:
+            if let found = console.scheduleRun {
+                ScheduleRunReportView(run: found.run, findings: console.scheduleRunDetail?.findings ?? [])
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func decide(_ card: ScheduleCard, _ allow: Bool) async -> ScheduledModel.PressResult {
+        guard let scheduled = appModel.scheduled else { return .refused(ScheduledModel.unreachable) }
+        let said = allow ? await scheduled.allow(card) : await scheduled.decline(card)
+        await console.refreshScheduleCards(force: true)
+        return said
+    }
+}
+
+// MARK: - Waiting on you (board 01 ⑥, 02 ⑤)
+
+/// One of the four kinds no session can file: a failed schedule, a held one, a run waiting on an approval, a run
+/// asking for a wider envelope. The amber head names the kind and when; each answers at its own door.
+struct ScheduleWaitingCardView: View {
+    @Environment(AppModel.self) private var appModel
+    let item: ScheduleWaitingItem
+    @State private var busy = false
+    @State private var said: String?
+
+    var body: some View {
+        let scheduled = appModel.scheduled
+        let schedule = scheduled?.schedule(item.scheduleId)
+        let zone = TimeZone.current.identifier
+        let content = text(schedule: schedule, scheduled: scheduled, zone: zone)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(content.kind).font(.orbitLabel.weight(.semibold)).foregroundStyle(Color.scheduleWarn)
+                Spacer(minLength: 8)
+                Text(ScheduleDisplay.parse(item.createdAt).map {
+                    ScheduleDisplay.whenText($0, now: Date(), timezone: zone)
+                } ?? "")
+                .font(.orbitLabel).foregroundStyle(Color.scheduleWarn.opacity(0.8))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(Color.scheduleWarn.opacity(0.10))
+            VStack(alignment: .leading, spacing: 8) {
+                Text(content.title).font(.orbitControl.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                if let command = content.command {
+                    Text(command).font(.orbitMono).foregroundStyle(.secondary).lineLimit(3)
+                }
+                Text(content.body).font(.orbitSubtext).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let said {
+                    Text(said).font(.orbitLabel).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                }
+                buttons(schedule: schedule)
+                if let note = content.note {
+                    Text(note).font(.orbitLabel).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(14)
+        }
+        .background(Color.scheduleWarn.opacity(0.03), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.scheduleWarn.opacity(0.45)))
+        .disabled(busy)
+        .task(id: item.id) { await load(schedule: schedule) }
+        // A container, so its own identifier does not overwrite its buttons'.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("schedule-waiting-\(item.kind)")
+    }
+
+    private struct WaitingContent {
+        var kind: String
+        var title: String
+        var body: String
+        var command: String? = nil
+        var note: String? = nil
+    }
+
+    private func text(schedule: ScheduleView?, scheduled: ScheduledModel?, zone: String) -> WaitingContent {
+        let title = schedule?.title ?? item.title
+        switch item.kind {
+        case "SCHEDULE_FAILED":
+            let run = schedule?.lastRun
+            let t = ScheduleDisplay.failedWaiting(title: title, consecutiveFailures: max(schedule?.consecutiveFailures ?? 1, 1),
+                                                  failureReason: run?.failureReason, reasonText: run?.reasonText,
+                                                  summary: run?.summary,
+                                                  plannedAt: run?.plannedAt ?? item.createdAt, timezone: zone)
+            return WaitingContent(kind: t.kind, title: t.title, body: t.body)
+        case "SCHEDULE_HELD":
+            let t = ScheduleDisplay.heldWaiting(title: title, heldReason: schedule?.heldReason,
+                                                plannedAt: schedule?.nextDueAt ?? schedule?.lastRun?.plannedAt ?? item.createdAt,
+                                                agentName: schedule?.agentName,
+                                                workspaceName: schedule?.workspaceName, now: Date(), timezone: zone)
+            return WaitingContent(kind: t.kind, title: t.title, body: t.body)
+        case "SCHEDULE_APPROVAL":
+            let approval = item.approvalId.flatMap { scheduled?.approvals[$0] }
+            let rules = approval.flatMap { a in a.toolName.flatMap { tool in a.input.map { Approvals.rememberRules(toolName: tool, input: $0) } } } ?? []
+            let deadline = ScheduleDisplay.parse(item.createdAt).map {
+                ISO8601DateFormatter().string(from: $0.addingTimeInterval(ScheduleDisplay.approvalTimeout))
+            } ?? item.createdAt
+            let t = ScheduleDisplay.approvalWaiting(title: title, deadline: deadline, nextAt: schedule?.nextDueAt,
+                                                    pattern: Approvals.ruleNames(rules).joined(separator: ", "),
+                                                    workspaceName: schedule?.workspaceName ?? "", now: Date(),
+                                                    timezone: zone)
+            return WaitingContent(kind: t.kind, title: t.title, body: t.body,
+                           command: approval?.input?["command"]?.stringValue,
+                           note: rules.isEmpty ? nil : t.alwaysAllow)
+        default:
+            let card = item.scheduleChangeRequestId.flatMap { scheduled?.cards[$0] }
+            var body = item.why
+            var heading = item.title
+            if let card, let envelope = card.envelope,
+               let text = ScheduleDisplay.envelopeCard(card, scheduleTitle: schedule?.title, ruleNow: schedule?.rule) {
+                heading = text.title
+                var names: [String: String] = [:]
+                for lines in [envelope.now, envelope.asked].compactMap({ $0 }) {
+                    if let name = lines.runsIn.workspaceName { names[lines.runsIn.workspaceId] = name }
+                }
+                body = ScheduleDisplay.widenWaitingText(reason: item.why, widens: envelope.widens,
+                                                        now: envelope.now?.envelope, asked: envelope.asked.envelope,
+                                                        ruleNow: schedule?.rule,
+                                                        ruleAsked: ScheduleRule(json: card.proposed?["rule"]),
+                                                        workspaceNames: names)
+            }
+            return WaitingContent(kind: SC.Waiting.kindsSchedule, title: heading, body: body)
+        }
+    }
+
+    @ViewBuilder
+    private func buttons(schedule: ScheduleView?) -> some View {
+        HStack(spacing: 10) {
+            switch item.kind {
+            case "SCHEDULE_FAILED":
+                primary(SC.Actions.openRun) {
+                    if let session = schedule?.lastRun?.sessionId { appModel.openScheduleRun(sessionID: session, scheduleID: item.scheduleId) }
+                    else { appModel.openSchedule(item.scheduleId) }
+                    return nil
+                }
+                secondary(SC.Actions.pauseSchedule) { await appModel.scheduled?.pause(item.scheduleId) }
+            case "SCHEDULE_HELD":
+                let agent = schedule?.heldReason == "AGENT_DISABLED" || schedule?.heldReason == "AGENT_MISSING"
+                primary(agent ? SC.Actions.openAgentSettings : SC.Actions.openSchedule) {
+                    appModel.openSchedule(item.scheduleId)
+                    return nil
+                }
+                secondary(SC.Actions.resume) { await appModel.scheduled?.resume(item.scheduleId) }
+            case "SCHEDULE_APPROVAL":
+                secondary(SC.Actions.deny) { await approval(allow: false, always: false) }
+                secondary(SC.Actions.allowOnce) { await approval(allow: true, always: false) }
+                primary(SC.Actions.alwaysAllow) { await approval(allow: true, always: true) }
+            default:
+                let card = item.scheduleChangeRequestId.flatMap { appModel.scheduled?.cards[$0] }
+                let keep = card.flatMap {
+                    ScheduleDisplay.envelopeCard($0, scheduleTitle: schedule?.title, ruleNow: schedule?.rule)?.keep
+                } ?? SC.keep["other"]!
+                secondary(keep) { await widen(card, allow: false) }
+                primary(SC.Actions.allow) { await widen(card, allow: true) }
+            }
+        }
+    }
+
+    private func primary(_ title: String, _ action: @escaping () async -> String?) -> some View {
+        Button { run(action) } label: {
+            Text(title).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity)
+        }
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier("schedule-waiting-\(title)")
+    }
+
+    private func secondary(_ title: String, _ action: @escaping () async -> String?) -> some View {
+        Button { run(action) } label: {
+            Text(title).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity)
+        }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("schedule-waiting-\(title)")
+    }
+
+    private func run(_ action: @escaping () async -> String?) {
+        busy = true
+        Task { @MainActor in
+            said = await action()
+            busy = false
+            await appModel.ownerRequests?.load()
+        }
+    }
+
+    private func approval(allow: Bool, always: Bool) async -> String? {
+        guard let session = item.askedBySessionId, let approval = item.approvalId else { return nil }
+        return await appModel.scheduled?.decideApproval(sessionID: session, approvalID: approval, allow: allow,
+                                                        always: always)
+    }
+
+    private func widen(_ card: ScheduleCard?, allow: Bool) async -> String? {
+        guard let card, let scheduled = appModel.scheduled else { return nil }
+        return (allow ? await scheduled.allow(card) : await scheduled.decline(card)).said
+    }
+
+    private func load(schedule: ScheduleView?) async {
+        guard let scheduled = appModel.scheduled else { return }
+        if schedule == nil { await scheduled.load() }
+        if let id = item.scheduleChangeRequestId { await scheduled.loadCard(id) }
+        if let approval = item.approvalId, let session = item.askedBySessionId {
+            await scheduled.loadApproval(sessionID: session, approvalID: approval)
+        }
+    }
+}

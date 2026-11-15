@@ -1962,7 +1962,7 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 func sessionContextEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
 	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth,
-		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID:
+		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID, envScheduleRun:
 		return true
 	default:
 		return false
