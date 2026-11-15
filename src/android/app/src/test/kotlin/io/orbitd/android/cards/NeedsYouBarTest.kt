@@ -94,6 +94,21 @@ class NeedsYouBarTest {
         compose.onNodeWithTag("needs-you-bar-deck", useUnmergedTree = true).assertDoesNotExist()
     }
 
+    /** Pushed up, the bar is put away; a tap is still the press, and TalkBack has the same Dismiss (06-list-floats). */
+    @Test fun aSwipeUpPutsTheBarAwayAndATapStillOpens() {
+        var pressed = 0
+        var swiped = 0
+        compose.setContent { OrbitTheme { NeedsYouBar("4 sessions need you", null, NeedsYouLogic.unfoldHint(4), deck = true,
+            onSwipeAway = { swiped++ }) { pressed++ } } }
+        compose.onNodeWithTag("needs-you-bar").performClick()
+        compose.runOnIdle { assertEquals(1, pressed); assertEquals(0, swiped) }
+        compose.onNodeWithTag("needs-you-bar").performTouchInput { swipeUp(startY = bottom - 4f, endY = top - 200f, durationMillis = 120) }
+        compose.waitUntil(5_000) { swiped == 1 }
+        compose.runOnIdle { assertEquals(1, pressed) }
+        val actions = compose.onNodeWithTag("needs-you-bar").fetchSemanticsNode().config.getOrNull(SemanticsActions.CustomActions)
+        assertEquals(listOf(NeedsYouLogic.dismissLabel), actions?.map { it.label })
+    }
+
     @Test fun theThreeHintsAreIosOwn() {
         assertEquals("Shows what is waiting in this conversation", NeedsYouLogic.belowHint)
         assertEquals("Opens the session waiting on you", NeedsYouLogic.sessionHint)

@@ -22,12 +22,32 @@ import { legacySessionEngine, recordedEngine } from '../providers/session-engine
  * a credential that is gone is refused as it always was, and one its engine no longer runs gives way to
  * the credential's own default engine.
  */
+/**
+ * Who opened a conversation (Session.openedBy, migration 0670): PERSON, or the Orbit door that opened
+ * it on its own. ORBIT is only ever a backfilled row whose door left no marker; no door writes it.
+ */
+export type SessionOpenedBy =
+  | 'PERSON'
+  | 'COORDINATOR'
+  | 'COORDINATOR_JUDGMENT'
+  | 'TASK_LIST_CONSOLE'
+  | 'WIKI_CHAT'
+  | 'FEISHU'
+  | 'SERVICE_TOKEN'
+  | 'MENTION_REPLY'
+  | 'ORBIT';
+
+export const SESSION_OPENED_BY_PERSON: SessionOpenedBy = 'PERSON';
+
 export interface AgentProviderSeed {
   /** The engine that session ran on: its recorded one, else derived by the old rules (§5.4). Null when
    *  nobody can tell — its key is gone — which a new session started from it is refused on anyway. */
   engine: AgentProvider | null;
   provider: string;
   providerBuiltin: boolean;
+  /** The model that same session runs on (Session.model): null until its first claim settles one, and
+   *  null for a seed no session gave (the floor, a managed runner's first). Absent = null. */
+  model?: string | null;
 }
 
 /** A project that has never run anything has no history to read; start where Orbit starts. */
@@ -35,13 +55,19 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
   engine: AgentProvider.CLAUDE,
   provider: AgentProvider.CLAUDE,
   providerBuiltin: true,
+  model: null,
 };
 
 /**
  * The last interactive session's provider for each of `workspaceIds` (absent = never ran one).
  *
- * Only sessions a *person* started count. Two kinds are excluded, for the same reason:
+ * Only sessions a *person* opened count (docs/workspace-default-model-design.md §2.2). Excluded, for
+ * the same reason:
  *
+ *  • Conversations Orbit opens on its own (`opened_by` other than PERSON, migration 0670): a project's
+ *    coordinator, a coordinator judgment, a wiki chat, a Feishu message's session, a task list's
+ *    console, a service token's bridge, an @-mention's reply. None is a person choosing an engine,
+ *    and counting them let one coordinator — or one wiki question — re-point every later start.
  *  • Task-launched runs — a task that pins a provider (Task.provider) is stating what *that* job
  *    needs, and letting it move the project's default would make one pinned job silently re-point
  *    the human's next session.
@@ -61,9 +87,11 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  * Written as a LATERAL per id rather than the obvious `DISTINCT ON (workspace_id) … ORDER BY
  * created_at DESC`: Postgres has no skip scan, so that form reads *every* session belonging to
  * these workspaces and sorts them, which on the workspace-list path (every client boot) is a sequential
- * scan that grows with the session table. One `LIMIT 1` per id instead walks
- * session_workspace_id_created_at_idx and stops at the first row — measured on a copy of a live
- * database: 4.7ms and 930 rows scanned → 0.3ms and one row per workspace.
+ * scan that grows with the session table. One `LIMIT 1` per id instead walks an index and stops at the
+ * first row — measured on a copy of a live database: 4.7ms and 930 rows scanned → 0.3ms and one row per
+ * workspace. The index is 0670's partial session_workspace_person_opened_idx, whose predicate is this
+ * WHERE: the plain (workspace_id, created_at) one would walk past every task run, child and Orbit-opened
+ * conversation newer than the person's (workspace-default-opened-by.pg.spec.ts measures both).
  *
  * One kind of workspace has a default before it has history: a managed runner's default workspace,
  * once its runner became READY (`managed_runner.initial_provider`, docs/managed-runner-design.md
@@ -89,6 +117,7 @@ export async function lastProviderByWorkspace(
     workspace_id: string;
     engine: string | null;
     provider: string;
+    model: string | null;
     provider_builtin: boolean;
     owner_id: string | null;
     /** A managed default workspace whose runner has not been found ready yet; its owner is managed_owner_id. */
@@ -96,34 +125,34 @@ export async function lastProviderByWorkspace(
     managed_owner_id: string | null;
   }>>(Prisma.sql`
     WITH a(id) AS (SELECT unnest(ARRAY[${Prisma.join(ids)}]::uuid[]))
-    SELECT a.id AS workspace_id, s.engine, s.provider, s.provider_builtin, s.owner_id::text AS owner_id,
+    SELECT a.id AS workspace_id, s.engine, s.provider, s.model, s.provider_builtin, s.owner_id::text AS owner_id,
            false AS managed_unready, NULL::text AS managed_owner_id
     FROM a
     CROSS JOIN LATERAL (
-      SELECT engine, provider, provider_builtin, owner_id
+      SELECT engine, provider, model, provider_builtin, owner_id
       FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
-        AND kind = 'CONVERSATION'
+        AND kind = 'CONVERSATION' AND opened_by = 'PERSON'
       ORDER BY created_at DESC
       LIMIT 1
     ) s
     UNION ALL
-    SELECT a.id, m.initial_provider, m.initial_provider, true, NULL, false, m.owner_id::text
+    SELECT a.id, m.initial_provider, m.initial_provider, NULL, true, NULL, false, m.owner_id::text
     FROM a
     JOIN managed_runner m ON m.default_workspace_id = a.id AND m.initial_provider IS NOT NULL
     WHERE NOT EXISTS (
       SELECT 1 FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
-        AND kind = 'CONVERSATION'
+        AND kind = 'CONVERSATION' AND opened_by = 'PERSON'
     )
     UNION ALL
-    SELECT a.id, NULL, NULL, false, NULL, true, m.owner_id::text
+    SELECT a.id, NULL, NULL, NULL, false, NULL, true, m.owner_id::text
     FROM a
     JOIN managed_runner m ON m.default_workspace_id = a.id AND m.initial_provider IS NULL
     WHERE NOT EXISTS (
       SELECT 1 FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
-        AND kind = 'CONVERSATION'
+        AND kind = 'CONVERSATION' AND opened_by = 'PERSON'
     )
   `);
   const seeds = new Map<string, AgentProviderSeed>();
@@ -134,20 +163,20 @@ export async function lastProviderByWorkspace(
       const key = await managedFirstSessionKey(prisma, r.managed_owner_id);
       if (key) {
         const engine = await legacySessionEngine(prisma, { provider: key, providerBuiltin: false, ownerId: r.managed_owner_id });
-        seeds.set(r.workspace_id, { engine, provider: key, providerBuiltin: false });
+        seeds.set(r.workspace_id, { engine, provider: key, providerBuiltin: false, model: null });
       }
       continue;
     }
     // A managed runner READY on one of its owner's model keys: that key, on the engine its row names.
     if (r.managed_owner_id && !recordedEngine(r.provider)) {
       const engine = await legacySessionEngine(prisma, { provider: r.provider, providerBuiltin: false, ownerId: r.managed_owner_id });
-      seeds.set(r.workspace_id, { engine, provider: r.provider, providerBuiltin: false });
+      seeds.set(r.workspace_id, { engine, provider: r.provider, providerBuiltin: false, model: null });
       continue;
     }
     const engine = recordedEngine(r.engine) ?? (r.owner_id
       ? await legacySessionEngine(prisma, { provider: r.provider, providerBuiltin: r.provider_builtin, ownerId: r.owner_id })
       : null);
-    seeds.set(r.workspace_id, { engine, provider: r.provider, providerBuiltin: r.provider_builtin });
+    seeds.set(r.workspace_id, { engine, provider: r.provider, providerBuiltin: r.provider_builtin, model: r.model ?? null });
   }
   return seeds;
 }
@@ -165,7 +194,8 @@ export async function agentProviderSeed(
  * Attach the derived default to workspace payloads.
  *
  * `lastProvider` is the honest name and what clients read, with `lastEngine` beside it: the engine that
- * session ran on (null when nobody can tell). `provider` is kept as a read-only alias for one release:
+ * session ran on (null when nobody can tell), and `lastModel`: the model it runs on, which a new-session
+ * draft preselects (null before its first claim, and for a workspace with no such session). `provider` is kept as a read-only alias for one release:
  * iOS and macOS builds already in the field read it for a workspace's badge and avatar, and dropping it
  * would render every workspace as Claude until those ship. None is stored — the column is gone
  * (migration 0088).
@@ -173,13 +203,20 @@ export async function agentProviderSeed(
 export function withProviderSeed<T extends { id: string }>(
   workspaces: T[],
   seeds: Map<string, AgentProviderSeed>,
-): Array<T & { lastEngine: AgentProvider | null; lastProvider: string; provider: string; providerBuiltin: boolean }> {
+): Array<T & {
+  lastEngine: AgentProvider | null;
+  lastProvider: string;
+  lastModel: string | null;
+  provider: string;
+  providerBuiltin: boolean;
+}> {
   return workspaces.map((workspace) => {
     const seed = seeds.get(workspace.id) ?? DEFAULT_AGENT_PROVIDER;
     return {
       ...workspace,
       lastEngine: seed.engine,
       lastProvider: seed.provider,
+      lastModel: seed.model ?? null,
       provider: seed.provider,
       providerBuiltin: seed.providerBuiltin,
     };
