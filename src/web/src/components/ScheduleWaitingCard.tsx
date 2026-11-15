@@ -130,6 +130,7 @@ export function ScheduleWaitingCard({ request, now = Date.now() }: { request: Ow
       title,
       heldReason: schedule.heldReason,
       plannedAt: run?.plannedAt ?? schedule.nextDueAt ?? request.createdAt,
+      agentName: schedule.agentName,
       workspaceName: schedule.workspaceName,
       now: nowDate,
       timezone,

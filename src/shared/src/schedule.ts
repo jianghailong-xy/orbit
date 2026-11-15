@@ -1050,13 +1050,16 @@ export function scheduleRowLine(
   return parts.join(C.separator);
 }
 
-/** A past run's second line: "Ended without a report", "2.1.310 is out · you were notified". */
+/**
+ * A past run's second line: "Ended without a report", "Reported a failure: The releases page returned 503",
+ * "2.1.310 is out · you were notified".
+ */
 export function scheduleRunLine(
   run: Pick<ScheduleRunView, 'state' | 'summary' | 'failureReason' | 'reasonText'>,
   opts: { notified?: boolean } = {},
 ): string {
   if (run.state === 'FAILED' || run.state === 'MISSED' || run.state === 'HELD') {
-    const clause = scheduleFailureClause(run);
+    const clause = reportedFailureClause(run) ?? scheduleFailureClause(run);
     if (clause) return capitalize(clause);
     return C.runStates[run.state];
   }
@@ -1441,14 +1444,17 @@ const SUMMARY_MAX = 120;
  * characters with no closing full stop ("reported a failure: The releases page returned 503"), else the reason's.
  */
 function failedWaitingClause(run: Pick<ScheduleRunView, 'failureReason' | 'reasonText'> & { summary?: string | null }): string {
+  return reportedFailureClause(run) ?? scheduleFailureClause(run) ?? C.failureReasons.REPORTED_FAILED;
+}
+
+/** A REPORTED_FAILED run's clause with its own summary, or null when the run has none (or the server's reasonText). */
+function reportedFailureClause(run: Pick<ScheduleRunView, 'failureReason' | 'reasonText'> & { summary?: string | null }): string | null {
   const template = run.reasonText ? undefined
     : (C.failureReasonsWithSummary as Record<string, string>)[String(run.failureReason)];
   const flat = run.summary?.replace(/\s+/g, ' ').trim().replace(/[.。]+$/, '') ?? '';
-  if (template && flat) {
-    const summary = flat.length <= SUMMARY_MAX ? flat : `${flat.slice(0, SUMMARY_MAX - 1).trimEnd()}…`;
-    return scheduleFill(template, { summary });
-  }
-  return scheduleFailureClause(run) ?? C.failureReasons.REPORTED_FAILED;
+  if (!template || !flat) return null;
+  const summary = flat.length <= SUMMARY_MAX ? flat : `${flat.slice(0, SUMMARY_MAX - 1).trimEnd()}…`;
+  return scheduleFill(template, { summary });
 }
 
 /** A failed schedule's card: "Nightly pg spec sweep failed 3 runs in a row". */

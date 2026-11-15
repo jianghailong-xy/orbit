@@ -18,6 +18,8 @@ import {
   scheduleDetail,
 } from '../test/scheduleFixtures';
 
+import { scheduleCreateNotice } from '@orbit/shared';
+
 vi.mock('../api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api')>()), api: vi.fn() }));
 vi.mock('../lib/schedules', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/schedules')>()),
@@ -115,8 +117,25 @@ describe('the create card in a conversation (board 2/2 ①)', () => {
     });
     expect(card.querySelector('[data-fact="may"] b')!.textContent).toBe('Check only');
     expect(card.querySelector('[data-fact="costs"] b')!.textContent).toBe('7 runs a week');
-    expect(card.querySelector('.sched-card-note')!.textContent).toBe("You'll hear about new findings and failures only.");
+    expect(card.querySelector('.sched-card-note')!.textContent).toBe("You'll hear about new versions and failures only.");
     expect([...card.querySelectorAll('.sched-card-foot button')].map((b) => b.textContent)).toEqual(['Not now', 'Create']);
+  });
+
+  it('ends with the notice the server built from the proposal’s findings, else the generic line', async () => {
+    serve();
+    // The proposal said findings 'versions': the server's card carries scheduleCreateNotice('versions').
+    await render(<cards.ScheduleCardView card={{ ...CREATE_CARD, notice: scheduleCreateNotice('versions') }} />);
+    expect(host.querySelector('.sched-card-note')!.textContent).toBe("You'll hear about new versions and failures only.");
+    act(() => root?.unmount());
+    host.remove();
+    // A proposal with no findings: the server sends the generic line; a card with no notice at all draws it too.
+    for (const notice of [scheduleCreateNotice(null), '']) {
+      await render(<cards.ScheduleCardView card={{ ...CREATE_CARD, notice }} />);
+      expect(host.querySelector('.sched-card-note')!.textContent).toBe("You'll hear about new findings and failures only.");
+      act(() => root?.unmount());
+      host.remove();
+    }
+    root = null;
   });
 
   it('Create allows the card; Not now declines it', async () => {
@@ -223,6 +242,8 @@ function RunSession({ sessionId }: { sessionId: string }) {
       <cards.ScheduleRunStrip of={of} />
       <cards.ScheduleRunReport of={of} />
       <span data-inserts="">{inserts.length}</span>
+      {/* The header's agent, as WorkspaceView names it, beside a session that ran on Claude. */}
+      <span data-run-agent="">{cards.scheduleRunAgentName(of, 'Claude')}</span>
     </>
   );
 }
@@ -275,6 +296,28 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
     await render(<RunSession sessionId="sess-freeze-run" />);
     expect(host.querySelector('[data-schedule-crumb]')!.textContent).toBe('Scheduled › Release 2.0 freeze watch › run of Nov 14');
     expect(host.querySelector('.sched-report-head')!.textContent).toBe('Reported: Changed · released@2.0.0 · you were notified');
+  });
+
+  it('names the agent in its header from the schedule’s view, not the session’s engine', async () => {
+    serveRun('sess-codex-run-nov13', CODEX_NOV13_RUN);
+    await render(<RunSession sessionId="sess-codex-run-nov13" />);
+    // Codex stable check's view carries engine 'codex'; the session's own engine (Claude here) is not read.
+    expect(host.querySelector('[data-run-agent]')!.textContent).toBe('Codex');
+  });
+
+  it('names the session’s own engine when the schedule names none', async () => {
+    serveRun('sess-freeze-run', FREEZE_RUN);
+    await render(<RunSession sessionId="sess-freeze-run" />);
+    expect(host.querySelector('[data-run-agent]')!.textContent).toBe('Claude');
+  });
+
+  it('a reported failure’s report says what the run reported', async () => {
+    serveRun('sess-codex-run-nov13', {
+      ...CODEX_NOV13_RUN, state: 'FAILED', failureReason: 'REPORTED_FAILED', key: null, links: [],
+      summary: 'The releases page returned 503.',
+    });
+    await render(<RunSession sessionId="sess-codex-run-nov13" />);
+    expect(host.querySelector('.sched-report-head')!.textContent).toBe('Reported a failure: The releases page returned 503');
   });
 
   it('draws nothing for a session that serves no run', async () => {

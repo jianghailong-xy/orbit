@@ -29,7 +29,7 @@ const flush = async () => {
 };
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
 
-function serve() {
+function serve(detailOf: (id: string) => ReturnType<typeof scheduleDetail> = scheduleDetail) {
   apiMock.mockImplementation((async (path: string, options: { method?: string; body?: unknown } = {}) => {
     const method = options.method ?? 'GET';
     calls.push({ path, method, body: options.body });
@@ -41,7 +41,7 @@ function serve() {
     if (path === '/sessions/sess-pg-run-nov14/approvals?status=PENDING') return [PSQL_APPROVAL];
     if (path === `/schedule-requests/${RUN_WIDEN_CARD.id}`) return RUN_WIDEN_CARD;
     const detail = /^\/schedules\/([^/?]+)$/.exec(path);
-    if (detail) return scheduleDetail(detail[1]!);
+    if (detail) return detailOf(detail[1]!);
     return [];
   }) as never);
 }
@@ -124,6 +124,19 @@ describe('Waiting on you: a scheduled task’s four kinds of card (board 2/2 ④
     expect(calls.filter((c) => c.method === 'POST').map((c) => c.path)).toEqual(['/schedules/sch-pg/pause', '/owner-requests/or-failed/done']);
   });
 
+  it('a reported failure says what the run reported', async () => {
+    serve((id) => {
+      const detail = scheduleDetail(id);
+      if (id !== 'sch-pg') return detail;
+      const run = { ...detail.recentRuns[0]!, failureReason: 'REPORTED_FAILED', summary: 'psql could not reach 127.0.0.1:55490.' };
+      return { ...detail, lastRun: run, recentRuns: [run] };
+    });
+    await open();
+    expect(read(card('SCHEDULE_FAILED')).why).toBe(
+      'The last run reported a failure: psql could not reach 127.0.0.1:55490 (Nov 14, 02:00). It keeps running on schedule until you pause it. Open the run to see where it stopped, or ask a session to fix the prompt.',
+    );
+  });
+
   it('a failure’s Open run goes to the run’s session', async () => {
     serve();
     await open();
@@ -137,11 +150,21 @@ describe('Waiting on you: a scheduled task’s four kinds of card (board 2/2 ④
     expect(read(card('SCHEDULE_HELD'))).toEqual({
       title: 'Weekly dependency audit is held',
       kind: 'Scheduled',
-      why: 'It could not start on Monday 09:00: its agent is disabled. Nothing runs until it is enabled and you resume.',
+      why: 'It could not start on Monday 09:00: the agent "auditor" in workspace web is disabled. Nothing runs until it is enabled and you resume.',
       doors: ['Open agent settings', 'Resume'],
     });
     await press(card('SCHEDULE_HELD'), 'Resume');
     expect(calls.find((c) => c.method === 'POST')!.path).toBe('/schedules/sch-audit/resume');
+  });
+
+  it('a hold whose agent the view does not name says “its agent”', async () => {
+    serve((id) => {
+      const detail = scheduleDetail(id);
+      return id === 'sch-audit' ? { ...detail, schedule: { ...detail.schedule, agentName: null } } : detail;
+    });
+    await open();
+    expect(read(card('SCHEDULE_HELD')).why)
+      .toBe('It could not start on Monday 09:00: its agent is disabled. Nothing runs until it is enabled and you resume.');
   });
 
   it('a run’s approval: the command, the deadline, and Always allow with what it covers', async () => {
