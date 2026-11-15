@@ -1,0 +1,6 @@
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneCapsuleOnTheSessionList]' started.
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneCapsuleOnTheSessionList]' passed (63.633 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 63.633 (63.636) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 63.633 (63.636) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 63.633 (63.637) seconds
+** TEST SUCCEEDED **
