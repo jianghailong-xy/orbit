@@ -186,23 +186,25 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         await { has(hasTestTag("handoff-handed-over")) }
     }
 
-    /** Board 02-2's "Handing over" header badge has no slot on Android: the session page's top bar names no session and carries no
-     * run state (A06-18, after iOS d87e5fa67 — whether it runs, the composer says), so neither "Running" nor the badge is drawn there,
-     * in any handoff state. While the note is written and the replacement runs, the composer says it instead. The page as a phone draws
-     * it is a PNG under app/build/evidence/handing-over (not committed). */
-    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun theSessionBarHasNoStatusSlotSoTheComposerSaysHandingOver() {
-        for (state in listOf("WRITING", "HANDING_OVER", "FAILED", null)) {
+    /** Board 04 (A, the owner 2026-11-15): while the note is written and the replacement runs, the session page's top bar says
+     * "Handing over" in its middle (iOS `handingOverCapsule`), as the web and Mac headers do (board 02-2), and the composer says it too.
+     * In any other state the bar is as before: no badge, and never a run word or a second line. The page as a phone draws it is a PNG
+     * under app/build/evidence/handing-over (not committed). */
+    @Test @GraphicsMode(GraphicsMode.Mode.NATIVE) fun theSessionBarSaysHandingOverOnlyWhileTheHandoffLocksTheComposer() {
+        for (state in listOf("WRITING", "HANDING_OVER", "FAILED", "CANCELLED", null)) {
             if (state == null) coordinatorSession(*running) else coordinatorSession(handoff(state), *running)
             if (state == "WRITING") { signIn(); open("orbit-session:${ComposerShell.SESSION}") } else app().realtime.refreshSession()
-            await { if (state == null || state == "FAILED") has(hasTestTag("composer-input") and isEnabled())
-                else has(hasTestTag("handoff-progress")) }
+            val locks = state == "WRITING" || state == "HANDING_OVER"
+            await { if (locks) has(hasTestTag("handoff-progress")) else has(hasTestTag("composer-input") and isEnabled()) }
             val inBar = { text: String -> has(hasText(text) and hasAnyAncestor(hasTestTag("app-bar")), unmerged = true) }
-            assertFalse("$state: the bar draws no badge", inBar(CoordinatorHandoffCopy.BADGE_HANDING_OVER))
-            assertFalse("$state: the bar draws no run word either", inBar("Running"))
+            assertEquals("$state: the bar's Handing over", locks, inBar(CoordinatorHandoffCopy.BADGE_HANDING_OVER))
+            assertEquals("$state: in its capsule", locks,
+                has(hasTestTag("handing-over-capsule") and hasAnyAncestor(hasTestTag("app-bar")), unmerged = true))
+            assertFalse("$state: the bar draws no run word", inBar("Running"))
             assertFalse("$state: the bar has no second line", has(hasTestTag("page-bar-subtitle"), unmerged = true))
             val composerSays = has(hasText(CoordinatorHandoffCopy.HANDING_OVER), unmerged = true)
-            assertEquals("$state: the composer says it is handing over", state == "WRITING" || state == "HANDING_OVER", composerSays)
-            if (state == "WRITING" || state == "HANDING_OVER") shot(state.lowercase())
+            assertEquals("$state: the composer says it is handing over", locks, composerSays)
+            if (locks) shot(state!!.lowercase())
         }
     }
 
