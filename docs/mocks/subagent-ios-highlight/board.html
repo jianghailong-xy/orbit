@@ -1,0 +1,262 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>SubAgent on iOS · highlight board</title>
+<link rel="stylesheet" href="board.css">
+<script>
+const LOCK = '<svg viewBox="0 0 12 12"><rect x="2" y="5.2" width="8" height="6" rx="1.4" fill="currentColor"/><path d="M3.8 5.4V3.9a2.2 2.2 0 0 1 4.4 0v1.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>';
+const MAC = '<svg viewBox="0 0 12 12"><rect x="1" y="1.5" width="10" height="7" rx="1.2" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M4 10.8h4" stroke="currentColor" stroke-width="1.4"/></svg>';
+const LOGO = { claude: 'C', codex: '>_', deepseek: 'D' };
+const NAME = { claude: 'Claude', codex: 'Codex', deepseek: 'DeepSeek' };
+function eng(e, model) { return `<span class="eng ${e}"><span class="lg">${LOGO[e]}</span><b>${NAME[e]}</b>${model ? ' ' + model : ''}</span>`; }
+function from(e) { return `<span class="from">${NAME[e]} →</span>`; }
+function ro() { return `<span class="fact">${LOCK}Read-only</span>`; }
+function on(ws) { return `<span class="fact">${MAC}on ${ws}</span>`; }
+function phoneTop(title) {
+  return `<div class="sb"><span>9:41</span><span>▂▄▆ 5G ▮</span></div>
+  <div class="toolbar"><div class="glass round">‹</div><div class="glass title">${title}</div><div class="glass">▦ 37 &nbsp; •••</div></div>`;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-top]').forEach(n => n.insertAdjacentHTML('afterbegin', phoneTop(n.dataset.top)));
+  document.querySelectorAll('[data-x]').forEach(n => { n.outerHTML = eval(n.dataset.x); });
+  document.body.dataset.ready = '1';
+});
+</script>
+</head><body>
+
+<!-- ================= 01 the block ================= -->
+<section class="board" id="b01">
+  <h1>① 单个 SubAgent 块：把「谁 · 在哪 · 做成了什么」摆到折叠行上</h1>
+  <p class="sub">父会话是 Claude（Opus 5.5）。三个块分别是：前台只读、换了引擎（Codex）；前台写文件、换了引擎（DeepSeek）；后台、派到另一台机器（orbit-macos），引擎和父会话相同。<br>
+  左边按今天 iOS 的代码画（<code>ToolCards.swift</code> + <code>SubagentBlock.describe</code>，90b463ef5）；中间、右边是建议。手绘，字号取 iOS 的 <code>Typography.swift</code>。</p>
+  <div class="cols">
+    <div class="col">
+      <div class="col-h"><span class="tag now">今天</span>和引擎自带的 Agent 卡同一个样子</div>
+      <div class="phone"><div class="scr" data-top="Quota poller retry">
+        <div class="user">Find who calls pollQuota, add a backoff, and run the iOS tests on the Mac.</div>
+        <div class="prose">First, the callers.</div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Find every caller of pollQuota</span><span class="st ok">✓</span></div>
+          <div class="l2">explore · S · gpt-6.1-sol · 19s · &lt;$0.01</div></div>
+        <div class="prose">Three callers, all in quota/. Now the change.</div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Add backoff to the quota poller</span><span class="st ok">✓</span></div>
+          <div class="l2">general · M · DeepSeek Chat · 2m 4s · $0.03</div></div>
+        <div class="prose">Backoff is in. Running the iOS tests on the Mac in the background.</div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Run the iOS build and tests</span><span class="st"><span class="spin"></span></span></div>
+          <div class="l2">Background · M · Claude Sonnet 5.5</div>
+          <div class="live">Bash xcodebuild test -scheme Orbit -destination…</div></div>
+        <div class="prose" style="color:#999">⋯</div>
+      </div></div>
+    </div>
+
+    <div class="col">
+      <div class="col-h"><span class="tag new">建议 · 折叠</span>第二行身份，第三行产出</div>
+      <div class="phone"><div class="scr" data-top="Quota poller retry">
+        <div class="user">Find who calls pollQuota, add a backoff, and run the iOS tests on the Mac.</div>
+        <div class="prose">First, the callers.</div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Find every caller of pollQuota</span><span class="st ok">✓</span></div>
+          <div class="idl"><span data-x="from('claude')"></span><span data-x="eng('codex','gpt-6.1-sol')"></span><span class="meta">S · explore</span><span data-x="ro()"></span></div>
+          <div class="outl"><span class="arrow">↳</span><span class="txt">Three callers, all in quota/: poller.ts, budget…</span><span class="num">19s · &lt;$0.01</span></div></div>
+        <div class="prose">Three callers, all in quota/. Now the change.</div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Add backoff to the quota poller</span><span class="st ok">✓</span></div>
+          <div class="idl"><span data-x="from('claude')"></span><span data-x="eng('deepseek','Chat')"></span><span class="meta">M · general</span></div>
+          <div class="outl"><span class="arrow">↳</span><span class="txt files"><b>3 files changed</b> <span style="color:#1a7f37">+48</span> <span style="color:#cf222e">−6</span></span><span class="num">2m 4s · $0.03</span></div></div>
+        <div class="prose">Backoff is in. Running the iOS tests on the Mac in the background.</div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Run the iOS build and tests</span><span class="st"><span class="spin"></span></span></div>
+          <div class="idl"><span data-x="eng('claude','Sonnet 5.5')"></span><span class="meta">M · Background</span><span data-x="on('orbit-macos')"></span></div>
+          <div class="outl"><span class="txt it">Bash xcodebuild test -scheme Orbit -destin…</span><span class="num">1:12 · 9 steps</span></div></div>
+      </div></div>
+    </div>
+
+    <div class="col">
+      <div class="col-h"><span class="tag new">建议 · 展开</span>Why → 步骤 → 改动 → 结果</div>
+      <div class="phone"><div class="scr" data-top="Quota poller retry">
+        <div class="prose">Three callers, all in quota/. Now the change.</div>
+        <div class="blk open"><div class="r1"><span class="chev down">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Add backoff to the quota poller</span><span class="st ok">✓</span></div>
+          <div class="idl"><span data-x="from('claude')"></span><span data-x="eng('deepseek','Chat')"></span><span class="meta">M · general</span></div>
+          <div class="outl"><span class="arrow">↳</span><span class="txt files"><b>3 files changed</b> <span style="color:#1a7f37">+48</span> <span style="color:#cf222e">−6</span></span><span class="num">2m 4s · $0.03</span></div>
+          <div class="body">
+            <div class="why"><b>Why</b> · M from the caller's size · Cost: DeepSeek Chat, cheapest key with room · 2 removed <span class="det">Details</span></div>
+            <div class="steps">
+              <div class="step"><span class="k">›</span> Read 4 files · Searched 1 pattern</div>
+              <div class="step"><span class="k">✎</span> Edit quota/poller.ts</div>
+              <div class="step"><span class="k">✎</span> Edit quota/backoff.ts</div>
+              <div class="step"><span class="k">✎</span> Write quota/backoff.spec.ts</div>
+              <div class="step"><span class="k">$</span> npm test -- backoff &nbsp;<span style="color:#34c759">✓</span></div>
+            </div>
+            <div class="chg"><div class="h"><span>Changed files</span><span style="font-weight:400;color:#888">not committed</span></div>
+              <div class="f">quota/poller.ts<i><span class="p">+12</span> <span class="m">−6</span></i></div>
+              <div class="f">quota/backoff.ts<i><span class="p">+19</span></i></div>
+              <div class="f">quota/backoff.spec.ts<i><span class="p">+17</span></i></div>
+            </div>
+            <div class="res">Added exponential backoff (1 s → 60 s, full jitter) to pollQuota; reset on success. Spec covers the cap and the reset. All 14 quota tests pass.</div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="notes">
+      <h3>折叠行的三行分工</h3>
+      <ol>
+        <li><b>第一行不变</b>：✦ SubAgent + description + 状态。</li>
+        <li><b>第二行 = 谁、在哪</b>：引擎 chip（引擎小标 + 短模型名，按引擎着色）。<span class="rec">和父会话引擎不同时，前面加灰字 <code>Claude →</code></span>；相同就不加（第三个块）。后面是灰字档位和类型，<code>Background</code> 放在类型的位置。只读的 run 加 <code>🔒 Read-only</code>，派到别的机器的加 <code>on orbit-macos</code>。</li>
+        <li><b>第三行 = 做成了什么</b>：结束后，会写文件的显示 <code>N files changed +a −d</code>，只读的显示交回结果的第一句；运行中显示斜体的当前步骤（今天的 live line）。<span class="rec">用时和花费从第二行挪到这一行的右端</span>，运行中换成计时和步数。</li>
+      </ol>
+      <h3>展开</h3>
+      <ul>
+        <li>顺序：Why → 步骤 → <b>Changed files</b>（新增，标明 <code>not committed</code>）→ 结果。</li>
+        <li>跨 workspace 的 run 在这里显示 runner 附的 <code>Discarded changes</code>，不画 Changed files。</li>
+      </ul>
+      <h3>要服务端补的字段</h3>
+      <p><code>SubagentRunView</code> 加 <code>engine</code>（选中的引擎）、<code>readonly</code>、<code>changedFiles</code>（带行数）、运行中的 <code>steps</code>。<code>subagent_run</code> 表已经有 <code>changed_files</code> 和 <code>decision.engine</code>，只是没下发；行数要 runner 回报时多带。父会话的引擎客户端本来就有。</p>
+      <p class="muted">顺带修：今天 iOS 第二行漏了 <code>on &lt;workspace&gt;</code>（web 有，设计 §10.3 要求）。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 group ================= -->
+<section class="board" id="b02">
+  <h1>② 并行派出的几个 SubAgent 合成一组</h1>
+  <p class="sub">规则：同一条回复里连续的 ≥2 个 <code>delegate</code> 调用（中间没有正文）合成一个组；只有一个时照 ① 画。组头汇总，成员各占两行，点成员在组内展开成 ① 的展开样子。</p>
+  <div class="cols">
+    <div class="col">
+      <div class="col-h"><span class="tag now">今天</span>三个互不相关的块</div>
+      <div class="phone"><div class="scr" data-top="Release readiness">
+        <div class="user">Check we're ready to cut beta.6.</div>
+        <div class="prose">Splitting this three ways.</div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Audit open landings</span><span class="st ok">✓</span></div>
+          <div class="l2">explore · S · gpt-6.1-sol · 22s · &lt;$0.01</div></div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Run the Android unit tests</span><span class="st ok">✓</span></div>
+          <div class="l2">general · M · DeepSeek Chat · 4m 10s · $0.02</div></div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Run the iOS tests on the Mac</span><span class="st"><span class="spin"></span></span></div>
+          <div class="l2">Background · M · Claude Sonnet 5.5</div>
+          <div class="live">Bash xcodebuild test -scheme Orbit…</div></div>
+        <div class="prose">Landings are clear and Android is green; waiting on iOS.</div>
+      </div></div>
+    </div>
+    <div class="col">
+      <div class="col-h"><span class="tag new">建议 · 折叠</span>一个组，组头是汇总</div>
+      <div class="phone"><div class="scr" data-top="Release readiness">
+        <div class="user">Check we're ready to cut beta.6.</div>
+        <div class="prose">Splitting this three ways.</div>
+        <div class="grp">
+          <div class="gh"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">3 SubAgents</span><span class="sum">2 of 3 done</span><span class="st"><span class="spin"></span></span></div>
+          <div class="gsub"><span>Claude → Codex, DeepSeek</span>·<span>2 machines</span>·<span>$0.03 so far</span></div>
+          <div class="bar"><span style="flex:2;background:#34c759"></span><span style="flex:1;background:#d7c4f7"></span></div>
+          <div class="mem"><div class="t"><span class="st ok">✓</span><span class="d">Audit open landings</span></div>
+            <div class="m"><span data-x="eng('codex','gpt-6.1-sol')"></span><span data-x="ro()"></span><span class="meta">22s · &lt;$0.01</span></div></div>
+          <div class="mem"><div class="t"><span class="st ok">✓</span><span class="d">Run the Android unit tests</span></div>
+            <div class="m"><span data-x="eng('deepseek','Chat')"></span><span class="meta">4m 10s · $0.02</span></div></div>
+          <div class="mem"><div class="t"><span class="st"><span class="spin"></span></span><span class="d">Run the iOS tests on the Mac</span></div>
+            <div class="m"><span data-x="eng('claude','Sonnet 5.5')"></span><span data-x="on('orbit-macos')"></span><span class="meta">1:12</span></div></div>
+        </div>
+        <div class="prose">Landings are clear and Android is green; waiting on iOS.</div>
+      </div></div>
+    </div>
+    <div class="col">
+      <div class="col-h"><span class="tag new">建议 · 点开一个成员</span>就地展开，其他成员不动</div>
+      <div class="phone"><div class="scr" data-top="Release readiness">
+        <div class="prose">Splitting this three ways.</div>
+        <div class="grp">
+          <div class="gh"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">3 SubAgents</span><span class="sum">2 of 3 done</span><span class="st"><span class="spin"></span></span></div>
+          <div class="gsub"><span>Claude → Codex, DeepSeek</span>·<span>2 machines</span>·<span>$0.03 so far</span></div>
+          <div class="bar"><span style="flex:2;background:#34c759"></span><span style="flex:1;background:#d7c4f7"></span></div>
+          <div class="mem"><div class="t"><span class="st ok">✓</span><span class="d">Audit open landings</span></div>
+            <div class="m"><span data-x="eng('codex','gpt-6.1-sol')"></span><span data-x="ro()"></span><span class="meta">22s · &lt;$0.01</span></div></div>
+          <div class="mem" style="background:rgba(0,0,0,.03);margin:0 -10px 0 -12px;padding-left:39px;padding-right:10px"><div class="t"><span class="st ok" style="left:14px">✓</span><span class="d"><b>Run the Android unit tests</b></span><span class="chev down">›</span></div>
+            <div class="m"><span data-x="eng('deepseek','Chat')"></span><span class="meta">M · general · 4m 10s · $0.02</span></div>
+            <div class="body">
+              <div class="why"><b>Why</b> · M from the caller's size · Cost: DeepSeek Chat, cheapest key with room</div>
+              <div class="steps">
+                <div class="step"><span class="k">$</span> ./gradlew :app:testDebugUnitTest</div>
+                <div class="step"><span class="k">›</span> Read build/reports/tests/…/index.html</div>
+              </div>
+              <div class="res">812 tests, 0 failures, 3 skipped (device-only). No files changed.</div>
+            </div></div>
+          <div class="mem"><div class="t"><span class="st"><span class="spin"></span></span><span class="d">Run the iOS tests on the Mac</span></div>
+            <div class="m"><span data-x="eng('claude','Sonnet 5.5')"></span><span data-x="on('orbit-macos')"></span><span class="meta">1:12</span></div></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="notes">
+      <h3>组头</h3>
+      <ul>
+        <li><code>3 SubAgents</code> + 进度 <code>2 of 3 done</code>；进度条绿 = 已结束，紫 = 在跑，红 = 失败。</li>
+        <li>第二行：用到的引擎（<span class="rec">和父会话不同的才列，前面同样加 <code>Claude →</code></span>）、几台机器、累计花费。</li>
+      </ul>
+      <h3>成员</h3>
+      <ul>
+        <li>两行：状态 + description；引擎 chip + 只读 / 机器 + 用时花费。比单个块省掉一行，三个成员的高度和今天差不多，但信息多了引擎和机器。</li>
+        <li>点成员在组内展开，内容同 ① 的展开；一次只开一个成员，组本身不跟着展开或收起。</li>
+        <li>后台成员结束时唤醒父会话，组的进度就地更新，不在消息流底部再插一个块。</li>
+      </ul>
+      <h3>不做的</h3>
+      <p class="muted">不跨回复合组（隔着正文的两次派出各自成块）；引擎自带的 Agent 卡不进组。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 session ================= -->
+<section class="board" id="b03">
+  <h1>③ 会话级：底部胶囊多一格 SubAgents，点开是全部 run 的清单</h1>
+  <p class="sub">底部胶囊就是今天的 WorktreeBar（截图里 <code>12 · 23/23 · ✓ Merged</code> 那个）。会话里派过 SubAgent 才出现这一格；有在跑的时候 ✦ 转圈。会话列表的状态行把模型带上。</p>
+  <div class="cols">
+    <div class="col">
+      <div class="col-h"><span class="tag new">建议</span>胶囊多一格 <code style="font-size:13px">✦ 4 · $0.07</code></div>
+      <div class="phone"><div class="scr" data-top="Release readiness">
+        <div class="prose">Landings are clear and Android is green; waiting on iOS.</div>
+        <div class="blk"><div class="r1"><span class="chev">›</span><span class="ico">✦</span><span class="lbl">SubAgent</span><span class="sum">Run the iOS tests on the Mac</span><span class="st ok">✓</span></div>
+          <div class="idl"><span data-x="eng('claude','Sonnet 5.5')"></span><span class="meta">M · Background</span><span data-x="on('orbit-macos')"></span></div>
+          <div class="outl"><span class="arrow">↳</span><span class="txt">412 tests passed on iOS 27 simulator; 0 failed.</span><span class="num">6m 2s · $0.02</span></div></div>
+        <div class="prose">All three are green. Ready to cut beta.6 — want me to tag it?</div>
+        <div class="wbar"><span>▢ 12</span><span>☑ 23/23</span><span class="sa hl">✦ 4 · $0.07</span><span class="ok">✓ Merged</span></div>
+      </div></div>
+    </div>
+    <div class="col">
+      <div class="col-h"><span class="tag new">建议 · 点开</span>SubAgents sheet</div>
+      <div class="phone"><div class="scr" data-top="Release readiness">
+        <div class="dim"></div>
+        <div class="sheet"><div class="grab"></div>
+          <div class="sh-h"><h2>SubAgents</h2><div class="x">✕</div></div>
+          <div class="tot"><div><b>4</b><span>runs · all done</span></div><div><b>$0.07</b><span>added to this session</span></div><div><b>3</b><span>engines · 2 machines</span></div></div>
+          <div class="bar" style="margin:4px 0 6px;height:8px"><span style="flex:2;background:#d97757"></span><span style="flex:.6;background:#1f1f1f"></span><span style="flex:5;background:#4d6bfe"></span></div>
+          <div class="legend"><span><i style="background:#d97757"></i>Claude $0.02</span><span><i style="background:#1f1f1f"></i>Codex &lt;$0.01</span><span><i style="background:#4d6bfe"></i>DeepSeek $0.05</span></div>
+          <div class="sec">Done</div>
+          <div class="run"><span class="st ok">✓</span><div class="c"><div class="d">Run the iOS tests on the Mac</div>
+            <div class="m"><span data-x="eng('claude','Sonnet 5.5')"></span><span data-x="on('orbit-macos')"></span><span class="meta">6m 2s · $0.02</span></div></div><span class="go">›</span></div>
+          <div class="run"><span class="st ok">✓</span><div class="c"><div class="d">Run the Android unit tests</div>
+            <div class="m"><span data-x="eng('deepseek','Chat')"></span><span class="meta">4m 10s · $0.02</span></div></div><span class="go">›</span></div>
+          <div class="run"><span class="st ok">✓</span><div class="c"><div class="d">Audit open landings</div>
+            <div class="m"><span data-x="eng('codex','gpt-6.1-sol')"></span><span data-x="ro()"></span><span class="meta">22s · &lt;$0.01</span></div></div><span class="go">›</span></div>
+          <div class="run"><span class="st ok">✓</span><div class="c"><div class="d">Add backoff to the quota poller</div>
+            <div class="m"><span data-x="eng('deepseek','Chat')"></span><span class="meta">3 files · 2m 4s · $0.03</span></div></div><span class="go">›</span></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="col">
+      <div class="col-h"><span class="tag now">今天</span> / <span class="tag new">建议</span>会话列表的状态行</div>
+      <div class="phone"><div class="scr" data-top="Sessions">
+        <div class="cap" style="margin-top:6px">今天</div>
+        <div class="listrow"><div class="tt">Release readiness<span>2m</span></div><div class="ln"><span class="spin"></span>Running 2 agents…</div></div>
+        <div class="listrow"><div class="tt">Quota poller retry<span>18m</span></div><div class="ln"><span class="spin"></span>Running agent…</div></div>
+        <div class="cap" style="margin-top:22px">建议</div>
+        <div class="listrow"><div class="tt">Release readiness<span>2m</span></div><div class="ln"><span class="spin"></span>2 SubAgents · Codex · on orbit-macos…</div></div>
+        <div class="listrow"><div class="tt">Quota poller retry<span>18m</span></div><div class="ln"><span class="spin"></span>SubAgent · DeepSeek Chat…</div></div>
+        <div class="cap" style="margin-top:22px;line-height:1.6">规则：一个在跑写引擎 + 模型；多个写个数 + 引擎（和父会话相同的引擎不写），有在别的机器上的再加 <code>on &lt;workspace&gt;</code>，放不下从尾部截断。</div>
+      </div></div>
+    </div>
+    <div class="notes">
+      <h3>胶囊里的一格</h3>
+      <ul>
+        <li>内容 <code>✦ 4 · $0.07</code>：派过几个、一共花了多少（已经计入会话花费的那部分）。有在跑的时候 ✦ 换成转圈。</li>
+        <li><span class="rec">放在 Merged 前面</span>：顺序是 改动 → 任务 → SubAgents → 落地状态。</li>
+      </ul>
+      <h3>Sheet</h3>
+      <ul>
+        <li>三个数（次数、花费、引擎 / 机器数）+ 按引擎分的花费条。</li>
+        <li>清单：Running 在上（图中都已结束），Done 按时间倒序；行的样子和组成员一样。点一行关掉 sheet，<b>滚回消息流里那个块并展开</b>。</li>
+        <li>数据来自已有的 <code>GET /sessions/:id/subagents</code>，不用新接口。</li>
+      </ul>
+      <h3>先不做</h3>
+      <p class="muted">L4（Live Activity / 灵动岛、SubAgent 结束推送）等 ①–③ 上线、有使用数据后再看。web 和 Android 照这套定稿跟进。</p>
+    </div>
+  </div>
+</section>
+</body></html>

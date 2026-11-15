@@ -61,6 +61,7 @@ public struct OrbitExchange: Identifiable, Equatable, Sendable {
             switch row {
             case .item(let item): ids.insert(item.id)
             case .steps(let items): items.forEach { ids.insert($0.id) }
+            case .agents(let cards): cards.forEach { ids.insert($0.id) }
             default: ids.insert(row.id)
             }
         }
