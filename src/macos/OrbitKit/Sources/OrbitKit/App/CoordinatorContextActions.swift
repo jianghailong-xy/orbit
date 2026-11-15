@@ -101,6 +101,15 @@ public enum CoordinatorContextActions {
         clientTurnId?.hasPrefix(handoffTurnPrefix) == true
     }
 
+    /// The note prompt's first words (`COORDINATOR_HANDOFF_PROMPT_HEAD`): an echo that arrives without
+    /// its `clientTurnId` is still the platform's prompt, as web and Android read it.
+    public static let handoffPromptHead = "From Orbit · handoff note"
+
+    public static func isHandoffPrompt(_ text: String?) -> Bool {
+        guard let text else { return false }
+        return text.drop(while: { $0.isWhitespace }).hasPrefix(handoffPromptHead)
+    }
+
     /// Compact is offered only where the session's engine lists `compact` among its slash assets — so
     /// not on Codex (no registry) and not on Cursor, which lists none by that name.
     public static func offersCompact(slashItems: [SlashCommandInfo], engine: String?) -> Bool {

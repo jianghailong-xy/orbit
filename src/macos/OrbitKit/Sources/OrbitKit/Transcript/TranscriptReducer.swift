@@ -1478,7 +1478,9 @@ public struct TranscriptReducer: Sendable, Codable {
         // A coordinator's handoff-note turn is the platform's prompt, not the owner's words: the
         // conversation shows the handoff's own row instead (docs/coordinator-handoff.md), and the
         // reply that follows is drawn as usual.
-        if CoordinatorContextActions.isHandoffTurn(clientTurnId: cid) {
+        // Matched by its turn id, or by the prompt's head when an echo comes without one (web and
+        // Android read it the same way).
+        if CoordinatorContextActions.isHandoffTurn(clientTurnId: cid) || CoordinatorContextActions.isHandoffPrompt(body) {
             if let tid = ev.turnId { state.queued.removeAll { $0.turnId == tid } }
             return
         }

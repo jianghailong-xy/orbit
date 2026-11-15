@@ -145,6 +145,26 @@ final class CoordinatorContextActionsTests: XCTestCase {
         XCTAssertFalse(CoordinatorContextActions.isHandoffTurn(clientTurnId: nil))
     }
 
+    /// An echo of the note prompt with no `clientTurnId` is still the platform's: no message is drawn
+    /// for it, and the reply that follows is drawn as usual.
+    func testANotePromptEchoWithoutItsTurnIdIsNotDrawnButItsReplyIs() {
+        XCTAssertTrue(CoordinatorContextActions.isHandoffPrompt("\nFrom Orbit · handoff note\n\nThe owner…"))
+        XCTAssertFalse(CoordinatorContextActions.isHandoffPrompt("Did Orbit write the handoff note?"))
+        XCTAssertFalse(CoordinatorContextActions.isHandoffPrompt(nil))
+        var reducer = TranscriptReducer()
+        reducer.apply(RunEvent(seq: 1, type: .user, turnId: "t1", payload: .object(["text": .string(
+            "From Orbit · handoff note\n\nThe owner is handing this project over to a new coordinator conversation.")])))
+        reducer.apply(RunEvent(seq: 2, type: .assistant, turnId: "t1",
+                               payload: .object(["text": .string("## Where things stand\n- 4 of 6 tasks done.")])))
+        let users = reducer.state.items.filter { if case .user = $0 { return true } else { return false } }
+        XCTAssertTrue(users.isEmpty, "the prompt's echo draws no message: \(users)")
+        let replies = reducer.state.items.compactMap { item -> String? in
+            if case .assistant(let b) = item { return b.text } else { return nil }
+        }
+        XCTAssertEqual(replies.count, 1)
+        XCTAssertTrue(replies.first?.contains("Where things stand") == true, "the reply is drawn: \(replies)")
+    }
+
     // MARK: Wire
 
     func testTheSessionFieldsDecodeAndTheSummaryOwnsThem() throws {
