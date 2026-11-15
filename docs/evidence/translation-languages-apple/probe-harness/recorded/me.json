@@ -1,0 +1,18 @@
+{
+ "id": "34wNjrJHhldxc57hBv7I1",
+ "email": "owner@x3.test",
+ "name": "Owner",
+ "createdAt": "2026-11-12T15:51:08.536Z",
+ "preferences": {
+  "translationEnabled": true,
+  "translationLanguage": "zh-Hans"
+ },
+ "role": "ADMIN",
+ "avatarUpdatedAt": null,
+ "signInMethods": {
+  "password": true,
+  "google": null
+ },
+ "translationAvailable": true,
+ "publicId": "34wNjrJHhldxc57hBv7I1"
+}

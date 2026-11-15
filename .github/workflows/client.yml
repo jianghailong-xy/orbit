@@ -55,6 +55,10 @@ on:
         description: "Also run the iOS http://ip ATS probe (simulator, A/B against no ATS keys)"
         type: boolean
         default: false
+      translation_languages_probe:
+        description: "PROBE (never merged): translation languages Settings shots (Mac + iPhone)"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -396,3 +400,54 @@ jobs:
           git commit -q -m "macOS runtime crash gate for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
             results:refs/heads/probe/macos-runtime-results
+
+  # PROBE (never merged), task 34xweTmJeaYjcJmKAkO4P: Settings › Translation with a non-English agent language.
+  translation-languages-shots:
+    name: Translation languages probe (Mac + iPhone)
+    if: github.event_name == 'workflow_dispatch' && inputs.translation_languages_probe
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .lang-probe
+          cp -R docs/evidence/translation-languages-apple/probe-harness/. .lang-probe/
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .lang-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .lang-probe/shots
+          cp run-output.log .lang-probe/shots/run-output.log 2>/dev/null || true
+          for log in .lang-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".lang-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".lang-probe/shots/tail-$base.txt" || true
+          done
+          find .lang-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .lang-probe/shots/outcomes.txt
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .lang-probe/shots/outcomes.txt
+          echo "sha=${{ github.sha }}" >> .lang-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: translation-languages-shots
+          path: .lang-probe/shots
+          include-hidden-files: true
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
