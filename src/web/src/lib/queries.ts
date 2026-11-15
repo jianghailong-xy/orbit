@@ -209,6 +209,9 @@ export interface UserPreferences {
   translationEnabled?: boolean;
   /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
   translationLanguage?: TranslationLanguage;
+  /** Settings › General › Prompt optimizer (@orbit/shared prompt-optimizer.ts): the composer's
+   *  ✦ Optimize button. Absent means OFF; only turning it on has to be written. */
+  promptOptimizer?: boolean;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
 }
@@ -233,6 +236,9 @@ export interface Me {
   /** The server holds a DeepSeek key and can translate (Settings › Translation). Absent from a
    *  server that predates translation, which reads as unable. */
   translationAvailable?: boolean;
+  /** The server holds a DeepSeek key and can optimize a draft (Settings › General › Prompt optimizer).
+   *  Absent from a server that predates it, which reads as unable. */
+  promptOptimizerAvailable?: boolean;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */

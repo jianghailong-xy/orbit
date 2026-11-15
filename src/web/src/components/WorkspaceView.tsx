@@ -630,6 +630,7 @@ import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { useOpenTaskOverPage } from '../lib/taskInPlace';
+import { OPTIMIZE_SHORTCUT, usePromptOptimizer, type PromptOptimizerTarget } from './PromptOptimizer';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -689,6 +690,8 @@ interface ComposerSendVars {
    *  that a refusal about who holds the task is answered where the press was — on the card, whose
    *  offer to re-send is what stopped being true — instead of twice, in two places at once. */
   source?: 'autoRetry';
+  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English. */
+  skipTranslation?: boolean;
   /** A machine's first session: which machine, and the folder of the workspace it makes, sent instead
    *  of a workspace. */
   firstWorkspace?: { runnerId: string; folder: NewWorkspaceRequest };
@@ -2475,6 +2478,9 @@ export function WorkspaceView({
   const canHover = useMediaQuery('(hover: hover)');
   const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
+  // The prompt optimizer's text, while it is what Use put in the box (D2): a send of exactly it is
+  // already English and skips Translation. Any other text is translated as usual.
+  const [optimizedInsert, setOptimizedInsert] = useState<string | null>(null);
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
   // text it annotates — a token the user edits stops matching and simply travels as prose.
@@ -5776,6 +5782,7 @@ export function WorkspaceView({
           shell ? 'shell' : undefined,
           intent,
           operation.clientTurnId,
+          vars.skipTranslation,
         );
         // The server decides this under the same Session row lock as enqueue/claim. Missing
         // placement is a protocol error; local idle state is never used to infer delivery.
@@ -5830,6 +5837,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             intent,
             operation.clientTurnId,
+            vars.skipTranslation,
           );
           const placement = turnPlacementOf(res);
           const queuedItem =
@@ -5881,6 +5889,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             operation.clientTurnId,
             vars.stopSessionId,
+            vars.skipTranslation,
           );
           // The task moved on to another run and the server delivered this there. Nothing was
           // placed on THIS row, so there is no placement to honour and no bubble to paint here —
@@ -5975,6 +5984,7 @@ export function WorkspaceView({
         shell,
         // Composed on a folder's page: the session starts in that folder.
         ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
+        ...(vars.skipTranslation ? { skipTranslation: true } : {}),
       });
       // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
@@ -7280,10 +7290,14 @@ export function WorkspaceView({
       else setText('');
       return;
     }
+    // D2: still exactly what the optimizer put in the box, so it is English already.
+    const skipTranslation = optimizedInsert !== null && c === optimizedInsert.trim();
+    setOptimizedInsert(null);
     sendFromComposer({
       content: materializeReferences(c, composerRefs),
       images: readyImages,
       intent,
+      ...(skipTranslation ? { skipTranslation: true } : {}),
     });
   };
   // Open the new-session draft for this workspace. A /sessions/<id> URL carries no
@@ -8292,6 +8306,16 @@ export function WorkspaceView({
   // An existing session's workspace is fixed (live or recycled/terminal); only a brand-new
   // compose draft reflects the local pick.
   const shownWorkspaceId: string | undefined = selected ? (selected.workspace?.id ?? undefined) : workspaceId;
+  // ✦ Optimize's context (docs/prompt-optimizer-design.md, D1): a session supplies its own; a new
+  // draft has none yet, so it names the workspace the composer picked.
+  const promptOptimizerTarget = useMemo<PromptOptimizerTarget>(
+    () => ({
+      ...(selectedId ? { sessionId: selectedId } : shownWorkspaceId ? { workspaceId: shownWorkspaceId } : {}),
+      onInserted: setOptimizedInsert,
+    }),
+    [selectedId, shownWorkspaceId],
+  );
+  useEffect(() => setOptimizedInsert(null), [selectedId]);
   // The workspace can't be switched once the session exists (live or terminal), nor when the
   // view is locked to one workspace. In those cases the Select is dropped from the controls row
   // entirely — the workspace is already named in the header and the sidebar.
@@ -11353,6 +11377,7 @@ export function WorkspaceView({
           queueOffered={queueOffered}
           defaultSendIntent={defaultSendIntent}
           contextActions={composerContextActions}
+          promptOptimizer={promptOptimizerTarget}
         />
         )}
         {handoffConfirm && (
@@ -11530,6 +11555,9 @@ export interface SessionComposerProps {
   defaultSendIntent: SessionTurnIntent;
   /** Compact and Start a new coordinator in the Context popover (board 01). */
   contextActions?: Omit<ContextActionsProps, 'pct' | 'onPicked'>;
+  /** The prompt optimizer's ✦ Optimize (docs/prompt-optimizer-design.md): where the draft's context
+   *  comes from. Absent, the composer offers no optimizer. */
+  promptOptimizer?: PromptOptimizerTarget;
 }
 
 export function SessionComposer({
@@ -11601,6 +11629,7 @@ export function SessionComposer({
   queueOffered,
   defaultSendIntent,
   contextActions,
+  promptOptimizer,
 }: SessionComposerProps) {
   // Settings › Translation (6A): the account's switch and language, for the composer's tag.
   const navigate = useNavigate();
@@ -11818,6 +11847,16 @@ export function SessionComposer({
   // and a reply-to-question draft resolves an approval instead), so the composer only turns
   // red when the send really would be a shell turn.
   const shellMode = shellOffered && !replyTo && text.trim().startsWith('!');
+  // ✦ Optimize (board docs/mocks/prompt-optimizer, frames 2–6).
+  const optimizer = usePromptOptimizer({
+    target: promptOptimizer,
+    text,
+    setText,
+    taRef,
+    shellMode,
+    disabled: !!composerDisabled || !!replyTo,
+    resetKey: selectedId,
+  });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
   // shell command (run on the runner, bypassing claude). The user types the command after.
   const insertShell = (): void => {
@@ -11868,6 +11907,7 @@ export function SessionComposer({
 
   return (
     <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
+      {optimizer.card}
       {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
           Only shown once the box has hit its auto-grow cap or the user set a manual
           height — an empty/short composer has nothing worth resizing. */}
@@ -12143,6 +12183,7 @@ export function SessionComposer({
               return;
             }
           }
+          if (optimizer.onKeyDown(e)) return;
           // Tab takes the offered suggestion. An open menu above has already had the key, and
           // with no suggestion on offer Tab moves focus as it always has.
           if (
@@ -12514,6 +12555,26 @@ export function SessionComposer({
             onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
           >
             {translationTag(translationLanguageOf(me.data))}
+          </button>
+        )}
+        {optimizer.buttonShown && (
+          <button
+            type="button"
+            className={optimizer.busy ? 'composer-optimize composer-optimize-busy' : 'composer-optimize'}
+            onClick={optimizer.press}
+            aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
+            title={optimizer.busy ? 'Press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
+          >
+            {optimizer.busy ? (
+              <>
+                <span className="composer-optimize-spin" aria-hidden="true" />
+                Optimizing…
+              </>
+            ) : (
+              <>
+                <span aria-hidden="true">✦</span> Optimize
+              </>
+            )}
           </button>
         )}
         {showStop ? (
