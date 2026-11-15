@@ -169,9 +169,13 @@ test('Project and Task refusals carry their contracted recovery, and leak nothin
       autoRunWhenReady: false, ...extra,
     });
     const before = await sql.query(`SELECT count(*)::int AS n FROM task WHERE owner_id = $1`, [ownerId]);
-    const reply = await call(server!, 'POST', '/api/runner/tasks/batch-create', runnerToken, {
-      tasks: [item('plan one'), item('plan two', { dependsOnTaskIds: [t2] })],
-    }, { 'x-orbit-session-id': coordinatorId });
+    const plan = { tasks: [item('plan one'), item('plan two', { dependsOnTaskIds: [t2] })] };
+    // The runner door is carded by caller (task-write-approval.ts): the coordinator's plan reaches
+    // preflight only under the owner's answered card for this exact batch.
+    await db.approval.create({
+      data: { sessionId: coordinatorId, toolName: 'orbit_task_batch', input: plan as never, status: 'ALLOWED', decidedById: ownerId, decidedAt: new Date() },
+    });
+    const reply = await call(server!, 'POST', '/api/runner/tasks/batch-create', runnerToken, plan, { 'x-orbit-session-id': coordinatorId });
 
     assert.equal(reply.status, 400, reply.text);
     assert.equal(reply.json.code, 'PLAN_PREFLIGHT_FAILED', reply.text);
