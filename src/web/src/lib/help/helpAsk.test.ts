@@ -29,6 +29,11 @@ describe('parseAnswer', () => {
     expect(parsed.body).toBe('It sleeps.\n\nThat is all.');
   });
 
+  it('reads [1][2] as two citations', () => {
+    const parsed = parseAnswer('Run orbit doctor [1][2].\n\nSources:\n[1] [A](orbit:/help/x/a)\n[2] [B](orbit:/help/x/b)');
+    expect(parsed.body).toBe('Run orbit doctor [1](cite:1) [2](cite:2).');
+  });
+
   it('takes a bold heading and a list item marker', () => {
     const parsed = parseAnswer('Yes [1].\n\n**Sources:**\n- [1] [Connect a model](orbit:/help/get-started/connect-a-model)');
     expect(parsed.sources.map((s) => s.slug)).toEqual(['connect-a-model']);

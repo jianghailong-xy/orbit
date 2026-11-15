@@ -178,6 +178,8 @@ export function parseAnswer(text: string): ParsedAnswer {
     return label;
   });
   const known = new Set(sources.map((s) => s.n));
+  // `[1][2]` is two citations, not a reference-style link: set them apart so each becomes a chip.
+  body = body.replace(/\[(\d{1,2})\](?=\[\d{1,2}\])/gu, '[$1] ');
   // `[n]` not already a link or a reference definition: a chip, when the list names n.
   body = body.replace(/\[(\d{1,2})\](?![(:[])/gu, (all, n: string) => (known.has(Number(n)) ? `[${n}](cite:${n})` : all));
   return { body, sources, buttons };
