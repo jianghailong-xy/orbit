@@ -28,7 +28,7 @@
   .nav-i.gone { color: #c0392b; text-decoration: line-through; }
   .main { padding: 28px 34px 34px; min-width: 0; }
   .elided { color: #999; font-size: 12.5px; border: 1px dashed #d6d9de; border-radius: 8px; padding: 10px 14px; margin: 18px 0; text-align: center; }
-  .pending-row { background: #fff8ec; }
+  .built { font-size: 12.5px; color: #8a4b00; background: #fff8ec; border: 1px dashed #f0c987; border-radius: 8px; padding: 10px 14px; margin: 18px 0 0; line-height: 1.6; }
   .code { font-family: ui-monospace, Menlo, monospace; font-weight: 600; letter-spacing: .04em; background: #f1f2f4; padding: 1px 6px; border-radius: 4px; }
   .acts { display: flex; gap: 8px; }
   .mark { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: #3e69f6; color: #fff; font-size: 11px; font-weight: 700; align-items: center; justify-content: center; margin-right: 6px; vertical-align: 1px; }
@@ -44,12 +44,12 @@
 <body>
 <div class="m-sheet">
   <h1 class="b-title">Terminals move onto the machine page</h1>
-  <p class="b-sub">Settings → Terminals goes away. Each machine's page gets a <b>Terminals</b> section, between Workspaces and About: terminals waiting for approval at the top, approved ones under them, each with Revoke. A machine with no terminals shows no section at all.</p>
+  <p class="b-sub">Settings → Terminals goes away. Each machine's page gets a <b>Terminals</b> section between Workspaces and About, listing that machine's approved terminals, each with Revoke. The pending &ldquo;Terminals to approve&rdquo; section the project line already built stays where it is. A machine with no approved terminal shows no section.</p>
 
   <div class="frames">
     <!-- A: pending + approved -->
     <div class="frame">
-      <div class="frame-label"><span>A</span>A machine with one terminal waiting and one approved</div>
+      <div class="frame-label"><span>A</span>A machine with two approved terminals (and one waiting)</div>
       <div class="win">
         <nav class="nav">
           <div class="nav-h">Account</div>
@@ -72,26 +72,25 @@
               <div class="machine-metaline">dev-laptop.local · v0.1.261 · Last check-in 12s ago</div>
             </header>
 
+            <div class="built"><span class="mark">1</span><b>Terminals to approve</b> · already built on the project line (board 02-terminal-approvals): approve cards under the title, shown only while one waits. Unchanged.</div>
+
             <div class="elided">Engines · Capacity · Workspaces (unchanged)</div>
 
             <section class="settings-section">
-              <div class="settings-section-head"><h2 class="settings-section-title"><span class="mark">1</span>Terminals</h2></div>
-              <p class="settings-section-description">Terminals on this machine where you typed orbit. An approved one can start sessions here and answer their approval cards until it expires.</p>
+              <div class="settings-section-head"><h2 class="settings-section-title"><span class="mark">2</span>Terminals</h2></div>
+              <p class="settings-section-description">Terminals on this machine where you typed orbit and approved it. Each one can start sessions here and answer their approval cards until it expires.</p>
               <div class="settings-card">
-                <div class="settings-row pending-row">
-                  <div class="settings-row-text">
-                    <div class="settings-row-title"><span class="mark">2</span>Waiting for you<span class="pill-amber">Asked 1m ago</span></div>
-                    <div class="settings-row-description">Code <span class="code">7KQ-4MZ</span>. Approve only if this is the code your terminal shows.</div>
-                  </div>
-                  <div class="settings-row-control"><div class="acts">
-                    <button class="orbit-button orbit-button-default orbit-button-small">Deny</button>
-                    <button class="orbit-button orbit-button-primary orbit-button-small">Approve</button>
-                  </div></div>
-                </div>
                 <div class="settings-row">
                   <div class="settings-row-text">
                     <div class="settings-row-title"><span class="mark">3</span>Approved Nov 12, 2026</div>
                     <div class="settings-row-description">Last used 3h ago · Expires Dec 12, 2026 · in 26 days</div>
+                  </div>
+                  <div class="settings-row-control"><button class="orbit-button orbit-button-default orbit-button-small orbit-button-danger">Revoke</button></div>
+                </div>
+                <div class="settings-row">
+                  <div class="settings-row-text">
+                    <div class="settings-row-title">Approved Nov 15, 2026</div>
+                    <div class="settings-row-description">Never used · Expires Dec 15, 2026 · in 29 days</div>
                   </div>
                   <div class="settings-row-control"><button class="orbit-button orbit-button-default orbit-button-small orbit-button-danger">Revoke</button></div>
                 </div>
@@ -106,7 +105,7 @@
 
     <!-- B: none -->
     <div class="frame">
-      <div class="frame-label"><span>B</span>A machine with no terminals: no section</div>
+      <div class="frame-label"><span>B</span>A machine with no approved terminals: no section</div>
       <div class="win">
         <nav class="nav">
           <div class="nav-h">Account</div>
@@ -136,8 +135,8 @@
       <div class="note" style="margin-top:24px">
         <h3>Notes on A</h3>
         <ol>
-          <li><b>Section.</b> Only on a machine that has a pending or approved terminal. Rows need no machine name, since the page already is the machine.</li>
-          <li><b>Pending row.</b> Same Approve / Deny as the in-chat card. The code is the one the terminal prints, compared by eye. It leaves the list once you answer or it expires.</li>
+          <li><b>Terminals to approve</b> stays exactly as the project line built it. Approving a card moves that terminal into section 2 at once.</li>
+          <li><b>Terminals</b>, between Workspaces and About, only on a machine with an approved, unexpired, unrevoked terminal. Newest first. Rows need no machine name: the page is the machine.</li>
           <li><b>Approved row.</b> The three lines of today's Settings → Terminals row on one line. Revoke keeps today's confirm: "Revoke the terminal on dev-laptop? It stops working at once…"</li>
         </ol>
       </div>
