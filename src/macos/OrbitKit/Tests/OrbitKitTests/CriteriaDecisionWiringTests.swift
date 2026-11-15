@@ -340,7 +340,7 @@ final class CriteriaDecisionWiringTests: XCTestCase {
         // Since 2026-11-15 (docs/mocks/needs-you-capsule/07-console-one-capsule) the conversation's
         // own capsule in its nav bar says it, not the needs-you bar.
         let banner = try source(Self.transcriptViewPath)
-        XCTAssertTrue(banner.contains("if !hidesStickyQuestion, let here = console.waitingBelow,"),
+        XCTAssertTrue(banner.contains("let here = hidesStickyQuestion ? nil : console.waitingBelow"),
                       "the in-conversation question is what the capsule says when there is one")
         // It points INTO this transcript, whichever way the card lies: down was the only direction
         // while every card it counted sat below the reader, and a card placed by its own moment can
