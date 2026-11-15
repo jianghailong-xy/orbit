@@ -8212,11 +8212,10 @@ button.chat-jump-start:hover {
 .chat-bilingual-reply .chat-bilingual {
   margin-top: 2px;
 }
-.chat-bilingual-text > :first-child {
-  margin-top: 0;
-}
-.chat-bilingual-text > :last-child {
-  margin-bottom: 0;
+/* The English is Markdown (.md sets its own 14px): a size smaller than the words above it. */
+.chat-bilingual .md {
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 .chat-bilingual.is-collapsed .chat-bilingual-text {
   max-height: calc(2 * 1.55em);
