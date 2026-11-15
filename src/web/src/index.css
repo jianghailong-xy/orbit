@@ -23462,11 +23462,14 @@ div.landing-jobs-open {
 /* A SubAgent's end (SubagentFinishedCard): the same line, marked with the SubAgent card's own purple ✦
    so it reads back to the card that started it, and what it handed back kept under the line. */
 .sawake .bgwake-mark {
-  color: #7c3aed;
   font-size: 12px;
   line-height: 1;
 }
-:root[data-theme='dark'] .sawake .bgwake-mark {
+/* Purple only while it finished: scoped so the dark theme's purple never outranks the error tone. */
+.sawake:not(.is-failed) .bgwake-mark {
+  color: #7c3aed;
+}
+:root[data-theme='dark'] .sawake:not(.is-failed) .bgwake-mark {
   color: #a78bfa;
 }
 .sawake.is-failed .bgwake-mark {
@@ -23492,18 +23495,19 @@ div.landing-jobs-open {
 .sawake-runs {
   margin: 4px 0 6px 22px;
   padding: 8px 12px;
-  border-left: 2px solid #c4b5fd;
+  border-left: 2px solid var(--error-solid);
   border-radius: 0 6px 6px 0;
   background: var(--bg-sunken);
   color: var(--text-1);
   font-size: 13px;
 }
-:root[data-theme='dark'] .sawake-outcome,
+.sawake-outcome:not(.is-failed),
+.sawake-runs {
+  border-left-color: #c4b5fd;
+}
+:root[data-theme='dark'] .sawake-outcome:not(.is-failed),
 :root[data-theme='dark'] .sawake-runs {
   border-left-color: rgba(167, 139, 250, 0.5);
-}
-.sawake-outcome.is-failed {
-  border-left-color: var(--error-solid);
 }
 .sawake-reason {
   color: var(--error);
@@ -23522,16 +23526,16 @@ div.landing-jobs-open {
 .sawake-result-md .md > :last-child {
   margin-bottom: 0;
 }
-/* Three lines of it until asked: the height bounds a result whose first block is taller than a line. */
-.sawake-result-md.is-clamped {
+/* Three lines of it until asked, clamped on the Markdown's own box and line height so the cut lands
+   on a line boundary (inline code chips included) and the third line ends in the ellipsis. No
+   max-height: one taken from the wrapper's font size cut the third line through its glyphs. */
+.sawake-result-md.is-clamped > .md {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
-  max-height: calc(3 * 1.6em);
-  line-height: 1.6;
   overflow: hidden;
 }
-.sawake-result-md.is-clamped .md > * {
+.sawake-result-md.is-clamped > .md > * {
   margin: 0;
 }
 .sawake-result-toggle {

@@ -33,7 +33,8 @@ function ResultPreview({ text }: { text: string }) {
   const [fits, setFits] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    const el = ref.current;
+    // The clamp sits on the Markdown's own box, so that is the box that overflows.
+    const el = ref.current?.firstElementChild;
     if (el && el.scrollHeight > 0) setFits(el.scrollHeight <= el.clientHeight + 1);
   }, [text]);
   // A file has no script to open it with: all of it is there.
