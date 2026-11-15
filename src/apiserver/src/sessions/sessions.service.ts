@@ -3929,7 +3929,7 @@ export class SessionsService {
       // A scheduled task's run is reached from its schedule's history and its notification, never from a list
       // (docs/scheduled-tasks-design.md §7.4): every view, folder and project read, and the delta that reads this.
       // `listRowsByIds` names its sessions and is left as it is: a link card to a run is by id.
-      visibility: Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
+      visibility: view === 'system' ? visibility : Prisma.sql`(${visibility}) AND s.run_source <> 'SCHEDULE'`,
       orderBy,
       pageLimit,
     });
