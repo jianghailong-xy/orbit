@@ -209,6 +209,8 @@ export interface UserPreferences {
   translationEnabled?: boolean;
   /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
   translationLanguage?: TranslationLanguage;
+  /** "Agents work in". Absent = DEFAULT_AGENT_LANGUAGE (English). */
+  translationAgentLanguage?: TranslationLanguage;
   /** Settings › General › Prompt optimizer (@orbit/shared prompt-optimizer.ts): the composer's
    *  ✦ Optimize button. Absent means OFF; only turning it on has to be written. */
   promptOptimizer?: boolean;

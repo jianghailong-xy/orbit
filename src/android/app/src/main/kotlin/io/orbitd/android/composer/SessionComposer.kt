@@ -256,9 +256,10 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     // Settings › Translation (6A): while it is on, the box says which way its words go — "Chinese → English" —
-                    // and the tag opens Settings › Sessions, where the switch and the language are.
-                    trailingIcon = translation.takeIf { it.on }?.let { on -> {
-                        Text(Translation.tag(on.language), Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
+                    // and the tag opens Settings › Sessions, where the switch and the language are. Like the placeholder, it
+                    // shows only while the box is empty, so typed text gets the whole width.
+                    trailingIcon = translation.takeIf { it.on && field.text.isEmpty() }?.let { on -> {
+                        Text(Translation.tag(on.language, on.agentLanguage), Modifier.padding(end = 8.dp).testTag("composer-translation-tag")
                             .clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceVariant)
                             .then(if (openTranslationSettings != null) Modifier.clickable(role = Role.Button, onClick = openTranslationSettings) else Modifier)
                             .padding(horizontal = 8.dp, vertical = 2.dp),

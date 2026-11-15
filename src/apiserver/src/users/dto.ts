@@ -160,6 +160,12 @@ export class UpdatePreferencesDto {
   @IsIn([...TRANSLATION_LANGUAGES])
   translationLanguage?: TranslationLanguage;
 
+  /** The language agents work in ("Agents work in"): one of TRANSLATION_LANGUAGES, the same list as
+   *  the owner's. Absent = English. */
+  @IsOptional()
+  @IsIn([...TRANSLATION_LANGUAGES])
+  translationAgentLanguage?: TranslationLanguage;
+
   /**
    * Prompt optimizer (@orbit/shared prompt-optimizer.ts): whether the composer offers ✦ Optimize,
    * which has DeepSeek improve the draft before it is sent. Default OFF (absent = off). Without the

@@ -36,6 +36,7 @@ struct SettingsView: View {
     /// Settings › Prompt optimizer: the account's switch. Absent on the server means off.
     @State private var promptOptimizer = false
     @State private var translationLanguage: TranslationLanguage = .default
+    @State private var translationAgentLanguage: TranslationLanguage = .agentDefault
     @State private var loaded = false
 
     @State private var curPw = ""
@@ -151,7 +152,7 @@ struct SettingsView: View {
             Section(TranslationCopy.title) {
                 Toggle(TranslationCopy.translateConversations, isOn: $translation)
                     .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
-                Text(TranslationCopy.translateConversationsHint)
+                Text(TranslationCopy.translateConversationsHint(translationAgentLanguage))
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 if SessionTranslation.unavailable(model.user) {
                     Text(TranslationCopy.unavailable)
@@ -163,7 +164,10 @@ struct SettingsView: View {
                 .accessibilityIdentifier(TranslationCopy.languageIdentifier)
                 Text(TranslationCopy.yourLanguageHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
+                Picker(TranslationCopy.agentsWorkIn, selection: $translationAgentLanguage) {
+                    ForEach(TranslationLanguage.allCases, id: \.self) { Text($0.name).tag($0) }
+                }
+                .accessibilityIdentifier(TranslationCopy.agentLanguageIdentifier)
                 Text(TranslationCopy.agentsWorkInHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                 Text(TranslationCopy.footnote)
@@ -228,6 +232,7 @@ struct SettingsView: View {
         .onChange(of: translation) { saveTranslation() }
         .onChange(of: promptOptimizer) { savePromptOptimizer() }
         .onChange(of: translationLanguage) { saveTranslationLanguage() }
+        .onChange(of: translationAgentLanguage) { saveTranslationAgentLanguage() }
         .task { await model.accessTokens?.load() }
         .task { await model.runners?.load() }
         .onAppear {
@@ -246,6 +251,7 @@ struct SettingsView: View {
             translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
             promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true
             translationLanguage = SessionTranslation.language(p)
+            translationAgentLanguage = SessionTranslation.agentLanguage(p)
             name = model.user?.name ?? ""
         }
         .onChange(of: name) { accountMessage = nil }
@@ -302,7 +308,7 @@ struct SettingsView: View {
         Task { await model.savePreferences(UpdatePreferencesRequest(recaps: recaps)) }
     }
 
-    /// And for Settings › Translation's switch and language, each its own key.
+    /// And for Settings › Translation's switch and two languages, each its own key.
     private func saveTranslation() {
         guard (model.user?.preferences?.translationEnabled ?? false) != translation else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: translation)) }
@@ -316,6 +322,11 @@ struct SettingsView: View {
     private func saveTranslationLanguage() {
         guard SessionTranslation.language(model.user?.preferences) != translationLanguage else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationLanguage: translationLanguage.rawValue)) }
+    }
+
+    private func saveTranslationAgentLanguage() {
+        guard SessionTranslation.agentLanguage(model.user?.preferences) != translationAgentLanguage else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(translationAgentLanguage: translationAgentLanguage.rawValue)) }
     }
 }
 

@@ -60,5 +60,50 @@ class ManagedRunnerFixtureTest {
         assertEquals(copy["signIn"]!!.jsonPrimitive.content, ManagedRunner.SIGN_IN)
     }
 
+    @Test fun theRowsShortLabelsAndTonesAreTheFixtures() {
+        val short = fixture.getValue("short").jsonObject
+        val tone = fixture.getValue("rowTone").jsonObject
+        assertEquals(short.keys, ManagedRunner.SHORT.keys)
+        assertEquals(tone.keys, ManagedRunner.ROW_TONE.keys)
+        for ((kind, label) in short) assertEquals(kind, label.jsonPrimitive.content, ManagedRunner.SHORT[kind])
+        for ((kind, value) in tone) assertEquals(kind, value.jsonPrimitive.content, ManagedRunner.ROW_TONE.getValue(kind).name.lowercase())
+    }
+
+    @Test fun theEntryConfirmationAndAsleepWordsAreTheFixtures() {
+        val entry = fixture.getValue("entry").jsonObject
+        assertEquals(entry["title"]!!.jsonPrimitive.content, ManagedRunner.Entry.TITLE)
+        assertEquals(entry["action"]!!.jsonPrimitive.content, ManagedRunner.Entry.ACTION)
+        assertEquals(entry["subtitle"]!!.jsonPrimitive.content, ManagedRunner.Entry.SUBTITLE)
+        val confirm = fixture.getValue("confirm").jsonObject
+        assertEquals(confirm["title"]!!.jsonPrimitive.content, ManagedRunner.Confirm.TITLE)
+        assertEquals(confirm["body"]!!.jsonPrimitive.content, ManagedRunner.Confirm.BODY)
+        assertEquals(confirm["cancel"]!!.jsonPrimitive.content, ManagedRunner.Confirm.CANCEL)
+        assertEquals(confirm["confirm"]!!.jsonPrimitive.content, ManagedRunner.Confirm.CONFIRM)
+        val asleep = fixture.getValue("asleep").jsonObject
+        assertEquals(asleep["row"]!!.jsonPrimitive.content, ManagedRunner.Asleep.ROW)
+        assertEquals(asleep["composer"]!!.jsonPrimitive.content, ManagedRunner.Asleep.COMPOSER)
+    }
+
+    /** Every state of the fixture as the managed runner's own machine row reads it (`managedRunnerRow`), and no row for another runner. */
+    @Test fun everyStatesRowIsTheSharedRule() {
+        for (entry in cases("states")) {
+            val name = entry["name"]!!.jsonPrimitive.content
+            val status = ManagedRunner.status(entry["status"])!!
+            val display = ManagedRunner.display(status)
+            val id = status.runnerId ?: "0198f3a2-2222-7000-8000-000000000002"
+            val row = ManagedRunner.row(id, status)
+            if (status.runnerId == null || display == null || display.kind == "notOffered") { assertNull(name, row); continue }
+            assertNotNull(name, row); row!!
+            assertEquals(name, ManagedRunner.SHORT[display.kind], row.label)
+            val tone = ManagedRunner.ROW_TONE.getValue(display.kind)
+            assertEquals(name, if (tone == ManagedRunner.Tone.PROGRESS && !display.moving) ManagedRunner.Tone.IDLE else tone, row.tone)
+            assertEquals(name, if (display.kind == "sleeping" && display.acceptsWork) ManagedRunner.Asleep.ROW else null, row.detail)
+            assertEquals(name, display.acceptsWork, row.acceptsWork)
+            assertNotEquals(name, "Offline", row.label)
+            assertNull(name, ManagedRunner.row("0198f3a2-7777-7000-8000-000000000007", status))
+        }
+        assertNull(ManagedRunner.row(null, null))
+    }
+
     private companion object { const val FIXTURE = "src/shared/src/managed-runner-states.fixture.json" }
 }

@@ -42,7 +42,10 @@ struct SettingsSheet: View {
                         case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
                         case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
                         case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
-                        case .settingsPage(let page):     SettingsPageView(page: page)
+                        // Inline, as the list is: a page pushed from the list inherits that, but
+                        // one the sheet opens directly on (the composer's translation tag opens
+                        // Sessions) would otherwise get a large title drawn over its first row.
+                        case .settingsPage(let page):     SettingsPageView(page: page).navigationBarTitleDisplayMode(.inline)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
                         case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
@@ -807,11 +810,12 @@ private struct SessionSettingsPage: View {
         }
     }
 
-    /// Settings › Translation (board frame 7): the switch, Your language (a pushed list of the
-    /// seven), Agents work in (English, not a choice) and the web's words as the footer. A server
-    /// without a DeepSeek key draws it all disabled with frame 2's notice.
+    /// Settings › Translation (board frame 7): the switch, Your language and Agents work in (each a
+    /// pushed list of the one shared list) and the web's words as the footer, naming the agent
+    /// language. A server without a DeepSeek key draws it all disabled with frame 2's notice.
     @ViewBuilder private var translationSection: some View {
         let unavailable = SessionTranslation.unavailable(model.user)
+        let prefs = model.user?.preferences
         Section {
             Toggle(TranslationCopy.translateConversations, isOn: $translation)
                 .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
@@ -821,16 +825,20 @@ private struct SessionSettingsPage: View {
                     .foregroundStyle(.orange)
             }
             NavigationLink {
-                TranslationLanguagePicker()
+                TranslationLanguagePicker(side: .owner)
             } label: {
-                LabeledContent(TranslationCopy.yourLanguage,
-                               value: SessionTranslation.language(model.user?.preferences).name)
+                LabeledContent(TranslationCopy.yourLanguage, value: SessionTranslation.language(prefs).name)
             }
-            LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
+            NavigationLink {
+                TranslationLanguagePicker(side: .agent)
+            } label: {
+                LabeledContent(TranslationCopy.agentsWorkIn, value: SessionTranslation.agentLanguage(prefs).name)
+            }
         } header: {
             SettingsHeader(TranslationCopy.title)
         } footer: {
-            Text(TranslationCopy.translateConversationsHint + " " + TranslationCopy.footnote)
+            Text(TranslationCopy.translateConversationsHint(SessionTranslation.agentLanguage(prefs))
+                 + " " + TranslationCopy.footnote)
         }
         .disabled(unavailable)
     }
@@ -869,19 +877,25 @@ private struct SessionSettingsPage: View {
     }
 }
 
-/// Your language: the seven, one ticked, written the moment one is picked (board frame 7's pushed
-/// single-choice list).
+/// Your language or Agents work in: the one shared list, one ticked, written the moment one is
+/// picked (board frame 7's pushed single-choice list).
 private struct TranslationLanguagePicker: View {
+    enum Side { case owner, agent }
+    let side: Side
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        let current = SessionTranslation.language(model.user?.preferences)
+        let prefs = model.user?.preferences
+        let current = side == .owner ? SessionTranslation.language(prefs) : SessionTranslation.agentLanguage(prefs)
         Form {
             Section {
                 ForEach(TranslationLanguage.allCases, id: \.self) { lang in
                     Button {
                         guard lang != current else { return }
-                        Task { await model.savePreferences(UpdatePreferencesRequest(translationLanguage: lang.rawValue)) }
+                        let patch = side == .owner
+                            ? UpdatePreferencesRequest(translationLanguage: lang.rawValue)
+                            : UpdatePreferencesRequest(translationAgentLanguage: lang.rawValue)
+                        Task { await model.savePreferences(patch) }
                     } label: {
                         HStack {
                             Text(lang.name).foregroundStyle(Color.primary)
@@ -894,10 +908,10 @@ private struct TranslationLanguagePicker: View {
                     }
                 }
             } footer: {
-                Text(TranslationCopy.yourLanguageHint)
+                Text(side == .owner ? TranslationCopy.yourLanguageHint : TranslationCopy.agentsWorkInHint)
             }
         }
-        .navigationTitle(TranslationCopy.yourLanguage)
+        .navigationTitle(side == .owner ? TranslationCopy.yourLanguage : TranslationCopy.agentsWorkIn)
     }
 }
 

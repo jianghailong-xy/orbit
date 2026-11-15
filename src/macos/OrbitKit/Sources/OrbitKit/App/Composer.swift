@@ -423,7 +423,8 @@ public enum ComposerLogic {
               bubble.startedCard == nil,
               bubble.sessionMessage == nil,
               WatchWakeText.parse(bubble.text) == nil,
-              BackgroundWakeText.parse(bubble.text) == nil else { return nil }
+              BackgroundWakeText.parse(bubble.text) == nil,
+              SubagentFinishedText.parse(bubble.text) == nil else { return nil }
         let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return body.isEmpty ? nil : body
     }

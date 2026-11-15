@@ -24,13 +24,31 @@ import UIKit
 struct WorkspaceFolderIcon: View {
     let selected: Bool
     let offline: Bool
+    /// The account's managed runner, when this workspace runs on it (D4): Asleep is a moon, never the
+    /// heartbeat's "Runner offline" slash.
+    var managed: ManagedRunnerRow? = nil
 
     var body: some View {
         Image(systemName: "folder")
             .frame(width: 24)
             .foregroundStyle(selected ? Color.accentColor : .primary)
             .overlay(alignment: .bottomTrailing) {
-                if offline {
+                if let managed, managed.kind != .available {
+                    if managed.tone == .progress {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .padding(1)
+                            .background(.background, in: Circle())
+                            .offset(x: 4, y: 4)
+                    } else {
+                        Image(systemName: managed.asleep ? "moon.zzz.fill" : "exclamationmark.circle.fill")
+                            .font(.orbitMeta.weight(.bold))
+                            .foregroundStyle(managed.ink)
+                            .padding(1)
+                            .background(.background, in: Circle())
+                            .offset(x: 4, y: 4)
+                    }
+                } else if offline {
                     Image(systemName: "wifi.slash")
                         .font(.orbitMeta.weight(.bold))
                         .foregroundStyle(.secondary)
@@ -40,8 +58,8 @@ struct WorkspaceFolderIcon: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Runner offline")
-            .accessibilityHidden(!offline)
+            .accessibilityLabel(managed?.label ?? "Runner offline")
+            .accessibilityHidden(managed == nil && !offline)
     }
 }
 
@@ -64,13 +82,23 @@ struct WorkspaceNavigationRow: View {
     let waiting: Int
     var shortcut: Int? = nil
     var runnerOnHover: Bool = false
+    @Environment(AppModel.self) private var app
     @State private var hovering = false
 
+    /// This workspace's managed runner, when it runs on it: the shared short state (Asleep, Waking
+    /// up…, Ready…) in place of the heartbeat's Offline (D4).
+    private var managed: ManagedRunnerRow? {
+        ManagedRunnerLogic.row(runnerID: agent.runnerId, status: app.managedRunner?.status)
+    }
+
     var body: some View {
+        let managedRow = managed
+        // The heartbeat's offline reading is not said of a managed runner: its shared state is.
+        let offlineNow = offline && managedRow == nil
         let status = WorkspaceNavigationStatusLogic.resolve(
-            waiting: waiting, running: running, jobs: jobs, runnerOffline: offline)
+            waiting: waiting, running: running, jobs: jobs, runnerOffline: offlineNow)
         HStack(spacing: 12) {
-            WorkspaceFolderIcon(selected: selected, offline: offline)
+            WorkspaceFolderIcon(selected: selected, offline: offlineNow, managed: managedRow)
             HStack(spacing: 0) {
                 workspaceName
                 disabledBadge
@@ -95,6 +123,12 @@ struct WorkspaceNavigationRow: View {
                 // be read as the spinner above it.
                 BreathingGlyph(systemImage: "terminal")
                     .accessibilityLabel("Background job running")
+            } else if let managedRow, managedRow.kind != .available {
+                Text(managedRow.label)
+                    .font(.orbitMeta)
+                    .foregroundStyle(managedRow.ink)
+                    .lineLimit(1)
+                    .accessibilityLabel(managedRow.detail.map { "\(managedRow.label) — \($0)" } ?? managedRow.label)
             } else if let shortcut {
                 Text("⌘\(shortcut + 1)")
                     .font(.orbitMeta).monospacedDigit()
@@ -347,11 +381,6 @@ struct AgentPanes: View {
     let rowNavigation: SessionRowNavigation
     @State private var view: SessionView = .open
     @State private var showSettings = false
-    #if os(iOS)
-    /// The needs-you capsule's height over this list: the room the list's first row keeps for it,
-    /// so it covers nothing at rest (see `topInsetClearOfRefresh(_:floating:)`).
-    @State private var needsYouClearance: CGFloat = 0
-    #endif
     /// The row whose "Tags…" action was tapped — drives the tag picker sheet. Owned by the list (not
     /// the row's context menu) so the sheet presents reliably.
     @State private var taggingSession: Session?
@@ -416,19 +445,6 @@ struct AgentPanes: View {
         let projectRows = grouping.projectRows
         let projectMarks = grouping.projectListing.marks
         List(selection: listSelection) {
-            #if os(iOS)
-            // The needs-you capsule floats over the list (the owner, 2026-11-15,
-            // docs/mocks/needs-you-capsule/06-list-floats): this row keeps its height clear at the top,
-            // and scrolls away with the rows, which then pass behind it.
-            if needsYouClearance > 0 {
-                Color.clear
-                    .frame(height: needsYouClearance)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .accessibilityHidden(true)
-            }
-            #endif
             // Recency sections (Pinned / Today / Yesterday / 2–7 days ago / …), as web's list draws
             // them, on every platform. Bucketing is the pure, tested `SessionTimeGrouping`.
             // Optional "By Tag" grouping (one Section per tag + Untagged) or the default recency
@@ -501,9 +517,7 @@ struct AgentPanes: View {
         // Regular iPad keeps the lifecycle scope visible instead of burying it in the filter menu.
         // It lives below the inline title/search chrome and stays fixed while the rows scroll. The
         // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
-        // "Another session needs you" floats over the list under it (`floating:`). This remains the only
-        // instance at regular width (the console beside it stays quiet), so it excludes that visible
-        // console.
+        // What waits on you is noticed by the toast host, once (docs/mocks/needs-you-capsule/12-once).
         //
         // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
         // bar, in the band these sit in, and a pull drew it over the needs-you bar; the modifier
@@ -524,17 +538,6 @@ struct AgentPanes: View {
                 }
                 .background(.bar)
             }
-        } floating: {
-            // Over the list, not inset above it, as it floats over a conversation: the sticky
-            // section headers pin under the nav bar and pass behind it (06-list-floats).
-            NeedsYouBannerView(excluding: app.selectedAgentSessionID,
-                               projectInColumn: rowNavigation == .selection,
-                               overList: true)
-                // The room follows the card on a spring, so the rows ease up after it goes and down
-                // as it comes (08-motion ③④) rather than jumping.
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                    withAnimation(.spring(duration: 0.3, bounce: 0)) { needsYouClearance = height }
-                }
         }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
@@ -1595,8 +1598,18 @@ struct NewSessionView: View {
                 // in the hero's place above, or in the welcome card's first step.
                 if !managedWelcome {
                     if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
-                        ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                            .padding(.bottom, .composerBandGap)
+                        if managed.display.kind == .sleeping {
+                            // Asleep is not a fault: the shared calm line, and sending wakes it.
+                            Text(ManagedRunnerCopy.Asleep.composer)
+                                .font(.orbitLabel)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.bottom, .composerBandGap)
+                                .accessibilityIdentifier("managed-asleep-composer")
+                        } else {
+                            ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                                .padding(.bottom, .composerBandGap)
+                        }
                     }
                 }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).

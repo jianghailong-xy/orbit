@@ -319,22 +319,20 @@ final class AppModel {
     /// re-scan the whole Open list once per row per pass. `needsYouSessions` holds whole records (not
     /// ids) because the banner needs the target's agent name and id to navigate; it is the handful of
     /// blocked rows, not the list.
-    private(set) var needsYouSessions: [Session] = []
+    private(set) var needsYouSessions: [Session] = [] { didSet { noticeNewlyWaiting() } }
     private(set) var agentNeedsYou: [String: Int] = [:]
-    /// An approval that has just reached this device with the app open (iOS): the needs-you bar says
-    /// it for its first seconds (`NeedsYouLogic.arriving`) — the one surface for it since the owner's
-    /// 2026-11-15 board `docs/mocks/needs-you-capsule/05-one-surface`, where the app used to put up an
-    /// amber card of its own beside the bar. Cleared again once those seconds have passed, which is
-    /// the body pass that puts the bar back to the count.
-    private(set) var needsYouArrival: NeedsYouArrival?
-    /// What the needs-you bar was swiped away from (`NeedsYouLogic.dismissalKeys`, the owner,
-    /// 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats): it stays away until something new is
-    /// waiting. Kept on this device only — a swipe is "not now", and tells the server nothing.
-    private(set) var needsYouDismissed: Set<String> =
-        Set(UserDefaults.standard.stringArray(forKey: AppModel.needsYouDismissedKey) ?? []) {
-        didSet { UserDefaults.standard.set(Array(needsYouDismissed), forKey: AppModel.needsYouDismissedKey) }
-    }
-    private static let needsYouDismissedKey = "needsYou.dismissed"
+    /// The notices of conversations that have just started waiting on the reader (iOS; the owner,
+    /// 2026-11-15, docs/mocks/needs-you-capsule/12-once): one per wait, shown once by the toast host,
+    /// gone on their own after `needsYouToastSeconds`. At most `needsYouToastLimit` at once; the ones
+    /// past it are counted in `needsYouToastsMore`.
+    private(set) var needsYouToasts: [NeedsYouToast] = []
+    private(set) var needsYouToastsMore = 0
+    static let needsYouToastLimit = 3
+    static let needsYouToastSeconds: TimeInterval = 6
+    /// The waits already looked at (`NeedsYouLogic.waitKey`), so each is noticed once. Nil until the
+    /// next look takes them as they stand — at launch, and on coming back to the foreground: what was
+    /// already waiting then is the lists' to show, not news.
+    private var needsYouSeen: Set<String>?
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
@@ -893,6 +891,11 @@ final class AppModel {
 
     func logout() {
         apiGeneration &+= 1
+        #if os(iOS)
+        needsYouSeen = nil
+        needsYouToasts = []
+        needsYouToastsMore = 0
+        #endif
         pollTask?.cancel()
         pollTask = nil
         appPoll = nil
@@ -987,18 +990,6 @@ final class AppModel {
     func bootstrap() {
         notifications.configure()
         notifications.onIntent = { [weak self] intent in self?.handle(intent) }
-        #if os(iOS)
-        // An approval that arrives while you're in the app is said by the needs-you bar rather than
-        // a system banner (see `NotificationManager.willPresent`): for its first seconds the bar
-        // carries the push's line and an amber ring, then goes back to the count, and it stays until
-        // the last thing waiting is dealt with. It used to be an amber card of its own beside the bar
-        // — one fact in two shapes (the owner, 2026-11-15, docs/mocks/needs-you-capsule/05). The
-        // push names the session by its stored UUID; the bar finds it among the needs-you rows by
-        // the lists' spelling, or it would never find it.
-        notifications.onForegroundApproval = { [weak self] sessionID, line in
-            self?.noteNeedsYouArrival(sessionID: PublicID.toPublic(sessionID), line: line)
-        }
-        #endif
         #if os(macOS)
         // A Mac an older app enrolled runs a LaunchAgent that keeps its runner from updating
         // itself; rewrite it once, at launch.
@@ -2263,59 +2254,55 @@ final class AppModel {
         }
     }
 
-    /// The "needs you" banner's state for a screen showing `focused` (nil from a list, which shows no
-    /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
-    /// the Open list, which `applySessionSnapshot` already narrowed.
-    func needsYouBanner(excluding focused: String?) -> NeedsYouBanner? {
-        if let arriving = NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused,
-                                                 now: Date()) {
-            return arriving
+    /// A look at what waits: each wait not seen before becomes one notice (iOS). The first look after
+    /// launch or a return to the foreground only takes stock. Called whenever `needsYouSessions` moves.
+    private func noticeNewlyWaiting() {
+        #if os(iOS)
+        guard openListAnswered else { return }
+        let keys = Set(needsYouSessions.map(NeedsYouLogic.waitKey))
+        defer { needsYouSeen = keys }
+        guard let seen = needsYouSeen else { return }
+        for notice in NeedsYouLogic.newlyWaiting(needsYouSessions, seen: seen, excluding: focusedConsoleSessionID) {
+            showNeedsYouToast(notice)
         }
-        if NeedsYouLogic.isDismissed(waiting: needsYouSessions, excluding: focused, dismissed: needsYouDismissed) {
-            return nil
-        }
-        return NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
-    }
-
-    /// The bar swiped away: everything waiting now is put away until something new joins it.
-    func dismissNeedsYou() {
-        needsYouDismissed = NeedsYouLogic.dismissalKeys(waiting: needsYouSessions)
-        needsYouArrival = nil
-    }
-
-    /// How many are waiting while the bar is swiped away — the count the drawer's button carries
-    /// then, so what the bar said is not lost. Zero while the bar is showing.
-    var needsYouPutAwayCount: Int {
-        NeedsYouLogic.isDismissed(waiting: needsYouSessions, dismissed: needsYouDismissed) ? needsYouSessions.count : 0
+        // A notice whose conversation stopped waiting has nothing left to say.
+        needsYouToasts.removeAll { !keys.contains($0.id) }
+        if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
+        #endif
     }
 
     #if os(iOS)
-    /// Whether the page on screen has no needs-you bar of its own, so the shell carries one over it
-    /// (`needsYouOverPage`, the owner, 2026-11-15, 05-one-surface). The bar is the Sessions list's
-    /// and a phone's conversation's; a wide shell keeps the list beside whatever Agents shows.
-    func pageHasNoNeedsYouBar(wide: Bool) -> Bool {
-        guard selectedSection == .agents else { return true }
-        if wide { return false }
-        return !(nav.sectionAtRoot || nav.focusedConsoleSessionID != nil)
-    }
-    #endif
+    /// Back in the foreground: what waits now is taken as it stands, not announced.
+    func retakeNeedsYouStock() { needsYouSeen = nil }
 
-    /// An approval push that landed while the app is in front: the bar says it for its first seconds.
-    func noteNeedsYouArrival(sessionID: String, line: String) {
-        let arrival = NeedsYouArrival(sessionID: sessionID, line: line, at: Date())
-        needsYouArrival = arrival
-        // Something new: a bar swiped away comes back for it.
-        needsYouDismissed = []
+    private func showNeedsYouToast(_ notice: NeedsYouToast) {
+        guard needsYouToasts.count < Self.needsYouToastLimit else {
+            needsYouToastsMore += 1
+            return
+        }
+        needsYouToasts.append(notice)
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(NeedsYouLogic.arrivalSeconds * 1_000_000_000))
-            if self?.needsYouArrival == arrival { self?.needsYouArrival = nil }
+            try? await Task.sleep(nanoseconds: UInt64(Self.needsYouToastSeconds * 1_000_000_000))
+            self?.dismissNeedsYouToast(notice.id)
         }
     }
 
-    /// The banner unfolded: one line per waiting conversation, the first the one the banner names.
-    func needsYouEntries(excluding focused: String?) -> [NeedsYouBanner] {
-        NeedsYouLogic.entries(waiting: needsYouSessions, excluding: focused)
+    /// Swiped away, or its time is up.
+    func dismissNeedsYouToast(_ id: String) {
+        needsYouToasts.removeAll { $0.id == id }
+        if needsYouToasts.isEmpty { needsYouToastsMore = 0 }
     }
+
+    /// A press on a notice: the conversation it names, at the card it waits on.
+    func openNeedsYouToast(_ notice: NeedsYouToast, projectInColumn: Bool = false) {
+        dismissNeedsYouToast(notice.id)
+        if let item = notice.ownerItem {
+            openNeedsYouItem(notice.target, item, projectInColumn: projectInColumn)
+        } else {
+            openNeedsYouSession(notice.target)
+        }
+    }
+    #endif
 
     /// Open the session the banner points at. The same navigation as a Recents tap, minus the origin
     /// that says "drawer": a banner tap didn't come from the drawer, so the console it lands on keeps
