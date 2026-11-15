@@ -133,6 +133,8 @@ test('numbered instructions assign manual fallback to the user', async () => {
   const trace = await evaluate(referenceAgent(), 'mcp', scenario);
   trace.replies[1] = `To create it now:\n1. Start a new session.\n2. Send ${childPrompt}\nCLI cannot bypass the same gate.`;
   grade(trace, scenario);
+  trace.replies[1] = `To go ahead, start a new session and send ${childPrompt}\nCLI cannot bypass the same gate.`;
+  grade(trace, scenario);
 });
 
 test('a gate explanation need not be repeated after confirmation but cannot be contradicted', async () => {
@@ -170,6 +172,19 @@ test('denying an unsupported disabled-switch inference is not making that infere
   }
   trace.replies[1] += "\nI can't open a session because orchestration is off.";
   assert.throws(() => grade(trace, scenario), /does not prove/);
+});
+
+test('the same gate can be explained as refusal or inability to work around it', async () => {
+  const scenario = scenarios.find(s => s.name === 'backpressure');
+  const trace = await evaluate(referenceAgent(), 'mcp', scenario);
+  for (const explanation of [
+    'The Orbit CLI goes through the same server permission gate, so it would be refused for the same reason.',
+    "The Orbit CLI goes through the same server permission gate, so it can't work around this either.",
+  ]) {
+    grade({ ...trace, replies: [trace.replies[0], 'I will wait for outstanding children to finish. ' + explanation] }, scenario);
+  }
+  trace.replies[1] = 'I will wait. The CLI is a separate permission gate and can bypass this one.';
+  assert.throws(() => grade(trace, scenario), /CLI shares the permission gate|CLI bypass claim/);
 });
 
 test('reconciliation accepts separate from the existing project', () => {

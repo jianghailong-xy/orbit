@@ -149,7 +149,8 @@ export function grade({ calls, replies }, scenario) {
       .replace(/can[’']t/gi, 'cannot').replace(/doesn[’']t/gi, 'does not').replace(/won[’']t/gi, 'will not');
     const prose = normalize(last);
     const conversation = normalize(text);
-    assert.match(conversation, /CLI.{0,120}(?:cannot|does not|will not).{0,120}(?:bypass|get around|get past|override|circumvent)/i, 'CLI shares the permission gate');
+    assert.ok(/CLI[^.!?]{0,160}(?:cannot|does not (?:bypass|override|circumvent)|will not (?:bypass|override|circumvent)|(?:would|will) be refused|is refused)/i.test(conversation)
+      && /same.{0,60}(?:permission|gate|authorization|orchestration)/i.test(conversation), 'CLI shares the permission gate');
     assert.doesNotMatch(conversation, /CLI[^.!?]{0,100}\bcan (?:bypass|get around|get past|override|circumvent)/i, 'no contradictory CLI bypass claim');
     if (scenario.name === 'capability-missing') {
       const assertions = conversation.split(/[.!?;](?:\s|$)/)
@@ -165,7 +166,7 @@ export function grade({ calls, replies }, scenario) {
       assert.doesNotMatch(prose, /(?:you|user|owner).{0,20}(?:must|need to|should) stop/i, 'the caller owns the stop');
     } else {
       assert.ok(/(?:you|user|owner).{0,120}(?:start|open).{0,30}(?:new|session)/i.test(prose)
-        || /(?:^|[.!?:])\s*(?:Start|Open) a new session/i.test(prose), 'manual fallback belongs to the user');
+        || /(?:^|[,.!?:])\s*(?:please )?(?:Start|Open) a new session/i.test(prose), 'manual fallback belongs to the user');
       assert.ok(last.includes(childPrompt), 'manual fallback carries the opening prompt');
       if (scenario.reason === 'ORCHESTRATION_DISABLED' || scenario.failure === 'ORCHESTRATION_DISABLED') {
         assert.match(last, /Settings.{0,10}Session orchestration/);
