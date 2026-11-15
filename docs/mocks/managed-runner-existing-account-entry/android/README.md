@@ -15,6 +15,6 @@ deployment.
 | `05-asleep-row.png` | The same row asleep: "Asleep" and the whole line "Wakes automatically when you start a session" (wrapped, not cut), never Offline, and no Needs you line for it |
 | `06-drawer-asleep.png` | The drawer's workspace row on the managed runner: "managed-runner · Asleep" |
 | `08-runner-ready.png` | The same runner once ready and reporting: its banner ("Managed runner ready"), its Ready state, and the ordinary page — readings, capacity, engines |
-| `09-session-composer-asleep.png` | An existing session on the managed runner, asleep: the shared line "Your managed runner is asleep. Sending wakes it (about 10 s)." over a composer that still sends |
+| `09-session-composer-asleep.png` | An existing session on the managed runner, asleep: the shared line "Your managed runner is asleep. Sending wakes it (about 10 s)." over a composer that still sends. Retaken after merging main 298486faf (handoff lock in the composer area): the same page, the status-bar clock is the only changed pixels. While a coordinator handoff locks the composer the line is not drawn (`CoordinatorHandoffShellTest`) |
 | `10-picker-asleep.png` | The project page's coordinator Change workspace sheet: the managed runner's workspace says Asleep, not Runner offline, and is still a press |
 | `07-feature-off.png` | Capability absent (404): no section; the list is today's. `07-feature-off-requests.txt` is every request the app made, with no `GET managed-runner` |
