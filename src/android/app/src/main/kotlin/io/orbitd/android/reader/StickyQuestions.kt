@@ -76,12 +76,13 @@ internal object StickySummary {
                 .any { event.card(cards, it) != null }) return true
         if (event.card(cards, "watch") != null) return false
         if (event.card(cards, "ownerAnswer") != null) return false
-        if (event.card(cards, "wake") == null) return true
+        // A SubAgent's end is a line inside the answer too, as a background job's news is (board subagent-finished-line ①).
+        if (event.card(cards, "wake") == null && event.card(cards, "subagent") == null) return true
         return event.personWords().isNotBlank()
     }
 
     /** The turns that are lines inside an answer rather than Orbit opening a round of its own (`isAnchor`). */
-    private val linesInAnAnswer = setOf("watch", "wake", "ownerAnswer")
+    private val linesInAnAnswer = setOf("watch", "wake", "subagent", "ownerAnswer")
 
     /**
      * Whether Orbit, not a person, opened this turn: one of the control plane's cards stands in for the bubble (OrbitKit

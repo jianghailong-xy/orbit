@@ -34,6 +34,7 @@ import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.QuestionRecords
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.cards.SessionMessageNote
+import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
@@ -324,6 +325,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             val sessionNote = if (shown.fields["sessionMessage"] is JsonObject) SessionMessageNote.split(shown.fields.string("controlPlaneNote")) else null
             val note = (sessionNote?.rest ?: shown.fields.string("controlPlaneNote"))?.takeIf { it.isNotBlank() }
                 // A wake's blocks are its line (A08-11); only what else the note carried is an attached entry.
+                // So is a SubAgent's end: only what else its note carried stays.
+                ?.let { if (cards.any { card -> card.key.endsWith(":subagent") }) SubagentFinished.parse(it)?.rest ?: it else it }
                 ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
             val words = shownWords(shown)
             // A reply still to be translated is the English greyed, with its chip under it (2A).
@@ -340,6 +343,8 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             } }
             // Another session's words, and what delivery attached, are its bubble's.
             else if (bubble != null) Unit
+            // A SubAgent's end carries nothing but its block, which its line already holds under "What the agent read".
+            else if (cards.any { it.key.endsWith(":subagent") } && shown.personWords().isBlank()) Unit
             else if (shown.body().isNotBlank()) DetailFold("Orbit attached") { MarkdownText(shown.body(), open = open) }
             val doors = console?.composer
             val toggle = { shownOriginals?.toggle(translationKey) ?: Unit }
