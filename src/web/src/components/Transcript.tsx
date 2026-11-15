@@ -2673,6 +2673,12 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           </>
         );
       }
+      // A turn with no words and no files that still carries a note is one the control plane opened
+      // for a block this client cannot read yet (a background job's stall was one, before it had its
+      // line). Drawn as a bubble it was an empty bubble in the reader's name; the note stands alone.
+      if (!queued && node.note && node.text.trim() === '' && !node.images?.length && !node.attachmentRefs?.length) {
+        return <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
+      }
       return <UserBubble node={node} queued={queued} />;
     }
     case 'assistant':
@@ -3464,6 +3470,10 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
       )}
       {(typed || status || note || held || translationFoot) && (
         <div className="chat-user-meta">
+          {/* A delivered translation's flip opens the row; copy and the time stay together at its
+              end (docs/mocks/translation-user-hover). */}
+          {flipFoot && translationFoot}
+          {flipFoot && typed && <span className="chat-meta-sep">·</span>}
           {typed && (
             <button
               type="button"
@@ -3475,10 +3485,6 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
               {copied ? <CheckOutlined /> : <CopyOutlined />}
             </button>
           )}
-          {/* A delivered translation's flip sits before the time, which ends the row
-              (docs/mocks/translation-user-hover). */}
-          {flipFoot && translationFoot}
-          {flipFoot && typed && node.ts && <span className="chat-meta-sep">·</span>}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
           {typed && node.ts && (status || note || held || (!flipFoot && translationFoot)) && (
             <span className="chat-meta-sep">·</span>
