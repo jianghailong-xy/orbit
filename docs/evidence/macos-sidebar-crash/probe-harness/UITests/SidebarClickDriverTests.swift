@@ -51,6 +51,7 @@ final class SidebarClickDriverTests: XCTestCase {
         var clicked = 0
         var skipped = 0
         var selectedPresses = 0
+        var rescues = 0
         var step = 0
         let deadline = Date().addingTimeInterval(900)
         while clicked < clicks {
@@ -67,6 +68,20 @@ final class SidebarClickDriverTests: XCTestCase {
                 if lastSelectedRows > 0 { selectedPresses += 1 }
             } else {
                 skipped += 1
+                if skipped == 1 {
+                    // What the window looks like the first time the rail cannot be reached.
+                    note("first miss; window says: \(windowSize(app)); tree (first 4000 chars):\n"
+                         + String(app.debugDescription.prefix(4000)))
+                }
+                // The rail can go away under this harness: the probe window is 1100 points wide on
+                // a 1024-point screen, and a section page that opens a third column makes the split
+                // view fold the sidebar away. Ask for it back rather than spending the run skipping.
+                if skipped >= 2 && rescues < 8 {
+                    app.activate()
+                    app.typeKey("s", modifierFlags: [.command, .control])
+                    rescues += 1
+                    note("rail unreachable at step \(step); sent the sidebar toggle (rescue \(rescues))")
+                }
             }
             step += 1
             // No settle: the next click lands while the server's answer is still on its way.
