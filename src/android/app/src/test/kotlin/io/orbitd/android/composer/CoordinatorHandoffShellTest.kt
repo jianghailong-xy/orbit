@@ -167,6 +167,38 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         await { ComposerShell.calls.contains("POST projects/$project/coordinator/handoff/cancel") }
     }
 
+    /** The session's workspace, by the field the session page reads it from. */
+    private val onWorkspace = "workspaceId" to JsonPrimitive(ComposerShell.WORKSPACE)
+    /** The session's runner is the account's managed runner, asleep, on a server that offers one. */
+    private fun sleepingManagedRunner() {
+        ComposerShell.answers["GET auth/capabilities"] = { ApiResponse(200, io.orbitd.android.management.ManagementFixture.MANAGED_ON.encodeToByteArray()) }
+        ComposerShell.answers["GET managed-runner"] = { ApiResponse(200, ("""{"contractVersion":1,"enabled":true,"revision":3,"managementState":"SLEEPING",
+            "desiredState":null,"runnerId":"${ComposerShell.RUNNER}","workspaceId":"${ComposerShell.WORKSPACE}","usable":false,"reason":null,
+            "initialProvider":"claude","firstSessionProvider":null,"actions":{"canEnsure":false,"canWake":true,"canRetry":false}}""").encodeToByteArray()) }
+    }
+
+    /** Without a handoff, the asleep line stands above the composer: sending is open, and a message wakes the runner. */
+    @Test fun aSleepingManagedRunnersLineStandsAboveAnOpenComposer() {
+        sleepingManagedRunner(); coordinatorSession(onWorkspace)
+        signIn(); open("orbit-session:${ComposerShell.SESSION}")
+        await { has(hasTestTag("managed-runner-asleep-line"), unmerged = true) }
+        assertTrue(has(hasText(ManagedRunner.Asleep.COMPOSER), unmerged = true))
+    }
+
+    /** While the handoff locks the composer the asleep line is not drawn: it would say a message gets through when none can. */
+    private fun noAsleepLineWhileTheHandoff(state: String) {
+        sleepingManagedRunner(); coordinatorSession(onWorkspace, handoff(state), *running)
+        signIn(); open("orbit-session:${ComposerShell.SESSION}")
+        await { has(hasTestTag("handoff-progress")) }
+        await { ComposerShell.calls.contains("GET managed-runner") }
+        compose.waitForIdle()
+        compose.onNodeWithTag("composer-input").assertIsNotEnabled()
+        assertFalse(has(hasTestTag("managed-runner-asleep-line"), unmerged = true))
+        assertFalse(has(hasText(ManagedRunner.Asleep.COMPOSER), unmerged = true))
+    }
+    @Test fun whileTheNoteIsWrittenTheAsleepLineIsNotDrawn() = noAsleepLineWhileTheHandoff("WRITING")
+    @Test fun whileItHandsOverTheAsleepLineIsNotDrawn() = noAsleepLineWhileTheHandoff("HANDING_OVER")
+
     /** The note turn has ended and the session is not running: its handoff still moves on screen without a press — WRITING to
      * FAILED (the server's sweep), and HANDING_OVER to the banner. */
     @Test fun aHandoffInHandIsReadAgainAfterTheTurnEnds() {

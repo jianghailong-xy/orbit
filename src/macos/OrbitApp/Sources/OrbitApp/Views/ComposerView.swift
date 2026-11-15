@@ -347,6 +347,11 @@ struct ComposerView: View {
         )
     }
 
+    /// The "Chinese → English" tag shows while the account translates and the box is empty.
+    private var showsTranslationTag: Bool {
+        SessionTranslation.isOn(app.user) && console.composerText.isEmpty
+    }
+
     /// The engine's guess at the next message, when the empty box offers it (`ComposerLogic`,
     /// docs/prompt-suggestions-design.md §4): the transcript's own `promptSuggestion`, held to the
     /// same authoritative record the Stop morph reads.
@@ -476,10 +481,11 @@ struct ComposerView: View {
                         }
                     }
                     // Settings › Translation (6A): "Chinese → English" on the box's right while the
-                    // account translates; pressed, it opens the setting.
-                    .padding(.trailing, SessionTranslation.isOn(app.user) ? 112 : 0)
+                    // account translates; pressed, it opens the setting. Like the placeholder, it shows
+                    // only while the box is empty, so typed text gets the whole width.
+                    .padding(.trailing, showsTranslationTag ? 112 : 0)
                     .overlay(alignment: .topTrailing) {
-                        if SessionTranslation.isOn(app.user) {
+                        if showsTranslationTag {
                             ComposerTranslationTag(language: SessionTranslation.language(app.user?.preferences),
                                                    open: openTranslationSettings)
                         }

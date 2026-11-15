@@ -520,7 +520,7 @@ private enum ToastStyle {
     }
 }
 
-private extension View {
+extension View {
     /// iOS 26's Liquid Glass — the toolbar's own material — so a toast reads as chrome over the page
     /// rather than as a grey slab of it, tinted for a ③. Earlier systems get the regular material with
     /// a tint wash, a hairline edge (`.primary`, so it inverts with the appearance) and a soft shadow.

@@ -240,7 +240,7 @@ final class SubagentBlockTests: XCTestCase {
 
     // MARK: - the session's Agents
 
-    func testTheSessionSummaryCountsCostsAndListsRunningFirst() throws {
+    func testTheSessionSummaryCountsWithoutCostAndListsRunningFirst() throws {
         let runs = [
             run(costUsd: 0.004, createdAt: "2026-11-11T08:00:00.000Z", engine: "codex", description: "Audit"),
             run(costUsd: 0.05, createdAt: "2026-11-11T08:01:00.000Z", description: "Backoff"),
@@ -250,10 +250,8 @@ final class SubagentBlockTests: XCTestCase {
         let summary = try XCTUnwrap(SubagentSessionSummary.make(runs))
         XCTAssertEqual(summary.count, 3)
         XCTAssertEqual(summary.running, 1)
-        XCTAssertEqual(summary.capsule, "3 · $0.07")
+        XCTAssertEqual(summary.capsule, "3", "the capsule shows no cost")
         XCTAssertEqual(summary.spread, "3 engines · 2 machines")
-        XCTAssertEqual(summary.byEngine.map(\SubagentSessionSummary.EngineShare.name), ["DeepSeek", "Claude", "Codex"])
-        XCTAssertEqual(summary.byEngine.map(\SubagentSessionSummary.EngineShare.cost), ["$0.05", "$0.02", "<$0.01"])
         XCTAssertEqual(summary.rows.map(\SubagentRunView.description), ["iOS tests", "Backoff", "Audit"])
         XCTAssertNil(SubagentSessionSummary.make([]), "no Agent, no capsule")
         XCTAssertEqual(SubagentSessionSummary.make([run(costUsd: 0)])?.capsule, "1")
