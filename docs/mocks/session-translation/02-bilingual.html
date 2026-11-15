@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+:root{--bg:#f6f6f4;--card:#fff;--line:#e6e4df;--text:#1d1d1b;--t2:#55534e;--t3:#8b8882;--acc:#d97757;--accbg:#fbeee8;--blue:#2f6fde;--ok:#2e8b57;--warn:#c4581b;--bub:#efede8}
+*{box-sizing:border-box}
+body{margin:0;background:#e9e7e2;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:var(--text)}
+.board{width:2160px;padding:40px;background:#e9e7e2}
+h1{font-size:30px;margin:0 0 6px}
+.sub{color:var(--t2);font-size:16px;margin-bottom:28px;line-height:1.6}
+.row{display:flex;gap:28px;align-items:flex-start;margin-bottom:32px}
+.frame{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.08);overflow:hidden}
+.cap{font-size:15px;font-weight:600;margin:0 0 10px;color:#333}
+.cap small{font-weight:400;color:var(--t2);margin-left:6px}
+.num{display:inline-flex;width:24px;height:24px;border-radius:12px;background:var(--acc);color:#fff;font-size:13px;align-items:center;justify-content:center;margin-right:6px;font-weight:700}
+.mk{display:inline-flex;width:20px;height:20px;border-radius:10px;background:var(--acc);color:#fff;font-size:11px;align-items:center;justify-content:center;font-weight:700;vertical-align:middle;margin-left:6px;box-shadow:0 0 0 2px #fff}
+/* web console */
+.w{background:var(--bg);font-size:14px}
+.w-top{height:44px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 16px;gap:10px;background:#fbfbfa;color:var(--t2);font-size:13px}
+.w-page{padding:22px 0 26px}
+.w-col{max-width:560px;margin:0 auto}
+.w h2.pt{font-size:22px;margin:0 0 16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:16px}
+.card.new{outline:2.5px solid var(--acc);outline-offset:3px}
+.card .ct{font-weight:600;font-size:14px;padding:2px 0 6px;border-bottom:1px solid var(--line);margin-bottom:2px}
+.field{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:10px 0}
+.field .h{color:var(--t3);font-size:12px;line-height:1.45;margin-top:2px}
+.sw{width:34px;height:20px;border-radius:10px;background:#cfccc6;position:relative;flex:none}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:8px;background:#fff}
+.sw.on{background:var(--acc)}.sw.on::after{left:16px}
+.sw.dis{opacity:.45}
+.sel{border:1px solid var(--line);border-radius:7px;padding:5px 10px;width:200px;display:flex;justify-content:space-between;font-size:13px;background:#fff;flex:none}
+.sel.dis{color:var(--t3);background:#f4f3f0}
+.dim{opacity:.38}
+.notice{background:#fff7e8;border:1px solid #f1d9a8;border-radius:8px;padding:8px 10px;font-size:12px;color:#7a5512;margin:8px 0 4px}
+/* web transcript */
+.tr{padding:18px 26px;font-size:14px;line-height:1.6}
+.u{display:flex;flex-direction:column;align-items:flex-end;margin:6px 0 14px}
+.ub{background:var(--bub);border-radius:14px;padding:9px 13px;max-width:78%}
+.foot{font-size:12px;color:var(--t3);margin-top:4px;display:flex;gap:8px;align-items:center}
+.foot a{color:var(--t2);text-decoration:underline;text-underline-offset:2px}
+.foot .tg{display:inline-flex;align-items:center;gap:4px}
+.a{margin:4px 0 12px}
+.a p{margin:0 0 6px}
+.tool{font-family:'SF Mono',monospace;font-size:12.5px;color:var(--t2);background:#f4f3f0;border-radius:7px;padding:6px 10px;margin:8px 0}
+.orig{border-left:3px solid var(--line);padding-left:10px;color:var(--t2)}
+.stream::after{content:'▍';color:var(--acc)}
+.chip{font-size:11.5px;background:#f0eee9;color:var(--t2);border-radius:10px;padding:1px 8px}
+.err{color:var(--warn)}
+.composer{margin:10px 26px 18px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;font-size:14px;color:var(--t3);display:flex;justify-content:space-between;align-items:center}
+.composer .lang{font-size:12px;color:var(--t2);background:#f4f3f0;border-radius:8px;padding:2px 8px}
+.cardq{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;margin:8px 0}
+.opt{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-top:6px;font-size:13px}
+/* phones */
+.ph{width:393px;height:852px;border-radius:44px;background:#000;padding:10px;flex:none}
+.ps{width:373px;height:832px;border-radius:36px;overflow:hidden;background:#f2f2f7;position:relative;font-size:15px}
+.ps.and{background:#fbf8f6;border-radius:28px}
+.stat{height:48px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 6px;font-size:14px;font-weight:600}
+.nav{padding:6px 16px 8px;display:flex;align-items:center;gap:10px}
+.nav .t{font-size:17px;font-weight:600;flex:1;text-align:center}
+.nav .bk{color:var(--blue);font-size:16px}
+.big{font-size:32px;font-weight:700;padding:4px 18px 10px}
+.grp{margin:0 16px 6px;background:#fff;border-radius:12px;overflow:hidden}
+.gh{font-size:12.5px;color:#6d6d72;text-transform:uppercase;padding:14px 32px 6px}
+.gf{font-size:12.5px;color:#6d6d72;padding:6px 32px 10px;line-height:1.4}
+.cell{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid #e5e5ea}
+.cell:last-child{border-bottom:0}
+.cell .v{color:#8e8e93}
+.isw{width:51px;height:31px;border-radius:16px;background:#e9e9eb;position:relative}
+.isw::after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:14px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.isw.on{background:#34c759}.isw.on::after{left:22px}
+.hl{outline:2.5px solid var(--acc);outline-offset:-2px}
+.pt2{padding:8px 14px;font-size:15px;line-height:1.5}
+.pt2 .ub{background:#e9e9eb;max-width:85%}
+.pcomp{position:absolute;left:12px;right:12px;bottom:26px;background:#fff;border-radius:20px;padding:10px 14px;color:#8e8e93;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.and .cell{border-bottom:0;padding:14px 18px}
+.and .grp{background:transparent;margin:0}
+.and .gh{text-transform:none;color:#8a4b32;font-weight:600;font-size:13.5px;padding:16px 18px 2px}
+.asw{flex:none;width:52px;height:32px;border-radius:16px;background:#e7e0dc;border:2px solid #85736b;position:relative}
+.asw::after{content:'';position:absolute;top:6px;left:6px;width:16px;height:16px;border-radius:8px;background:#85736b}
+.asw.on{background:#8a4b32;border-color:#8a4b32}.asw.on::after{left:24px;top:2px;width:24px;height:24px;border-radius:12px;background:#fff}
+.atop{padding:10px 8px 10px 14px;display:flex;gap:16px;align-items:center;font-size:20px}
+/* notes */
+.notes{background:#fff;border-radius:14px;padding:22px 26px;font-size:14.5px;line-height:1.65;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.notes h3{margin:0 0 10px;font-size:18px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+td,th{border-bottom:1px solid #eee;padding:7px 8px;text-align:left;vertical-align:top}
+th{color:#666;font-weight:600;background:#faf9f7}
+code{font-family:'SF Mono',monospace;font-size:12.5px;background:#f3f1ec;padding:1px 5px;border-radius:4px}
+.dec{border:2px dashed var(--acc);background:#fffaf7}
+.dec li{margin-bottom:10px}
+.rec{color:var(--ok);font-weight:600}
+.bi{margin-top:6px;padding-top:6px;border-top:1px dashed #d9d6d0;color:var(--t2);font-size:.92em;line-height:1.5}
+.u .bi{border-top-color:rgba(0,0,0,.12)}
+.bil{font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:2px}
+.fold{margin-top:6px;padding-top:6px;border-top:1px dashed #d9d6d0;font-size:12.5px;color:var(--t2)}
+.fold a{text-decoration:underline;text-underline-offset:2px}
+.fade{max-height:66px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 40%,transparent)}
+</style></head><body><div class="board">
+<h1>Translation · 双语显示（默认中英对照）</h1>
+<div class="sub">今天：每条消息只显示一种语言，“Show original” 逐条切换，刷新后复原。提议：开翻译时默认<b>两种都显示</b>——你的语言在上，Agent 实际读/写的英文在下（小一号、灰、虚线隔开）。两份文字服务器已经都下发了，只改客户端显示 + 一个账号级偏好。<br>界面文字一律英文（CLAUDE.md §5），标注用中文。</div>
+
+<div class="row">
+  <div>
+    <div class="cap"><span class="num">1</span>iOS · Settings › Sessions <small>Translation 分组加一行</small></div>
+    <div class="ph"><div class="ps">
+      <div class="stat"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="bk">‹ Settings</span><span class="t">Sessions</span><span style="width:70px"></span></div>
+      <div class="gh">Session defaults</div>
+      <div class="grp"><div class="cell"><span>Permission mode</span><span class="v">Ask before edits ›</span></div><div class="cell"><span>Session recaps</span><span class="isw on"></span></div></div>
+      <div class="gh">Translation</div>
+      <div class="grp"><div class="cell"><span>Translate conversations</span><span class="isw on"></span></div>
+        <div class="cell"><span>Your language</span><span class="v">Chinese (Simplified) ›</span></div>
+        <div class="cell"><span>Agents work in</span><span class="v">English</span></div>
+        <div class="cell hl"><span>Show both languages <span class="mk">A</span></span><span class="isw on"></span></div></div>
+      <div class="gf">Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are. <b style="color:#3a3a3c">With both languages on, each translated message also shows the English the agent read or wrote.</b> <span class="mk">B</span> Translated by the server's DeepSeek model.</div>
+      <div class="gh">Orchestration</div>
+      <div class="grp"><div class="cell"><span>Let sessions orchestrate</span><span class="isw on"></span></div></div>
+    </div></div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">2</span>iOS · 会话 · 方案 A：全部对照 <small>推荐</small></div>
+    <div class="ph"><div class="ps" style="background:#fff">
+      <div class="stat"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="bk">‹</span><span class="t">Safari Google 登录</span><span class="bk">⋯</span></div>
+      <div class="pt2">
+        <div class="u"><div class="ub">登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好
+          <div class="bi">The Google sign-in button on the login page does nothing in Safari. Find out why and fix it.</div></div>
+          <div class="foot">Sent to the agent in English <span class="mk">C</span></div></div>
+        <div class="tool" style="font-size:12px">Read LoginPage.tsx</div>
+        <div class="a"><p>原因找到了：Safari 会拦截不是由点击直接触发的弹窗。按钮在 <code>await loadGoogleScript()</code> 之后才调用 <code>signInWithPopup</code>，这时已经不算用户手势了。</p><p style="margin:0">要我直接改吗？</p>
+          <div class="bi"><p style="margin:0 0 4px">Found it: Safari blocks popups that aren't opened directly by a click. The button calls <code>signInWithPopup</code> only after <code>await loadGoogleScript()</code>, which no longer counts as a user gesture.</p>Want me to make the change?</div>
+          <div class="foot">Translated <span class="mk">D</span></div></div>
+      </div>
+      <div class="pcomp">Message <span style="float:right;font-size:12px;background:#f2f2f7;border-radius:8px;padding:1px 7px;color:#555">Chinese → English</span></div>
+    </div></div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">3</span>iOS · 会话 · 方案 B：长回复英文折叠</div>
+    <div class="ph"><div class="ps" style="background:#fff">
+      <div class="stat"><span>9:41</span><span>●●● ▮</span></div>
+      <div class="nav"><span class="bk">‹</span><span class="t">Safari Google 登录</span><span class="bk">⋯</span></div>
+      <div class="pt2">
+        <div class="u"><div class="ub">好的，改吧，顺便加个测试
+          <div class="bi">OK, go ahead, and add a test too.</div></div>
+          <div class="foot">Sent to the agent in English</div></div>
+        <div class="a"><p>改好了。现在弹窗在点击时同步打开：</p><p>1. 脚本在页面加载时用 <code>useEffect</code> 预先加载；</p><p>2. 点击处理里不再 <code>await</code>，直接调用 <code>signInWithPopup</code>；</p><p style="margin:0">3. 新增 <code>LoginPage.safari.test.tsx</code> 覆盖这个场景，全部测试通过。</p>
+          <div class="fold"><div class="fade" style="color:var(--t2)">Done. The popup now opens synchronously on click: 1. The script preloads on page load in a <code>useEffect</code>; 2. The click handler no longer awaits…</div>
+          <a>Show English</a> <span style="color:var(--t3)">· 9 lines</span> <span class="mk">E</span></div>
+          <div class="foot">Translated</div></div>
+      </div>
+      <div class="pcomp">Message <span style="float:right;font-size:12px;background:#f2f2f7;border-radius:8px;padding:1px 7px;color:#555">Chinese → English</span></div>
+    </div></div>
+  </div>
+  <div class="notes" style="width:520px">
+    <h3>标注</h3>
+    <b>A</b> 新行 “Show both languages”，只在 Translate conversations 开着时出现；<b>默认开</b>。账号级（同 Your language），四端共用一个值。<br><br>
+    <b>B</b> 脚注加一句说明（英文 copy）。<br><br>
+    <b>C</b> 你的消息：气泡里先是你写的中文，虚线下是引擎收到的英文——方便核对翻得对不对。脚注不再有 “Show original”。<br><br>
+    <b>D</b> Agent 回复：中文在上、英文原文在下（小一号、灰）。工具行、代码块不重复，只在正文里出现一次。<br><br>
+    <b>E</b> 方案 B：超过 ~6 行的回复，英文只露两行渐隐 + “Show English · N lines”，点开展开；短消息照常全显示。<br><br>
+    <b>关掉 A</b>：回到今天的样子（只显示译文 + 逐条 “Show original”）。<br><br>
+    <b>Copy 按钮</b>：复制你的语言那一版（同今天默认）。
+  </div>
+</div>
+
+<div class="row">
+  <div>
+    <div class="cap"><span class="num">4</span>Web · 会话 · 方案 A</div>
+    <div class="frame w" style="width:720px;background:#fff">
+      <div class="tr">
+        <div class="u"><div class="ub">登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好
+          <div class="bi">The Google sign-in button on the login page does nothing in Safari. Find out why and fix it.</div></div>
+          <div class="foot">Sent to the agent in English</div></div>
+        <div class="a"><p>我先看一下登录页里 Google 登录按钮的处理逻辑。</p>
+          <div class="bi">Let me look at how the login page handles the Google sign-in button.</div></div>
+        <div class="tool">Read src/web/src/pages/LoginPage.tsx</div>
+        <div class="tool">Bash  grep -rn "signInWithPopup" src/web/src</div>
+        <div class="a"><p>原因找到了：Safari 会拦截不是由点击直接触发的弹窗。按钮在 <code>await loadGoogleScript()</code> 之后才调用 <code>signInWithPopup</code>，这时已经不算用户手势了。</p>
+          <p style="margin:0">修法：页面加载时预先加载脚本，点击时同步打开弹窗。要我直接改吗？</p>
+          <div class="bi"><p style="margin:0 0 4px">Found it: Safari blocks popups that aren't opened directly by a click. The button calls <code>signInWithPopup</code> only after <code>await loadGoogleScript()</code>, which no longer counts as a user gesture.</p>Fix: load the script on page load and open the popup synchronously on click. Want me to make the change?</div>
+          <div class="foot">Translated</div></div>
+      </div>
+      <div class="composer"><span>Reply…</span><span class="lang">Chinese → English</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="cap"><span class="num">5</span>对照：今天（关掉 Show both languages 也是这样）</div>
+    <div class="frame w" style="width:560px;background:#fff">
+      <div class="tr">
+        <div class="u"><div class="ub">登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好</div>
+          <div class="foot">Translated ·<a>Show original</a></div></div>
+        <div class="a"><p>我先看一下登录页里 Google 登录按钮的处理逻辑。</p><div class="foot">Translated ·<a>Show original</a></div></div>
+        <div class="tool">Read src/web/src/pages/LoginPage.tsx</div>
+        <div class="a"><p>原因找到了：Safari 会拦截不是由点击直接触发的弹窗……要我直接改吗？</p><div class="foot">Translated ·<a>Show original</a></div></div>
+      </div>
+    </div>
+    <div class="notes" style="width:560px;margin-top:18px;font-size:13.5px">
+      进行中 / 失败状态不变：“Translating…” chip 时只有一种语言；回复翻译失败时只有英文 + “Couldn't translate this reply · Retry”。对照块只在两版都有时才画。
+    </div>
+  </div>
+  <div class="notes dec" style="width:720px">
+    <h3>⑥ 待你定（每项推荐 A）</h3>
+    <ol>
+      <li><b>默认值</b><br><span class="rec">A</span> 开翻译即默认双语，可在设置里关　/　B 默认单语，自己去开</li>
+      <li><b>长回复</b>（③ E）<br><span class="rec">A</span> 全部对照，所见即所得（手机上长回复约高一倍）　/　B 超过 ~6 行英文折叠成 “Show English · N lines”</li>
+      <li><b>你自己的消息也对照吗</b>（C）<br><span class="rec">A</span> 也显示引擎收到的英文，便于核对　/　B 只对照 Agent 回复</li>
+      <li><b>上下顺序</b><br><span class="rec">A</span> 你的语言在上，英文在下（小一号、灰）　/　B 英文在上，译文在下</li>
+      <li><b>开关放哪</b>（A）<br><span class="rec">A</span> 账号级一行，四端同步　/　B 每台设备各自记</li>
+    </ol>
+  </div>
+</div>
+</div></body></html>

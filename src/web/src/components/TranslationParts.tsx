@@ -118,7 +118,7 @@ export function UserTranslationFoot({
       );
     case 'DONE':
       return (
-        <span className="chat-translate-foot">
+        <span className="chat-translate-foot is-flip">
           <button type="button" className="chat-translate-action" onClick={onFlip}>
             {flipped ? COPY.showTranslation : COPY.showOriginal}
           </button>

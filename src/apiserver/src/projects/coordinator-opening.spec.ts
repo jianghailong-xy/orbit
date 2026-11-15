@@ -7,7 +7,7 @@ import {
   buildCoordinatorDeliveryInstructions,
   buildCoordinatorInstructions,
   buildCoordinatorOpening,
-  buildDelegatedCoordinatorNotice,
+  buildChildCoordinatorPrompt,
   coordinatorOpeningIsCurrent,
   coordinatorSessionTitle,
   hasCoordinatorOpening,
@@ -40,13 +40,73 @@ test('every form of the coordinator role files new work as tasks, and prices ope
   for (const form of EVERY_FORM) {
     // Still the default and still first: ordinary new work belongs to the project it turned up in.
     assert.match(form, /record it as a task under this project/);
-    // Opening one is allowed — the confirmation card is the owner's answer — but the reason
-    // travels with the permission: the new project is coordinated by a conversation of its own,
-    // which knows none of this one, so what the coordinator writes is all it inherits.
+    // Opening one is allowed — the confirmation card is the owner's answer — and the boundary it
+    // meets is spelled out: ALREADY_COORDINATING, then the one chain that may open a session.
     assert.match(form, /you may open a new project/);
     assert.match(form, /a session coordinates only one project/);
-    assert.match(form, /opens a coordinator session of its own for it/);
+    assert.match(form, /refused with ALREADY_COORDINATING, which names the project you coordinate/);
   }
+});
+
+// The one exception to "opening another coordinator session is not in your hands", in its order:
+// reconcile, ask, one session_create with the server's prompt, no session_send, a manual fallback.
+test('every form of the coordinator role carries the ALREADY_COORDINATING child-session exception', () => {
+  for (const form of EVERY_FORM) {
+    const steps = [
+      /the one exception to opening sessions yourself/,
+      /If the project it names is the one you were creating \(your first answer was lost\), it is already recorded/,
+      /ask whether to open a child session that records and coordinates the new one; if they decline, create nothing/,
+      /call it once with the refusal’s childSessionPrompt as its prompt, unchanged/,
+      /the child’s own project_create makes it the new project’s coordinator/,
+      /Do not follow it with session_send/,
+      /Report the project id and the child’s session id/,
+      /Without session_create \(orchestration off, or the call refused\), give the account owner the manual fallback/,
+      /A structured WAIT or STOP refusal takes priority over that fallback/,
+      /the caller waits for children to finish on outstanding-child backpressure, and stops on a depth\/rate limit or invalid permission/,
+      /explicitly tell the user that the CLI cannot bypass the same permission gate/,
+      /A missing capability alone does not prove orchestration is off/,
+    ];
+    let at = -1;
+    for (const step of steps) {
+      const match = step.exec(form.slice(at + 1));
+      assert.ok(match, `missing, or out of order: ${step}`);
+      at += 1 + match.index;
+    }
+  }
+});
+
+// The child starts with nothing but this prompt, so it has to be the whole project, as the exact
+// arguments, and say what a success reply names.
+test('the child coordinator prompt is self-contained and names its success receipt', () => {
+  const parentSession = '0192f0d0-0000-7000-8000-0000000000c1';
+  const request = {
+    title: 'Crawl again',
+    goal: 'Re-crawl weekly.',
+    instructions: 'Never run two crawls at once; a ``` fence inside the text must not end the block.',
+    acceptanceCriteriaItems: [
+      { text: 'A crawl runs every week.', verificationMethod: 'Read the schedule.', satisfiedBy: 'TASKS' },
+    ],
+  };
+  const prompt = buildChildCoordinatorPrompt(request, {
+    sessionId: parentSession, projectId: PROJECT_ID, projectTitle: 'Crawl the corpus',
+  });
+  assert.match(prompt, new RegExp(`opened by session ${uuidToBase62(parentSession)}`));
+  assert.match(prompt, new RegExp(`“Crawl the corpus” \\(id: ${uuidToBase62(PROJECT_ID)}\\) and keeps doing so`));
+  const block = /(`{4,})json\n([\s\S]*?)\n\1\n/.exec(prompt);
+  assert.ok(block, 'a fence longer than the user text\'s own backticks');
+  assert.deepEqual(JSON.parse(block[2]), request);
+  assert.match(prompt, /Call project_create once, from this session/);
+  assert.match(prompt, /Do not add a workspaceId/);
+  assert.match(prompt, /PROJECT_CREATED projectId=<id from the result> coordinatorSessionId=<coordinatorSessionId from the result>/);
+  assert.match(prompt, /A reply without the project id is not a success/);
+  // It is the brief for the coordinator, not the coordinator's role.
+  assert.equal(hasCoordinatorOpening(prompt, PROJECT_ID), false);
+
+  // Fields the request did not state are not invented.
+  const bare = buildChildCoordinatorPrompt({ title: 'Only a title' }, {
+    sessionId: parentSession, projectId: PROJECT_ID, projectTitle: 'Crawl the corpus',
+  });
+  assert.deepEqual(JSON.parse(/```json\n([\s\S]*?)\n```/.exec(bare)![1]), { title: 'Only a title' });
 });
 
 // A task whose criteria need another task's output it does not depend on can never prove them when
@@ -220,7 +280,4 @@ test('an opening is recognized by the project id in its identity sentence, in En
   assert.equal(coordinatorOpeningIsCurrent(older, PROJECT_ID, false), false);
   assert.equal(coordinatorOpeningIsCurrent(opening, PROJECT_ID, false), true);
 
-  // Being told a project was recorded under another conversation is not that conversation's role.
-  const notice = buildDelegatedCoordinatorNotice('Crawl the corpus', PROJECT_ID, other);
-  assert.equal(hasCoordinatorOpening(notice, PROJECT_ID), false);
 });

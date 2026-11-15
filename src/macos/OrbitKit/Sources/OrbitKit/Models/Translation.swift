@@ -5,19 +5,27 @@ import Foundation
 // file only reads the fields it writes (@orbit/shared translation.ts) and says them in the web's
 // words (`TranslationCopyParityTests` reads them back out of the web sources).
 
-/// "Your language": the seven the owner may write and read in (decision 5A), in the web's order.
-/// "Agents work in" is fixed to English and is not a choice.
+/// The one curated list both pickers offer, "Your language" and "Agents work in", in the order of
+/// `TRANSLATION_LANGUAGES` (@orbit/shared translation.ts).
 public enum TranslationLanguage: String, CaseIterable, Codable, Equatable, Sendable {
+    case en
     case zhHans = "zh-Hans"
     case zhHant = "zh-Hant"
-    case ja, ko, es, fr, de
+    case ja, ko, es, fr, de, ru, pt, it
+    case nl, ar, hi, tr, vi, th, id, pl
+    case uk, he, sv, cs, da, fi, el, hu
+    case ro, ms, bn
 
-    /// What a preference without a language means: the board's default pick.
+    /// What a preference without an owner language means: the board's default pick.
     public static let `default`: TranslationLanguage = .zhHans
+    /// What a preference without an agent language means: English, as before it could be chosen
+    /// (`DEFAULT_AGENT_LANGUAGE`).
+    public static let agentDefault: TranslationLanguage = .en
 
     /// The language's English name, as Settings lists it (`TRANSLATION_LANGUAGE_NAMES`).
     public var name: String {
         switch self {
+        case .en:     return "English"
         case .zhHans: return "Chinese (Simplified)"
         case .zhHant: return "Chinese (Traditional)"
         case .ja:     return "Japanese"
@@ -25,14 +33,40 @@ public enum TranslationLanguage: String, CaseIterable, Codable, Equatable, Senda
         case .es:     return "Spanish"
         case .fr:     return "French"
         case .de:     return "German"
+        case .ru:     return "Russian"
+        case .pt:     return "Portuguese"
+        case .it:     return "Italian"
+        case .nl:     return "Dutch"
+        case .ar:     return "Arabic"
+        case .hi:     return "Hindi"
+        case .tr:     return "Turkish"
+        case .vi:     return "Vietnamese"
+        case .th:     return "Thai"
+        case .id:     return "Indonesian"
+        case .pl:     return "Polish"
+        case .uk:     return "Ukrainian"
+        case .he:     return "Hebrew"
+        case .sv:     return "Swedish"
+        case .cs:     return "Czech"
+        case .da:     return "Danish"
+        case .fi:     return "Finnish"
+        case .el:     return "Greek"
+        case .hu:     return "Hungarian"
+        case .ro:     return "Romanian"
+        case .ms:     return "Malay"
+        case .bn:     return "Bengali"
         }
     }
 
-    /// The composer tag (6A): "<Language> → English", the language without its parenthesis —
+    /// The name without its parenthesis: "Chinese (Simplified)" reads "Chinese".
+    public var shortName: String {
+        name.range(of: " (").map { String(name[..<$0.lowerBound]) } ?? name
+    }
+
+    /// The composer tag (6A): "<Language> → <Agent language>", both without their parenthesis —
     /// "Chinese → English".
-    public var tag: String {
-        let bare = name.range(of: " (").map { String(name[..<$0.lowerBound]) } ?? name
-        return "\(bare) → English"
+    public func tag(to agent: TranslationLanguage) -> String {
+        "\(shortName) → \(agent.shortName)"
     }
 }
 
@@ -42,12 +76,14 @@ public enum TranslationCopy {
     // MARK: Settings › Translation
     public static let title = "Translation"
     public static let translateConversations = "Translate conversations"
-    public static let translateConversationsHint = "Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
+    /// The switch's line, naming the language agents work in (web: `translationEnabledDescription`).
+    public static func translateConversationsHint(_ agentLanguage: TranslationLanguage) -> String {
+        "Agents read and write in \(agentLanguage.name); you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
+    }
     public static let yourLanguage = "Your language"
     public static let yourLanguageHint = "What you write in, and what replies are shown in."
     public static let agentsWorkIn = "Agents work in"
     public static let agentsWorkInHint = "What the agent receives and answers in."
-    public static let english = "English"
     public static let footnote = "Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a conversation stays as it was."
     /// Board frame 2: the server has no DeepSeek key, so the switch is drawn disabled.
     public static let unavailable = "This server has no DeepSeek key, so it can't translate. Whoever runs it sets DEEPSEEK_API_KEY and restarts it."
@@ -55,6 +91,7 @@ public enum TranslationCopy {
     /// switch with no label of its own, so UI tests find them by these.
     public static let toggleIdentifier = "settings.translation.enabled"
     public static let languageIdentifier = "settings.translation.language"
+    public static let agentLanguageIdentifier = "settings.translation.agentLanguage"
 
     // MARK: In a conversation (frames 4–6)
     public static let translated = "Translated"
@@ -85,7 +122,7 @@ public enum TurnTranslationState: String, Codable, Equatable, Sendable {
 /// the runner's `user` event. Absent on every message translation was not involved in.
 public struct TurnTranslation: Codable, Equatable, Sendable {
     public var state: TurnTranslationState
-    /// The language the owner wrote in. The target is always English.
+    /// The language the owner wrote in. The target is the account's agent language.
     public var from: TranslationLanguage
     /// What the owner typed, as typed.
     public var original: String
@@ -232,6 +269,11 @@ public enum SessionTranslation {
     /// The language the account writes and reads in; absent (or unknown) is the default pick.
     public static func language(_ prefs: UserPreferences?) -> TranslationLanguage {
         prefs?.translationLanguage.flatMap(TranslationLanguage.init(rawValue:)) ?? .default
+    }
+
+    /// The language agents work in ("Agents work in"); absent (or unknown) is English.
+    public static func agentLanguage(_ prefs: UserPreferences?) -> TranslationLanguage {
+        prefs?.translationAgentLanguage.flatMap(TranslationLanguage.init(rawValue:)) ?? .agentDefault
     }
 
     /// Whether the owner's messages are being translated now: switched on, and the server able to.

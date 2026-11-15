@@ -8,6 +8,7 @@ import type { CoordinatorDeliveryKind } from '@orbit/shared';
 import type { ExchangeTreeLookup } from '../lib/orbitExchangeFold';
 import { EXCHANGE_REVEAL_EVENT, ExchangeTreeCtx } from './OrbitExchangeFold';
 import { ExportCtx, Transcript, type RunEvent } from './Transcript';
+import { SUBAGENT_DONE, SUBAGENT_FAILED, SUBAGENT_STEER } from '../lib/subagentFinished.fixtures';
 
 /**
  * Turns Orbit opened fold, with the agent's answer, into one line each, and a run of them into one
@@ -246,6 +247,33 @@ describe('turns Orbit opened, folded', () => {
     expect(container.textContent).toContain('Exempt.');
     // A watch's short answer folds even past 80: it is its row's words, not a message of its own.
     expect(text('.chat-msg.chat-assistant').some((t) => t!.includes('Duplicate wake'))).toBe(false);
+  });
+
+  it('folds a SubAgent’s end like a job’s news: a short answer folds, a long one and a failure stay drawn', () => {
+    const sub = (min: number, block: string, reply: string) =>
+      exchange(min, { text: block, controlPlaneNote: block }, reply, []);
+    seq = 0;
+    turn = 0;
+    const events = [
+      ...exchange(0, { text: 'Deploy it and find the callers.' }, 'Two SubAgents started.', []),
+      ...sub(5, SUBAGENT_DONE, 'Waiting for PID 916891.'),
+      ...exchange(8, { text: 'ok' }, 'Noted.', []),
+      ...sub(10, SUBAGENT_STEER, `Three callers. ${'Each one reads the quota before it polls, so the spec covers all three. '.repeat(2)}`),
+      ...sub(15, SUBAGENT_FAILED, 'Fixing it.'),
+      ...exchange(30, { text: 'thanks' }, 'Done.', []),
+    ];
+    mount(events);
+    // The short answer folds into one row named by the line's title and the SubAgent's description.
+    expect(text('.orbit-exchange-root .orbit-exchange-what')).toEqual(['SubAgent finished: Deploy 6bb50a957 to production']);
+    expect(text('.chat-msg.chat-assistant').some((t) => t!.includes('Waiting for PID 916891'))).toBe(false);
+    // An answer of 80 or more stays drawn, under its own line.
+    expect(container.textContent).toContain('Three callers. Each one reads the quota');
+    expect(all('.sawake').map((line) => line.querySelector('.bgwake-name')?.textContent)).toEqual([
+      'Find every caller of pollQuota',
+      'Write the poller spec',
+    ]);
+    // One that did not finish stays drawn however short the answer.
+    expect(container.textContent).toContain('Fixing it.');
   });
 
   it('leaves a turn the agent has not answered as the line its card draws', () => {
