@@ -739,7 +739,9 @@ struct OwnerRequestInboxView: View {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         let rows = model.rows(model.tab)
                         let entries = model.openEntries
-                        if model.tab == .open ? entries.isEmpty && model.terminalRequests.isEmpty : rows.isEmpty {
+                        if model.tab == .open
+                            ? entries.isEmpty && model.terminalRequests.isEmpty && model.scheduleItems.isEmpty
+                            : rows.isEmpty {
                             Text(model.tab.empty).font(.orbitSubtext).foregroundStyle(.secondary).padding(16)
                         }
                         // A terminal asking to be approved waits ten minutes at most: its card is whole, at the top.
@@ -748,6 +750,13 @@ struct OwnerRequestInboxView: View {
                                 TerminalApproveCard(model: model, request: request)
                                     .padding(.horizontal, 16).padding(.vertical, 8)
                                 Divider()
+                            }
+                        }
+                        // A scheduled task's items, whole: each answers at its own door (Waiting on you, board 01 ⑥).
+                        if model.tab == .open {
+                            ForEach(model.scheduleItems) { item in
+                                ScheduleWaitingCardView(item: item)
+                                    .padding(.horizontal, 16).padding(.vertical, 8)
                             }
                         }
                         if model.tab == .open {

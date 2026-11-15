@@ -2252,6 +2252,12 @@ final class ConsoleModel {
         contextLoaded = true
         adoptServerSnapshot(s)
         agentName = s.agent?.name
+        // A scheduled task's run: its strip, its report and the cards it asked, drawn from the schedule reads.
+        scheduleRunID = s.scheduleRunId
+        // The run's head line reads this session's own state and engine: a run's session is in none of the app's
+        // lists, so this read is the only one that has them.
+        if s.scheduleRunId != nil { scheduleRunSession = s }
+        Task { [weak self] in await self?.refreshScheduleCards(force: true) }
         // Adopt the owning agent's id too (a console opened by session id may have been created
         // without one), so project commands/skills remain correctly scoped.
         if let aid = s.agent?.id { agentID = aid }
@@ -4593,6 +4599,11 @@ final class ConsoleModel {
             case .crossingBatch(let batchID):
                 // Answered on its card, by pressing.
                 return waiting(crossingBatch(batchID)?.isLive == true, question: false)
+            case .scheduleCard(let requestID):
+                // Create or Allow on the card itself, by pressing.
+                return waiting(scheduleCard(requestID)?.isPending == true, question: false)
+            case .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
+                return nil
             }
         }
         // Oldest in the CONVERSATION first — which is not the order these were delivered in, now
@@ -5144,6 +5155,108 @@ final class ConsoleModel {
     /// The owner requests of this conversation still pending, by storage key.
     private(set) var pendingOwnerRequests: Set<String> = []
 
+    // MARK: scheduled tasks (docs/scheduled-tasks-design.md §8.1, §4, §7.4)
+
+    /// The scheduled tasks' cards this conversation asked and the changes it made, as last read.
+    private(set) var scheduleCards: SessionScheduleCardsResponse?
+    /// The scheduled task's run this session is, from its own read; nil for every other session.
+    private(set) var scheduleRunID: String?
+    /// That run and its schedule, once found; the detail for whether its finding was new and told.
+    private(set) var scheduleRun: (schedule: ScheduleView, run: ScheduleRunView)?
+    private(set) var scheduleRunDetail: ScheduleDetailResponse?
+    /// This run's session as its own read answered, for the head line's state and engine.
+    private(set) var scheduleRunSession: Session?
+    private var loadingScheduleCards = false
+    private var lastScheduleRead = Date.distantPast
+
+    func scheduleCard(_ requestID: String) -> ScheduleCard? {
+        let key = PublicID.storageKey(requestID)
+        return scheduleCards?.cards.first { PublicID.storageKey($0.id) == key }
+    }
+
+    func scheduleRecord(scheduleID: String, revision: Int) -> ScheduleChangeRecord? {
+        let key = PublicID.storageKey(scheduleID)
+        return scheduleCards?.records.first { PublicID.storageKey($0.scheduleId) == key && $0.revision == revision }
+    }
+
+    /// Read the conversation's schedule cards and records, and draw each where it happened (its `createdAt`),
+    /// in the order they happened; a run's session also gets its strip at the head and its report after its end.
+    /// Runs when the session's context loads, with the evidence reads (reconnect, a row's waiting count moving),
+    /// and after every press on one of them.
+    func refreshScheduleCards(force: Bool = false) async {
+        guard !isDraft, !loadingScheduleCards else { return }
+        if !force, Date().timeIntervalSince(lastScheduleRead) < Self.rulerReadThrottle { return }
+        lastScheduleRead = Date()
+        loadingScheduleCards = true
+        defer { loadingScheduleCards = false }
+        let read = try? await api.sessionScheduleCards(sessionID: sessionID)
+        if let read {
+            if scheduleCards != read { scheduleCards = read }
+            var said: [(at: String, kind: DeliveredDecisionCard.Kind)] = []
+            for card in read.cards {
+                said.append((at: card.createdAt, kind: DeliveredDecisionCard.Kind.scheduleCard(requestID: card.id)))
+            }
+            for record in read.records {
+                said.append((at: record.createdAt,
+                             kind: DeliveredDecisionCard.Kind.scheduleRecord(scheduleID: record.scheduleId,
+                                                                             revision: record.revision)))
+            }
+            let order: (String) -> Date = { RelativeTime.parse($0) ?? Date.distantPast }
+            for item in said.sorted(by: { order($0.at) < order($1.at) }) {
+                deliver(item.kind, placement: .at(item.at))
+            }
+        }
+        if let run = read?.run {
+            await adoptScheduleRun(run)
+        } else {
+            await findScheduleRun()
+        }
+    }
+
+    /// The run the session read named (W2): its schedule and findings from the schedule's own read.
+    private func adoptScheduleRun(_ run: ScheduleRunView) async {
+        guard let detail = try? await api.schedule(run.scheduleId) else { return }
+        scheduleRun = (detail.schedule, run)
+        scheduleRunDetail = detail
+        deliver(.scheduleRunStrip(runID: run.id), placement: .at(run.plannedAt))
+        if let ended = run.endedAt, ScheduleDisplay.runEnded(run.state) {
+            deliver(.scheduleRunReport(runID: run.id), placement: .at(ended))
+        }
+    }
+
+    /// The run this session is, found among the account's schedules, for a server whose session read names no run
+    /// (a run's session is in no list: it is reached from the schedule's history or a notification, §7.4).
+    private func findScheduleRun() async {
+        guard let runID = scheduleRunID else { return }
+        let key = PublicID.storageKey(runID)
+        var found: (ScheduleView, ScheduleRunView)?
+        if let current = scheduleRun, PublicID.storageKey(current.run.id) == key {
+            if let runs = try? await api.scheduleRuns(current.schedule.id),
+               let run = runs.first(where: { PublicID.storageKey($0.id) == key }) {
+                found = (current.schedule, run)
+            }
+        } else if let schedules = try? await api.schedules(state: "all") {
+            for schedule in schedules {
+                if let last = schedule.lastRun, PublicID.storageKey(last.id) == key {
+                    found = (schedule, last)
+                    break
+                }
+                guard let runs = try? await api.scheduleRuns(schedule.id) else { continue }
+                if let run = runs.first(where: { PublicID.storageKey($0.id) == key }) {
+                    found = (schedule, run)
+                    break
+                }
+            }
+        }
+        guard let found else { return }
+        scheduleRun = (found.0, found.1)
+        scheduleRunDetail = try? await api.schedule(found.0.id)
+        deliver(.scheduleRunStrip(runID: found.1.id), placement: .at(found.1.plannedAt))
+        if let ended = found.1.endedAt, ScheduleDisplay.runEnded(found.1.state) {
+            deliver(.scheduleRunReport(runID: found.1.id), placement: .at(ended))
+        }
+    }
+
     // MARK: cross-project requests into this project
 
     /// The project's handoffs as last read, both directions; nil while unread.
@@ -5554,6 +5667,9 @@ final class ConsoleModel {
     /// event, and there may not be one.
     func refreshEvidenceDecisions(force: Bool = false) async {
         guard !isDraft else { return }
+        // The schedule cards ride every door this read does: a card is asked or a change made while the reader
+        // is elsewhere, and only reading again finds it.
+        Task { [weak self] in await self?.refreshScheduleCards() }
         if loadingEvidence {
             if force { evidenceReadOwed = true }
             return

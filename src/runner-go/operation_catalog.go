@@ -55,6 +55,7 @@ const (
 	objectBackgroundJob operationObject = "background_job"
 	objectPermission    operationObject = "permission"
 	objectMergeReceipt  operationObject = "merge_receipt"
+	objectSchedule      operationObject = "schedule"
 )
 
 // operationRisk classes the consequence of getting the call wrong. low is a read with no side
@@ -228,6 +229,17 @@ var catalogCLIExemptions = map[string]string{
 	"ask_owner":                       "asks as the project's coordinator session: a terminal outside one is refused by the server",
 	"request_owner_action":            "files as the calling session and answers it with a turn: a terminal outside one is refused by the server",
 	"withdraw_owner_request":          "withdraws as the calling session what it filed: a terminal outside one is refused by the server",
+	"schedule_create":                 "proposes a schedule in the calling session's workspace, on its engine: a terminal outside a session has neither",
+	"schedule_update":                 "changes a schedule as the calling session, which the envelope rule judges: a terminal outside one is refused by the server",
+	"schedule_list":                   "a scheduled task's reads are served to sessions; the person reads them in the app",
+	"schedule_get":                    "a scheduled task's reads are served to sessions; the person reads them in the app",
+	"schedule_pause":                  "controls a schedule as the calling session: a terminal outside one is refused by the server",
+	"schedule_resume":                 "controls a schedule as the calling session: a terminal outside one is refused by the server",
+	"schedule_run_now":                "controls a schedule as the calling session: a terminal outside one is refused by the server",
+	"schedule_run_stop":               "controls a schedule as the calling session: a terminal outside one is refused by the server",
+	"schedule_end":                    "controls a schedule as the calling session: a terminal outside one is refused by the server",
+	"schedule_delete":                 "controls a schedule as the calling session: a terminal outside one is refused by the server",
+	"schedule_run_report":             "reports the scheduled run the calling session serves: a terminal is no such session",
 	"open_item_resolve":               "closes an item as the project's coordinator session: a terminal outside one is refused by the server",
 	"open_item_hand_over":             "hands an item to the account owner as the project's coordinator session: a terminal outside one is refused by the server",
 	"integration_retry":               "reruns a landing as the project's coordinator session: a terminal outside one is refused by the server",
@@ -256,6 +268,17 @@ var catalogMCPOnlyMutations = map[string]bool{
 	"request_owner_action":            true,
 	"schedule_wakeup":                 true,
 	"withdraw_owner_request":          true,
+	"schedule_create":                 true,
+	"schedule_update":                 true,
+	"schedule_list":                   false,
+	"schedule_get":                    false,
+	"schedule_pause":                  true,
+	"schedule_resume":                 true,
+	"schedule_run_now":                true,
+	"schedule_run_stop":               true,
+	"schedule_end":                    true,
+	"schedule_delete":                 true,
+	"schedule_run_report":             true,
 }
 
 // catalogCallerKeyOperations take a caller idempotency key (idempotencyKey, or clientTurnId on
@@ -301,6 +324,10 @@ var catalogPlanRunsWrites = map[string]string{
 	"ask_owner":              "puts a question to the owner; a question is not work",
 	"request_owner_action":   "asks the owner for an action that is theirs to take; a question is not work",
 	"withdraw_owner_request": "takes back a question this session asked",
+	"schedule_create":        "puts a create card in front of the owner; nothing is scheduled until they press Create",
+	"schedule_update":        "changes a schedule inside what the owner allowed, or asks them on a card; it changes no code",
+	"schedule_end":           "ends a schedule whose goal is reached; it changes no code, and the owner can undo it",
+	"schedule_run_report":    "reports the scheduled run this session serves, which is what a check-only run is for",
 }
 
 // catalogPlanOwnGates are the operations whose own gate decides in every mode, Plan included, with the reason.
@@ -2652,7 +2679,7 @@ func buildOperationCatalog() []*operation {
 				"the same. One loop runs per session, and a new recurring call replaces it; a one-shot wakeup and a loop " +
 				"never replace each other. stop: true cancels the pending wakeup and ends the loop. To wait for something " +
 				"that ends by itself outside Orbit (CI, a build, a deploy), prefer bg_run with wakeOnExit; for Orbit tasks " +
-				"and sessions, call task_await or session_await. Both wake you when it happens.",
+				"and sessions, call task_await or session_await. Both wake you when it happens. " + scheduleTimerChoice,
 			"inputSchema": obj(map[string]interface{}{
 				"delaySeconds": map[string]interface{}{
 					"type": "number",
@@ -2686,6 +2713,8 @@ func buildOperationCatalog() []*operation {
 			}),
 		},
 	}...)
+	// Scheduled tasks (schedule_tools.go).
+	add(gateAlways, scheduleToolDescriptors(obj)...)
 	{
 		sessionIDProp := map[string]interface{}{"type": "string", "description": "Target session id."}
 		sessionStatus := map[string]interface{}{"type": "string", "enum": []string{"PENDING", "RUNNING", "AWAITING_INPUT", "SUCCEEDED", "FAILED", "CANCELLED", "INTERRUPTED"}}
@@ -4930,6 +4959,56 @@ var catalogMetadata = map[string]operationMeta{
 	"schedule_wakeup": {
 		Object: objectSession,
 		Intent: "Schedule a wake-up in this session, once or on a loop.",
+	},
+
+	// ── scheduled tasks (docs/scheduled-tasks-design.md §9.1) ──
+	"schedule_create": {
+		Object:   objectSchedule,
+		Intent:   "Propose a scheduled task on a create card the owner answers.",
+		Approval: approvalKindOwner,
+	},
+	"schedule_update": {
+		Object:         objectSchedule,
+		Intent:         "Change a scheduled task; a change that grows its envelope waits on the owner's card.",
+		Approval:       approvalKindOwner,
+		ApprovalDetail: "Inside the envelope it applies at once with Undo; another workspace, a wider access level, more runs a week or a longer run limit go on an envelope card.",
+	},
+	"schedule_list": {
+		Object: objectSchedule,
+		Intent: "See the owner's scheduled tasks.",
+	},
+	"schedule_get": {
+		Object: objectSchedule,
+		Intent: "Read one scheduled task: last result, findings, note, use and history.",
+	},
+	"schedule_pause": {
+		Object: objectSchedule,
+		Intent: "Pause a scheduled task.",
+	},
+	"schedule_resume": {
+		Object: objectSchedule,
+		Intent: "Resume a paused or held scheduled task.",
+	},
+	"schedule_run_now": {
+		Object: objectSchedule,
+		Intent: "Start one run of a scheduled task now.",
+	},
+	"schedule_run_stop": {
+		Object: objectSchedule,
+		Intent: "Stop one run of a scheduled task.",
+	},
+	"schedule_end": {
+		Object: objectSchedule,
+		Intent: "End a scheduled task whose goal is reached.",
+	},
+	"schedule_delete": {
+		Object:      objectSchedule,
+		Intent:      "Delete a scheduled task; its runs and findings are kept.",
+		Destructive: true,
+	},
+	"schedule_run_report": {
+		Object: objectSchedule,
+		Intent: "Report the scheduled run this session serves, once.",
 	},
 
 	// ── agents, runners, providers ──
