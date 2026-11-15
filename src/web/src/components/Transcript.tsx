@@ -203,6 +203,7 @@ import {
 /** What `Markdown` accepts as `remarkPlugins`: the array `MD` builds is annotated with it so that
  *  the plugins written into its literal cannot narrow its element type and refuse the next one. */
 type RemarkPlugins = NonNullable<ComponentProps<typeof Markdown>['remarkPlugins']>;
+type MarkdownComponents = NonNullable<ComponentProps<typeof Markdown>['components']>;
 
 // One normalized run event (subset the transcript cares about). Mirrors the SSE
 // payload the runner emits; see src/runner-go/claude.go + @orbit/shared enums.
@@ -4136,14 +4137,48 @@ function remarkHtmlBlocks() {
   };
 }
 
+/** The tag `remarkTail` puts the tail on; `block` when it had no line to end. */
+const MD_TAIL_TAG = 'md-tail';
+const MdTailCtx = createContext<ReactNode>(null);
+
+// Stable, so a press inside the tail keeps its focus when the reply re-renders.
+function MdTail({ block }: { block?: string }) {
+  const tail = useContext(MdTailCtx);
+  return block ? <div className="md-tail-block">{tail}</div> : <>{tail}</>;
+}
+
+/** Appends the tail to the end of the last line: the last paragraph or heading, inside the last
+ *  item of a closing list. When the text ends in anything else (code, a table, a quote), on a line
+ *  of its own below. */
+function remarkTail() {
+  return (tree: any) => {
+    const place = (parent: any): boolean => {
+      const last = parent.children?.at(-1);
+      if (!last) return false;
+      if (last.type === 'paragraph' || last.type === 'heading') {
+        last.children.push({ type: 'mdTail', data: { hName: MD_TAIL_TAG } });
+        return true;
+      }
+      if (last.type === 'list' || last.type === 'listItem') return place(last);
+      return false;
+    };
+    if (!place(tree)) {
+      tree.children.push({ type: 'mdTail', data: { hName: MD_TAIL_TAG, hProperties: { block: 'true' } } });
+    }
+  };
+}
+
 export const MD = memo(function MD({
   children,
   highlight = true,
   breaks = false,
+  tail,
 }: {
   children: string;
   highlight?: boolean;
   breaks?: boolean;
+  /** Drawn at the end of the text's last line, e.g. a translated reply's flip. */
+  tail?: ReactNode;
 }) {
   // Links that name an object of this deployment become cards — but only where a conversation view
   // has asked for them, which is what `OrbitLinkCardsProvider` says. The shared page and the
@@ -4158,16 +4193,25 @@ export const MD = memo(function MD({
   // plugin handed over already called would be installed as one and asked to read a tree it was
   // never given.
   if (cards && !exporting) plugins.push([orbitLinkRemarkPlugin, { host: cards.host }]);
+  if (tail) plugins.push(remarkTail);
   return (
     <div className="md">
-      <Markdown
-        remarkPlugins={plugins}
-        rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
-        urlTransform={transcriptUrlTransform}
-        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink, ...orbitLinkCardComponents }}
-      >
-        {children}
-      </Markdown>
+      <MdTailCtx.Provider value={tail}>
+        <Markdown
+          remarkPlugins={plugins}
+          rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
+          urlTransform={transcriptUrlTransform}
+          components={{
+            pre: CodeBlock,
+            img: MarkdownImage,
+            a: MarkdownLink,
+            ...orbitLinkCardComponents,
+            ...({ [MD_TAIL_TAG]: MdTail } as unknown as MarkdownComponents),
+          }}
+        >
+          {children}
+        </Markdown>
+      </MdTailCtx.Provider>
     </div>
   );
 });
@@ -4180,18 +4224,20 @@ export function AssistantBubble({
   text,
   streaming,
   seq,
+  tail,
 }: {
   text: string;
   streaming?: boolean;
   // Absent for the live draft, which has no persisted event to point at yet.
   seq?: number;
+  tail?: ReactNode;
 }) {
   return (
     <div
       className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
       data-seq={seq}
     >
-      <MD highlight={!streaming}>{text}</MD>
+      <MD highlight={!streaming} tail={tail}>{text}</MD>
     </div>
   );
 }
@@ -4206,8 +4252,19 @@ function TranslatedReply({ node }: { node: TextNode }) {
   const pending = !translation && node.awaitsTranslation;
   return (
     <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
-      <AssistantBubble text={translated} seq={node.seq} />
-      <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+      {translation?.text !== undefined && !translation.failed ? (
+        // Delivered: the flip rides at the end of the reply's last line.
+        <AssistantBubble
+          text={translated}
+          seq={node.seq}
+          tail={<ReplyTranslationFoot translation={translation} seq={node.seq} flipped={flipped} onFlip={flip} />}
+        />
+      ) : (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      )}
     </div>
   );
 }
@@ -5065,11 +5122,11 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
           </div>
         ) : undefined,
       };
-    // Orbit's SubAgent (docs/subagent-design.md §6.4): the same purple card as Agent. Its tier, model, time
+    // Orbit's SubAgent (docs/subagent-design.md §6.4), named Agent on screen as on iOS and macOS: the same purple card as Agent. Its tier, model, time
     // and cost come from its run (ToolView); opened, it is the child's steps and the result — no prompt.
     case DELEGATE_TOOL:
       return {
-        label: 'SubAgent',
+        label: 'Agent',
         icon: <span className="chat-subagent-icon">✦</span>,
         tone: 'agent',
         summary: [i.type || 'general', i.description].filter(Boolean).join(' · '),

@@ -72,12 +72,17 @@ class TranslationConversationTest : ComposerShellTest() {
         assertTrue(has(text("原因找到了") and row(2), unmerged = true))
         assertFalse("the English is not drawn", has(text("does nothing in Safari"), unmerged = true))
         assertFalse(has(text("Safari blocks popups"), unmerged = true))
-        assertTrue(has(text(TranslationCopy.TRANSLATED, substring = false) and row(1), unmerged = true))
+        assertFalse("the owner's message has the press alone", has(text(TranslationCopy.TRANSLATED, substring = false) and row(1), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 1), unmerged = true))
         assertTrue(has(action(TranslationCopy.SHOW_ORIGINAL, 2), unmerged = true))
         // Frame 10's composer: the tag says which way the words go.
         assertTrue(has(hasTestTag("composer-translation-tag") and hasText("Chinese → English"), unmerged = true))
         shot("1-conversation-translated")
+        // Like the placeholder, the tag gives way once the owner types, and comes back when the box is empty.
+        compose.onNodeWithTag("composer-input").performTextInput("hi")
+        await { !has(hasTestTag("composer-translation-tag"), unmerged = true) }
+        compose.onNodeWithTag("composer-input").performTextClearance()
+        await { has(hasTestTag("composer-translation-tag"), unmerged = true) }
 
         // Frame 10: the reply flipped to the English the agent wrote — "Original · Show translation" — and only that one.
         compose.onNode(action(TranslationCopy.SHOW_ORIGINAL, 2), useUnmergedTree = true).performClick()
@@ -91,7 +96,7 @@ class TranslationConversationTest : ComposerShellTest() {
         // The owner's message flips to what reached the agent.
         compose.onNode(action(TranslationCopy.SHOW_ORIGINAL, 1), useUnmergedTree = true).performClick()
         await { has(text("does nothing in Safari") and row(1), unmerged = true) }
-        assertTrue(has(text(TranslationCopy.SENT_IN_ENGLISH) and row(1), unmerged = true))
+        assertTrue(has(action(TranslationCopy.SHOW_TRANSLATION, 1), unmerged = true))
         // And back.
         compose.onNode(action(TranslationCopy.SHOW_TRANSLATION, 2), useUnmergedTree = true).performClick()
         await { has(text("原因找到了") and row(2), unmerged = true) }

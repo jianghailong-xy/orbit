@@ -1760,7 +1760,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                     attachments: atts.isEmpty ? placeholder.attachments : atts, ts: bubble.ts,
                                     clientTurnId: bubble.clientTurnId, turnId: bubble.turnId, pending: false,
                                     note: bubble.note, steer: true, delivery: bubble.delivery,
-                                    withdrawable: bubble.withdrawable)
+                                    withdrawable: bubble.withdrawable, translation: bubble.translation)
             }
             if let turnId = bubble.turnId { heldAt[turnId] = state.items.count }
             state.unreadSteers.append(bubble)
