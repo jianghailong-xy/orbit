@@ -8073,6 +8073,24 @@ button.chat-jump-start:hover {
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
+/* A delivered message's Show original / Show translation (docs/mocks/translation-user-hover): shown on
+   hover with copy and time, flipped or not; always on a touch screen. */
+.chat-user-meta > .chat-translate-foot.is-flip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-flip,
+.chat-user-meta > .chat-translate-foot.is-flip:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .chat-user-meta > .chat-translate-foot.is-flip {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .chat-user-wrap:hover .chat-user-meta > *,
 .chat-user-meta:focus-within > * {
   opacity: 1;
@@ -8162,6 +8180,35 @@ button.chat-jump-start:hover {
   margin: 2px 0 6px;
   /* Under the reply's text, which .chat-assistant insets by 12px. */
   padding: 0 12px;
+}
+/* A delivered reply's flip, at the end of its last line (docs/mocks/translation-reply-hover):
+   invisible but in the line, so a hover never re-wraps the text; shown while the reply is hovered,
+   the flip has focus, or the original is on screen. Without hover (touch), its own line as before. */
+.chat-translate-foot.is-reply.is-tail {
+  display: inline-flex;
+  margin: 0 0 0 8px;
+  padding: 0;
+  vertical-align: baseline;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.chat-translated-reply:hover .chat-translate-foot.is-tail,
+.chat-translate-foot.is-tail:focus-within,
+.chat-translate-foot.is-tail.is-flipped {
+  opacity: 1;
+}
+.md-tail-block {
+  margin-top: 2px;
+}
+.md-tail-block > .chat-translate-foot.is-reply.is-tail {
+  margin: 0;
+}
+@media (hover: none) {
+  .chat-translate-foot.is-reply.is-tail {
+    display: flex;
+    margin: 2px 0 0;
+    opacity: 1;
+  }
 }
 .chat-translate-foot.is-error {
   color: var(--error-solid);
@@ -11353,8 +11400,10 @@ button.chat-jump-start:hover {
 }
 /* A decision recorded from the conversation, kept where it was made (`EvidenceDecisionReceipt`):
    the card's frame at rest, without the brand tone of a question that is waiting for somebody.
-   Two classes, because `.approval-card` is written further down and would win at one. */
+   Two classes, because `.approval-card` is written further down and would win at one. It is kept
+   to the width of the conversation's other cards (`.crc`), not stretched across the stream. */
 .approval-card.evidence-decision-receipt {
+  max-width: 720px;
   border-color: var(--border);
   background: var(--bg-raised);
 }
@@ -13585,6 +13634,9 @@ button.chat-jump-start:hover {
    (docs/mocks/owner-answer-sent-card/tone.html). Dashed while the turn handing it over waits on the
    queue, as a queued message is. */
 .review-card-preview.answered-question-card {
+  /* The margin `approval-card` gives every other card, which this preview's own class replaces:
+     without it, questions answered back to back draw as one block with three borders. */
+  margin: 10px 0;
   gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border);
@@ -23426,6 +23478,149 @@ div.landing-jobs-open {
   flex-wrap: wrap;
   justify-content: flex-start;
   row-gap: 2px;
+}
+/* A SubAgent's end (SubagentFinishedCard): the same line, marked with the SubAgent card's own purple ✦
+   so it reads back to the card that started it, and what it handed back kept under the line. */
+.sawake .bgwake-mark {
+  font-size: 12px;
+  line-height: 1;
+}
+/* Purple only while it finished: scoped so the dark theme's purple never outranks the error tone. */
+.sawake:not(.is-failed) .bgwake-mark {
+  color: #7c3aed;
+}
+:root[data-theme='dark'] .sawake:not(.is-failed) .bgwake-mark {
+  color: #a78bfa;
+}
+.sawake.is-failed .bgwake-mark {
+  color: var(--error-solid);
+}
+.sawake-meta-runs {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  color: var(--text-3);
+}
+.sawake-meta-name {
+  color: var(--text-2);
+}
+.sawake-run-id {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+}
+.sawake-card-link {
+  color: var(--brand);
+}
+.sawake-outcome,
+.sawake-runs {
+  margin: 4px 0 6px 22px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--error-solid);
+  border-radius: 0 6px 6px 0;
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.sawake-outcome:not(.is-failed),
+.sawake-runs {
+  border-left-color: #c4b5fd;
+}
+:root[data-theme='dark'] .sawake-outcome:not(.is-failed),
+:root[data-theme='dark'] .sawake-runs {
+  border-left-color: rgba(167, 139, 250, 0.5);
+}
+.sawake-reason {
+  color: var(--error);
+}
+.sawake-reason + .sawake-result,
+.sawake-reason + .sawake-noresult {
+  margin-top: 4px;
+}
+.sawake-noresult {
+  color: var(--text-3);
+  font-style: italic;
+}
+.sawake-result-md .md > :first-child {
+  margin-top: 0;
+}
+.sawake-result-md .md > :last-child {
+  margin-bottom: 0;
+}
+/* Three lines of it until asked, clamped on the Markdown's own box and line height so the cut lands
+   on a line boundary (inline code chips included) and the third line ends in the ellipsis. No
+   max-height: one taken from the wrapper's font size cut the third line through its glyphs. */
+.sawake-result-md.is-clamped > .md {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.sawake-result-md.is-clamped > .md > * {
+  margin: 0;
+}
+.sawake-result-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sawake-result-toggle .anticon {
+  font-size: 9px;
+}
+.sawake-runs {
+  list-style: none;
+}
+.sawake-run + .sawake-run {
+  margin-top: 8px;
+}
+.sawake-run-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.sawake-run-mark {
+  flex: none;
+  width: 14px;
+  color: var(--success-solid);
+}
+.sawake-run.is-failed .sawake-run-mark,
+.sawake-run.is-failed .sawake-run-name {
+  color: var(--error);
+}
+.sawake-run-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sawake-run-line {
+  margin-left: 20px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.sawake-run-line .md,
+.sawake-run-line .md > * {
+  display: inline;
+  margin: 0;
+}
+.sawake-run-line.is-reason {
+  color: var(--error);
+}
+.sawake.is-failed > .bgwake-fold > .bgwake-row .bgwake-status,
+.sawake-run.is-failed .bgwake-status {
+  background: var(--error-bg);
+  color: var(--error);
+}
+.sawake-run-line.is-empty {
+  font-style: italic;
 }
 /* An exception item's delivery to the coordinator (components/OpenItemDeliveryCard.tsx): the same
    card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields

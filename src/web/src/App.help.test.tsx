@@ -386,6 +386,35 @@ describe('the /help home', () => {
     }
   });
 
+  it('signed in, Ask opens the help drawer docked beside the page on its Ask tab, and Esc closes it', async () => {
+    signIn();
+    await visit('/help');
+    const drawer = () => container.querySelector('aside.help-drawer[aria-label="Help"]');
+    expect(drawer(), 'closed until asked').toBeNull();
+
+    await act(async () => (container.querySelector('.help-ask') as HTMLButtonElement).click());
+    // Docked: the shell's last child, a sibling of the page's main area, not an overlay.
+    const shell = container.querySelector('.help-shell')!;
+    expect(drawer()).not.toBeNull();
+    expect(shell.lastElementChild).toBe(drawer());
+    expect(drawer()!.previousElementSibling?.classList.contains('help-main')).toBe(true);
+    expect(drawer()!.querySelector('[data-help-pane]')?.getAttribute('data-help-pane')).toBe('ask');
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(drawer(), 'closed by Esc').toBeNull();
+  });
+
+  it('signed out, renders with no drawer, and the drawer event opens none', async () => {
+    await visit('/help');
+    expect(container.querySelector('.help-shell')!.lastElementChild?.classList.contains('help-main')).toBe(true);
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent(HELP_DRAWER_EVENT, { detail: { tab: 'ask' } }));
+    });
+    expect(container.querySelector('.help-drawer')).toBeNull();
+  });
+
   it('lists the categories and More in its nav, the open category listing its articles', async () => {
     await visit('/help/machines-and-engines/machine-offline');
     const nav = container.querySelector('nav[aria-label="Help"]')!;

@@ -27,18 +27,18 @@ object TranslationCopy {
     // Settings › Sessions › Translation (board frames 1, 2 and 9).
     const val TITLE = "Translation"
     const val TRANSLATE_CONVERSATIONS = "Translate conversations"
-    const val TRANSLATE_CONVERSATIONS_HINT = "Agents read and write in English; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
+    /** The switch's line, naming the language agents work in by its name ("Agents work in"; web `translationEnabledDescription`). */
+    fun translateConversationsHint(agentLanguage: String): String =
+        "Agents read and write in ${Translation.name(agentLanguage)}; you write and read in your language. Your messages are translated before the agent gets them, its replies before you see them. Tool calls, output and code stay as they are."
     const val UNAVAILABLE = "This server has no DeepSeek key, so it can't translate. Whoever runs it sets DEEPSEEK_API_KEY and restarts it."
     const val YOUR_LANGUAGE = "Your language"
     const val AGENTS_WORK_IN = "Agents work in"
-    const val ENGLISH = "English"
     const val FOOTER = "Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a conversation stays as it was."
 
     // The conversation (board frames 4–6).
     const val TRANSLATED = "Translated"
     const val SHOW_ORIGINAL = "Show original"
     const val SHOW_TRANSLATION = "Show translation"
-    const val SENT_IN_ENGLISH = "Sent to the agent in English"
     const val ORIGINAL = "Original"
     const val TRANSLATING = "Translating…"
     const val SEND_FAILED = "Couldn't translate, so it wasn't sent"
@@ -95,8 +95,8 @@ fun TranslationChip(text: String) {
 }
 
 /**
- * The owner's message (board frames 4–6, web `UserTranslationFoot`): "Translated · Show original" ↔ "Sent to the agent in English ·
- * Show translation" once delivered; the "Translating…" chip while held; and, held because the translation failed (1A), "Couldn't
+ * The owner's message (board frames 4–6, web `UserTranslationFoot`): "Show original" ↔ "Show translation" once delivered, the press
+ * alone (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and, held because the translation failed (1A), "Couldn't
  * translate, so it wasn't sent · Retry · Send as written". A message sent as written has no foot.
  */
 @Composable
@@ -113,9 +113,8 @@ fun UserTranslationFoot(turn: Translation.Turn, flipped: Boolean, onFlip: () -> 
                 Sep(error); FootAction(TranslationCopy.SEND_AS_WRITTEN, error, sendAsWritten)
             }
         }
-        Translation.TurnState.DONE -> Row(modifier.testTag("translation-foot"), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (flipped) TranslationCopy.SENT_IN_ENGLISH else TranslationCopy.TRANSLATED, color = muted, style = MaterialTheme.typography.labelSmall)
-            Sep(muted); FootAction(if (flipped) TranslationCopy.SHOW_TRANSLATION else TranslationCopy.SHOW_ORIGINAL, muted, onFlip)
+        Translation.TurnState.DONE -> Row(modifier.testTag("translation-foot"), verticalAlignment = Alignment.CenterVertically) {
+            FootAction(if (flipped) TranslationCopy.SHOW_TRANSLATION else TranslationCopy.SHOW_ORIGINAL, muted, onFlip)
         }
         Translation.TurnState.SENT_AS_WRITTEN -> Unit
     }

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { HELP_ADMIN_CATEGORY, HELP_CATEGORIES, type HelpCategory } from '@orbit/shared';
 import { LeftOutlined, MenuOutlined } from '@ant-design/icons';
 import { getToken } from '../../api';
+import { HelpDrawer } from '../../components/HelpDrawer';
 import { helpArticlePath, helpIndexQuery } from '../../lib/help/helpQueries';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useMediaQuery } from '../../lib/useMediaQuery';
@@ -20,7 +21,8 @@ const FALLBACK_CATEGORIES: HelpCategory[] = HELP_CATEGORIES.filter((c) => c.slug
  * The help center's window (docs/mocks/help-center board 01 §3–4), drawn as Settings is: its own nav in place of
  * the app's sidebar — "‹ Back to Orbit", Home, the categories the reader may see (the open one listing its
  * articles), and More — with the page beside it. It is outside the sign-in gate, so an article reads signed out.
- * Narrower than 900px the nav is a menu the button above the page opens.
+ * Narrower than 900px the nav is a menu the button above the page opens. Signed in, the help drawer docks at the
+ * right as it does in Settings, a column that narrows the page; signed out it never opens, so nothing is drawn.
  */
 export function HelpLayout() {
   const narrow = useMediaQuery(NARROW_HELP_QUERY);
@@ -45,6 +47,7 @@ export function HelpLayout() {
         )}
         <Outlet />
       </main>
+      <HelpDrawer />
     </div>
   );
 }

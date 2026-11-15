@@ -98,12 +98,16 @@ export function parseArticle(category: string, file: string, source: string): He
 export function plainText(markdown: string): string {
   return markdown
     .split('\n')
-    .filter((line) => !/^\s*(```|:::)/.test(line))
+    // Fences, and a table's separator row or a horizontal rule: nothing a reader sees.
+    .filter((line) => !/^\s*(```|:::)/.test(line) && !/^\s*\|?[\s:|-]*-{3,}[\s:|-]*$/.test(line))
+    // A table row reads as its cells, one after another.
+    .map((line) => (/^\s*\|/.test(line) ? line.replace(/^\s*\||\|\s*$/g, '').replace(/\s*\|\s*/g, ' ') : line))
     .map((line) => line
       .replace(/^\s*#+\s+/, '')
       .replace(/^\s*(?:[-*+]|>)\s+/, '')
       .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/\*\*|__|`/g, ''))
+      .replace(/\*\*|__|`/g, '')
+      .replace(/(^|[^\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, '$1$2'))
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();

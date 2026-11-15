@@ -265,10 +265,20 @@ struct ConsoleView: View {
                             held: trayHeld(console))
             // The managed runner's state while it is anything but ready, when this
             // console's runner is it (docs/managed-runner-design.md): about the runner the
-            // message goes to, so it stays in sight while you type.
+            // message goes to, so it stays in sight while you type. Asleep is not a fault: one
+            // calm line that sending wakes it, rather than the notice (board 3).
             if let managed = console.managed, managed.showsBanner {
-                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                    .padding(.bottom, .composerBandGap)
+                if managed.display.kind == .sleeping {
+                    Text(ManagedRunnerCopy.Asleep.composer)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, .composerBandGap)
+                        .accessibilityIdentifier("managed-asleep-composer")
+                } else {
+                    ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                        .padding(.bottom, .composerBandGap)
+                }
             }
             // Errors only, and sticky until the ✕ — this row is in flow, so anything that
             // comes and goes on a timer here shoves the composer around while the user is
@@ -1057,6 +1067,9 @@ struct TranscriptView: View {
         .environment(\.answeredQuestions, console.answeredQuestions)
         // The item a record link or a search hit asked for: a long message from another session opens to it.
         .environment(\.revealedItemID, console.revealedItemID)
+        // Where a SubAgent's finished line finds the card it was started from, and the scroll to it.
+        .environment(\.subagentCardLinks, SubagentCardLinks(find: { console.delegateCard(forRun: $0) },
+                                                            reveal: { console.revealAgent($0) }))
         .scrollContentBackground(.hidden)   // show the window background, not the List's own
         #if os(iOS)
         // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
@@ -1310,7 +1323,7 @@ struct TranscriptView: View {
                             .transition(reduceMotion ? .opacity : .push(from: .bottom))
                     } else if saysWaiting, let here {
                         waitingCapsule(here)
-                            .frame(idealWidth: questionWidth, maxWidth: questionWidth)
+                            .frame(maxWidth: questionWidth)
                             .transition(reduceMotion ? .opacity : .push(from: .bottom))
                     } else {
                         principalQuestion(proxy)
@@ -1655,9 +1668,10 @@ struct TranscriptView: View {
         }
     }
 
-    /// What waits in this conversation, in the nav bar's capsule: the amber circle the needs-you bar
-    /// marks with, the bar's own words ("1 waiting below", "1 open question above") and the way the
-    /// card lies. A press scrolls to the card, as the bar's did.
+    /// What waits in this conversation, in the nav bar's capsule: the needs-you mark in amber, the
+    /// bar's own words ("1 waiting below", "1 open question above") and the way the card lies, drawn
+    /// as the "Changes committed" toast pill is (`ToastPill`): its surface (`toastGlass`), a bare
+    /// filled glyph, no ring, hugging its words. A press scrolls to the card, as the bar's did.
     private func waitingCapsule(_ here: WaitingBelow) -> some View {
         CoastingButton {
             PlatformHaptics.tap()
@@ -1667,24 +1681,27 @@ struct TranscriptView: View {
         } label: { _ in
             HStack(spacing: 8) {
                 Image(systemName: here.glyph.symbol)
-                    .font(.orbitLabel)
+                    .font(.title3)
                     .foregroundStyle(.orange)
-                    .frame(width: 26, height: 26)
-                    .background(Color.orange.opacity(0.15), in: Circle())
                 Text(here.text)
                     .font(.orbitSubtext.weight(.semibold)).foregroundStyle(.primary)
                     .lineLimit(1).truncationMode(.tail)
                 Image(systemName: here.side == .above ? "chevron.up" : "chevron.down")
-                    .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
+                    .font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }
-            .padding(.leading, 9)
-            .padding(.trailing, 14)
-            .questionGlass()
-            .overlay(Capsule().strokeBorder(Color.orange.opacity(0.55), lineWidth: 1.2))
+            .padding(.leading, 10)
+            .padding(.trailing, 16)
+            // The nav bar's height (questionGlass's), on the toast's own surface.
+            .frame(height: Self.waitingCapsuleHeight)
+            .toastGlass(Capsule(), tint: nil)
             .contentShape(Capsule())
         }
         .accessibilityLabel(here.text)
         .accessibilityHint("Shows what is waiting in this conversation")
+    }
+
+    private static var waitingCapsuleHeight: CGFloat {
+        if #available(iOS 26.0, *) { return 44 } else { return 32 }
     }
 
     /// "Handing over" in the nav bar's capsule while the handoff locks the composer (board 04): the

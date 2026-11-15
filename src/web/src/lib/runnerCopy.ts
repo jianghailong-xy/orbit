@@ -96,9 +96,22 @@ export function runnerDiskFree(free: string): string {
 // MARK: Capacity
 
 export const RUNNER_MAX_CONCURRENT = 'Max Concurrent';
-/** Max Concurrent's dialog, opened from its `3/16`: what the number is, and when it takes effect. */
-export const RUNNER_MAX_CONCURRENT_HINT =
-  'How many sessions this machine runs at once. A change applies to the next session it picks up — no restart.';
+/** Max Concurrent's dialog, opened from its `3/16`: when a change takes effect. The unit after the field says
+ *  what the number is. */
+export const RUNNER_MAX_CONCURRENT_HINT = 'Applies to the next session it picks up — no restart.';
+/** After the dialog's field: what the number counts. */
+export const RUNNER_MAX_CONCURRENT_UNIT = 'sessions at once';
+/** The dialog's − and + beside its field. */
+export const RUNNER_MAX_CONCURRENT_DECREASE = 'Decrease Max Concurrent';
+export const RUNNER_MAX_CONCURRENT_INCREASE = 'Increase Max Concurrent';
+/** At the dialog's end of the field's line, while the machine is online: its sessions running now. */
+export function runnerRunningNow(active: number): string {
+  return `${active} running`;
+}
+/** Under the field when the new limit is below what runs now: a lower limit stops nothing (session_pool.go setMax). */
+export function runnerMaxBelowRunning(active: number, max: number): string {
+  return `The ${active} running now carry on; new ones wait until fewer than ${max} are running.`;
+}
 /** Beside Max Concurrent's reading: opens its dialog. */
 export const RUNNER_EDIT = 'Edit';
 export const RUNNER_DISK = 'Disk';

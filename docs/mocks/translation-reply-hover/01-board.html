@@ -1,0 +1,121 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+@font-face{font-family:NotoSC;src:url(/var/tmp/landing-mock-render/fonts/NotoSansSC.ttf)}
+@font-face{font-family:JBM;src:url(/var/tmp/landing-mock-render/fonts/JetBrainsMono.ttf)}
+/* Tokens copied from src/web/src/index.css (light :root). */
+:root{--text-1:#1f2329;--text-2:#646a73;--text-3:#8f959e;--error-solid:#d4380d;--fill-2:rgba(0,0,0,.05);--line:#e5e6eb}
+*{box-sizing:border-box}
+body{margin:0;padding:32px 40px 40px;width:1500px;background:#f2f3f5;font-family:Inter,NotoSC,sans-serif;color:var(--text-1)}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--text-2);font-size:14px;margin:0 0 24px;max-width:1300px;line-height:1.5}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
+.frame{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 8px 12px;position:relative}
+.tag{position:absolute;top:-11px;left:14px;background:#1f2329;color:#fff;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px}
+.tag.rec{background:#1a7f37}
+.cap{font-size:13px;color:var(--text-2);line-height:1.5;margin:12px 12px 0;padding-top:10px;border-top:1px dashed var(--line)}
+.cap b{color:var(--text-1)}
+/* Real class names from the console. */
+.chat-msg{padding:0 12px;margin:6px 0;font-size:14px;line-height:1.55}
+.chat-assistant{background:transparent}
+.work{padding:0 12px;margin:6px 0;font-size:14px;line-height:1.55;color:var(--text-3)}
+.work .bad{color:var(--error-solid)}
+.chat-translate-foot{display:flex;align-items:center;gap:5px;font-size:12px;line-height:1.4;color:var(--text-3);white-space:nowrap}
+.chat-translate-foot.is-reply{margin:2px 0 6px;padding:0 12px}
+.chat-translate-foot.is-error{color:var(--error-solid)}
+.chat-translate-foot.is-error .chat-translate-action{color:var(--error-solid)}
+.chat-translate-action{color:var(--text-2);text-decoration:underline;cursor:pointer}
+.chat-translate-chip{padding:1px 8px;border-radius:999px;background:var(--fill-2);color:var(--text-2)}
+/* Proposed: the flip rides inline at the end of the reply's last line. */
+.chat-translate-inline{display:inline;margin-left:8px;font-size:12px;color:var(--text-3);white-space:nowrap;opacity:0}
+.chat-translate-inline.is-shown{opacity:1}
+.chat-translate-inline.is-reserved{opacity:1;outline:1.5px dashed #c9a227;outline-offset:2px;color:transparent}
+.chat-translate-inline.is-reserved .chat-translate-action{color:transparent}
+.hovered{background:rgba(0,0,0,.025);border-radius:6px}
+.cursor{position:absolute;width:14px;height:20px}
+pre{margin:6px 12px;padding:10px 12px;background:#f7f8fa;border-radius:8px;font:12.5px/1.5 JBM,monospace;color:var(--text-1)}
+.glyph{display:inline-block;margin-left:6px;font-size:11px;color:var(--text-3);border:1px solid #d5d8dc;border-radius:4px;padding:0 3px;line-height:15px;vertical-align:1px}
+.note{font-size:12px;color:#9a6b00}
+</style></head><body>
+<h1>Translated replies: "Show original" at the end of the line, on hover</h1>
+<p class="sub">Hand-drawn board using the console's tokens and class names (<code>.chat-assistant</code>, <code>.chat-translate-foot</code>, <code>.chat-translate-action</code>). The new inline element is drawn as <code>.chat-translate-inline</code>. Copy is from the screenshot. Scope: web/macOS (with a mouse). Touch keeps today's line (frame F).</p>
+
+<div class="row">
+ <div class="frame"><span class="tag">A · Today</span>
+  <div class="work">Ran 3 shell commands, edited 1 file</div>
+  <div class="chat-msg chat-assistant">两处修改都已加入。现在进行构建/测试：检查 Android 单元测试在这台主机上如何运行。</div>
+  <div class="chat-translate-foot is-reply"><span>Translated</span><span>·</span><span class="chat-translate-action">Show original</span></div>
+  <div class="work">Ran 1 shell command</div>
+  <div class="chat-msg chat-assistant">我会在现有的 Android 测试中添加一个断言，验证输入文字会隐藏标签。正在查找测试如何向输入框输入文字。</div>
+  <div class="chat-translate-foot is-reply"><span>Translated</span><span>·</span><span class="chat-translate-action">Show original</span></div>
+  <div class="work">Ran 3 shell commands <span class="bad">· 1 failed</span></div>
+  <div class="chat-msg chat-assistant">Android 测试套件已从 /mnt/tmp 中消失，因此我正在重建一个最小版本，并在后台运行那一个测试类（大约 20 分钟）。</div>
+  <div class="chat-translate-foot is-reply"><span>Translated</span><span>·</span><span class="chat-translate-action">Show original</span></div>
+  <div class="work">Listed 1 directory, ran 2 shell commands, used 2 tools</div>
+  <div class="cap"><b>Three rows per step.</b> The grey foot under every reply looks just like the work rows, so the rhythm reads work → reply → foot → work…</div>
+ </div>
+ <div class="frame"><span class="tag rec">B · Proposed, at rest</span>
+  <div class="work">Ran 3 shell commands, edited 1 file</div>
+  <div class="chat-msg chat-assistant">两处修改都已加入。现在进行构建/测试：检查 Android 单元测试在这台主机上如何运行。<span class="chat-translate-inline is-reserved">Translated · <span class="chat-translate-action">Show original</span></span></div>
+  <div class="work">Ran 1 shell command</div>
+  <div class="chat-msg chat-assistant">我会在现有的 Android 测试中添加一个断言，验证输入文字会隐藏标签。正在查找测试如何向输入框输入文字。<span class="chat-translate-inline">Translated · <span class="chat-translate-action">Show original</span></span></div>
+  <div class="work">Ran 3 shell commands <span class="bad">· 1 failed</span></div>
+  <div class="chat-msg chat-assistant">Android 测试套件已从 /mnt/tmp 中消失，因此我正在重建一个最小版本，并在后台运行那一个测试类（大约 20 分钟）。<span class="chat-translate-inline">Translated · <span class="chat-translate-action">Show original</span></span></div>
+  <div class="work">Listed 1 directory, ran 2 shell commands, used 2 tools</div>
+  <div class="cap"><b>Two rows per step.</b> The foot is still in the line, just invisible (opacity 0), so hovering never re-wraps the text. <span class="note">Dashed box = the reserved space, drawn here only to show it. Trade-off, visible on the first reply: when the last line is almost full, the reserved label (~110px) wraps to a line of its own, so that reply keeps a blank-looking gap even at rest. It never jumps, though.</span> Keyboard focus also shows it, and screen readers still read it.</div>
+ </div>
+</div>
+
+<div class="row">
+ <div class="frame"><span class="tag rec">C · Hover a reply</span>
+  <div class="work">Ran 1 shell command</div>
+  <div class="chat-msg chat-assistant">我会在现有的 Android 测试中添加一个断言，验证输入文字会隐藏标签。正在查找测试如何向输入框输入文字。<span class="chat-translate-inline">Translated · <span class="chat-translate-action">Show original</span></span></div>
+  <div class="work">Ran 3 shell commands <span class="bad">· 1 failed</span></div>
+  <div class="chat-msg chat-assistant hovered" style="position:relative">Android 测试套件已从 /mnt/tmp 中消失，因此我正在重建一个最小版本，并在后台运行那一个测试类（大约 20 分钟）。<span class="chat-translate-inline is-shown">Translated · <span class="chat-translate-action">Show original</span></span>
+   <svg class="cursor" style="left:420px;top:14px" viewBox="0 0 14 20"><path d="M1 1 L1 16 L5 12 L8 19 L10.5 18 L7.5 11 L13 11 Z" fill="#fff" stroke="#000" stroke-width="1.2"/></svg></div>
+  <div class="work">Listed 1 directory, ran 2 shell commands, used 2 tools</div>
+  <div class="cap"><b>Hovering anywhere on the reply</b> fades in <code>Translated · Show original</code> at the end of its last line (about 120 ms). Only the reply under the cursor shows it. The faint row tint is optional.</div>
+ </div>
+ <div class="frame"><span class="tag rec">D · Showing the original</span>
+  <div class="work">Ran 1 shell command</div>
+  <div class="chat-msg chat-assistant">我会在现有的 Android 测试中添加一个断言，验证输入文字会隐藏标签。正在查找测试如何向输入框输入文字。<span class="chat-translate-inline">Translated · <span class="chat-translate-action">Show original</span></span></div>
+  <div class="work">Ran 3 shell commands <span class="bad">· 1 failed</span></div>
+  <div class="chat-msg chat-assistant">The Android test suite is gone from /mnt/tmp, so I'm rebuilding a minimal one and running just that test class in the background (about 20 minutes).<span class="chat-translate-inline is-shown">Original · <span class="chat-translate-action">Show translation</span></span></div>
+  <div class="work">Listed 1 directory, ran 2 shell commands, used 2 tools</div>
+  <div class="cap"><b>A flipped reply keeps its label visible without hover.</b> It's the unusual state, so it shouldn't hide. This also gives you a way back.</div>
+ </div>
+</div>
+
+<div class="row">
+ <div class="frame"><span class="tag">E · Reply ends in a code block / table</span>
+  <div class="work">Ran 2 shell commands</div>
+  <div class="chat-msg chat-assistant">失败的断言如下：</div>
+  <pre>expected: label hidden
+  actual: label visible (width 64dp)</pre>
+  <div class="chat-translate-foot is-reply"><span>Translated</span><span>·</span><span class="chat-translate-action">Show original</span></div>
+  <div class="work">Edited 1 file</div>
+  <div class="cap"><b>No line end to sit on.</b> When the last block isn't text (code, table, quote, image), the foot falls back to its own line below, still shown only on hover. A paragraph or list item at the end gets it inline, as in C.</div>
+ </div>
+ <div class="frame"><span class="tag">F · States that stay visible</span>
+  <div class="chat-msg chat-assistant" style="color:var(--text-2)">Rebuilding the minimal suite now; the class takes about 20 minutes.</div>
+  <div class="chat-translate-foot is-reply"><span class="chat-translate-chip">Translates when the reply is done</span></div>
+  <div class="chat-msg chat-assistant">The test passes on the emulator.</div>
+  <div class="chat-translate-foot is-reply is-error"><span>Couldn't translate this reply</span><span>·</span><span class="chat-translate-action">Retry</span></div>
+  <div class="chat-msg chat-assistant">两处修改都已加入。</div>
+  <div class="chat-translate-foot is-reply"><span>Translated</span><span>·</span><span class="chat-translate-action">Show original</span></div>
+  <div class="cap"><b>Unchanged:</b> pending and failed stay on their own visible line, because they need you to see them. The last row is a <b>touch screen</b> (<code>@media (hover: none)</code>), which keeps today's line. iOS and Android draw their own line and aren't part of this change.</div>
+ </div>
+</div>
+
+<div class="row">
+ <div class="frame"><span class="tag">Open choice · G1 hover only (recommended)</span>
+  <div class="chat-msg chat-assistant">Android 测试套件已从 /mnt/tmp 中消失，因此我正在重建一个最小版本，并在后台运行那一个测试类（大约 20 分钟）。</div>
+  <div class="cap">Nothing at rest. The composer's <code>Chinese → English</code> tag already tells you translation is on, so the replies don't need to repeat it.</div>
+ </div>
+ <div class="frame"><span class="tag">Open choice · G2 small 文A glyph always there</span>
+  <div class="chat-msg chat-assistant">Android 测试套件已从 /mnt/tmp 中消失，因此我正在重建一个最小版本，并在后台运行那一个测试类（大约 20 分钟）。<span class="glyph">文A</span></div>
+  <div class="cap">A muted glyph at the line end marks each translated reply, and hovering expands it into <code>Show original</code>. Easier to discover, but it's visible on every message.</div>
+ </div>
+</div>
+</body></html>

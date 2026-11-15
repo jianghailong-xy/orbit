@@ -1,6 +1,7 @@
 // Settings › Translation on the web (board docs/mocks/session-translation/01-board.png). The server
 // owns the feature (@orbit/shared translation.ts); everything here only reads the fields it writes.
 import {
+  DEFAULT_AGENT_LANGUAGE,
   DEFAULT_TRANSLATION_LANGUAGE,
   isTranslationLanguage,
   TRANSLATION_LANGUAGE_NAMES,
@@ -17,7 +18,6 @@ export const TRANSLATION_COPY = {
   translated: 'Translated',
   showOriginal: 'Show original',
   showTranslation: 'Show translation',
-  sentInEnglish: 'Sent to the agent in English',
   original: 'Original',
   translating: 'Translating…',
   sendFailed: "Couldn't translate, so it wasn't sent",
@@ -33,14 +33,25 @@ export function translationLanguageOf(me: Me | undefined): TranslationLanguage {
   return isTranslationLanguage(lang) ? lang : DEFAULT_TRANSLATION_LANGUAGE;
 }
 
+/** The language agents work in ("Agents work in"), absent = English. */
+export function agentLanguageOf(me: Me | undefined): TranslationLanguage {
+  const lang = me?.preferences?.translationAgentLanguage;
+  return isTranslationLanguage(lang) ? lang : DEFAULT_AGENT_LANGUAGE;
+}
+
 /** Whether the owner's messages are being translated now: switched on, and the server able to. */
 export function translationOn(me: Me | undefined): boolean {
   return me?.preferences?.translationEnabled === true && me.translationAvailable === true;
 }
 
-/** The composer tag (6A): "<Language> → English", the language without its parenthesis. */
-export function translationTag(lang: TranslationLanguage): string {
-  return `${TRANSLATION_LANGUAGE_NAMES[lang].replace(/\s*\(.*\)$/, '')} → English`;
+/** A language's name without its parenthesis: "Chinese (Simplified)" → "Chinese". */
+function shortLanguageName(lang: TranslationLanguage): string {
+  return TRANSLATION_LANGUAGE_NAMES[lang].replace(/\s*\(.*\)$/, '');
+}
+
+/** The composer tag (6A): "<Language> → <Agent language>", both without their parenthesis. */
+export function translationTag(lang: TranslationLanguage, agentLang: TranslationLanguage = DEFAULT_AGENT_LANGUAGE): string {
+  return `${shortLanguageName(lang)} → ${shortLanguageName(agentLang)}`;
 }
 
 /** A `user` event's or a turn row's `translation`, when it is one. */

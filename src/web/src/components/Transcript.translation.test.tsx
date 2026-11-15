@@ -96,18 +96,16 @@ afterEach(async () => {
 });
 
 describe("the owner's message", () => {
-  it('shows what they wrote, "Translated · Show original", and flips to the English the agent got', async () => {
+  it('shows what they wrote, "Show original", and flips to the English the agent got', async () => {
     await draw(<Transcript events={[user(1, done)]} />);
     const bubble = container.querySelector('.chat-user')!;
     expect(bubble.textContent).toContain(ORIGINAL);
     expect(bubble.textContent).not.toContain(ENGLISH);
-    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Translated·Show original');
+    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Show original');
 
     await press('Show original');
     expect(container.querySelector('.chat-user')!.textContent).toContain(ENGLISH);
-    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe(
-      'Sent to the agent in English·Show translation',
-    );
+    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Show translation');
 
     await press('Show translation');
     expect(container.querySelector('.chat-user')!.textContent).toContain(ORIGINAL);
@@ -189,6 +187,27 @@ describe("the agent's reply", () => {
     expect(foot()).toBe('Original·Show translation');
     await pressReply('Show translation');
     expect(container.querySelector('.chat-assistant')!.textContent).toContain(REPLY_ZH);
+  });
+
+  it('puts the flip at the end of the last line, hidden until hovered unless the original shows', async () => {
+    await draw(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: REPLY_ZH })]} />);
+    const tail = () => container.querySelector('.chat-assistant p .chat-translate-foot.is-tail')!;
+    expect(tail().closest('p')!.textContent).toBe(`${REPLY_ZH}Translated·Show original`);
+    expect(tail().classList.contains('is-flipped')).toBe(false);
+    await pressReply('Show original');
+    expect(tail().closest('p')!.textContent).toBe(`${REPLY_EN}Original·Show translation`);
+    expect(tail().classList.contains('is-flipped')).toBe(true);
+  });
+
+  it('ends a closing list item; after a code block, a line of its own', async () => {
+    await draw(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: '步骤：\n\n- 构建\n- 测试' })]} />);
+    expect(container.querySelector('.chat-assistant li:last-child .chat-translate-foot.is-tail')!.closest('li')!.textContent)
+      .toBe('测试Translated·Show original');
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await draw(<Transcript events={[user(1, done), reply(2, { lang: 'zh-Hans', text: '如下：\n\n```\nfail\n```' })]} />);
+    expect(container.querySelector('.chat-assistant .md-tail-block > .chat-translate-foot.is-tail')).not.toBeNull();
+    expect(container.querySelector('.chat-assistant p .chat-translate-foot')).toBeNull();
   });
 
   it("the turn's copy button copies the reply as shown", async () => {
