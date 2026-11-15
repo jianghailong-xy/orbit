@@ -242,6 +242,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
     await db.session.update({ where: { id: sessionId }, data: { changedFiles: [{ path: 'census.txt', status: 'M' }] } });
     const eventId = randomUUID();
     await db.runEvent.create({ data: { id: eventId, sessionId, seq: 1, type: 'assistant_text', payload: { text: `wrote ${artifactPath}` } } });
+    // A reply of the agent's, which Settings › Translation can translate again (reply-translation.ts).
+    await db.runEvent.create({ data: { sessionId, seq: 2, type: 'assistant', payload: { text: 'the census replied' } } });
     await db.attachment.create({
       data: { ownerId, sessionId, mimeType: 'text/plain', sizeBytes: 6, fileName: 'census.txt', data: Buffer.from('census') },
     });
@@ -704,6 +706,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       turnId,
       eventId,
       eventSeq: 1,
+      replyEventSeq: 2,
       sessionRequestId,
       folderId,
       tagId,

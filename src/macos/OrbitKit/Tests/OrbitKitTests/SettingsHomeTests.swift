@@ -102,6 +102,15 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(Set(footers).count, footers.count, "two rows share a footer")
     }
 
+    /// Translation is the page's second group: right after Default permission and before Session
+    /// orchestration, as on Android and the web (docs/mocks/session-translation, frame 7); the rows
+    /// keep their order around it.
+    func testTheSessionsPagePutsTranslationAfterDefaultPermission() {
+        XCTAssertEqual(SessionSettings.groups,
+                       [.row(.defaultPermission), .translation, .row(.orchestration), .row(.modelRouting),
+                        .row(.promptSuggestions), .row(.recaps)])
+    }
+
     // MARK: - What a row says
 
     private func runner(_ id: String, online: Bool) throws -> Runner {

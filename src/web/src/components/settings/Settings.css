@@ -1010,3 +1010,16 @@
   font-size: 13px;
   color: var(--text-2);
 }
+/* Settings › Translation on General: frame 2's notice sits in the card under the switch row, and the
+   row after it keeps its hairline; the footnote reads under the card. */
+.settings-card .settings-translation-notice {
+  margin: 0 0 12px;
+}
+.settings-translation-notice + .settings-row {
+  border-top: 1px solid var(--border-subtle);
+}
+.settings-translation-footnote {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
