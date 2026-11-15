@@ -456,7 +456,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
             RunnerHead(runner, now, managedRow)
             managed?.let { ManagedRunnerNotice(managedReader, it) { open(OrbitRoute(Destination.RUNNER, null)) } }
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
-            RunnerPage.updateCard(runner, now)?.takeUnless { managedWaiting }?.let { card ->
+            if (!managedWaiting) RunnerPage.updateCard(runner, now)?.let { card ->
                 // Update Now… interrupts the turns in flight on a runner that takes it (available, draining, postponed); an older one's
                 // postponed card keeps the Update Now… that ends the postponement through Update Runner Now.
                 val updateNow = RunnerUpdateNow.offered(runner)
