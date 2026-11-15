@@ -1,0 +1,74 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .lede, .foot { max-width: 1880px; }
+  .row4 { display: flex; gap: 32px; align-items: flex-start; }
+  .row4 .col { width: 440px; }
+  .ntitle { position: absolute; left: 80px; top: 62px; height: 44px; display: flex; align-items: center; font: 600 20px "Inter", "Noto Sans SC"; z-index: 12; color: var(--l1); }
+  .srow .s .bl { color: #0A84FF; } .srow .s .or { color: #FF9500; }
+  .glass { position: absolute; z-index: 16; border-radius: 22px; backdrop-filter: blur(10px) saturate(1.8); -webkit-backdrop-filter: blur(10px) saturate(1.8);
+           background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.56));
+           box-shadow: inset 0 1px 0 rgba(255,255,255,.95), inset 0 0 0 .75px rgba(255,255,255,.7), 0 8px 24px rgba(0,0,0,.10); }
+  .toast { left: 16px; right: 16px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; }
+  .toast .ico { width: 38px; height: 38px; border-radius: 50%; background: rgba(255,149,0,.18); flex: none; display: flex; align-items: center; justify-content: center; }
+  .toast .w { flex: 1; min-width: 0; }
+  .toast .h { display: flex; justify-content: space-between; gap: 8px; font: 600 15px/20px "Inter", "Noto Sans SC"; }
+  .toast .h span { font-weight: 400; font-size: 13px; color: var(--l2); flex: none; }
+  .toast p { margin: 1px 0 0; font: 15px/20px "Inter", "Noto Sans SC"; color: var(--l2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast .ring { position: absolute; inset: 0; border-radius: 22px; box-shadow: inset 0 0 0 1.5px rgba(255,149,0,.7); }
+  .bdg { position: absolute; left: 50px; top: 60px; z-index: 14; min-width: 18px; height: 18px; border-radius: 9px; background: #FF9500; color: #fff; font: 700 11px/18px "Inter"; text-align: center; padding: 0 5px; box-shadow: 0 0 0 2px #fff; }
+  .note { position: absolute; z-index: 22; font: 600 12.5px/1.35 "Inter", "Noto Sans SC"; color: #0A60D0; background: rgba(214,228,255,.95); padding: 4px 8px; border-radius: 8px; }
+  .hl { position: absolute; left: 10px; right: 10px; border-radius: 12px; z-index: 2; background: rgba(255,149,0,.08); }
+</style>
+<body>
+<h1>needs-you · 一件事只通知一次（toast），不再常驻</h1>
+<p class="lede">owner 11-15：<b>如果是 toast，就应该是发生了一次通知，不应该出现「2 sessions need you」。</b>改成：<b>某个会话刚开始等你</b>（审批、问题、例外、合并……）时，弹一条 toast，说<b>哪个会话、什么事</b>；看过就走，不常驻、不汇总、不展开。「现在有几件在等你」由已有的常驻信号回答：列表行上的橙点 / 「Waiting for approval」、抽屉里各工作区的角标、☰ 上的数。会话页导航中间那枚（这个会话自己的事）不变。</p>
+
+<h2>一次通知的一生</h2>
+<div class="row4" id="r1"></div>
+<h2>同时来几件 · 其他页面</h2>
+<div class="row4" id="r2"></div>
+<h2>规格</h2>
+<table class="tok" id="spec"></table>
+<p class="foot" id="foot"></p>
+<script>
+const ROWS = [
+  { t: '定时任务 v1 (Scheduled tasks)', s: 'S4 报告实现已完成：分支已合入最新的项目分…', tm: 'now' },
+  { t: 'Android 自动更新报错', s: '<span class="dt"></span><span class="or">Waiting for approval</span>', tm: 'now' },
+  { t: 'Compact and coordinator handoff from…', s: '<span class="bl">Resolving a merge conflict · 19m</span>', tm: 'now' },
+  { t: 'Orbit 接入 Ollama（本地模型供应商）', s: '<span class="dt"></span><span class="or">Waiting for approval</span>', tm: '19m' },
+  { t: 'Session translation (Settings › Translation)', s: '已请求把项目分支合入 main', tm: '22m' },
+  { t: 'Help center (web)', s: 'Watching all 8 tasks · 1 running', tm: 'now' },
+];
+const rows = (top) => `<div style="position:absolute;left:20px;top:${top}px;font:700 22px Inter;color:var(--l2);z-index:3">Pinned</div>` + ROWS.map((r, i) =>
+  `<div class="srow sep" style="top:${top + 42 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('');
+const listNav = (badge) => `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div><div class="ntitle">orbit-develop</div>${badge ? `<div class="bdg">${badge}</div>` : ''}`;
+const toast = (top, title, sub, age, ring = false) => `<div class="glass toast" style="top:${top}px"><span class="ico">${ic('hand', 21, '#FF9500', 2.1)}</span><div class="w"><div class="h">${title}<span>${age}</span></div><p>${sub}</p></div>${ring ? '<div class="ring"></div>' : ''}</div>`;
+const shell = (body, badge, h = 560, nav) => phone('light', `${statusBar('12:44')}${nav || listNav(badge)}${body}${edge('light', 70, 112)}<div class="home"></div>`, { h, cls: 'crop' });
+const note = (txt, x, y) => `<div class="note" style="left:${x}px;top:${y}px">${txt}</div>`;
+
+document.getElementById('r1').innerHTML = `
+<div class="col"><span class="tag rec">① 刚开始等你 → 弹一次</span>${shell(`${rows(126)}${toast(114, 'Android 自动更新报错', 'Needs your reply · Bash · orbit-develop', 'now', true)}`, 2)}<div class="cap"><h3>说哪个会话、什么事</h3>第一行是会话名，第二行是在等什么（审批的工具、「Question from coordinator」、「Approve merge to main」……）和工作区。琥珀描边、触感一下。点它直接进那个会话、那张卡。</div></div>
+<div class="col"><span class="tag rec">② 6 秒后自己走</span>${shell(`<div class="hl" style="top:${126 + 42 + 70 - 6}px;height:66px"></div>${rows(126)}${note('列表这一行和 ☰ 的数还在说它', 150, 300)}`, 2)}<div class="cap"><h3>不常驻</h3>上滑可以提前关掉。它走了之后，「还在等你」由常驻的地方说：这一行的橙点和「Waiting for approval」、☰ 上的数（2 = 现在一共两件在等你）、抽屉里的工作区角标。</div></div>
+<div class="col"><span class="tag rec">③ 已经在等的，不再弹</span>${shell(`${rows(126)}${note('打开 App 时已有 2 件在等：不弹，☰ 上是 2', 120, 160)}`, 2)}<div class="cap"><h3>只为「新」的那一刻</h3>打开 App、切回前台、换页面时，已经在等的那几件不弹。同一件事只弹一次——哪怕它一直没处理。它再次开始等（处理完又来一个审批）算新的一次。</div></div>
+<div class="col"><span class="tag rec">④ 点它 → 进会话</span>${phone('light', `${statusBar('12:44')}<div class="nav"><div class="gc l">${ic('chevl', 22, 'var(--l1)', 2.6)}</div><div class="gc r">${dots()}</div></div>${tx(118)}<div style="position:absolute;left:16px;right:16px;top:430px;z-index:6;border-radius:18px;padding:14px;background:#FFF6EA;box-shadow:inset 0 0 0 1px rgba(255,149,0,.45);font:600 15px Inter">Waiting for your approval<div style="font:13px/18px 'JetBrains Mono';color:rgba(60,60,67,.7);margin-top:4px">Bash · ./gradlew assembleRelease</div></div>${edge('light', 70, 112)}<div class="home"></div>`, { h: 560, cls: 'crop' })}<div class="cap"><h3>落在那张卡上</h3>和点列表那一行一样：打开会话、滚到等你的那张卡。</div></div>`;
+
+document.getElementById('r2').innerHTML = `
+<div class="col"><span class="tag rec">两件几乎同时来</span>${shell(`${rows(126)}${toast(114, 'Android 自动更新报错', 'Needs your reply · Bash · orbit-develop', 'now', true)}${toast(194, 'Orbit 接入 Ollama（本地模型供应商）', 'Question from coordinator · orbit-op', 'now', true)}`, 2)}<div class="cap"><h3>各弹各的</h3>每件一条，最多同时 3 条，排在 toast 列里；各自 6 秒后走。超过 3 条时第 3 条说「and 2 more」，点它打开列表的「Needs you」筛选。</div></div>
+<div class="col"><span class="tag rec">和普通 toast 一起</span>${shell(`${rows(126)}${toast(114, 'Android 自动更新报错', 'Needs your reply · Bash · orbit-develop', 'now', true)}<div class="glass" style="left:50%;transform:translateX(-50%);top:194px;height:44px;border-radius:22px;display:flex;align-items:center;gap:8px;padding:0 16px 0 12px;font:600 15px Inter;white-space:nowrap"><span style="width:22px;height:22px;border-radius:50%;background:#34C759;display:flex;align-items:center;justify-content:center">${ic('chevr', 12, '#fff', 3)}</span>Committed</div>`, 2)}<div class="cap"><h3>它就是一条 toast</h3>和「Committed」同一列、同一块玻璃、同一套进出场；没有特殊的位置或留白。</div></div>
+<div class="col"><span class="tag rec">其他页面</span>${shell(`<div style="position:absolute;left:20px;top:178px;font:700 34px Inter;z-index:3">Wiki</div>${toast(114, 'Android 自动更新报错', 'Needs your reply · Bash · orbit-develop', 'now', true)}`, 2, 560, `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div><div class="gc r">${ic('search', 20, 'var(--l1)', 2)}</div></div><div class="bdg">2</div>`)}<div class="cap"><h3>在哪都一样</h3>toast 层在 App 最外层，哪一页都是同一条；正在看的那个会话不弹（它的卡就在眼前，导航中间那枚会说）。</div></div>
+<div class="col"><span class="tag alt">不再有</span>${shell(`${rows(206)}<div class="glass toast" style="top:116px;opacity:.35"><span class="ico">${ic('hand', 21, '#FF9500', 2.1)}</span><div class="w"><div class="h">2 sessions need you<span>5h</span></div><p>Android 自动更新报错</p></div></div>${note('常驻胶囊、汇总、展开、叠边、列表留白——都去掉', 60, 196)}`, 2)}<div class="cap"><h3>去掉的东西</h3>常驻的「N sessions need you」、展开成一串、叠边、上滑「收起直到有新的」、列表顶部留白和透明首行、页面级浮层。</div></div>`;
+
+document.getElementById('spec').innerHTML = `
+<tr><td>何时弹</td><td>App 在前台、某个会话<b>从「不等你」变成「等你」</b>的那一刻（新的待审批 / 问题 / 例外 / 合并确认 / 暂停 / 未确认落地），每个会话每次开始等只弹一次。打开 App 时已在等的不弹；正在看的会话不弹。</td></tr>
+<tr><td>说什么</td><td>第一行会话名；第二行「等什么 · 工作区」，用今天已有的词（推送的 <code>Needs your reply · 工具名</code>、<code>Question from coordinator</code>、<code>Approve merge to main</code>…）。右上时间。</td></tr>
+<tr><td>多久</td><td>6 秒自己走（手指按着暂停），上滑提前关。点它 = 打开那个会话并滚到那张卡。</td></tr>
+<tr><td>样子</td><td>toast 的玻璃卡（<code>toastGlass</code>，圆角 22），左边 38pt 琥珀圆片，琥珀描边；触感 warning 一次。最多同时 3 条。</td></tr>
+<tr><td>常驻信号</td><td>列表行橙点 + 词、抽屉工作区角标、☰ 上的数（现在一共几件等你；今天上滑收起后才显示，改成一直显示）。</td></tr>
+<tr><td>来源</td><td>今天的推送前台回调只覆盖「审批」；改成由会话快照的变化触发（<code>needsYouSessions</code> 里新出现的成员），所以问题、例外、合并等也会弹，且不依赖推送。</td></tr>
+<tr><td>Android</td><td>同样：<code>PushNoticeHost</code> 底部 Snackbar 换成顶部同样的卡片 toast，规则相同。</td></tr>`;
+document.getElementById('foot').innerHTML = `<b>待你定</b>：① 6 秒自己走（推荐）还是一直留到处理/手动关；② ☰ 上的数一直显示（推荐，常驻的「几件等你」靠它）还是不显示；③ 同时最多 3 条（推荐）还是只显示最新一条。`;
+</script>
+</body></html>

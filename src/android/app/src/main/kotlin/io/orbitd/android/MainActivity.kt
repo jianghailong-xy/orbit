@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import io.orbitd.android.cards.NeedsYouMenuIcon
+import io.orbitd.android.cards.NeedsYouToasts
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
 import io.orbitd.android.auth.loginBackground
@@ -410,7 +411,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                     },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
-                            // The menu carries how many wait on you while the needs-you bar is swiped away (06-list-floats).
+                            // The menu carries how many wait on you (needs-you-capsule/12-once).
                             if (navigation.canGoBack) Icon(painterResource(R.drawable.ic_back), "Back") else NeedsYouMenuIcon(app, "Open navigation")
                         }
                     }, actions = {
@@ -485,7 +486,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 openSession(session)
                                 WorktreeModel(api, session, app.processScope).resolveInSession(conflict.branch, conflict.target)
                             }
-                        }, modifier = Modifier.widthIn(max = 560.dp))
+                        }, modifier = Modifier.widthIn(max = 560.dp), needsYou = { NeedsYouToasts(app, signedIn.handle, ::open) })
                 }
             }
         }
