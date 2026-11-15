@@ -11382,8 +11382,10 @@ button.chat-jump-start:hover {
 }
 /* A decision recorded from the conversation, kept where it was made (`EvidenceDecisionReceipt`):
    the card's frame at rest, without the brand tone of a question that is waiting for somebody.
-   Two classes, because `.approval-card` is written further down and would win at one. */
+   Two classes, because `.approval-card` is written further down and would win at one. It is kept
+   to the width of the conversation's other cards (`.crc`), not stretched across the stream. */
 .approval-card.evidence-decision-receipt {
+  max-width: 720px;
   border-color: var(--border);
   background: var(--bg-raised);
 }
