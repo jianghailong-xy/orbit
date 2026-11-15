@@ -369,6 +369,46 @@ struct ComposerView: View {
                 && session?.effectiveLifecycleState == .open)
     }
 
+    /// Frame 2's ✦ Optimize: the account has it on and the box holds a draft it can improve (the
+    /// web's rules, `PromptOptimizer.showsButton`); while a press is out it stays, as the busy button.
+    private var showsOptimize: Bool {
+        console.promptOptimizer.isOptimizing
+            || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)
+    }
+
+    /// Frame 4's card: above the composer on a Mac, the body of the sheet over it on a phone.
+    private func optimizationCard(_ optimization: PromptOptimization, sheet: Bool) -> some View {
+        PromptOptimizationCard(
+            optimization: optimization,
+            basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
+            showingGloss: $console.promptOptimizer.showingGloss,
+            glossLanguage: SessionTranslation.language(app.user?.preferences),
+            sheet: sheet,
+            use: { console.useOptimization(edit: false) },
+            editThenUse: editThenUseOptimization,
+            tryAgain: { console.retryOptimizePrompt() },
+            dismiss: { console.dismissOptimization() })
+    }
+
+    /// Edit, then use: Use, with the caret in the box. On a phone the sheet goes first, so the box
+    /// takes focus once it has.
+    private func editThenUseOptimization() {
+        #if os(iOS)
+        console.useOptimization(edit: false)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { requestFocus() }
+        #else
+        console.useOptimization(edit: true)
+        #endif
+    }
+
+    #if os(iOS)
+    /// The phone's sheet is up while there is a suggestion; swiped down, it is dismissed (draft kept).
+    private var optimizationSheetShown: Binding<Bool> {
+        Binding(get: { console.promptOptimizer.suggestion != nil },
+                set: { if !$0 { console.dismissOptimization() } })
+    }
+    #endif
+
     /// The composer's translation tag: Settings › Sessions, where Translation is.
     private func openTranslationSettings() {
         #if os(iOS)
@@ -455,6 +495,20 @@ struct ComposerView: View {
                 .background(.blue.opacity(0.1), in: Capsule())
             }
 
+            // Frame 6: the press failed; the draft below is untouched.
+            if console.promptOptimizer.failed {
+                PromptOptimizationFailureLine(retry: { console.retryOptimizePrompt() },
+                                              dismiss: { console.dismissOptimization() })
+            }
+
+            // Frame 4 on a Mac: the suggestion is a card above the composer; the box is untouched
+            // until Use. A phone shows the same card as a sheet (below).
+            #if os(macOS)
+            if let optimization = console.promptOptimizer.suggestion {
+                optimizationCard(optimization, sheet: false)
+            }
+            #endif
+
             // The composer card: staged attachments, the text across the whole width, and a toolbar
             // pinned to its foot — `+` and the mode on the left; the model control, the usage gauges
             // and Send on the right (web parity: `.composer-box` / `.composer-toolbar`). The text grows
@@ -533,7 +587,27 @@ struct ComposerView: View {
             // Raise the card (and with it the floating `/` card) above the notices stacked over it,
             // so nothing in this stack paints across the menu.
             .zIndex(1)
+
+            // Frame 5: after Use, Undo puts the owner's own draft back, for as long as the box still
+            // holds what Use put there, and for a few seconds.
+            if console.promptOptimizer.offersUndo(current: console.composerText) {
+                PromptOptimizationUndoToast { console.undoOptimization() }
+                    .task {
+                        try? await Task.sleep(nanoseconds: 8_000_000_000)
+                        console.promptOptimizer.forgetUndo()
+                    }
+            }
         }
+        #if os(iOS)
+        // Frame 4 on a phone: the suggestion is a sheet over the composer, with the same actions.
+        .sheet(isPresented: optimizationSheetShown) {
+            if let optimization = console.promptOptimizer.suggestion {
+                optimizationCard(optimization, sheet: true)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
+        }
+        #endif
         // No gutter, surface or vertical padding of its own: the enclosing `ComposerBand` owns all
         // three for every member of the stack, so this can't drift away from the bars above it.
         //
@@ -612,6 +686,11 @@ struct ComposerView: View {
                 return .handled
             }
             .onKeyPress(.escape) {
+                // Esc dismisses the optimizer's card (or its failure line); the draft is kept.
+                if console.promptOptimizer.suggestion != nil || console.promptOptimizer.failed {
+                    console.dismissOptimization()
+                    return .handled
+                }
                 if showSlash {
                     slashDismissed = console.slashToken
                     return .handled
@@ -680,6 +759,14 @@ struct ComposerView: View {
                                            ? CursorRuntime.contextUnavailable : nil,
                                        modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil,
                                        actions: contextActions)
+            }
+            // Frame 2: ✦ Optimize beside Send once there is a draft; frame 3: busy, it cancels.
+            if showsOptimize {
+                PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing) { console.optimizePrompt() }
+                    #if os(macOS)
+                    .keyboardShortcut("o", modifiers: [.command, .shift])
+                    #endif
+                    .layoutPriority(1)
             }
             sendControls
         }

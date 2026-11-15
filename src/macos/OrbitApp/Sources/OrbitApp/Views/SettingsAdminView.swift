@@ -33,6 +33,8 @@ struct SettingsView: View {
     @State private var recaps = true
     /// Settings › Translation: the account's switch (absent = off) and Your language.
     @State private var translation = false
+    /// Settings › Prompt optimizer: the account's switch. Absent on the server means off.
+    @State private var promptOptimizer = false
     @State private var translationLanguage: TranslationLanguage = .default
     @State private var loaded = false
 
@@ -123,6 +125,28 @@ struct SettingsView: View {
                 Toggle(SettingsCopy.suggestedReplies, isOn: $promptSuggestions)
                 Text(SettingsCopy.suggestedRepliesHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
+                // Prompt optimizer (board frame 1): under Suggested replies, off by default; a server
+                // without a DeepSeek key draws it disabled with frame 1b's notice.
+                Group {
+                    Toggle(isOn: $promptOptimizer) {
+                        HStack(spacing: 6) {
+                            Text(PromptOptimizerCopy.title)
+                            Text(PromptOptimizerCopy.new)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
+                    .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
+                    Text(PromptOptimizerCopy.hint)
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                    if PromptOptimizer.unavailable(model.user) {
+                        Text(PromptOptimizerCopy.unavailable)
+                            .font(.orbitLabel).foregroundStyle(.orange)
+                    }
+                }
+                .disabled(PromptOptimizer.unavailable(model.user))
                 Toggle(SettingsCopy.sessionRecaps, isOn: $recaps)
                 Text(SettingsCopy.sessionRecapsHint)
                     .font(.orbitLabel).foregroundStyle(.secondary)
@@ -211,6 +235,7 @@ struct SettingsView: View {
         .onChange(of: promptSuggestions) { savePromptSuggestions() }
         .onChange(of: recaps) { saveRecaps() }
         .onChange(of: translation) { saveTranslation() }
+        .onChange(of: promptOptimizer) { savePromptOptimizer() }
         .onChange(of: translationLanguage) { saveTranslationLanguage() }
         .task { await model.accessTokens?.load() }
         .task { await model.runners?.load() }
@@ -228,6 +253,7 @@ struct SettingsView: View {
             promptSuggestions = p?.suggestedReplies ?? true
             recaps = p?.showRecaps ?? true
             translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+            promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true
             translationLanguage = SessionTranslation.language(p)
             name = model.user?.name ?? ""
         }
@@ -289,6 +315,11 @@ struct SettingsView: View {
     private func saveTranslation() {
         guard (model.user?.preferences?.translationEnabled ?? false) != translation else { return }
         Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: translation)) }
+    }
+
+    private func savePromptOptimizer() {
+        guard (model.user?.preferences?.promptOptimizer ?? false) != promptOptimizer else { return }
+        Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: promptOptimizer)) }
     }
 
     private func saveTranslationLanguage() {

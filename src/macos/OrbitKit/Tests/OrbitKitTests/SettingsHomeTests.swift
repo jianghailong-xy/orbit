@@ -108,7 +108,7 @@ final class SettingsHomeTests: XCTestCase {
     func testTheSessionsPagePutsTranslationAfterDefaultPermission() {
         XCTAssertEqual(SessionSettings.groups,
                        [.row(.defaultPermission), .translation, .row(.orchestration), .row(.modelRouting),
-                        .row(.promptSuggestions), .row(.recaps)])
+                        .row(.promptSuggestions), .promptOptimizer, .row(.recaps)])
     }
 
     // MARK: - What a row says
