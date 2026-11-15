@@ -284,6 +284,9 @@
       "CANCELLED_BY_OWNER": "was stopped by you",
       "OVER_BUDGET": "was over what you allowed this week"
     },
+    "failureReasonsWithSummary": {
+      "REPORTED_FAILED": "reported a failure: {summary}"
+    },
     "heldReasons": {
       "WORKSPACE_NOT_OWNED": {
         "clause": "the workspace {workspace} is no longer yours",
@@ -314,7 +317,7 @@
         "until": "it runs on an engine that can"
       },
       "MODE_WIDER_THAN_ACCOUNT_DEFAULT": {
-        "clause": "its access is wider than your account's default mode",
+        "clause": "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)",
         "until": "your default mode allows it"
       },
       "NO_REPOSITORY": {
@@ -430,7 +433,8 @@
       "firstRunInline": "first run {day}",
       "runsInEngine": "{workspace} · {engine} agent",
       "zoneFromDevice": "your time zone",
-      "notice": "You'll hear about new findings and failures only."
+      "notice": "You'll hear about new findings and failures only.",
+      "noticeAbout": "You'll hear about new {findings} and failures only."
     },
     "envelopeCard": {
       "titles": {
@@ -472,6 +476,10 @@
       "widen": {
         "body": "{reason} Now: {now}. Asked: {asked}"
       }
+    },
+    "push": {
+      "failedBody": "The last run {reason}. It keeps running until you pause it.",
+      "goalReachedTitle": "{title} ended itself"
     },
     "empty": {
       "lead": "Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.",
