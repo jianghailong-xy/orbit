@@ -5,15 +5,19 @@
  *
  * WHAT A CLIENT READS AND WRITES
  * ==============================
- *  - `GET /users/me` → `preferences.translationEnabled` / `preferences.translationLanguage`
- *    (TranslationPreferences) and `translationAvailable` (MeTranslation). Absent
- *    `translationEnabled` is OFF. `translationAvailable: false` is board frame 2: the switch is
+ *  - `GET /users/me` → `preferences.translationEnabled` / `preferences.translationLanguage` /
+ *    `preferences.translationAgentLanguage` (TranslationPreferences) and `translationAvailable`
+ *    (MeTranslation). Absent `translationEnabled` is OFF, absent `translationLanguage` is zh-Hans,
+ *    absent `translationAgentLanguage` is English. Both languages come from the one list
+ *    TRANSLATION_LANGUAGES ("Your language" and "Agents work in" alike). `translationAvailable: false` is board frame 2: the switch is
  *    drawn disabled with the DEEPSEEK_API_KEY notice, and nothing is translated whatever the
  *    preference says.
- *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage? }`. A
- *    `translationLanguage` outside TRANSLATION_LANGUAGES is a 400. The answer is the same shape as
+ *    When the two languages are the same, nothing is translated either: messages, replies and
+ *    cards go exactly as with translation off (no `translation` on any of them).
+ *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage?,
+ *    translationAgentLanguage? }`. Either language outside TRANSLATION_LANGUAGES is a 400. The answer is the same shape as
  *    `/users/me`.
- *  - The owner's message, once translated, travels as a turn whose `content` is the English the
+ *  - The owner's message, once translated, travels as a turn whose `content` is the translation the
  *    engine receives and whose `translation.original` is what the owner typed (TurnTranslation).
  *    It is on:
  *      · the queued/active turn list, `GET /sessions/:id/turns[?view=active]` — every row may carry
@@ -23,7 +27,7 @@
  *        `/resume`, `/interrupt` with a follow-up): `translation` with state TRANSLATING when the
  *        message is being translated, absent when translation was not involved;
  *      · the transcript: the runner's `user` run event for that turn carries `translation`
- *        (state DONE or SENT_AS_WRITTEN) beside its `text`, which is the English delivered.
+ *        (state DONE or SENT_AS_WRITTEN) beside its `text`, which is the translation delivered.
  *  - Every change of a held turn's state (TRANSLATING → DONE / FAILED, Retry, Send as written) is
  *    announced on the session's event stream with the existing QUEUED_TURNS_CHANGED run event
  *    (RunEventType.QUEUED_TURNS_CHANGED, RealtimeService.publishQueuedTurnsChanged);
@@ -52,7 +56,7 @@
  *    TranslationEventPayload, `of` the seq of the event it belongs to. Fold it into that event's
  *    payload as `translation`, exactly as a replay would have delivered it.
  *  - The streaming reply (2A): between the first `text_delta` and the TRANSLATION for its block,
- *    the English is what there is; the client greys it with "Translates when the reply is done".
+ *    the agent's own words are what there is; the client greys it with "Translates when the reply is done".
  *  - Failure (2A): `{ failed: true }` draws "Couldn't translate this reply · Retry". Retry is
  *    `POST /sessions/:id/events/:seq/translation/retry` (no body), answered at once with
  *    ReplyTranslationRetryResponse; the result arrives as another TRANSLATION. A 409 means
@@ -68,25 +72,64 @@
  *    question as shown and the option labels as shown — the original or the translated, either one;
  *    the server maps a translated question and a translated label back to the original before the
  *    engine reads it. Any other answer (the owner's own words) and the decision's `message` are
- *    translated into English like a message. If that translation fails the decision is NOT
+ *    translated into the agent language like a message. If that translation fails the decision is NOT
  *    recorded (1A): 422 with `code: 'TRANSLATION_FAILED'`; the client offers Retry (send it again)
  *    and Send as written (send it again with `sendAsWritten: true`).
  */
 
-/** "Your language": the seven the owner may write and read in (board decision 5A). "Agents work in"
- *  is fixed to English and is not a field. */
-export const TRANSLATION_LANGUAGES = ['zh-Hans', 'zh-Hant', 'ja', 'ko', 'es', 'fr', 'de'] as const;
+/** The curated languages DeepSeek translates well (owner decision, 2026-11-15). ONE list for both
+ *  pickers, "Your language" and "Agents work in", on every client; the Swift and Kotlin copies
+ *  mirror it under parity tests. The first seven codes after English are the ones shipped before
+ *  the list grew: never rename them, stored preferences name them. */
+export const TRANSLATION_LANGUAGES = [
+  'en',
+  'zh-Hans',
+  'zh-Hant',
+  'ja',
+  'ko',
+  'es',
+  'fr',
+  'de',
+  'ru',
+  'pt',
+  'it',
+  'nl',
+  'ar',
+  'hi',
+  'tr',
+  'vi',
+  'th',
+  'id',
+  'pl',
+  'uk',
+  'he',
+  'sv',
+  'cs',
+  'da',
+  'fi',
+  'el',
+  'hu',
+  'ro',
+  'ms',
+  'bn',
+] as const;
 export type TranslationLanguage = (typeof TRANSLATION_LANGUAGES)[number];
 
-/** What a preference without a language means: the board's default pick. */
+/** What a preference without an owner language means: the board's default pick. */
 export const DEFAULT_TRANSLATION_LANGUAGE: TranslationLanguage = 'zh-Hans';
 
-/** The language every engine is spoken to in. Read-only on every client ("Agents work in"). */
-export const AGENT_LANGUAGE = 'en' as const;
+/** What a preference without an agent language means: English, as every account had before the
+ *  agent language could be chosen. */
+export const DEFAULT_AGENT_LANGUAGE = 'en' satisfies TranslationLanguage;
 
-/** Each language's English name, as Settings lists it and the composer tag reads it (6A:
- *  "<Language> → English", where the tag drops the parenthesis: "Chinese → English"). */
+/** @deprecated The agent language is now the account's `translationAgentLanguage`; this is only its
+ *  default. Kept so code written when it was fixed still compiles. */
+export const AGENT_LANGUAGE = DEFAULT_AGENT_LANGUAGE;
+
+/** Each language's English name, as Settings lists it and the composer tag reads it
+ *  ("<Language> → <Agent language>", where the tag drops the parenthesis: "Chinese → English"). */
 export const TRANSLATION_LANGUAGE_NAMES: Readonly<Record<TranslationLanguage, string>> = {
+  en: 'English',
   'zh-Hans': 'Chinese (Simplified)',
   'zh-Hant': 'Chinese (Traditional)',
   ja: 'Japanese',
@@ -94,19 +137,43 @@ export const TRANSLATION_LANGUAGE_NAMES: Readonly<Record<TranslationLanguage, st
   es: 'Spanish',
   fr: 'French',
   de: 'German',
+  ru: 'Russian',
+  pt: 'Portuguese',
+  it: 'Italian',
+  nl: 'Dutch',
+  ar: 'Arabic',
+  hi: 'Hindi',
+  tr: 'Turkish',
+  vi: 'Vietnamese',
+  th: 'Thai',
+  id: 'Indonesian',
+  pl: 'Polish',
+  uk: 'Ukrainian',
+  he: 'Hebrew',
+  sv: 'Swedish',
+  cs: 'Czech',
+  da: 'Danish',
+  fi: 'Finnish',
+  el: 'Greek',
+  hu: 'Hungarian',
+  ro: 'Romanian',
+  ms: 'Malay',
+  bn: 'Bengali',
 };
 
 export function isTranslationLanguage(value: unknown): value is TranslationLanguage {
   return typeof value === 'string' && (TRANSLATION_LANGUAGES as readonly string[]).includes(value);
 }
 
-/** The two keys of `User.preferences` (UserPreferences) this feature owns. Account-wide, no
+/** The keys of `User.preferences` (UserPreferences) this feature owns. Account-wide, no
  *  per-session switch; read on every send, so a change applies from the next message. */
 export interface TranslationPreferences {
   /** Absent = off. */
   translationEnabled?: boolean;
-  /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
+  /** "Your language". Absent = DEFAULT_TRANSLATION_LANGUAGE. */
   translationLanguage?: TranslationLanguage;
+  /** "Agents work in": the language engines are spoken to in. Absent = DEFAULT_AGENT_LANGUAGE. */
+  translationAgentLanguage?: TranslationLanguage;
 }
 
 /** Added to `GET /users/me` (and every answer shaped like it). */
@@ -121,7 +188,7 @@ export interface MeTranslation {
  *  - TRANSLATING: being translated; not delivered to the engine yet (chip "Translating…").
  *  - FAILED: translation failed or took longer than 20 s; NOT delivered (decision 1A). The client
  *    shows "Couldn't translate, so it wasn't sent · Retry · Send as written".
- *  - DONE: delivered in English; `original` is what the owner wrote.
+ *  - DONE: delivered in the account's agent language; `original` is what the owner wrote.
  *  - SENT_AS_WRITTEN: the owner chose Send as written; delivered untranslated, so `content` and
  *    `original` are the same words.
  */
@@ -131,10 +198,10 @@ export type TurnTranslationState = 'TRANSLATING' | 'FAILED' | 'DONE' | 'SENT_AS_
  *  Absent on every message translation was not involved in. */
 export interface TurnTranslation {
   state: TurnTranslationState;
-  /** The language the owner wrote in. The target is always AGENT_LANGUAGE. */
+  /** The language the owner wrote in. The target is the account's agent language (`translationAgentLanguage`). */
   from: TranslationLanguage;
   /** What the owner typed, as typed. Draw this in the bubble by default; "Show original" on a DONE
-   *  message flips to the turn's `content` / the event's `text` (the English the agent got). */
+   *  message flips to the turn's `content` / the event's `text` (what the agent got). */
   original: string;
 }
 
@@ -186,7 +253,7 @@ export interface TranslatedQuestion {
  *  owner's language. Absent until it is translated, and on every card translation is off for. */
 export interface ApprovalTranslation {
   lang: TranslationLanguage;
-  /** The card could not be translated: draw it in English. Nothing else is set. */
+  /** The card could not be translated: draw it as the agent wrote it. Nothing else is set. */
   failed?: true;
   /** `input.description` translated (a tool card's one-line "what this does"). */
   description?: string;

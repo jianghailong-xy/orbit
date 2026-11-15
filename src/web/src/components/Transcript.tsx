@@ -67,7 +67,7 @@ import {
   type SubagentRunView,
   type TaskProgress,
 } from '@orbit/shared';
-import { DELEGATE_TOOL, delegateResultText, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
+import { DELEGATE_TOOL, delegateResultText, delegateRunId, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import {
@@ -96,6 +96,7 @@ import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
+import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
@@ -111,6 +112,7 @@ import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { parseSubagentFinished, subagentFinishedOk } from '../lib/subagentFinished';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
@@ -997,7 +999,8 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
-  && !parseBackgroundWake(node.note);
+  && !parseBackgroundWake(node.note)
+  && !parseSubagentFinished(node.note);
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   return buildTranscript(events, turnImages).nodes;
@@ -2133,6 +2136,17 @@ function orbitTurnOf(
       target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
     };
   }
+  // A SubAgent's end folds like a job's news: a session running several should not read as a run of
+  // rounds the reader opened. One that did not finish stays drawn, as a failed job does.
+  const subagent = parseSubagentFinished(node.note);
+  if (subagent) {
+    if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;
+    const jobs = parseBackgroundWake(subagent.rest);
+    if (jobs?.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+    const title = subagentFinishedTitle(subagent);
+    const name = subagent.runs.length === 1 ? subagent.runs[0].description : null;
+    return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
+  }
   const background = parseBackgroundWake(node.note);
   if (background) {
     if (background.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
@@ -2599,6 +2613,43 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // A job that ended while a turn ran is written into that turn as a steer: the same line, in
       // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
       // would — never the bubble itself.
+      //
+      // A SubAgent's end is the same kind of turn, in a block of its own (SubagentFinishedCard). A note
+      // that carries a background job's news beside it draws that line too, after the SubAgent's, as
+      // the control plane wrote them; the job's line then says how the turn went, once.
+      const subagent = parseSubagentFinished(node.note);
+      if (subagent) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        const steer = node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined;
+        const jobs = parseBackgroundWake(subagent.rest);
+        const rest = jobs ? jobs.rest : subagent.rest;
+        const attached = rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />;
+        return (
+          <>
+            <SubagentFinishedCard
+              wake={subagent}
+              seq={seq}
+              ts={node.ts}
+              undelivered={undelivered && !jobs}
+              steer={jobs ? undefined : steer}
+              queued={jobs ? undefined : queued}
+              attached={!jobs && attached}
+            />
+            {jobs && (
+              <BackgroundWakeCard
+                wake={jobs}
+                seq={seq}
+                ts={node.ts}
+                undelivered={undelivered}
+                steer={steer}
+                queued={queued}
+                attached={attached}
+              />
+            )}
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+          </>
+        );
+      }
       const background = parseBackgroundWake(node.note);
       if (background) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
@@ -3348,6 +3399,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
     translation && translation.state !== 'SENT_AS_WRITTEN' ? (
       <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
     ) : null;
+  const flipFoot = translation?.state === 'DONE';
   // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
   // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
   const noteKind = node.note ? describeNote(node.note) : '';
@@ -3418,9 +3470,15 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
               {copied ? <CheckOutlined /> : <CopyOutlined />}
             </button>
           )}
+          {/* A delivered translation's flip sits before the time, which ends the row
+              (docs/mocks/translation-user-hover). */}
+          {flipFoot && translationFoot}
+          {flipFoot && typed && node.ts && <span className="chat-meta-sep">·</span>}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note || held || translationFoot) && <span className="chat-meta-sep">·</span>}
-          {translationFoot}
+          {typed && node.ts && (status || note || held || (!flipFoot && translationFoot)) && (
+            <span className="chat-meta-sep">·</span>
+          )}
+          {!flipFoot && translationFoot}
           {status}
           {held}
           {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
@@ -4573,6 +4631,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     <>
       <div
         data-seq={node.seq}
+        // Where a SubAgent's finished line finds the card it was started from (SubagentFinishedCard).
+        data-subagent-run={isDelegate && node.result ? delegateRunId(resultContent) ?? undefined : undefined}
         className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
           hasDetail && open ? ' is-open' : ''
         }`}

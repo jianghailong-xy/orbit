@@ -271,6 +271,16 @@ public enum OrbitExchangeFold {
             return OrbitExchange(id: bubble.id, ts: ts, what: name.map { "\(title): \($0)" } ?? title,
                                  whatInTask: title, reply: "", category: .watch, target: target)
         }
+        // A SubAgent's end folds like a job's news: a session running several should not read as a run
+        // of rounds the reader opened. One that did not finish stays drawn, as a failed job does.
+        if let subagent = SubagentFinishedText.parse(bubble.note) {
+            if subagent.runs.contains(where: { !SubagentFinishedCard.isOk($0) }) { return nil }
+            if BackgroundWakeText.parse(subagent.rest)?.jobs.contains(where: BackgroundWakeCard.isFailed) == true {
+                return nil
+            }
+            return OrbitExchange(id: bubble.id, ts: ts, what: SubagentFinishedCard.foldWhat(subagent),
+                                 reply: "", category: .job, target: nil)
+        }
         if let wake = BackgroundWakeText.parse(bubble.note) {
             if wake.jobs.contains(where: BackgroundWakeCard.isFailed) { return nil }
             let title = BackgroundWakeCard.title(wake)

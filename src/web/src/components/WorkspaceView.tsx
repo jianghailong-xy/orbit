@@ -335,7 +335,7 @@ import {
 import { DshRepairCard } from './Transcript';
 import type { TranslationActionResponse } from '@orbit/shared';
 import { useApprovalDecisions } from '../lib/approvalDecisions';
-import { heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
+import { agentLanguageOf, heldForTranslation, translationLanguageOf, translationOn, translationTag } from '../lib/translation';
 import { TranslationCtx, type TranslationActions } from './TranslationParts';
 import {
   RunNeverStartedCard,
@@ -12534,7 +12534,7 @@ export function SessionComposer({
             actions={contextActions}
           />
         )}
-        {/* Settings › Translation is on (6A): what is typed here is translated into English when it
+        {/* Settings › Translation is on (6A): what is typed here is translated into the agent language when it
             is sent, never while it is typed. The tag opens the setting. */}
         {translationIsOn && (
           <button
@@ -12543,7 +12543,7 @@ export function SessionComposer({
             title="Messages are translated before the agent gets them. Open Settings › Translation"
             onClick={() => navigate('/settings/general', { state: { settingsAnchor: 'translationEnabled' } })}
           >
-            {translationTag(translationLanguageOf(me.data))}
+            {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
           </button>
         )}
         {showStop ? (

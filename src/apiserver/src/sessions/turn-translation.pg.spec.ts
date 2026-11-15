@@ -16,8 +16,9 @@ import '../test-support/dequeue-under-lease';
 /**
  * Settings › Translation against the real schema (migration 0532) and the real delivery SQL: a HELD
  * message is never leased by the inbox and never lets the claim hand out a session whose only work it
- * is; released, the runner is handed the English; its `user` event is stored with the owner's
- * original beside it, and the session list previews the original. DeepSeek is stubbed.
+ * is; released, the runner is handed the translation into the account's agent language (absent = English;
+ * Japanese below); its `user` event is stored with the owner's original beside it, and the session list
+ * previews the original. With the owner's language the agent's, a send is not held at all. DeepSeek is stubbed.
  */
 const PG_URL = process.env.COORDINATOR_PG_URL;
 
@@ -35,6 +36,8 @@ let turnsChanged = 0;
 
 /** What DeepSeek answers next: a translation, or an HTTP error status. */
 let deepSeekReplies: Array<string | number> = [];
+/** The system prompt of every DeepSeek call, in order. */
+let deepSeekSystems: string[] = [];
 const realFetch = globalThis.fetch;
 const realKey = process.env.DEEPSEEK_API_KEY;
 
@@ -50,8 +53,10 @@ before(async () => {
   prisma = prismaClientFor(PG_URL);
   await prisma.$connect();
   process.env.DEEPSEEK_API_KEY = 'test-key';
-  globalThis.fetch = (async (url: string | URL | Request) => {
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     if (!String(url).startsWith('https://api.deepseek.com/')) return realFetch(url);
+    const body = JSON.parse(String(init?.body)) as { messages: Array<{ role: string; content: string }> };
+    deepSeekSystems.push(body.messages.find((m) => m.role === 'system')!.content);
     const reply = deepSeekReplies.shift();
     if (typeof reply !== 'string') return { ok: false, status: reply ?? 500, body: null } as Response;
     return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: reply } }] }) } as Response;
@@ -89,6 +94,7 @@ before(async () => {
 
 afterEach(() => {
   deepSeekReplies = [];
+  deepSeekSystems = [];
 });
 
 after(async () => {
@@ -205,6 +211,9 @@ scenario('Retry after a failure delivers the translation', async () => {
   const delivered = await dequeue(sessionId);
   assert.equal(delivered.turnId, sent.turnId);
   assert.equal(delivered.content, ENGLISH);
+  // The account names no agent language: English, as before.
+  assert.equal(deepSeekSystems.length, 2);
+  for (const system of deepSeekSystems) assert.match(system, /from Chinese \(Simplified\) into English\./);
 });
 
 scenario('a held message can be withdrawn like a queued one', async () => {
@@ -265,4 +274,53 @@ scenario('translation off, or no server key: a send is written and delivered as 
     process.env.DEEPSEEK_API_KEY = 'test-key';
   }
   assert.ok(turnsChanged > 0);
+});
+
+scenario('with a Japanese agent language the runner is handed Japanese; the turn still names the owner\'s language', async () => {
+  const JAPANESE = 'ログインページの Google ボタンを直して';
+  await prisma.user.update({
+    where: { id: ownerId },
+    data: { preferences: { translationEnabled: true, translationLanguage: 'zh-Hans', translationAgentLanguage: 'ja' } },
+  });
+  try {
+    const sessionId = await liveSession(RunStatus.RUNNING);
+    deepSeekReplies = [JAPANESE];
+    const sent = await send(sessionId);
+    assert.deepEqual(sent.translation, { state: 'TRANSLATING', from: 'zh-Hans', original: ORIGINAL });
+    await sessions.translationsSettled();
+    assert.equal(deepSeekSystems.length, 1);
+    assert.match(deepSeekSystems[0], /from Chinese \(Simplified\) into Japanese\./);
+    const delivered = await dequeue(sessionId);
+    assert.equal(delivered.turnId, sent.turnId);
+    assert.equal(delivered.content, JAPANESE, 'the engine is handed Japanese');
+    const row = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: sent.turnId } });
+    assert.equal(row.displayPrompt, ORIGINAL);
+    assert.equal(row.translationLang, 'zh-Hans');
+    assert.equal(row.translationState, 'DONE');
+  } finally {
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { translationEnabled: true, translationLanguage: 'zh-Hans' } } });
+  }
+});
+
+scenario('the owner\'s language the agent\'s: a send is written and delivered as written, never held', async () => {
+  await prisma.user.update({
+    where: { id: ownerId },
+    data: { preferences: { translationEnabled: true, translationLanguage: 'ja', translationAgentLanguage: 'ja' } },
+  });
+  try {
+    const sessionId = await liveSession(RunStatus.RUNNING);
+    const sent = await send(sessionId, 'ボタンを直して');
+    assert.equal(sent.translation, undefined);
+    const row = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: sent.turnId } });
+    assert.equal(row.status, 'PENDING');
+    assert.equal(row.translationState, null);
+    assert.equal(row.displayPrompt, null);
+    const delivered = await dequeue(sessionId);
+    assert.equal(delivered.turnId, sent.turnId);
+    assert.equal(delivered.content, 'ボタンを直して');
+    await sessions.translationsSettled();
+    assert.equal(deepSeekSystems.length, 0, 'DeepSeek was never asked');
+  } finally {
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { translationEnabled: true, translationLanguage: 'zh-Hans' } } });
+  }
 });

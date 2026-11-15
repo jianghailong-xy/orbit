@@ -160,6 +160,12 @@ export class UpdatePreferencesDto {
   @IsIn([...TRANSLATION_LANGUAGES])
   translationLanguage?: TranslationLanguage;
 
+  /** The language agents work in ("Agents work in"): one of TRANSLATION_LANGUAGES, the same list as
+   *  the owner's. Absent = English. */
+  @IsOptional()
+  @IsIn([...TRANSLATION_LANGUAGES])
+  translationAgentLanguage?: TranslationLanguage;
+
   /**
    * The provider slugs this account's SubAgents are never routed onto (docs/subagent-design.md §4.2, §6.2).
    * Absent = none blocked; the whole list is replaced on each write, so [] unblocks everything.

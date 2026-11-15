@@ -1,6 +1,6 @@
 import { CoordinatorHandoffService } from '../projects/coordinator-handoff.service';
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
-import { ownerTranslationLanguage, turnTranslationOf } from '../sessions/turn-translation';
+import { translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
@@ -6225,11 +6225,11 @@ export class RunnerApiController {
       // slow APNs round-trip can't delay the runner's approval-create response.
       if (fallback) void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName, true);
       else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
-      // Settings › Translation (3A, reply-translation.ts): the card goes out in English at once, and again in
+      // Settings › Translation (3A, reply-translation.ts): the card goes out in the agent's words at once, and again in
       // the owner's language once it is translated.
       if (cardHasText(approval.input)) {
-        const lang = await ownerTranslationLanguage(this.prisma, session.ownerId).catch(() => null);
-        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, lang);
+        const langs = await translationLanguages(this.prisma, session.ownerId).catch(() => null);
+        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs);
       }
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
@@ -9410,8 +9410,8 @@ export class RunnerApiController {
     // for an owner with translation on, in the background. The owner's switch is read only for a batch that holds
     // something to translate — most hold none.
     if (durable.some((e) => translatableText(e.type, e.payload) !== null)) {
-      const lang = await ownerTranslationLanguage(this.prisma, eventOutcome.session.ownerId).catch(() => null);
-      translateStoredEvents(this.translationDeps(), sessionId, lang, durable);
+      const langs = await translationLanguages(this.prisma, eventOutcome.session.ownerId).catch(() => null);
+      translateStoredEvents(this.translationDeps(), sessionId, langs, durable);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
