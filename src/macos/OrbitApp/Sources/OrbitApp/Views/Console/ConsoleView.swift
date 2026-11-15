@@ -833,6 +833,7 @@ private struct TypingFold: ViewModifier {
 
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openApprovalReview) private var openApprovalReview
     @Environment(\.openPromotionReview) private var openPromotionReview
     let console: ConsoleModel
@@ -1295,17 +1296,29 @@ struct TranscriptView: View {
                 // otherwise the question above the fold, as before. A coordinator handing itself over
                 // takes it over both, at the tail and off it, while the note is written and the
                 // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A).
-                if !hidesStickyQuestion,
-                   CoordinatorContextActions.locksComposer(app.session(id: console.sessionID)?.coordinatorHandoff) {
-                    handingOverCapsule
-                        .frame(maxWidth: questionWidth)
-                } else if !hidesStickyQuestion, let here = console.waitingBelow,
-                   here.side == .above || !atBottom || console.detached {
-                    waitingCapsule(here)
-                        .frame(idealWidth: questionWidth, maxWidth: questionWidth)
-                } else {
-                    principalQuestion(proxy)
+                // The switch between them is one capsule changing (08-motion ⑤): the old words
+                // leave upward, the new come in from below, the width eases between them.
+                let handingOver = !hidesStickyQuestion
+                    && CoordinatorContextActions.locksComposer(app.session(id: console.sessionID)?.coordinatorHandoff)
+                let here = hidesStickyQuestion ? nil : console.waitingBelow
+                let saysWaiting = !handingOver
+                    && (here.map { $0.side == .above || !atBottom || console.detached } ?? false)
+                Group {
+                    if handingOver {
+                        handingOverCapsule
+                            .frame(maxWidth: questionWidth)
+                            .transition(reduceMotion ? .opacity : .push(from: .bottom))
+                    } else if saysWaiting, let here {
+                        waitingCapsule(here)
+                            .frame(idealWidth: questionWidth, maxWidth: questionWidth)
+                            .transition(reduceMotion ? .opacity : .push(from: .bottom))
+                    } else {
+                        principalQuestion(proxy)
+                            .transition(reduceMotion ? .opacity : .push(from: .bottom))
+                    }
                 }
+                .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.26), value: saysWaiting)
+                .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.26), value: handingOver)
             }
         }
         #else
