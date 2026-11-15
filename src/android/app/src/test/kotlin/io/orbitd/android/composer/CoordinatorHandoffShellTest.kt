@@ -75,7 +75,10 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
 
     private fun noCompactWhileTheHandoff(state: String) {
         runnerWithCompact(); coordinatorSession(handoff(state))
-        signIn(); openSession(); openContext()
+        // The locked composer greys its model chip, which openSession waits on: wait for the handoff's row instead.
+        signIn(); open("orbit-session:${ComposerShell.SESSION}")
+        await { has(hasTestTag("handoff-progress")) }
+        openContext()
         await { has(inDialog("No quota reported for this account.")) || has(inDialog("claude · claude-opus-5-5")) }
         assertFalse(has(hasTestTag("context-action-compact")))
         assertFalse(has(inDialog("Available when this turn ends.")))
