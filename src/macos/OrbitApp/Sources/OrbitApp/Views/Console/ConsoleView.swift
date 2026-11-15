@@ -265,10 +265,20 @@ struct ConsoleView: View {
                             held: trayHeld(console))
             // The managed runner's state while it is anything but ready, when this
             // console's runner is it (docs/managed-runner-design.md): about the runner the
-            // message goes to, so it stays in sight while you type.
+            // message goes to, so it stays in sight while you type. Asleep is not a fault: one
+            // calm line that sending wakes it, rather than the notice (board 3).
             if let managed = console.managed, managed.showsBanner {
-                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                    .padding(.bottom, .composerBandGap)
+                if managed.display.kind == .sleeping {
+                    Text(ManagedRunnerCopy.Asleep.composer)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, .composerBandGap)
+                        .accessibilityIdentifier("managed-asleep-composer")
+                } else {
+                    ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
+                        .padding(.bottom, .composerBandGap)
+                }
             }
             // Errors only, and sticky until the ✕ — this row is in flow, so anything that
             // comes and goes on a timer here shoves the composer around while the user is

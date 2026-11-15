@@ -18,6 +18,7 @@ import {
   scheduleRecordView,
   scheduleRunView,
   scheduleUsageThisMonth,
+  scheduleViewNames,
   scheduleView,
   workspaceNames,
 } from './schedule-views';
@@ -82,6 +83,7 @@ export class ScheduleReadsService {
       take: 200,
     });
     const names = await workspaceNames(this.prisma, ownerId, rows.map((r) => r.workspaceId));
+    const viewNames = await scheduleViewNames(this.prisma, ownerId, rows);
     const lastRuns = rows.length
       ? await this.prisma.scheduleRun.findMany({
           where: { scheduleId: { in: rows.map((r) => r.id) }, endedAt: { not: null } },
@@ -91,7 +93,7 @@ export class ScheduleReadsService {
       : [];
     const last = new Map(lastRuns.map((r) => [r.scheduleId, r]));
     const schedules = rows.map((r) => ({
-      ...scheduleView(r, names),
+      ...scheduleView(r, names, viewNames),
       lastRun: last.has(r.id) ? scheduleRunView(last.get(r.id)!) : null,
     }));
     if (!filter.timeline) return { schedules };
@@ -152,8 +154,9 @@ export class ScheduleReadsService {
     const schedule = await tx.schedule.findFirst({ where: { id: scheduleId, ownerId } });
     if (!schedule) throw new NotFoundException({ code: 'SCHEDULE_NOT_FOUND', message: 'No such schedule.' });
     const now = this.now();
-    const [names, runs, findings, revisions, pending, creation, usage] = await Promise.all([
+    const [names, viewNames, runs, findings, revisions, pending, creation, usage] = await Promise.all([
       workspaceNames(tx, ownerId, [schedule.workspaceId, schedule.envelopeWorkspaceId]),
+      scheduleViewNames(tx, ownerId, [schedule]),
       tx.scheduleRun.findMany({ where: { scheduleId }, orderBy: { plannedAt: 'desc' }, take: 10 }),
       tx.scheduleFinding.findMany({ where: { scheduleId }, orderBy: { createdAt: 'desc' }, take: 50 }),
       tx.scheduleRevision.findMany({ where: { scheduleId }, orderBy: { revision: 'desc' }, take: 50 }),
@@ -166,7 +169,7 @@ export class ScheduleReadsService {
     const ended = runs.find((r) => r.endedAt !== null) ?? null;
     const proposed = creation?.proposed as { readBack?: string | null } | undefined;
     return {
-      schedule: scheduleView(schedule, names),
+      schedule: scheduleView(schedule, names, viewNames),
       readBack: proposed?.readBack ?? schedule.intent,
       lastRun: ended ? scheduleRunView(ended) : null,
       recentRuns: runs.map(scheduleRunView),
@@ -305,7 +308,11 @@ export class ScheduleReadsService {
   }
 
   async rowView(ownerId: string, schedule: Schedule) {
-    return scheduleView(schedule, await workspaceNames(this.prisma, ownerId, [schedule.workspaceId]));
+    return scheduleView(
+      schedule,
+      await workspaceNames(this.prisma, ownerId, [schedule.workspaceId]),
+      await scheduleViewNames(this.prisma, ownerId, [schedule]),
+    );
   }
 
   private async record(schedule: Schedule, revision: number) {

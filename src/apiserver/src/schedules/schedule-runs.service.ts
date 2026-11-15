@@ -56,9 +56,9 @@ import { openingTurnKey } from '../sessions/orbit-authored-turn';
 import {
   SCHEDULE_NOTIFIER,
   approvalCopy,
+  approvalPattern,
   closeScheduleItems,
   failedCopy,
-  failureClause,
   fileScheduleItem,
   findingCopy,
   heldCopy,
@@ -1022,11 +1022,14 @@ export class ScheduleRunsService {
     // An ended or deleted schedule has nothing left to wait on the owner for: a run that outlived it and then failed is
     // still pushed, but files no item nothing would ever close.
     const file = schedule.state !== 'ENDED';
-    const copy = failedCopy(
-      schedule.title,
-      failure.consecutiveFailures,
-      failureClause(failure.reason, { summary: failure.summary, runLimitMinutes: schedule.runLimitMinutes }),
-    );
+    const copy = failedCopy({
+      title: schedule.title,
+      consecutiveFailures: failure.consecutiveFailures,
+      failureReason: failure.reason,
+      summary: failure.summary,
+      plannedAt: run.plannedAt,
+      timezone: schedule.timezone,
+    });
     const askedBy = file ? (run.sessionId ?? (await scheduleHomeSession(tx, schedule))) : null;
     const itemId = askedBy
       ? await fileScheduleItem(tx, {
@@ -1038,7 +1041,7 @@ export class ScheduleRunsService {
           workspaceId: schedule.workspaceId,
           key: `schedule-failed:${run.id}`,
           title: copy.title,
-          why: copy.body,
+          why: copy.why,
         })
       : null;
     alerts.push({
@@ -1048,14 +1051,28 @@ export class ScheduleRunsService {
       runId: run.id,
       opens: run.sessionId ? { sessionId: run.sessionId } : { scheduleId: schedule.id },
       ownerRequestId: itemId,
-      ...copy,
+      title: copy.title,
+      body: copy.body,
       collapseId: `schedule-failed-${run.id}`,
     });
   }
 
   /** A schedule moved to HELD by this run's start: pushed, and waiting on the owner until it is resumed (§6.1). */
   private async fileHeld(tx: Tx, schedule: Schedule, run: ScheduleRun, reason: string, alerts: ScheduleAlert[]): Promise<void> {
-    const copy = heldCopy(schedule.title, reason);
+    // The hold names what holds it: 'the agent "auditor" in workspace web is disabled'.
+    const [agent, workspace] = await Promise.all([
+      schedule.agentId ? tx.agent.findUnique({ where: { id: schedule.agentId }, select: { name: true, ownerId: true } }) : null,
+      tx.workspace.findUnique({ where: { id: schedule.workspaceId }, select: { name: true, ownerId: true } }),
+    ]);
+    const copy = heldCopy({
+      title: schedule.title,
+      reason,
+      plannedAt: run.plannedAt,
+      agentName: agent?.ownerId === schedule.ownerId ? agent.name : null,
+      workspaceName: workspace?.ownerId === schedule.ownerId ? workspace.name : null,
+      now: this.clock(),
+      timezone: schedule.timezone,
+    });
     const askedBy = await scheduleHomeSession(tx, schedule);
     const itemId = askedBy
       ? await fileScheduleItem(tx, {
@@ -1067,7 +1084,7 @@ export class ScheduleRunsService {
           workspaceId: schedule.workspaceId,
           key: `schedule-held:${run.id}`,
           title: copy.title,
-          why: copy.body,
+          why: copy.why,
         })
       : null;
     alerts.push({
@@ -1077,7 +1094,8 @@ export class ScheduleRunsService {
       runId: run.id,
       opens: { scheduleId: schedule.id },
       ownerRequestId: itemId,
-      ...copy,
+      title: copy.title,
+      body: copy.body,
       collapseId: `schedule-held-${run.id}`,
     });
   }
@@ -1157,15 +1175,26 @@ export class ScheduleRunsService {
         const pending = await tx.approval.findMany({
           where: { sessionId, status: 'PENDING' },
           orderBy: { createdAt: 'asc' },
-          select: { id: true, toolName: true },
+          select: { id: true, toolName: true, input: true, createdAt: true },
         });
+        const workspace = pending.length
+          ? await tx.workspace.findUnique({ where: { id: schedule.workspaceId }, select: { name: true } })
+          : null;
         await closeScheduleItems(
           tx,
           { scheduleId: schedule.id, kinds: ['SCHEDULE_APPROVAL'], scheduleRunId: runId, approvalIdsNotIn: pending.map((c) => c.id) },
           { state: 'DONE', note: 'The approval was answered.', byUserId: schedule.ownerId, now },
         );
         for (const card of pending) {
-          const copy = approvalCopy(schedule.title, card.toolName);
+          const copy = approvalCopy({
+            title: schedule.title,
+            deadline: new Date(card.createdAt.getTime() + SCHEDULE_APPROVAL_TIMEOUT_MS),
+            nextAt: schedule.nextDueAt,
+            pattern: approvalPattern(card.toolName, card.input),
+            workspaceName: workspace?.name ?? '',
+            now,
+            timezone: schedule.timezone,
+          });
           const itemId = await fileScheduleItem(tx, {
             kind: 'SCHEDULE_APPROVAL',
             ownerId: schedule.ownerId,

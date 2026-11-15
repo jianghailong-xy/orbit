@@ -221,10 +221,10 @@ test('schedule_create: a card, no schedule; Create writes one whose envelope is 
   assert.equal(card.title, 'Codex stable check');
   assert.equal(card.readBack, CREATE.readBack);
   assert.equal(card.askedBySessionId, w.sessionId);
-  assert.equal(card.when.text, 'Daily 10:00 · your time zone');
+  assert.equal(card.when.text, 'Daily 10:00 · your time zone', 'no zone yet: no first run either');
   assert.equal(card.when.timezone, null);
   assert.equal(card.runsIn.workspaceId, w.workspaceId);
-  assert.equal(card.runsIn.text, `${w.workspaceName} · claude`);
+  assert.equal(card.runsIn.text, `${w.workspaceName} · Claude agent`);
   assert.equal(card.may.text, 'Check only · reads and reports, edits nothing');
   assert.equal(card.costs.text, 'Up to 7 runs a week, 30 min each');
   assert.equal(card.today?.text, CREATE.baseline.summary);
@@ -276,7 +276,10 @@ test('schedule_create: Not now leaves nothing; a card naming its zone refuses an
 
   const zoned = await tools.create(w.runner, w.sessionId, { ...CREATE, timezone: 'Asia/Shanghai' } as never);
   const zonedId = (zoned as { card: { id: string; when: { text: string } } }).card.id;
-  assert.equal((zoned as { card: { when: { text: string } } }).card.when.text, 'Daily 10:00 · Asia/Shanghai');
+  assert.match(
+    (zoned as { card: { when: { text: string } } }).card.when.text,
+    /^Daily 10:00 · Asia\/Shanghai · first run (today|tomorrow)$/,
+  );
   await refusedWith(rest.allow(w.user, zonedId, { timezone: 'Europe/Berlin' }, NO_SESSION), 'SCHEDULE_TIMEZONE_ALREADY_SET');
   const unzoned = await tools.create(w.runner, w.sessionId, CREATE as never);
   await refusedWith(rest.allow(w.user, (unzoned as { card: { id: string } }).card.id, {}, NO_SESSION), 'SCHEDULE_TIMEZONE_REQUIRED');
@@ -512,7 +515,7 @@ test('REST doors: list, detail with this month\'s use, runs, pause, resume, run,
   assert.equal(detail.usage.runs, 2);
   assert.equal(detail.usage.minutes, 5);
   assert.equal(detail.usage.costUsd, 0.25);
-  assert.equal(detail.usage.text, 'This month: 2 runs · 5 min · $0.25');
+  assert.equal(detail.usage.text, '2 runs · 5 min', 'This month is the block\'s title, and the cost its own field');
   assert.equal((await rest.listRuns(w.user, s.id)).runs.length, 2);
 
   const paused = await rest.pause(w.pat, s.id, NO_SESSION);
@@ -555,7 +558,7 @@ test('the Scheduled page\'s quick-add: a sentence opens an ordinary session; its
   const id = (pending as { card: { id: string } }).card.id;
   const { drafts } = await rest.drafts(w.user);
   assert.deepEqual(drafts.map((d) => [d.id, d.askedBySessionId]), [[id, opened.sessionId]]);
-  assert.equal(drafts[0].when?.text, 'Weekdays 09:00 · your time zone');
+  assert.equal(drafts[0].when?.text, 'Weekdays at 09:00 · your time zone');
   await rest.decline(w.user, id, NO_SESSION);
   assert.deepEqual((await rest.drafts(w.user)).drafts, [], 'Not now takes the draft away');
 });

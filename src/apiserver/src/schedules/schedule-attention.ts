@@ -26,7 +26,21 @@
  * Pushes are sent after the transaction commits, through the ScheduleNotifier port, so a spec reads what was sent and
  * production sends it through PushService.
  */
-import { SCHEDULE_COPY } from '@orbit/shared';
+import {
+  SCHEDULE_COPY,
+  bashCommandRules,
+  scheduleApprovalWaiting,
+  scheduleEnvelopeTitle,
+  scheduleFailedPush,
+  scheduleFailedWaiting,
+  scheduleGoalReachedPushTitle,
+  scheduleHeldClause,
+  scheduleHeldWaiting,
+  scheduleWidenWaitingText,
+  type ScheduleEnvelope,
+  type ScheduleEnvelopePart,
+  type ScheduleRule,
+} from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
 
 export const SCHEDULE_ITEM_KINDS = ['SCHEDULE_FAILED', 'SCHEDULE_HELD', 'SCHEDULE_APPROVAL', 'SCHEDULE_WIDEN'] as const;
@@ -87,137 +101,148 @@ export async function sendAlerts(
 // Copy
 // ---------------------------------------------------------------------------------------------------------------
 
+/** A banner's body; an item's text is longer and only made one line (WHY_MAX). */
 const BODY_MAX = 180;
+const WHY_MAX = 1_000;
 
 function line(text: string, max = BODY_MAX): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length <= max ? flat : `${flat.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** What a failure reason means, in a clause. */
-export function failureClause(reason: string, ctx: { summary?: string | null; runLimitMinutes?: number }): string {
-  switch (reason) {
-    case 'REPORTED_FAILED':
-      return ctx.summary ? `it reported a failure: ${line(ctx.summary, 120)}` : 'it reported a failure';
-    case 'NO_REPORT':
-      return 'it ended without reporting';
-    case 'ENGINE_CRASHED':
-      return 'its engine stopped';
-    case 'APPROVAL_TIMEOUT':
-      return 'an approval waited 2 hours with no answer';
-    case 'RUN_LIMIT':
-      return `it ran past its ${ctx.runLimitMinutes ?? 30}-minute limit`;
-    default:
-      return `it failed (${reason})`;
-  }
+/** A run's reasonText (§4): the shared sentence for a slot over budget; null otherwise, so a client words the rest. */
+export function runReasonText(run: { failureReason: string | null }): string | null {
+  // No count: the envelope may have changed since, and the row should stay true.
+  return run.failureReason === 'OVER_BUDGET' ? SCHEDULE_COPY.runReasonTexts.OVER_BUDGET : null;
 }
 
-/** Why a run did not start or ended, as its row in the run list says it; null for a run with no reason. */
-export function runReasonText(run: { state: string; failureReason: string | null; heldReason: string | null }): string | null {
-  if (run.state === 'HELD' && run.heldReason) return `Held: ${heldClause(run.heldReason)}.`;
-  if (!run.failureReason) return null;
-  switch (run.failureReason) {
-    case 'OVER_BUDGET':
-      // No count: the envelope may have changed since, and the row should stay true. One sentence for the server and
-      // the clients (@orbit/shared SCHEDULE_COPY).
-      return SCHEDULE_COPY.runReasonTexts.OVER_BUDGET;
-    case 'RUNNER_UNAVAILABLE':
-      return run.state === 'MISSED' ? 'Not started: the runner was not available in time.' : 'The runner was not available.';
-    case 'QUOTA':
-      return run.state === 'MISSED' ? "Not started: the engine's usage limit was reached." : "The engine's usage limit was reached.";
-    case 'ENGINE_CRASHED_BEFORE_START':
-      return run.state === 'MISSED' ? 'Not started: the engine stopped before the run began.' : 'The engine stopped before the run began.';
-    case 'CANCELLED_BY_OWNER':
-      return 'You stopped this run.';
-    default:
-      return `Failed: ${failureClause(run.failureReason, { summary: null })}.`;
-  }
-}
-
-function overBudgetClause(runsPerWeek: number): string {
-  return `it had already started ${runsPerWeek} run${runsPerWeek === 1 ? '' : 's'} in the past 7 days, as many as you allowed`;
-}
-
+/** The push for a slot over budget, told once (§4, §7.3). */
 export function overBudgetCopy(title: string, runsPerWeek: number): { title: string; body: string } {
+  const runs = `${runsPerWeek} run${runsPerWeek === 1 ? '' : 's'}`;
   return {
     title: line(`${title} skipped a run`, 120),
     body: line(
-      `A run was not started: ${overBudgetClause(runsPerWeek)}. `
+      `A run was not started: it had already started ${runs} in the past 7 days, as many as you allowed. `
       + 'Its slots run again as older runs leave the 7 days; Run now still starts one.',
     ),
   };
 }
 
-/** Why a schedule is held, in a clause (§6.1's reasons). */
+/**
+ * Why a schedule is held, in a clause (§6.1's reasons), for a refusal's message: the boards' clause with "its agent",
+ * "its workspace" for the names a refusal does not carry.
+ */
 export function heldClause(reason: string): string {
-  switch (reason) {
-    case 'WORKSPACE_NOT_OWNED':
-      return 'its workspace is no longer yours';
-    case 'WORKSPACE_DELETED':
-      return 'its workspace was deleted';
-    case 'WORKSPACE_DISABLED':
-      return 'its workspace is disabled';
-    case 'AGENT_MISSING':
-      return 'its agent no longer exists';
-    case 'AGENT_DISABLED':
-      return 'its agent is disabled';
-    case 'OUTSIDE_ENVELOPE':
-      return 'it no longer fits what you allowed';
-    case 'ACCESS_NOT_ENFORCEABLE':
-      return 'the engine it would run on cannot enforce its access level';
-    case 'MODE_WIDER_THAN_ACCOUNT_DEFAULT':
-      // Says what to change: Plan as the account default holds a CHECK_ONLY run on Claude Code (Don't Ask, §6.2)
-      // and every OPEN_PR run; Default holds neither.
-      return "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)";
-    case 'NO_REPOSITORY':
-      return 'its workspace has no repository to open a PR in';
-    case 'SESSION_REFUSED':
-      return "its run's session could not be opened";
-    default:
-      return `a start check failed (${reason})`;
-  }
+  return scheduleHeldClause(reason)?.clause ?? `a start check failed (${reason})`;
 }
 
-export function failedCopy(title: string, consecutive: number, clause: string): { title: string; body: string } {
-  const body = consecutive >= 3
-    ? `It failed ${consecutive} runs in a row; the last time ${clause}.`
-    : `The last run failed: ${clause}.`;
-  return { title: line(`${title} failed`, 120), body: line(body) };
+export interface ScheduleCopy {
+  title: string;
+  /** The push's body. */
+  body: string;
+  /** The Waiting on you item's text. */
+  why: string;
 }
 
-export function heldCopy(title: string, reason: string): { title: string; body: string } {
+/**
+ * A failure: the item is the board's card ("The last run ended without a report (Nov 14, 02:00). It keeps running on
+ * schedule until you pause it. …"), the push its shorter banner. Times are in the schedule's zone.
+ */
+export function failedCopy(input: {
+  title: string;
+  consecutiveFailures: number;
+  failureReason: string;
+  /** What the run reported; a REPORTED_FAILED item and push say it. */
+  summary?: string | null;
+  plannedAt: Date;
+  timezone: string;
+}): ScheduleCopy {
+  const waiting = {
+    title: input.title,
+    consecutiveFailures: input.consecutiveFailures,
+    run: {
+      failureReason: input.failureReason,
+      reasonText: null,
+      summary: input.summary ?? null,
+      plannedAt: input.plannedAt.toISOString(),
+    },
+    timezone: input.timezone,
+  };
+  const push = scheduleFailedPush(waiting);
   return {
-    title: line(`${title} is on hold`, 120),
-    body: line(`It won't run until you resume it: ${heldClause(reason)}.`),
+    title: line(push.title, 120),
+    body: line(push.body),
+    why: line(scheduleFailedWaiting(waiting).body, WHY_MAX),
   };
 }
 
-/** The approval item's text says what Always allow writes and what it means for later runs (§6.4). */
-export function approvalCopy(title: string, toolName: string): { title: string; body: string; why: string } {
-  return {
-    title: line(`${title} needs your approval`, 120),
-    body: line(`A run is waiting to use ${toolName}.`),
-    why:
-      `A run of "${title}" is waiting for your approval to use ${toolName}. `
-      + 'Always allow writes a rule for this workspace (a workspace permission rule), so later runs won\'t ask for this. '
-      + 'With no answer in 2 hours the run fails.',
-  };
+/** A hold: "Weekly dependency audit is held", naming the agent or the workspace that holds it. */
+export function heldCopy(input: {
+  title: string;
+  reason: string;
+  plannedAt: Date;
+  agentName: string | null;
+  workspaceName: string | null;
+  now: Date;
+  timezone: string;
+}): ScheduleCopy {
+  const text = scheduleHeldWaiting({
+    title: input.title,
+    heldReason: input.reason,
+    plannedAt: input.plannedAt.toISOString(),
+    agentName: input.agentName,
+    workspaceName: input.workspaceName,
+    now: input.now,
+    timezone: input.timezone,
+  });
+  return { title: line(text.title, 120), body: line(text.body), why: line(text.body, WHY_MAX) };
 }
 
-export function widenCopy(title: string, widens: readonly string[]): { title: string; body: string } {
-  const parts = widens.map((w) => WIDEN_WORDS[w] ?? w.toLowerCase()).join(', ');
-  return {
-    title: line(`${title} asks to do more`, 120),
-    body: line(`A run asked to change ${parts || 'what it may do'}. Nothing changes unless you allow it.`),
-  };
+/** What Always allow would write for a card, as the card's rule names it ("psql:*", "WebFetch"); '' for none. */
+export function approvalPattern(toolName: string, input: unknown): string {
+  if (toolName === 'AskUserQuestion') return '';
+  if (toolName !== 'Bash') return toolName;
+  const command = input && typeof input === 'object' ? (input as { command?: unknown }).command : undefined;
+  return typeof command === 'string' ? bashCommandRules(command).map((r) => r.ruleContent || r.toolName).join(', ') : '';
 }
 
-const WIDEN_WORDS: Readonly<Record<string, string>> = {
-  WORKSPACE: 'where it runs',
-  ACCESS_LEVEL: 'what it may do',
-  RUNS_PER_WEEK: 'how often it runs',
-  RUN_LIMIT: 'how long a run may take',
-};
+/**
+ * A run's card (§6.4): "Nightly pg spec sweep wants to run a command" / "If nobody answers by 04:00 this run fails; the
+ * next one starts tomorrow." The item adds what Always allow covers and what that means for later runs.
+ */
+export function approvalCopy(input: {
+  title: string;
+  deadline: Date;
+  nextAt: Date | null;
+  pattern: string;
+  workspaceName: string;
+  now: Date;
+  timezone: string;
+}): ScheduleCopy {
+  const text = scheduleApprovalWaiting({
+    ...input,
+    deadline: input.deadline.toISOString(),
+    nextAt: input.nextAt?.toISOString() ?? null,
+  });
+  const why = input.pattern && input.workspaceName ? `${text.body} ${text.alwaysAllow}` : text.body;
+  return { title: line(text.title, 120), body: line(text.body), why: line(why, WHY_MAX) };
+}
+
+/** A run's widen: "Let Codex stable check open PRs?" with its Now and Asked. */
+export function widenCopy(input: {
+  title: string;
+  reason: string | null;
+  widens: readonly ScheduleEnvelopePart[];
+  now: ScheduleEnvelope;
+  asked: ScheduleEnvelope;
+  ruleNow: ScheduleRule | null;
+  ruleAsked: ScheduleRule | null;
+  workspaceNames: Record<string, string>;
+}): ScheduleCopy {
+  const text = scheduleWidenWaitingText({ ...input, reason: input.reason ?? '' });
+  const title = scheduleEnvelopeTitle(input.title, input.widens, input.workspaceNames[input.asked.workspaceId]);
+  return { title: line(title, 120), body: line(text), why: line(text, WHY_MAX) };
+}
 
 export function findingCopy(title: string, summary: string): { title: string; body: string } {
   return { title: line(title, 120), body: line(summary) };
@@ -225,7 +250,7 @@ export function findingCopy(title: string, summary: string): { title: string; bo
 
 export function goalReachedCopy(title: string): { title: string; body: string } {
   return {
-    title: line(`${title} ended itself`, 120),
+    title: line(scheduleGoalReachedPushTitle(title), 120),
     body: 'A run found nothing left to watch and ended this scheduled task. Undo resumes it.',
   };
 }
