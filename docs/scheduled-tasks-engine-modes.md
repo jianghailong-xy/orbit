@@ -803,3 +803,107 @@ So in `default`, with these lists:
 Not measured: a SubAgent (`Task`) of such a run asking; it asks under its parent's session through the same prompt
 tool and the same server door, so the same rule applies, but no probe exercised it. Codex is unchanged: its
 `CHECK_ONLY` run is in its read-only sandbox and never asks (§8). Server-side only; no runner release.
+
+---
+
+## 10. Revision 2: what a review found still ran unasked, and the runner changes (S2e, 2026-11-16)
+
+A review of §9 found five more ways a `CHECK_ONLY` run on Claude Code could run something without the owner's card
+(design §6.2 lists the fixes). Three are the runner's (`runner-go/schedule_check_only.go`, for a claim with
+`agent.scheduledCheckOnly`); this records what was measured for them on the same `claude` 2.1.325. The kit is §9's
+with `lists.js` reproducing the runner's new argv (`RUNNER=new`) or the old one (`RUNNER=old`), `run.sh` taking
+`PLANT` (files written into the scratch checkout before the run) and `EXTRA` (more flags); kept as Orbit file
+`s2e-claude-default-probe-kit-r2.tgz` (id 34y7WHdzoZMfZM2ykKWtS, pinned) with every transcript and stub log.
+
+### 10.1 Claude Code's own settings files (H4)
+
+The runner spawned Claude Code with no `--setting-sources`, so it loaded the user's, the project's and the local
+settings. Planted (job `bgj_7e2217732846`): the checkout's `.claude/settings.json` allowing `Bash(touch:*)`, its
+`.claude/settings.local.json` allowing `Bash(mkdir:*)`, and a private `CLAUDE_CONFIG_DIR` (the host's own was not
+touched) whose `settings.json` allows `Bash(cp:*)`. A `--settings` file denying `Bash(whoami)` stands in for the
+runner's own settings file. Prompt: `touch planted-project.txt`, `mkdir planted-local`, `cp README.md planted-user.txt`,
+`whoami`.
+
+```
+### no --setting-sources (as the runner spawned until now)
+TOOL_USE Bash {"command": "touch planted-project.txt"}   RESULT err= True denied by the user     (asked: a card)
+TOOL_USE Bash {"command": "mkdir planted-local"}         RESULT err= False                       (ran unasked)
+TOOL_USE Bash {"command": "cp README.md planted-user.txt"} RESULT err= False                     (ran unasked)
+TOOL_USE Bash {"command": "whoami"}                      RESULT err= True Permission to use Bash with command whoami has been denied.
+FILES: package.json planted-local planted-user.txt README.md victim.txt
+stub: REQUEST Bash touch planted-project.txt -> CARD answered deny          (1 line)
+
+### --setting-sources ''
+TOOL_USE Bash {"command": "touch planted-project.txt"}   RESULT err= True denied by the user
+TOOL_USE Bash {"command": "mkdir planted-local"}         RESULT err= True denied by the user
+TOOL_USE Bash {"command": "cp README.md planted-user.txt"} RESULT err= True denied by the user
+TOOL_USE Bash {"command": "whoami"}                      RESULT err= True Permission to use Bash with command whoami has been denied.
+FILES: package.json README.md victim.txt
+stub: REQUEST Bash touch … / mkdir … / cp … -> CARD answered deny           (3 lines)
+```
+
+So the local and the user settings' allow rules were honoured headless (the project file's was not, on this host:
+it is a checkout Claude Code was never asked to trust), and `--setting-sources ''` loads none of them while the
+`--settings` file still applies. The runner now passes `--setting-sources ''` for such a run. It turns off whatever
+those files set for that engine: their hooks, env, model and plugin settings, an `apiKeyHelper`. The runner's own
+settings file carries what Orbit needs.
+
+### 10.2 The runner's new argv, all prompts (H2, H3, H4)
+
+Job `bgj_2ea5aab8dfdd`: the claim's lists from the build (only the rule a scheduled card wrote is carried:
+`Bash(touch carried.txt)` and a scheduled `Bash(<orbit> task update:*)`; the interactive `Bash(python3:*)`, `Edit`,
+`mcp__orbit__bg_run` and the bare `Bash` rule are not), no Orbit CLI allow rule, the CLI denied as `Bash(<orbit>)`,
+`Bash(<orbit> *)`, `Bash('<orbit>')`, `Bash('<orbit>' *)`, `--setting-sources ''`, and the checkout planted with the
+two settings files of 10.1. Every card answered deny.
+
+```
+reads:  git log --oneline -1, ls, cat README.md, grep -rn hello ., git status --short — ran, 0 requests
+writes: touch, date >, rm, npm test, psql, curl -o — each a REQUEST (card), none ran; touch carried.txt ran unasked
+other:  Edit, Write, NotebookEdit, bg_run, task_update, session_merge, task_start — not offered
+        ("No matching deferred tools found"); <orbit> task update / '<orbit>' session merge — "Permission to use Bash
+        with command … has been denied.", no request; task_get and schedule_run_report ran; 0 prompts for Orbit tools
+h3:     <orbit> task update / '<orbit>' session merge / <orbit> task get — denied, no request, though a scheduled
+        card's rule `Bash(<orbit> task update:*)` was carried: the deny wins
+        orbit task update probe --title x (a bare `orbit` on PATH) — REQUEST (card), did not run
+        python3 -c "open('py.txt','w')…" — REQUEST: the interactive Bash(python3:*) was not carried
+        touch planted-project.txt, mkdir planted-local — REQUEST: the planted settings were not loaded
+        ls /mnt/data/checkonly-probe/orbit — REQUEST: a directory outside the checkout; Claude Code asks for that
+        whatever its name
+FILES (h3): carried.txt package.json README.md victim.txt
+```
+
+The runner's refusal of every Orbit tool prompt (H2) is pinned by `TestScheduledCheckOnlyRefusesEveryOrbitToolPrompt`
+(bg_run, task_update, session_merge, task_start, task_get and a name no catalogue has are all denied with no card);
+here no Orbit tool prompt was raised at all, since the server's by-name denials stay.
+
+### 10.3 A directory named `orbit` (H3)
+
+Job `bgj_96f9261ff2e9`: the checkout holds a directory `orbit/`; prompt `ls ./orbit .`, then `<orbit> task get probe`.
+
+```
+### RUNNER=old (the server's Bash(*/orbit *) and Bash('*/orbit' *), the runner's CLI allow rules)
+TOOL_USE Bash {"command": "ls ./orbit ."}   RESULT err= True Permission to use Bash with command ls ./orbit . has been denied.
+TOOL_USE Bash {"command": "/mnt/data/checkonly-probe/bin/orbit task get probe"}   RESULT err= True … has been denied.
+
+### RUNNER=new (no CLI allow rule; Bash(<orbit>), Bash(<orbit> *) and the quoted forms denied)
+TOOL_USE Bash {"command": "ls ./orbit ."}   RESULT err= False .: | orbit | package.json | README.md | victim.txt | | ./orbit: | inside.txt
+TOOL_USE Bash {"command": "/mnt/data/checkonly-probe/bin/orbit task get probe"}   RESULT err= True … has been denied.
+stub: 0 lines in both
+```
+
+The old patterns refused a read of any path ending in `/orbit` followed by an argument (this repository's checkout
+on its hosts is such a path); the runner's anchored denial refuses only its own executable. A disguised form of the
+CLI asks (10.2: a bare `orbit` on PATH was a card).
+
+### 10.4 What the server changed, and where it is proven
+
+- H1 rule origin (`workspace_permission_rule.from_schedule_run`, migration 0850), H5 Always allow held to the card's
+  command (`400 SCHEDULE_CHECK_ONLY_RULE_REFUSED`), H6 the run's own level (`schedule_run.access_level`): the pg spec
+  `schedule-attention.pg.spec.ts` (S2e cases, including a SubAgent's Edit and the schedule moved to OPEN_PR and then
+  deleted mid-run) and `schedule-access.spec.ts` (odd tool names: `bash`, `BashOutput`, `Task`, `mcp__docs__Bash`, an
+  empty name are all refused at once).
+- Not measured: Claude Code's behaviour when the runner's executable path itself contains a character Claude's rule
+  grammar cannot carry; such a runner keeps the server's `*/orbit *` patterns (`checkOnlyDisallowedTools`).
+
+The runner changes need the first runner release after v0.1.261-beta.8 (design §6.2 says what an older runner leaves
+open).

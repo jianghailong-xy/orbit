@@ -330,9 +330,11 @@ it ran in `dontAsk`, where such a command was refused with no card.
 
 Only a shell command can ask. The claim hands the runner, for that run only:
 
-- `allowedTools`: this list, plus the workspace's "Always allow" rules for the shell (`Bash(npm test:*)`). No
-  `mcp__orbit__*` wildcard, no workspace rule for any other tool (`Edit`, `Write`, an MCP tool), and no rule for the
-  whole shell (`Bash`, `Bash(*)`), which would run every writing command unasked:
+- `allowedTools`: this list, plus the shell rules written by answering Always allow on a scheduled run's card
+  (`Bash(npm test:*)`; `workspace_permission_rule.from_schedule_run`, migration 0850). Not the rules a person's
+  interactive sessions wrote (`Bash(python:*)`, `Bash(git:*)` would run writing commands unasked), no `mcp__orbit__*`
+  wildcard, no rule for any other tool (`Edit`, `Write`, an MCP tool), and no rule for the whole shell (`Bash`,
+  `Bash(*)`):
   - the run's own schedule: `schedule_run_report`, `schedule_get`, `schedule_list`, `schedule_update`,
     `schedule_end` (the server holds a run to the schedule it serves and to its envelope, §8.3: an update or end of
     any other schedule, and a create, pause, delete or run-now of any, is refused `SCHEDULE_RUN_SESSION_SCOPE`);
@@ -345,7 +347,7 @@ Only a shell command can ask. The claim hands the runner, for that run only:
 
   These are the Orbit tools a `CHECK_ONLY` run on Claude Code has (each as `mcp__orbit__<name>`).
 - `disallowedTools`, added to the workspace's own: `Edit`, `Write`, `NotebookEdit`; the Orbit CLI
-  (`Bash(*/orbit *)`, `Bash('*/orbit' *)`); and **every other Orbit tool by name** (`bg_run`, `bg_kill`,
+  (`Bash(*/orbit *)`, `Bash('*/orbit' *)`, which the runner replaces, below); and **every other Orbit tool by name** (`bg_run`, `bg_kill`,
   `session_merge`, `task_start`, `task_update`, `session_send`, the create doors, `integration_*`, `provider_*`,
   `agent_*`, `runner_*`, `task_comment`, `file_upload`, … : `CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS`, every tool of
   `docs/operation-catalog.md`'s MCP column the allow list does not name, held to it by `schedule-access.spec.ts`).
@@ -365,13 +367,43 @@ Only a shell command can ask. The claim hands the runner, for that run only:
 both, with no card, before anything starts. That is read from the runner's code, not measured on those engines. On
 Claude Code `bg_run` is denied by name and is not offered (record §9).
 
+- Always allow on such a card writes only that card's command's rules (`bashCommandRules`, what the card says Always
+  allow covers, e.g. `psql:*`): a client sending any other rule (another command's, the whole shell, `Edit`, an Orbit
+  tool) is refused `400 SCHEDULE_CHECK_ONLY_RULE_REFUSED` and the card is not decided. The rule is marked as a
+  scheduled card's, so later checks carry it; a rule an interactive session wrote first is the same row and is
+  marked then.
+- The level is the run's own: `schedule_run.access_level` is written when the run starts, and the claim, the reclaim
+  and the approval door read it. Moving the schedule to `OPEN_PR`, or deleting it, while a check runs does not give
+  that check cards for other tools or hand a reclaim `mcp__orbit__*`.
+
+The runner closes what only it can, for a claim with `agent.scheduledCheckOnly` on Claude Code
+(`runner-go/schedule_check_only.go`):
+
+- **Orbit's tools.** Claude Code asks about an Orbit tool its allow rules do not cover, and the runner answers that
+  ask itself (`answerOrbitToolPrompt`). In such a run every such ask is refused, with no card, whatever the catalogue
+  says of the tool, so a tool on neither of the server's lists (a runner newer than its server) does not run unasked.
+  The server's by-name list stays for older runners.
+- **The Orbit CLI.** The runner adds no CLI allow rule, and denies its own executable anchored at the start of the
+  command, in both quoting forms (`Bash(<exe>)`, `Bash(<exe> *)`, `Bash('<exe>')`, `Bash('<exe>' *)`), in place of the
+  server's `*/orbit *` patterns, which also refused `ls /root/orbit src`. A disguised form (a bare `orbit` on `PATH`,
+  `env orbit …`, a copy of the binary, `curl` with a token) is a shell command like any other: it asks, and the card
+  shows the command the owner would allow. Measured (record §10): `ls ./orbit .` in a checkout holding a directory `orbit` ran unasked (the old patterns refused it), the CLI
+  by its path was refused with no request, a bare `orbit …` asked.
+- **Claude Code's own settings files.** With no `--setting-sources`, `permissions.allow` in the checkout's
+  `.claude/settings.local.json` and in the user's `settings.json` ran commands unasked (measured, record §10). Such a
+  run is started with `--setting-sources ''`: it loads no user, project or local settings file. The runner's own
+  `--settings` file (its background-work hooks, fast mode, the account switches) still applies. Turned off with
+  them: anything those files set for that engine (their hooks, env, model and plugin settings, an `apiKeyHelper`).
+  Measured: a `Bash(whoami)` deny in `--settings` still refused `whoami`.
+
+**Runner release.** The three runner changes need the first runner release after v0.1.261-beta.8. On an older
+runner a `CHECK_ONLY` run on Claude Code still runs in `default` with the server's lists and server gate: Orbit's
+tools are held by the by-name deny list, the CLI by the server's `*/orbit *` patterns (which also refuse a path
+ending in `/orbit`), and a settings file in the checkout or the user's config can still allow a command unasked.
+
 **Codex still never asks.** A Codex `CHECK_ONLY` run stays in Codex's read-only sandbox with approvals off (below):
 a writing command is refused by the OS, with no card. Kimi's `plan` asks for each command, as before; OpenCode's
 refuses commands.
-
-This is server-side only (the claim payload and the approval door); it needs no runner release. A runner newer than
-the server that offers an Orbit tool the server's deny list does not name would allow that tool unasked in such a
-run; the list moves with the catalogue in this repository.
 
 - A level is a claim to the person, so it is enforced, not prompted: the mode above, plus `disallowedTools` on the
   run's session for the *May not* column.
@@ -757,6 +789,11 @@ rules allowed it, and `bg_run`, `task_update`, `session_merge` and `task_start` 
 reaching the prompt tool. The server answers any request of such a run that is not a shell command DENY at once (§6.2).
 An account whose default mode is Plan still holds such a run (`default` is wider than Plan); `default`, `dontAsk` and
 the wider modes do not. Codex still never asks: its `CHECK_ONLY` run stays in its read-only sandbox (record §8).
+Revision 2 of S2e (review, 2026-11-16; record §10) closed five more ways such a run could run something unasked:
+rules a person's interactive sessions wrote are no longer carried, Always allow on its card is held to that card's
+command, the run keeps the level it started with, and the runner refuses every Orbit tool prompt, denies the CLI by
+its own path and loads no settings file of the checkout's or the user's. Those three runner changes need the first
+runner release after v0.1.261-beta.8 (§6.2).
 
 **Weekly budget (S2d, 2026-11-15).** The envelope's runs per week was first enforced only on the rule
 (`judgeEnvelopeChange` and the start check compare `runsPerWeek(rule)` with the envelope), so a rule moved inside

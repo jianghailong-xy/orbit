@@ -22,8 +22,11 @@
  * 2026-11-15. Nothing but a shell command may ask (`checkOnlyRefusesApproval`): the file tools and the Orbit CLI are
  * denied outright, so is every Orbit tool outside a short allow list (`bg_run` would start a shell outside Claude's
  * check, and the runner answers Claude's prompt for an Orbit tool itself, allowing it outside Plan), and any other
- * tool that asks is answered DENY by the server before it becomes a card. Of the workspace's "Always allow" rules
- * only `Bash(…)` ones are carried (docs/scheduled-tasks-engine-modes.md §7, §9).
+ * tool that asks is answered DENY by the server before it becomes a card. Of the workspace's "Always allow" rules only
+ * narrow `Bash(…)` ones a scheduled run's card wrote are carried, and such a card may write only its own command's
+ * rules (`checkOnlyRuleRefusal`). A run is held to the level it started with (`runAccessLevel`). The runner closes the
+ * rest for a claim with `scheduledCheckOnly` (runner-go schedule_check_only.go): every Orbit tool prompt refused, the
+ * CLI denied by its own path, no settings file loaded (docs/scheduled-tasks-engine-modes.md §7, §9, §10).
  */
 import {
   AgentProvider,
