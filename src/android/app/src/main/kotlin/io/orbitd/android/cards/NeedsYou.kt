@@ -121,6 +121,19 @@ object NeedsYouLogic {
         return belowRows(CardCatalog.session(sessionId, snapshot, answered = answered), asking)
     }
 
+    /** This conversation's own approvals still asking, at its tail (`approval:<id>` cards): the capsule in its header counts them
+     * after the rail's cards (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/07-console-one-capsule`). */
+    fun approvalRows(sessionId: String, snapshot: SessionSnapshot, answered: Map<String, JsonObject> = emptyMap()): List<BelowRow> =
+        CardCatalog.session(sessionId, snapshot, answered = answered)
+            .filter { it.key.startsWith("approval:") && it.actions.isNotEmpty() }.map { BelowRow(it.key, false) }
+
+    /** What the conversation's own capsule says (OrbitKit `here`): its cards, then its approvals — which lie below wherever the
+     * reader is, so alone they say "below" and carry the raised hand. Only this conversation: what waits elsewhere is the lists'. */
+    fun here(rows: List<BelowRow>, approvals: List<BelowRow>, side: ReaderSide?): WaitingBelow? {
+        val said = below(rows + approvals, if (rows.isEmpty()) ReaderSide.BELOW else side) ?: return null
+        return if (rows.isEmpty()) said.copy(glyph = NeedsYouGlyph.HAND) else said
+    }
+
     /** The address the coordinator's done card is drawn under (`CardFocus`). */
     fun doneKey(projectId: String) = "done:$projectId"
 
