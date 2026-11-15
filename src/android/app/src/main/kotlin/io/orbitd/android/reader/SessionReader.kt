@@ -558,8 +558,12 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         // reader in THIS conversation takes it while its card is out of sight — above them, or anywhere once they are off the tail
         // (at the tail the card is the tail); otherwise the question. What waits elsewhere is not said here; the lists say it.
         val here = NeedsYouLogic.here(belowRows, approvalRows, readerSide)
+        // A coordinator handing itself over takes the capsule over both, at the tail and off it, while the note is written and the
+        // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A; iOS `handingOverCapsule`).
+        val handingOver = CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
-            if (here != null && (here.side == ReaderSide.ABOVE || offTail)) WaitingCapsule(here) { showWaiting(here.rowId) }
+            if (handingOver) HandingOverCapsule()
+            else if (here != null && (here.side == ReaderSide.ABOVE || offTail)) WaitingCapsule(here) { showWaiting(here.rowId) }
             else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }

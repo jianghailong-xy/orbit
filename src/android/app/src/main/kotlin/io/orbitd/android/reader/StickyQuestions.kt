@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import io.orbitd.android.R
+import io.orbitd.android.composer.CoordinatorHandoffCopy
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.WaitingBelow
@@ -192,6 +193,17 @@ internal fun QuestionCapsule(row: TranscriptRow, jump: (TranscriptRow) -> Unit) 
             maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(text.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(), Modifier.weight(1f, fill = false),
             style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** "Handing over" in the header's capsule while the handoff locks the composer (board 04; iOS `handingOverCapsule`): the web and Mac
+ * headers' word, in the question capsule's shape. Nothing to press: the transcript's row carries the handoff's actions and its clock. */
+@Composable
+internal fun HandingOverCapsule() {
+    Box(Modifier.heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+        .padding(horizontal = 14.dp, vertical = 4.dp).testTag("handing-over-capsule"), contentAlignment = Alignment.Center) {
+        Text(CoordinatorHandoffCopy.BADGE_HANDING_OVER, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
