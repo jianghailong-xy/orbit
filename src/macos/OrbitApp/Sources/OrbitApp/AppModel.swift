@@ -332,6 +332,14 @@ final class AppModel {
     /// amber card of its own beside the bar. Cleared again once those seconds have passed, which is
     /// the body pass that puts the bar back to the count.
     private(set) var needsYouArrival: NeedsYouArrival?
+    /// What the needs-you bar was swiped away from (`NeedsYouLogic.dismissalKeys`, the owner,
+    /// 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats): it stays away until something new is
+    /// waiting. Kept on this device only — a swipe is "not now", and tells the server nothing.
+    private(set) var needsYouDismissed: Set<String> =
+        Set(UserDefaults.standard.stringArray(forKey: AppModel.needsYouDismissedKey) ?? []) {
+        didSet { UserDefaults.standard.set(Array(needsYouDismissed), forKey: AppModel.needsYouDismissedKey) }
+    }
+    private static let needsYouDismissedKey = "needsYou.dismissed"
     /// Workspace ids with at least one Session that draws the shared running spinner. Cached beside
     /// `agentNeedsYou` so the drawer, the iPad sidebar and the Mac sidebar never rescan Open once per row/render.
     private(set) var runningWorkspaceIDs: Set<String> = []
@@ -2277,8 +2285,26 @@ final class AppModel {
     /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
     /// the Open list, which `applySessionSnapshot` already narrowed.
     func needsYouBanner(excluding focused: String?) -> NeedsYouBanner? {
-        NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused, now: Date())
-            ?? NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+        if let arriving = NeedsYouLogic.arriving(needsYouArrival, waiting: needsYouSessions, excluding: focused,
+                                                 now: Date()) {
+            return arriving
+        }
+        if NeedsYouLogic.isDismissed(waiting: needsYouSessions, excluding: focused, dismissed: needsYouDismissed) {
+            return nil
+        }
+        return NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+    }
+
+    /// The bar swiped away: everything waiting now is put away until something new joins it.
+    func dismissNeedsYou() {
+        needsYouDismissed = NeedsYouLogic.dismissalKeys(waiting: needsYouSessions)
+        needsYouArrival = nil
+    }
+
+    /// How many are waiting while the bar is swiped away — the count the drawer's button carries
+    /// then, so what the bar said is not lost. Zero while the bar is showing.
+    var needsYouPutAwayCount: Int {
+        NeedsYouLogic.isDismissed(waiting: needsYouSessions, dismissed: needsYouDismissed) ? needsYouSessions.count : 0
     }
 
     #if os(iOS)
@@ -2296,6 +2322,8 @@ final class AppModel {
     func noteNeedsYouArrival(sessionID: String, line: String) {
         let arrival = NeedsYouArrival(sessionID: sessionID, line: line, at: Date())
         needsYouArrival = arrival
+        // Something new: a bar swiped away comes back for it.
+        needsYouDismissed = []
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(NeedsYouLogic.arrivalSeconds * 1_000_000_000))
             if self?.needsYouArrival == arrival { self?.needsYouArrival = nil }
