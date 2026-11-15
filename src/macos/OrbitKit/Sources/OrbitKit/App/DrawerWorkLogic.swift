@@ -7,8 +7,6 @@ import Foundation
 public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
     case projects
     case wiki
-    /// New wiki…, right under the Wiki row once there is a wiki.
-    case newWiki
     case section(AppSection)
     /// What agents have asked the owner to do.
     case waitingOnYou
@@ -21,7 +19,6 @@ public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
         switch self {
         case .projects: "projects"
         case .wiki: "wiki"
-        case .newWiki: "new-wiki"
         case .section(let section): "section:\(section.rawValue)"
         case .waitingOnYou: "waiting-on-you"
         case .workspacesHeader: "workspaces-header"
@@ -34,14 +31,14 @@ public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
 
 public enum DrawerWorkLogic {
     /// The rail's rows: the work sections `sections` names — the Wiki dropped here when the server
-    /// has it off (`wiki`), as data, and New wiki… under it once there is a wiki (`newWiki`) — then
-    /// the inbox only while the server serves it, then the Workspaces header and the rows under it.
-    public static func rows(_ sections: [AppSection], wiki: Bool, newWiki: Bool = false,
-                            waitingOnYou: Bool) -> [DrawerWorkRow] {
+    /// has it off (`wiki`), as data — then the inbox only while the server serves it, then the
+    /// Workspaces header and the rows under it. New wiki… has no row here: the drawer has no Wiki group
+    /// to put it in, so it lives in the Wiki's head picker.
+    public static func rows(_ sections: [AppSection], wiki: Bool, waitingOnYou: Bool) -> [DrawerWorkRow] {
         let work: [DrawerWorkRow] = sections.filter { $0 != .wiki || wiki }.flatMap { section -> [DrawerWorkRow] in
             switch section {
             case .projects: [.projects]
-            case .wiki: newWiki ? [.wiki, .newWiki] : [.wiki]
+            case .wiki: [.wiki]
             default: [.section(section)]
             }
         }
