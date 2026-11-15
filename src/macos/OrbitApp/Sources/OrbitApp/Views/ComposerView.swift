@@ -2708,6 +2708,12 @@ private struct ContextActionsSheet: View {
     let dismiss: () -> Void
     let startNewCoordinator: () -> Void
 
+    /// The sheet's groups, in the order they draw. The groups are the List's one row array; each row
+    /// draws its section and that section's rows.
+    private enum Group: Hashable { case reading, actions }
+
+    private var groups: [Group] { [.reading, .actions] }
+
     var body: some View {
         VStack(spacing: 0) {
             Text(CoordinatorContextCopy.title)
@@ -2715,37 +2721,14 @@ private struct ContextActionsSheet: View {
                 .padding(.top, 22)
                 .padding(.bottom, 4)
             List {
-                Section {
-                    HStack {
-                        Text("Context window")
-                        Spacer()
-                        Text(reading).monospacedDigit().foregroundStyle(.secondary)
-                    }
-                    if showsBar {
-                        UsageBar(percent: pct, warn: pct >= 75, critical: pct >= 90).frame(height: 4)
-                    }
-                    Text(caption).foregroundStyle(.secondary)
-                    if let modelLine {
-                        HStack {
-                            Text("Model")
-                            Spacer()
-                            Text(modelLine).lineLimit(1).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                Section {
-                    if actions.offersCompact {
-                        row(ContextActionSymbol.compact, CoordinatorContextCopy.compact, actions.compactDetail,
-                            enabled: actions.compactEnabled) {
-                            dismiss()
-                            actions.compact()
-                        }
-                        .accessibilityIdentifier("context-action-compact")
-                    }
-                    if actions.offersNewCoordinator {
-                        row(ContextActionSymbol.newCoordinator, CoordinatorContextCopy.newCoordinator,
-                            actions.newCoordinatorDetail, enabled: true, action: startNewCoordinator)
-                            .accessibilityIdentifier("context-action-new-coordinator")
+                ForEach(groups, id: \.self) { group in
+                    switch group {
+                    case .reading:
+                        ContextReadingSection(reading: reading, pct: pct, showsBar: showsBar,
+                                              caption: caption, modelLine: modelLine)
+                    case .actions:
+                        ContextActionSection(actions: actions, dismiss: dismiss,
+                                             startNewCoordinator: startNewCoordinator)
                     }
                 }
             }
@@ -2755,9 +2738,91 @@ private struct ContextActionsSheet: View {
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
     }
+}
 
-    private func row(_ symbol: String, _ title: String, _ detail: String, enabled: Bool,
-                     action: @escaping () -> Void) -> some View {
+/// The reading group: the context window, the bar while a size is known, the caption, the model.
+private struct ContextReadingSection: View {
+    let reading: String
+    let pct: Int
+    let showsBar: Bool
+    let caption: String
+    let modelLine: String?
+
+    /// The rows this snapshot draws, in order: the bar only while a size is known, the model line
+    /// only when the runtime named one.
+    private enum Row: Hashable { case reading, bar, caption, model(String) }
+
+    private var rows: [Row] {
+        var rows: [Row] = [.reading]
+        if showsBar { rows.append(.bar) }
+        rows.append(.caption)
+        if let modelLine { rows.append(.model(modelLine)) }
+        return rows
+    }
+
+    var body: some View {
+        Section {
+            ForEach(rows, id: \.self) { row in
+                switch row {
+                case .reading:
+                    HStack {
+                        Text("Context window")
+                        Spacer()
+                        Text(reading).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                case .bar:
+                    UsageBar(percent: pct, warn: pct >= 75, critical: pct >= 90).frame(height: 4)
+                case .caption:
+                    Text(caption).foregroundStyle(.secondary)
+                case .model(let line):
+                    HStack {
+                        Text("Model")
+                        Spacer()
+                        Text(line).lineLimit(1).foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The actions group, the actions in the system's blue.
+private struct ContextActionSection: View {
+    let actions: ContextActions
+    let dismiss: () -> Void
+    let startNewCoordinator: () -> Void
+
+    private enum Row: Hashable { case compact, newCoordinator }
+
+    private var rows: [Row] {
+        var rows: [Row] = []
+        if actions.offersCompact { rows.append(.compact) }
+        if actions.offersNewCoordinator { rows.append(.newCoordinator) }
+        return rows
+    }
+
+    var body: some View {
+        Section {
+            ForEach(rows, id: \.self) { row in
+                switch row {
+                case .compact:
+                    actionRow(ContextActionSymbol.compact, CoordinatorContextCopy.compact,
+                              actions.compactDetail, enabled: actions.compactEnabled) {
+                        dismiss()
+                        actions.compact()
+                    }
+                    .accessibilityIdentifier("context-action-compact")
+                case .newCoordinator:
+                    actionRow(ContextActionSymbol.newCoordinator, CoordinatorContextCopy.newCoordinator,
+                             actions.newCoordinatorDetail, enabled: true, action: startNewCoordinator)
+                        .accessibilityIdentifier("context-action-new-coordinator")
+                }
+            }
+        }
+    }
+
+    private func actionRow(_ symbol: String, _ title: String, _ detail: String, enabled: Bool,
+                           action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: symbol).foregroundStyle(enabled ? Color.accentColor : Color.secondary)
