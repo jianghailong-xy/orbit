@@ -21,6 +21,42 @@ class NeedsYouLogicTest {
         agentName?.let { name -> putJsonObject("agent") { put("id", agentId ?: "a"); put("name", name) } }
     }
 
+    // the conversation's own capsule (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule; OrbitKit's twin)
+
+    /** Its cards first, in their words and direction; its approvals after them, at its tail — so alone they say "below". */
+    @Test fun theConversationsOwnCapsuleCountsItsCardsAndItsApprovals() {
+        val alone = NeedsYouLogic.here(emptyList(), listOf(BelowRow("approval:a1", false)), null)!!
+        assertEquals("1 waiting below", alone.text)
+        assertEquals("approval:a1", alone.rowId)
+        assertEquals(ReaderSide.BELOW, alone.side)
+        assertEquals(NeedsYouGlyph.HAND, alone.glyph)
+        val both = NeedsYouLogic.here(listOf(BelowRow("q1", true)), listOf(BelowRow("approval:a1", false)), ReaderSide.ABOVE)!!
+        assertEquals("2 waiting above", both.text)
+        assertEquals("q1", both.rowId)
+        assertEquals(NeedsYouGlyph.QUESTION, both.glyph)
+        assertEquals("1 open question below", NeedsYouLogic.here(listOf(BelowRow("q1", true)), emptyList(), ReaderSide.BELOW)?.text)
+        assertNull(NeedsYouLogic.here(emptyList(), emptyList(), ReaderSide.BELOW))
+    }
+
+    // swiped away (the owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats; OrbitKit's twin test)
+
+    /** A swipe puts away what is waiting now; only something new brings the bar back. */
+    @Test fun aSwipedBarComesBackOnlyForSomethingNew() {
+        val a = session("a", approvals = 1, lastTurnAt = "2026-11-15T01:00:00Z")
+        val b = session("b", approvals = 1, lastTurnAt = "2026-11-15T02:00:00Z")
+        val idle = session("idle", lastTurnAt = "2026-11-15T00:00:00Z")
+        val dismissed = NeedsYouLogic.dismissalKeys(listOf(a, b, idle))
+        assertEquals(setOf("a|2026-11-15T01:00:00Z", "b|2026-11-15T02:00:00Z"), dismissed)
+        assertTrue(NeedsYouLogic.isDismissed(listOf(a, b, idle), null, dismissed))
+        assertTrue("one answered: still away", NeedsYouLogic.isDismissed(listOf(a), null, dismissed))
+        assertTrue("on a conversation's page too", NeedsYouLogic.isDismissed(listOf(a, b), "a", dismissed))
+        val c = session("c", approvals = 1, lastTurnAt = "2026-11-15T03:00:00Z")
+        assertFalse("a new one", NeedsYouLogic.isDismissed(listOf(a, b, c), null, dismissed))
+        val bAgain = session("b", approvals = 1, lastTurnAt = "2026-11-15T04:00:00Z")
+        assertFalse("stopped again", NeedsYouLogic.isDismissed(listOf(a, bAgain), null, dismissed))
+        assertFalse("nothing to put away", NeedsYouLogic.isDismissed(listOf(idle), null, dismissed))
+    }
+
     // banner
 
     @Test fun bannerIsNullWhenNothingIsWaiting() = assertNull(NeedsYouLogic.banner(emptyList()))

@@ -10,6 +10,7 @@ import type {
   SessionCreatedTasks,
   SessionSearchResponse,
   TaskRunReason,
+  TranslationLanguage,
   WatchView,
 } from '@orbit/shared';
 import {
@@ -179,8 +180,6 @@ export const presetModelsQuery = () =>
 export interface UserPreferences {
   theme?: 'system' | 'light' | 'dark';
   defaultModel?: string;
-  /** Last-picked model for each provider, synced across clients. */
-  defaultModels?: Record<string, string>;
   defaultPermissionMode?: string;
   /** Account-wide default reasoning effort for a new session (last-picked-wins). '' = model
    *  default. Synced so the value carries to the iOS/macOS clients (replaces localStorage). */
@@ -206,6 +205,10 @@ export interface UserPreferences {
    *  raw last reply. Read by every client's list row; absent means on, so only opting out is ever
    *  written. */
   recaps?: boolean;
+  /** Settings › Translation (@orbit/shared translation.ts): absent means OFF. */
+  translationEnabled?: boolean;
+  /** Absent = DEFAULT_TRANSLATION_LANGUAGE. */
+  translationLanguage?: TranslationLanguage;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
 }
@@ -227,6 +230,9 @@ export interface Me {
   avatarUpdatedAt?: string | null;
   /** Absent from a server that predates Google sign-in, where an account has a password and nothing else. */
   signInMethods?: SignInMethods;
+  /** The server holds a DeepSeek key and can translate (Settings › Translation). Absent from a
+   *  server that predates translation, which reads as unable. */
+  translationAvailable?: boolean;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */

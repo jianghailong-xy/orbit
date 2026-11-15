@@ -14,7 +14,6 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.directoryError
-import io.orbitd.android.management.LocalDefaultModels
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.AddRunnerDialog
 import io.orbitd.android.management.RunnerPage
@@ -267,10 +266,8 @@ private fun MachineDraftComposer(
     }.orEmpty()
     val keyToUse = MachineSetup.firstKey(engines, preferring = engine)
 
-    val remembered = LocalDefaultModels.current
-    val seed = if (state.draft.resumeConfig["model"] != null) null else state.catalog?.let { catalog ->
-        catalog.liveRememberedModel(engine, providerSlug, remembered)
-    }
+    // A machine's first workspace has no session a person opened yet, so no lastModel: the runner or key default.
+    val seed = if (state.draft.resumeConfig["model"] != null) null else state.catalog?.liveLastModel(engine, providerSlug, draftWorkspace)
 
     SideEffect {
         model.machineSend = { heldMessage ->

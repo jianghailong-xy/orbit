@@ -33,6 +33,7 @@ import {
   accountPoolRuntime,
   adminOnlyProviderRefusal,
   engineIncompatible,
+  engineIncompatibleMessage,
   isBuiltinProvider,
   keyCredential,
   usableProviderScope,
@@ -287,11 +288,25 @@ export interface EngineProviderResolution {
   model: string | null | undefined;
 }
 
+/**
+ * The session a seed was read off when it is an anchor (docs/workspace-default-model-design.md §2.1,
+ * start-anchor.ts) rather than the workspace's newest person-opened session: a project's coordinator,
+ * its previous coordinator, or a child's parent. A refusal names it (§2.3).
+ */
+export interface EngineProviderSeedAnchor {
+  /** How the refusal names it: "the project's coordinator session", "the parent session", … */
+  role: string;
+  sessionId: string;
+  title: string;
+}
+
 /** What a workspace's next session starts on when nothing is named (workspace-provider.ts). */
 export interface EngineProviderSeed {
   engine: AgentProvider | null;
   provider: string;
   providerBuiltin: boolean;
+  /** Set when the seed is an anchor session's (start-anchor.ts). */
+  anchor?: EngineProviderSeedAnchor;
 }
 
 export interface EngineProviderRequest {
@@ -300,8 +315,8 @@ export interface EngineProviderRequest {
   provider?: string | null;
   model?: string | null;
   door: ProviderDoor;
-  /** Read only when neither an engine nor a provider is named. */
-  seed?: () => Promise<EngineProviderSeed>;
+  /** Read only when neither an engine nor a provider is named; null is the floor. */
+  seed?: () => Promise<EngineProviderSeed | null>;
 }
 
 /**
@@ -425,11 +440,55 @@ async function fromSeed(
   seed: EngineProviderSeed,
   model: string | null | undefined,
 ): Promise<EngineProviderResolution> {
+  if (seed.anchor) return fromAnchor(deps, ownerId, seed, seed.anchor, model);
   const credential = await classifyProvider(deps, ownerId, seed.provider, 'session', seed.providerBuiltin);
   if (credential.kind === 'legacy-dsh') return dshOnDefaultKey(deps.db, ownerId, model);
   const engines = resolvedCredentialEngines(credential);
   const engine = seed.engine && engines.includes(seed.engine) ? seed.engine : defaultEngine(credential, seed.provider);
   return { engine, ...storedSlug(credential), credential, model };
+}
+
+/**
+ * An anchor session's pair (docs/workspace-default-model-design.md §2.3): re-checked as a seed is, and
+ * refused in words naming that session when its credential is gone or disabled. Never moved to another
+ * engine: an anchor whose credential no longer runs its engine is refused too, where a seed would give
+ * way to the credential's default engine (project-agent-contract.md §7.4).
+ */
+async function fromAnchor(
+  deps: EngineProviderDeps,
+  ownerId: string,
+  seed: EngineProviderSeed,
+  anchor: EngineProviderSeedAnchor,
+  model: string | null | undefined,
+): Promise<EngineProviderResolution> {
+  const refuse = (reason: string) => new BadRequestException({
+    code: 'ANCHOR_CREDENTIAL_UNAVAILABLE',
+    message: `${anchor.role} "${anchor.title}" runs on a credential that is no longer available (${reason}). ` +
+      'Name an engine and provider for this start, or re-enable that credential.',
+    sessionId: anchor.sessionId,
+    provider: seed.provider,
+  });
+  let credential: ResolvedCredential;
+  try {
+    credential = await classifyProvider(deps, ownerId, seed.provider, 'session', seed.providerBuiltin);
+  } catch (e) {
+    if (e instanceof BadRequestException) throw refuse(httpMessage(e));
+    throw e;
+  }
+  if (credential.kind === 'legacy-dsh') return dshOnDefaultKey(deps.db, ownerId, model);
+  const engines = resolvedCredentialEngines(credential);
+  if (seed.engine && !engines.includes(seed.engine)) {
+    throw refuse(engineIncompatibleMessage(seed.provider, seed.engine, engines));
+  }
+  const engine = seed.engine ?? defaultEngine(credential, seed.provider);
+  return { engine, ...storedSlug(credential), credential, model };
+}
+
+function httpMessage(e: BadRequestException): string {
+  const body = e.getResponse();
+  if (typeof body === 'string') return body;
+  const message = (body as { message?: unknown }).message;
+  return typeof message === 'string' ? message : e.message;
 }
 
 // ---------------------------------------------------------------------------------------------------

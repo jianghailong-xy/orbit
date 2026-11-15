@@ -60,14 +60,19 @@ public enum PendingTray {
             let intoTurn = bubble.steer || steering
             let taking = asked(withdrawing, bubble)
             let busy = taking || steering
+            // Settings › Translation: held for its translation, it says where that is (4A / 1A) and
+            // cannot be steered — nothing can deliver it until it is translated or sent as written.
+            let held = bubble.translation?.held == true
+            let heldState = bubble.translation?.state == .failed ? TranslationCopy.sendFailed : TranslationCopy.translating
             return PendingTrayRow(
                 bubble: bubble, heading: intoTurn ? .currentTurn : .nextTurn, text: text(of: bubble),
-                state: taking ? "Withdrawing…" : intoTurn ? SteerDelivery.state(nil).label : "Queued for next turn",
+                state: taking ? "Withdrawing…" : held ? heldState
+                    : intoTurn ? SteerDelivery.state(nil).label : "Queued for next turn",
                 busy: busy,
                 // Not handed to a runner yet, either way: the server takes it back alone — once its
                 // turn id, which the DELETE keys on, is known.
                 offersWithdraw: !busy && bubble.turnId != nil && (!bubble.steer || SteerDelivery.offersWithdraw(bubble)),
-                offersSteer: !busy && !intoTurn && !bubble.shell && bubble.turnId != nil && steerOffered)
+                offersSteer: !busy && !held && !intoTurn && !bubble.shell && bubble.turnId != nil && steerOffered)
         }
         // A row this end just sent has no receipt time yet: it is the newest. Stable for the rest.
         return (unread + queued).enumerated()

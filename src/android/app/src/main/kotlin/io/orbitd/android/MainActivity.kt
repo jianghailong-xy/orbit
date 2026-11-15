@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import io.orbitd.android.cards.NeedsYouMenuIcon
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
 import io.orbitd.android.auth.loginBackground
@@ -409,11 +410,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                     },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
-                            Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
+                            // The menu carries how many wait on you while the needs-you bar is swiped away (06-list-floats).
+                            if (navigation.canGoBack) Icon(painterResource(R.drawable.ic_back), "Back") else NeedsYouMenuIcon(app, "Open navigation")
                         }
                     }, actions = {
                         PageBar.Actions(route, this)
-                        if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
+                        if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
                         // iOS: a session list is refreshed by pulling it.
                         if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER)
                             IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }

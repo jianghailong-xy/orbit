@@ -1,3 +1,5 @@
+import { COORDINATOR_HANDOFF_PROMPT_HEAD } from '@orbit/shared';
+import type { TurnTranslation } from '@orbit/shared';
 import type { TurnCards } from '../api';
 import { parseBackgroundWake } from './backgroundWake';
 
@@ -19,6 +21,8 @@ export interface AcceptedUserTurn extends TurnCards {
   text: string;
   acceptedAt: string;
   attachments: { id: string; mime?: string; name?: string }[];
+  /** Settings › Translation: the turn's translation, carried as the runner's echo will carry it. */
+  translation?: TurnTranslation;
 }
 
 /** Every field of `TurnCards`, which the compiler holds this list to: a card added there cannot be
@@ -65,6 +69,7 @@ interface QueuedTurnLike {
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
+  content?: string;
 }
 
 const terminalDeliveryForEvent = (event: UserTurnEvent): string | null => {
@@ -142,6 +147,7 @@ export function acceptedUserTurnEvent(
     payload: {
       text: turn.text,
       ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
+      ...(turn.translation ? { translation: turn.translation } : {}),
       // Beside the text, as the control plane records them on the runner's echo (readTurnCards,
       // turn-cards.ts): the words and the cards they are drawn as, one payload either way — so the
       // placeholder is drawn as the card, by the same parser, rather than as a bubble the card
@@ -159,6 +165,8 @@ interface QueuedTurnRow extends TurnCards {
   createdAt?: string;
   attachments?: { id: string; mimeType: string }[];
   authoredByOrbit?: true;
+  /** Settings › Translation: carried onto the event as the runner's echo will carry it. */
+  translation?: TurnTranslation;
 }
 
 /** Whether the queue listed this turn with the block it will be delivered with rather than with
@@ -206,6 +214,7 @@ export function queuedTurnEvent(turn: QueuedTurnRow): UserTurnEvent {
         : {}),
       ...(listedWithItsBlock(turn) ? { controlPlaneNote: turn.content } : {}),
       ...(turn.shell ? { shell: true } : {}),
+      ...(turn.translation ? { translation: turn.translation } : {}),
       ...turnCardsOf(turn),
     },
   };
@@ -305,6 +314,10 @@ export function queuedTurnsOutsideTranscript<T extends QueuedTurnLike>(
     return turnId ? [turnId] : [];
   }));
   return queued.filter((turn) => {
+    // The platform's ask for a coordinator's handoff note is drawn only as the handoff's own row
+    // (board 02 ②), as Transcript leaves out its echo: never a queued card, not even an empty one
+    // with the queue's line and a Cancel. The listing carries no turn key, so its first line tells it.
+    if (turn.content?.startsWith(COORDINATOR_HANDOFF_PROMPT_HEAD)) return false;
     // A live steer has its own authored USER event and must never disappear merely because the
     // target event was already in the transcript before it was sent.
     // A durable terminal receipt sharing a USER's turnId is merged into that existing bubble by

@@ -11,11 +11,13 @@ import androidx.compose.ui.unit.dp
 
 /**
  * Above a composer whose session or draft runs on [runnerId]: when that runner is the account's managed runner, asleep, the shared composer
- * line (MANAGED_RUNNER_COPY.asleep.composer). Sending stays open, since a message wakes it. Nothing for any other runner or state.
+ * line (MANAGED_RUNNER_COPY.asleep.composer). Sending stays open, since a message wakes it. Nothing for any other runner or state, nor
+ * while [composerLocked] (a coordinator handoff holds the composer): sending does not work then, and the line would say it does.
  */
 @Composable
-internal fun ManagedRunnerAsleepLine(runnerId: String?, status: ManagedRunner.Status? = LocalManagedRunnerStatus.current) {
-    if (ManagedRunner.row(runnerId, status)?.asleep != true) return
+internal fun ManagedRunnerAsleepLine(runnerId: String?, status: ManagedRunner.Status? = LocalManagedRunnerStatus.current,
+    composerLocked: Boolean = false) {
+    if (composerLocked || ManagedRunner.row(runnerId, status)?.asleep != true) return
     Text(ManagedRunner.Asleep.COMPOSER, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("managed-runner-asleep-line"),
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

@@ -101,3 +101,51 @@ test('model preferences reject malformed maps and unauthenticated writes', async
   assert.equal(anonymous.status, 401, await anonymous.text());
   assert.deepEqual(writes, []);
 });
+
+test('Settings › Translation: the switch and the language persist, absent stays off, and a language outside the seven is refused', async (t) => {
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  t.after(() => {
+    if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = originalKey;
+  });
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  const patch = await boot(t);
+  // Absent means off: a patch that does not mention it writes nothing.
+  const unrelated = await patch({ theme: 'light' });
+  assert.equal(unrelated.status, 200, await unrelated.clone().text());
+  assert.equal('translationEnabled' in preferences, false);
+  assert.equal((await unrelated.json() as { translationAvailable: boolean }).translationAvailable, true);
+
+  const on = await patch({ translationEnabled: true, translationLanguage: 'ja' });
+  assert.equal(on.status, 200, await on.clone().text());
+  const account = await on.json() as { preferences: Record<string, unknown> };
+  assert.equal(account.preferences.translationEnabled, true);
+  assert.equal(account.preferences.translationLanguage, 'ja');
+  assert.deepEqual(writes.at(-1), { where: { id: USER_ID }, data: { preferences } });
+
+  for (const translationLanguage of ['en', 'zh', 'zh-CN', 42]) {
+    const refused = await patch({ translationLanguage });
+    assert.equal(refused.status, 400, await refused.text());
+  }
+  const malformed = await patch({ translationEnabled: 'yes' });
+  assert.equal(malformed.status, 400, await malformed.text());
+  assert.equal(preferences.translationLanguage, 'ja', 'a refused write changed nothing');
+  // The other preferences stood throughout.
+  assert.equal(preferences.theme, 'light');
+});
+
+test('me says whether the server can translate: without DEEPSEEK_API_KEY it cannot', async (t) => {
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  t.after(() => {
+    if (originalKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+    else process.env.DEEPSEEK_API_KEY = originalKey;
+  });
+  delete process.env.DEEPSEEK_API_KEY;
+  const patch = await boot(t);
+  const response = await patch({ translationEnabled: true });
+  assert.equal(response.status, 200, await response.clone().text());
+  const account = await response.json() as { translationAvailable: boolean; preferences: Record<string, unknown> };
+  assert.equal(account.translationAvailable, false);
+  // The preference is kept as chosen; it simply does nothing until the server has a key.
+  assert.equal(account.preferences.translationEnabled, true);
+});

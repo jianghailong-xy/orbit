@@ -499,7 +499,6 @@ final class ConsoleModel {
     /// asynchronously, so a console built before it lands must still read the current one.
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
-    @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
     var effort: Effort = .default
     /// Account preferences can arrive after a restored-token launch has already presented the
     /// draft. They may refine the legacy workspace seed only until the user touches the picker;
@@ -1125,6 +1124,17 @@ final class ConsoleModel {
         case sent(AnsweredApproval)
     }
 
+    /// Settings › Translation (1A): decisions refused because the owner's own words could not be
+    /// translated (422 TRANSLATION_FAILED), by approval id. Nothing was recorded; the card that came
+    /// back offers Retry and Send as written, each sending the same press again.
+    private(set) var untranslatedDecisions: [String: UntranslatedDecision] = [:]
+
+    struct UntranslatedDecision: Equatable {
+        let behavior: ApprovalBehavior
+        let answers: [String: [String]]?
+        let remember: Bool
+    }
+
     /// An approval as it was answered here: the card as it was asked, and the press that answered
     /// it. The one copy of it there is — the server keeps no record of an approval's question — so
     /// the record lives as long as this console does.
@@ -1707,6 +1717,7 @@ final class ConsoleModel {
         refreshSubagentRunsIfNeeded()
         clearAwaitingReplyIfSatisfied()
         reconcileReplyContext()
+        followPendingWaitingCard()
     }
 
     /// Read the session's SubAgent runs whenever a `delegate` call starts or ends (web parity:
@@ -1948,6 +1959,19 @@ final class ConsoleModel {
                                         showWorkingIndicator: false, decisionCards: decisionCards)
         scrollTick += 1
         recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: itemID, in: rows) ?? itemID,
+                                      tick: scrollTick)
+    }
+
+    /// Scroll the transcript to an Agent's block, from the session's list of Agents: its own row, or the
+    /// group it was drawn in. One the loaded window no longer holds is left where it is.
+    func revealAgent(_ toolUseID: String) {
+        let state = reducer.state
+        guard state.items.contains(where: { $0.id == toolUseID }) else { return }
+        revealedItemID = toolUseID
+        let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
+        scrollTick += 1
+        recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: toolUseID, in: rows) ?? toolUseID,
                                       tick: scrollTick)
     }
 
@@ -2626,8 +2650,8 @@ final class ConsoleModel {
 
     /// Pick the engine and a credential of it for this draft: an engine on the new-session hero, landing
     /// where it says, or a credential of the draft's engine in the composer's Provider menu. The model
-    /// space is the pair's, so the model can't survive the switch — it is re-seeded from what was last
-    /// picked for the incoming pair, or its default, and the mode/effort pills are re-clamped to what it
+    /// space is the pair's, so the model can't survive the switch — it is re-seeded from the workspace's
+    /// lastModel when the incoming pair is the one it last ran on, else the pair's default, and the mode/effort pills are re-clamped to what it
     /// accepts. The seed is marked pristine again on purpose: a model chosen for the outgoing pair is not
     /// a choice about this one, and keeping it would pin an id the new one may not even offer.
     func pickDraft(engine: String, provider slug: String) {
@@ -2736,11 +2760,11 @@ final class ConsoleModel {
             configured: configuredProviders)
     }
 
-    /// The model a draft starts on: the last one picked for its engine and provider (`<engine>:<provider>`
-    /// in the account's remembered models, read in contract §6.5's order), else `fallback`.
+    /// The model a draft starts on: its workspace's `lastModel` while it is on that workspace's
+    /// `lastEngine`/`lastProvider`, else `fallback`.
     private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
         AgentDefaults.newSessionModel(
-            engine: engine, provider: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            engine: engine, provider: provider, workspace: draftAgent, fallback: fallback,
             catalog: modelCatalog, configured: configuredProviders,
             runtimeDefaults: runtimeDefaults ?? runtimeDefaultModels)
     }
@@ -3085,7 +3109,8 @@ final class ConsoleModel {
                 // written into that turn (a steer) rather than queued behind it, and the bubble
                 // has to stop saying "Queued" and trade the queue's Cancel for a steer's Withdraw.
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
-                                            steer: SteerDelivery.isSteerKind(accepted.kind))
+                                            steer: SteerDelivery.isSteerKind(accepted.kind),
+                                            translation: accepted.turnTranslation)
                 publishStateNow()
             }
         } catch {
@@ -3796,6 +3821,27 @@ final class ConsoleModel {
         catch { statusMessage = "Interrupt failed" }
     }
 
+    // MARK: coordinator handoff (docs/coordinator-handoff.md)
+
+    /// The waits a handover would move, for the confirm. A failed read is no row rather than no
+    /// confirm: the waits move either way, the row only names them.
+    func coordinatorPendingWaits(projectID: String) async -> [CoordinatorPendingWait] {
+        (try? await api.coordinatorPendingWaits(projectID)) ?? []
+    }
+
+    /// One of the handoff's presses. What it changed reaches this conversation as `session.updated`
+    /// (every transition publishes it), so the answer is read only for a refusal.
+    func coordinatorHandoff(projectID: String, _ action: CoordinatorHandoffAction) async {
+        do { _ = try await api.coordinatorHandoff(projectID, action) }
+        catch { statusMessage = CoordinatorHandoffCopy.refusal(APIClient.failureReason(error)) }
+    }
+
+    /// Compact: the engine's own command, sent as if typed — no confirm, and the composer's draft
+    /// stays where it is.
+    func compactConversation() async {
+        await send(overrideText: CoordinatorContextActions.compactCommand)
+    }
+
     /// "Stop the current turn and send THIS instead" — one request, not a stop followed by a send
     /// (web parity, `interruptAndSend`). Two requests could not express it: the interrupt drops the
     /// follow-ups queued behind the running turn, so a send racing it might be deleted by it, and a
@@ -3843,7 +3889,8 @@ final class ConsoleModel {
                                         attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             if let tid = accepted.turnId {
-                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid)
+                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
+                                            translation: accepted.turnTranslation)
             }
             publishStateNow()
         } catch {
@@ -3864,6 +3911,42 @@ final class ConsoleModel {
     /// the server DELETE. Gated in the UI on a known `turnId` (the DELETE needs it); if the runner has
     /// already leased the message the server rejects the withdraw (409) and its durable `user` event
     /// lands it in the transcript as usual — so a lost race is a no-op, not an error.
+    // MARK: Settings › Translation (board frames 4–6)
+
+    /// Retry a held message whose translation failed (FAILED → TRANSLATING). The answer is the new
+    /// state, drawn at once; the turn list's nudge brings the rest.
+    func retryTurnTranslation(_ turnId: String) async {
+        do {
+            let answer = try await api.retryTurnTranslation(sessionID: sessionID, turnId: turnId)
+            reducer.setTurnTranslation(turnId: turnId, answer.translation)
+            publishStateNow()
+        } catch {
+            statusMessage = "Retry failed — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Send as written: deliver a held message untranslated.
+    func sendTurnAsWritten(_ turnId: String) async {
+        do {
+            let answer = try await api.sendTurnAsWritten(sessionID: sessionID, turnId: turnId)
+            reducer.setTurnTranslation(turnId: turnId, answer.translation)
+            publishStateNow()
+        } catch {
+            statusMessage = "Send as written failed — \(APIClient.failureReason(error))."
+        }
+    }
+
+    /// Retry a reply whose translation failed: it waits again until the live `translation` event.
+    func retryReplyTranslation(_ seq: Int) async {
+        do {
+            try await api.retryReplyTranslation(sessionID: sessionID, seq: seq)
+            reducer.markReplyRetrying(seq: seq)
+            publishStateNow()
+        } catch {
+            statusMessage = "Retry failed — \(APIClient.failureReason(error))."
+        }
+    }
+
     func cancelQueued(_ bubble: UserBubble) async {
         guard let turnId = bubble.turnId else { return }
         reducer.removeQueued(id: bubble.id)
@@ -4212,7 +4295,7 @@ final class ConsoleModel {
     /// the new task's run.
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
                 answers: [String: [String]]? = nil, remember: Bool = false,
-                startAfterCreate: Bool = false) async {
+                startAfterCreate: Bool = false, sendAsWritten: Bool = false) async {
         var rules: [PermissionRule]?
         if remember, behavior == .allow, !executesDsh, let input = approval.input {
             rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
@@ -4226,11 +4309,21 @@ final class ConsoleModel {
         // no startAfterCreate key in it at all.
         let req = startAfterCreate
             ? Approvals.createAndStartRequest
-            : ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
+            : ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules,
+                                      sendAsWritten: sendAsWritten ? true : nil)
         do {
             try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req)
+            untranslatedDecisions[approval.id] = nil
             approvalAnswers[approval.id] = .sent(AnsweredApproval(approval: approval, behavior: behavior,
                                                                   answers: answers, at: Date()))
+        }
+        catch where SessionTranslation.refusedUntranslated(error) {
+            // The owner's words could not be translated, so nothing was recorded (1A): the card comes
+            // back with Retry / Send as written rather than a failure line.
+            approvalAnswers[approval.id] = nil
+            untranslatedDecisions[approval.id] = UntranslatedDecision(behavior: behavior, answers: answers,
+                                                                      remember: remember)
+            await refreshApprovals()
         }
         catch {
             // Nothing was decided: the press is not what took this card away, and the re-seed below
@@ -4512,15 +4605,17 @@ final class ConsoleModel {
             .map(\.element.row)
     }
 
-    /// What the needs-you bar above this transcript says, or nil when nothing in it is waiting.
+    /// What waits on the reader in THIS conversation, for the capsule in its nav bar, or nil when
+    /// nothing does (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule): its
+    /// open cards, and its own approvals at the tail (`NeedsYouLogic.here`).
     ///
     /// The direction word is the one part of the line this conversation cannot answer by itself: it
     /// is about the reader's own place, reported by the transcript (`topVisibleItemID`). Everything
-    /// else is the count and what kind of thing it points at (`NeedsYouLogic.below`).
+    /// else is the count and what kind of thing it points at.
     var waitingBelow: WaitingBelow? {
         let rows = openBelowRows
-        guard let first = rows.first else { return nil }
-        return NeedsYouLogic.below(rows: rows, side: side(ofRow: first.rowID))
+        return NeedsYouLogic.here(rows: rows, approvalIDs: state.pendingApprovals.map(\.id),
+                                  side: rows.first.flatMap { side(ofRow: $0.rowID) })
     }
 
     /// Where one delivered card sits in the conversation RIGHT NOW, as an index into `state.items`:
@@ -4742,6 +4837,7 @@ final class ConsoleModel {
         }
         // A press that arrived before this read now has its row to land on.
         scrollToPendingOwnerItem()
+        followPendingWaitingCard()
         lastRulerRead = Date()
     }
 
@@ -5033,6 +5129,7 @@ final class ConsoleModel {
         for request in requests {
             deliver(.ownerRequest(requestID: request.id), placement: .at(request.createdAt))
         }
+        followPendingWaitingCard()
     }
 
     /// The owner requests of this conversation still pending, by storage key.
@@ -5107,6 +5204,9 @@ final class ConsoleModel {
         guard !closedCards.contains(card.id), !decisionCards.contains(where: { $0.id == card.id })
         else { return }
         decisionCards.append(card)
+        // A card arriving by a read of its own — an owner request comes from the account's list, not
+        // from a publish or the ruler's read — may be the one a project row's tap is waiting for.
+        followPendingWaitingCard()
     }
 
     /// Put the answers this project's read publishes into the conversation as records, and let go of
@@ -5459,6 +5559,7 @@ final class ConsoleModel {
                 evidenceDecisions = queue
                 adoptEvidenceQueue(queue)
                 lastEvidenceRead = Date()
+                followPendingWaitingCard()
             }
         } while evidenceReadOwed && !Task.isCancelled
     }
@@ -5715,6 +5816,52 @@ final class ConsoleModel {
     func focusStartCard() {
         pendingStartCard = true
         Task { await refreshRulerQuestions(force: true) }
+    }
+
+    /// Until when this conversation, opened from a project row whose line says it is waiting on you,
+    /// still lands on its waiting card (`focusWaitingCard`). The reader's own scroll or send ends it
+    /// sooner (`readerTookOver`); the ceiling only keeps a card read much later from moving a reader
+    /// who has been reading a while. Long enough for a slow first read: 15 s was not, on a cold
+    /// simulator.
+    private var pendingWaitingCardUntil: Date?
+    /// The waiting card's row, for the transcript to open at its top. Its own request, apart from
+    /// `scrollRequest` (the bar's, which centres the card and opens its review) and `recordRequest`
+    /// (a link's, which marks the row): this one only places the reader at the card's header.
+    private(set) var cardRequest: ScrollRequest?
+
+    /// Open this conversation at the top of the card it is waiting on you with (owner 2026-11-14: a
+    /// project row's tap on "Waiting on you · <member>"), not at the transcript's end — a card taller
+    /// than the screen would otherwise show its buttons with its title above the fold. Spent by the
+    /// first publish or read that has the card; the reads run as the console opens.
+    func focusWaitingCard() {
+        pendingWaitingCardUntil = Date().addingTimeInterval(60)
+        followPendingWaitingCard()
+        Task { await refreshRulerQuestions(force: true) }
+    }
+
+    private func followPendingWaitingCard() {
+        guard let until = pendingWaitingCardUntil else { return }
+        guard Date() < until else { pendingWaitingCardUntil = nil; return }
+        let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
+        guard let rowID = SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)
+        else { return }
+        pendingWaitingCardUntil = nil
+        scrollTick += 1
+        cardRequest = ScrollRequest(rowID: rowID, tick: scrollTick)
+    }
+
+    /// The transcript placed the reader at the card: consume the request, so a transcript appearing
+    /// again later does not jump back to it.
+    func cardRequestFollowed() {
+        cardRequest = nil
+    }
+
+    /// The reader moved the list or sent something before the card was reached: the conversation is
+    /// theirs now, and a card read after this does not move them.
+    func readerTookOver() {
+        pendingWaitingCardUntil = nil
+        cardRequest = nil
     }
 
     /// Spend the pending press, if the card it names is on screen now.
@@ -6116,7 +6263,8 @@ final class ConsoleModel {
         guard let infos = try? await api.approvals(sessionID: sessionID) else { return }
         reducer.reconcileApprovals(infos.map {
             PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
-                            toolName: $0.toolName, input: $0.input)
+                            toolName: $0.toolName, input: $0.input,
+                            translation: ApprovalTranslation.parse($0.translation))
         }, knownBefore: knownBefore)
         publishStateNow()
     }

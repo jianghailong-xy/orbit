@@ -420,7 +420,7 @@ func TestRemoteSubagentParentFollowsTheRelayedEvents(t *testing.T) {
 		"toolUseId": "toolu_delegate", "description": "build OrbitKit", "prompt": "run swift build in src/ios/OrbitKit",
 		"workspace": "orbit-macos",
 	})
-	if report.Status != subagentStatusRunning || report.Workspace != "orbit-macos" {
+	if report.Status != subagentStatusRunning || report.Workspace != "orbit-macos" || report.Model != "gpt-6.1-sol" {
 		t.Fatalf("the remote SubAgent started as %+v", report)
 	}
 	s.mu.Lock()
@@ -441,7 +441,8 @@ func TestRemoteSubagentParentFollowsTheRelayedEvents(t *testing.T) {
 		ended = r.call("subagent_wait", map[string]interface{}{"runId": report.RunID, "waitMs": float64(500)})
 		return ended.Status != subagentStatusRunning
 	}, "the remote SubAgent never ended")
-	if ended.Status != subagentStatusDone || !strings.HasSuffix(ended.Result, "Discarded changes: 1 file (Sources/OrbitKit/X.swift)") {
+	if ended.Status != subagentStatusDone || ended.Model != "gpt-6.1-sol" ||
+		!strings.HasSuffix(ended.Result, "Discarded changes: 1 file (Sources/OrbitKit/X.swift)") {
 		t.Fatalf("the remote SubAgent ended as %+v", ended)
 	}
 	if len(r.reports()) != 0 {

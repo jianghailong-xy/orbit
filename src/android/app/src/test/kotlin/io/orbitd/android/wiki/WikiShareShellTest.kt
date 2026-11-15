@@ -96,6 +96,8 @@ class WikiShareShellTest {
             .assert(hasText("486 footnotes")).assertIsOff()
         press(footnotes)
         awaitThat("Footnotes on") { compose.onAllNodes(footnotes and isOn()).fetchSemanticsNodes().isNotEmpty() }
+        // The switch turns on at the press; its PUT reaches the server from a coroutine a moment later.
+        awaitThat("the Footnotes PUT") { shell.shareWrites.size >= 2 }
         assertEquals(listOf("PUT ${WikiShell.SPACE} {}", """PUT ${WikiShell.SPACE} {"include":{"footnotes":true}}"""), shell.shareWrites.toList())
         press(inSheet(hasText("Done") and hasClickAction()))
         awaitThat("the panel closed") { compose.onAllNodesWithTag("share-sheet").fetchSemanticsNodes().isEmpty() }

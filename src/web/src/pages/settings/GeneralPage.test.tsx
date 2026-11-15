@@ -29,18 +29,22 @@ const switchIn = (row: string): string => row.match(/<[a-z]+[^>]*role="switch"[^
 const unescape = (text: string) => text.replace(/&#x27;/g, "'").replace(/&amp;/g, '&');
 
 describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
-  it('is headed General, how new sessions start, with New sessions then Orchestration', () => {
+  it('is headed General, how new sessions start, with New sessions, Translation, then Orchestration', () => {
     const html = render({});
     expect(html).toMatch(/<h1[^>]*>General<\/h1>/);
     expect(html).toContain('How new sessions start, account-wide.');
     const sections = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((m) => m[1]);
-    expect(sections).toEqual(['New sessions', 'Orchestration']);
+    // Translation sits after the session defaults, before Orchestration (docs/mocks/session-translation, frame 1).
+    expect(sections).toEqual(['New sessions', 'Translation', 'Orchestration']);
     const rows = [...html.matchAll(/<div class="settings-row-title">([^<]+)<\/div>/g)].map((m) => m[1]);
     expect(rows).toEqual([
       'Default permission mode',
       'Smart model selection',
       'Suggested replies',
       'Session recaps',
+      'Translate conversations',
+      'Your language',
+      'Agents work in',
       'Let sessions orchestrate',
     ]);
     // No way into Machines & models any more: the nav's Machines, Providers and Workspaces groups replace it.

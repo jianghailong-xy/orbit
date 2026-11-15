@@ -1059,7 +1059,7 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches)); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent))); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {
