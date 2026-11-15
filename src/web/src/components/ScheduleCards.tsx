@@ -5,7 +5,9 @@ import {
   SCHEDULE_COPY,
   scheduleChangeLineText,
   scheduleCostsParts,
+  scheduleCreateNotice,
   scheduleCreateWhen,
+  scheduleEngineName,
   scheduleEnvelopeNote,
   scheduleEnvelopeSides,
   scheduleEnvelopeTitle,
@@ -159,7 +161,7 @@ export function ScheduleCreateCardView({ card, layout = 'chat', onOpenConversati
           </>
         ) : null}
       </dl>
-      <div className="sched-card-note">{C.createCard.notice}</div>
+      <div className="sched-card-note">{card.notice || scheduleCreateNotice(null)}</div>
       {error ? <div className="sched-card-error" role="alert">{error}</div> : null}
       {pending || onOpenConversation ? (
         <div className="sched-card-foot">
@@ -312,6 +314,11 @@ export interface ScheduleRunOfSession {
   schedule: ScheduleView;
   run: ScheduleRunView;
   detail: ScheduleDetailResponse | undefined;
+}
+
+/** The agent a run's header names: the engine its schedule's view carries, else the session's own ("Codex"). */
+export function scheduleRunAgentName(of: Pick<ScheduleRunOfSession, 'schedule'>, sessionEngine: string | null): string | null {
+  return of.schedule.engine ? scheduleEngineName(of.schedule.engine) : sessionEngine;
 }
 
 /**

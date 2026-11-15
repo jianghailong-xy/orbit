@@ -34,16 +34,17 @@ const flush = async () => {
 interface Served {
   schedules?: typeof LIST_ROWS;
   drafts?: (typeof DRAFT_CARD)[];
+  list?: ReturnType<typeof listAnswer>;
 }
 const calls: Array<{ path: string; method: string; body: unknown }> = [];
 
-function serve({ schedules = LIST_ROWS, drafts = [DRAFT_CARD] }: Served = {}) {
+function serve({ schedules = LIST_ROWS, drafts = [DRAFT_CARD], list }: Served = {}) {
   apiMock.mockImplementation((async (path: string, options: { method?: string; body?: unknown } = {}) => {
     const method = options.method ?? 'GET';
     calls.push({ path, method, body: options.body });
     if (method === 'POST' && path === '/schedules/drafts') return { sessionId: 'sess-new', session: {} };
     if (method !== 'GET') return {};
-    if (path.startsWith('/schedules?') || path === '/schedules') return listAnswer(schedules);
+    if (path.startsWith('/schedules?') || path === '/schedules') return list ?? listAnswer(schedules);
     if (path === '/schedules/drafts') return { drafts };
     const detail = /^\/schedules\/([^/?]+)$/.exec(path);
     if (detail) return scheduleDetail(decodeURIComponent(detail[1]!));
@@ -157,8 +158,15 @@ describe('the Scheduled page: a timeline by date (board 1/2 ①)', () => {
     const needs = group('NEEDS_YOU');
     expect(rows(needs).map(describeRow)).toEqual([
       { circle: 'failed', title: 'Nightly pg spec sweep', line: '↻Every day at 02:00 · apiserver · Check only', tag: 'Failed 3 in a row', time: 'Today 02:00' },
-      { circle: 'held', title: 'Weekly dependency audit', line: '↻Every Monday at 09:00 · web · its agent is disabled', tag: 'Held', time: '' },
+      { circle: 'held', title: 'Weekly dependency audit', line: '↻Every Monday at 09:00 · web · the agent "auditor" is disabled', tag: 'Held', time: '' },
     ]);
+  });
+
+  it('says “its agent” for a hold whose view names no agent', async () => {
+    serve({ schedules: LIST_ROWS.map((s) => (s.id === 'sch-audit' ? { ...s, agentName: null } : s)) });
+    await open();
+    expect(describeRow(row(group('NEEDS_YOU'), 'Weekly dependency audit')).line)
+      .toBe('↻Every Monday at 09:00 · web · its agent is disabled');
   });
 
   it('puts one-off and repeating schedules in the same column, by time', async () => {
@@ -208,6 +216,23 @@ describe('Show past runs (board 1/2 ②)', () => {
       { circle: 'done', title: 'Codex stable check', line: 'Known 0.49.0, linked PR #831 · not notified', tag: 'Known', time: '10:00' },
       { circle: 'new', title: 'Claude CLI version check', line: '2.1.310 is out · you were notified', tag: 'New', time: '10:30' },
     ]);
+  });
+
+  it('a reported failure’s line says what the run reported', async () => {
+    const answer = listAnswer();
+    serve({
+      list: {
+        ...answer,
+        runs: answer.runs.map((r) => (r.id === 'run-pg-nov14'
+          ? { ...r, failureReason: 'REPORTED_FAILED', summary: 'psql could not reach 127.0.0.1:55490.' }
+          : r)),
+      },
+    });
+    await open();
+    await click(host.querySelector('.sched-past-toggle [role="switch"]')!);
+    expect(describeRow(rows(group('TODAY')).find((r) => r.classList.contains('is-past'))!)).toEqual({
+      circle: 'failed', title: 'Nightly pg spec sweep', line: 'Reported a failure: psql could not reach 127.0.0.1:55490', tag: 'Failed', time: '02:00',
+    });
   });
 });
 

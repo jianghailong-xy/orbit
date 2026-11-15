@@ -284,6 +284,10 @@ describe('row lines', () => {
       .toBe('0.49.0 again · linked PR #831 · not notified');
     expect(scheduleRunLine(run(s, 'MISSED', NOW.toISOString(), { failureReason: 'OVER_BUDGET', reasonText: 'Over budget: 7 of 7 runs this week' })))
       .toBe('Over budget: 7 of 7 runs this week');
+    // A reported failure says what the run reported, as its Waiting card and push do.
+    expect(scheduleRunLine(run(s, 'FAILED', NOW.toISOString(), { failureReason: 'REPORTED_FAILED', summary: 'The releases page returned 503.' })))
+      .toBe('Reported a failure: The releases page returned 503');
+    expect(scheduleRunLine(run(s, 'FAILED', NOW.toISOString(), { failureReason: 'REPORTED_FAILED' }))).toBe('Reported a failure');
   });
 
   it('when', () => {

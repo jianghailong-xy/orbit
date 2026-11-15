@@ -1,6 +1,7 @@
 // Scheduled tasks as the REST doors answer them, on the boards' demo data (docs/mocks/scheduled-tasks/web): Friday
-// Nov 14 2025 (the boards' calendar: a Friday), 12:30 in Asia/Shanghai. Plain data with type-only imports, so a capture script can load it under Node's
-// type stripping as well as vitest.
+// Nov 14 2025 (the boards' calendar: a Friday), 12:30 in Asia/Shanghai. Plain data, so a capture script can load it under Node's
+// type stripping as well as vitest; its one value import is @orbit/shared's notice line, as the server builds it.
+import { scheduleCreateNotice } from '@orbit/shared';
 import type {
   ScheduleChangeRecord,
   ScheduleCreateCard,
@@ -118,7 +119,7 @@ const pgFailed = run({
 
 const audit = schedule({
   id: 'sch-audit', title: 'Weekly dependency audit', rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON'] }, ws: WS.web,
-  state: 'HELD', heldReason: 'AGENT_DISABLED', nextDueAt: null,
+  state: 'HELD', heldReason: 'AGENT_DISABLED', nextDueAt: null, agentId: 'agent-auditor', agentName: 'auditor',
 });
 
 const docs = schedule({
@@ -138,7 +139,7 @@ const deploy = schedule({
 
 const codex = schedule({
   id: 'sch-codex', title: 'Codex stable check', rule: { kind: 'DAILY', time: '09:00' }, ws: WS.apiserver, accessLevel: 'OPEN_PR',
-  nextDueAt: sh(15, '09:00'), revision: 4, createdFromSessionId: SESSION_IDS.codexWatch,
+  engine: 'codex', nextDueAt: sh(15, '09:00'), revision: 4, createdFromSessionId: SESSION_IDS.codexWatch,
   intent: '每天北京时间 10 点检查 Codex 官方稳定版，和 apiserver 固定的版本比一下。没变化就别吵我，有新版告诉我版本号和发布说明。',
   note: 'Release notes moved to github.com/openai/codex/releases. The old changelog URL is 404.',
 });
@@ -158,6 +159,7 @@ const codexNov12 = run({
 
 const claude = schedule({
   id: 'sch-claude', title: 'Claude CLI version check', rule: { kind: 'DAILY', time: '10:30' }, ws: WS.apiserver, nextDueAt: sh(15, '10:30'),
+  engine: 'claude',
 });
 const claudeToday = run({
   id: 'run-claude-nov14', scheduleId: claude.id, plannedAt: sh(14, '10:30'), state: 'CHANGED', key: '2.1.310',
@@ -297,7 +299,8 @@ export const DRAFT_CARD: ScheduleCreateCard = {
   intent: 'every weekday at 9, summarise new GitHub issues in orbit and tell me only if there are any',
   when: { rule: { kind: 'WEEKLY', time: '09:00', weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI'] }, timezone: SCHEDULE_TZ, firstRunAt: sh(17, '09:00'), text: '' },
   today: { key: 'open-12', summary: null, text: '12 issues are open now. The first run reports what comes after.' },
-  notice: '',
+  // The agent proposed findings 'issues' (schedule_create's `findings`); the server sends the notice built from it.
+  notice: scheduleCreateNotice('issues'),
   envelope: null,
   ...lines(WS.apiserver, 'claude', 'CHECK_ONLY', 5, 30),
 };
@@ -311,7 +314,7 @@ export const CREATE_CARD: ScheduleCreateCard = {
   intent: '每天北京时间 10 点检查 Codex 官方稳定版，和 apiserver 固定的版本比一下。没变化就别吵我，有新版告诉我版本号和发布说明。',
   when: { rule: { kind: 'DAILY', time: '10:00' }, timezone: SCHEDULE_TZ, firstRunAt: sh(15, '10:00'), text: '' },
   today: { key: '0.48.0', summary: null, text: 'Codex 0.48.0, same as pinned. Nothing to report.' },
-  notice: '',
+  notice: scheduleCreateNotice('versions'),
   envelope: null,
   ...lines(WS.apiserver, 'codex', 'CHECK_ONLY', 7, 30),
 };

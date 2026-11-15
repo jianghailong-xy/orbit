@@ -55,7 +55,7 @@ describe('a run’s session (board 2/2 ⑤ ⑥)', () => {
 
   it('has no Follow chip, and its header line is the run’s: state · agent · duration', () => {
     expect(SOURCE).toContain('!selectedMissing && !isScheduleRun && (\n                <SessionWatchBadges sessionId={selectedId} />');
-    expect(SOURCE).toMatch(/: selected && isScheduleRun && scheduleRun\n\s+\? scheduleRunHeadText\(\{\n\s+state: headLifecycleWord,\n\s+engine: ENGINE_CLI_NAMES\[selectedEngine\]/);
+    expect(SOURCE).toMatch(/: selected && isScheduleRun && scheduleRun\n\s+\? scheduleRunHeadText\(\{\n\s+state: headLifecycleWord,\n\s+engine: scheduleRunAgentName\(scheduleRun, ENGINE_CLI_NAMES\[selectedEngine\] \?\? null\),/);
   });
 
   it('folds the session column away', () => {
