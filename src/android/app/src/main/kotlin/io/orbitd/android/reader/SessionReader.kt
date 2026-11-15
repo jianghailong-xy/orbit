@@ -560,7 +560,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val here = NeedsYouLogic.here(belowRows, approvalRows, readerSide)
         // A coordinator handing itself over takes the capsule over both, at the tail and off it, while the note is written and the
         // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A; iOS `handingOverCapsule`).
-        val handingOver = CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true
+        // A state the capsule reads, like `offTail`: the bar keeps the content it is first handed.
+        val handingOver by rememberUpdatedState(CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true)
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
             if (handingOver) HandingOverCapsule()
             else if (here != null && (here.side == ReaderSide.ABOVE || offTail)) WaitingCapsule(here) { showWaiting(here.rowId) }
