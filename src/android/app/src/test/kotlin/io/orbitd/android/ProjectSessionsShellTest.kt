@@ -64,6 +64,8 @@ class ProjectSessionsShellTest {
      * sessions page; the conversation's bar carries the project glyph and the project's session count ("Project sessions"), which opens
      * those sessions in a bottom sheet — the page as it is, under a head with ✕ — and Back from the conversation returns to the list. */
     @Test fun theRowOpensTheCoordinatorWhoseBarOpensTheProjectsSessionsInASheet() {
+        // Nobody waits on you: a row whose line names a waiting member opens that member instead (owner 2026-11-14).
+        ProjectShell.memberWaiting = false
         signIn(); openAlpha()
         compose.onNodeWithTag("project-row:${ProjectShell.LAUNCH}").performClick()
         await { ProjectShell.calls.any { it == "GET sessions/${ProjectShell.COORD}" } && exists(hasContentDescription("Project sessions")) }

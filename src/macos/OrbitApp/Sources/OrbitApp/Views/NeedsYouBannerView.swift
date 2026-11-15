@@ -137,6 +137,7 @@ struct NeedsYouBannerView: View {
                         deck: banner.count > 1, arriving: banner.arriving) {
                         if several { setUnfolded(true) } else { open(banner) }
                     }
+                    .swipesAway { model.dismissNeedsYou() }
                 }
             }
         }
@@ -369,6 +370,45 @@ private struct NeedsYouOverPage: ViewModifier {
             // The tap the amber card came in with, wherever the bar that says it is.
             .sensoryFeedback(.warning, trigger: model.needsYouArrival) { _, new in new != nil }
     }
+}
+
+/// Pushed up, the bar goes away (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/06-list-floats`):
+/// it follows the finger up and fades, and past half its height — or flicked — it is put away until
+/// something new is waiting (`AppModel.dismissNeedsYou`); short of that it springs back. A tap is
+/// still the press, and a sideways or downward drag does nothing.
+private struct SwipeAway: ViewModifier {
+    let dismiss: () -> Void
+    @State private var lift: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: lift)
+            .opacity(1 - min(0.8, Double(-lift) / 60))
+            .gesture(
+                DragGesture(minimumDistance: 10)
+                    .onChanged { value in
+                        guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                        lift = min(0, value.translation.height)
+                    }
+                    .onEnded { value in
+                        let away = value.translation.height < -22 || value.predictedEndTranslation.height < -60
+                        if away {
+                            PlatformHaptics.tap()
+                            withAnimation(.spring(duration: 0.3)) { lift = -80 } completion: {
+                                dismiss()
+                                lift = 0
+                            }
+                        } else {
+                            withAnimation(.spring(duration: 0.3)) { lift = 0 }
+                        }
+                    }
+            )
+            .accessibilityAction(named: "Dismiss") { dismiss() }
+    }
+}
+
+private extension View {
+    func swipesAway(_ dismiss: @escaping () -> Void) -> some View { modifier(SwipeAway(dismiss: dismiss)) }
 }
 
 /// How long the thing the bar names has waited — "12m", "2h" — kept current while it sits there.
