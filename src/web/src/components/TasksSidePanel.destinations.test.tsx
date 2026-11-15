@@ -264,7 +264,7 @@ describe('Machines & models, which has no sidebar row (docs/mocks/machines-and-m
     serve();
     await visit('/tasks');
     const labels = [...container!.querySelectorAll('.tp-section .tp-label')].map((label) => label.textContent);
-    expect(labels).toEqual(['Projects', 'Tasks', 'Waiting on you', 'Wiki']);
+    expect(labels).toEqual(['Projects', 'Tasks', 'Scheduled', 'Waiting on you', 'Wiki']);
   });
 
   it('is no row of the account menu either: it is a part of Settings', async () => {
