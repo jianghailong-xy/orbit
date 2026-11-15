@@ -415,6 +415,30 @@ private struct CompactSections: View {
             // and the line a rewrite floats (docs/wiki-chat-design.md §9).
             .wikiChatHost()
 
+        // SCHEDULED — the timeline (board 01 ②); a row's detail is the page's own bottom panel, and a run's
+        // session is pushed over the page, so back returns to the schedule it ran for.
+        case .scheduled:
+            NavigationStack(path: $model.nav.path) {
+                ScheduledPage()
+                    .drawerToggle(open: openDrawer)
+                    .refreshable { await model.scheduled?.load() }
+                    .navigationDestination(for: NavNode.self) { node in
+                        switch node {
+                        case .console(let sessionID, _):
+                            AgentConsolePage(sessionID: sessionID)
+                                .environment(\.opensPagesOverConsole, true)
+                        // What a console opens over itself, as on the Agents stack.
+                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
+                        case .projectDetail(let projectID, _): ProjectDetailView(projectID: projectID)
+                        case .createdTasks(let sessionID):  CreatedTasksPage(sessionID: sessionID)
+                        case .watches:                      FollowingListView(rowNavigation: .push)
+                        case .watchDetail(let watchID):     WatchDetailView(watchID: watchID)
+                        case .wikiEntry(let entryID):       WikiEntryView(entryID: entryID, rowNavigation: .push)
+                        default:                            EmptyView()
+                        }
+                    }
+            }
+
         // RUNNERS — the Machines & models page → a machine's record → an engine's or its name's page, a
         // pool's page, and a DeepSeek key's. Same single stack as Agents: the rows carry their own destination and push it, so a
         // deep link (`.runner(id)`) and a row tap are one navigation.
@@ -763,11 +787,15 @@ struct NavigationDrawer: View {
                     // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
                     // that the Wiki's own page is the Set up your first wiki card.
                     newWiki: model.wiki?.spaces.isEmpty == false,
+                    // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
+                    // the server predates scheduled tasks.
+                    scheduled: model.scheduled.map { !$0.unsupported } ?? false,
                     waitingOnYou: model.ownerRequests.map { !$0.unsupported } ?? false)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
                     case .newWiki:        newWikiRow
+                    case .scheduled:      scheduledRow
                     case .section(let section): sectionRow(section)
                     case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
                     case .workspacesHeader: workspacesHeader
@@ -795,6 +823,8 @@ struct NavigationDrawer: View {
             // The Wiki row counts what waits on the owner across the spaces — the spaces list, fetched
             // with the drawer for the same reason.
             .task { await model.wiki?.loadSpaces() }
+            // Scheduled's number — the schedules failing or held — read with the drawer like the others.
+            .task { await model.scheduled?.load() }
             // Shared with me, the rail's last group: read with the drawer, then every minute.
             .task { await model.followSharedWithMe() }
             // The action bar *floats over* the rail (ChatGPT-style) rather than being docked below a
@@ -1104,6 +1134,39 @@ struct NavigationDrawer: View {
         }
         .buttonStyle(.plain)
         .drawerRow()
+    }
+
+    /// Scheduled (board 01 ①): under Tasks, with the number of schedules that need the owner — failing or held —
+    /// in red, written and said the way the Projects row writes its own, and nothing at zero.
+    private var scheduledRow: some View {
+        let selected = model.drawerDestination == .section(.scheduled)
+        let needs = model.scheduled?.needsYouCount ?? 0
+        return Button {
+            open(.section(.scheduled))
+        } label: {
+            pill(selected: selected) {
+                HStack(spacing: 12) {
+                    Image(systemName: AppSection.scheduled.systemImage)
+                        .frame(width: 24)
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
+                    Text(AppSection.scheduled.title)
+                        .fontWeight(selected ? .semibold : .regular)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    if needs > 0 {
+                        Text("\(needs)")
+                            .font(.orbitMeta.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(minWidth: 18, minHeight: 18)
+                            .background(Color.red, in: Circle())
+                            .accessibilityLabel("\(needs) need you")
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
+        .accessibilityIdentifier("drawer-scheduled")
     }
 
     /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over

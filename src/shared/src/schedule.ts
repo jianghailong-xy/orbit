@@ -158,6 +158,9 @@ export const SCHEDULE_COPY = {
     draft: 'draft, waiting for you',
     notified: 'you were notified',
     notNotified: 'not notified',
+    /** The phone's row line (schedulePhoneRowLine): "Daily 12:00 · web · running 21 min", "… · draft". */
+    runningShort: 'running {minutes} min',
+    draftShort: 'draft',
   },
   tags: {
     failedInARow: 'Failed {count} in a row',
@@ -223,6 +226,19 @@ export const SCHEDULE_COPY = {
     SESSION_REFUSED: { clause: "its run's session could not be opened", until: 'that is fixed' },
   },
   heldWhere: ' in workspace {workspace}',
+  /** Why a schedule is held, as the few words the phone's row line has room for ("agent disabled"). */
+  heldShort: {
+    WORKSPACE_NOT_OWNED: 'workspace not yours',
+    WORKSPACE_DELETED: 'workspace deleted',
+    WORKSPACE_DISABLED: 'workspace disabled',
+    AGENT_MISSING: 'agent missing',
+    AGENT_DISABLED: 'agent disabled',
+    OUTSIDE_ENVELOPE: 'outside what you allowed',
+    ACCESS_NOT_ENFORCEABLE: 'access not enforceable',
+    MODE_WIDER_THAN_ACCOUNT_DEFAULT: 'wider than your default mode',
+    NO_REPOSITORY: 'no repository',
+    SESSION_REFUSED: 'session refused',
+  },
   endedReasons: {
     DELETED: 'deleted',
     END_REACHED: 'its end time passed',
@@ -1051,6 +1067,32 @@ export function scheduleRowLine(
   }
   if (opts.runningMinutes != null) parts.push(scheduleFill(C.row.runningFor, { minutes: opts.runningMinutes }));
   if (opts.draft) parts.push(C.row.draft);
+  return parts.join(C.separator);
+}
+
+/**
+ * A schedule row's second line on a phone (iOS board 01 ②), one line: the short rule, then the workspace — or, held,
+ * why in a few words — then "Open a PR" only when the schedule may open PRs, when it paused, how long it has been
+ * running, or that it is a draft. "Daily 02:00 · apiserver", "Mondays 09:00 · agent disabled",
+ * "Daily 12:00 · web · running 21 min", "Daily 09:00 · apiserver · Open a PR". The web's wide row keeps scheduleRowLine.
+ */
+export function schedulePhoneRowLine(
+  schedule: Pick<ScheduleView, 'rule' | 'workspaceName' | 'accessLevel' | 'state' | 'heldReason'>,
+  opts: { pausedAt?: Date | null; timezone?: string; runningMinutes?: number | null; draft?: boolean } = {},
+): string {
+  const parts: string[] = [scheduleRuleText(schedule.rule, 'short')];
+  if (schedule.state === 'HELD') {
+    const short = schedule.heldReason ? (C.heldShort as Record<string, string>)[schedule.heldReason] : undefined;
+    parts.push(short ?? C.tags.held);
+  } else {
+    if (schedule.workspaceName) parts.push(schedule.workspaceName);
+    if (schedule.accessLevel === 'OPEN_PR') parts.push(C.access.OPEN_PR.label);
+    if (schedule.state === 'PAUSED' && opts.pausedAt && opts.timezone) {
+      parts.push(scheduleFill(C.row.pausedOn, { date: scheduleDateText(opts.pausedAt, opts.timezone) }));
+    }
+  }
+  if (opts.runningMinutes != null) parts.push(scheduleFill(C.row.runningShort, { minutes: opts.runningMinutes }));
+  if (opts.draft) parts.push(C.row.draftShort);
   return parts.join(C.separator);
 }
 
