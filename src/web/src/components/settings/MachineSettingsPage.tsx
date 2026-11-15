@@ -84,6 +84,9 @@ import {
   RUNNER_LINE_SEPARATOR,
   RUNNER_MAX_CONCURRENT,
   RUNNER_MAX_CONCURRENT_HINT,
+  RUNNER_MAX_CONCURRENT_UNIT,
+  RUNNER_MAX_CONCURRENT_DECREASE,
+  RUNNER_MAX_CONCURRENT_INCREASE,
   RUNNER_EDIT,
   RUNNER_NEEDS_ATTENTION,
   RUNNER_OFFLINE,
@@ -109,6 +112,8 @@ import {
   attentionQuotaResets,
   runnerOfflineLastSeen,
   runnerRunningOf,
+  runnerRunningNow,
+  runnerMaxBelowRunning,
   runnerUpdatedFromTo,
   runnerVersionUpdatingTo,
   runnerVersionTag,
@@ -442,6 +447,12 @@ export function MachineSettingsPage() {
     setMaxOpen(false);
     if (next !== null && next !== runner.maxConcurrent) capacityMut.mutate({ maxConcurrent: next });
   };
+  const stepMaxConcurrent = (by: number) => {
+    const next = Math.max(1, (maxTyped.current ?? runner.maxConcurrent ?? 1) + by);
+    maxTyped.current = next;
+    setMaxDraft(next);
+  };
+  const maxUnchanged = maxDraft === null || maxDraft === runner.maxConcurrent;
 
   // About's version line: current, catching up by itself, or stuck until someone upgrades it. A
   // runner that reports where its updates stand says which; an older one is judged by runsAsRoot.
@@ -1089,31 +1100,53 @@ export function MachineSettingsPage() {
       <Dialog
         className="runner-dialog"
         title={RUNNER_MAX_CONCURRENT}
+        width={400}
         open={maxOpen}
         onClose={() => setMaxOpen(false)}
         returnFocus={maxButton}
         footer={
           <>
             <Button onClick={() => setMaxOpen(false)}>Cancel</Button>
-            <Button variant="primary" onClick={saveMaxConcurrent}>
+            <Button variant="primary" disabled={maxUnchanged} onClick={saveMaxConcurrent}>
               Save
             </Button>
           </>
         }
       >
-        <div className="rd-hint machine-max-concurrent-hint">{RUNNER_MAX_CONCURRENT_HINT}</div>
-        <NumberInput
-          className="rd-max-concurrent"
-          aria-label={RUNNER_MAX_CONCURRENT}
-          min={1}
-          precision={0}
-          value={maxDraft}
-          onValueChange={(v) => {
-            maxTyped.current = v;
-            setMaxDraft(v);
-          }}
-          onPressEnter={saveMaxConcurrent}
-        />
+        {/* − 8 + sessions at once ········ 3 running */}
+        <div className="machine-max-concurrent-line">
+          <div className="machine-max-stepper">
+            <Button
+              aria-label={RUNNER_MAX_CONCURRENT_DECREASE}
+              disabled={(maxDraft ?? 1) <= 1}
+              onClick={() => stepMaxConcurrent(-1)}
+            >
+              −
+            </Button>
+            <NumberInput
+              className="rd-max-concurrent"
+              aria-label={RUNNER_MAX_CONCURRENT}
+              min={1}
+              precision={0}
+              value={maxDraft}
+              onValueChange={(v) => {
+                maxTyped.current = v;
+                setMaxDraft(v);
+              }}
+              onPressEnter={saveMaxConcurrent}
+            />
+            <Button aria-label={RUNNER_MAX_CONCURRENT_INCREASE} onClick={() => stepMaxConcurrent(1)}>
+              +
+            </Button>
+          </div>
+          <span className="machine-max-concurrent-unit">{RUNNER_MAX_CONCURRENT_UNIT}</span>
+          {running && <span className="machine-max-concurrent-now">{runnerRunningNow(running.active)}</span>}
+        </div>
+        {running && maxDraft !== null && maxDraft < running.active ? (
+          <div className="rd-hint machine-max-concurrent-hint warn">{runnerMaxBelowRunning(running.active, maxDraft)}</div>
+        ) : (
+          <div className="rd-hint machine-max-concurrent-hint">{RUNNER_MAX_CONCURRENT_HINT}</div>
+        )}
       </Dialog>
       <Dialog
         className="runner-dialog"
