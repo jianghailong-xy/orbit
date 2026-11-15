@@ -732,15 +732,22 @@ private struct SessionSettingsPage: View {
     @State private var promptSuggestions = true
     /// The account's switch for session recaps. Absent on the server means on.
     @State private var recaps = true
+    /// Settings › Translation: the account's switch. Absent on the server means off.
+    @State private var translation = false
     @State private var seeded = false
 
     var body: some View {
         Form {
-            ForEach(SessionSettings.Row.allCases, id: \.self) { row in
-                Section {
-                    control(row)
-                } footer: {
-                    Text(SessionSettings.footer(row))
+            ForEach(SessionSettings.groups, id: \.self) { group in
+                switch group {
+                case .row(let row):
+                    Section {
+                        control(row)
+                    } footer: {
+                        Text(SessionSettings.footer(row))
+                    }
+                case .translation:
+                    translationSection
                 }
             }
         }
@@ -768,6 +775,10 @@ private struct SessionSettingsPage: View {
             guard (model.user?.preferences?.showRecaps ?? true) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(recaps: value)) }
         }
+        .onChange(of: translation) { _, value in
+            guard (model.user?.preferences?.translationEnabled ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: value)) }
+        }
     }
 
     /// A row's own control: the mode is a menu on the row, as the list's Appearance is; the other four
@@ -788,6 +799,34 @@ private struct SessionSettingsPage: View {
         }
     }
 
+    /// Settings › Translation (board frame 7): the switch, Your language (a pushed list of the
+    /// seven), Agents work in (English, not a choice) and the web's words as the footer. A server
+    /// without a DeepSeek key draws it all disabled with frame 2's notice.
+    @ViewBuilder private var translationSection: some View {
+        let unavailable = SessionTranslation.unavailable(model.user)
+        Section {
+            Toggle(TranslationCopy.translateConversations, isOn: $translation)
+                .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
+            if unavailable {
+                Text(TranslationCopy.unavailable)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.orange)
+            }
+            NavigationLink {
+                TranslationLanguagePicker()
+            } label: {
+                LabeledContent(TranslationCopy.yourLanguage,
+                               value: SessionTranslation.language(model.user?.preferences).name)
+            }
+            LabeledContent(TranslationCopy.agentsWorkIn, value: TranslationCopy.english)
+        } header: {
+            SettingsHeader(TranslationCopy.title)
+        } footer: {
+            Text(TranslationCopy.translateConversationsHint + " " + TranslationCopy.footnote)
+        }
+        .disabled(unavailable)
+    }
+
     private func seed() {
         guard !seeded else { return }
         seeded = true
@@ -799,6 +838,39 @@ private struct SessionSettingsPage: View {
         modelRouting = p?.smartModelSelection ?? false
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
+        translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+    }
+}
+
+/// Your language: the seven, one ticked, written the moment one is picked (board frame 7's pushed
+/// single-choice list).
+private struct TranslationLanguagePicker: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let current = SessionTranslation.language(model.user?.preferences)
+        Form {
+            Section {
+                ForEach(TranslationLanguage.allCases, id: \.self) { lang in
+                    Button {
+                        guard lang != current else { return }
+                        Task { await model.savePreferences(UpdatePreferencesRequest(translationLanguage: lang.rawValue)) }
+                    } label: {
+                        HStack {
+                            Text(lang.name).foregroundStyle(Color.primary)
+                            Spacer()
+                            if lang == current {
+                                Image(systemName: "checkmark").foregroundStyle(.tint)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                }
+            } footer: {
+                Text(TranslationCopy.yourLanguageHint)
+            }
+        }
+        .navigationTitle(TranslationCopy.yourLanguage)
     }
 }
 

@@ -82,7 +82,7 @@ import {
   recordTaskFailure,
   sessionHasEnded,
 } from '../projects/project-open-item';
-import { branchName } from '../projects/project-criterion-landing';
+import { LANDING_SERVING_WORK_SELECT, branchName } from '../projects/project-criterion-landing';
 import { forkSourceLine } from '../projects/session-source';
 import { projectAwaitingStart, projectNotStartedRefusal } from '../projects/project-started';
 import {
@@ -3319,7 +3319,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             take: 1,
             select: { isolationStatus: true, branch: true, workspace: { select: { repoUrl: true } } },
           },
-          mergeReceipts: { select: { result: true, targetBranch: true } },
+          mergeReceipts: LANDING_SERVING_WORK_SELECT.mergeReceipts,
         },
       });
       for (const row of rows) {

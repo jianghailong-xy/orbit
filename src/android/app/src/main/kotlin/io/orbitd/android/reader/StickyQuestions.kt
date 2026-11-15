@@ -31,6 +31,8 @@ import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.core.cards.transcriptCards
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.translation.Translation
+import io.orbitd.android.translation.TranslationShown
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
@@ -90,6 +92,10 @@ internal object StickySummary {
      */
     fun isOrbits(cards: List<InteractionCard>): Boolean =
         cards.any { it.key.split(":").getOrNull(2) !in linesInAnAnswer }
+
+    /** The owner's own words, as the bubble under the bar shows them: what they typed, not the English the engine got. */
+    fun words(event: RunEvent): String =
+        TranslationShown.userWords(event.personWords(), Translation.turn(event.fields["translation"]), flipped = false)
 }
 
 /**
@@ -184,7 +190,7 @@ internal fun rememberStuckQuestion(rows: List<TranscriptRow>, list: LazyListStat
  */
 @Composable
 internal fun QuestionCapsule(row: TranscriptRow, jump: (TranscriptRow) -> Unit) {
-    val text = remember(row) { row.event.personWords() }
+    val text = remember(row) { StickySummary.words(row.event) }
     Row(Modifier.widthIn(max = 260.dp).heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
         .clickable(role = Role.Button) { jump(row) }.semantics { contentDescription = "Jump to your last question" }
         .padding(horizontal = 12.dp, vertical = 4.dp).testTag("question-capsule"),

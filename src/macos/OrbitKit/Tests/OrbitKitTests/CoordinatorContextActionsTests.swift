@@ -148,7 +148,7 @@ final class CoordinatorContextActionsTests: XCTestCase {
     /// An echo of the note prompt with no `clientTurnId` is still the platform's: no message is drawn
     /// for it, and the reply that follows is drawn as usual.
     func testANotePromptEchoWithoutItsTurnIdIsNotDrawnButItsReplyIs() {
-        XCTAssertTrue(CoordinatorContextActions.isHandoffPrompt("\nFrom Orbit · handoff note\n\nThe owner…"))
+        XCTAssertTrue(CoordinatorContextActions.isHandoffPrompt("From Orbit · handoff note\n\nThe owner…"))
         XCTAssertFalse(CoordinatorContextActions.isHandoffPrompt("Did Orbit write the handoff note?"))
         XCTAssertFalse(CoordinatorContextActions.isHandoffPrompt(nil))
         var reducer = TranscriptReducer()
@@ -267,6 +267,13 @@ final class CoordinatorContextActionsTests: XCTestCase {
                        + "conversation. Nothing is deleted.")
         XCTAssertTrue(CoordinatorContextCopy.phoneConfirmBody(waits: 1, running: true)
             .hasPrefix("After the current turn ends, this coordinator writes a handoff note"))
+    }
+
+    /// A refused press reads web's toast title, then why (`APIClient.failureReason`).
+    func testARefusedPressSaysCouldntHandOver() {
+        XCTAssertEqual(CoordinatorHandoffCopy.refused, "Couldn't hand over")
+        XCTAssertEqual(CoordinatorHandoffCopy.refusal("the connection dropped"),
+                       "Couldn't hand over: the connection dropped.")
     }
 }
 

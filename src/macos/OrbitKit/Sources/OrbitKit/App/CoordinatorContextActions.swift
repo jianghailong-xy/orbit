@@ -20,7 +20,8 @@ public enum CoordinatorContextCopy {
         "Begins after this turn ends: a handoff note, then a fresh conversation."
 
     /// The phone's system Alert body (board 03 iOS 2): the confirm's words, with the waits as a count
-    /// only — and no count when there are none.
+    /// only — and no count when there are none. `coordinatorHandoffPhoneConfirmBody` in
+    /// src/shared/src/coordinator-handoff.ts, which Android's confirm says too.
     public static func phoneConfirmBody(waits: Int, running: Bool) -> String {
         let lead = running
             ? "After the current turn ends, this coordinator writes a handoff note"
@@ -63,6 +64,10 @@ public enum CoordinatorHandoffCopy {
     public static let tryAgain = "Try again"
     public static let handOverWithoutNote = "Hand over without a note"
     public static let keepThisCoordinator = "Keep this coordinator"
+    /// A handoff press the server refused (`refused`): web's toast title, this line's lead.
+    public static let refused = "Couldn't hand over"
+    /// The line a refused press leaves, `reason` being `APIClient.failureReason` (a sentence's tail).
+    public static func refusal(_ reason: String) -> String { "\(refused): \(reason)." }
 
     /// `COORDINATOR_HANDOFF_SECTIONS`: the note's four sections, in order.
     public static let sections = ["Where things stand", "Agreed with the owner", "Waiting on", "Next"]
@@ -101,13 +106,12 @@ public enum CoordinatorContextActions {
         clientTurnId?.hasPrefix(handoffTurnPrefix) == true
     }
 
-    /// The note prompt's first words (`COORDINATOR_HANDOFF_PROMPT_HEAD`): an echo that arrives without
-    /// its `clientTurnId` is still the platform's prompt, as web and Android read it.
+    /// The note turn's first line (`COORDINATOR_HANDOFF_PROMPT_HEAD`). A listed turn carries no
+    /// `clientTurnId`, so the queue tells the platform's prompt by this line and draws no row for it.
     public static let handoffPromptHead = "From Orbit · handoff note"
 
     public static func isHandoffPrompt(_ text: String?) -> Bool {
-        guard let text else { return false }
-        return text.drop(while: { $0.isWhitespace }).hasPrefix(handoffPromptHead)
+        text?.hasPrefix(handoffPromptHead) == true
     }
 
     /// Compact is offered only where the session's engine lists `compact` among its slash assets — so

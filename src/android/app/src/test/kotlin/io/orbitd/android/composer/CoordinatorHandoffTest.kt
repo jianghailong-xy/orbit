@@ -158,11 +158,20 @@ class CoordinatorHandoffTest {
     @Test fun theNoteReadsAsItsFourSections() {
         val note = "Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\n\nAgreed with the owner\nDon't merge Payment retries before Friday's release.\n" +
             "## Waiting on\n- Evidence for Fix login redirect.\n**Next:**\n- Ask for the merge once that evidence is in."
-        val sections = CoordinatorHandoff.sections(note)!!
+        val parsed = CoordinatorHandoff.sections(note)!!
+        val sections = parsed.sections
+        assertEquals(emptyList<String>(), parsed.preamble)
         assertEquals(CoordinatorHandoff.SECTIONS, sections.map { it.title })
         assertEquals(listOf("4 of 6 tasks done; Fix login redirect in review."), sections[0].lines)
         assertEquals(listOf("Ask for the merge once that evidence is in."), sections[3].lines)
         assertNull("free text keeps its own shape", CoordinatorHandoff.sections("Nothing structured here."))
+    }
+
+    @Test fun linesBeforeTheFirstHeadingAreKeptAboveTheSections() {
+        val parsed = CoordinatorHandoff.sections("Handing over after the release.\n\n- Read this first.\nWhere things stand\n- 4 of 6 done.\nNext\n- Merge.")!!
+        assertEquals(listOf("Handing over after the release.", "Read this first."), parsed.preamble)
+        assertEquals(listOf("Where things stand", "Next"), parsed.sections.map { it.title })
+        assertEquals(listOf("4 of 6 done."), parsed.sections[0].lines)
     }
 
     @Test fun theSuccessorReadsItsHandoff() {
@@ -171,9 +180,28 @@ class CoordinatorHandoffTest {
             {"id":"w2","label":"Session finishing its turn","paused":true}]}}"""))!!
         assertEquals("S0", received.from); assertNull(received.note); assertEquals(2, received.movedWaits.size)
         assertTrue(received.movedWaits[1].paused)
+        assertEquals("a paused wait says so", "Session finishing its turn (paused)", received.movedWaits[1].shownLabel)
+        assertEquals("Waiting for \"Fix login redirect\" to be DONE", received.movedWaits[0].shownLabel)
         assertEquals("2 waits moved here", CoordinatorHandoffCopy.waitsMovedHere(2))
         assertEquals("1 wait moved here", CoordinatorHandoffCopy.waitsMovedHere(1))
         assertEquals("2 pending waits move over", CoordinatorHandoffCopy.waitsRowTitle(2))
         assertEquals("1 pending wait moves over", CoordinatorHandoffCopy.waitsRowTitle(1))
+    }
+
+    /** Board 03 iOS 2's body, word for word as OrbitKit's `phoneConfirmBody` pins it: the waits a count, none when there are none. */
+    @Test fun thePhoneConfirmBodyIsIOSs() {
+        assertEquals("This coordinator writes a handoff note, then the project continues in a new conversation. 2 pending waits move over. Nothing is deleted.",
+            CoordinatorHandoffCopy.phoneConfirmBody(2, running = false))
+        assertEquals("This coordinator writes a handoff note, then the project continues in a new conversation. Nothing is deleted.",
+            CoordinatorHandoffCopy.phoneConfirmBody(0, running = false))
+        assertTrue(CoordinatorHandoffCopy.phoneConfirmBody(1, running = true).startsWith("After the current turn ends, this coordinator writes a handoff note"))
+    }
+
+    /** A refused press reads web's toast title, then the server's message, else what kind of failure it was. */
+    @Test fun aRefusedPressSaysCouldntHandOver() {
+        assertEquals("Couldn't hand over: This project already has a handoff under way.", CoordinatorHandoff.refusal(
+            io.orbitd.android.core.net.ApiError.parse(409, """{"message":"This project already has a handoff under way."}""".encodeToByteArray())))
+        assertEquals("Couldn't hand over: Can't reach Orbit. Check your connection and try again.",
+            CoordinatorHandoff.refusal(io.orbitd.android.core.net.NetworkException()))
     }
 }
