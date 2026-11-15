@@ -96,18 +96,16 @@ afterEach(async () => {
 });
 
 describe("the owner's message", () => {
-  it('shows what they wrote, "Translated · Show original", and flips to the English the agent got', async () => {
+  it('shows what they wrote, "Show original", and flips to the English the agent got', async () => {
     await draw(<Transcript events={[user(1, done)]} />);
     const bubble = container.querySelector('.chat-user')!;
     expect(bubble.textContent).toContain(ORIGINAL);
     expect(bubble.textContent).not.toContain(ENGLISH);
-    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Translated·Show original');
+    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Show original');
 
     await press('Show original');
     expect(container.querySelector('.chat-user')!.textContent).toContain(ENGLISH);
-    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe(
-      'Sent to the agent in English·Show translation',
-    );
+    expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Show translation');
 
     await press('Show translation');
     expect(container.querySelector('.chat-user')!.textContent).toContain(ORIGINAL);
