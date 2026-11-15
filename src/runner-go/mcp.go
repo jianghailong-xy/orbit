@@ -238,12 +238,8 @@ func (s *mcpServer) handle(req *rpcRequest) (rpcResponse, bool) {
 	case "ping":
 		return s.ok(req.ID, struct{}{}), true
 	case "tools/list":
-		tools := s.listedToolDescriptors()
-		// schedule_run_report is a scheduled run's own (schedule_tools.go).
-		if !s.scheduleRun {
-			tools = withoutScheduleRunReport(tools)
-		}
-		return s.ok(req.ID, map[string]interface{}{"tools": tools}), true
+		// schedule_run_report's filter lives in listedToolDescriptors, so recovery's listedTools counts what this lists.
+		return s.ok(req.ID, map[string]interface{}{"tools": s.listedToolDescriptors()}), true
 	case "tools/call":
 		var p struct {
 			Name      string                 `json:"name"`
@@ -2881,6 +2877,11 @@ func (s *mcpServer) answerOrbitToolPrompt(args map[string]interface{}) (map[stri
 	tool, ours := strings.CutPrefix(getString(args, "tool_name"), claudeToolName(""))
 	if !ours {
 		return nil, false
+	}
+	// A scheduled CHECK_ONLY run: an Orbit tool its allow rules do not cover is refused, whatever the catalogue says
+	// of it, and asks nobody (schedule_check_only.go).
+	if scheduledCheckOnlyFromEnv() {
+		return toolResult(denyJSON(checkOnlyOrbitToolRefusal), false), true
 	}
 	if entry, declared := planGateTable()[tool]; !declared || !entry.mcp {
 		return nil, false

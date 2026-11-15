@@ -216,7 +216,7 @@ export const SCHEDULE_COPY = {
       until: 'it runs on an engine that can',
     },
     MODE_WIDER_THAN_ACCOUNT_DEFAULT: {
-      // Says what to change: Plan as the account default holds a CHECK_ONLY run on Claude Code (Don't Ask, §6.2) and
+      // Says what to change: Plan as the account default holds a CHECK_ONLY run on Claude Code (Default, §6.2) and
       // every OPEN_PR run; Default holds neither.
       clause:
         "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)",

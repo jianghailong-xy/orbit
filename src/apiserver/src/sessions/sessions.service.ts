@@ -32,6 +32,7 @@ import {
 } from '@prisma/client';
 import { appendBackgroundWakeContext, isBackgroundWakeTurn } from '../runner-api/background-job-wake';
 import { appendScheduledWakeupContext, endWakeupLoop, readSessionWakeups } from '../runner-api/scheduled-wakeup';
+import { checkOnlyRuleRefusal, runAccessLevel, SCHEDULE_CHECK_ONLY_RULE_REFUSED } from '../schedules/schedule-access';
 import { settleUnrunWakeTurns } from '../runner-api/wake-turn-withdraw';
 import { linkNotFound } from '../share-links/share-link';
 import { freshRunningBgJobs } from './background-job-activity';
@@ -9733,7 +9734,10 @@ export class SessionsService {
     }
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, workspaceId: true, sessionKind: true },
+      select: {
+        id: true, workspaceId: true, sessionKind: true, ownerId: true, engine: true, provider: true, providerBuiltin: true,
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
+      },
     });
     if (!session) throw new NotFoundException('session not found');
     // Answering a tool-permission card is an engine door (§2.9 LS6).
@@ -9780,6 +9784,16 @@ export class SessionsService {
       where: { id: approvalId, sessionId: id },
       select: { toolName: true, input: true, translation: true, status: true },
     });
+    // A scheduled CHECK_ONLY run on Claude Code (design §6.2): Always allow on its card writes only that card's command's
+    // rules, computed here, and only those rules are marked for later checks to carry (from_schedule_run). A rule from
+    // any other card, an OPEN_PR run's included, is the client's choice and is never carried by a check.
+    const checkOnlyRules = dto.behavior === 'allow' && !!dto.rememberRules?.length && !!answering
+      && runAccessLevel(session.scheduleRun) === 'CHECK_ONLY'
+      && (await sessionEngine(this.prisma, session)) === AgentProvider.CLAUDE;
+    if (checkOnlyRules) {
+      const refused = checkOnlyRuleRefusal(answering!, dto.rememberRules!);
+      if (refused) throw new BadRequestException({ code: SCHEDULE_CHECK_ONLY_RULE_REFUSED, message: refused });
+    }
     // Settings › Translation (3A, reply-translation.ts): what the engine reads is in the account's agent language —
     // options the owner picked in translation mapped back to the card's own, their own words translated. A failed translation
     // records nothing (422 TRANSLATION_FAILED). Only for a card still asking: a late click is a no-op anyway.
@@ -9859,7 +9873,9 @@ export class SessionsService {
       // Only the decision that actually landed writes the standing grant: a second, losing
       // click on an already-answered approval must not widen anything.
       if (dto.behavior === 'allow' && session.workspaceId) {
-        await this.rememberForWorkspace(session.workspaceId, ownerId, approvalId, dto.rememberRules);
+        await this.rememberForWorkspace(
+          session.workspaceId, ownerId, approvalId, dto.rememberRules, checkOnlyRules,
+        );
       }
       this.realtime.publish(id, {
         seq: 0,
@@ -9881,6 +9897,7 @@ export class SessionsService {
     ownerId: string,
     approvalId: string,
     rules: PermissionRule[] | undefined,
+    fromScheduleRun = false,
   ): Promise<void> {
     const stored = normalizePermissionRules(rules).filter((rule) => !reachesPastOneMcpTool(rule.toolName));
     if (!stored.length) return;
@@ -9891,9 +9908,22 @@ export class SessionsService {
         ruleContent: rule.ruleContent,
         createdById: ownerId,
         approvalId,
+        ...(fromScheduleRun ? { fromScheduleRun: true } : {}),
       })),
       skipDuplicates: true,
     });
+    // A rule an interactive session wrote first is the same row: answering a CHECK_ONLY run's card for it marks it, so
+    // a CHECK_ONLY run carries it from now on (schedule-access.ts scheduleRunAllowedTools).
+    if (fromScheduleRun) {
+      await this.prisma.workspacePermissionRule.updateMany({
+        where: {
+          workspaceId,
+          fromScheduleRun: false,
+          OR: stored.map((rule) => ({ toolName: rule.toolName, ruleContent: rule.ruleContent })),
+        },
+        data: { fromScheduleRun: true },
+      });
+    }
   }
 
   private toApprovalInfo(a: {
