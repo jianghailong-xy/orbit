@@ -194,12 +194,12 @@ struct SectionSidebar: View {
             wiki: model.wiki?.shown == true,
             projectsWaiting: model.projects?.needsYouCount ?? 0,
             wikiWaiting: model.wiki?.waiting ?? 0,
-            // New wiki… under the Wiki row once there is a wiki (docs/wiki-explicit-creation-design.md §3.4).
-            newWiki: model.wiki?.shown == true && model.wiki?.spaces.isEmpty == false,
             // Scheduled under Tasks with the schedules failing or held (web board 01 ①): account-wide, never a
             // row of a workspace's list; away while the server predates scheduled tasks.
             scheduled: model.scheduled.map { !$0.unsupported } ?? false,
-            scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0)
+            scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0,
+            // New wiki… under the Wiki row once there is a wiki (docs/wiki-explicit-creation-design.md §3.4).
+            newWiki: model.wiki?.shown == true && model.wiki?.spaces.isEmpty == false)
         let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         let projects = AgentListLogic.sidebarProjects(openProjects, coordinators: model.projectCoordinators)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render

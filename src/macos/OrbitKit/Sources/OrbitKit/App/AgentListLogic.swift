@@ -139,8 +139,8 @@ public enum AgentListLogic {
     /// schedules failing or held (`scheduledNeedsYou`). Account-wide: it is never a row of a workspace's list.
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
                                        projectsWaiting: Int, wikiWaiting: Int,
-                                       newWiki: Bool = false, scheduled: Bool = false,
-                                       scheduledNeedsYou: Int = 0) -> [SidebarSectionRow] {
+                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0,
+                                       newWiki: Bool = false) -> [SidebarSectionRow] {
         sections.filter { $0 != .wiki || wiki }.flatMap { section -> [SidebarSectionRow] in
             let waiting: Int
             switch section {
