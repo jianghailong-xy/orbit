@@ -64,6 +64,7 @@ import io.orbitd.android.composer.NoMachineWelcomeCard
 import io.orbitd.android.composer.rememberAccountName
 import io.orbitd.android.composer.rememberManagedOffered
 import io.orbitd.android.composer.FollowManagedRunner
+import io.orbitd.android.composer.LocalManagedRunnerStatus
 import io.orbitd.android.composer.ManagedRunner
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
@@ -415,7 +416,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
                     Box(Modifier.fillMaxHeight().widthIn(max = 840.dp).fillMaxWidth()) {
-                        CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
+                        CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) },
+                            LocalManagedRunnerStatus provides managedForLanding.shown?.status) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, management, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }

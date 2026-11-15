@@ -251,4 +251,129 @@ class ManagedRunnerEntryTest {
         compose.onAllNodesWithTag("managed-runner-notice", useUnmergedTree = true).assertCountEquals(0)
         assertEquals(fixture.calls.toString(), 0, managedReads())
     }
+
+    // The owner's ruling of 2026-11-14 (comment 34xZ7C9Du8MisU6H8Wqx7): a managed runner that is not available and has not reported a
+    // version shows its banner and state only — Resources and Engines say "Available once the runner is ready.", with no Update runner,
+    // no "predates" lines and no engine rows. Once it reports a version, or is ready, the page is as today; other runners are unchanged.
+
+    private fun claudeSignedIn() { fixture.runnerEngines = """[{"engine":"claude","installed":true,"auth":"yes"}]""" }
+    private fun waitingLines() = compose.onAllNodesWithText(RunnerCopy.MANAGED_NOT_REPORTED, useUnmergedTree = true).fetchSemanticsNodes().size
+    private fun engineRows() = compose.onAllNodesWithText("Claude Code", useUnmergedTree = true).fetchSemanticsNodes().size
+
+    private fun assertNotReportedPage(title: String) {
+        await(title)
+        compose.waitForIdle()
+        assertEquals(2, waitingLines())
+        compose.onNodeWithTag("managed-waiting-resources", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("managed-waiting-engines", useUnmergedTree = true).assertExists()
+        none("Update runner")
+        none("predates")
+        assertEquals(0, engineRows())
+        none(RunnerCopy.UPDATE_ENGINES_NOW)
+        // The banner and the state stay.
+        compose.onNodeWithTag("managed-runner-notice", useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun aPreparingManagedRunnerThatHasNotReportedShowsOneQuietLineEach() {
+        fixture.capabilities = ManagementFixture.MANAGED_ON
+        fixture.managedStatus = fixture.managed("PROVISIONING", fixture.RUNNER)
+        fixture.runnerOnline = false; fixture.runnerVersion = null; claudeSignedIn()
+        runnerPage(fixture.RUNNER)
+        assertNotReportedPage("Preparing your managed runner")
+        compose.onNodeWithText("Preparing", useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun waitingForCapacityOrFailedToStartBeforeReportingIsTheSameQuietPage() {
+        for ((status, title) in listOf(fixture.managed("WAITING_CAPACITY", fixture.RUNNER) to "Waiting for capacity",
+            fixture.managed("FAILED", fixture.RUNNER) to "Managed runner failed")) {
+            fixture.reset()
+            fixture.capabilities = ManagementFixture.MANAGED_ON
+            fixture.managedStatus = status
+            fixture.runnerOnline = false; fixture.runnerVersion = null; claudeSignedIn()
+            val api = api()
+            if (!hosting) { hosting = true; compose.setContent { current?.let { key(it) { RunnerScreen(it, fixture.RUNNER, null, 0, {}, {}, {}) } } } }
+            compose.runOnIdle { current = api }
+            assertNotReportedPage(title)
+            compose.runOnIdle { current = null }; compose.waitForIdle()
+        }
+    }
+
+    @Test fun controlTheManagedRunnerReadyIsTheOrdinaryPage() {
+        fixture.capabilities = ManagementFixture.MANAGED_ON
+        fixture.managedStatus = fixture.managed("READY", fixture.RUNNER, usable = true, initialProvider = "claude")
+        claudeSignedIn()
+        runnerPage(fixture.RUNNER)
+        await("Managed runner ready")
+        compose.waitUntil(10_000) { engineRows() > 0 }
+        assertEquals(0, waitingLines())
+        compose.onAllNodesWithText(RunnerCopy.RESOURCES, useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test fun controlAManagedRunnerThatHasReportedAVersionIsTheOrdinaryPage() {
+        fixture.capabilities = ManagementFixture.MANAGED_ON
+        fixture.managedStatus = fixture.managed("STARTING", fixture.RUNNER, initialProvider = "claude") // waking again: it has reported before
+        fixture.runnerOnline = false; claudeSignedIn()
+        runnerPage(fixture.RUNNER)
+        await("Waking your managed runner")
+        compose.waitUntil(10_000) { engineRows() > 0 }
+        assertEquals(0, waitingLines())
+    }
+
+    @Test fun controlAnotherRunnerWithoutAVersionIsUnchanged() {
+        fixture.capabilities = ManagementFixture.MANAGED_ON
+        fixture.secondRunner = true
+        fixture.managedStatus = fixture.managed("PROVISIONING", fixture.RUNNER_TWO)
+        fixture.runnerOnline = false; fixture.runnerVersion = null; claudeSignedIn()
+        runnerPage(fixture.RUNNER)
+        await(fixture.runnerAlias)
+        compose.waitUntil(10_000) { engineRows() > 0 }
+        assertEquals(0, waitingLines())
+        compose.onAllNodesWithTag("managed-runner-notice", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test fun controlNoCapabilityARunnerWithoutAVersionIsUnchanged() {
+        fixture.runnerOnline = false; fixture.runnerVersion = null; claudeSignedIn()
+        runnerPage(fixture.RUNNER)
+        await(fixture.runnerAlias)
+        compose.waitUntil(10_000) { engineRows() > 0 }
+        assertEquals(0, waitingLines())
+        assertEquals(0, managedReads())
+    }
+
+    // Sleep is not Offline anywhere a runner is named (coordinator comment 34xSUx9zU5vQtCEYNoqwu): the coordinator's workspace picker and a
+    // session's composer.
+
+    private fun status(json: String) = ManagedRunner.status(kotlinx.serialization.json.Json.parseToJsonElement(json))
+
+    @Test fun thePickerSaysAsleepForTheSleepingManagedRunnerAndRunnerOfflineForAnother() {
+        val sleeping = status(fixture.managed("SLEEPING", "r9", initialProvider = "claude"))
+        fun ws(id: String, runner: String) = kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"id":"$id","name":"$id-name","enabled":true,"runnerId":"$runner"}""").let { it as kotlinx.serialization.json.JsonObject }
+        val rows = io.orbitd.android.projects.CoordinatorChange.rows(listOf(ws("w1", "r1"), ws("w9", "r9"), ws("w2", "r2")), "w1", setOf("r1"), sleeping)
+        compose.setContent { io.orbitd.android.projects.CoordinatorChangeList(rows, false) {} }
+        compose.onNode(hasTestTag("coordinator-change-runner:w9") and hasText("Asleep"), useUnmergedTree = true).assertExists()
+        compose.onNode(hasTestTag("coordinator-change-runner:w2") and hasText(io.orbitd.android.projects.CoordinatorChange.runnerOffline), useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText(io.orbitd.android.projects.CoordinatorChange.runnerOffline, useUnmergedTree = true).assertCountEquals(1)
+        // Still a press: a new conversation there wakes it.
+        compose.onNode(hasTestTag("coordinator-change:w9") and hasClickAction(), useUnmergedTree = true).assertIsEnabled()
+    }
+
+    @Test fun theComposerLineShowsOnlyForTheSleepingManagedRunner() {
+        val sleeping = status(fixture.managed("SLEEPING", "r9", initialProvider = "claude"))
+        val ready = status(fixture.managed("READY", "r9", usable = true, initialProvider = "claude"))
+        val waking = status(fixture.managed("SLEEPING", "r9", desired = "RUNNING", initialProvider = "claude"))
+        compose.setContent {
+            androidx.compose.foundation.layout.Column {
+                // Read from the shell's status, as a session's composer does.
+                androidx.compose.runtime.CompositionLocalProvider(io.orbitd.android.composer.LocalManagedRunnerStatus provides sleeping) {
+                    io.orbitd.android.composer.ManagedRunnerAsleepLine("r9")
+                    io.orbitd.android.composer.ManagedRunnerAsleepLine("r1") // another runner
+                }
+                io.orbitd.android.composer.ManagedRunnerAsleepLine("r9", ready)
+                io.orbitd.android.composer.ManagedRunnerAsleepLine("r9", waking)
+                io.orbitd.android.composer.ManagedRunnerAsleepLine("r9", null) // no capability
+            }
+        }
+        compose.onAllNodesWithText(ManagedRunner.Asleep.COMPOSER, useUnmergedTree = true).assertCountEquals(1)
+    }
 }

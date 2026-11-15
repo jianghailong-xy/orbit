@@ -59,6 +59,27 @@ class CoordinatorChangeTest {
         assertEquals(listOf(false, false, false, false, false), CoordinatorChange.rows(workspaces, null, null).map { it.current })
     }
 
+    /** The account's managed runner away is its shared state — Asleep, Waking up… — never "Runner offline", and still a press (a message
+     * wakes it); every other runner reads as before (coordinator comment 34xSUx9zU5vQtCEYNoqwu). */
+    @Test fun aSleepingManagedRunnerIsAsleepNotOfflineAndStillAPress() {
+        fun managed(state: String, desired: String = state) = io.orbitd.android.composer.ManagedRunner.status(Json.parseToJsonElement(
+            """{"contractVersion":1,"enabled":true,"revision":2,"managementState":"$state","desiredState":"$desired","runnerId":"r9",
+            "workspaceId":"w9","usable":false,"initialProvider":"claude","actions":{"canEnsure":false,"canWake":true,"canRetry":false}}"""))
+        val workspaces = listOf(
+            obj("""{"id":"w1","name":"orbit","enabled":true,"runnerId":"r1"}"""),
+            obj("""{"id":"w9","name":"default","enabled":true,"runnerId":"r9","runner":{"name":"managed"}}"""),
+            obj("""{"id":"w5","name":"wikova","enabled":true,"runnerId":"r2"}"""),
+        )
+        val asleep = CoordinatorChange.rows(workspaces, "w1", setOf("r1"), managed("SLEEPING"))
+        assertEquals(listOf(null, "Asleep", null), asleep.map { it.runnerState })
+        assertEquals(listOf(false, true, true), asleep.map { it.runnerOffline })
+        assertEquals(listOf(false, true, true), asleep.map { it.pickable })
+        assertEquals("Waking up…", CoordinatorChange.rows(workspaces, "w1", setOf("r1"), managed("SLEEPING", "RUNNING"))[1].runnerState)
+        // Online, it is an ordinary row; without the capability's status, it reads Runner offline as before.
+        assertEquals(null, CoordinatorChange.rows(workspaces, "w1", setOf("r1", "r9"), managed("SLEEPING"))[1].runnerState)
+        assertEquals(listOf(null, null, null), CoordinatorChange.rows(workspaces, "w1", setOf("r1"), null).map { it.runnerState })
+    }
+
     @Test fun theQuestionSaysWhereTheOldConversationStaysAndTheButtonWhatItDoes() {
         fun status(session: String?) = obj("""{"state":"LIVE","coordination":{"workspaceName":"orbit","session":${session ?: "null"}}}""")
         assertEquals(CoordinatorChange.Outgoing.OPEN, CoordinatorChange.outgoing(status("""{"lifecycleState":"ACTIVE"}""")))

@@ -121,6 +121,8 @@ object ManagementFixture {
     @Volatile var deviceGate: CompletableDeferred<Unit>? = null
     /** GET auth/capabilities' body, or null for a server from before it (404). Without one there is no managed UI and no managed read. */
     @Volatile var capabilities: String? = null
+    /** The first runner's version; null is one that has never reported (a managed runner still being prepared). */
+    @Volatile var runnerVersion: String? = "0.1.200"
     /** GET managed-runner's body; POST managed-runner/ensure runs [onEnsure] and answers [ensured] (or refuses 403 with [ensureRefusal]). */
     @Volatile var managedStatus = "{}"
     @Volatile var ensured = "{}"
@@ -146,7 +148,7 @@ object ManagementFixture {
         balances.clear(); balanceGates.clear(); task = "{}"; evidence = "[]"
         keyCheckAnswer = """{"ok":true,"keyCheck":"VALID","message":"Cursor accepted this key.","recorded":true,"keyCheckState":"VALID","keyCheckedAt":null}"""
         onKeyCheck = {}
-        capabilities = null; managedStatus = "{}"; ensured = "{}"; ensureRefusal = null; onEnsure = {}; ensureBodies.clear()
+        capabilities = null; runnerVersion = "0.1.200"; managedStatus = "{}"; ensured = "{}"; ensureRefusal = null; onEnsure = {}; ensureBodies.clear()
     }
 
     /** A managed runner status as GET managed-runner answers it (contract 1). */
@@ -189,7 +191,7 @@ object ManagementFixture {
     private fun runnerTwo() = """{"id":"$RUNNER_TWO","name":"spare","displayName":"Spare box","hostname":"spare-01","version":"0.1.200","online":$runnerTwoOnline,
         "status":"${if (runnerTwoOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerTwoOnline) now else now.minusSeconds(86_400)}","maxConcurrent":1,
         "activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,"engines":[],"enrolledAt":"2026-09-02T00:00:00Z"$runnerTwoExtra}"""
-    private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":"0.1.200","online":$runnerOnline,
+    private fun runner() = """{"id":"$RUNNER","name":"box","displayName":"$runnerAlias","hostname":"box-01","version":${runnerVersion?.let { "\"$it\"" } ?: "null"},"online":$runnerOnline,
         "status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${if (runnerOnline) now else now.minusSeconds(86_400)}","maxConcurrent":$runnerCapacity,"activeSessions":0,"runsAsRoot":false,"minFreeDiskMb":null,
         "selfUpdate":${selfUpdate?.let { """{"state":"$it"}""" } ?: "null"},"engines":$runnerEngines$runnerExtra,"enrolledAt":"2026-09-01T00:00:00Z"}"""
     private fun sessionRow() = """{"id":"$SESSION","title":"Fixture session","status":"SUCCEEDED","lifecycleState":"OPEN","workspaceId":"$WORKSPACE",

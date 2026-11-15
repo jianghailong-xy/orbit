@@ -350,7 +350,9 @@ private fun RunnerRow(runner: JsonObject, workspaces: List<JsonObject>, latest: 
                         Gauge(if (max > 0) active.toFloat() / max else 0f, if (active >= max) Ink.amber else MaterialTheme.colorScheme.primary, Modifier.width(44.dp))
                     } else if (RunnerPage.isOffline(runner, now)) Text(RunnerCopy.OFFLINE, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
-                Text(managed?.detail ?: MachinesAndModels.machineLine(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted, maxLines = 1)
+                // The asleep line is a whole sentence: it wraps rather than being cut.
+                Text(managed?.detail ?: MachinesAndModels.machineLine(runner, now), style = MaterialTheme.typography.bodySmall, color = Ink.muted,
+                    maxLines = if (managed?.detail != null) 2 else 1)
                 RunnerPage.listAttentionLine(items)?.let { line ->
                     Text("⚠ $line", style = MaterialTheme.typography.bodySmall, color = Ink.tone(RunnerPage.listTone(items) ?: "warn"), maxLines = 2)
                 }
@@ -416,8 +418,13 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
     }
     val workspaces = model.workspacesOf(id)
     val offline = RunnerPage.isOffline(runner, now)
+    // The account's managed runner before it first reports (preparing, waiting for capacity, failed to start): no version, no readings,
+    // no engines. Its page is the banner and its state only — no Update runner, no "predates" lines, no engine rows to install or sign in
+    // (the owner's ruling of 2026-11-14, as the web's MachineSettingsPage). Once it reports a version or is available, the page is as today.
+    val managedWaiting = managedRow != null && managedRow.kind != "available" && runner.str("version")?.trim().isNullOrEmpty()
     // Asleep (or any managed state) is said by the banner, not as a machine away.
-    val items = RunnerPage.attention(runner, workspaces, now, model.latestVersion).filter { managedRow == null || it.kind != "offline" }
+    val items = if (managedWaiting) emptyList()
+        else RunnerPage.attention(runner, workspaces, now, model.latestVersion).filter { managedRow == null || it.kind != "offline" }
     var choosingReserve by remember { mutableStateOf(false) }
     var confirmingRotate by remember { mutableStateOf(false) }
     var confirmingRemove by remember { mutableStateOf(false) }
@@ -449,7 +456,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
             RunnerHead(runner, now, managedRow)
             managed?.let { ManagedRunnerNotice(managedReader, it) { open(OrbitRoute(Destination.RUNNER, null)) } }
             if (model.failed) model.error?.let { Text("⚠ $it", Modifier.padding(top = 8.dp), color = Ink.amber, style = MaterialTheme.typography.labelMedium) }
-            RunnerPage.updateCard(runner, now)?.let { card ->
+            RunnerPage.updateCard(runner, now)?.takeUnless { managedWaiting }?.let { card ->
                 // Update Now… interrupts the turns in flight on a runner that takes it (available, draining, postponed); an older one's
                 // postponed card keeps the Update Now… that ends the postponement through Update Runner Now.
                 val updateNow = RunnerUpdateNow.offered(runner)
@@ -510,7 +517,10 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     }
                 }
             }
-            RunnerResourcesSection(api, runner, workspaces, now, online = !offline, resumed = resumed, awayLabel = managedRow?.label)
+            if (managedWaiting) FormSection(RunnerCopy.RESOURCES) {
+                Text(RunnerCopy.MANAGED_NOT_REPORTED, Modifier.padding(vertical = 8.dp).testTag("managed-waiting-resources"), color = Ink.muted)
+            }
+            else RunnerResourcesSection(api, runner, workspaces, now, online = !offline, resumed = resumed, awayLabel = managedRow?.label)
             RunnerCapacity(runner, now, model, notice, api)
             // Cursor CLI's row on every machine once one of the account's knows it (RunnerPage.engines), and the footer says it is the one
             // CLI kept on a pinned build (iOS 2 ②).
@@ -518,7 +528,10 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
             // A machine blocked for the Claude region says why under its engines, and where Claude's connection came out (board 03's
             // group footnote) — not that a session spends a subscription signed in here, which its Claude ones don't.
             val regionNote = RunnerPage.claudeRegionNote(runner, now)
-            FormSection(RunnerCopy.ENGINES, RunnerPage.enginesNote(runner, now), when {
+            if (managedWaiting) FormSection(RunnerCopy.ENGINES) {
+                Text(RunnerCopy.MANAGED_NOT_REPORTED, Modifier.padding(vertical = 8.dp).testTag("managed-waiting-engines"), color = Ink.muted)
+            }
+            else FormSection(RunnerCopy.ENGINES, RunnerPage.enginesNote(runner, now), when {
                 regionNote != null -> null
                 offline -> RunnerCopy.ENGINES_OFFLINE_FOOTER
                 engineRows.any { it.str("engine") == ProviderEngines.CURSOR } -> CursorCopy.ENGINES_FOOTER

@@ -1,5 +1,6 @@
 package io.orbitd.android.composer
 
+import androidx.compose.runtime.staticCompositionLocalOf
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -248,3 +249,10 @@ object ManagedRunner {
         )
     }
 }
+
+/**
+ * The account's managed runner status as the signed-in shell last read it (null without the capability, or before it answers): pages that
+ * name a runner — a session's composer, the coordinator's workspace picker — read it here rather than asking the server again, and show
+ * that runner by [ManagedRunner.row] (Asleep, Waking up…, never Offline). Other runners are unchanged.
+ */
+val LocalManagedRunnerStatus = staticCompositionLocalOf<ManagedRunner.Status?> { null }
