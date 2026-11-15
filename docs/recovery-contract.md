@@ -483,6 +483,40 @@ The chain, in order:
 `renderRecoveryNext` maps `CREATE_PROJECT_IN_CHILD_SESSION` to `ask_user` on every surface. Its
 reason names `session_create` when this surface exposes it, and the manual fallback when it does not.
 
+### Agent interaction regression
+
+`node --test test/already-coordinating-eval.test.mjs` runs the interaction contract in CI. The
+evaluator in `scripts/already-coordinating-eval.mjs` gives an adapter the conversation and exposed
+tools, records calls through its own callback, supplies the user's decision as a second turn, and
+checks the actual replies and calls. Each case runs over MCP `structuredContent` (with the raw
+refusal in legacy content), CLI JSON recovery, and legacy text. Cases include reconciliation with
+the same project, no decision, refusal, confirmation, missing capability, orchestration disabled,
+outstanding-child backpressure, depth limit, invalid permission, and a switch disabled after discovery.
+Negative controls reject premature or duplicate children, an immediate `session_send`, missing
+parameters, manual-only conclusions while creation is available, and CLI permission bypasses.
+
+The CI adapter is a reference implementation that tests the evaluator; it is not a live model
+evaluation. To drive a candidate, export `createAgent()` from an adapter module and run:
+
+```sh
+node scripts/already-coordinating-eval.mjs /absolute/path/to/adapter.mjs
+```
+
+An adapter returns an async function accepting `{messages, tools, call, ...observation}`. It returns
+the assistant's text and invokes `await call(toolName, input)` for tool actions. Create a fresh
+candidate context for each case. The evaluator does not expose real Orbit mutations. The supplied
+`scripts/already-coordinating-claude-adapter.mjs` drives Claude Code with its native tools disabled
+and dispatches its JSON tool decisions through that callback. It requires an already authorized
+Claude installation. Configure its scratch/auth location externally; the adapter never copies
+credentials. Candidate failures fail the run; missing authentication does not turn into a skip.
+
+The real database binding check remains
+`src/apiserver/src/runner-api/already-coordinating-child-chain.pg.spec.ts`, run by the PostgreSQL CI
+matrix. For a local run constrained to a scratch filesystem, use an isolated checkout on that
+filesystem, set `TMPDIR`, cache variables, and `RUN_PG_SPEC_PGDATA_ROOT` there, and run
+`scripts/run-pg-spec.sh` with the fixture's absolute path in that checkout. The PGDATA override
+bind-mounts a unique temporary directory and removes it during cleanup, including confirmation runs.
+
 ## 10. Project and Task refusals
 
 The API states the `recovery` block itself for the Project and Task refusals an agent most often meets.
