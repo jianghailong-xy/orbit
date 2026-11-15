@@ -47,6 +47,9 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(views.contains("let collapsed = collapsible && !open && lines > BilingualEnglish.collapseLines"))
         XCTAssertTrue(views.contains(".lineLimit(collapsed ? 2 : nil)"))
         XCTAssertTrue(views.contains("Text(TranslationCopy.showEnglishLabel(lines: lines))"))
+        // Inline code in the English is drawn as code, not as backticks.
+        XCTAssertTrue(views.contains("Text(Self.inline(english))"))
+        XCTAssertTrue(views.contains("interpretedSyntax: .inlineOnlyPreservingWhitespace"))
         let console = try source(app + "Views/Console/ConsoleView.swift")
         XCTAssertTrue(console.contains("bilingual: SessionTranslation.bilingual(appModel.user?.preferences),"))
     }

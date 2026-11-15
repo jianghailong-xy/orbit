@@ -23,7 +23,7 @@ import org.robolectric.annotation.GraphicsMode
 class TranslationBilingualTest : ComposerShellTest() {
     private val askedZh = "登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好"
     private val askedEn = "The Google sign-in button on the login page does nothing in Safari. Find out why and fix it."
-    private val shortEn = "Let me look at how the login page handles the Google sign-in button."
+    private val shortEn = "Let me look at how the login page calls `signInWithPopup`."
     private val shortZh = "我先看一下登录页里 Google 登录按钮的处理逻辑。"
     private val longEn = listOf(
         "Done. The popup now opens synchronously on click:",
@@ -84,7 +84,9 @@ class TranslationBilingualTest : ComposerShellTest() {
         assertFalse(has(hasTestTag("translation-action:${TranslationCopy.SHOW_ORIGINAL}"), unmerged = true))
         // A short reply: its English in full, "Translated" alone (mark D).
         assertTrue(has(text("我先看一下") and row(2), unmerged = true))
-        assertTrue(has(text(shortEn) and english(2), unmerged = true))
+        // Its inline code is drawn as code: the backticks go.
+        assertTrue(has(text("Let me look at how the login page calls signInWithPopup.") and english(2), unmerged = true))
+        assertFalse(has(text("`signInWithPopup`") and english(2), unmerged = true))
         assertTrue(has(text(TranslationCopy.TRANSLATED, substring = false) and row(2), unmerged = true))
         // A long reply: collapsed to its preview with "Show English · 10 lines" (frame 3); its code block is not repeated.
         compose.onNode(hasTestTag("event:3"), useUnmergedTree = true).performScrollTo()

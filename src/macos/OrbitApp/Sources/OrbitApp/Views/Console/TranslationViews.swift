@@ -93,7 +93,7 @@ struct BilingualEnglishView: View {
         let collapsed = collapsible && !open && lines > BilingualEnglish.collapseLines
         VStack(alignment: alignment, spacing: 6) {
             DashedDivider()
-            Text(english)
+            Text(Self.inline(english))
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .lineLimit(collapsed ? 2 : nil)
@@ -118,6 +118,16 @@ struct BilingualEnglishView: View {
                 .contentShape(Rectangle())
             }
         }
+    }
+}
+
+extension BilingualEnglishView {
+    /// The English's inline Markdown (code spans, emphasis, links) drawn as such, its line breaks kept;
+    /// words that do not parse are drawn as written.
+    static func inline(_ english: String) -> AttributedString {
+        (try? AttributedString(markdown: english,
+                               options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(english)
     }
 }
 

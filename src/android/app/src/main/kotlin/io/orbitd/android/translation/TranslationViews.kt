@@ -32,6 +32,11 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.core.translation.Translation
@@ -82,6 +87,17 @@ object BilingualShown {
     fun collapses(english: String): Boolean = Translation.bilingualLineCount(english) > Translation.BILINGUAL_COLLAPSE_LINES
 }
 
+/** The English's `code` spans in monospace on a quiet ground, as the web and iOS draw them; the backticks go. */
+internal fun inlineCode(english: String, ground: Color): AnnotatedString = buildAnnotatedString {
+    var at = 0
+    Regex("`([^`\n]+)`").findAll(english).forEach { m ->
+        append(english.substring(at, m.range.first))
+        withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = ground)) { append(m.groupValues[1]) }
+        at = m.range.last + 1
+    }
+    append(english.substring(at))
+}
+
 /**
  * "Show both languages" (02-bilingual.png): the English the agent read or wrote, under a dashed divider, a size smaller and grey. A
  * reply's English over [Translation.BILINGUAL_COLLAPSE_LINES] lines starts as a two-line faded preview with "Show English · N lines",
@@ -99,7 +115,8 @@ fun BilingualEnglish(english: String, collapsible: Boolean = false, modifier: Mo
             drawLine(divider, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 1.dp.toPx(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx())))
         }
-        Text(english, Modifier.testTag(if (collapsed) "translation-english-collapsed" else "translation-english-text")
+        val code = MaterialTheme.colorScheme.surfaceVariant
+        Text(remember(english, code) { inlineCode(english, code) }, Modifier.testTag(if (collapsed) "translation-english-collapsed" else "translation-english-text")
             .then(if (collapsed) Modifier.graphicsLayer { alpha = 0.99f }.drawWithContent {
                 drawContent()
                 drawRect(Brush.verticalGradient(0.4f to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
