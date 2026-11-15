@@ -118,6 +118,8 @@ test('UI list and detail payloads include the same derived capabilities', async 
     sessionRequest: noSessionRequests(),
     projectOpenItem: { findMany: async () => [] },
     ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
@@ -192,6 +194,8 @@ test('the session list and detail carry the SOURCE snapshot the never-started ca
     sessionRequest: noSessionRequests(),
     projectOpenItem: { findMany: async () => [] },
     ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 
@@ -241,6 +245,8 @@ test('a session that resolves no SOURCE reports UNBOUND with null refusal keys',
     sessionRequest: noSessionRequests(),
     projectOpenItem: { findMany: async () => [] },
     ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
 

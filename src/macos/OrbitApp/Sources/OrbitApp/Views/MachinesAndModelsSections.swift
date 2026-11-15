@@ -183,7 +183,7 @@ struct MachinesAndModelsPoolsSection: View {
     }
 }
 
-/// A Codex pool's row, by who reads it (web's `PoolCard` head): its name — SHARED once anybody but its
+/// A Codex pool's row, by who reads it (web's `PoolCard` head): its name — Shared once anybody but its
 /// owner can use it — then whose it is and how many keys the reader can run on, or "Just me" and how many
 /// of its accounts can run, and at its end the head's gauge, where the reader has one.
 struct CodexPoolRowLabel: View {

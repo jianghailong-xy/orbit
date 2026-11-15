@@ -231,13 +231,18 @@ class SessionListPageShellTest {
         assertFalse(exists(hasTestTag("directory-list")))
     }
 
-    /** The list's first thing, above the rows, from a list that shows no single session: everything waiting is elsewhere. */
+    /** The list's first thing, from a list that shows no single session: everything waiting is elsewhere. It floats over the list's
+     * top (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/04-floating`) — the list runs on under it — and at rest the first
+     * row starts below it. */
     @Test fun theNeedsYouCapsuleIsAtTheTopOfTheList() {
         NavShell.extra = mapOf("open" to listOf(NavShell.row("34A05cSessionWaiting1", "Waiting row", pending = 1)))
         signIn()
         await { exists(hasTestTag("needs-you-bar")) && exists(hasRowMenu("Options for Waiting row")) }
-        assertTrue(compose.onNodeWithTag("needs-you-bar").fetchSemanticsNode().boundsInRoot.bottom <=
-            compose.onNodeWithTag("directory-list").fetchSemanticsNode().boundsInRoot.top + 1)
+        val bar = compose.onNodeWithTag("needs-you-bar").fetchSemanticsNode().boundsInRoot
+        val list = compose.onNodeWithTag("directory-list").fetchSemanticsNode().boundsInRoot
+        assertTrue("over the list, at its top", bar.top <= list.top + 1 && bar.bottom > list.top + 1)
+        assertTrue("the first row clear of it", compose.onNode(hasRowMenu("Options for Waiting row")).fetchSemanticsNode().boundsInRoot.top >=
+            bar.bottom - 1)
     }
 
     /** iOS: a list that opens on today would be saying what its rows say. Later sections, and a Pinned that leads, keep their titles. */

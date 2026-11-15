@@ -1,11 +1,13 @@
 import { CheckCircleFilled, CheckOutlined, CopyOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import { api } from '../api';
 import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
 import { machineDraftPath } from '../lib/machineSetup';
+import { useManagedRunner } from '../lib/managedRunner';
 import { REGISTER_NEXT, REGISTER_NEXT_IN_SETTINGS, START_A_SESSION } from '../lib/machineSetupCopy';
 import { Button } from './ui/Button';
 import {
@@ -64,6 +66,8 @@ function CommandBox({ cmd, copied, onCopy }: { cmd: string; copied: boolean; onC
 
 /** Right-pane guide for connecting a new runner machine (shown from the side panel's “Add”). */
 export function RunnerRegisterGuide({ inSettings = false }: { inSettings?: boolean } = {}) {
+  // Settings' Register a machine points at the managed runner's Set up page while the server offers one.
+  const { managed } = useManagedRunner(inSettings);
   const navigate = useNavigate();
   const [os, setOs] = useState<OS>('macOS');
   const [copied, setCopied] = useState(false);
@@ -171,6 +175,11 @@ export function RunnerRegisterGuide({ inSettings = false }: { inSettings?: boole
           machine you want to add — it installs the orbit CLI, then opens your browser to confirm
           the machine belongs to you. {inSettings ? 'It appears under Machines on the left' : 'It appears under Machines in Settings'} once it comes online.
         </p>
+        {inSettings && managed?.display.ensure && (
+          <p className="runner-sub runner-managed-entry">
+            <Link to="/settings/machines/managed">{MANAGED_RUNNER_COPY.entry.register}</Link>
+          </p>
+        )}
 
         <Segmented<OS>
           className="runner-os"

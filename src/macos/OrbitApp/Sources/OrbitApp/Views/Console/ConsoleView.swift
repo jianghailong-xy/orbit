@@ -99,6 +99,7 @@ struct ConsoleView: View {
             progress: { console.state.taskProgress[$0] },
             isRunning: { id in console.state.background.contains { $0.id == id && $0.status == "running" } },
             subagentItems: { console.state.subagentItems[$0] ?? [] },
+            subagentRun: { console.subagentRuns[$0] },
             fullPayload: { await console.fullPayload(seq: $0) })
     }
 
@@ -238,6 +239,14 @@ struct ConsoleView: View {
     }
     #endif
 
+    /// The session, when its runner's update or a full runner, run or batch holds what it queued: the
+    /// tray's waiting rows say which (`PendingTrayView.held`).
+    private func trayHeld(_ console: ConsoleModel) -> Session? {
+        guard let session = appModel.session(id: console.sessionID),
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
+        return session
+    }
+
     private func bandMembers(_ console: ConsoleModel) -> some View {
         // Unread messages, error, background tray, git bar, composer — web's order
         // (`workspace-composer`). Staged attachments are not a member: they sit inside the
@@ -251,7 +260,8 @@ struct ConsoleView: View {
             PendingTrayView(console: console, rows: console.pendingTrayRows(
                 turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running),
                             // Why none of them goes into the turn running now: Cursor CLI's would stop it.
-                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil)
+                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil,
+                            held: trayHeld(console))
             // The managed runner's state while it is anything but ready, when this
             // console's runner is it (docs/managed-runner-design.md): about the runner the
             // message goes to, so it stays in sight while you type.
@@ -859,6 +869,9 @@ struct TranscriptView: View {
     // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
     // on the macOS 14 floor it stays true — the view keeps the unconditional follow and hides the button.
     @State private var atBottom = true
+    /// The waiting card a project row's tap opened this conversation at (`console.cardRequest`), held
+    /// for a moment while the rows above it are measured.
+    @State private var cardHold: TranscriptCardHold?
     // Whether more than `TailPinning.nearBottom` of content sits below the viewport right now, for any
     // reason. `atBottom` can't say: it un-pins on a scroll UP alone, so a pinned transcript whose tail
     // left the view some other way — a row that grew under it (a card opened, an image or link card
@@ -903,10 +916,12 @@ struct TranscriptView: View {
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
                              recompute: recomputeStuck, follow: repinAfterResize, scroll: transcriptScroll,
                              readingBack: readingBack,
-                             dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } })
+                             dragged: { if bandOpened.wrappedValue { bandOpened.wrappedValue = false } },
+                             readerScrolled: { cardHold = nil; console.readerTookOver() })
         #else
         return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
-                             recompute: recomputeStuck, follow: repinAfterResize)
+                             recompute: recomputeStuck, follow: repinAfterResize,
+                             readerScrolled: { cardHold = nil; console.readerTookOver() })
         #endif
     }
 
@@ -972,14 +987,17 @@ struct TranscriptView: View {
         #endif
     }
 
-    /// The session as the list holds it, when its runner's update is what holds it.
+    /// The session as the list holds it, when its runner's update is what holds it — or a full runner,
+    /// run or batch, which is said in the same places by the same rules (docs/mocks/queued-card-runner-full).
     private var runnerUpdatingSession: Session? {
-        guard let session = app.session(id: console.sessionID), RunnerUpdating.holds(session) else { return nil }
+        guard let session = app.session(id: console.sessionID),
+              RunnerUpdating.holds(session) || QueuedCapacity.holds(session) else { return nil }
         return session
     }
 
-    /// Whether a turn on the queued tail is what the update holds: then that turn's own queued line
-    /// says so (`runnerUpdatingQueued`), and neither the last message nor the queued page does.
+    /// Whether a waiting turn is what the update holds — on the queued tail, whose line says so
+    /// (`runnerUpdatingQueued`), or in the tray, whose row does (`PendingTrayView.held`): then neither
+    /// the last message nor the queued page does (web `tailHeld`).
     private var runnerUpdatingTailHeld: Bool { RunnerUpdating.tailHolds(console.state.queued) }
 
     private var runnerUpdatingFoot: RunnerUpdatingFoot? {
@@ -995,7 +1013,7 @@ struct TranscriptView: View {
     }
 
     @ViewBuilder private var runnerUpdatingPage: some View {
-        if let session = runnerUpdatingSession, !runnerUpdatingTailHeld,
+        if let session = runnerUpdatingSession, RunnerUpdating.holds(session), !runnerUpdatingTailHeld,
            RunnerUpdating.footBubbleID(console.state.items) == nil {
             RunnerUpdatingQueuedView(session: session, machine: console.runnerName, runnerID: console.runnerID,
                                      onOpenSession: { app.route(to: .session($0)) })
@@ -1092,7 +1110,10 @@ struct TranscriptView: View {
             let prependAnchor = console.takePrependAnchor()
             // A window opened at a record ends at a gap, so its bottom is never the live tail to
             // follow — pinning there would only walk the window down page by page.
-            if atBottom && !console.detached && !reviewingCard {
+            if let hold = cardHold, hold.sessionID == console.sessionID, Date() < hold.until {
+                // Opened at a waiting card: a publish in the first moments keeps the card's top.
+                proxy.scrollTo(hold.rowID, anchor: .top)
+            } else if atBottom && !console.detached && !reviewingCard {
                 proxy.scrollTo(bottomID, anchor: .bottom)
             } else if let prependAnchor {
                 proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
@@ -1120,7 +1141,7 @@ struct TranscriptView: View {
             }
         }
         .onChange(of: console.sessionID) {
-            atBottom = true; stranded = false; ruler.reset(); stuckID = nil
+            atBottom = true; stranded = false; ruler.reset(); stuckID = nil; cardHold = nil
             console.setReadingHistory(false)
             // The reader's place went with the transcript that was on screen: the new one has
             // not been laid out yet, and the bar's direction word must not answer for the
@@ -1132,13 +1153,13 @@ struct TranscriptView: View {
         // they'd scrolled up to read history (the stateRevision follow above only re-pins while
         // already at the bottom). Web parity: onSend re-pins atBottom on send (AgentView.tsx).
         .onChange(of: console.localSendTick) {
-            atBottom = true
+            atBottom = true; cardHold = nil; console.readerTookOver()
             proxy.scrollTo(bottomID, anchor: .bottom)
         }
         // A local command is an explicit new tail item, so reveal it even when the reader had
         // scrolled up. This matches a normal local send and web's `pinToBottom()` behavior.
         .onChange(of: console.localStatusCards.count) {
-            atBottom = true
+            atBottom = true; cardHold = nil
             proxy.scrollTo(bottomID, anchor: .bottom)
         }
         // The "N open questions below" bar, pressed. It sits outside this reader (it is an
@@ -1171,6 +1192,33 @@ struct TranscriptView: View {
             transcriptScroll.halt()
             #endif
             DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
+        }
+        // A conversation opened from a project row that says it is waiting on you (owner
+        // 2026-11-14): the top of its waiting card, header and title, rather than the transcript's
+        // end. Off the live tail first, as above; set on the next turn of the run loop with the
+        // scroll, after the session switch's own re-pin (`console.sessionID` above) has run. `initial`
+        // because the request is made before this transcript appears; consumed once followed.
+        .onChange(of: console.cardRequest, initial: true) { _, request in
+            guard let request else { return }
+            console.cardRequestFollowed()
+            #if os(iOS)
+            transcriptScroll.halt()
+            #endif
+            let hold = TranscriptCardHold(rowID: request.rowID, sessionID: console.sessionID,
+                                until: Date().addingTimeInterval(2.5))
+            cardHold = hold
+            DispatchQueue.main.async {
+                atBottom = false
+                holdScroll(to: hold.rowID, anchor: .top, animated: false)
+            }
+            // Again while the rows above take their measured heights: a self-sizing List places a
+            // row it has not laid out by estimates, which put the card's first landing far above it.
+            for delay in [0.4, 1.0, 2.0] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard cardHold == hold, console.sessionID == hold.sessionID else { return }
+                    holdScroll(to: hold.rowID, anchor: .top, animated: false)
+                }
+            }
         }
         // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
         // its rows, so the index path SwiftUI picks for the row is one UIKit has.
@@ -1756,6 +1804,17 @@ private extension View {
 }
 #endif
 
+/// The session page's transcript in a wiki chat's panel (design §9): the same rows, cards and approvals,
+/// with the sticky question kept out of a navigation bar the panel does not have. It sits here, beside
+/// the view it initializes: an initializer for this struct declared in another file crashes Xcode 27's
+/// IRGen on the private `HeldScroll` (`Global is external, but doesn't have external or weak linkage`).
+extension TranscriptView {
+    init(wikiChat console: ConsoleModel) {
+        self.console = console
+        self.hidesStickyQuestion = true
+    }
+}
+
 /// A tap target that still fires while the enclosing `List` is coasting (momentum scroll) — the whole
 /// reason these controls aren't plain `Button`s. On iOS the scroll view's stop-on-tap arbitration eats
 /// that first touch, so a SwiftUI `Button`/`onTapGesture`/`DragGesture` does nothing until the list
@@ -1858,6 +1917,15 @@ struct SessionStatusCardView: View {
 }
 
 /// A transcript scroll waiting for the next update to make it (`TranscriptView.heldScroll`).
+/// A waiting card the transcript keeps its top on until `until` (`TranscriptView.cardHold`).
+/// Internal, not private: Swift 6.2.4 crashed in IRGen on the private type held in `@State`
+/// ("Global is external, but doesn't have external or weak linkage", the iOS gate on ac6416097).
+struct TranscriptCardHold: Equatable {
+    let rowID: String
+    let sessionID: String
+    let until: Date
+}
+
 private struct HeldScroll: Equatable {
     let rowID: String
     let anchor: UnitPoint
@@ -2063,6 +2131,10 @@ private struct ScrollTracker: ViewModifier {
     /// A finger put on the list: a band its bar opened folds again.
     var dragged: () -> Void = {}
     #endif
+    /// The reader started moving the list themselves — a finger on iOS, the trackpad or wheel on
+    /// macOS (`.interacting`; a `scrollTo` the app makes never reports it): a waiting card's hold
+    /// lets go (`TranscriptView.cardHold`).
+    var readerScrolled: () -> Void = {}
     /// Whether the reader is the one moving the list: a finger on it, or the momentum of one.
     /// `.animating` is SwiftUI moving it (a jump-to-latest, the sticky header) and `.idle` is it
     /// sitting still while content is re-laid-out underneath — neither is a reader. `TailPinning`
@@ -2102,6 +2174,7 @@ private struct ScrollTracker: ViewModifier {
                 .onScrollPhaseChange { _, phase in
                     readerDriven = phase != .idle && phase != .animating
                     scrolling = phase != .idle
+                    if phase == .interacting { readerScrolled() }
                     #if os(iOS)
                     if phase == .interacting { dragged() }
                     #endif

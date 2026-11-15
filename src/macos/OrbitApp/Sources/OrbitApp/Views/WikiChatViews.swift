@@ -10,17 +10,6 @@ import OrbitKit
 //
 // Every word is `WikiChatCopy`'s and every rule `WikiChatLogic`'s (OrbitKit), held there to the web and the contract.
 
-// MARK: - the transcript, here
-
-extension TranscriptView {
-    /// The session page's transcript in a wiki chat's panel (design §9): the same rows, cards and approvals, with the
-    /// sticky question kept out of a navigation bar the panel does not have.
-    init(wikiChat console: ConsoleModel) {
-        self.console = console
-        self.hidesStickyQuestion = true
-    }
-}
-
 private struct WikiChatPanelKey: EnvironmentKey {
     static let defaultValue = false
 }

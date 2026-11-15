@@ -8,6 +8,9 @@
  *   - with the repository's wiki in Trash, the same five calls make nothing either, and say unavailable wiki_in_trash and
  *     the Trash sentence, for a workspace whose row named it and for one that never had a row;
  *   - a workspace whose repository has a wiki in use still binds to it on first use, and asks for no plan draft.
+ *   - POST /api/wiki/spaces with a session header is refused WIKI_OWNER_CHANNEL_ONLY, maintenance or not, and makes
+ *     nothing; a second wiki for a repository with one in use is refused 409 WIKI_SPACE_EXISTS with no new row, also
+ *     for creates that race, while the owner's first create, another owner's and one after the old went to Trash succeed.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-explicit-creation.pg.spec.ts
  *
@@ -339,4 +342,69 @@ test('a workspace whose repository has a wiki still binds to it on first use, an
   assert.equal(after.spaces, 1, 'no second wiki');
   assert.equal(after.planJobs, 1, 'no second plan job');
   assert.equal(after.bindings, 1, 'one row, written once');
+});
+
+// ── POST /api/wiki/spaces: the owner's, one per repository ────────────────────────────────────────
+
+test('POST /wiki/spaces with a session header is refused WIKI_OWNER_CHANNEL_ONLY and makes nothing', { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h);
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id, null, machine.id);
+  const talk = await session(h, owner.id, ws, machine.id);
+
+  const plain = await call(h, { bearer: owner.bearer, session: talk }, 'POST', '/wiki/spaces', { title: 'agent-made', repoUrl: repository() });
+  expectStatus(plain, 403, 'a session asking for a wiki with no maintenance');
+  assert.equal(plain.body.code, 'WIKI_OWNER_CHANNEL_ONLY');
+  const maintained = await call(h, { bearer: owner.bearer, session: talk }, 'POST', '/wiki/spaces', {
+    title: 'agent-made',
+    maintenance: { enabled: true, dailyRunLimit: 2 },
+  });
+  expectStatus(maintained, 403, 'and one naming maintenance');
+  assert.equal(maintained.body.code, 'WIKI_OWNER_CHANNEL_ONLY');
+
+  assert.deepEqual(await made(h, owner.id), { spaces: 0, planJobs: 0, bindings: 0, exposures: 0, changesets: 0 }, 'no wiki and no plan job');
+});
+
+test('a second wiki for a repository is refused 409 WIKI_SPACE_EXISTS with no new row; the owner\'s first create succeeds', { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h);
+  const url = repository();
+
+  const first = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', { title: 'lfs-builder', repoUrl: url });
+  expectStatus(first, 201, 'the owner creates the wiki');
+  assert.equal(first.body.repoUrlNorm, url.replace('https://', ''));
+  const before = await made(h, owner.id);
+  assert.deepEqual([before.spaces, before.planJobs], [1, 1], 'one wiki, and its plan asked for');
+
+  // The same repository, as the form would send it again, and in another spelling.
+  for (const repoUrl of [url, `${url.replace('https://github.com/', 'git@github.com:')}.git`]) {
+    const again = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', { title: 'lfs-builder again', repoUrl });
+    expectStatus(again, 409, `a second wiki for ${repoUrl}`);
+    assert.deepEqual(again.body, { code: 'WIKI_SPACE_EXISTS', message: 'This repository already has a wiki.' });
+  }
+  assert.deepEqual(await made(h, owner.id), before, 'no new wiki_space row and no plan job');
+
+  // Another account's wiki for the same repository is no business of this one's.
+  const other = await account(h);
+  expectStatus(await call(h, { bearer: other.bearer }, 'POST', '/wiki/spaces', { title: 'theirs', repoUrl: url }), 201, 'another owner creates theirs');
+
+  // A wiki with no repository never collides.
+  expectStatus(await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', { title: 'notes' }), 201, 'a wiki with no repository');
+  expectStatus(await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', { title: 'notes' }), 201, 'and another');
+
+  // With the repository's wiki in Trash, the owner may create a new one.
+  expectStatus(await call(h, { bearer: owner.bearer }, 'DELETE', `/wiki/spaces/${first.body.id}`), 200, 'the owner moves it to Trash');
+  expectStatus(await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', { title: 'lfs-builder anew', repoUrl: url }), 201, 'a new wiki once the old is in Trash');
+});
+
+test('two creates of one repository at once: one wiki, the other answered WIKI_SPACE_EXISTS, never a 500', { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h);
+  const url = repository();
+  const answers = await Promise.all(Array.from({ length: 4 }, () => call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', { title: 'race', repoUrl: url })));
+  const statuses = answers.map((a) => a.status).sort();
+  assert.deepEqual(statuses, [201, 409, 409, 409], JSON.stringify(answers.map((a) => a.body)).slice(0, 1500));
+  for (const a of answers.filter((x) => x.status === 409)) assert.equal(a.body.code, 'WIKI_SPACE_EXISTS');
+  assert.equal(await h.prisma.wikiSpace.count({ where: { ownerId: owner.id } }), 1, 'one wiki');
 });

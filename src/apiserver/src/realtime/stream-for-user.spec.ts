@@ -121,6 +121,8 @@ function fakePrisma(
     coordinatorHandoff: { findFirst: async () => null },
     projectOpenItem: { findMany: async () => [] },
     ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
   } as unknown as PrismaService;
 }
 

@@ -69,6 +69,8 @@ data class SessionLine(val text: String, val tone: Tone) {
                 // A runner draining for its update is the one queue word in the warning colour (board 2 ①): it can last hours, and
                 // only the owner can shorten it.
                 if (held == null && RunnerUpdating.isRunnerUpdating(s.queuedGate)) return SessionLine(RunnerUpdating.runnerUpdatingTitle(s.queuedGate), Tone.WARNING)
+                // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
+                if (held == null && QueuedCapacity.isCapacityHeld(s.queuedGate)) return SessionLine(QueuedCapacity.title(s.queuedGate), Tone.QUEUED)
                 return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
@@ -166,7 +168,8 @@ internal object SessionHeader {
         if (s.pendingApprovals > 0) return waitingWord(s)
         if (s.confirmationUnderReview != null) return OwnerReview.underReview
         return when (s.effectiveRunState) {
-            RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.runnerUpdatingTitle(s.queuedGate) else SessionLineCopy.queued
+            RunState.QUEUED -> if (RunnerUpdating.isRunnerUpdating(s.queuedGate)) RunnerUpdating.runnerUpdatingTitle(s.queuedGate)
+                else if (QueuedCapacity.isCapacityHeld(s.queuedGate)) QueuedCapacity.title(s.queuedGate) else SessionLineCopy.queued
             RunState.RUNNING -> SessionLineCopy.stateRunning
             RunState.AWAITING_INPUT -> when {
                 // A turn the runtime started for itself keeps the run parked for its whole duration.

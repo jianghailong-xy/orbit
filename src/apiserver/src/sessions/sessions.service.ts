@@ -1,4 +1,6 @@
 import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
+import type { SubagentRunView } from '@orbit/shared';
+import { modelLabels, subagentRunView } from '../runner-api/subagent-run';
 import { checkedWorkSubdir } from './work-subdir';
 import { visibleQuestions, questionsWithCoordinator } from './run-question';
 import { isRunNotifyTurn, runNotifyContent } from './run-notify';
@@ -171,6 +173,7 @@ import { reachesPastOneMcpTool } from './remember-rules';
 import {
   batchActiveTurns,
   runnerActiveTurns,
+  runnerBackgroundHeldSessions,
   treeActiveTurns,
   treeCeiling,
 } from '../common/session-tree-sql';
@@ -255,7 +258,13 @@ import {
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
-import { countLiveApprovals, readByLiveBackgroundJob } from './abandoned-approvals';
+import {
+  countLiveApprovals,
+  liveSubagentCards,
+  readByLiveBackgroundJob,
+  readByRunningSubagent,
+  runningSubagentCards,
+} from './abandoned-approvals';
 import { holdsWorkspaceWriteValues, withoutEnvValues } from './workspace-write-card-values';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
@@ -279,7 +288,7 @@ import {
   type EngineProviderDeps,
   type SessionSwitch,
 } from '../providers/engine-provider';
-import { ownsModel } from '../providers/preset-overlay';
+import { ownsModel, withPreset } from '../providers/preset-overlay';
 import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
@@ -3572,6 +3581,32 @@ export class SessionsService {
       needsYou.add(session.id);
       row(session.workspaceId).needsYou += 1;
     }
+    // And the cards a running SubAgent asked (docs/subagent-design.md §5.3): its child engine reads them
+    // while the parent sits idle, so a background SubAgent waiting on a person lights its row the same way.
+    const withSubagents = await this.prisma.session.findMany({
+      where: {
+        ...open,
+        // `open` says it already; said here too, where the session-kind census reads this scan.
+        sessionKind: SESSION_KIND_CONVERSATION,
+        runningSubagents: { isEmpty: false },
+        approvals: { some: { status: 'PENDING', subagentRunId: { not: null } } },
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        approvals: { where: { status: 'PENDING', subagentRunId: { not: null } }, select: { id: true, toolName: true, subagentRunId: true } },
+      },
+    });
+    const subagentCards = await visibleQuestions(this.prisma, await runningSubagentCards(
+      this.prisma,
+      withSubagents.flatMap((w) => (w.approvals ?? []).map((card) => ({ ...card, sessionId: w.id }))),
+    ));
+    for (const session of withSubagents) {
+      if (!session.workspaceId || needsYou.has(session.id)) continue;
+      if (!subagentCards.some((card) => card.sessionId === session.id)) continue;
+      needsYou.add(session.id);
+      row(session.workspaceId).needsYou += 1;
+    }
     // The activity tallies, after `needsYou` because a session counted there is counted only there
     // (see the doc above).
     for (const session of running) {
@@ -3918,6 +3953,7 @@ export class SessionsService {
       queuedReason: string | null;
       queuedActive: number | null;
       queuedLimit: number | null;
+      queuedHeldByJobs: number | bigint | null;
       queuedRunnerSelfUpdate: Prisma.JsonValue;
       queuedRunnerTurns: Array<{ id: string; title: string | null }> | null;
       queuedSince: Date | null;
@@ -4100,6 +4136,7 @@ export class SessionsService {
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit",
+        q.held    AS "queuedHeldByJobs",
         -- What the runner_updating explanation names (docs/runner-update-drain-design.md §3): the
         -- release it is updating to, the owner's turns it waits for, and the clock "Waiting 38 min"
         -- counts from. Read only for a row that gate holds; every other row pays nothing for it.
@@ -4132,7 +4169,7 @@ export class SessionsService {
       -- second copy would drift, and confidently naming the wrong gate is worse than naming
       -- none. Only PENDING rows carry an answer; for the rest the lateral yields NULLs.
       LEFT JOIN LATERAL (
-        SELECT reason, active, "limit" FROM (
+        SELECT reason, active, "limit", held FROM (
           SELECT
             CASE
               -- First, because it subsumes every gate below: a runner that is not polling will
@@ -4147,7 +4184,11 @@ export class SessionsService {
               -- here would send the reader to the wrong cause. Ends only when the update does.
               WHEN r.heartbeat_draining IS TRUE
                 THEN 'runner_updating'
-              WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
+              -- Turns plus the sessions its background jobs hold a slot for: what the runner itself
+              -- admits against (runnerBackgroundHeldSessions). Turns alone read 10 of 16 on a machine
+              -- whose other 6 slots were held by bg_run jobs, and this row said nothing at all.
+              WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)}
+                   + ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
                 THEN 'runner_at_capacity'
               WHEN s.root_session_id IS NOT NULL
                    AND ${treeActiveTurns('s')} >= ${treeCeiling(Prisma.sql`s.assigned_runner_id`)}
@@ -4162,6 +4203,7 @@ export class SessionsService {
                 THEN 'worktree_op_pending'
             END AS reason,
             ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} AS runner_active,
+            ${runnerBackgroundHeldSessions(Prisma.sql`s.assigned_runner_id`)} AS runner_held,
             r.max_concurrent AS runner_limit,
             ${treeActiveTurns('s')} AS tree_active,
             ${treeCeiling(Prisma.sql`s.assigned_runner_id`)} AS tree_limit,
@@ -4173,7 +4215,7 @@ export class SessionsService {
             CASE g.reason
               -- The turns the drain waits for: every one in flight on the runner.
               WHEN 'runner_updating'    THEN g.runner_active
-              WHEN 'runner_at_capacity' THEN g.runner_active
+              WHEN 'runner_at_capacity' THEN g.runner_active + g.runner_held
               WHEN 'tree_at_capacity'   THEN g.tree_active
               WHEN 'batch_at_capacity'  THEN g.batch_active
             END AS active,
@@ -4181,7 +4223,10 @@ export class SessionsService {
               WHEN 'runner_at_capacity' THEN g.runner_limit
               WHEN 'tree_at_capacity'   THEN g.tree_limit
               WHEN 'batch_at_capacity'  THEN g.batch_limit
-            END AS "limit"
+            END AS "limit",
+            -- Of active, the slots background jobs hold (runner_at_capacity only): the part of a
+            -- full runner its list of running turns does not show.
+            CASE g.reason WHEN 'runner_at_capacity' THEN g.runner_held END AS held
         ) n
       ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
       WHERE s.owner_id = ${ownerId}::uuid
@@ -4279,6 +4324,8 @@ export class SessionsService {
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
         queuedLimit: r.queuedLimit == null ? null : Number(r.queuedLimit),
+        // Of queuedActive, the slots background jobs hold; beside runner_at_capacity only.
+        queuedHeldByJobs: r.queuedHeldByJobs == null ? null : Number(r.queuedHeldByJobs),
         // Only beside queuedReason 'runner_updating'; null on every other row.
         queuedRunnerUpdate: queuedRunnerUpdateOf(r),
       }),
@@ -4305,16 +4352,34 @@ export class SessionsService {
       rows.filter((r) => r.runningBgShells.length > 0).map((r) => [r.id, r.runningBgShells]),
     );
     const candidates = [...new Set([...generating, ...shells.keys()])];
-    const cards = candidates.length === 0
+    const asked = candidates.length === 0
       ? []
       : await this.prisma.approval.findMany({
           where: { sessionId: { in: candidates }, status: 'PENDING' },
           select: { id: true, toolName: true, sessionId: true, backgroundJobId: true },
         });
+    // The third class: the cards of a SubAgent still running, which its child engine reads whatever the
+    // parent's turn is doing (docs/subagent-design.md §5.3). Its candidates are the sessions not generating
+    // with a SubAgent in flight (`runningSubagentCount`), a handful at most.
+    const withSubagents = rows.filter((r) => !generating.has(r.id) && r.runningSubagentCount > 0).map((r) => r.id);
+    const subagentCards = withSubagents.length === 0
+      ? []
+      : await liveSubagentCards(this.prisma, { sessionId: { in: withSubagents } });
+    const readBySubagent = new Set(subagentCards.map((card) => card.id));
+    const cards = [
+      ...asked,
+      ...subagentCards
+        .filter((card) => !asked.some((a) => a.id === card.id))
+        .map((card) => ({ ...card, backgroundJobId: null })),
+    ];
     const heldQuestions = await questionsWithCoordinator(this.prisma, sessions.filter(s => s.taskId).map(s => s.id));
     const byId = new Map<string, number>();
     for (const card of await visibleQuestions(this.prisma, cards)) {
-      if (!generating.has(card.sessionId) && !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? [])) {
+      if (
+        !generating.has(card.sessionId) &&
+        !readByLiveBackgroundJob(card, shells.get(card.sessionId) ?? []) &&
+        !readBySubagent.has(card.id)
+      ) {
         continue;
       }
       byId.set(card.sessionId, (byId.get(card.sessionId) ?? 0) + 1);
@@ -5394,6 +5459,29 @@ export class SessionsService {
    * on every client regardless of how much transcript is loaded. Reuses the exact derivation the
    * web client overlays live (@orbit/shared deriveBackgroundShells), so the two never drift.
    */
+  /** A session's SubAgent runs, oldest first (`GET /sessions/:id/subagents`). */
+  async listSubagentRuns(userId: string, id: string): Promise<SubagentRunView[]> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { assignedRunner: { select: { modelCatalog: true } } },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const rows = await this.prisma.subagentRun.findMany({
+      where: { sessionId: id },
+      orderBy: { createdAt: 'asc' },
+      include: { workspace: { select: { name: true } } },
+    });
+    if (rows.length === 0) return [];
+    // The owner's keys and the shared rows anyone may pick: only their model names are read.
+    const providers = await this.prisma.modelProvider.findMany({
+      where: { OR: [{ ownerId: userId }, { ownerId: null }] },
+      select: { runtime: true, presetSlug: true, followsPreset: true, models: true, defaultModel: true },
+    });
+    const catalog = session.assignedRunner?.modelCatalog as RunnerModelCatalog | null | undefined;
+    const labels = modelLabels(providers.map((row) => withPreset(row)), catalog);
+    return rows.map((row) => subagentRunView(row, labels));
+  }
+
   async getBackgroundShells(userId: string, id: string): Promise<BgShell[]> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId: userId },
@@ -8943,7 +9031,7 @@ export class SessionsService {
    * `abandoned-approvals.ts`), so a card leaves this list exactly where it stops being answerable.
    */
   private async stillBeingAsked<
-    T extends { id: string; toolUseId: string | null; backgroundJobId: string | null },
+    T extends { id: string; toolUseId: string | null; backgroundJobId: string | null; subagentRunId?: string | null },
   >(
     session: {
       id: string;
@@ -8955,8 +9043,21 @@ export class SessionsService {
   ): Promise<T[]> {
     if (approvals.length === 0) return approvals;
     const generating = isSessionGenerating(session);
+    // A SubAgent's card is read by its child engine (docs/subagent-design.md §5.3): a question while its
+    // run is RUNNING and the child's call has no result yet, whatever the parent's turn is doing.
+    const asksForSubagent = approvals.some((a) => !!a.subagentRunId);
+    const runningSubagentRuns = new Set(
+      asksForSubagent
+        ? (
+            await this.prisma.subagentRun.findMany({
+              where: { sessionId: session.id, status: 'RUNNING' },
+              select: { id: true },
+            })
+          ).map((run) => run.id)
+        : [],
+    );
     const raised = approvals
-      .filter((a) => a.backgroundJobId === null)
+      .filter((a) => a.backgroundJobId === null && (generating || !!a.subagentRunId))
       .map((a) => a.toolUseId)
       .filter((id): id is string => id !== null);
     // An old runtime sent no tool_use id, so its rows can never be paired with a result and are
@@ -8964,7 +9065,7 @@ export class SessionsService {
     // read is skipped when there is nothing the turn could tell us about — no id to pair against,
     // or a turn that is not running, which leaves its cards over whatever the calls say.
     const over =
-      raised.length === 0 || !generating
+      raised.length === 0
         ? new Set<string>()
         : new Set(
             (
@@ -8979,9 +9080,11 @@ export class SessionsService {
             ).map((call) => call.toolUseId),
           );
     return approvals.filter((a) =>
-      a.backgroundJobId === null
-        ? generating && (a.toolUseId === null || !over.has(a.toolUseId))
-        : readByLiveBackgroundJob(a, session.runningBgShells),
+      a.subagentRunId
+        ? readByRunningSubagent(a, runningSubagentRuns) && (a.toolUseId === null || !over.has(a.toolUseId))
+        : a.backgroundJobId === null
+          ? generating && (a.toolUseId === null || !over.has(a.toolUseId))
+          : readByLiveBackgroundJob(a, session.runningBgShells),
     );
   }
 
@@ -9167,6 +9270,7 @@ export class SessionsService {
     input: Prisma.JsonValue;
     toolUseId: string | null;
     backgroundJobId: string | null;
+    subagentRunId?: string | null;
     status: string;
     message: string | null;
     createdAt: Date;
@@ -9181,6 +9285,7 @@ export class SessionsService {
       input: a.input,
       toolUseId: a.toolUseId ?? undefined,
       backgroundJobId: a.backgroundJobId ?? undefined,
+      ...(a.subagentRunId ? { subagentRunId: a.subagentRunId } : {}),
       answeredBy: a.decidedCredentialKind === 'COORDINATOR' ? 'COORDINATOR' : null,
       coordinatorFallback: a.coordinatorFallback as ApprovalInfo['coordinatorFallback'] ?? null,
       status: a.status as ApprovalStatus,
@@ -11282,6 +11387,7 @@ export class SessionsService {
     cancelRequestedAt: true,
     engineTurnActive: true,
     runningBgShells: true,
+    runningSubagents: true,
     mergeStatus: true,
     commitStatus: true,
     mergeRecovery: true,

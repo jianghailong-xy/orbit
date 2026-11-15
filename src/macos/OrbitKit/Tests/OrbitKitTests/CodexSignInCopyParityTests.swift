@@ -12,6 +12,7 @@ import XCTest
 ///
 /// Deliberately not compared: "New pool" — a pool is made on the web (it opens straight to signing in),
 /// as a shared pool's is; the words only a phone has to say (the swipe's own label is `Sign out`, the
+/// screen-reader name it gives the account — `signOutLabel`, pinned to this client's value below — the
 /// web mark's name); and the page the accounts are drawn on, whose words — its head, its way out, who can
 /// use it — are `PoolAccessCopyParityTests`'.
 final class CodexSignInCopyParityTests: XCTestCase {
@@ -231,10 +232,14 @@ final class CodexSignInCopyParityTests: XCTestCase {
         assertSays(row, "<div className=\"pool-why\"> {signInAgain ? '\(CodexLoginPool.signedOutReason)' : `\(CodexLoginPool.signedOutReasonNotYours("${contributor ? contributor.name : 'the person who signed it in'}"))`} </div>",
                    in: Self.accountPools)
         assertSays(row, "> \(CodexLoginPool.signInAgain) </Button>", in: Self.accountPools)
+        // Signing out sits behind the row's ⋯ since the settings-buttons landing (board 02): the item
+        // says the word, and the confirmation it opens names the account.
         let signingOut = account(email: "${member.label}")
-        assertSays(row, "title={`\(CodexLoginPool.signOutTitle(signingOut))`}", in: Self.accountPools)
-        assertSays(row, "aria-label={`\(CodexLoginPool.signOutLabel(signingOut))`}", in: Self.accountPools)
-        assertSays(row, "confirmText=\"\(CodexLoginPool.signOut)\"", in: Self.accountPools)
+        assertSays(row, "label: '\(CodexLoginPool.signOut)',", in: Self.accountPools)
+        assertSays(row, "title: `\(CodexLoginPool.signOutTitle(signingOut))`,", in: Self.accountPools)
+        assertSays(row, "confirmText: '\(CodexLoginPool.signOut)',", in: Self.accountPools)
+        // The swipe's own screen-reader name, which the web's single ⋯ does not say: this client's only.
+        XCTAssertEqual(CodexLoginPool.signOutLabel(signingOut), "Sign out ${member.label}")
         // Signing one out: the only account, and nothing runs on the pool; one of several, and it keeps
         // running on the others — "account" for one left, "accounts" for more.
         let one = CodexLoginPool.signOutNote(pool("${pool.label}", accounts: 1))
