@@ -3004,6 +3004,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // approval_decided_via_chk and lets activity_credential_chk say TERMINAL; no preserved rows, triggers or DONE
       // fence change, and no row is written.
       '0663_approval_decided_terminal_machine',
+      // 0670 adds session.opened_by (who opened a conversation), its CHECK and a partial index, and backfills it on
+      // conversations with no task and no parent; no preserved table, trigger or DONE fence changes.
+      '0670_session_opened_by',
       // 0700 adds nullable or defaulted session settings columns and their CHECKs only; no preserved rows, triggers or DONE fence change.
       '0700_session_settings',
       // 0705 adds a nullable `runner.engine_update_dismissals` JSONB only, catalog-only; `runner` is none of the
@@ -3026,13 +3029,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // VALID and then validated; `main_checkout_request` is none of the preserved relations, no trigger, function or
       // DONE fence changes, and no row is written.
       '0770_main_checkout_discard',
+      // 0780 adds runner_presence.background_job_session_ids (UUID[], NOT NULL with a constant default) only,
+      // catalog-only; no preserved rows, triggers or DONE fence change, and no row is written.
+      '0780_runner_presence_background_job_sessions',
       // 0790 adds the schedule tables, a SCHEDULE session_run_source value and a nullable session.schedule_run_id
       // only; no preserved rows, triggers or DONE fence change, and no row is written.
       '0790_schedules',
       // 0800 adds two nullable pool_login_token columns (account_id, key_id: a SubAgent's token's own credential),
       // catalog-only; `pool_login_token` is none of the preserved relations, no trigger, function or DONE fence
       // changes, and no row is written.
-      '0800_pool_login_token_subagent_credential'],
+      '0800_pool_login_token_subagent_credential',
+      // 0830 adds two nullable schedule_run columns (not_before_at, held_reason) and a partial index, and widens
+      // session_opened_by_check by 'SCHEDULE'; catalog-only but for the check's validating scan, `schedule_run` is none
+      // of the preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      '0830_schedule_run_start'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -27,11 +27,13 @@ data class QueuedRunnerUpdate(val targetVersion: String? = null, val since: Stri
     }
 }
 
-/** Which gate the server found holding a queued session (web `QueuedGate`), as the runner_updating copy reads it. */
-data class QueuedGate(val queuedReason: String? = null, val queuedActive: Int? = null, val queuedRunnerUpdate: QueuedRunnerUpdate? = null)
+/** Which gate the server found holding a queued session (web `QueuedGate`), as the runner_updating and capacity copy read it.
+ *  [queuedLimit] and [queuedHeldByJobs] beside a capacity gate ([QueuedCapacity]); [since], when the session went PENDING. */
+data class QueuedGate(val queuedReason: String? = null, val queuedActive: Int? = null, val queuedRunnerUpdate: QueuedRunnerUpdate? = null,
+    val queuedLimit: Int? = null, val queuedHeldByJobs: Int? = null, val since: String? = null)
 
 internal val DirectorySession.queuedGate: QueuedGate
-    get() = QueuedGate(queuedReason, queuedActive, QueuedRunnerUpdate.of(queuedRunnerUpdate))
+    get() = QueuedGate(queuedReason, queuedActive, QueuedRunnerUpdate.of(queuedRunnerUpdate), queuedLimit, queuedHeldByJobs, lastTurnAt)
 
 /** A run of the explanation: words, or a turn the reader can open (web `RunnerUpdatingPart`). */
 sealed interface RunnerUpdatingPart {

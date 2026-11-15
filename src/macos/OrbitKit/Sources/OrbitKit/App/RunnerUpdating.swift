@@ -178,10 +178,11 @@ public enum RunnerUpdating {
         !bubble.steer && !bubble.undelivered && !SteerDelivery.settles(bubble.delivery)
     }
 
-    /// Whether the transcript's queued tail — what the tray does not hold — has a turn the update
-    /// holds. Then that turn says why, and neither the last message nor the queued page does.
+    /// Whether a waiting turn is one the update holds — a card on the queued tail, or the reader's own
+    /// message in the tray, each of which says why on its own line (docs/mocks/queued-card-runner-full ②).
+    /// Then neither the last message nor the queued page does (web `tailHeld`).
     public static func tailHolds(_ queued: [UserBubble]) -> Bool {
-        queued.contains { !PendingTray.holds($0) && holdsQueued($0) }
+        queued.contains(where: holdsQueued)
     }
 
     /// The message whose foot row carries `Queued · runner updating` where the queued tail holds

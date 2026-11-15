@@ -112,6 +112,7 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
     };
     p.runner.serverUrl = 'https://orbitd.io';
     p.runner.image = 'channel';
+    p.lifecycle.pollIntervalSeconds = 1;
     return p;
   }
 
@@ -241,6 +242,8 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
 
     channelB.down = false;
     const readsB = channelB.count('readContainer');
+    // While marked, B's mappings wait for its next recheck, at most once per poll interval.
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
     await untilReady(first.runtime, [owners.one, owners.two, owners.three, owners.four]);
     assert.ok(channelB.count('readContainer') > readsB, 'B\'s runners are looked at again');
   });
@@ -273,6 +276,7 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
     };
     p.runner.serverUrl = 'https://orbitd.io';
     p.runner.image = 'channel';
+    p.lifecycle.pollIntervalSeconds = 1;
     const { runtime, service } = start(p);
     const [hostC, hostD] = runtime.hosts!;
     const pool2 = async (namespace: string) => (await sql.query('SELECT pods, pods_reserved FROM managed_runner_capacity WHERE cluster_key = $1 AND namespace = $2', [`${clusterKey}-reach`, namespace])).rows[0];
@@ -315,6 +319,8 @@ test('several Docker channel hosts: one manager per host, separate pools, placem
     // The hosts come back: every runner, the last one's included, comes up where it was placed.
     channelC.down = false;
     channelD.down = false;
+    // A marked host's mappings wait for its next recheck, at most once per poll interval.
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
     // Their retry time comes (the outage put the waiting ones on a backoff).
     await db.managedRunner.updateMany({ where: { ownerId: { in: [c1.ownerId, d1.ownerId, c2.ownerId, all.ownerId] } }, data: { nextAttemptAt: new Date() } });
     await untilReady(runtime, [c1.ownerId, d1.ownerId, c2.ownerId, all.ownerId]);

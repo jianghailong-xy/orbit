@@ -60,6 +60,8 @@ import {
   type Envelope,
 } from './schedule-envelope';
 import { ScheduleRuleError, assertTimezone, nextDueAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
+import { SCHEDULE_ACCESS_NOT_ENFORCEABLE, scheduleRunMode } from './schedule-access';
+import { scheduleStartCheck } from './schedule-start-check';
 
 /** At most this many schedules that are not ENDED per account (§3). */
 export const SCHEDULE_LIMIT = 50;
@@ -275,7 +277,10 @@ export class SchedulesService {
           throw refusal('BAD_REQUEST', 'SCHEDULE_WORKSPACE_REQUIRED', 'A schedule runs in a workspace; the session has none.');
         }
         const normalized = this.normalizeCreate(input, workspaceId);
-        if (who.session) this.assertWithinSessionMode(who.session, normalized.accessLevel);
+        if (who.session) {
+          this.assertEnforceable(who.session.engine, normalized.accessLevel);
+          this.assertWithinSessionMode(who.session, normalized.accessLevel);
+        }
         await this.assertUnderLimit(tx, actor.ownerId);
         if (actor.kind === 'SESSION') {
           const request = await tx.scheduleChangeRequest.create({
@@ -410,17 +415,29 @@ export class SchedulesService {
     );
   }
 
-  /** PAUSED or HELD → ACTIVE, at the next slot after now; slots missed meanwhile are not caught up. */
+  /**
+   * PAUSED or HELD → ACTIVE, at the next slot after now; slots missed meanwhile are not caught up. From HELD the
+   * start checks (§6.1) run first, and a schedule that still fails one stays HELD (SCHEDULE_START_CHECK_FAILED).
+   */
   async resume(actor: ScheduleActor, scheduleId: string): Promise<Schedule> {
     return withTransactionRetry(
       this.prisma,
-      (tx) =>
-        this.controlLocked(tx, actor, scheduleId, (s) => {
+      async (tx) => {
+        const resumed = await this.controlLocked(tx, actor, scheduleId, (s) => {
           if (s.state !== 'PAUSED' && s.state !== 'HELD') {
             throw refusal('CONFLICT', 'SCHEDULE_NOT_PAUSED', `The schedule is ${s.state}.`);
           }
           return { state: 'ACTIVE', endedReason: null };
-        }),
+        }, false, async (s) => {
+          if (s.state !== 'HELD') return;
+          const check = await scheduleStartCheck(tx, s);
+          if (!check.ok) {
+            throw refusal('CONFLICT', 'SCHEDULE_START_CHECK_FAILED', `The schedule is still held: ${check.reason}.`);
+          }
+        });
+        if (resumed.heldReason === null) return resumed;
+        return tx.schedule.update({ where: { id: resumed.id }, data: { heldReason: null } });
+      },
       loggedRetry(this.logger, 'schedules.resume'),
     );
   }
@@ -511,9 +528,11 @@ export class SchedulesService {
     scheduleId: string,
     transition: (s: Schedule) => { state: ScheduleState; endedReason: ScheduleEndedReason | null },
     allowEnded = false,
+    precheck?: (s: Schedule) => Promise<void>,
   ): Promise<Schedule> {
     await this.lockAccount(tx, actor.ownerId);
     const schedule = await this.lockSchedule(tx, actor.ownerId, scheduleId, { allowEnded });
+    await precheck?.(schedule);
     const who = actor.kind === 'PAT'
       ? { changedBy: 'USER' as const, sessionId: null, session: null }
       : await this.resolveActor(tx, actor, scheduleId);
@@ -531,6 +550,7 @@ export class SchedulesService {
     undoOf: number | null,
   ): Promise<ScheduleUpdateResult> {
     const settings = this.settingsAfter(schedule, patch);
+    if (who.session && settings.accessLevel !== schedule.accessLevel) this.assertEnforceable(who.session.engine, settings.accessLevel);
     const judgment = judgeEnvelopeChange(envelopeOf(schedule), needOf(this.settingsOf(schedule)), needOf(settings), who.changedBy);
     if (actor.kind === 'OWNER' || judgment.inside) {
       return this.applyLocked(tx, schedule, patch, who, { widen: actor.kind === 'OWNER', undoOf });
@@ -778,6 +798,17 @@ export class SchedulesService {
         workspaceId: session.workspaceId,
       },
     };
+  }
+
+  /** §6.2: a level the engine cannot enforce with a mode that is not wider is refused at the door. */
+  private assertEnforceable(engine: string | null, level: AccessLevel): void {
+    if (scheduleRunMode(level, engine)) return;
+    throw refusal(
+      'BAD_REQUEST',
+      SCHEDULE_ACCESS_NOT_ENFORCEABLE,
+      `${level} cannot be enforced on the ${engine ?? 'default'} engine: it has no permission mode that is not wider. `
+        + 'Create the schedule from a session on an engine that can, such as Claude Code.',
+    );
   }
 
   private assertWithinSessionMode(session: { mode: string; engine: string | null }, level: AccessLevel): void {

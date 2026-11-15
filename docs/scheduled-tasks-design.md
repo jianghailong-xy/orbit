@@ -125,10 +125,26 @@ ScheduleRun
   startedAt?, endedAt?, sessionId?
   key?, summary?, links[]                              from the run's report
   failureReason?                                       closed set, §7.2
+  heldReason?                                          why a HELD run's start checks failed, §6.1
+  notBeforeAt?                                         a QUEUED run starts no earlier: a retry's wait, §7.2
 
 ScheduleFinding
   scheduleId, key, firstRunId?, lastSeenRunId?, notifiedAt?, links[]
+
+ScheduleChangeRequest                                  a create, or a change that grows the envelope, waiting for a press
+  ownerId, scheduleId?                                 scheduleId is NULL for a CREATE until it is allowed
+  kind          CREATE | UPDATE
+  state         PENDING → ALLOWED | DECLINED | SUPERSEDED
+  askedBy (USER | SESSION | RUN), askedBySessionId?, baseRevision?
+  proposed                                             CREATE: the whole input; UPDATE: the patch
+  envelopeBefore?, envelopeAsked, widens[]             the card's *now* and *asked*, and the parts that grow
 ```
+
+A session's `schedule_create` is always a PENDING CREATE request: the card's **Create** is the owner's press that
+writes the schedule. A newer UPDATE request for the same schedule supersedes the older one.
+
+Rule encoding: weekdays are `MON` … `SUN`; `ONCE.at` is a local `YYYY-MM-DDTHH:mm` in the schedule's time zone;
+`DAILY` and `WEEKLY` take `time` as a local `HH:mm`.
 
 There is no notify field and no runner field: §7.3 decides who hears, and a run goes to any online runner the
 workspace can use.
@@ -167,7 +183,19 @@ The rule, checked by the server on every `schedule_create` and `schedule_update`
   schedule off from daily to weekly (§8.3) leaves the envelope at 7 runs a week, so it, or any session, may return
   to daily without asking. What was allowed is not asked twice; what was taken back is.
 - A session cannot ask for an envelope wider than its own permission mode
-  (`PERMISSION_MODE_WIDER_THAN_SESSION`, the rule in `common/permission-mode.ts`).
+  (`PERMISSION_MODE_WIDER_THAN_SESSION`, the rule in `common/permission-mode.ts`). The ceiling holds for ordinary
+  sessions only, on create and when a change widens the access level. It does not hold for a schedule's own run
+  session, whose mode is its access level's (a CHECK_ONLY run is in Plan), so §8.3's widen card stays reachable;
+  what a run asks still applies only on the owner's **Allow**. A change of access level inside the envelope is not
+  held to the ceiling.
+- A personal access token may use the controls (pause, resume, end, delete, undo, run now, stop) and is recorded as
+  the person (`USER`). It may not create, change or decide (`OWNER_INTERACTIVE_CREDENTIAL_REQUIRED`); its undo is
+  judged by the rule above like a session's. Only the owner's own undo also restores the envelope.
+- A person's narrowing shrinks only the parts the change itself narrowed: rewriting the prompt of a schedule a run
+  had backed off leaves the envelope where it was.
+- Undo works on any revision whose fields have not changed since (otherwise `SCHEDULE_UNDO_STALE`), once per
+  revision (`SCHEDULE_ALREADY_UNDONE`); revision 1, the creation, cannot be undone. Bringing an ENDED schedule back
+  counts against `SCHEDULE_LIMIT`.
 
 The budget is counted in runs and minutes, not in money, because a subscription account reports no cost per run.
 The inspector shows what was used: "This month: 14 runs · 41 min", with a cost where the engine reports one.
@@ -207,6 +235,12 @@ dispatch was paused, the account's quota was exhausted.
 - Catch-up reaches back one period (24 hours for `ONCE`). An older slot is recorded MISSED and the schedule waits
   for its next slot. A missed `ONCE` notifies, because nothing else will run.
 - A run shows both `plannedAt` and `startedAt`, so a late run says it was late.
+- The same holds for a run already written whose start meets the outage. A runner that is offline (a managed runner
+  asleep is not: opening the session wakes it) leaves the run QUEUED, without spending an attempt, looking again
+  every minute and starting when the runner is back. A run whose first turn never reaches its engine (dispatch
+  paused, quota spent, the engine dying before its first turn) is retried as §7.2 says. Either way, once the
+  catch-up window has passed the run is MISSED, with the reason in `failureReason`: a slot not run, never a
+  failure, and not counted in `consecutiveFailures`.
 
 ## 6. Starting a run
 
@@ -221,6 +255,15 @@ A card is not standing permission for a world that has changed. Before each run 
 When a check fails the run is HELD with the reason, the schedule moves to HELD, and the owner gets an item in
 **Waiting on you**. A HELD schedule fires nothing until it is resumed. It is never retried in silence.
 
+The reasons (`heldReason`, on the run and the schedule): `WORKSPACE_NOT_OWNED`, `WORKSPACE_DELETED`,
+`WORKSPACE_DISABLED`, `AGENT_MISSING`, `AGENT_DISABLED` (only when the schedule names an agent),
+`OUTSIDE_ENVELOPE`, `ACCESS_NOT_ENFORCEABLE` (§6.2, on the engine the run would use), `MODE_WIDER_THAN_ACCOUNT_DEFAULT`,
+`NO_REPOSITORY`, and `SESSION_REFUSED` when the session door refuses the run's session before writing it (a 4xx: the
+request cannot be served as it stands, and retrying would not change that). A run uses the engine and credential of
+the session that created the schedule while that session exists in the schedule's workspace and is not in Trash,
+else what the workspace last ran. Resuming a HELD schedule runs the
+same checks and is refused `SCHEDULE_START_CHECK_FAILED` while one still fails.
+
 ### 6.2 Access levels
 
 The agent picks the level from what the intent needs: a check, a report or a summary is `CHECK_ONLY`; "open a PR",
@@ -229,7 +272,27 @@ The agent picks the level from what the intent needs: a check, a report or a sum
 | Level | Card says | Session | May not |
 | --- | --- | --- | --- |
 | `CHECK_ONLY` | "reads and reports, edits nothing" | `plan` mode, no worktree | edit files, create tasks |
-| `OPEN_PR` | "edits in its own worktree and opens a PR; can't merge or deploy" | `acceptEdits` mode, own worktree | `session_merge`, release and deploy tools |
+| `OPEN_PR` | "edits in its own worktree and opens a PR; can't merge or deploy" | `acceptEdits` mode, own worktree when the workspace has worktrees | `session_merge`, release and deploy tools |
+
+The mode each engine gets (`schedules/schedule-access.ts`; measured on the real CLIs, §12):
+
+| Engine | `CHECK_ONLY` | `OPEN_PR` | Measured |
+| --- | --- | --- | --- |
+| Claude Code | `plan` | `acceptEdits` | 2.1.325 |
+| Codex | `plan` | `acceptEdits` | 0.169.0 |
+| Kimi | `plan` | `acceptEdits` | 2.5.3 |
+| OpenCode | `plan` (denies everything but reads) | refused: `SCHEDULE_ACCESS_NOT_ENFORCEABLE` | 1.19.5 |
+| Antigravity | `plan` | `acceptEdits` | not measured (no signed-in account on the host) |
+| DeepSeek Harness | `dontAsk` (its read-only file sandbox) | `default` (asks before each write) | not installed; from `permissionSemantics.ts` |
+| Cursor CLI | `plan` | `acceptEdits` | not installed; from `permissionSemantics.ts` |
+
+The rule behind it: each level has its modes in order (`CHECK_ONLY`: `plan`, `dontAsk`; `OPEN_PR`: `acceptEdits`,
+`default`). The run gets the first that `derivePermissionSemantics` says the engine honours and that never allows an
+unapproved action; for `CHECK_ONLY` a mode that denies every unapproved action counts even where it is not honoured
+as asked, because denying is not wider. The `OPEN_PR` run's `disallowedTools` are `mcp__orbit__session_merge`,
+`mcp__orbit__integration_request_promotion`, `mcp__orbit__integration_skip_merge_check`, `Bash(gh pr merge:*)`,
+`Bash(gh release:*)`, `Bash(npm publish:*)`, `Bash(docker push:*)`, `Skill(release)` and `Skill(upgrade)`, added to
+the workspace's own at claim.
 
 - A level is a claim to the person, so it is enforced, not prompted: the mode above, plus `disallowedTools` on the
   run's session for the *May not* column.
@@ -242,6 +305,7 @@ The agent picks the level from what the intent needs: a check, a report or a sum
 ### 6.3 Session
 
 The run gets a new session in the schedule's workspace, with `runSource = SCHEDULE` and `scheduleRunId` set. Its
+`openedBy` is `SCHEDULE`, so it never becomes the workspace default a person's next session starts from. Its
 first turn carries a block written by the control plane, then the prompt:
 
 ```text
@@ -287,13 +351,29 @@ findings and the note.
 
 | `failureReason` | Retried | Meaning |
 | --- | --- | --- |
-| `RUNNER_UNAVAILABLE`, `QUOTA`, `ENGINE_CRASHED_BEFORE_START` | yes | the run never reached the engine (no `delivered_at` on its first turn) |
+| `RUNNER_UNAVAILABLE`, `QUOTA`, `ENGINE_CRASHED_BEFORE_START` | yes, then MISSED (§5.2) | the run never reached the engine (no `delivered_at` on its first turn) |
 | `REPORTED_FAILED`, `NO_REPORT`, `ENGINE_CRASHED`, `APPROVAL_TIMEOUT`, `RUN_LIMIT` | no | the work started and may have had effects |
 | `CANCELLED_BY_OWNER` | no | the owner stopped this run |
 
-- Retry: up to 3 attempts (after 1, 5 and 15 minutes), inside the catch-up window.
+- Retry: after 1, 5 and 15 minutes, then once an hour, for as long as the catch-up window lasts; a retry that would
+  start past it makes the run MISSED instead (§5.2). A retry on a schedule paused, held or deleted meanwhile is
+  CANCELLED (a MANUAL run on a paused schedule still retries), and one with a newer run already waiting is SKIPPED.
+- One run never has two live sessions. Before a run that never reached its engine is put back, its session is
+  retired: auto-retry cancelled, then ended; if that fails the run is left as it is for the next pass. Before a
+  QUEUED run opens a session, any live session still naming it (`scheduleRunId`) is retired first. A create that
+  fails after its INSERT committed keeps that session as the run's. A report from a session that no longer serves
+  its run is refused (`SCHEDULE_RUN_REPORT_NOT_A_RUN`).
+- A QUEUED run whose start throws is put aside for 5 minutes, so the runs behind it start, and is MISSED once its
+  window has passed; a schedule or run whose pass throws is left out of that replica's passes for 5 minutes.
 - `consecutiveFailures` counts FAILED runs in a row and resets on NO_CHANGE or CHANGED. At 3 the notification says
   "failed 3 runs in a row". The schedule is **not** paused.
+- Whether a run reached its engine is its first turn's `delivered_at`. A run whose first turn is not delivered 10
+  minutes after it started is `RUNNER_UNAVAILABLE` (its session is ended); a session that FAILED before delivery is
+  `QUOTA` when its error is a usage-limit message, else `ENGINE_CRASHED_BEFORE_START`; after delivery it is
+  `ENGINE_CRASHED`. A session that ended before delivery is `RUNNER_UNAVAILABLE`, after it `NO_REPORT`. A retry is the same run row back in QUEUED with `attempt + 1` and `notBeforeAt`, and a new
+  session; a newer run already waiting takes its place instead.
+- The run limit counts the engine's working time from `delivered_at`: time a card kept the run waiting is left out,
+  so the 2-hour approval timeout can be reached under a run limit of at most 2 hours.
 - SKIPPED, MISSED and HELD runs are not failures.
 
 ### 7.3 Who hears
@@ -442,12 +522,56 @@ Mocks first, with iOS as the reference. Client work starts after the owner appro
 | P2 clients | boards → owner approval → left-drawer page, inspector and session cards on iOS, then web, macOS, Android |
 | P3 | cron and sub-daily rules |
 
-## 12. Open points for P1
+## 12. Open points for P1, settled (S2, 2026-11-15)
 
-- Every query that must leave `SCHEDULE` sessions out: the session list, search, a workspace's session count.
-- The mode each engine runs for each access level, measured on the real CLIs: whether `plan` lets a `CHECK_ONLY` run
-  fetch a URL and run read-only commands without a card on each engine.
-- The 2-hour approval timeout, the retry backoff and the 30-minute run limit are first guesses.
+**1. The queries that must leave `SCHEDULE` sessions out** (S3 implements them; `runSource = 'SCHEDULE'`, or
+`schedule_run_id IS NOT NULL`):
+
+- `SessionsService.list` (`GET /sessions`: Open, Completed and Trash, every filter and folder view);
+- `SessionsService.listOpenSince` and `listRowsByIds` (the list's delta and the rows pushed to clients);
+- `SessionsService.search` and `searchEvents` (session search, by title and by transcript);
+- `SessionsService.workspaceSessionCounts` (a workspace's session count in the sidebar);
+- `SessionsService.listForOrchestration` (MCP `session_list` and `orbit session list`);
+- the project sessions view (`sessions/session-project-membership.ts`) and session-folder counts;
+- the realtime `session.created` push, so a run's session does not appear in an open list.
+
+A run's session stays reachable by id (`GET /sessions/:id`, `session_get`), which is how the schedule's history and
+the notification open it.
+
+**2. The mode each engine runs for each access level**, measured on the real CLIs on 2026-11-15; the full record,
+with the commands and their output, is [scheduled-tasks-engine-modes.md](./scheduled-tasks-engine-modes.md). The
+table in §6.2 is the result. What the measurement found:
+
+- *Claude Code 2.1.325*, `claude -p … --permission-mode plan` with the runner's flags: `WebFetch`, `curl`,
+  `git log --oneline -1` and `ls` ran with no ask; `Write` was refused ("Cannot write to …/probe.txt while in plan
+  mode."). **But a writing shell command also ran with no ask**: `date > probe3.txt; ls` and `touch probe2.txt`
+  created both files (`DENIALS []`), where `--permission-mode default` asked ("Output redirection to … needs
+  approval"). So on Claude, `CHECK_ONLY` blocks file tools but leaves "edits nothing" for the shell to the model.
+  `acceptEdits`: `Write` ran; `git add`/`git commit` and `curl` asked, so an `OPEN_PR` run stops on a card at its
+  commit unless a workspace rule (Always allow) covers it.
+- *Codex 0.169.0* (app-server, `approvalPolicy: untrusted`, runner answers as for Plan): the built-in web search
+  opened `https://example.com` with no request; `git log` and even `ls` came as `commandExecution/requestApproval`,
+  which in Plan the runner declines with no card; the patch was declined. Plan is enforced, but a check that needs to
+  read the checkout cannot: reads go through the shell.
+- *Kimi 2.5.3* (ACP, mode `plan`): `FetchURL` ran with no ask; `Bash` asked (`session/request_permission`), so each
+  command is a card; the write was refused by Kimi ("Plan mode is active…").
+- *OpenCode 1.19.5* (`opencode run` with the runner's permission map): in plan, `webfetch` and `bash` were
+  auto-rejected ("permission requested: webfetch …; auto-rejecting") and no write tool was offered; reads worked.
+  In acceptEdits the write worked but every command was auto-rejected, so it cannot commit or open a PR: `OPEN_PR`
+  is refused there.
+- *Antigravity 1.5.9*: not signed in on the measuring host ("error: authentication failed or timed out"); its row
+  follows the runner (`--mode plan`, the approval hook in Accept Edits) and is to be measured on a signed-in runner.
+- *DeepSeek Harness*, *Cursor CLI*: not installed on the measuring host; their rows follow `permissionSemantics.ts`.
+
+So `plan` lets a `CHECK_ONLY` run fetch a URL **and** run read-only commands without a card only on Claude Code;
+on Kimi each command is a card (answered "Always allow" once, the workspace rule carries it to later runs, §6.4),
+and on Codex and OpenCode a `CHECK_ONLY` run can fetch or read but not both. Two follow-ups are filed: closing
+Claude's shell-write gap in `plan`, and letting Codex Plan run read-only commands.
+
+**3. The defaults** stay: approval timeout 2 hours; retries after 1, 5 and 15 minutes, then hourly inside the
+catch-up window (§5.2, §7.2); run limit 30 minutes, at most 120. One change: the run limit counts working time only, without
+the time a card waited (§7.2), or the approval timeout could never fire. A first turn not delivered within 10
+minutes is `RUNNER_UNAVAILABLE`; a slot fired within 10 minutes of its time is SCHEDULED, later it is CATCH_UP.
 
 ## 13. Decisions (owner, 2026-11-14: A on all four)
 
