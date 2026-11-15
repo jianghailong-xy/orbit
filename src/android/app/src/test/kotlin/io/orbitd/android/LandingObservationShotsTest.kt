@@ -26,7 +26,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.cards.ExceptionCard
-import io.orbitd.android.cards.NeedsYouBar
+import io.orbitd.android.cards.NeedsYouToastCard
 import io.orbitd.android.cards.NeedsYouLogic
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.cards.CardActionState
@@ -59,7 +59,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * R29-12's NATIVE frames, light and dark, beside the browser's (docs/evidence/landing-observation/web): the start card and How it runs
  * with the Delivery row (§10.5 O-L1/O-L2), the two revision-29 items' cards with Accept and Observe again and the observation's
- * handling line (§10.7, §10.8, §4.7 H1), Observe again's reason, the item a project's failing observations open, the needs-you bar for
+ * handling line (§10.7, §10.8, §4.7 H1), Observe again's reason, the item a project's failing observations open, the needs-you notice for
  * the fifth owner item (§7.6 V13), and — over the shell's controlled server — the project page's task rows (§10.9), its Open items and
  * the projects list's chip (§7.1 V2). Each is drawn by the production composables with the web rig's items, and written as
  * `<scene>-<theme>.png` under `src/android/build/evidence/landing-observation-android/` beside its semantics tree; a menu's or a
@@ -191,20 +191,18 @@ abstract class LandingObservationShots {
     /** `IE:observe`, the owner's: Observe again its one, leading door. */
     @Test fun cardObserveFailing() { card(LandingObservationItems.observeFailing("OWNER")); shot("card-observe-failing") }
 
-    /** The needs-you bar for the fifth owner item: its kind word over the project, with the merge's mark. */
-    @Test fun needsYouBar() {
+    /** The needs-you notice for the fifth owner item: the conversation, its kind word and workspace, with the merge's mark. */
+    @Test fun needsYouToast() {
         val coordinator = j("""{"id":"${ProjectShell.COORD}","title":"Coordinate checkout","status":"AWAITING_INPUT","pendingApprovals":1,
             "waitingKind":"OWNER_ITEM","projectId":"$launch","projectTitle":"Checkout redesign","agent":{"id":"${ProjectShell.ALPHA}","name":"Alpha"},
             "ownerItems":[{"itemId":"${LandingObservationItems.LANDED}","kind":"LANDED_WITHOUT_CONFIRMATION",
             "title":"Reached main without your confirmation: Fix the login redirect","since":"${ago(120)}",
             "need":"Landed without your confirmation","mainBranch":"main"}]}""")
-        val banner = NeedsYouLogic.banner(listOf(coordinator))!!
+        val notice = NeedsYouLogic.newlyWaiting(listOf(coordinator), emptySet()).single()
         show {
-            Column(Modifier.padding(16.dp)) {
-                NeedsYouBar(banner.text, NeedsYouLogic.itemHint, detail = banner.detail, since = banner.since, more = banner.more, glyph = banner.glyph) {}
-            }
+            Column(Modifier.padding(16.dp)) { NeedsYouToastCard(notice, dismiss = {}) {} }
         }
-        shot("needs-you-bar")
+        shot("needs-you-toast")
     }
 
     // MARK: the pages
