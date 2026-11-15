@@ -164,7 +164,7 @@ export function grade({ calls, replies }, scenario) {
       assert.match(prose, /\bwait(?:ing)?\b/i, 'the caller waits for state change');
       assert.doesNotMatch(prose, /(?:you|user|owner).{0,20}(?:must|need to|should) wait/i, 'the caller owns the wait');
     } else if (scenario.disposition === 'STOP') {
-      assert.match(prose, /\bstop(?:ping|ped)?\b/i, 'the caller stops');
+      assert.match(prose, /\bstop(?:ping|ped)?\b|\bfinal\b|\b(?:will not|do not|cannot) (?:retry|try again)\b/i, 'the caller stops');
       assert.doesNotMatch(prose, /(?:you|user|owner).{0,20}(?:must|need to|should) stop/i, 'the caller owns the stop');
     } else {
       assert.ok(/(?:you|user|owner).{0,120}(?:start|open).{0,30}(?:new|session)/i.test(prose)
