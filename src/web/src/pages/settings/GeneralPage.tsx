@@ -180,9 +180,25 @@ export function GeneralSettingsPage() {
               />
             }
           />
+          {/* "Show both languages" (docs/mocks/session-translation/02-bilingual.png, mark A): only while
+              translation is on; absent = off. */}
+          {!translationUnavailable && prefs.translationEnabled === true && (
+            <SettingsRow
+              anchor={S.translationBilingual.anchor}
+              title={S.translationBilingual.title}
+              control={
+                <Switch
+                  aria-label="Show both languages"
+                  checked={prefs.translationBilingual === true}
+                  onCheckedChange={(v) => save.mutate({ translationBilingual: v })}
+                  loading={save.isPending}
+                />
+              }
+            />
+          )}
         </SettingsCard>
         <p className="settings-translation-footnote">
-          Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a
+          With both languages on, each translated message also shows the words the agent read or wrote, in the language agents work in. Translated by the server's DeepSeek model. Applies to every session from its next message; what's already in a
           conversation stays as it was.
         </p>
       </SettingsSection>

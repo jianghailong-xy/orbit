@@ -211,6 +211,8 @@ export interface UserPreferences {
   translationLanguage?: TranslationLanguage;
   /** "Agents work in". Absent = DEFAULT_AGENT_LANGUAGE (English). */
   translationAgentLanguage?: TranslationLanguage;
+  /** "Show both languages": absent means OFF. */
+  translationBilingual?: boolean;
   /** The provider slugs no SubAgent of this account is routed onto (docs/subagent-design.md §7). Absent: none. */
   subagentBlockedProviders?: string[];
 }
