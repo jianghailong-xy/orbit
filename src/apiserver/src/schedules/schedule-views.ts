@@ -8,6 +8,8 @@
  * line on what the person will hear about. Each line comes with the values it was written from, so a client may set
  * its own words.
  */
+// The Costs line has one source, shared with the clients (src/shared/src/schedule.ts).
+import { scheduleCostsText } from '@orbit/shared';
 import type { Prisma, Schedule, ScheduleChangeRequest, ScheduleFinding, ScheduleRevision, ScheduleRun } from '@prisma/client';
 
 import type { AccessLevel, Envelope, EnvelopePart } from './schedule-envelope';
@@ -47,10 +49,6 @@ export function scheduleRuleText(rule: ScheduleRule): string {
       return `Weekly ${days.map((d) => WEEKDAY_LABELS[d] ?? d).join(', ')} ${rule.time}`;
     }
   }
-}
-
-export function scheduleCostsText(runsPerWeekCount: number, runLimitMinutes: number): string {
-  return `Up to ${runsPerWeekCount} run${runsPerWeekCount === 1 ? '' : 's'} a week, ${runLimitMinutes} min each`;
 }
 
 export function scheduleMayText(level: AccessLevel): string {
