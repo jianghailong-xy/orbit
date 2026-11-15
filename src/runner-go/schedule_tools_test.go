@@ -78,7 +78,7 @@ func TestScheduleCreateSaysNothingIsScheduledYet(t *testing.T) {
 	res := s.callTool("schedule_create", map[string]interface{}{
 		"intent": "every day at 10", "title": "Check", "prompt": "check it", "accessLevel": "CHECK_ONLY",
 		"rule": map[string]interface{}{"kind": "DAILY", "time": "10:00"}, "readBack": "Every day I check it.",
-		"baseline": map[string]interface{}{"key": "v1"}, "workspaceId": "ignored",
+		"findings": "versions", "baseline": map[string]interface{}{"key": "v1"}, "workspaceId": "ignored",
 	})
 	if res["isError"] == true {
 		t.Fatalf("result = %v", res)
@@ -92,7 +92,7 @@ func TestScheduleCreateSaysNothingIsScheduledYet(t *testing.T) {
 	if _, sent := calls[0].body["workspaceId"]; sent {
 		t.Fatal("the workspace is the calling session's: the tool sends none")
 	}
-	for _, key := range []string{"intent", "title", "prompt", "rule", "accessLevel", "readBack", "baseline"} {
+	for _, key := range []string{"intent", "title", "prompt", "rule", "accessLevel", "readBack", "findings", "baseline"} {
 		if _, sent := calls[0].body[key]; !sent {
 			t.Errorf("%s was not sent", key)
 		}

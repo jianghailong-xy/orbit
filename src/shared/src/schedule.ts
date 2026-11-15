@@ -195,6 +195,10 @@ export const SCHEDULE_COPY = {
     CANCELLED_BY_OWNER: 'was stopped by you',
     OVER_BUDGET: 'was over what you allowed this week',
   },
+  /** A failure that reported what went wrong says it, in the failure card and its push (one line, 120 characters). */
+  failureReasonsWithSummary: {
+    REPORTED_FAILED: 'reported a failure: {summary}',
+  },
   /** Why a schedule is held, as a clause; `until` is what has to change before Resume. */
   heldReasons: {
     WORKSPACE_NOT_OWNED: { clause: 'the workspace {workspace} is no longer yours', until: 'it is yours again' },
@@ -208,7 +212,10 @@ export const SCHEDULE_COPY = {
       until: 'it runs on an engine that can',
     },
     MODE_WIDER_THAN_ACCOUNT_DEFAULT: {
-      clause: "its access is wider than your account's default mode",
+      // Says what to change: Plan as the account default holds a CHECK_ONLY run on Claude Code (Don't Ask, §6.2) and
+      // every OPEN_PR run; Default holds neither.
+      clause:
+        "your account's default permission mode is narrower than its runs use (set it to Default in Settings > General)",
       until: 'your default mode allows it',
     },
     NO_REPOSITORY: { clause: 'the workspace {workspace} has no repository', until: 'it has one' },
@@ -327,6 +334,8 @@ export const SCHEDULE_COPY = {
     runsInEngine: '{workspace} · {engine} agent',
     zoneFromDevice: 'your time zone',
     notice: "You'll hear about new findings and failures only.",
+    /** The notice with what this task finds ("versions", "issues"), as the boards word it per task. */
+    noticeAbout: "You'll hear about new {findings} and failures only.",
   },
   envelopeCard: {
     titles: {
@@ -367,6 +376,11 @@ export const SCHEDULE_COPY = {
     widen: {
       body: '{reason} Now: {now}. Asked: {asked}',
     },
+  },
+  /** A push's banner where it is not the Waiting on you card's own words (board 1/2 ⑤, 2/2 ④). */
+  push: {
+    failedBody: 'The last run {reason}. It keeps running until you pause it.',
+    goalReachedTitle: '{title} ended itself',
   },
   empty: {
     lead: 'Nothing scheduled. Say what should happen and when; an agent sets it up and asks you once.',
@@ -465,6 +479,10 @@ export interface ScheduleView {
   workspaceId: string;
   workspaceName: string | null;
   agentId: string | null;
+  /** The agent's name, so a hold can say 'the agent "auditor" is disabled'; null when it names none or is gone. */
+  agentName: string | null;
+  /** The engine its runs start on when the conversation it came from still names one ("codex"), else null. */
+  engine: string | null;
   accessLevel: ScheduleAccessLevel;
   may: string;
   runLimitMinutes: number;
@@ -876,6 +894,12 @@ export function scheduleRunsInText(workspaceName: string, engine: string | null)
   return engine
     ? scheduleFill(C.createCard.runsInEngine, { workspace: workspaceName, engine: scheduleEngineName(engine) })
     : workspaceName;
+}
+
+/** The create card's last line: "You'll hear about new versions and failures only." `findings` defaults to findings. */
+export function scheduleCreateNotice(findings?: string | null): string {
+  const what = findings?.trim();
+  return what ? scheduleFill(C.createCard.noticeAbout, { findings: what }) : C.createCard.notice;
 }
 
 /** The create card's When: "Daily 10:00 · Asia/Shanghai · first run tomorrow", with its parts. */
@@ -1452,11 +1476,28 @@ export interface ScheduleWaitingText {
   actions: string[];
 }
 
+const SUMMARY_MAX = 120;
+
+/**
+ * The failure clause a failure card and its push say: a REPORTED_FAILED run's own summary, one line of at most 120
+ * characters with no closing full stop ("reported a failure: The releases page returned 503"), else the reason's.
+ */
+function failedWaitingClause(run: Pick<ScheduleRunView, 'failureReason' | 'reasonText'> & { summary?: string | null }): string {
+  const template = run.reasonText ? undefined
+    : (C.failureReasonsWithSummary as Record<string, string>)[String(run.failureReason)];
+  const flat = run.summary?.replace(/\s+/g, ' ').trim().replace(/[.。]+$/, '') ?? '';
+  if (template && flat) {
+    const summary = flat.length <= SUMMARY_MAX ? flat : `${flat.slice(0, SUMMARY_MAX - 1).trimEnd()}…`;
+    return scheduleFill(template, { summary });
+  }
+  return scheduleFailureClause(run) ?? C.failureReasons.REPORTED_FAILED;
+}
+
 /** A failed schedule's card: "Nightly pg spec sweep failed 3 runs in a row". */
 export function scheduleFailedWaiting(input: {
   title: string;
   consecutiveFailures: number;
-  run: Pick<ScheduleRunView, 'failureReason' | 'reasonText' | 'plannedAt'>;
+  run: Pick<ScheduleRunView, 'failureReason' | 'reasonText' | 'plannedAt'> & { summary?: string | null };
   timezone: string;
 }): ScheduleWaitingText {
   const at = new Date(input.run.plannedAt);
@@ -1466,11 +1507,28 @@ export function scheduleFailedWaiting(input: {
       : scheduleFill(C.waiting.failed.title, { title: input.title }),
     kind: C.waiting.kinds.schedule,
     body: scheduleFill(C.waiting.failed.body, {
-      reason: scheduleFailureClause(input.run) ?? C.failureReasons.REPORTED_FAILED,
+      reason: failedWaitingClause(input.run),
       when: `${scheduleDateText(at, input.timezone)}, ${localParts(at, input.timezone).time}`,
     }),
     actions: [C.actions.openRun, C.actions.pauseSchedule],
   };
+}
+
+/**
+ * A failure's push: the card's title, and "The last run ended without a report. It keeps running until you pause it."
+ */
+export function scheduleFailedPush(input: Parameters<typeof scheduleFailedWaiting>[0]): { title: string; body: string } {
+  return {
+    title: scheduleFailedWaiting(input).title,
+    body: scheduleFill(C.push.failedBody, {
+      reason: failedWaitingClause(input.run),
+    }),
+  };
+}
+
+/** A run ending its own schedule: "Release 2.0 freeze watch ended itself". */
+export function scheduleGoalReachedPushTitle(title: string): string {
+  return scheduleFill(C.push.goalReachedTitle, { title });
 }
 
 /** A held schedule's card: "Weekly dependency audit is held". */

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { EMPTY, firstValueFrom, take, toArray } from 'rxjs';
 import { RunEventType } from '@orbit/shared';
 import { SessionsController } from './sessions.controller';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 
 /**
  * Settings › Translation: a reply's translation reaches a client once, as a live-only `translation`
@@ -33,8 +34,8 @@ function controllerOver(gap: unknown[], translated: unknown[] | Error): { c: Ses
   const queries: string[] = [];
   const prisma = {
     session: { findFirst: async () => ({ id: SESSION }) },
-    $queryRaw: async (strings: TemplateStringsArray) => {
-      const sql = strings.join('?');
+    $queryRaw: async (...args: unknown[]) => {
+      const sql = renderRawQuery(args).text;
       queries.push(sql);
       if (!sql.includes("payload->'translation'")) return gap;
       if (translated instanceof Error) throw translated;

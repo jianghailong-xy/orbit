@@ -62,6 +62,7 @@ import {
 import { ScheduleRuleError, assertTimezone, nextDueAt, parseRule, runsPerWeek, type ScheduleRule } from './schedule-time';
 import { SCHEDULE_ACCESS_NOT_ENFORCEABLE, scheduleRunMode } from './schedule-access';
 import { scheduleStartCheck } from './schedule-start-check';
+import { workspaceNames } from './schedule-views';
 import {
   SCHEDULE_NOTIFIER,
   closeScheduleItems,
@@ -116,6 +117,11 @@ export interface ScheduleCreateInput {
    * time I check …"). Kept on the CREATE request, which is where the card and the inspector read it from.
    */
   readBack?: string | null;
+  /**
+   * What a new finding of this task is, as a plural noun ("versions", "issues"): the card's last line says "You'll hear
+   * about new versions and failures only." Without it the line says findings.
+   */
+  findings?: string | null;
 }
 
 /** What the owner's press on a card may carry. */
@@ -791,8 +797,23 @@ export class SchedulesService {
     });
     if (who.changedBy === 'RUN' && who.sessionId) {
       // §8.3: a run asking to widen its envelope gets the card in Waiting on you; nobody is in its conversation.
-      const run = await tx.session.findUnique({ where: { id: who.sessionId }, select: { scheduleRunId: true } });
-      const copy = widenCopy(schedule.title, judgment.widens);
+      const run = await tx.session.findUnique({
+        where: { id: who.sessionId },
+        select: { scheduleRunId: true, scheduleRun: { select: { summary: true } } },
+      });
+      const before = envelopeOf(schedule);
+      const copy = widenCopy({
+        title: schedule.title,
+        reason: run?.scheduleRun?.summary ?? null,
+        widens: judgment.widens,
+        now: before,
+        asked: judgment.next,
+        ruleNow: schedule.rule as unknown as ScheduleRule,
+        ruleAsked: settings.rule,
+        workspaceNames: Object.fromEntries(
+          await workspaceNames(tx, schedule.ownerId, [before.workspaceId, judgment.next.workspaceId]),
+        ),
+      });
       const itemId = await fileScheduleItem(tx, {
         kind: 'SCHEDULE_WIDEN',
         ownerId: schedule.ownerId,
@@ -803,7 +824,7 @@ export class SchedulesService {
         workspaceId: schedule.workspaceId,
         key: `schedule-widen:${request.id}`,
         title: copy.title,
-        why: copy.body,
+        why: copy.why,
       });
       if (itemId) {
         alerts.push({
@@ -813,7 +834,8 @@ export class SchedulesService {
           runId: run?.scheduleRunId ?? null,
           opens: { sessionId: who.sessionId },
           ownerRequestId: itemId,
-          ...copy,
+          title: copy.title,
+          body: copy.body,
           collapseId: `owner-request-${itemId}`,
         });
       }
@@ -1093,6 +1115,9 @@ export class SchedulesService {
     if (input.readBack != null && (typeof input.readBack !== 'string' || input.readBack.length > 500)) {
       throw refusal('BAD_REQUEST', 'SCHEDULE_FIELD_INVALID', 'A read-back is one sentence of at most 500 characters.');
     }
+    if (input.findings != null && (typeof input.findings !== 'string' || input.findings.length > 60)) {
+      throw refusal('BAD_REQUEST', 'SCHEDULE_FIELD_INVALID', 'findings is a plural noun of at most 60 characters.');
+    }
     const runLimitMinutes = input.runLimitMinutes ?? DEFAULT_RUN_LIMIT_MINUTES;
     checkRunLimit(runLimitMinutes);
     if (input.baseline) checkText('baseline key', input.baseline.key);
@@ -1109,6 +1134,7 @@ export class SchedulesService {
       endAt: input.endAt ?? null,
       baseline: input.baseline ?? null,
       readBack: input.readBack?.trim() || null,
+      findings: input.findings?.trim() || null,
     };
   }
 
@@ -1125,6 +1151,7 @@ export class SchedulesService {
       ...(p as unknown as NormalizedCreate),
       timezone: (p.timezone as string | null | undefined) ?? null,
       readBack: (p.readBack as string | null | undefined) ?? null,
+      findings: (p.findings as string | null | undefined) ?? null,
       startAt: p.startAt ? new Date(p.startAt as string) : null,
       endAt: p.endAt ? new Date(p.endAt as string) : null,
     };
@@ -1220,4 +1247,5 @@ interface NormalizedCreate extends Omit<Settings, 'timezone'> {
   startAt: Date | null;
   baseline: ScheduleBaseline | null;
   readBack: string | null;
+  findings: string | null;
 }

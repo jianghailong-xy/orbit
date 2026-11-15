@@ -287,7 +287,13 @@ test('§7.3 FAILED: push and Waiting on you; the third in a row says "failed 3 r
   assert.equal(pushed[0].kind, 'FAILED');
   assert.equal(pushed[0].ownerRequestId, pending[0].id, 'the push announces the item');
   assert.deepEqual(pushed[0].opens, { sessionId: one.sessionId });
-  assert.doesNotMatch(pushed[0].body, /in a row/);
+  assert.doesNotMatch(pushed[0].title, /in a row/);
+  assert.equal(
+    pushed[0].body,
+    'The last run reported a failure: The releases page returned 503. It keeps running until you pause it.',
+    'the push says what the run reported',
+  );
+  assert.match(pending[0].why, /^The last run reported a failure: The releases page returned 503 \(Nov \d+, \d\d:\d\d\)\. /);
   assert.equal((await db.session.findUniqueOrThrow({ where: { id: one.sessionId } })).completedAt, null, 'a FAILED run\'s session stays open');
 
   // The second fails without a report (its turn settled idle), the third past its limit.
@@ -302,11 +308,13 @@ test('§7.3 FAILED: push and Waiting on you; the third in a row says "failed 3 r
 
   pushed = alertsOf(schedule.id);
   assert.deepEqual(pushed.map((a) => a.kind), ['FAILED', 'FAILED', 'FAILED']);
-  assert.match(pushed[2].body, /failed 3 runs in a row/);
+  assert.match(pushed[2].title, / failed 3 runs in a row$/);
+  assert.equal(pushed[2].body, 'The last run ran past its run limit. It keeps running until you pause it.');
   pending = await pendingItems(schedule.id);
   assert.equal(pending.length, 1, 'one failure item at a time: the newest');
   assert.equal(pending[0].scheduleRunId, three.run.id);
-  assert.match(pending[0].why, /failed 3 runs in a row/);
+  assert.match(pending[0].title, / failed 3 runs in a row$/);
+  assert.match(pending[0].why, /^The last run ran past its run limit \(Nov \d+, \d\d:\d\d\)\. It keeps running on schedule until you pause it\./);
   assert.equal((await scheduleOf(schedule.id)).state, 'ACTIVE', 'failures never pause the schedule');
 
   const four = await nextRun(schedule.id);
@@ -336,7 +344,9 @@ test('§7.3 HELD: push opens the schedule and Waiting on you holds it until the 
   assert.equal(held.kind, 'SCHEDULE_HELD');
   assert.equal(pushed[0].ownerRequestId, held.id);
   assert.equal(held.askedBySessionId, from, 'shown with the conversation the schedule came from');
-  assert.match(held.why, /disabled/);
+  assert.match(held.title, / is held$/);
+  assert.match(held.why, /^It could not start on .+: the workspace .+ is disabled\. Nothing runs until it is enabled and you resume\.$/);
+  assert.equal(pushed[0].body, held.why, 'the push says what the item says');
 
   // A replay of the start (the held run, or another pass) files nothing more.
   await runs.startDue(25, schedule.id);
@@ -365,8 +375,9 @@ test('§6.4/§7.3 AWAITING_APPROVAL: push and an item that says what Always allo
   assert.equal(item.approvalId, card.id);
   assert.equal(item.scheduleRunId, run.id);
   assert.equal(item.askedBySessionId, sessionId);
-  assert.match(item.why, /Always allow writes a rule for this workspace/);
-  assert.match(item.why, /later runs won't ask for this/);
+  assert.match(item.title, / wants to run a command$/);
+  assert.match(item.why, /^If nobody answers by \d\d:\d\d this run fails; the next one starts .+\./);
+  assert.match(item.why, / in .+: later runs won't ask for this\.$/, 'it says what Always allow covers');
   const pushed = alertsOf(schedule.id);
   assert.equal(pushed.length, 1);
   assert.equal(pushed[0].kind, 'AWAITING_APPROVAL');
@@ -446,7 +457,8 @@ test('§8.3/Waiting on you: a run asking for a wider envelope files an item; All
   assert.equal(item.scheduleChangeRequestId, requestId);
   assert.equal(item.scheduleRunId, run.id);
   assert.equal(item.askedBySessionId, sessionId);
-  assert.match(item.why, /how often it runs/);
+  assert.match(item.title, /^Let .+ run more often\?$/);
+  assert.match(item.why, /Now: Mondays 10:00 · up to 1 run a week\. Asked: Daily 10:00 · up to 7 runs a week, 30 min each$/);
   const pushed = alertsOf(schedule.id);
   assert.deepEqual(pushed.map((a) => a.kind), ['WIDEN']);
   assert.equal(pushed[0].ownerRequestId, item.id);
