@@ -17,8 +17,8 @@ const OTHER_RUNNER_ID = '00000000-0000-7000-8000-0000000000b2';
 const SESSION_ID = '00000000-0000-7000-8000-0000000000c1';
 const WORKSPACE_ID = '00000000-0000-7000-8000-0000000000d1';
 const PROJECT_ID = '00000000-0000-7000-8000-0000000000e1';
-/** The conversation the fallback opens for a project the acting session may not coordinate. */
-const SECOND_SESSION_ID = '00000000-0000-7000-8000-0000000000c2';
+/** The project the acting session already coordinates, when a test says it has one. */
+const BOUND_PROJECT_ID = '00000000-0000-7000-8000-0000000000e2';
 
 interface SessionRow {
   id: string;
@@ -101,8 +101,13 @@ function uniqueCoordinator(): Prisma.PrismaClientKnownRequestError {
   });
 }
 
-function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
+function makeService(
+  rows: SessionRow[] = [LIVE],
+  insertFails?: Error,
+  bound?: { id: string; title: string; coordinatorSessionId: string },
+) {
   rows = rows.map((row) => ({ ...row }));
+  const boundLookups: Record<string, unknown>[] = [];
   const creates: Record<string, unknown>[] = [];
   const lookups: Record<string, unknown>[] = [];
   const sessionUpdateSql: string[] = [];
@@ -119,6 +124,14 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
       },
     },
     project: {
+      // The project the acting session already coordinates, read only by the ALREADY_COORDINATING
+      // refusal so it can name it.
+      findFirst: async ({ where, select }: any) => {
+        boundLookups.push({ where, select });
+        return bound && where.ownerId === OWNER_ID && where.coordinatorSessionId === bound.coordinatorSessionId
+          ? { id: bound.id, title: bound.title }
+          : null;
+      },
       create: async ({ data }: any) => {
         // The row the insert WOULD have written is recorded before it fails, so a test can assert
         // that a rejected create left nothing behind — the database writes no row for a statement
@@ -198,26 +211,10 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
   return {
     creates,
     lookups,
+    boundLookups,
     sessionCreates,
     sessionUpdateSql,
     sessions: rows,
-    /**
-     * Record what the ALREADY_COORDINATING fallback delegates, instead of running it.
-     *
-     * `createInWorkspace` is a composition of three calls this fixture does not model — opening a
-     * coordinator takes a session, three lock reads and a compare-and-swap — and its own contract
-     * is asserted where those are modelled. What belongs HERE is the decision: that the fallback
-     * happens at all, and that the workspace it hands on is the acting session's own rather than
-     * anything a caller could have chosen.
-     */
-    delegateTo(calls: unknown[], project: Record<string, unknown>) {
-      (service as unknown as Record<string, unknown>).createInWorkspace = async (
-        ...args: unknown[]
-      ) => {
-        calls.push(args);
-        return project;
-      };
-    },
     inSession: (dto: CreateProjectDto, sessionId = SESSION_ID, runnerId = RUNNER_ID) =>
       service.createInSession(OWNER_ID, runnerId, sessionId, dto),
     /** The seeded create on its own, which is where the unique violation is translated. */
@@ -473,40 +470,61 @@ test('every refusal reads exactly the same', async () => {
 // ── One session coordinates at most one project ───────────────────────────────────────────────
 
 // `coordinator_session_id` is UNIQUE, so the SECOND project recorded from one conversation is a
-// unique violation rather than a second binding. The rule stands; what follows it changed. Being
-// refused left the caller one move it could actually make — drop the session header and retry —
-// and that move records a project coordinated by NOBODY, which is the one thing this path exists
-// to stop producing. So the second project gets a conversation of its own instead.
-test('a second project from the same session gets its OWN coordinator, in the same workspace', async () => {
-  const f = makeService([LIVE], uniqueCoordinator());
-  const delegated: unknown[] = [];
-  f.delegateTo(delegated, { id: PROJECT_ID, title: 'Crawl again', coordinatorSessionId: SECOND_SESSION_ID });
+// unique violation rather than a second binding. The rule stands, and the refusal is now what the
+// caller acts on: it names the project the session is bound to, so the caller can reconcile, and it
+// carries the child-session chain for the new one, which a person confirms before anything opens.
+// Nothing is opened here: the conversation the old fallback opened unasked kept no link back.
+test('a second project from the same session is refused with the bound project and the child-session chain', async () => {
+  const f = makeService([LIVE], uniqueCoordinator(), {
+    id: BOUND_PROJECT_ID, title: 'Explore the corpus', coordinatorSessionId: SESSION_ID,
+  });
+  const dto: CreateProjectDto = {
+    title: 'Crawl again',
+    goal: 'Re-crawl the corpus weekly.',
+    instructions: 'Keep each crawl idempotent.',
+    acceptanceCriteriaItems: [
+      { text: 'A crawl runs every week.', verificationMethod: 'Read the schedule.' },
+    ],
+  };
 
-  const result = await f.inSession({ title: 'Crawl again' }) as { coordinatorInstructions: string };
+  await assert.rejects(
+    () => f.inSession(dto),
+    (e: unknown) => {
+      assert.ok(e instanceof ConflictException, `expected a 409, got ${String(e)}`);
+      const body = e.getResponse() as Record<string, any>;
+      assert.equal(body.code, 'ALREADY_COORDINATING');
+      assert.deepEqual(body.coordinatingProject, { id: uuidToBase62(BOUND_PROJECT_ID), title: 'Explore the corpus' });
+      assert.equal(body.sessionId, uuidToBase62(SESSION_ID));
+      assert.equal(body.requiredAction, 'CREATE_PROJECT_IN_CHILD_SESSION');
+      assert.deepEqual(body.recovery, {
+        effect: 'NONE',
+        retryPolicy: 'NEVER',
+        actionCode: 'CREATE_PROJECT_IN_CHILD_SESSION',
+        actor: 'CALLER',
+        userConfirmation: 'REQUIRED',
+        resources: [
+          { type: 'PROJECT', id: uuidToBase62(BOUND_PROJECT_ID) },
+          { type: 'SESSION', id: uuidToBase62(SESSION_ID) },
+        ],
+      });
+      assert.match(body.message, /already coordinates project “Explore the corpus”/);
+      assert.match(body.message, /ask the user first/);
+      // The child's opening prompt is self-contained: every field of the project, as arguments.
+      const prompt = body.childSessionPrompt as string;
+      const json = /```json\n([\s\S]*?)\n```/.exec(prompt);
+      assert.ok(json, 'the prompt carries the project_create arguments as JSON');
+      assert.deepEqual(JSON.parse(json[1]), dto);
+      assert.match(prompt, /PROJECT_CREATED projectId=/, 'and names the receipt a success reply carries');
+      return true;
+    },
+  );
 
-  // The landing is STILL server-derived — the acting session's own workspace, not anything the
-  // caller named. Only the conversation is new, so this widens no authority.
-  assert.equal(delegated.length, 1);
-  assert.deepEqual((delegated[0] as unknown[]).slice(0, 1), [OWNER_ID]);
-  assert.equal((delegated[0] as unknown[])[2], WORKSPACE_ID);
-  assert.deepEqual((delegated[0] as unknown[])[3], { type: 'RUNNER', id: RUNNER_ID });
-
-  // And the caller is told it was NOT promoted. Saying nothing would be read as the promotion,
-  // since that is what recording a project from a session has always meant.
-  assert.match(result.coordinatorInstructions, /you are not its coordinator session/);
-  for (const coordinatorEnabled of [false, true]) {
-    assert.notEqual(
-      result.coordinatorInstructions,
-      buildCoordinatorInstructions('Crawl again', PROJECT_ID, coordinatorEnabled),
-    );
-  }
-
-  // The first attempt still wrote nothing. One statement is what makes half-written unreachable:
-  // the insert that would have carried the binding is the insert that raised, so there is no
-  // project row and no dangling pointer from it — the project that exists is the one the fallback
-  // created, and it is not this one.
+  // It looked up the binding under this owner and this session, and nothing else was written: the
+  // insert that would have carried the binding is the one that raised.
+  assert.deepEqual(f.boundLookups.map((l) => l.where), [{ ownerId: OWNER_ID, coordinatorSessionId: SESSION_ID }]);
   assert.equal(f.creates.length, 1, 'exactly one seeded statement was attempted');
   assert.equal(f.creates[0].coordinatorSessionId, SESSION_ID);
+  assert.equal(f.sessionCreates.length, 0, 'no conversation is opened on the caller\'s behalf');
   assert.equal(f.sessions[0].title, 'Explore the corpus', 'the failed transaction rolls the rename back');
   assert.equal(f.sessions[0].titleManagedByProject, false);
 });
@@ -517,9 +535,9 @@ test('a second project from the same session gets its OWN coordinator, in the sa
 test('the unique violation is still translated into a code the fallback can switch on', async () => {
   const f = makeService([LIVE], uniqueCoordinator());
 
-  // Asserted at its SOURCE — the seeded create — rather than through `createInSession`, which no
-  // longer lets it out. An untranslated P2002 would reach the fallback as a bare Prisma error and
-  // be rethrown as a 500 for a case that now has a working outcome.
+  // Asserted at its SOURCE — the seeded create — where the bare rule is raised; `createInSession`
+  // replaces it with the refusal that names the bound project. An untranslated P2002 would reach it
+  // as a bare Prisma error and be rethrown as a 500.
   await assert.rejects(
     () => f.seeded({ title: 'Crawl again' }),
     (e: unknown) => {

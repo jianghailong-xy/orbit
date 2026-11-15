@@ -477,7 +477,7 @@ func TestCapabilitiesDocumentStaysBackwardCompatibleAndCarriesCatalogIdentity(t 
 	for _, key := range []string{
 		"schemaVersion", "capabilityRevision", "serverCapabilityRevision", "serverSchemaRevision",
 		"contractDigest", "capabilityCount", "cliVersion", "sourceSha", "registered", "context",
-		"identity", "capabilities", "catalogVersion", "catalogHash",
+		"identity", "capabilities", "catalogVersion", "catalogHash", "unavailableCapabilities",
 	} {
 		if _, ok := decoded[key]; !ok {
 			t.Errorf("the capabilities document no longer carries %q", key)
@@ -502,7 +502,7 @@ func TestCapabilitiesDocumentStaysBackwardCompatibleAndCarriesCatalogIdentity(t 
 	}
 	added := []string{
 		"object", "intent", "risk", "approval", "destructive", "idempotency", "retry",
-		"successEvidence", "returns", "availability",
+		"successEvidence", "returns", "availability", "retryPolicy", "idempotencyArg", "interaction",
 	}
 	for i, entry := range capabilities {
 		row, _ := entry.(map[string]interface{})
