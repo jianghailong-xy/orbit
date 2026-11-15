@@ -23459,6 +23459,149 @@ div.landing-jobs-open {
   justify-content: flex-start;
   row-gap: 2px;
 }
+/* A SubAgent's end (SubagentFinishedCard): the same line, marked with the SubAgent card's own purple ✦
+   so it reads back to the card that started it, and what it handed back kept under the line. */
+.sawake .bgwake-mark {
+  font-size: 12px;
+  line-height: 1;
+}
+/* Purple only while it finished: scoped so the dark theme's purple never outranks the error tone. */
+.sawake:not(.is-failed) .bgwake-mark {
+  color: #7c3aed;
+}
+:root[data-theme='dark'] .sawake:not(.is-failed) .bgwake-mark {
+  color: #a78bfa;
+}
+.sawake.is-failed .bgwake-mark {
+  color: var(--error-solid);
+}
+.sawake-meta-runs {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  color: var(--text-3);
+}
+.sawake-meta-name {
+  color: var(--text-2);
+}
+.sawake-run-id {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+}
+.sawake-card-link {
+  color: var(--brand);
+}
+.sawake-outcome,
+.sawake-runs {
+  margin: 4px 0 6px 22px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--error-solid);
+  border-radius: 0 6px 6px 0;
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.sawake-outcome:not(.is-failed),
+.sawake-runs {
+  border-left-color: #c4b5fd;
+}
+:root[data-theme='dark'] .sawake-outcome:not(.is-failed),
+:root[data-theme='dark'] .sawake-runs {
+  border-left-color: rgba(167, 139, 250, 0.5);
+}
+.sawake-reason {
+  color: var(--error);
+}
+.sawake-reason + .sawake-result,
+.sawake-reason + .sawake-noresult {
+  margin-top: 4px;
+}
+.sawake-noresult {
+  color: var(--text-3);
+  font-style: italic;
+}
+.sawake-result-md .md > :first-child {
+  margin-top: 0;
+}
+.sawake-result-md .md > :last-child {
+  margin-bottom: 0;
+}
+/* Three lines of it until asked, clamped on the Markdown's own box and line height so the cut lands
+   on a line boundary (inline code chips included) and the third line ends in the ellipsis. No
+   max-height: one taken from the wrapper's font size cut the third line through its glyphs. */
+.sawake-result-md.is-clamped > .md {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.sawake-result-md.is-clamped > .md > * {
+  margin: 0;
+}
+.sawake-result-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sawake-result-toggle .anticon {
+  font-size: 9px;
+}
+.sawake-runs {
+  list-style: none;
+}
+.sawake-run + .sawake-run {
+  margin-top: 8px;
+}
+.sawake-run-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.sawake-run-mark {
+  flex: none;
+  width: 14px;
+  color: var(--success-solid);
+}
+.sawake-run.is-failed .sawake-run-mark,
+.sawake-run.is-failed .sawake-run-name {
+  color: var(--error);
+}
+.sawake-run-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sawake-run-line {
+  margin-left: 20px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.sawake-run-line .md,
+.sawake-run-line .md > * {
+  display: inline;
+  margin: 0;
+}
+.sawake-run-line.is-reason {
+  color: var(--error);
+}
+.sawake.is-failed > .bgwake-fold > .bgwake-row .bgwake-status,
+.sawake-run.is-failed .bgwake-status {
+  background: var(--error-bg);
+  color: var(--error);
+}
+.sawake-run-line.is-empty {
+  font-style: italic;
+}
 /* An exception item's delivery to the coordinator (components/OpenItemDeliveryCard.tsx): the same
    card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields
    drawn instead of the paragraph they were rendered into. Amber rather than brand: an exception
