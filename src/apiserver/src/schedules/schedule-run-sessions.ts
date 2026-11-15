@@ -28,6 +28,8 @@ export class SessionsScheduleRunPort implements ScheduleRunSessionPort {
         id: input.sessionId,
         runSource: SessionRunSource.SCHEDULE,
         scheduleRunId: input.scheduleRunId,
+        // Not a person's conversation: it must not become the workspace default (workspace-provider.ts).
+        openedBy: 'SCHEDULE',
         promptByOrbit: true,
         noWorktree: input.noWorktree,
       },

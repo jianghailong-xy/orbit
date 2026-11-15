@@ -35,6 +35,8 @@ export type SessionOpenedBy =
   | 'FEISHU'
   | 'SERVICE_TOKEN'
   | 'MENTION_REPLY'
+  /** A scheduled task's run (schedules/schedule-run-sessions.ts, migration 0830). */
+  | 'SCHEDULE'
   | 'ORBIT';
 
 export const SESSION_OPENED_BY_PERSON: SessionOpenedBy = 'PERSON';

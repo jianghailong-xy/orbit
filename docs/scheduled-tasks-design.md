@@ -305,6 +305,7 @@ the workspace's own at claim.
 ### 6.3 Session
 
 The run gets a new session in the schedule's workspace, with `runSource = SCHEDULE` and `scheduleRunId` set. Its
+`openedBy` is `SCHEDULE`, so it never becomes the workspace default a person's next session starts from. Its
 first turn carries a block written by the control plane, then the prompt:
 
 ```text

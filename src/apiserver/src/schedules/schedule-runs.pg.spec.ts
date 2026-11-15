@@ -567,6 +567,7 @@ test('§6.3 the run is a new session: runSource SCHEDULE, scheduleRunId, the mod
   assert.equal(session.permissionMode, PermissionMode.PLAN, 'CHECK_ONLY runs in Plan');
   assert.equal(session.branch, null, 'with no worktree');
   assert.equal(session.promptByOrbit, true, 'the control plane wrote its first turn');
+  assert.equal(session.openedBy, 'SCHEDULE', 'not a person\'s conversation, so never the workspace default');
   assert.equal(session.title, 'Codex stable check');
   assert.equal(
     session.prompt,

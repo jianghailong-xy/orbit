@@ -9855,9 +9855,9 @@ model ScheduleRun {
   summary          String?
   links            Json               @default("[]")
   failureReason    String?            @map("failure_reason")
-  /// A QUEUED run is not started before this (migration 0810): a retry's 1, 5 or 15 minutes (§7.2).
+  /// A QUEUED run is not started before this (migration 0830): a retry's 1, 5 or 15 minutes (§7.2).
   notBeforeAt      DateTime?          @map("not_before_at") @db.Timestamptz(3)
-  /// Why a HELD run's start checks failed (§6.1, migration 0810).
+  /// Why a HELD run's start checks failed (§6.1, migration 0830).
   heldReason       String?            @map("held_reason")
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
   sessions         Session[]
