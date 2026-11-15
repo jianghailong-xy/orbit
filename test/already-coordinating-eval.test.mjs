@@ -71,6 +71,17 @@ test('confirmation gate language is not mistaken for a manual-only conclusion', 
   grade(trace, confirmed);
 });
 
+test('reconciliation can compare the refusal with the requested project without another read', () => {
+  const trace = valid();
+  trace.calls.shift();
+  trace.replies[0] = 'Corpus (P1) is different from Refresh the search index. Open a child session?';
+  grade(trace, confirmed);
+});
+
+test('reconciliation can recognize the same project from the refusal without another read', () => {
+  grade({ calls: [], replies: ['Corpus (P1) already exists.'] }, scenarios.find(s => s.sameProject));
+});
+
 test('unconfirmed interaction cannot invoke even one child', async () => {
   await assert.rejects(evaluate(async ({ call }) => {
     await call('session_create', { prompt: childPrompt });

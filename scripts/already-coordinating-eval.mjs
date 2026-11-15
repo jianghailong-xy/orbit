@@ -101,7 +101,12 @@ export async function evaluate(adapter, surface, scenario) {
     await turn();
   }
   const trace = { calls, replies };
-  grade(trace, scenario);
+  try {
+    grade(trace, scenario);
+  } catch (error) {
+    error.evaluationTrace = trace;
+    throw error;
+  }
   return trace;
 }
 
@@ -112,7 +117,12 @@ export function grade({ calls, replies }, scenario) {
   assert.equal(calls.filter(c => c.name === 'session_send').length, 0, 'opening prompt needs no session_send');
   assert.ok(calls.every(c => ['project_get', 'session_create'].includes(c.name)), 'unexpected tool or CLI bypass');
   const read = calls.findIndex(c => c.name === 'project_get' && c.args.projectId === 'P1');
-  assert.ok(read >= 0 && (creates.length === 0 || read < calls.indexOf(creates[0])), 'reconcile the bound project before creating a child');
+  const readBeforeCreate = read >= 0 && (creates.length === 0 || read < calls.indexOf(creates[0]));
+  // Section 9 permits comparing the refusal's project with the requested one without another read.
+  const comparedInReply = scenario.sameProject
+    ? /already (recorded|exists)/i.test(replies[0])
+    : replies[0].includes(project.title) && /different|second project|separate project|another project/i.test(replies[0]);
+  assert.ok(readBeforeCreate || comparedInReply, 'reconcile the bound project before creating a child');
   assert.match(replies[0], /P1/);
   assert.match(replies[0], /Corpus/);
   if (scenario.sameProject) {
@@ -157,8 +167,8 @@ async function main() {
   const { createAgent } = await import(pathToFileURL(process.argv[2]).href);
   for (const surface of ['mcp', 'cli', 'legacy']) {
     for (const scenario of scenarios) {
-      await evaluate(await createAgent(), surface, scenario);
-      console.log(`PASS ${surface}/${scenario.name}`);
+      const trace = await evaluate(await createAgent(), surface, scenario);
+      console.log(`PASS ${surface}/${scenario.name} ${JSON.stringify(trace)}`);
     }
   }
 }
