@@ -137,6 +137,9 @@ public enum ScheduleCopy {
         "CANCELLED_BY_OWNER": "was stopped by you",
         "OVER_BUDGET": "was over what you allowed this week",
     ]
+    public static let runReasonTexts: [String: String] = [
+        "OVER_BUDGET": "Not started: it had already started as many runs in the past 7 days as you allowed.",
+    ]
     public static let failureReasonsWithSummary: [String: String] = [
         "REPORTED_FAILED": "reported a failure: {summary}",
     ]
@@ -428,6 +431,7 @@ public enum ScheduleCopy {
         "failureReasons.RUN_LIMIT": ScheduleCopy.failureReasons["RUN_LIMIT"]!,
         "failureReasons.CANCELLED_BY_OWNER": ScheduleCopy.failureReasons["CANCELLED_BY_OWNER"]!,
         "failureReasons.OVER_BUDGET": ScheduleCopy.failureReasons["OVER_BUDGET"]!,
+        "runReasonTexts.OVER_BUDGET": ScheduleCopy.runReasonTexts["OVER_BUDGET"]!,
         "failureReasonsWithSummary.REPORTED_FAILED": ScheduleCopy.failureReasonsWithSummary["REPORTED_FAILED"]!,
         "heldReasons.WORKSPACE_NOT_OWNED.clause": ScheduleCopy.heldReasons["WORKSPACE_NOT_OWNED"]!.clause,
         "heldReasons.WORKSPACE_NOT_OWNED.until": ScheduleCopy.heldReasons["WORKSPACE_NOT_OWNED"]!.until,
