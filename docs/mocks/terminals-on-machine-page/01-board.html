@@ -1,0 +1,161 @@
+<!doctype html>
+<!-- Design board 01: Settings → Terminals folds into each machine's page. Drawn with the web's own
+     index.css and Settings.css class names (MachineSettingsPage.tsx, SettingsBlocks.tsx, TerminalsPage.tsx).
+     Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Terminals on the machine page</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/settings/Settings.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<style>
+  body { margin: 0; background: #eef0f3; font-family: Inter, -apple-system, system-ui, sans-serif; }
+  .m-sheet { width: 1760px; padding: 40px 44px 48px; box-sizing: border-box; }
+  .b-title { font-size: 26px; font-weight: 700; margin: 0 0 6px; color: #1d1d1f; }
+  .b-sub { font-size: 14px; color: #555; margin: 0 0 28px; line-height: 1.6; max-width: 1200px; }
+  .frames { display: flex; gap: 32px; align-items: flex-start; }
+  .frame { width: 820px; }
+  .frame-label { font-size: 13px; font-weight: 600; color: #333; margin: 0 0 10px; letter-spacing: .02em; }
+  .frame-label span { display: inline-block; background: #1d1d1f; color: #fff; border-radius: 4px; padding: 1px 7px; margin-right: 8px; }
+  .win { background: var(--bg-page, #fff); border-radius: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 10px 30px rgba(0,0,0,.08); overflow: hidden; display: grid; grid-template-columns: 200px 1fr; }
+  .nav { background: #f6f7f9; border-right: 1px solid #e6e8ec; padding: 18px 10px; font-size: 13px; color: #333; }
+  .nav-h { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .06em; margin: 14px 8px 6px; }
+  .nav-i { padding: 6px 10px; border-radius: 6px; }
+  .nav-i.on { background: #e4e7ec; font-weight: 600; }
+  .nav-i.sub { padding-left: 24px; }
+  .nav-i.gone { color: #c0392b; text-decoration: line-through; }
+  .main { padding: 28px 34px 34px; min-width: 0; }
+  .elided { color: #999; font-size: 12.5px; border: 1px dashed #d6d9de; border-radius: 8px; padding: 10px 14px; margin: 18px 0; text-align: center; }
+  .pending-row { background: #fff8ec; }
+  .code { font-family: ui-monospace, Menlo, monospace; font-weight: 600; letter-spacing: .04em; background: #f1f2f4; padding: 1px 6px; border-radius: 4px; }
+  .acts { display: flex; gap: 8px; }
+  .mark { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: #3e69f6; color: #fff; font-size: 11px; font-weight: 700; align-items: center; justify-content: center; margin-right: 6px; vertical-align: 1px; }
+  .notes { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .note { background: #fff; border-radius: 10px; padding: 16px 20px; box-shadow: 0 0 0 1px rgba(0,0,0,.06); font-size: 13px; line-height: 1.7; color: #333; }
+  .note h3 { margin: 0 0 8px; font-size: 14px; }
+  .note ol { margin: 0; padding-left: 20px; }
+  .before { color: #999; text-decoration: line-through; }
+  .after { color: #1d6b2f; }
+  .pill-amber { display: inline-block; font-size: 11.5px; font-weight: 600; color: #8a4b00; background: #ffe9c7; border-radius: 10px; padding: 1px 8px; margin-left: 8px; vertical-align: 2px; }
+</style>
+</head>
+<body>
+<div class="m-sheet">
+  <h1 class="b-title">Terminals move onto the machine page</h1>
+  <p class="b-sub">Settings → Terminals goes away. Each machine's page gets a <b>Terminals</b> section, between Workspaces and About: terminals waiting for approval at the top, approved ones under them, each with Revoke. A machine with no terminals shows no section at all.</p>
+
+  <div class="frames">
+    <!-- A: pending + approved -->
+    <div class="frame">
+      <div class="frame-label"><span>A</span>A machine with one terminal waiting and one approved</div>
+      <div class="win">
+        <nav class="nav">
+          <div class="nav-h">Account</div>
+          <div class="nav-i">Profile</div>
+          <div class="nav-i">Access tokens</div>
+          <div class="nav-i gone">Terminals</div>
+          <div class="nav-h">Machines &amp; models</div>
+          <div class="nav-i">Machines</div>
+          <div class="nav-i sub on">dev-laptop</div>
+          <div class="nav-i sub">build-box</div>
+          <div class="nav-i">Providers</div>
+        </nav>
+        <div class="main">
+          <div class="machine-page">
+            <header class="machine-head">
+              <div class="machine-title-row">
+                <h1 class="machine-title">dev-laptop</h1>
+                <span class="machine-pill machine-pill--online"><span class="settings-dot settings-dot--online"></span>Online · 1 / 4 running</span>
+              </div>
+              <div class="machine-metaline">dev-laptop.local · v0.1.261 · Last check-in 12s ago</div>
+            </header>
+
+            <div class="elided">Engines · Capacity · Workspaces (unchanged)</div>
+
+            <section class="settings-section">
+              <div class="settings-section-head"><h2 class="settings-section-title"><span class="mark">1</span>Terminals</h2></div>
+              <p class="settings-section-description">Terminals on this machine where you typed orbit. An approved one can start sessions here and answer their approval cards until it expires.</p>
+              <div class="settings-card">
+                <div class="settings-row pending-row">
+                  <div class="settings-row-text">
+                    <div class="settings-row-title"><span class="mark">2</span>Waiting for you<span class="pill-amber">Asked 1m ago</span></div>
+                    <div class="settings-row-description">Code <span class="code">7KQ-4MZ</span>. Approve only if this is the code your terminal shows.</div>
+                  </div>
+                  <div class="settings-row-control"><div class="acts">
+                    <button class="orbit-button orbit-button-default orbit-button-small">Deny</button>
+                    <button class="orbit-button orbit-button-primary orbit-button-small">Approve</button>
+                  </div></div>
+                </div>
+                <div class="settings-row">
+                  <div class="settings-row-text">
+                    <div class="settings-row-title"><span class="mark">3</span>Approved Nov 12, 2026</div>
+                    <div class="settings-row-description">Last used 3h ago · Expires Dec 12, 2026 · in 26 days</div>
+                  </div>
+                  <div class="settings-row-control"><button class="orbit-button orbit-button-default orbit-button-small orbit-button-danger">Revoke</button></div>
+                </div>
+              </div>
+            </section>
+
+            <div class="elided">About · Delete machine (unchanged)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- B: none -->
+    <div class="frame">
+      <div class="frame-label"><span>B</span>A machine with no terminals: no section</div>
+      <div class="win">
+        <nav class="nav">
+          <div class="nav-h">Account</div>
+          <div class="nav-i">Profile</div>
+          <div class="nav-i">Access tokens</div>
+          <div class="nav-h">Machines &amp; models</div>
+          <div class="nav-i">Machines</div>
+          <div class="nav-i sub">dev-laptop</div>
+          <div class="nav-i sub on">build-box</div>
+          <div class="nav-i">Providers</div>
+        </nav>
+        <div class="main">
+          <div class="machine-page">
+            <header class="machine-head">
+              <div class="machine-title-row">
+                <h1 class="machine-title">build-box</h1>
+                <span class="machine-pill machine-pill--online"><span class="settings-dot settings-dot--online"></span>Online · 0 / 8 running</span>
+              </div>
+              <div class="machine-metaline">build-box · v0.1.261 · Last check-in 4s ago</div>
+            </header>
+            <div class="elided">Engines · Capacity · Workspaces (unchanged)</div>
+            <div class="elided">About · Delete machine (unchanged)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="note" style="margin-top:24px">
+        <h3>Notes on A</h3>
+        <ol>
+          <li><b>Section.</b> Only on a machine that has a pending or approved terminal. Rows need no machine name, since the page already is the machine.</li>
+          <li><b>Pending row.</b> Same Approve / Deny as the in-chat card. The code is the one the terminal prints, compared by eye. It leaves the list once you answer or it expires.</li>
+          <li><b>Approved row.</b> The three lines of today's Settings → Terminals row on one line. Revoke keeps today's confirm: "Revoke the terminal on dev-laptop? It stops working at once…"</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h3>Copy that changes</h3>
+      Approve card detail:<br>
+      <span class="before">…for 30 days. You can revoke it in Settings → Terminals.</span><br>
+      <span class="after">…for 30 days. You can revoke it on this machine's page in Settings.</span>
+    </div>
+    <div class="note">
+      <h3>Removed</h3>
+      The <code>/settings/terminals</code> route and its nav entry on web, macOS/iOS and Android. An old link to it opens Settings → Machines.
+    </div>
+  </div>
+</div>
+</body>
+</html>
