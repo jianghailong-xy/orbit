@@ -762,7 +762,7 @@ test('a widen card the press finds stale is superseded, and its Waiting on you i
 test('over the weekly budget: schedule_run_now from a session and a PAT\'s run are refused SCHEDULE_OVER_BUDGET; the owner\'s POST run starts; the run list says why', { skip }, async () => {
   const w = await world('budget');
   const s = await createdThroughCard(w);
-  assert.equal(s.envelopeRunsPerWeek, 7);
+  assert.equal(s.envelope.runsPerWeek, 7);
   // Seven runs started in the past 7 days: the budget is used.
   const now = Date.now();
   for (let i = 1; i <= 7; i++) {
