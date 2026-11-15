@@ -1,0 +1,48 @@
+==> iPhone FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC
+==> stub ready on 127.0.0.1:8765 (pid 13600, after 4s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> mac
+Test Case '-[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWhileWritingTheNote]' started.
+/Users/runner/work/orbit/orbit/.ls-probe/UITests/HandingOverHeaderTests.swift:24: error: -[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWhileWritingTheNote] : XCTAssertTrue failed - the Coordinator badge never showed
+Test Case '-[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWhileWritingTheNote]' failed (40.948 seconds).
+Test Case '-[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWithNoHandoff]' started.
+/Users/runner/work/orbit/orbit/.ls-probe/UITests/ProbeCase.swift:54: error: -[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWithNoHandoff] : failed - mac-plain: Checkout redesign never showed — the app did not render the stub's state
+Test Case '-[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWithNoHandoff]' failed (68.274 seconds).
+	 Executed 2 tests, with 2 failures (0 unexpected) in 109.223 (109.224) seconds
+	 Executed 2 tests, with 2 failures (0 unexpected) in 109.223 (109.226) seconds
+	 Executed 2 tests, with 2 failures (0 unexpected) in 109.223 (109.228) seconds
+** TEST FAILED **
+==> stub ready on 127.0.0.1:8765 (pid 40389, after 2s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> ios
+Test Case '-[LandingSessionProbeUITests.HandingOverHeaderTests testIPhoneWhileWritingTheNote]' started.
+Test Case '-[LandingSessionProbeUITests.HandingOverHeaderTests testIPhoneWhileWritingTheNote]' passed (24.958 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.958 (24.960) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.958 (24.961) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.958 (24.962) seconds
+** TEST SUCCEEDED **
+.ls-probe/run.sh: line 82: 40389 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.ls-probe/shots/ios:
+total 1712
+drwxr-xr-x  11 runner  staff     352 Nov 15 04:05 .
+drwxr-xr-x   4 runner  staff     128 Nov 15 03:43 ..
+drwxr-xr-x   7 runner  staff     224 Nov 15 04:05 attachments
+-rw-r--r--@  1 runner  staff       0 Nov 15 04:04 HandingOverHeaderTeststestIPhoneWhileWritingTheNote-notes.txt
+-rw-r--r--   1 runner  staff  126772 Nov 15 04:04 ios-writing.png
+-rw-r--r--   1 runner  staff     549 Nov 15 04:05 not-served.txt
+-rw-r--r--   1 runner  staff    7286 Nov 15 04:04 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 15 03:57 requests.log.out
+-rw-r--r--@  1 runner  staff   11571 Nov 15 04:04 tree-ios-writing.txt
+-rw-r--r--   1 runner  staff      40 Nov 15 04:05 writes.txt
+-rw-r--r--   1 runner  staff  718665 Nov 15 04:05 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.ls-probe/shots/mac:
+total 1728
+drwxr-xr-x  10 runner  staff     320 Nov 15 04:05 .
+drwxr-xr-x   4 runner  staff     128 Nov 15 03:43 ..
+drwxr-xr-x  18 runner  staff     576 Nov 15 03:57 attachments
+-rw-r--r--   1 runner  staff   58114 Nov 15 03:57 mac-no-handoff.png
+-rw-r--r--   1 runner  staff   58545 Nov 15 03:57 mac-writing.png
+-rw-r--r--   1 runner  staff     549 Nov 15 04:05 not-served.txt
+-rw-r--r--   1 runner  staff   19170 Nov 15 03:57 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 15 03:47 requests.log.out
+-rw-r--r--   1 runner  staff      80 Nov 15 04:05 writes.txt
+-rw-r--r--   1 runner  staff  731258 Nov 15 03:57 xcodebuild-mac.log

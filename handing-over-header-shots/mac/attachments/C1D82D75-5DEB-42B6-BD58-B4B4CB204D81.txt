@@ -1,0 +1,3 @@
+mac-plain: no window after launch; pressing ⌘N
+mac-plain: 1 window(s)
+mac-plain header: Waiting for your reply · Open · 11m ago

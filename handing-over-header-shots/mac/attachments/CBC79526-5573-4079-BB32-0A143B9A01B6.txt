@@ -1,0 +1,3 @@
+mac-writing: no window after launch; pressing ⌘N
+mac-writing: 1 window(s)
+mac-writing header: Handing over · Open · 10m ago

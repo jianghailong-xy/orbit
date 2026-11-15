@@ -1,0 +1,10 @@
+Test Case '-[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWhileWritingTheNote]' started.
+/Users/runner/work/orbit/orbit/.ls-probe/UITests/HandingOverHeaderTests.swift:24: error: -[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWhileWritingTheNote] : XCTAssertTrue failed - the Coordinator badge never showed
+Test Case '-[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWhileWritingTheNote]' failed (40.948 seconds).
+Test Case '-[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWithNoHandoff]' started.
+/Users/runner/work/orbit/orbit/.ls-probe/UITests/ProbeCase.swift:54: error: -[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWithNoHandoff] : failed - mac-plain: Checkout redesign never showed — the app did not render the stub's state
+Test Case '-[LandingSessionMacProbeUITests.HandingOverHeaderTests testMacHeaderWithNoHandoff]' failed (68.274 seconds).
+	 Executed 2 tests, with 2 failures (0 unexpected) in 109.223 (109.224) seconds
+	 Executed 2 tests, with 2 failures (0 unexpected) in 109.223 (109.226) seconds
+	 Executed 2 tests, with 2 failures (0 unexpected) in 109.223 (109.228) seconds
+** TEST FAILED **

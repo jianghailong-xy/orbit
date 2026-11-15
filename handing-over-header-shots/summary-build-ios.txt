@@ -1,0 +1,6 @@
+Test Case '-[LandingSessionProbeUITests.HandingOverHeaderTests testIPhoneWhileWritingTheNote]' started.
+Test Case '-[LandingSessionProbeUITests.HandingOverHeaderTests testIPhoneWhileWritingTheNote]' passed (24.958 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.958 (24.960) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.958 (24.961) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 24.958 (24.962) seconds
+** TEST SUCCEEDED **
