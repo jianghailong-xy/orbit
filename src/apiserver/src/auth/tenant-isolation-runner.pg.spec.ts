@@ -424,6 +424,14 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     // ── the wiki: a workspace bound to the space, a session in it, and an import job of the space's ──
     ok(await as('POST', `/wiki/spaces/${of.wikiSpaceId}/workspaces`, { workspaceId: of.workspaceId }), 'binding the space');
     const wikiSessionId = await open('wiki session');
+    // ── an Ask: a session of the machine's in no workspace, made an Ask by its INSERT (0850's guard refuses an UPDATE) ──
+    const helpAskSessionId = randomUUID();
+    await db.session.create({
+      data: {
+        id: helpAskSessionId, title: `${name} help ask`, prompt: 'Why is my machine offline?', ownerId, creatorId: ownerId,
+        assignedRunnerId: of.runnerId, engine: 'claude', helpAsk: { page: null },
+      },
+    });
     const wikiImportJobId = randomUUID();
     await db.wikiJob.create({
       data: { id: wikiImportJobId, ownerId, spaceId: of.wikiSpaceId, kind: 'import', input: {}, state: 'succeeded', report: {}, endedAt: new Date() },
@@ -455,7 +463,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
-      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId,
+      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, helpAskSessionId,
       wikiImportJobId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
       sharedTaskRunSessionId, sharedTaskAttachmentId, sharedProjectId, sharedProjectTaskId, sharedProjectRunSessionId,
       sharedProjectAttachmentId,

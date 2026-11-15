@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma, type ManagedRunnerManagementState } from '@prisma/client';
+import { helpAskMarkerOf } from '../help/help-ask-marker';
 import {
   AgentProvider,
   isAccountEngine,
@@ -10,6 +11,7 @@ import {
   credentialEngines,
   credentialIsAnthropicBound,
   fastModeAvailable,
+  HELP_ASK_V1,
   openCodeKeyOf,
   type AnthropicBoundCredential,
   type PlanUsageSnapshot,
@@ -625,6 +627,15 @@ export class QueueService {
                   AND 'provider:cursor' = ANY(r.capabilities)
               ))
             )
+            -- An Ask (migration 0850) only to a runner whose heartbeat declares help-ask/v1: one that does not would
+            -- start it in its default folder with every tool, instead of read-only among the help articles.
+            AND (
+              s."help_ask" IS NULL
+              OR EXISTS (
+                SELECT 1 FROM "runner" r WHERE r.id = ${runnerId}
+                  AND ${HELP_ASK_V1} = ANY(r.capabilities)
+              )
+            )
             -- Legacy runners treat an unknown provider as Claude. Require a positive OpenCode
             -- capability advertisement so an upgraded server can never dispatch one of these
             -- rows to a pre-0.1.82 process during a rolling release: a session recorded on
@@ -1149,6 +1160,9 @@ export class QueueService {
       prompt: session.prompt,
       // The project directory the runtime runs in comes from the session's workspace.
       workDir: workspace?.workDir ?? undefined,
+      // An Ask (migration 0850): the runner starts it read-only in a scratch folder of help articles, never in a
+      // workDir (help/help-ask.ts). Only when set, so every other claim keeps the shape it had.
+      ...(session.helpAsk != null ? { helpAsk: helpAskMarkerOf(session.helpAsk) ?? { page: null } } : {}),
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,

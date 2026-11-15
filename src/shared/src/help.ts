@@ -78,3 +78,96 @@ export interface HelpSearchResult {
   query: string;
   hits: HelpSearchHit[];
 }
+
+// ── Ask (docs/mocks/help-center board 02 §1–§4, decisions on board 03) ───────────────────────────────────────────────
+// An Ask is an ordinary session marked by `session.help_ask` (migration 0850): it runs on a machine and engine the
+// person picks, belongs to no workspace, is in no workspace's session list, and is listed under /help → Your
+// questions. Its runner starts it in a scratch folder holding the article library, with no tool that writes.
+
+/** The runner capability that says it starts an Ask read-only (runner-go help_ask.go). A machine without it is not offered. */
+export const HELP_ASK_V1 = 'help-ask/v1';
+
+/** The engines an Ask runs on: the ones whose read-only start the runner enforces (Claude Code's tool list). */
+export const HELP_ASK_ENGINES = ['claude'] as const;
+export type HelpAskEngine = (typeof HELP_ASK_ENGINES)[number];
+
+/**
+ * The account state an Ask session may read, one runner door each (GET /runner/help-ask/<name>), and nothing else.
+ * The board's list: machine status and heartbeat, session status, task status, account quota.
+ */
+export const HELP_ASK_READS = ['machines', 'sessions', 'tasks', 'quota'] as const;
+export type HelpAskRead = (typeof HELP_ASK_READS)[number];
+
+/** The page the question was asked from (board 02 ① ③): its route, what the chip calls it, and the errors it shows. */
+export interface HelpAskPage {
+  route: string;
+  label: string;
+  errors: string[];
+}
+
+/** What `session.help_ask` holds. `page` is null when the person took the page chip off. */
+export interface HelpAskMarker {
+  page: HelpAskPage | null;
+}
+
+/** One machine in the Runs on picker. */
+export interface HelpAskMachine {
+  id: string;
+  name: string;
+  online: boolean;
+  /** This machine's runner starts an Ask read-only (HELP_ASK_V1). */
+  supported: boolean;
+  /** The engines it has signed in that an Ask can run on, and those it has that an Ask cannot (shown disabled). */
+  engines: { engine: string; label: string; askable: boolean; model: string | null }[];
+}
+
+/** GET /api/help/ask/choices: the Runs on picker, and the machine and engine this person last asked on. */
+export interface HelpAskChoices {
+  machines: HelpAskMachine[];
+  remembered: { runnerId: string; engine: string } | null;
+}
+
+/** POST /api/help/ask: the first question, where it runs, and the page it was asked from. */
+export interface HelpAskCreateBody {
+  content: string;
+  runnerId: string;
+  engine: string;
+  model?: string;
+  page?: HelpAskPage | null;
+}
+
+export type HelpAskOutcome = 'working' | 'answered' | 'failed';
+
+/** One row of /help → Your questions (board 02 ④). */
+export interface HelpAskRow {
+  sessionId: string;
+  /** The first question. */
+  title: string;
+  /** What the page chip called the page it was asked from, or null. */
+  origin: string | null;
+  outcome: HelpAskOutcome;
+  costUsd: number;
+  createdAt: string;
+  runner: string | null;
+  engine: string | null;
+  model: string | null;
+}
+
+/** GET /api/help/ask/sessions. */
+export interface HelpAskList {
+  questions: HelpAskRow[];
+}
+
+/** The engine's name as the picker shows it. */
+export function helpAskEngineLabel(engine: string): string {
+  switch (engine) {
+    case 'claude': return 'Claude Code';
+    case 'codex': return 'Codex';
+    case 'cursor': return 'Cursor';
+    case 'kimi': return 'Kimi Code';
+    case 'antigravity': return 'Antigravity';
+    case 'opencode': return 'OpenCode';
+    case 'dsh': return 'DeepSeek Harness';
+    default: return engine;
+  }
+}

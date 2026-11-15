@@ -55,6 +55,7 @@ import { HelpLayout } from './pages/help/HelpLayout';
 import { HelpHomePage } from './pages/help/HelpHomePage';
 import { HelpArticlePage } from './pages/help/HelpArticlePage';
 import { HelpCategoryPage, HelpPlaceholderPage } from './pages/help/HelpCategoryPage';
+import { HelpQuestionPage, HelpQuestionsPage } from './pages/help/HelpQuestionsPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
 // (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
@@ -234,12 +235,12 @@ export function App() {
         <Route
           path="questions"
           element={
-            authed ? (
-              <HelpPlaceholderPage title="Your questions" text="The questions you ask with Ask will be listed here." />
-            ) : (
-              <Navigate to={`/login?next=${encodeURIComponent('/help/questions')}`} replace />
-            )
+            authed ? <HelpQuestionsPage /> : <Navigate to={`/login?next=${encodeURIComponent('/help/questions')}`} replace />
           }
+        />
+        <Route
+          path="questions/:id"
+          element={authed ? <HelpQuestionPage /> : <Navigate to={`/login?next=${encodeURIComponent('/help/questions')}`} replace />}
         />
         <Route path=":category" element={<HelpCategoryPage />} />
         <Route path=":category/:slug" element={<HelpArticlePage />} />

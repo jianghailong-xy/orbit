@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 34 |
-| `user` | 444 |
+| `user` | 447 |
 | `admin` | 28 |
-| `runner` | 186 |
+| `runner` | 187 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **696** |
+| **Total** | **700** |
 
 ## Public routes
 
@@ -138,6 +138,9 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/guest-sessions/:id/turns` | body `Object`; path `id` | `GuestSessionsController.turn` |
 | `DELETE` | `/api/guest-sessions/:id/turns/:turnId` | path `id`, `turnId` | `GuestSessionsController.cancelTurn` |
 | `POST` | `/api/guest-sessions/:id/turns/:turnId/steer` | path `id`, `turnId` | `GuestSessionsController.steerTurn` |
+| `POST` | `/api/help/ask` | body `Object` | `HelpAskController.create` |
+| `GET` | `/api/help/ask/choices` | — | `HelpAskController.choices` |
+| `GET` | `/api/help/ask/sessions` | — | `HelpAskController.list` |
 | `DELETE` | `/api/integrations/feishu` | — | `FeishuController.remove` |
 | `GET` | `/api/integrations/feishu` | — | `FeishuController.read` |
 | `PATCH` | `/api/integrations/feishu` | body `ChangeFeishuAppDto` | `FeishuController.change` |
@@ -589,6 +592,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/dir-probe-result` | body `Object` | `RunnerApiController.dirProbeResult` |
 | `GET` | `/api/runner/files` | query `evidenceId`, `sessionId`, `taskId` | `RunnerFilesController.list` |
 | `POST` | `/api/runner/heartbeat` | body `Object` | `RunnerApiController.heartbeat` |
+| `GET` | `/api/runner/help-ask/:read` | path `read` | `RunnerHelpAskController.read` |
 | `POST` | `/api/runner/install-result` | body `Object` | `RunnerApiController.installResult` |
 | `POST` | `/api/runner/integration-jobs/:jobId/output` | body `Object`; path `jobId` | `RunnerApiController.integrationJobOutput` |
 | `POST` | `/api/runner/integration-jobs/:jobId/progress` | body `Object`; path `jobId` | `RunnerApiController.integrationJobProgress` |
