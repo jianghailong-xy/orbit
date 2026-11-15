@@ -128,7 +128,7 @@ export function UserTranslationFoot({
         return <span className="chat-translate-foot">{sentToAgentLabel(actions.agentLanguage ?? DEFAULT_AGENT_LANGUAGE)}</span>;
       }
       return (
-        <span className="chat-translate-foot">
+        <span className="chat-translate-foot is-flip">
           <button type="button" className="chat-translate-action" onClick={onFlip}>
             {flipped ? COPY.showTranslation : COPY.showOriginal}
           </button>

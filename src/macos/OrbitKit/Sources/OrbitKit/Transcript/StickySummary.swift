@@ -57,7 +57,7 @@ public enum StickySummary {
         if ownerAnswer != nil { return false }
         if coordinatorDelivery != nil { return true }
         if WatchWakeText.parse(text) != nil { return false }
-        guard BackgroundWakeText.carriesWake(note) else { return true }
+        guard BackgroundWakeText.carriesWake(note) || SubagentFinishedText.carriesWake(note) else { return true }
         return BackgroundWakeCard.drawsBubble(text: text)
     }
 
