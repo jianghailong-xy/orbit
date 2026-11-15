@@ -76,6 +76,8 @@ internal object StickySummary {
                 .any { event.card(cards, it) != null }) return true
         if (event.card(cards, "watch") != null) return false
         if (event.card(cards, "ownerAnswer") != null) return false
+        // A turn carrying only Orbit's blocks is a line in the answer too (OrbitEvent), whatever block.
+        if (cards.isEmpty() && SteerDelivery.orbitOnly(event)) return false
         // A SubAgent's end is a line inside the answer too, as a background job's news is (board subagent-finished-line ①).
         if (event.card(cards, "wake") == null && event.card(cards, "subagent") == null) return true
         return event.personWords().isNotBlank()
