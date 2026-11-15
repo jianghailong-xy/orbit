@@ -60,7 +60,6 @@ public enum TranslationCopy {
     public static let translated = "Translated"
     public static let showOriginal = "Show original"
     public static let showTranslation = "Show translation"
-    public static let sentInEnglish = "Sent to the agent in English"
     public static let original = "Original"
     public static let translating = "Translating…"
     public static let sendFailed = "Couldn't translate, so it wasn't sent"
@@ -268,8 +267,9 @@ public enum SessionTranslation {
         case flip, retryTurn, sendAsWritten, retryReply
     }
 
-    /// The line under the owner's message (frames 4–6): "Translated · Show original" ↔ "Sent to the
-    /// agent in English · Show translation" once delivered; the "Translating…" chip while held; and,
+    /// The line under the owner's message (frames 4–6): "Show original" ↔ "Show translation" once
+    /// delivered, the press alone — it shares the copy/time line, and having an original already says
+    /// it was translated (docs/mocks/translation-foot-one-line, B); the "Translating…" chip while held; and,
     /// held because the translation failed (1A), "Couldn't translate, so it wasn't sent · Retry ·
     /// Send as written". Nothing for a message sent as written.
     public static func userFoot(_ translation: TurnTranslation?, flipped: Bool) -> [FootPart] {
@@ -282,9 +282,8 @@ public enum SessionTranslation {
                     .action(TranslationCopy.retry, .retryTurn),
                     .action(TranslationCopy.sendAsWritten, .sendAsWritten)]
         case .done:
-            return flipped
-                ? [.text(TranslationCopy.sentInEnglish), .action(TranslationCopy.showTranslation, .flip)]
-                : [.text(TranslationCopy.translated), .action(TranslationCopy.showOriginal, .flip)]
+            return [flipped ? .action(TranslationCopy.showTranslation, .flip)
+                            : .action(TranslationCopy.showOriginal, .flip)]
         case .sentAsWritten:
             return []
         }
