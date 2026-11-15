@@ -85,7 +85,15 @@ internal object RunnerCopy {
     const val WORKSPACES = "Workspaces"
     const val ABOUT = "About This Runner"
     const val MAX_CONCURRENT = "Max Concurrent"
-    const val MAX_CONCURRENT_HINT = "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    const val MAX_CONCURRENT_HINT = "Applies to the next session it picks up — no restart."
+    /** After the dialog's number: what it counts. */
+    const val MAX_CONCURRENT_UNIT = "sessions at once"
+    const val MAX_CONCURRENT_DECREASE = "Decrease Max Concurrent"
+    const val MAX_CONCURRENT_INCREASE = "Increase Max Concurrent"
+    /** At the end of the dialog's number line, while the machine is online. */
+    fun runningNow(active: Int) = "$active running"
+    /** Under the number when the new limit is below what runs now: a lower limit stops nothing. */
+    fun maxBelowRunning(active: Int, max: Int) = "The $active running now carry on; new ones wait until fewer than $max are running."
     const val EDIT = "Edit"
     const val DISK = "Disk"
     const val KEEP_FREE = "Keep Free"

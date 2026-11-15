@@ -49,8 +49,19 @@ public enum RunnerPageCopy {
     public static func runnerDiskFree(free: String) -> String { "\(free) GB free" }
 
     public static let RUNNER_MAX_CONCURRENT = "Max Concurrent"
-    public static let RUNNER_MAX_CONCURRENT_HINT =
-        "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    /// Max Concurrent's dialog: when a change takes effect. The unit after the field says what the number is.
+    public static let RUNNER_MAX_CONCURRENT_HINT = "Applies to the next session it picks up — no restart."
+    /// After the dialog's field: what the number counts.
+    public static let RUNNER_MAX_CONCURRENT_UNIT = "sessions at once"
+    /// The dialog's − and + beside its field.
+    public static let RUNNER_MAX_CONCURRENT_DECREASE = "Decrease Max Concurrent"
+    public static let RUNNER_MAX_CONCURRENT_INCREASE = "Increase Max Concurrent"
+    /// At the end of the dialog's field line, while the machine is online: its sessions running now.
+    public static func runnerRunningNow(active: Int) -> String { "\(active) running" }
+    /// Under the field when the new limit is below what runs now: a lower limit stops nothing.
+    public static func runnerMaxBelowRunning(active: Int, max: Int) -> String {
+        "The \(active) running now carry on; new ones wait until fewer than \(max) are running."
+    }
     public static let RUNNER_EDIT = "Edit"
     public static let RUNNER_DISK = "Disk"
     public static let RUNNER_KEEP_FREE = "Keep Free"

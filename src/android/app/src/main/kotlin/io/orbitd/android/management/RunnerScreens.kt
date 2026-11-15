@@ -711,19 +711,28 @@ private fun RunnerCapacity(runner: JsonObject, now: Long, model: RunnersModel, n
     var editing by remember(id) { mutableStateOf(false) }
     var draft by remember(id) { mutableIntStateOf(serverMax) }
     val scope = rememberCoroutineScope()
+    // The web's dialog: − number + and the unit on a line, the sessions running now at its end while online; under it when a change
+    // applies, or — a limit below what runs now — that those carry on. Save waits for a change.
+    val running = RunnerPage.slots(runner, now)?.first
     if (editing) AlertDialog(onDismissRequest = { editing = false }, title = { Text(RunnerCopy.MAX_CONCURRENT) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(RunnerCopy.MAX_CONCURRENT_HINT, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     // The glyph carries the words, so TalkBack says them alone, not "…, minus".
                     TextButton(onClick = { draft -= 1 }, enabled = draft > 1) {
-                        Text("−", Modifier.clearAndSetSemantics { contentDescription = "Decrease ${RunnerCopy.MAX_CONCURRENT}" })
+                        Text("−", Modifier.clearAndSetSemantics { contentDescription = RunnerCopy.MAX_CONCURRENT_DECREASE })
                     }
                     Text("$draft", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 12.dp))
                     TextButton(onClick = { draft += 1 }, enabled = draft < 64) {
-                        Text("+", Modifier.clearAndSetSemantics { contentDescription = "Increase ${RunnerCopy.MAX_CONCURRENT}" })
+                        Text("+", Modifier.clearAndSetSemantics { contentDescription = RunnerCopy.MAX_CONCURRENT_INCREASE })
                     }
+                    Text(RunnerCopy.MAX_CONCURRENT_UNIT, Modifier.padding(start = 4.dp).weight(1f))
+                    running?.let { Text(RunnerCopy.runningNow(it), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+                }
+                if (running != null && draft < running) {
+                    Text(RunnerCopy.maxBelowRunning(running, draft), style = MaterialTheme.typography.bodySmall, color = Ink.amber)
+                } else {
+                    Text(RunnerCopy.MAX_CONCURRENT_HINT, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                 }
             }
         },
@@ -734,7 +743,7 @@ private fun RunnerCapacity(runner: JsonObject, now: Long, model: RunnersModel, n
                 if (value != serverMax) scope.launch {
                     model.press { api.patch("runners/$id", buildJsonObject { put("maxConcurrent", value) }) }?.let(notice::show)
                 }
-            }) { Text("Save") }
+            }, enabled = draft != serverMax) { Text("Save") }
         },
         dismissButton = { TextButton({ editing = false }) { Text("Cancel") } })
     FormSection(RunnerCopy.CAPACITY, footer = RunnerCopy.CAPACITY_FOOTER) {

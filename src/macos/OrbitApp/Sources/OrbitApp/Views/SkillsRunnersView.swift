@@ -930,22 +930,59 @@ struct RunnerDetailContent: View {
         }
     }
 
-    /// Max Concurrent's sheet: the limit on a stepper, what it means, and Cancel or Save.
+    /// Max Concurrent's sheet, as the web's dialog: − field + and `sessions at once` on a line, the
+    /// sessions running now at its end while the machine is online; under it when a change applies, or —
+    /// a limit below what runs now — that those carry on. Save waits for a change.
     private var maxConcurrentSheet: some View {
-        NavigationStack {
+        let running = RunnerPageFormat.slots(runner, now: Date())
+        let unchanged = maxDraft == (runner.maxConcurrent ?? 1)
+        return NavigationStack {
             Form {
                 Section {
-                    Stepper(value: $maxDraft, in: 1...64) {
-                        HStack {
-                            Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
-                            Spacer(minLength: 8)
-                            Text(verbatim: "\(maxDraft)")
+                    HStack(spacing: 10) {
+                        HStack(spacing: 0) {
+                            Button {
+                                maxDraft = max(1, maxDraft - 1)
+                            } label: {
+                                Text(verbatim: "−").frame(width: 28)
+                            }
+                            .disabled(maxDraft <= 1)
+                            .accessibilityLabel(RunnerPageCopy.RUNNER_MAX_CONCURRENT_DECREASE)
+                            TextField(RunnerPageCopy.RUNNER_MAX_CONCURRENT, value: $maxDraft, format: .number)
+                                .labelsHidden()
+                                .multilineTextAlignment(.center)
+                                .monospacedDigit()
+                                .frame(width: 52)
+                                #if os(iOS)
+                                .keyboardType(.numberPad)
+                                #endif
+                                .onChange(of: maxDraft) { _, value in
+                                    if value < 1 { maxDraft = 1 }
+                                }
+                            Button {
+                                maxDraft += 1
+                            } label: {
+                                Text(verbatim: "+").frame(width: 28)
+                            }
+                            .accessibilityLabel(RunnerPageCopy.RUNNER_MAX_CONCURRENT_INCREASE)
+                        }
+                        .buttonStyle(.bordered)
+                        Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT_UNIT)
+                        Spacer(minLength: 8)
+                        if let running {
+                            Text(verbatim: RunnerPageCopy.runnerRunningNow(active: running.active))
+                                .font(.orbitListSubtitle)
                                 .foregroundStyle(Color.secondary)
                                 .monospacedDigit()
                         }
                     }
                 } footer: {
-                    Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT)
+                    if let running, maxDraft < running.active {
+                        Text(RunnerPageCopy.runnerMaxBelowRunning(active: running.active, max: maxDraft))
+                            .foregroundStyle(RunnerInk.amber)
+                    } else {
+                        Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT_HINT)
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -959,11 +996,12 @@ struct RunnerDetailContent: View {
                         editingMax = false
                         saveMaxConcurrent(maxDraft)
                     }
+                    .disabled(unchanged)
                 }
             }
         }
         #if os(macOS)
-        .frame(minWidth: 380, minHeight: 180)
+        .frame(minWidth: 400, minHeight: 180)
         #else
         .presentationDetents([.medium])
         #endif

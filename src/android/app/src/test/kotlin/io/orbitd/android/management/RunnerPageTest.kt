@@ -204,13 +204,18 @@ class RunnerPageTest {
             .first { File(it, "src/macos/OrbitKit/Sources/OrbitKit").isDirectory }
         val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/RunnerPageCopy.swift").readText().replace(Regex("\"\\s*\\+\\s*\""), "")
         val constants = mapOf("ATTENTION_NO_CLI_SIGNED_IN_SHORT" to RunnerCopy.NO_CLI_SIGNED_IN_SHORT, "ATTENTION_NO_CLI_SIGNED_IN" to RunnerCopy.NO_CLI_SIGNED_IN,
-            "RUNNER_NAMES_COMMA" to RunnerCopy.NAMES_COMMA)
+            "RUNNER_NAMES_COMMA" to RunnerCopy.NAMES_COMMA, "RUNNER_MAX_CONCURRENT_HINT" to RunnerCopy.MAX_CONCURRENT_HINT,
+            "RUNNER_MAX_CONCURRENT_UNIT" to RunnerCopy.MAX_CONCURRENT_UNIT, "RUNNER_MAX_CONCURRENT_DECREASE" to RunnerCopy.MAX_CONCURRENT_DECREASE,
+            "RUNNER_MAX_CONCURRENT_INCREASE" to RunnerCopy.MAX_CONCURRENT_INCREASE)
         for ((name, said) in constants) {
             assertTrue("RunnerPageCopy.$name is not \"$said\"", Regex("static let $name =\\s*\"${Regex.escape(said)}\"").containsMatchIn(swift))
         }
         val templates = mapOf("attentionNoCliSignedInDetail(cli: String)" to RunnerCopy.noCliSignedInDetail("\\(cli)"),
             "attentionNoCliSignedInDetailMany(clis: String)" to RunnerCopy.noCliSignedInDetailMany("\\(clis)"),
             "runnerNamesTwo(first: String, second: String)" to RunnerCopy.namesTwo("\\(first)", "\\(second)"),
+            "runnerRunningNow(active: Int)" to RunnerCopy.runningNow(90_001).replace("90001", "\\(active)"),
+            "runnerMaxBelowRunning(active: Int, max: Int)" to
+                RunnerCopy.maxBelowRunning(90_001, 90_002).replace("90001", "\\(active)").replace("90002", "\\(max)"),
             // The quiet-window wording of a runner update (selfUpdate.quietWindowSeconds); a number is rendered as a sentinel.
             "runnerVersionInstallsWhenQuiet(minutes: Int)" to RunnerCopy.versionInstallsWhenQuiet(90_001).replace("90001", "\\(minutes)"),
             "runnerUpdateAvailableBodyQuiet(minutes: Int, unit: String)" to
