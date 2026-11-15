@@ -1897,6 +1897,15 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// in the background, and the answer rides the next heartbeat.
 	agentDirs := newAgentDirProbe(agentDirProbeTimeout)
 	go agentDirs.run(loopCtx)
+	// The GitHub workspaces the control plane asks this runner to clone (clone_workdir.go). A clone that starts or
+	// ends has its work directory probed again and is reported at once. Their credential, and the landing's in
+	// such a checkout, is Orbit's when the machine's own cannot authenticate (github_credential.go).
+	clones := newCloner(loopCtx, cfg.Name, func() {
+		agentDirs.rescan()
+		beatNow()
+	})
+	setOrbitGitCredentialSource(t.gitCredential)
+	defer setOrbitGitCredentialSource(nil)
 
 	// The root this machine reports as where it keeps checkouts. A fact of the account this
 	// process runs as, so it is resolved once rather than on every beat.
@@ -1991,6 +2000,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			probes := agentDirs.snapshot()
 			resources := machineResources(probes, machineReposRoot)
+			cloneReports, cloneSeq := clones.snapshot()
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -2006,6 +2016,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				ReposRoot:            machineReposRoot,
 				SelfUpdate:           selfUpdateReport(),
 				ManagedWorkload:      workload,
+				CloneReports:         cloneReports,
 			}, t.heartbeat)
 			if err != nil {
 				// No reconcile is coming from this beat; sessions do not wait on one (secretStore.waitReady).
@@ -2044,6 +2055,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// Scan the directories this response named, ready for the next heartbeat. An older
 			// control plane sends none, which parks the scanner rather than clearing what it
 			// last found.
+			// Clones: start what is newly listed, stop what is no longer. A draining process starts none.
+			clones.reconcile(resp.CloneRequests, cloneSeq, !draining)
 			if resp.AgentDirs != nil {
 				agentDirs.trigger(resp.AgentDirs)
 				// Where an owner-request secret file may not go (secret_path.go).
