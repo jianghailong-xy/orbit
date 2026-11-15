@@ -192,4 +192,34 @@ test('plainText: what a reader sees of the Markdown', () => {
     plainText('## Step\n\nRun **this** and [Open it](orbit:/x).\n\n```bash\norbit status\n```\n::: platform ios\n- `Tap` here\n:::\n'),
     'Step Run this and Open it. orbit status Tap here',
   );
+  assert.equal(
+    plainText('| You see | What to do |\n| --- | :---: |\n| **Runner offline** | See [it](orbit:/help/x), *then* `wait`. |\n\n---\n\nDone.\n'),
+    'You see What to do Runner offline See it, then wait. Done.',
+  );
+});
+
+/** Markdown a snippet must not show: table pipes and separator runs, emphasis, code marks, fences, link targets. */
+const MARKDOWN_LEAK = /\||---|\*\*|`|:::|\]\(/;
+/** The same, less a lone '|': a shell pipe in a command (`curl … | bash`) is text the reader is meant to see. */
+const MARKDOWN_LEAK_BUT_PIPES = /\|\s*\||\|\s*:?-|---|\*\*|`|:::|\]\(/;
+
+test('GET /api/help/search: snippets are plain text, over a table article too, and their offsets slice the query word', async (t) => {
+  const get = await boot(t);
+  const { json } = await get('/api/help/search?q=offline');
+  assert.equal(json.hits[0].slug, 'machine-offline');
+  // This article's "offline" sits in a Markdown table, with bold cells and a link in the next column.
+  const table = json.hits.find((h: { slug: string }) => h.slug === 'sessions-that-pause-and-resume');
+  assert.ok(table, 'the pause-and-resume article is found');
+  assert.match(table.snippet.text, /offline/i);
+  assert.doesNotMatch(table.snippet.text, MARKDOWN_LEAK);
+  for (const q of ['offline', 'quota', 'merge', 'approval', 'orbit status', 'email']) {
+    for (const bearer of [undefined, 'admin']) {
+      for (const hit of (await get(`/api/help/search?q=${encodeURIComponent(q)}`, bearer)).json.hits) {
+        assert.doesNotMatch(hit.snippet.text, MARKDOWN_LEAK_BUT_PIPES, `${q}: ${hit.slug}`);
+        for (const m of hit.snippet.matches) {
+          assert.ok(q.split(' ').includes(hit.snippet.text.slice(m.start, m.start + m.length).toLowerCase()), `${q}: ${hit.slug}`);
+        }
+      }
+    }
+  }
 });
