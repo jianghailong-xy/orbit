@@ -50,6 +50,7 @@ import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.composer.SessionPendingTray
 import io.orbitd.android.cards.AnsweredQuestions
 import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.LocalCardViewport
 import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
 import io.orbitd.android.cards.EvidenceFilesSheet
@@ -181,7 +182,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
     } }
     val list = rememberLazyListState()
-    var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
+    // Opened from a project row onto the card a member waits on you with (owner 2026-11-14): placed at the cards, not the tail.
+    val ontoWaitingCard = remember(route.id) { CardFocus.pending(route.id!!) == CardFocus.WAITING }
+    DisposableEffect(route.id) { onDispose { if (CardFocus.pending(route.id!!) == CardFocus.WAITING) CardFocus.spend(route.id!!) } }
+    var follow by rememberSaveable { mutableStateOf(route.recordId == null && !ontoWaitingCard) }
     var placed by remember(model) { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var positioning by remember { mutableStateOf(false) }
@@ -243,7 +247,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(state.ready, state.window.seeded, state.targetTick) {
         if (!state.ready || !state.window.seeded || state.denied) return@LaunchedEffect
         positioning = true
-        if (!placed) follow = model.following
+        if (!placed) follow = model.following && !ontoWaitingCard
         withFrameNanos { }
         val target = state.targetSeq?.let { anchorRow(currentRows, it) }
         if (target != null) {
@@ -336,6 +340,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     val liveTail = transcript != null && state.window.newerAfter == null
     val queuedShown = if (liveTail) queued.size else 0
+    // Opened onto a waiting card: once placed, at the rail — the item before the queue and the tail — whose card then brings its
+    // own top into view. Once per open; a jump the open itself asked for (a record) wins.
+    var placedAtCards by remember(model) { mutableStateOf(false) }
+    var listHeight by remember { mutableIntStateOf(0) }
+    LaunchedEffect(placed) {
+        if (!placed || !ontoWaitingCard || placedAtCards || route.recordId != null) return@LaunchedEffect
+        placedAtCards = true
+        positioning = true
+        list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+        positioning = false
+    }
     // The questions whose answers the turns on screen hand to the coordinator — the window's, and at the live tail the accepted head and
     // the queue — are drawn by those turns, from the rail's records, and not again in the rail (`AnsweredQuestions`).
     val answeredQuestions = remember(state.session?.snapshot, state.session?.fresh, cards.answered, cards.previous, rows, accepted, queued, liveTail) {
@@ -585,6 +600,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val targetSeq = state.targetSeq
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize().fadesIntoComposerBand().onSizeChanged {
+                    listHeight = it.height
                     if (viewport.resized(it.height, placed && follow && state.window.newerAfter == null)) repin++
                 }.nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
@@ -682,7 +698,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
                         Box(Modifier.onSizeChanged { if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
-                            SessionCards(cards, openLink, discuss = discussCard)
+                            // The list's height below the floating needs-you bar: a card brought in by its top lands under the bar, not behind it.
+                            CompositionLocalProvider(LocalCardViewport provides (listHeight - barHeight).coerceAtLeast(0)) { SessionCards(cards, openLink, discuss = discussCard) }
                         }
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.

@@ -1,6 +1,7 @@
 package io.orbitd.android.cards
 
 import androidx.compose.runtime.mutableStateMapOf
+import io.orbitd.android.core.cards.InteractionCard
 import io.orbitd.android.core.cards.OwnerRequests
 import io.orbitd.android.navigation.ObjectId
 
@@ -11,6 +12,9 @@ import io.orbitd.android.navigation.ObjectId
  * promotion card answers a promotion focus), [ownerRequest] for a request the conversation filed. It changes where
  * the conversation is scrolled to, nothing else. */
 object CardFocus {
+    /** Not a card's address: whichever card the conversation first asks the owner about (owner 2026-11-14, a project row whose
+     * line says a member waits on you). Brought in top first, so a card taller than the screen shows its header and title. */
+    const val WAITING = "waiting"
     private val pending = mutableStateMapOf<String, String>()
     private fun session(id: String) = ObjectId.canonical(id) ?: id
 
@@ -20,6 +24,9 @@ object CardFocus {
     /** An owner request's card, under either spelling of its id. */
     fun ownerRequest(id: String) = "$OWNER_REQUEST${OwnerRequests.key(id)}"
     const val OWNER_REQUEST = "owner-request:"
+    /** The address [focus] names among [cards], drawn in this order: [WAITING] is the first that asks for an answer. */
+    fun resolve(focus: String?, cards: List<InteractionCard>): String? =
+        if (focus == WAITING) cards.firstOrNull { it.actions.isNotEmpty() }?.key else focus
     fun matches(focus: String, cardKey: String) =
         focus == cardKey || (focus.startsWith("promotion:") && cardKey.startsWith("promotion:"))
 }

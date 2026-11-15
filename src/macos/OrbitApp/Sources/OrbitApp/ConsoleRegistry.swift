@@ -32,7 +32,6 @@ final class ConsoleRegistry {
     /// reason: a `ConsoleModel` needn't know about `AppModel`.
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
-    @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
     /// Apply the app's cached session and catalog before a new console can be rendered.
     @ObservationIgnored var seedSessionContext: (ConsoleModel) -> Void = { _ in }
     /// The account's managed runner (docs/managed-runner-design.md), set once by `AppModel` and handed
@@ -132,10 +131,10 @@ final class ConsoleRegistry {
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
         let configured = configuredProviders
             + ProviderPools.asProviders(SharedPools.asProviderPools(sharedPools) + providerPools)
-        // The model last picked for what the workspace last ran on — its engine and its provider.
+        // The model of the session a person last opened in the workspace, on what it ran on.
         let seed = AgentDefaults.newSessionModel(
             engine: agent.defaultEngine(configured: configured), provider: agent.defaultProvider,
-            accountModels: accountDefaultModels(), fallback: defaultModel,
+            workspace: agent, fallback: defaultModel,
             catalog: modelCatalog, configured: configured)
         let model = ConsoleModel(draftFor: agent, defaultModel: seed,
                                  configuredProviders: configuredProviders,
@@ -319,7 +318,6 @@ final class ConsoleRegistry {
     /// Hand a console the account's permission default (read late — the `user` payload primes
     /// asynchronously) and the write-back for a Mode picked when starting a session.
     private func wireAccountDefaults(_ model: ConsoleModel) {
-        model.accountDefaultModels = { [weak self] in self?.accountDefaultModels() ?? [:] }
         model.accountDefaultPermissionMode = { [weak self] in
             guard let self else { return nil }
             return self.accountDefaultPermissionMode()

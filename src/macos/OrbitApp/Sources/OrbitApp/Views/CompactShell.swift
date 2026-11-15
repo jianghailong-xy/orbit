@@ -1345,13 +1345,36 @@ private extension View {
     /// shows only in the root nav bar (pushed pages keep the system back button).
     func drawerToggle(open: @escaping () -> Void) -> some View {
         toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: open) {
-                    Image(systemName: "line.3.horizontal")
-                }
-                .accessibilityLabel("Open navigation")
-            }
+            ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
         }
+    }
+}
+
+/// The hamburger, carrying how many are waiting on you while the needs-you bar is swiped away (the
+/// owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats) — so what the bar said is not lost.
+private struct DrawerToggleButton: View {
+    @Environment(AppModel.self) private var model
+    let open: () -> Void
+
+    var body: some View {
+        let waiting = model.needsYouPutAwayCount
+        Button(action: open) {
+            Image(systemName: "line.3.horizontal")
+                .overlay(alignment: .topTrailing) {
+                    if waiting > 0 {
+                        Text("\(waiting)")
+                            .font(.caption2.weight(.bold).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(Color.orange, in: Capsule())
+                            .offset(x: 10, y: -10)
+                            .accessibilityHidden(true)
+                    }
+                }
+        }
+        .accessibilityLabel("Open navigation")
+        .accessibilityValue(waiting > 0 ? "\(waiting) waiting on you" : "")
     }
 }
 

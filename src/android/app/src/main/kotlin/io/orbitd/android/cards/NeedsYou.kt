@@ -155,6 +155,27 @@ object NeedsYouLogic {
             since = target.text("lastTurnAt") ?: target.text("updatedAt") ?: target.text("createdAt"))
     }
 
+    /** What a swipe on the bar puts away (OrbitKit `dismissalKeys`; the owner, 2026-11-15,
+     * `docs/mocks/needs-you-capsule/06-list-floats`): each conversation waiting then, keyed by when it started waiting — its oldest
+     * owner item's instant, or its last turn's — and each terminal waiting to be approved ([terminals], its request ids), whose
+     * line leads the bar. A swipe is "not now": nothing is sent and no session changes. */
+    fun dismissalKeys(open: List<JsonObject>, terminals: List<String> = emptyList()): Set<String> = open.filter(::needsYou).mapNotNull { row ->
+        val id = row.text("id") ?: return@mapNotNull null
+        val since = oldestOwnerItem(listOf(row))?.second?.since?.takeIf { it.isNotEmpty() }
+            ?: row.text("lastTurnAt") ?: row.text("updatedAt") ?: row.text("createdAt") ?: ""
+        "$id|$since"
+    }.toSet() + terminals.map { "terminal:$it" }
+
+    /** Whether the bar stays put away: everything waiting elsewhere was already waiting when it was swiped. Something new —
+     * another conversation, one that stopped again, or another terminal asking — brings it back. */
+    fun isDismissed(open: List<JsonObject>, focused: String?, dismissed: Set<String>, terminals: List<String> = emptyList()): Boolean {
+        val keys = dismissalKeys(open.filter { !(focused != null && ObjectId.same(it.text("id"), focused)) }, terminals)
+        return keys.isNotEmpty() && dismissed.containsAll(keys)
+    }
+
+    /** TalkBack's action that puts the bar away (iOS `accessibilityAction(named: "Dismiss")`). */
+    const val dismissLabel = "Dismiss"
+
     /** At most this many capsules unfolded (the owner, 2026-11-13); the last says "+N" for the rest. */
     const val unfoldedLimit = 5
 
