@@ -71,6 +71,26 @@ struct PromptOptimizationCard: View {
                 }
                 .frame(maxHeight: 260)
             }
+            // Under the words and always in view, however long they are: the gloss's toggle and
+            // the "Used:" chips (frame 4).
+            if optimization.gloss != nil || !optimization.chips.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    if optimization.gloss != nil {
+                        Button(showingGloss ? PromptOptimizerCopy.showOriginal
+                                            : PromptOptimizerCopy.showIn(glossLanguage)) {
+                            showingGloss.toggle()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.orbitLabel.weight(.medium))
+                        .foregroundStyle(Color.accentColor)
+                    }
+                    if !optimization.chips.isEmpty { chips }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+                .padding(.bottom, 10)
+            }
             Divider()
             actions
         }
@@ -95,16 +115,6 @@ struct PromptOptimizationCard: View {
             promptText
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if optimization.gloss != nil {
-                Button(showingGloss ? PromptOptimizerCopy.showOriginal
-                                    : PromptOptimizerCopy.showIn(glossLanguage)) {
-                    showingGloss.toggle()
-                }
-                .buttonStyle(.plain)
-                .font(.orbitLabel.weight(.medium))
-                .foregroundStyle(Color.accentColor)
-            }
-            if !optimization.chips.isEmpty { chips }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
