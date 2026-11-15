@@ -14,10 +14,16 @@ package main
 //   - Claude Code's own settings files: with no --setting-sources, permissions.allow in the checkout's
 //     .claude/settings.local.json and in the user's settings ran commands unasked (measured on 2.1.325,
 //     docs/scheduled-tasks-engine-modes.md §10). Such a run loads none of them; the runner's own --settings file
-//     still applies.
+//     still applies, and carries what of the user's settings.json the engine needs to reach Anthropic the way the
+//     region check assumed: its env (a proxy, a base URL, a key) and its credential helpers, never its permissions.
+//
+// The runner advertises claudeScheduledCheckOnlyAsksCapabilityV1; the control plane hands Default only to such a
+// runner, and runs the check in Don't Ask with S2b's lists on any other.
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -62,4 +68,64 @@ func checkOnlyDisallowedTools(configured []string, executable string) []string {
 		out = append(out, "Bash("+form+")", "Bash("+form+" *)")
 	}
 	return out
+}
+
+// claudeScheduledCheckOnlyAsksCapabilityV1 declares that this runner closes the above for a scheduled CHECK_ONLY run
+// on Claude Code (apiserver schedule-access.ts CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1).
+const claudeScheduledCheckOnlyAsksCapabilityV1 = "claude-scheduled-check-only-asks/v1"
+
+// checkOnlyInheritedSettingKeys are the user settings.json keys such a run keeps through the runner's --settings file:
+// how the engine reaches and authenticates to its endpoint. Never permissions, hooks or anything else.
+var checkOnlyInheritedSettingKeys = []string{"env", "apiKeyHelper", "awsAuthRefresh", "awsCredentialExport"}
+
+// checkOnlyUserSettings reads those keys from the settings.json in the config dir the session's engine runs on (the
+// account slot's CLAUDE_CONFIG_DIR, else ~/.claude): nil when the file is missing or says none of them.
+func checkOnlyUserSettings(agentEnv map[string]string) map[string]json.RawMessage {
+	dir, err := claudeSessionAccountDir(agentEnv, "")
+	if err != nil {
+		return nil
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if err != nil {
+		return nil
+	}
+	var all map[string]json.RawMessage
+	if json.Unmarshal(b, &all) != nil {
+		return nil
+	}
+	out := map[string]json.RawMessage{}
+	for _, key := range checkOnlyInheritedSettingKeys {
+		if v, ok := all[key]; ok {
+			out[key] = v
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// mergeIntoSettingsFile adds keys to the runner's own settings file, keeping every key the runner wrote.
+func mergeIntoSettingsFile(path string, extra map[string]json.RawMessage) error {
+	if len(extra) == 0 {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var settings map[string]json.RawMessage
+	if err := json.Unmarshal(b, &settings); err != nil {
+		return err
+	}
+	for key, value := range extra {
+		if _, own := settings[key]; !own {
+			settings[key] = value
+		}
+	}
+	out, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0o644)
 }

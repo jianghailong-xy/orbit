@@ -1752,7 +1752,7 @@ model WorkspacePermissionRule {
   // long before the rule is revoked).
   createdById String?   @map("created_by_id") @db.Uuid
   approvalId  String?   @map("approval_id") @db.Uuid
-  // Written by answering Always allow on a scheduled run's card (migration 0850): the only Bash rules a CHECK_ONLY
+  // Written by answering Always allow on a scheduled run's card (migration 0860): the only Bash rules a CHECK_ONLY
   // run on Claude Code carries (docs/scheduled-tasks-design.md §6.2).
   fromScheduleRun Boolean @default(false) @map("from_schedule_run")
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -9941,7 +9941,7 @@ model ScheduleRun {
   notBeforeAt      DateTime?          @map("not_before_at") @db.Timestamptz(3)
   /// Why a HELD run's start checks failed (§6.1, migration 0830).
   heldReason       String?            @map("held_reason")
-  /// The level the run started with (§6.2, migration 0850): what its session is held to, whatever the schedule
+  /// The level the run started with (§6.2, migration 0860): what its session is held to, whatever the schedule
   /// says later. NULL until the run starts.
   accessLevel      ScheduleAccessLevel? @map("access_level")
   createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)

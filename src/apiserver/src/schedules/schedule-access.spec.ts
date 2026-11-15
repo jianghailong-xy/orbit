@@ -16,16 +16,21 @@ import {
   CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS,
   CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS,
   checkOnlyRuleRefusal,
+  CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS,
+  CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1,
   OPEN_PR_DISALLOWED_TOOLS,
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
   checkOnlyRefusesApproval,
   runAccessLevel,
   scheduleRunMode,
+  scheduleRunPermissionMode,
 } from './schedule-access';
 import { heldClause, heldCopy } from './schedule-attention';
 
 const WORKSPACE_ALLOWED = ['mcp__orbit__*', 'Bash(npm install:*)', 'Edit'];
+/** A runner that closes what only it can (runner-go schedule_check_only.go): the asking lists. */
+const ASKS = [CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1];
 
 test('CHECK_ONLY on Claude Code runs in Default; every other engine and level keeps its mode', () => {
   assert.equal(scheduleRunMode('CHECK_ONLY', 'claude'), PermissionMode.DEFAULT);
@@ -40,7 +45,7 @@ test('a CHECK_ONLY run on Claude Code is allowed what a check needs and nothing 
   const allowed = scheduleRunAllowedTools(WORKSPACE_ALLOWED, 'CHECK_ONLY', 'claude', [
     { toolName: 'Bash', ruleContent: 'npm install:*' },
     { toolName: 'Edit', ruleContent: '' },
-  ]);
+  ], ASKS);
   assert.deepEqual(allowed, [
     'mcp__orbit__schedule_run_report',
     'mcp__orbit__schedule_get',
@@ -104,22 +109,22 @@ test('of the workspace\'s rules a CHECK_ONLY run on Claude Code carries only nar
     { toolName: 'Bash', ruleContent: '/usr/local/bin/orbit task update:*', fromScheduleRun: true },
   ];
   const base = ['mcp__orbit__*', ...rules.map((r) => (r.ruleContent ? `${r.toolName}(${r.ruleContent})` : r.toolName))];
-  const carried = scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules).filter(
+  const carried = scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, ASKS).filter(
     (t) => !CHECK_ONLY_CLAUDE_ALLOWED_TOOLS.includes(t),
   );
   assert.deepEqual(carried, ['Bash(npm test:*)', 'Bash(psql:*)', 'Bash(/usr/local/bin/orbit task update:*)']);
   // A rule for the Orbit CLI is carried, and the deny list still wins over it (measured, record §9).
-  assert.ok(scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude').includes('Bash(*/orbit *)'));
+  assert.ok(scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude', ASKS).includes('Bash(*/orbit *)'));
   // Only a rule the claim itself put on the list: one its normalization dropped is not carried here either.
   assert.deepEqual(
-    scheduleRunAllowedTools(['mcp__orbit__*'], 'CHECK_ONLY', 'claude', [{ toolName: 'Bash', ruleContent: 'ls:*', fromScheduleRun: true }]),
+    scheduleRunAllowedTools(['mcp__orbit__*'], 'CHECK_ONLY', 'claude', [{ toolName: 'Bash', ruleContent: 'ls:*', fromScheduleRun: true }], ASKS),
     [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS],
   );
   // No duplicate when the workspace repeats an allowed tool.
   const twice = scheduleRunAllowedTools(['WebFetch', 'Bash(ls -la:*)'], 'CHECK_ONLY', 'claude', [
     { toolName: 'Bash', ruleContent: 'ls -la:*', fromScheduleRun: true },
     { toolName: 'Bash', ruleContent: 'ls -la:*', fromScheduleRun: true },
-  ]);
+  ], ASKS);
   assert.equal(twice.filter((t) => t === 'WebFetch').length, 1);
   assert.equal(twice.filter((t) => t === 'Bash(ls -la:*)').length, 1);
 });
@@ -166,12 +171,15 @@ test('every Orbit tool orbit mcp serves is allowed or denied by name for a CHECK
     .filter(([, mcp]) => mcp !== 'absent' && mcp !== 'engine')
     .map(([tool]) => `mcp__orbit__${tool}`);
   assert.ok(served.length > 100, `read ${served.length} tools off the catalogue`);
-  const denied = scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude');
+  // Served beside the catalogue (runner-go subagent.go); runner-go TestEveryServedOrbitToolIsOnACheckOnlyList checks
+  // every tool `orbit mcp` lists, these included, against this file.
+  served.push('mcp__orbit__delegate');
+  const denied = scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude', ASKS);
   for (const tool of served) {
     assert.ok(CHECK_ONLY_CLAUDE_ALLOWED_TOOLS.includes(tool) !== denied.includes(tool), `${tool}: allowed xor denied`);
   }
   for (const tool of CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS) assert.ok(served.includes(tool), `${tool} is served`);
-  for (const tool of ['bg_run', 'bg_kill', 'task_update', 'session_merge', 'task_start', 'session_send', 'ask_owner']) {
+  for (const tool of ['bg_run', 'bg_kill', 'task_update', 'session_merge', 'task_start', 'session_send', 'ask_owner', 'delegate']) {
     assert.ok(denied.includes(`mcp__orbit__${tool}`), tool);
   }
   // permission_prompt is the engine's door for every ask, a shell command's included: never denied.
@@ -196,13 +204,13 @@ test('the server answers DENY at once for anything but a shell command a CHECK_O
 });
 
 test('a CHECK_ONLY run on Claude Code may not use the file tools, the Orbit CLI or other Orbit tools, whatever allows them', () => {
-  const denied = scheduleRunDisallowedTools(['X'], 'CHECK_ONLY', 'claude');
+  const denied = scheduleRunDisallowedTools(['X'], 'CHECK_ONLY', 'claude', ASKS);
   assert.deepEqual(denied, ['X', ...CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS]);
   for (const tool of ['Edit', 'Write', 'NotebookEdit']) assert.ok(denied.includes(tool), tool);
   // The runner allows `Bash(<orbit> <command> *)` for every CLI command, quoted and unquoted; these win over it.
   assert.ok(denied.includes('Bash(*/orbit *)'));
   assert.ok(denied.includes("Bash('*/orbit' *)"));
-  assert.deepEqual(scheduleRunDisallowedTools(['X', 'Edit'], 'CHECK_ONLY', 'claude').filter((t) => t === 'Edit'), ['Edit']);
+  assert.deepEqual(scheduleRunDisallowedTools(['X', 'Edit'], 'CHECK_ONLY', 'claude', ASKS).filter((t) => t === 'Edit'), ['Edit']);
 });
 
 test('a run held because the account default is narrower says what to change, inside the item\'s length', () => {
@@ -237,14 +245,18 @@ test('every other run keeps the claim\'s tools: CHECK_ONLY elsewhere, OPEN_PR, a
 
 test('both claim paths hand the runner the run\'s allow and deny lists, by the session\'s level and provider', () => {
   const root = join(__dirname, '..', '..', 'src');
-  for (const [file, session] of [
-    ['queue/queue.service.ts', 'session'],
-    ['runner-api/runner-api.controller.ts', 's'],
+  for (const [file, session, caps] of [
+    ['queue/queue.service.ts', 'session', 'session.assignedRunner?.capabilities'],
+    ['runner-api/runner-api.controller.ts', 's', 'runner.capabilities'],
   ] as const) {
     const source = readFileSync(join(root, file), 'utf8');
+    assert.ok(
+      source.includes(`scheduleRunPermissionMode(\n            permissionMode, runAccessLevel(${session}.scheduleRun), provider, ${caps},\n          ),`),
+      `${file}: the mode by the claiming runner's capability`,
+    );
     const level = `runAccessLevel(${session}.scheduleRun),`;
     assert.ok(
-      source.includes(`allowedTools: scheduleRunAllowedTools(\n          dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),\n          ${level}\n          provider,\n          workspace?.permissionRules ?? [],\n        ),`),
+      source.includes(`allowedTools: scheduleRunAllowedTools(\n          dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),\n          ${level}\n          provider,\n          workspace?.permissionRules ?? [],\n          ${caps},\n        ),`),
       `${file}: allowedTools`,
     );
     assert.ok(
@@ -252,8 +264,40 @@ test('both claim paths hand the runner the run\'s allow and deny lists, by the s
       `${file}: reads the run's own level`,
     );
     assert.ok(
-      source.includes(`disallowedTools: scheduleRunDisallowedTools(\n          (workspace?.disallowedTools as string[] | null) ?? [],\n          ${level}\n          provider,\n        ),`),
+      source.includes(`disallowedTools: scheduleRunDisallowedTools(\n          (workspace?.disallowedTools as string[] | null) ?? [],\n          ${level}\n          provider,\n          ${caps},\n        ),`),
       `${file}: disallowedTools`,
     );
   }
+});
+
+test('a CHECK_ONLY run on Claude Code asks only on a runner that advertises it; any other gets S2b\'s Don\'t Ask exactly', () => {
+  const rules = [{ toolName: 'Bash', ruleContent: 'npm test:*', fromScheduleRun: true }];
+  const base = ['mcp__orbit__*', 'Bash(npm test:*)'];
+  for (const caps of [[], null, undefined, ['claude-account-move/v1']]) {
+    assert.equal(scheduleRunPermissionMode(PermissionMode.DEFAULT, 'CHECK_ONLY', 'claude', caps), PermissionMode.DONT_ASK);
+    assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, caps), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS],
+      'S2b\'s allow list, no rule carried');
+    assert.deepEqual(scheduleRunDisallowedTools(['X'], 'CHECK_ONLY', 'claude', caps),
+      ['X', 'Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)"], 'S2b\'s deny list as it landed');
+  }
+  assert.deepEqual([...CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS], ['Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)"]);
+  // A runner that advertises it: Default, the carried rule, and the full deny list (EnterPlanMode, every other Orbit tool).
+  assert.equal(scheduleRunPermissionMode(PermissionMode.DEFAULT, 'CHECK_ONLY', 'claude', ASKS), PermissionMode.DEFAULT);
+  assert.deepEqual(scheduleRunAllowedTools(base, 'CHECK_ONLY', 'claude', rules, ASKS), [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS, 'Bash(npm test:*)']);
+  const denied = scheduleRunDisallowedTools([], 'CHECK_ONLY', 'claude', ASKS);
+  for (const tool of ['EnterPlanMode', 'mcp__orbit__delegate', 'mcp__orbit__bg_run']) assert.ok(denied.includes(tool), tool);
+  // Every other run keeps its mode whatever the runner says.
+  assert.equal(scheduleRunPermissionMode(PermissionMode.ACCEPT_EDITS, 'OPEN_PR', 'claude', []), PermissionMode.ACCEPT_EDITS);
+  assert.equal(scheduleRunPermissionMode(PermissionMode.PLAN, 'CHECK_ONLY', 'codex', []), PermissionMode.PLAN);
+  assert.equal(scheduleRunPermissionMode(PermissionMode.DEFAULT, null, 'claude', []), PermissionMode.DEFAULT);
+});
+
+test('migration 0860 marks no existing rule: only a CHECK_ONLY card\'s server-computed rules are ever carried', () => {
+  const sql = readFileSync(
+    join(__dirname, '..', '..', 'prisma', 'migrations', '0860_schedule_check_only_asks', 'migration.sql'), 'utf8',
+  );
+  const statements = sql.split('\n').filter((l) => !l.trimStart().startsWith('--')).join('\n');
+  assert.match(statements, /ADD COLUMN "from_schedule_run" BOOLEAN NOT NULL DEFAULT false/);
+  assert.doesNotMatch(statements, /UPDATE\s+"workspace_permission_rule"/i, 'no backfill marks a rule');
+  assert.match(statements, /UPDATE "schedule_run" r\s+SET "access_level"/);
 });

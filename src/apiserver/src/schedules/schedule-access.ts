@@ -26,7 +26,9 @@
  * narrow `Bash(…)` ones a scheduled run's card wrote are carried, and such a card may write only its own command's
  * rules (`checkOnlyRuleRefusal`). A run is held to the level it started with (`runAccessLevel`). The runner closes the
  * rest for a claim with `scheduledCheckOnly` (runner-go schedule_check_only.go): every Orbit tool prompt refused, the
- * CLI denied by its own path, no settings file loaded (docs/scheduled-tasks-engine-modes.md §7, §9, §10).
+ * CLI denied by its own path, no settings file loaded (docs/scheduled-tasks-engine-modes.md §7, §9, §10). Only a runner
+ * that advertises CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 is handed Default; any other runs the check in Don't Ask with
+ * S2b's lists (`scheduleRunPermissionMode`), where nothing asks.
  */
 import {
   AgentProvider,
@@ -145,6 +147,8 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__tasklist_update', 'mcp__orbit__watch_cancel', 'mcp__orbit__watch_create', 'mcp__orbit__watch_get',
   'mcp__orbit__watch_list', 'mcp__orbit__watch_update', 'mcp__orbit__wiki_draft', 'mcp__orbit__wiki_note',
   'mcp__orbit__wiki_propose', 'mcp__orbit__withdraw_owner_request',
+  // Served by `orbit mcp` beside the catalogue (runner-go subagent.go): it starts a SubAgent, work outside this check.
+  'mcp__orbit__delegate',
 ];
 
 /**
@@ -159,13 +163,55 @@ export const CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
   'NotebookEdit',
   'Bash(*/orbit *)',
   "Bash('*/orbit' *)",
+  // Plan entered by the engine itself would hold back the run's own report: in Plan Claude Code asks about every Orbit
+  // tool not marked read-only, schedule_run_report and notify included, and such a run's runner refuses each such ask.
+  'EnterPlanMode',
   ...CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS,
 ];
 
 /**
- * The level a run's session is held to: the one the run started with (`schedule_run.access_level`, migration 0850),
+ * S2b's deny list, exactly as it landed: what a CHECK_ONLY run on Claude Code gets in Don't Ask, on a runner that does
+ * not advertise CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1. Don't Ask runs nothing an allow rule does not name and asks
+ * nobody, so the Orbit tools outside the allow list need no name here.
+ */
+export const CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS: readonly string[] = [
+  'Edit',
+  'Write',
+  'NotebookEdit',
+  'Bash(*/orbit *)',
+  "Bash('*/orbit' *)",
+];
+
+/**
+ * The capability a runner advertises when it closes what only the runner can for a CHECK_ONLY run on Claude Code that
+ * may ask (runner-go schedule_check_only.go): every Orbit tool prompt refused, no Orbit CLI allow rule and the CLI
+ * denied by its own path, and no settings file of the checkout's or the user's loaded. Only such a runner is handed
+ * Default; any other runs the check in Don't Ask with S2b's lists, where nothing asks and nothing unlisted runs.
+ */
+export const CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 = 'claude-scheduled-check-only-asks/v1';
+
+/** Whether a CHECK_ONLY run on Claude Code may ask on this runner (its advertised capabilities). */
+export function checkOnlyAsksOn(capabilities: readonly string[] | null | undefined): boolean {
+  return (capabilities ?? []).includes(CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1);
+}
+
+/**
+ * The permission mode the claim hands the runner: the session's own, except that a CHECK_ONLY run on Claude Code
+ * claimed by a runner without CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1 runs in Don't Ask, as S2b ran it.
+ */
+export function scheduleRunPermissionMode(
+  mode: PermissionMode,
+  accessLevel: AccessLevel | null | undefined,
+  provider: string | null | undefined,
+  runnerCapabilities: readonly string[] | null | undefined,
+): PermissionMode {
+  return claudeCheckOnly(accessLevel, provider) && !checkOnlyAsksOn(runnerCapabilities) ? PermissionMode.DONT_ASK : mode;
+}
+
+/**
+ * The level a run's session is held to: the one the run started with (`schedule_run.access_level`, migration 0860),
  * so moving the schedule to OPEN_PR, or deleting it, while a check runs does not widen that check. The schedule's own
- * level only for a run started before 0850 recorded it.
+ * level only for a run started before 0860 recorded it.
  */
 export function runAccessLevel(
   run: { accessLevel: AccessLevel | null; schedule?: { accessLevel: AccessLevel } | null } | null | undefined,
@@ -189,8 +235,11 @@ export function scheduleRunAllowedTools(
   accessLevel: AccessLevel | null | undefined,
   provider: string | null | undefined,
   rules: readonly CarriedRule[] = [],
+  runnerCapabilities: readonly string[] | null | undefined = [],
 ): string[] {
   if (!claudeCheckOnly(accessLevel, provider)) return base;
+  // Don't Ask (a runner that cannot close the rest): S2b's list exactly, no rule carried.
+  if (!checkOnlyAsksOn(runnerCapabilities)) return [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS];
   const carried = rules
     .filter((rule) => rule.fromScheduleRun === true && rule.toolName === 'Bash' && !/^[\s*:]*$/.test(rule.ruleContent))
     .map((rule) => `Bash(${rule.ruleContent})`)
@@ -269,9 +318,15 @@ export function scheduleRunDisallowedTools(
   base: string[],
   accessLevel: AccessLevel | null | undefined,
   provider: string | null | undefined,
+  runnerCapabilities: readonly string[] | null | undefined = [],
 ): string[] {
   if (accessLevel === 'OPEN_PR') return [...new Set([...base, ...OPEN_PR_DISALLOWED_TOOLS])];
-  if (claudeCheckOnly(accessLevel, provider)) return [...new Set([...base, ...CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS])];
+  if (claudeCheckOnly(accessLevel, provider)) {
+    const own = checkOnlyAsksOn(runnerCapabilities)
+      ? CHECK_ONLY_CLAUDE_DISALLOWED_TOOLS
+      : CHECK_ONLY_CLAUDE_DONT_ASK_DISALLOWED_TOOLS;
+    return [...new Set([...base, ...own])];
+  }
   return base;
 }
 

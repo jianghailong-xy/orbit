@@ -564,6 +564,7 @@ import {
   checkOnlyRefusesApproval,
   runAccessLevel,
   scheduleRunAgentFields,
+  scheduleRunPermissionMode,
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
@@ -4260,18 +4261,23 @@ export class RunnerApiController {
           runAccessLevel(s.scheduleRun),
           provider,
           workspace?.permissionRules ?? [],
+          runner.capabilities,
         ),
         disallowedTools: scheduleRunDisallowedTools(
           (workspace?.disallowedTools as string[] | null) ?? [],
           runAccessLevel(s.scheduleRun),
           provider,
+          runner.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(s.scheduleRun)),
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          permissionMode,
+          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
+          scheduleRunPermissionMode(
+            permissionMode, runAccessLevel(s.scheduleRun), provider, runner.capabilities,
+          ),
           customRow?.enabled === true,
           runner.runsAsRoot,
           s.assignedRunner?.modelCatalog,

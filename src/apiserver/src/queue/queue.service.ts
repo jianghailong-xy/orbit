@@ -122,6 +122,7 @@ import { openingTurnId } from '../sessions/orbit-authored-turn';
 import {
   runAccessLevel,
   scheduleRunAgentFields,
+  scheduleRunPermissionMode,
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
 } from '../schedules/schedule-access';
@@ -1227,11 +1228,13 @@ export class QueueService {
           runAccessLevel(session.scheduleRun),
           provider,
           workspace?.permissionRules ?? [],
+          session.assignedRunner?.capabilities,
         ),
         disallowedTools: scheduleRunDisallowedTools(
           (workspace?.disallowedTools as string[] | null) ?? [],
           runAccessLevel(session.scheduleRun),
           provider,
+          session.assignedRunner?.capabilities,
         ),
         // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
         ...scheduleRunAgentFields(runAccessLevel(session.scheduleRun)),
@@ -1243,7 +1246,10 @@ export class QueueService {
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          permissionMode,
+          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
+          scheduleRunPermissionMode(
+            permissionMode, runAccessLevel(session.scheduleRun), provider, session.assignedRunner?.capabilities,
+          ),
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
           session.assignedRunner?.modelCatalog,

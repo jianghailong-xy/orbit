@@ -44,11 +44,13 @@ import { lastActiveByWorkspace, workspaceSessionCount } from '../workspaces/work
 import {
   CHECK_ONLY_CLAUDE_ALLOWED_TOOLS,
   CHECK_ONLY_REFUSED_MESSAGE,
+  CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1,
   runAccessLevel,
   SCHEDULE_CHECK_ONLY_RULE_REFUSED,
   scheduleRunAgentFields,
   scheduleRunAllowedTools,
   scheduleRunDisallowedTools,
+  scheduleRunPermissionMode,
 } from './schedule-access';
 import type { ScheduleAlert, ScheduleNotifier } from './schedule-attention';
 import { SessionsScheduleRunPort } from './schedule-run-sessions';
@@ -569,8 +571,8 @@ test('§6.2 S2e: a CHECK_ONLY run on Claude Code asks only about a shell command
   assert.deepEqual(lists.agentFields, { scheduledCheckOnly: true });
 });
 
-/** What both claim paths hand the runner for a session: its mode, allow and deny lists and schedule fields. */
-async function claimLists(sessionId: string) {
+/** What both claim paths hand the runner for a session claimed by a runner with these capabilities. */
+async function claimLists(sessionId: string, runnerCapabilities: readonly string[] = [CLAUDE_SCHEDULED_CHECK_ONLY_ASKS_V1]) {
   const dispatched = await db.session.findUniqueOrThrow({
     where: { id: sessionId },
     include: {
@@ -582,10 +584,14 @@ async function claimLists(sessionId: string) {
   const level = runAccessLevel(dispatched.scheduleRun);
   const rules = dispatched.workspace?.permissionRules ?? [];
   return {
-    permissionMode: dispatched.permissionMode,
+    permissionMode: scheduleRunPermissionMode(dispatched.permissionMode as PermissionMode, level, provider, runnerCapabilities),
     level,
-    allowed: scheduleRunAllowedTools(dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, rules), level, provider, rules),
-    denied: scheduleRunDisallowedTools((dispatched.workspace?.disallowedTools as string[] | null) ?? [], level, provider),
+    allowed: scheduleRunAllowedTools(
+      dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, rules), level, provider, rules, runnerCapabilities,
+    ),
+    denied: scheduleRunDisallowedTools(
+      (dispatched.workspace?.disallowedTools as string[] | null) ?? [], level, provider, runnerCapabilities,
+    ),
     agentFields: scheduleRunAgentFields(level),
   };
 }
@@ -633,6 +639,38 @@ test('§6.2 S2e H6: a check is held to the level it started with when the schedu
   assert.equal((await ask('Write')).status, 'DENIED');
   assert.equal(door.published.length, 0, 'no card was announced');
   assert.equal(door.pushed.length, 0, 'and nothing was pushed');
+});
+
+test('§6.2 S2e: an OPEN_PR run\'s Always allow is never carried by a check, and a runner without the capability gets Don\'t Ask', { skip }, async () => {
+  alerts = [];
+  at('2026-11-14T00:00:00Z');
+  const w = await world('s2e-open-pr-rule');
+  const pr = await created(w, { accessLevel: 'OPEN_PR' });
+  const prRun = await nextRun(pr.schedule.id);
+  await heldByRunner(w, prRun.sessionId);
+  const door = approvalDoor();
+  const card = await door.controller.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, prRun.sessionId,
+    { toolName: 'Bash', input: { command: 'git push origin HEAD' }, toolUseId: `tu-${randomUUID()}` } as never);
+  assert.equal(card.status, 'PENDING');
+  // The client sends whatever it likes for an OPEN_PR card: stored as before, and not marked.
+  await sessionsService.decideApproval(w.ownerId, prRun.sessionId, card.id, {
+    behavior: 'allow', rememberRules: [{ toolName: 'Bash', ruleContent: 'git:*' }],
+  });
+  const rule = await db.workspacePermissionRule.findFirstOrThrow({ where: { workspaceId: w.workspaceId, ruleContent: 'git:*' } });
+  assert.equal(rule.fromScheduleRun, false, 'an OPEN_PR card\'s rule is not a check\'s');
+
+  const check = await created(w);
+  const checkRun = await nextRun(check.schedule.id);
+  const lists = await claimLists(checkRun.sessionId);
+  assert.equal(lists.permissionMode, PermissionMode.DEFAULT);
+  assert.deepEqual(lists.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS], 'git:* from the OPEN_PR card is not carried');
+
+  // The same check claimed by a runner that does not advertise the capability: S2b's Don't Ask, nothing asks.
+  const old = await claimLists(checkRun.sessionId, ['claude-account-move/v1']);
+  assert.equal(old.permissionMode, PermissionMode.DONT_ASK);
+  assert.deepEqual(old.allowed, [...CHECK_ONLY_CLAUDE_ALLOWED_TOOLS]);
+  assert.deepEqual(old.denied, ['Edit', 'Write', 'NotebookEdit', 'Bash(*/orbit *)', "Bash('*/orbit' *)"]);
+  assert.deepEqual(old.agentFields, { scheduledCheckOnly: true });
 });
 
 test('§6.2 S2e: an ordinary session and an OPEN_PR run ask as before: an Edit or bg_run request is a card', { skip }, async () => {

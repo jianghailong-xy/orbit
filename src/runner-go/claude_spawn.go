@@ -116,6 +116,11 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	// we could not write, or an exe we could not resolve, leaves the engine's own
 	// background shells working exactly as before.
 	if path, err := writeClaudeSettings(scratchDir, orbitExe, a.FastMode); err == nil && path != "" {
+		// A scheduled CHECK_ONLY run keeps the user settings' env and credential helpers through this file, since it
+		// loads no settings file of its own below (schedule_check_only.go).
+		if a.ScheduledCheckOnly {
+			_ = mergeIntoSettingsFile(path, checkOnlyUserSettings(a.Env))
+		}
 		args = append(args, "--settings", path)
 	}
 	// A scheduled CHECK_ONLY run loads no settings file of its own: permissions.allow in the checkout's or the

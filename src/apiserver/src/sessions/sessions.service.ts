@@ -9736,7 +9736,6 @@ export class SessionsService {
       where: { id, ownerId },
       select: {
         id: true, workspaceId: true, sessionKind: true, ownerId: true, engine: true, provider: true, providerBuiltin: true,
-        scheduleRunId: true,
         scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
       },
     });
@@ -9786,11 +9785,13 @@ export class SessionsService {
       select: { toolName: true, input: true, translation: true, status: true },
     });
     // A scheduled CHECK_ONLY run on Claude Code (design §6.2): Always allow on its card writes only that card's command's
-    // rules, which are all such a run carries; anything else a client sends is refused, and nothing is decided.
-    if (dto.behavior === 'allow' && dto.rememberRules?.length && answering
+    // rules, computed here, and only those rules are marked for later checks to carry (from_schedule_run). A rule from
+    // any other card, an OPEN_PR run's included, is the client's choice and is never carried by a check.
+    const checkOnlyRules = dto.behavior === 'allow' && !!dto.rememberRules?.length && !!answering
       && runAccessLevel(session.scheduleRun) === 'CHECK_ONLY'
-      && (await sessionEngine(this.prisma, session)) === AgentProvider.CLAUDE) {
-      const refused = checkOnlyRuleRefusal(answering, dto.rememberRules);
+      && (await sessionEngine(this.prisma, session)) === AgentProvider.CLAUDE;
+    if (checkOnlyRules) {
+      const refused = checkOnlyRuleRefusal(answering!, dto.rememberRules!);
       if (refused) throw new BadRequestException({ code: SCHEDULE_CHECK_ONLY_RULE_REFUSED, message: refused });
     }
     // Settings › Translation (3A, reply-translation.ts): what the engine reads is in the account's agent language —
@@ -9873,7 +9874,7 @@ export class SessionsService {
       // click on an already-answered approval must not widen anything.
       if (dto.behavior === 'allow' && session.workspaceId) {
         await this.rememberForWorkspace(
-          session.workspaceId, ownerId, approvalId, dto.rememberRules, !!session.scheduleRunId,
+          session.workspaceId, ownerId, approvalId, dto.rememberRules, checkOnlyRules,
         );
       }
       this.realtime.publish(id, {
@@ -9911,7 +9912,7 @@ export class SessionsService {
       })),
       skipDuplicates: true,
     });
-    // A rule an interactive session wrote first is the same row: answering a scheduled run's card for it marks it, so
+    // A rule an interactive session wrote first is the same row: answering a CHECK_ONLY run's card for it marks it, so
     // a CHECK_ONLY run carries it from now on (schedule-access.ts scheduleRunAllowedTools).
     if (fromScheduleRun) {
       await this.prisma.workspacePermissionRule.updateMany({

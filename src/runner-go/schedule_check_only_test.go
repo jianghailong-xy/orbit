@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -161,6 +163,102 @@ func TestListedToolsMatchToolsListForScheduleRunReport(t *testing.T) {
 		}
 		if listed != run || inList != run {
 			t.Errorf("scheduleRun=%v: listedTools has it %v, tools/list has it %v", run, listed, inList)
+		}
+	}
+}
+
+// Such a run loads no settings file (--setting-sources ''), so the runner's own --settings file carries what of the
+// user's settings.json the engine needs to reach its endpoint: env and credential helpers, never permissions or hooks.
+func TestScheduledCheckOnlyKeepsUserEnvAndCredentialHelpersOnly(t *testing.T) {
+	cfg := t.TempDir()
+	user := `{"env":{"HTTPS_PROXY":"http://127.0.0.1:3128","ANTHROPIC_BASE_URL":"https://gw.example"},` +
+		`"apiKeyHelper":"/opt/key-helper","awsAuthRefresh":"aws sso login",` +
+		`"permissions":{"allow":["Bash(cp:*)"]},"hooks":{"PreToolUse":[]},"model":"x"}`
+	if err := os.WriteFile(filepath.Join(cfg, "settings.json"), []byte(user), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	job := claudeSpawnJob(t)
+	job.Agent.PermissionMode = "default"
+	job.Agent.Env = map[string]string{"CLAUDE_CONFIG_DIR": cfg}
+	read := func(args []string) map[string]json.RawMessage {
+		path, ok := argAfter(args, "--settings")
+		if !ok {
+			t.Fatalf("no --settings: %v", args)
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var settings map[string]json.RawMessage
+		if err := json.Unmarshal(b, &settings); err != nil {
+			t.Fatal(err)
+		}
+		return settings
+	}
+
+	job.Agent.ScheduledCheckOnly = true
+	settings := read(claudeCommandArgs(job, t.TempDir(), true))
+	if string(settings["env"]) != `{"ANTHROPIC_BASE_URL":"https://gw.example","HTTPS_PROXY":"http://127.0.0.1:3128"}` &&
+		string(settings["env"]) != `{"HTTPS_PROXY":"http://127.0.0.1:3128","ANTHROPIC_BASE_URL":"https://gw.example"}` {
+		t.Errorf("env %s", settings["env"])
+	}
+	if string(settings["apiKeyHelper"]) != `"/opt/key-helper"` || string(settings["awsAuthRefresh"]) != `"aws sso login"` {
+		t.Errorf("credential helpers not kept: %v", settings)
+	}
+	if _, has := settings["permissions"]; has {
+		t.Errorf("the user's permissions reached the run's settings: %s", settings["permissions"])
+	}
+	if _, has := settings["model"]; has {
+		t.Errorf("a key that is not how the engine reaches its endpoint was kept: %v", settings)
+	}
+	// The runner's own keys stand: its hooks, not the user's empty list.
+	if !strings.Contains(string(settings["hooks"]), "bg-guard") && orbitCLIExecutable() != "" {
+		t.Errorf("the runner's hooks were replaced: %s", settings["hooks"])
+	}
+	if string(settings["disableClaudeAiConnectors"]) != "true" {
+		t.Errorf("the runner's own settings are gone: %v", settings)
+	}
+
+	// Any other session loads the user's settings itself, so the runner's file carries none of them.
+	job.Agent.ScheduledCheckOnly = false
+	settings = read(claudeCommandArgs(job, t.TempDir(), true))
+	for _, key := range checkOnlyInheritedSettingKeys {
+		if _, has := settings[key]; has {
+			t.Errorf("an ordinary session's --settings file carries %s", key)
+		}
+	}
+}
+
+// Every Orbit tool `orbit mcp` can serve (every switch on, a scheduled run's session, outside a SubAgent) is on one of
+// the control plane's lists for a CHECK_ONLY run on Claude Code (apiserver schedule-access.ts): allowed, or denied by
+// name. A tool on neither would reach this runner's prompt refusal only, and an older runner's allow.
+func TestEveryServedOrbitToolIsOnACheckOnlyList(t *testing.T) {
+	t.Setenv(envSubagentRunID, "")
+	t.Setenv(envWatches, "1")
+	t.Setenv(envWiki, "1")
+	source, err := os.ReadFile(filepath.Join("..", "apiserver", "src", "schedules", "schedule-access.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &mcpServer{sessionID: "sess-1", allowOrchestration: true, scheduleRun: true, allowPermissionPrompt: true}
+	names := map[string]bool{}
+	for _, tool := range srv.listedToolDescriptors() {
+		names[tool["name"].(string)] = true
+	}
+	for _, op := range operationCatalog().Ops {
+		if op.MCP != nil {
+			names[op.Tool] = true
+		}
+	}
+	if !names[delegateToolName] || !names["bg_run"] || !names[scheduleRunReportTool] {
+		t.Fatalf("the served set is not the whole set: %v", names)
+	}
+	for name := range names {
+		if name == "permission_prompt" {
+			continue // the engine's door for every ask, a shell command's included
+		}
+		if !strings.Contains(string(source), "'"+claudeToolName(name)+"'") {
+			t.Errorf("%s is served by orbit mcp and is on neither CHECK_ONLY list in schedule-access.ts", claudeToolName(name))
 		}
 	}
 }
