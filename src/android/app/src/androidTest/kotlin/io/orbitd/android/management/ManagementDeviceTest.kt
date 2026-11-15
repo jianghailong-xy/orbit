@@ -69,6 +69,7 @@ class ManagementDeviceTest {
     @Volatile private var permission = "auto"
     @Volatile private var forbidden = false
     @Volatile private var runnerOnline = false
+    @Volatile private var runnerActive = 1
     /** The runner's selfUpdate report (JSON); null is a runner too old to report one. */
     @Volatile private var runnerSelfUpdate: String? = null
     /** Runners served instead of the one controlled remote, for the list case; DELETE and reorder change it. */
@@ -290,6 +291,32 @@ class ManagementDeviceTest {
             } finally {
                 runBlocking { app.session.logout() }
                 File(app.filesDir, "a13-management").apply { mkdirs() }.resolve("runner-requests.txt").writeText(calls.joinToString("\n"))
+            }
+        }
+    }
+
+    /** Max Concurrent's dialog as the web's: − 4 + sessions at once, 3 running; Save waits for a change; below 3, the warning. */
+    @Test fun maxConcurrentDialogStepsAndWarnsBelowRunning() {
+        start()
+        MockWebServer().use { server ->
+            server.dispatcher = dispatcher()
+            try {
+                role = "ADMIN"; runnerOnline = true; runnerActive = 3
+                signIn(server); settings()
+                click(hasText("Machines & models") and hasClickAction()); await("Controlled remote")
+                click(hasText("Controlled remote") and hasClickAction()); await("Max Concurrent")
+                click(hasContentDescription("Edit Max Concurrent"))
+                await("sessions at once"); await("3 running"); await("Applies to the next session it picks up — no restart.")
+                compose.onNode(hasText("Save") and hasClickAction()).assertIsNotEnabled()
+                capture("max-concurrent-dialog")
+                compose.onNodeWithContentDescription("Decrease Max Concurrent").performClick()
+                compose.onNodeWithContentDescription("Decrease Max Concurrent").performClick()
+                await("The 3 running now carry on; new ones wait until fewer than 2 are running.")
+                compose.onNode(hasText("Save") and hasClickAction()).assertIsEnabled()
+                capture("max-concurrent-dialog-below-running")
+            } finally {
+                runnerActive = 1
+                runBlocking { app.session.logout() }
             }
         }
     }
@@ -1271,7 +1298,7 @@ class ManagementDeviceTest {
         "selfUpdate":null,"minFreeDiskMb":null,"enrolledAt":"2026-09-01T10:00:00Z",
         "engines":[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"no"}],"install":null}"""
     private fun runner() = if (kimiPass) kimiRunner() else if (accountsPass) accountsRunner() else """{"id":"$runnerId","name":"controlled-remote","displayName":"Controlled remote","hostname":"ci-runner-01","version":"0.1.199",
-        "online":$runnerOnline,"status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":1,
+        "online":$runnerOnline,"status":"${if (runnerOnline) "ONLINE" else "OFFLINE"}","lastHeartbeatAt":"${heartbeat()}","maxConcurrent":4,"activeSessions":$runnerActive,
         "runsAsRoot":false,"selfUpdate":${runnerSelfUpdate ?: "null"},"minFreeDiskMb":null,"reposRoot":"/home/ci/orbit-repos","enrolledAt":"2026-09-01T10:00:00Z","capabilities":["claude-account-remove/v1"],
         "engines":[{"engine":"claude","installed":true,"version":"2.1.284 (Claude Code)","auth":"yes","update":{"status":"checked","at":"${now.minusSeconds(360)}","okAt":"${now.minusSeconds(360)}","latest":"2.1.284"},
           "accounts":[{"id":"default","home":"/home/ci/.claude","auth":"yes"},{"id":"1fda3f43","home":"/home/ci/.orbit/claude-accounts/1fda3f43","auth":"no","name":"Work"}]},
