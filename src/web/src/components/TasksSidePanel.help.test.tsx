@@ -176,7 +176,7 @@ describe('the ? button beside the avatar', () => {
     await act(async () => {
       window.dispatchEvent(new CustomEvent(HELP_DRAWER_EVENT, { detail: { slug: 'machine-offline' } }));
     });
-    expect(drawer()!.querySelector('[data-help-pane="articles"]')?.getAttribute('data-help-slug')).toBe('machine-offline');
+    expect(drawer()!.querySelector('[data-help-pane="article"]')?.getAttribute('data-help-slug')).toBe('machine-offline');
     await act(async () => {
       window.dispatchEvent(new CustomEvent(HELP_DRAWER_EVENT, { detail: { tab: 'ask', query: 'offline' } }));
     });
