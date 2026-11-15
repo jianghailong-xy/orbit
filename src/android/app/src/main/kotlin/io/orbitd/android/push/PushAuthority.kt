@@ -71,6 +71,12 @@ class PushAuthority(private val api: OrbitApi, private val handle: SessionHandle
                 val rows = array(objectRead(listOf("terminals", "requests"))["requests"])
                 if (rows.any { ObjectId.same(canonical(it.text("id")), payload.terminalLoginId) }) PushCheck.ACTIVE else PushCheck.STALE
             }
+            // A scheduled task's alert that opens no run's session stands while its schedule does (a deleted one answers 404).
+            payload.kind == PushPayload.SCHEDULE && payload.sessionId == null -> {
+                val row = objectRead(listOf("schedules", payload.scheduleId!!)).obj("schedule") ?: throw ProtocolException()
+                if (!ObjectId.same(row.text("id"), payload.scheduleId)) throw ProtocolException()
+                PushCheck.ACTIVE
+            }
             payload.sessionId != null -> {
                 val row = sessionRead(payload.sessionId)
                 if (row.present("deletedAt")) PushCheck.MISSING

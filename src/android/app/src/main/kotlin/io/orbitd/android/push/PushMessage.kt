@@ -30,6 +30,8 @@ data class PushPayload(
     val ownerRequestKind: String? = null,
     /** `terminal-login`: the terminal sign-in waiting for the owner's Approve (docs/terminal-session-design.md). */
     val terminalLoginId: String? = null,
+    /** `schedule`: the scheduled task an alert is about (§7.3); it names the run's session too when there is one to open. */
+    val scheduleId: String? = null,
 ) {
     val isOwnerItem get() = kind in ownerItemKinds
     val isReminder get() = kind == "approval" || isOwnerItem
@@ -46,6 +48,8 @@ data class PushPayload(
         // A terminal asking to be approved: the Waiting on you inbox, whose Open tab heads with its card (iOS `.openTerminalRequests`).
         kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
+        // A scheduled task's alert: its run's session when it names one, else the schedule's detail on the Scheduled page.
+        kind == SCHEDULE -> sessionId?.let { "orbit-session:$it" } ?: scheduleId?.let { "orbit://schedule/$it" }
         // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
         // or it drains for an update with the owner's work waiting on it.
         kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
@@ -69,6 +73,7 @@ data class PushPayload(
             "landed-without-confirmation")
         const val OWNER_REQUEST = "owner-request"
         const val TERMINAL_LOGIN = "terminal-login"
+        const val SCHEDULE = "schedule"
     }
 }
 
@@ -87,7 +92,7 @@ data class PushMessage(
         private val kinds = PushPayload.ownerItemKinds + setOf("project-done", "project-orphan", "approval", "finished", "failed", "agent-message",
             "engine-signed-out", "confirmation-problems", "watch-matched", "wiki-review-mode-manual",
             "wiki-review-mode-tiered", "wiki-maintenance-failing", "loop-missed", "wakeup-dropped", "claude-region-blocked",
-            "runner-updating", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN)
+            "runner-updating", PushPayload.OWNER_REQUEST, PushPayload.TERMINAL_LOGIN, PushPayload.SCHEDULE)
 
         /** No unknown version, malformed identifier, or partial route can become a notification. */
         fun parse(data: Map<String, String>): PushMessage? = try {
@@ -121,7 +126,7 @@ data class PushMessage(
                 string("kind"), number("badge"), clear, id("sessionID"), id("projectID"), id("openItemID"),
                 id("taskID"), id("recordID"), id("runnerID"), string("engine"), id("watchID"),
                 number("generation"), id("wikiSpaceID"), ownerRequestId = id("ownerRequestID"), ownerRequestKind = string("ownerRequestKind"),
-                terminalLoginId = id("terminalLoginID"))
+                terminalLoginId = id("terminalLoginID"), scheduleId = id("scheduleID"))
             if (type == PushType.ALERT) {
                 require(!payload.title.isNullOrBlank() && payload.body != null && payload.kind in kinds)
                 when (payload.kind) {
@@ -138,6 +143,8 @@ data class PushMessage(
                     "engine-signed-out", "claude-region-blocked" -> require(payload.runnerId != null && !payload.engine.isNullOrBlank())
                     // A runner draining for its update with the owner's work waiting: about the machine, no engine.
                     "runner-updating" -> require(payload.runnerId != null)
+                    // A scheduled task's alert (apiserver `notifySchedule`) names its schedule, and the run's session when it opens one.
+                    PushPayload.SCHEDULE -> require(payload.scheduleId != null)
                     "watch-matched" -> require(payload.watchId != null && (payload.generation ?: 0) > 0)
                     in PushPayload.ownerItemKinds -> require(payload.projectId != null && payload.openItemId != null)
                     else -> require(payload.wikiSpaceId != null)

@@ -76,6 +76,9 @@ import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
 import io.orbitd.android.cards.SessionRunStartCard
+import io.orbitd.android.schedule.ScheduleConversationInsert
+import io.orbitd.android.schedule.ScheduleInsert
+import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.cards.LocalWatchTargetNames
 import io.orbitd.android.cards.watchTargetName
@@ -328,6 +331,22 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // A review open here is this conversation's: leaving it closes it.
     DisposableEffect(crossingStore) { onDispose { crossingStore.close() } }
     val crossingBatches = remember(crossingState.rows, coordinated) { coordinated?.let { crossingState.batches(it) }.orEmpty() }
+    // The scheduled tasks' cards this conversation asked and the changes it made, each where it happened; a run's own session gets
+    // its strip at its head and its report after its end (docs/scheduled-tasks-design.md §8.1, §4, §7.4). Read behind each of the
+    // session's snapshot reads, as the owner requests are.
+    val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
+    val scheduledState by scheduled.state.collectAsState()
+    val scheduleRunId = snapshotDetail?.text("scheduleRunId")
+    LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
+    val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
+    val scheduleSessionState = when (snapshotDetail?.text("lifecycleState")) { "COMPLETED" -> "Completed"; "TRASH" -> "Trash"; else -> "Open" }
+    val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
+        key(insert.key) {
+            ScheduleConversationInsert(insert, scheduled, route.id!!, scheduleSessionState, snapshotDetail?.text("engine")) { id ->
+                open(OrbitRoute(Destination.SCHEDULED, ObjectId.canonical(id) ?: id, origin = Origin.LINK))
+            }
+        }
+    }
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
     // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
     // answered here stops counting with the press, not with the read after it (A08-13).
@@ -617,6 +636,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
+                val schedulePlaced = remember(displayedRows, scheduleInserts) { ScheduleInsert.place(displayedRows.map { it.event.ts }, scheduleInserts) }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
                 // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
@@ -644,7 +664,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
-                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            schedulePlaced[-1]?.forEach { drawSchedule(it) }
                             ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
@@ -687,6 +708,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
                         val crossings = crossingPlaced[index]
+                        val scheduleThings = schedulePlaced[index]
                         // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
                         val held = runnerUpdatingGate?.takeIf { heldSeq != null && row.event.seq == heldSeq }
@@ -698,9 +720,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
-                        if (asked == null && crossings == null) drawRow()
+                        if (asked == null && crossings == null && scheduleThings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
+                            scheduleThings?.forEach { drawSchedule(it) }
                             asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
