@@ -848,13 +848,12 @@ struct ComposerView: View {
     }
 
     /// A Cursor CLI model's setting picked: the session's model value carries it — one back at the model's
-    /// own default is taken out of it — applied and remembered as a model pick is.
+    /// own default is taken out of it — applied as a model pick is.
     private func pickCursorSetting(_ id: String, _ value: String, pick: CursorRuntime.Pick) {
         var settings: [String: String?] = pick.parameters.mapValues { Optional($0) }
         settings[id] = value
         let model = CursorRuntime.encodeModel(pick.model, settings, row: pick.row)
         let clampedPermissionMode = console.selectModel(model)
-        app.rememberDefaultModel(model, engine: console.engine, provider: console.provider)
         let permissionMode = clampedPermissionMode ? console.permissionMode.rawValue : nil
         Task { await console.applyConfig(model: model, permissionMode: permissionMode) }
     }
@@ -1003,9 +1002,8 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
-                    // Remembered per engine and provider (`<engine>:<provider>`, contract §6.5): one
-                    // key's model on Claude Code is not its model on DeepSeek Harness.
-                    app.rememberDefaultModel(m.id, engine: console.engine, provider: console.provider)
+                    // The pick is this session's alone: no account-wide model memory is written
+                    // (docs/workspace-default-model-design.md).
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil

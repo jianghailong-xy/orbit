@@ -541,4 +541,24 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertNil(NeedsYouLogic.arriving(arrival, waiting: [other, new], excluding: "new", now: at))
         XCTAssertNil(NeedsYouLogic.arriving(nil, waiting: [other, new], now: at))
     }
+
+    // MARK: swiped away (the owner, 2026-11-15, docs/mocks/needs-you-capsule/06-list-floats)
+
+    /// A swipe puts away what is waiting now; only something new brings the bar back — another
+    /// conversation, or one that stopped to ask again.
+    func testASwipedBarComesBackOnlyForSomethingNew() {
+        let a = session("a", approvals: 1, lastTurnAt: "2026-11-15T01:00:00Z")
+        let b = session("b", approvals: 1, lastTurnAt: "2026-11-15T02:00:00Z")
+        let dismissed = NeedsYouLogic.dismissalKeys(waiting: [a, b])
+        XCTAssertTrue(NeedsYouLogic.isDismissed(waiting: [a, b], dismissed: dismissed))
+        XCTAssertTrue(NeedsYouLogic.isDismissed(waiting: [a], dismissed: dismissed), "one answered: still away")
+        XCTAssertTrue(NeedsYouLogic.isDismissed(waiting: [a, b], excluding: "a", dismissed: dismissed),
+                      "on a conversation's page too")
+
+        let c = session("c", approvals: 1, lastTurnAt: "2026-11-15T03:00:00Z")
+        XCTAssertFalse(NeedsYouLogic.isDismissed(waiting: [a, b, c], dismissed: dismissed), "a new one")
+        let bAgain = session("b", approvals: 1, lastTurnAt: "2026-11-15T04:00:00Z")
+        XCTAssertFalse(NeedsYouLogic.isDismissed(waiting: [a, bAgain], dismissed: dismissed), "stopped again")
+        XCTAssertFalse(NeedsYouLogic.isDismissed(waiting: [], dismissed: dismissed), "nothing to put away")
+    }
 }
