@@ -93,7 +93,7 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(composer.contains("agentLanguage: SessionTranslation.agentLanguage(app.user?.preferences),"))
         let tag = try source(app + "Views/Console/TranslationViews.swift")
         XCTAssertTrue(tag.contains("Text(language.tag(to: agentLanguage))"), "the tag names the agent language")
-        XCTAssertTrue(composer.contains("app.nav.openSettings(at: .sessions)"))
+        XCTAssertTrue(composer.contains("app.nav.openSettings(at: .general)"))
     }
 
     func testSettingsHasTheRowsOnBothPlatforms() throws {

@@ -40,7 +40,7 @@ class MachinesAndModelsCopyParityTest {
         val settings = read("${kit}SettingsHome.swift")
         listOf("\"1 needs you\"", " need you\"").forEach { assertTrue("$it is not in SettingsHome.swift", settings.contains(it)) }
         // Settings' Machines & models group has no header, as on iOS: its one row says the name.
-        assertTrue("iOS heads Machines & models", settings.contains("case .machines:    return nil"))
+        assertTrue("iOS heads Machines & models", settings.contains("case .machines:  return nil"))
         assertTrue(read("${views}SkillsRunnersView.swift").contains("failedTitle: \"Machines couldn't be loaded\""))
     }
 

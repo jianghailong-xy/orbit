@@ -219,9 +219,9 @@ final class TranslationTests: XCTestCase {
 
     func testTheComposerTagOpensSettingsOnSessions() {
         var nav = NavState()
-        nav.openSettings(at: .sessions)
+        nav.openSettings(at: .general)
         XCTAssertTrue(nav.settingsPresented)
-        XCTAssertEqual(nav.settingsPath, [.settingsPage(.sessions)])
+        XCTAssertEqual(nav.settingsPath, [.settingsPage(.general)])
     }
 
     // MARK: - Decoding a message's, a reply's and a card's translation

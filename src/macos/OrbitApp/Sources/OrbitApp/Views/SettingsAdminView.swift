@@ -176,7 +176,7 @@ struct SettingsView: View {
                     Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 }
             } label: {
-                Label(SettingsHome.title(.machinesAndModels), systemImage: SettingsHome.systemImage(.machinesAndModels))
+                Label(AppSection.runners.title, systemImage: AppSection.runners.systemImage)
             }
             .contentShape(Rectangle())
         }
