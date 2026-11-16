@@ -8556,6 +8556,20 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   font-size: 11.5px;
 }
+/* The key Tab is, inside Use, as .approval-kbd draws Enter on a card's button. */
+.composer-optimized-key {
+  margin-left: 8px;
+  font: inherit;
+  font-size: 11px;
+  opacity: 0.75;
+}
+/* No keyboard, no Tab: a touch screen draws neither the key nor its line. */
+@media (hover: none) {
+  .composer-optimized-key,
+  .composer-optimized-tab-hint {
+    display: none;
+  }
+}
 .composer-optimize-link {
   padding: 0;
   border: 0;

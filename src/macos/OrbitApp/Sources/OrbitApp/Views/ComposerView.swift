@@ -692,7 +692,13 @@ struct ComposerView: View {
             // Tab takes the offered suggestion, as on the web; with none on offer it moves focus as
             // it always has. The box is empty whenever one is offered, so no `/` menu is open.
             .onKeyPress(keys: [.tab]) { press in
-                guard press.modifiers.isEmpty, offeredSuggestion != nil else { return .ignored }
+                guard press.modifiers.isEmpty else { return .ignored }
+                // The optimizer's card open over a draft: Tab is its Use, the same key's same meaning.
+                if console.promptOptimizer.suggestion != nil, !showSlash {
+                    console.useOptimization(edit: false)
+                    return .handled
+                }
+                guard offeredSuggestion != nil else { return .ignored }
                 acceptSuggestion()
                 return .handled
             }
