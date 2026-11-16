@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,7 +25,7 @@ import (
 // temporary directory inside the repos root that is renamed into place when the clone is whole, and says where it
 // stands on the heartbeat (cloneReports) until the answer stops listing it.
 //
-//   - The target is held to the repos root as an Orbit-made folder is (orbitWorkDirTarget).
+//   - The target is held to the repos root (cloneWorkDirTarget), never home: its temporary directory is there.
 //   - A target that is already there is READY when it is a clone of the same repository, and FAILED
 //     "<path> already exists on <machine>" otherwise: nothing is cloned over it.
 //   - The clone is full (no --depth): landing and merge-base need the history.
@@ -199,12 +200,37 @@ func (c *cloner) startLocked(request CloneRequest) {
 // wait is for tests: every clone this cloner started has ended.
 func (c *cloner) wait() { c.wg.Wait() }
 
+// cloneWorkDirTarget is the directory a clone lands in, symlinks resolved, held to the repos root alone. A new folder
+// may be made anywhere in home (orbitWorkDirTarget, create-workdir/v2), but a clone is made in a temporary directory
+// inside the repos root and renamed into place, and the control plane names its folder there: nothing else is taken.
+func cloneWorkDirTarget(dir string) (string, error) {
+	root := reposRoot()
+	if root == "" {
+		return "", errors.New("this machine has no repos root")
+	}
+	if !filepath.IsAbs(dir) {
+		return "", errors.New("it is not an absolute path")
+	}
+	if slices.Contains(strings.Split(filepath.ToSlash(dir), "/"), "..") {
+		return "", errors.New("it steps up with ..")
+	}
+	existing, missing, err := resolveExistingPart(dir)
+	if err != nil {
+		return "", err
+	}
+	target := filepath.Join(existing, missing)
+	if err := insideRoot(root, existing, target, true); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
 // cloneWorkDir clones request's repository into its work directory and answers where that leaves it.
 func cloneWorkDir(ctx context.Context, request CloneRequest, machine string, progress func(int)) CloneReport {
 	failed := func(why string) CloneReport {
 		return CloneReport{WorkspaceID: request.WorkspaceID, State: cloneStateFailed, Error: why}
 	}
-	target, err := orbitWorkDirTarget(request.WorkDir)
+	target, err := cloneWorkDirTarget(request.WorkDir)
 	if err != nil {
 		return failed(fmt.Sprintf("Orbit cannot clone into %s: %v.", request.WorkDir, err))
 	}
