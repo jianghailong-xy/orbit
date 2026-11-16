@@ -61,11 +61,13 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(console.contains("agentLanguage: SessionTranslation.agentLanguage(appModel.user?.preferences),"))
     }
 
-    func testTheTrayDrawsAHeldMessagesFoot() throws {
+    /// A message held for its translation stays in the conversation with its foot and its doors (above),
+    /// never in the tray, which only waits for the engine (2bb2eb62b, web `inPendingTray`): the tray
+    /// draws no translation foot.
+    func testTheTrayDrawsNoTranslationFoot() throws {
         let tray = try source(app + "Views/Console/PendingTrayView.swift")
-        XCTAssertTrue(tray.contains("TranslationFootView(parts: SessionTranslation.userFoot(row.bubble.translation, flipped: false))"))
-        XCTAssertTrue(tray.contains("case .retryTurn: translationActions?.retryTurn(id)"))
-        XCTAssertTrue(tray.contains("case .sendAsWritten: translationActions?.sendAsWritten(id)"))
+        XCTAssertFalse(tray.contains("TranslationFootView"))
+        XCTAssertFalse(tray.contains("translationActions"))
     }
 
     func testTheConsoleHandsTheBubblesItsDoors() throws {
