@@ -2799,6 +2799,8 @@ export function WorkspaceView({
   const [stuck, setStuck] = useState<
     { seq: string | null; text: string; loading?: boolean } | null
   >(null);
+  // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
+  const stuckBarRef = useRef<HTMLButtonElement>(null);
   // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
   // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
@@ -4655,11 +4657,21 @@ export function WorkspaceView({
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
-    let cur: HTMLElement | null = null;
+    let at = -1;
     for (const b of bubbles) {
-      if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
+      if (b.getBoundingClientRect().bottom <= topY + 1) at++;
       else break;
     }
+    // The bar sits above the scroller, so drawing or dropping it moves the transcript by its height
+    // whenever the scroll position has to give way: at the tail, which stays pinned. A turn Orbit
+    // opened hides the bar as it leaves the top, and with the bar gone that turn came back into view,
+    // which raised the bar again, which pushed it out — the bar flickered at a frame's pace. So while
+    // the bar is up, such a turn only takes it down once it is above the top by the bar's own height,
+    // and the question the bar names until then is the one before it.
+    const barHeight = stuckBarRef.current?.offsetHeight ?? 0;
+    if (at >= 0 && barHeight > 0 && bubbles[at].hasAttribute('data-orbit-round')
+      && bubbles[at].getBoundingClientRect().bottom > topY + 1 - barHeight) at--;
+    const cur: HTMLElement | null = at >= 0 ? bubbles[at] : null;
     if (cur?.hasAttribute('data-orbit-round')) {
       setStuck(null);
     } else if (cur) {
@@ -10576,6 +10588,7 @@ export function WorkspaceView({
 
         {stuck && (
           <button
+            ref={stuckBarRef}
             className={stuck.loading ? 'chat-sticky-question chat-sticky-loading' : 'chat-sticky-question'}
             title={stuck.text}
             onClick={() => {
