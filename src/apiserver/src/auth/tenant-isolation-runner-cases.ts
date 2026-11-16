@@ -1576,10 +1576,6 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/sessions/:id/subagents body toolUseId':
     'the engine\'s id for the delegate call, a key only within the session the path names '
     + '(runner-api/runner-subagents.controller.ts:110)',
-  'POST /runner/sessions/:id/subagents body resumeOf':
-    'a SubAgent run, looked up only among the runs of the session the path names, whose ownership the door checked '
-    + 'first (runner-api/runner-subagents.controller.ts:207); any other id, another account\'s run included, is the '
-    + '404 SUBAGENT_RESUME_NOT_FOUND (runner-api/runner-subagents.controller.ts:353)',
   'POST /runner/sessions/:id/background-wake body wakeId':
     'the machine\'s key for one wake of one of its jobs, made into a turn key of the session the path names '
     + '(runner-api.controller.ts:4094)',
