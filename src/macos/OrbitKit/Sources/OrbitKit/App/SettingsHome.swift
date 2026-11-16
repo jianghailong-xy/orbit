@@ -311,7 +311,7 @@ public enum SettingsCopy {
     /// Over the two switches the web page has: they are the account's, so every device follows them.
     public static let accountHeader = "Sent to all your devices"
     public static let sessionFinished = "When a session finishes"
-    public static let sessionFinishedHint = "Alert your devices when a run finishes on its own or fails for good."
+    public static let sessionFinishedHint = "Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings."
     public static let agentMessage = "When an agent asks for you"
     public static let agentMessageHint = "Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute."
     /// What alerts whatever the two switches say — the server gates only those two
