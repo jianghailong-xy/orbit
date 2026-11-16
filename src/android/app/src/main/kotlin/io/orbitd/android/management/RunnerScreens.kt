@@ -534,6 +534,7 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
             else FormSection(RunnerCopy.ENGINES, RunnerPage.enginesNote(runner, now), when {
                 regionNote != null -> null
                 offline -> RunnerCopy.ENGINES_OFFLINE_FOOTER
+                RunnerPage.isManaged(runner) -> RunnerCopy.ENGINES_MANAGED_FOOTER
                 engineRows.any { it.str("engine") == ProviderEngines.CURSOR } -> CursorCopy.ENGINES_FOOTER
                 else -> RunnerCopy.ENGINES_FOOTER
             }, footerContent = regionNote?.let { note -> { ClaudeRegionNote(note, offline) } }) {
@@ -1034,8 +1035,12 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
             if (cursor != null) Text(if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else CursorCopy.ENGINE_FOOTER,
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp).testTag("cursor-engine-footer"), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            else FormSection(footer = if (offline) RunnerCopy.ENGINES_OFFLINE_FOOTER else if (engine == ProviderEngines.DSH) RunnerCopy.DSH_FOOTER
-                else RunnerCopy.ENGINES_FOOTER) {
+            else FormSection(footer = when {
+                offline -> RunnerCopy.ENGINES_OFFLINE_FOOTER
+                RunnerPage.isManaged(runner) -> if (engine == ProviderEngines.DSH) RunnerCopy.DSH_MANAGED_FOOTER else RunnerCopy.ENGINES_MANAGED_FOOTER
+                engine == ProviderEngines.DSH -> RunnerCopy.DSH_FOOTER
+                else -> RunnerCopy.ENGINES_FOOTER
+            }) {
                 TextButton(enabled = !offline && !RunnerPage.engineUpdateInFlight(runner.obj("install")), onClick = {
                     scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
                 }) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }

@@ -97,6 +97,10 @@ public enum RunnerPageCopy {
     public static let RUNNER_ENGINES_FOOTER =
         "Orbit keeps these CLIs updated every 30 min. Sign-ins live on this machine — a session spends "
         + "that subscription, nothing to paste."
+    /// A hosted runner's: its CLIs are fixed in Orbit's image, which moves with each Orbit release, not every 30 min.
+    public static let RUNNER_ENGINES_MANAGED_FOOTER =
+        "Orbit updates these CLIs with each Orbit release. Sign-ins live on this runner — a session spends "
+        + "that subscription, nothing to paste."
     public static let RUNNER_ENGINES_OFFLINE_FOOTER = "Signing in and updating need the runner online."
 
     public static let RUNNER_ENGINE_RENEW = "Renew"
