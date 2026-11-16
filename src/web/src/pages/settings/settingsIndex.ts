@@ -58,6 +58,13 @@ export const PERSONAL_SETTINGS = {
     'Suggested replies',
     "When a Claude turn ends, the empty message box offers what you'd probably type next.",
   ),
+  // Board docs/mocks/prompt-optimizer frame 1: right under Suggested replies.
+  promptOptimizer: setting(
+    'promptOptimizer',
+    '/settings/general',
+    'Prompt optimizer',
+    "Show an Optimize button in the composer. DeepSeek rewrites your draft with this session's context; you review it before it replaces the draft.",
+  ),
   recaps: setting(
     'recaps',
     '/settings/general',

@@ -33,6 +33,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.orbitd.android.BuildConfig
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.TerminalsApi
+import io.orbitd.android.core.promptoptimizer.PromptOptimizer
+import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.core.translation.Translation
 import io.orbitd.android.navigation.*
 import io.orbitd.android.translation.TranslationCopy
@@ -136,6 +138,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
     val smartSelectionChanged = LocalSmartSelectionChanged.current
     val recapsChanged = LocalSessionRecapsChanged.current
     val translationChanged = LocalTranslationChanged.current
+    val promptOptimizerChanged = LocalPromptOptimizerChanged.current
     val scope = rememberCoroutineScope()
     return { key, value ->
         scope.launch {
@@ -146,6 +149,7 @@ private fun rememberPreferenceWrite(api: ManagementApi, record: PersonalRecord):
                 "modelRouting" -> smartSelectionChanged(smartModelSelection(saved))
                 "recaps" -> recapsChanged(sessionRecapsEnabled(saved))
                 "translationEnabled", "translationLanguage", "translationAgentLanguage", "translationBilingual" -> translationChanged(AccountTranslation.of(record.value as? JsonObject))
+                "promptOptimizer" -> promptOptimizerChanged(PromptOptimizer.isOn(record.value as? JsonObject))
             }
         }
     }
@@ -306,6 +310,9 @@ private fun SessionSettingsPage(api: ManagementApi, revision: Long) {
         SettingsGroup(null, footer = SUGGESTED_REPLIES_HINT) {
             SettingsSwitch(SUGGESTED_REPLIES, on("promptSuggestions"), record.ready) { preference("promptSuggestions", JsonPrimitive(it)) }
         }
+        // Prompt optimizer (docs/mocks/prompt-optimizer, frame 1): under Suggested replies, off by default; a server without a DeepSeek
+        // key draws it disabled with frame 1b's notice (iOS SessionSettings' promptOptimizerSection).
+        PromptOptimizerGroup(record.value as? JsonObject, record.ready) { preference("promptOptimizer", JsonPrimitive(it)) }
         // The server's rolling recap on a session's list row (0418). One switch for the whole account, so turning it off holds on
         // the phone and on the web at once — the moment the server has taken the change, the lists behind Settings redraw without it.
         SettingsGroup(null, footer = SESSION_RECAPS_HINT) {
@@ -433,5 +440,24 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
                 }
             }
         }
+    }
+}
+
+/**
+ * The Sessions page's Prompt optimizer group (board frames 1 and 1b; iOS SessionSettings' promptOptimizerSection): one account-wide
+ * switch, absent = off, with what it does as the group's footer. A server without a DeepSeek key ([user]'s `promptOptimizerAvailable`
+ * false) draws it off and disabled with the notice under it, whatever the preference says. No NEW badge.
+ */
+@Composable
+internal fun PromptOptimizerGroup(user: JsonObject?, ready: Boolean, write: (Boolean) -> Unit) {
+    val unavailable = PromptOptimizer.unavailable(user)
+    val enabled = ready && !unavailable
+    val on = !unavailable && PromptOptimizer.enabled(user?.get("preferences") as? JsonObject)
+    SettingsGroup(null, footer = PromptOptimizerCopy.HINT) {
+        ListItem(headlineContent = { Text(PromptOptimizerCopy.TITLE) }, colors = settingsRowColors(),
+            trailingContent = { Switch(checked = on, onCheckedChange = null, enabled = enabled) },
+            modifier = Modifier.testTag("settings-prompt-optimizer").toggleable(value = on, enabled = enabled, role = Role.Switch, onValueChange = write))
+        if (unavailable) Text(PromptOptimizerCopy.UNAVAILABLE, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+            .testTag("prompt-optimizer-unavailable"), color = Ink.amber, style = MaterialTheme.typography.bodySmall)
     }
 }

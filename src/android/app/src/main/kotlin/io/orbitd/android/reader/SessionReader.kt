@@ -559,9 +559,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     val mainCheckoutResults = remember(state.window.events) {
         state.window.events.filter { it.type == "system" }.mapNotNull { e -> MainCheckout.resultNotice(e.fields)?.let { e.seq to it } }
     }
+    // A SubAgent's finished line points back at the delegate card its run was started from, when that card is drawn.
+    val delegateCalls = remember(state.window.events) { delegateCallsByRun(state.window.events) }
+    val subagentJump: (String) -> (() -> Unit)? = { runId ->
+        delegateCalls[runId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
     CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
-        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns) {
+        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns, LocalSubagentCardJump provides subagentJump) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current

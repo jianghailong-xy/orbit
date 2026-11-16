@@ -51,6 +51,9 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     public let translationBilingual: Bool?
     /// The providers SubAgents may not use, by slug (docs/subagent-design.md §7). Absent: none blocked.
     public let subagentBlockedProviders: [String]?
+    /// Settings › Prompt optimizer (@orbit/shared prompt-optimizer.ts): whether the composer offers
+    /// ✦ Optimize. Absent means off. Tolerant like the switches above.
+    public let promptOptimizer: Bool?
 
     /// Whether smart model selection is on for this account — only an explicit `true` turns it on.
     public var smartModelSelection: Bool { modelRouting == true }
@@ -62,7 +65,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case theme, defaultModel, defaultPermissionMode, defaultEffort
         case enableOrchestration, notifySessionFinished, notifyAgentMessage, modelRouting, promptSuggestions
-        case recaps, translationEnabled, translationLanguage, translationAgentLanguage, translationBilingual, subagentBlockedProviders
+        case recaps, translationEnabled, translationLanguage, translationAgentLanguage, translationBilingual, subagentBlockedProviders, promptOptimizer
     }
 
     public init(from decoder: Decoder) throws {
@@ -82,6 +85,7 @@ public struct UserPreferences: Codable, Equatable, Sendable {
         translationAgentLanguage = (try? c.decodeIfPresent(String.self, forKey: .translationAgentLanguage)) ?? nil
         translationBilingual = (try? c.decodeIfPresent(Bool.self, forKey: .translationBilingual)) ?? nil
         subagentBlockedProviders = (try? c.decodeIfPresent([String].self, forKey: .subagentBlockedProviders)) ?? nil
+        promptOptimizer = (try? c.decodeIfPresent(Bool.self, forKey: .promptOptimizer)) ?? nil
     }
 }
 
@@ -104,6 +108,8 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var translationBilingual: Bool?
     /// Replaces the whole blocked list.
     public var subagentBlockedProviders: [String]?
+    /// Settings › Prompt optimizer's switch.
+    public var promptOptimizer: Bool?
     public init(theme: String? = nil, defaultModel: String? = nil,
                 defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
@@ -112,7 +118,8 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
                 translationEnabled: Bool? = nil, translationLanguage: String? = nil,
                 translationAgentLanguage: String? = nil,
                 translationBilingual: Bool? = nil,
-                subagentBlockedProviders: [String]? = nil) {
+                subagentBlockedProviders: [String]? = nil, promptOptimizer: Bool? = nil) {
+        self.promptOptimizer = promptOptimizer
         self.theme = theme
         self.defaultModel = defaultModel
         self.defaultPermissionMode = defaultPermissionMode

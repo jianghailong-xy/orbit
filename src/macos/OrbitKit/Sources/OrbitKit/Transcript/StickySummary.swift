@@ -52,12 +52,18 @@ public enum StickySummary {
                                 startedCard: ProjectStarted? = nil,
                                 sessionMessage: SessionMessage? = nil,
                                 ownerAnswer: OwnerAnswer? = nil,
-                                coordinatorDelivery: CoordinatorDelivery? = nil) -> Bool {
+                                coordinatorDelivery: CoordinatorDelivery? = nil,
+                                hasAttachments: Bool = false) -> Bool {
         if sessionMessage != nil || itemCard != nil || taskStart != nil || startedCard != nil { return true }
         if ownerAnswer != nil { return false }
         if coordinatorDelivery != nil { return true }
         if WatchWakeText.parse(text) != nil { return false }
-        guard BackgroundWakeText.carriesWake(note) || SubagentFinishedText.carriesWake(note) else { return true }
+        guard BackgroundWakeText.carriesWake(note) || SubagentFinishedText.carriesWake(note) else {
+            // A turn that is only a note this client cannot read draws no bubble, so it heads no round
+            // (`BackgroundWakeCard.drawsNoteAlone`; web: no `.chat-user` for the bar to find).
+            return !BackgroundWakeCard.drawsNoteAlone(text: text, hasAttachments: hasAttachments, note: note,
+                                                      queued: false)
+        }
         return BackgroundWakeCard.drawsBubble(text: text)
     }
 

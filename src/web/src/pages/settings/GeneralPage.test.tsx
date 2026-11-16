@@ -41,6 +41,7 @@ describe('Settings → General (docs/mocks/settings-redesign, board-2)', () => {
       'Default permission mode',
       'Smart model selection',
       'Suggested replies',
+      'Prompt optimizer',
       'Session recaps',
       'Translate conversations',
       'Your language',

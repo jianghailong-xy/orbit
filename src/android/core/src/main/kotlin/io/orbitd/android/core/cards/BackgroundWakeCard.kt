@@ -1,6 +1,8 @@
 package io.orbitd.android.core.cards
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -37,13 +39,16 @@ object BackgroundWakeCard {
     fun title(wake: JsonObject): String {
         val jobs = jobs(wake)
         val only = jobs.firstOrNull() ?: return "Scheduled wakeup"
-        if (jobs.size > 1) return "${jobs.size} background jobs finished"
+        if (jobs.size > 1) return if (jobs.all { stall(it) != null }) "${jobs.size} background jobs went quiet" else "${jobs.size} background jobs finished"
+        if (stall(only) != null) return "Background job went quiet"
         if (!only.flag("ended")) return "Background job has new output"
         return if (isFailed(only)) "Background job failed" else "Background job finished"
     }
 
-    /** How one job came out, as the word its row closes on — null while it has only written something. */
+    /** How one job came out, as the word its row closes on — how long it has been quiet when it went quiet, null while it has only
+     * written something. */
     fun status(job: JsonObject): String? {
+        stall(job)?.let { stall -> return stall.long("quietForMs")?.let { "quiet ${duration(it / 1000)}" } ?: "quiet" }
         if (job.text("status") == "killed") return job.text("killReason")?.takeIf { it.isNotEmpty() }?.let { "killed: $it" } ?: "killed"
         job.number("exitCode")?.let { return "exit $it" }
         return if (job.flag("ended")) job.text("status") else null
@@ -82,6 +87,24 @@ object BackgroundWakeCard {
         n < 1024 * 1024 -> String.format(Locale.ROOT, "%.1f KB", n / 1024.0)
         else -> String.format(Locale.ROOT, "%.1f MB", n / (1024.0 * 1024.0))
     }
+
+    /** How a quiet job stood (`<background-job-stall>`), or null for any other job. */
+    fun stall(job: JsonObject): JsonObject? = job["stall"] as? JsonObject
+
+    /** "Still running · 15m in · last wrote 15m ago" — a quiet job's row in the fold (OrbitKit `stallLine`, web `stallLine`). */
+    fun stallLine(stall: JsonObject, now: Instant = Instant.now()): String = buildList {
+        add("Still running")
+        stall.long("runningForMs")?.let { add("${duration(it / 1000)} in") }
+        if (stall.flag("wroteNothing")) add("has written nothing yet")
+        else stall.text("lastOutputAt")?.let { relative(it, now) }?.let { add("last wrote $it") }
+    }.joinToString(" · ")
+
+    /** Whether a turn is only a note: no words, no files, and a note this client could not read as anything else — the note alone, never
+     * an empty row in the reader's name (OrbitKit `drawsNoteAlone`, web `Transcript.tsx`'s fallback before `UserBubble`). */
+    fun drawsNoteAlone(words: String, hasAttachments: Boolean, note: String?, queued: Boolean): Boolean =
+        !queued && !note.isNullOrBlank() && words.isBlank() && !hasAttachments
+
+    private fun JsonObject.long(key: String): Long? = (this[key] as? JsonPrimitive)?.longOrNull
 
     /** "Asked for 1h out · came due 4m ago". */
     fun wakeupMeta(wakeup: JsonObject, now: Instant = Instant.now()): String = buildList {

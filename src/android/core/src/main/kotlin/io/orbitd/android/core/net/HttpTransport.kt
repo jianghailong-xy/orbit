@@ -26,6 +26,8 @@ class ApiRequest(
     val contentType: String = "application/json; charset=utf-8",
     val maxResponseBytes: Long? = null,
     val onUploadProgress: ((Long, Long) -> Unit)? = null,
+    /** How long to wait for the answer once the request is sent, where OkHttp's 10 s default is too short (a DeepSeek call). */
+    val readTimeoutSeconds: Long? = null,
 ) {
     val path = path.toList()
     val query = query.toList()
@@ -105,7 +107,7 @@ class OkHttpTransport : HttpTransport {
             .method(api.method.name, body)
             .build()
         return suspendCancellableCoroutine { continuation ->
-            val call = client.newCall(wire)
+            val call = (api.readTimeoutSeconds?.let { client.newBuilder().readTimeout(it, TimeUnit.SECONDS).build() } ?: client).newCall(wire)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) {

@@ -416,3 +416,23 @@ test('a platform delivery is never translated, even with the owner\'s switch on'
   assert.equal(h.turns[0].translationState, null);
   assert.equal(bodies.length, 0);
 });
+
+test('skipTranslation (the prompt optimizer\'s English): the send is not held, carries no translation, and DeepSeek is not asked', async () => {
+  const bodies = stubDeepSeek([ENGLISH]);
+  const h = harness();
+  const answer = await h.service.createTurn(
+    OWNER_ID, SESSION_ID,
+    { clientTurnId: 'optimized-1', content: ENGLISH_RESTORED, intent: 'NEXT_TURN', skipTranslation: true },
+    { translate: true },
+  );
+  assert.equal(answer.translation, undefined);
+  assert.equal(h.turns[0].status, 'PENDING');
+  assert.equal(h.turns[0].content, ENGLISH_RESTORED);
+  assert.equal(h.turns[0].displayPrompt, null);
+  assert.equal(h.turns[0].translationState, null);
+  assert.equal(h.turns[0].translationLang, null);
+  assert.equal(h.session.status, RunStatus.PENDING);
+  assert.equal(h.wakes.queue, 1);
+  await h.service.translationsSettled();
+  assert.equal(bodies.length, 0);
+});

@@ -728,6 +728,12 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/approvals", query: [URLQueryItem(name: "status", value: status)])
     }
 
+    /// Prompt optimizer: DeepSeek improves a composer draft (docs/prompt-optimizer-design.md). One call
+    /// per press; 409 PROMPT_OPTIMIZER_OFF, 404, 400 and 422 PROMPT_OPTIMIZATION_FAILED throw.
+    public func optimizePrompt(_ req: PromptOptimizationRequest) async throws -> PromptOptimization {
+        try await post("prompt-optimizations", body: req)
+    }
+
     /// Settings › Translation: translate a held message again (FAILED → TRANSLATING).
     public func retryTurnTranslation(sessionID: String, turnId: String) async throws -> TranslationActionResponse {
         try await postEmpty("sessions/\(sessionID)/turns/\(turnId)/translation/retry")

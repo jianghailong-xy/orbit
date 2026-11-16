@@ -4,6 +4,7 @@ import {
   CheckOutlined,
   CodeOutlined,
   DeleteOutlined,
+  DesktopOutlined,
   DisconnectOutlined,
   FolderAddOutlined,
   FolderOutlined,
@@ -611,6 +612,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
     return m;
   }, [runners.data]);
+
+  // The account menu's Machines row: every machine, and how many of them are online.
+  const machineList = runners.data ?? [];
+  const onlineMachines = machineList.filter((runner) => runner.online).length;
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
@@ -1284,6 +1289,65 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 },
               })),
             },
+            // Every machine, a level down with its state, as Settings lists them: there is no one Machines page to
+            // open, so the row picks one. With none yet it is the way to add the first.
+            machineList.length > 0
+              ? {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">
+                        {onlineMachines === machineList.length
+                          ? 'All online'
+                          : `${onlineMachines} of ${machineList.length} online`}
+                      </span>
+                    </span>
+                  ),
+                  children: [
+                    ...machineList.map((runner) => {
+                      const managedRow = managedRowOf(accountManaged, runner.id);
+                      return {
+                        key: `machine-${runner.id}`,
+                        textValue: runner.displayName || runner.name,
+                        icon: (
+                          <span
+                            className="tp-account-machine-dot"
+                            data-online={managedRow ? managedRow.acceptsWork : runner.online}
+                          />
+                        ),
+                        label: (
+                          <span className="tp-account-appearance-label">
+                            <span>{runner.displayName || runner.name}</span>
+                            {(managedRow || !runner.online) && (
+                              <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
+                            )}
+                          </span>
+                        ),
+                        onSelect: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
+                      };
+                    }),
+                    { type: 'separator' as const, key: 'machines-add-separator' },
+                    {
+                      key: 'machines-add',
+                      icon: <PlusOutlined />,
+                      label: 'Add a machine',
+                      onSelect: () => navigate('/settings/machines/new'),
+                    },
+                  ],
+                }
+              : {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">None</span>
+                    </span>
+                  ),
+                  onSelect: () => navigate('/settings/machines/new'),
+                },
             {
               key: 'settings',
               icon: <SettingOutlined />,
