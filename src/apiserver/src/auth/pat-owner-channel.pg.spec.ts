@@ -42,6 +42,8 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { hashChatTicket } from '../feishu/feishu-chat-route.service';
+import { wikiCreateTitle } from '../owner-requests/owner-request';
+import { normalizeRepoUrl } from '../wiki/wiki.service';
 import { OWNER_INTERACTIVE_ROUTES } from './pat-owner-channel-routes';
 import { PAT_FORBIDDEN_REASONS, type PatForbiddenReason } from './pat-scope.decorator';
 import { PAT_SCOPES, PatService } from './pat.service';
@@ -170,6 +172,26 @@ test('the owner channel refuses a personal access token door by door and field b
   const savedSecret = await db.accountSecret.create({ data: { ownerId: userId, label: 'door fixture', valueEnc: 'to be replaced' } });
   const savedRow = () => db.accountSecret.findUnique({ where: { id: savedSecret.id } });
 
+  // A real WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.6): filed from a session in a workspace on a
+  // repository with no wiki, so the Create wiki door makes that wiki and settles the card.
+  const wikiRepoUrl = `https://github.com/owner-channel/wiki-${RUN}`;
+  const wikiRepoUrlNorm = normalizeRepoUrl(wikiRepoUrl)!;
+  const wikiWorkspaceId = randomUUID();
+  await db.workspace.create({ data: { id: wikiWorkspaceId, ownerId: userId, runnerId, name: `wiki ${RUN}`, enabled: true, repoUrl: wikiRepoUrl } });
+  const wikiSessionId = toUuid(
+    ok(await api('POST', '/sessions', login, { prompt: 'asks for a wiki', workspaceId: wikiWorkspaceId }), 'creating a session on the repository').json.id,
+  );
+  const wikiToCreate = (await db.ownerRequest.create({
+    data: {
+      ownerId: userId, askedBySessionId: wikiSessionId, kind: 'WIKI_CREATE', title: wikiCreateTitle(wikiRepoUrlNorm),
+      why: 'the session needs a wiki', repoUrlNorm: wikiRepoUrlNorm, workspaceId: wikiWorkspaceId,
+    },
+  })).id;
+  const wikiCreated = async () => ({
+    state: (await db.ownerRequest.findUniqueOrThrow({ where: { id: wikiToCreate } })).state,
+    spaces: await db.wikiSpace.count({ where: { ownerId: userId, repoUrlNorm: wikiRepoUrlNorm, deletedAt: null } }),
+  });
+
   // A Feishu app of the account's (switched off, so nothing connects it) with a group waiting on a live ticket, and two
   // groups connected: the three group doors (docs/feishu-bot-design.md §8.1) stood up for real.
   const feishuAppId = `cli_owner_channel_${RUN}`;
@@ -210,6 +232,23 @@ test('the owner channel refuses a personal access token door by door and field b
 
   // ── (1) the owner channel, door by door ────────────────────────────────────────────────────
 
+  // Scheduled tasks' create cards (docs/scheduled-tasks-design.md §4, §8.1), as a session's schedule_create leaves them.
+  const scheduleCard = async () => (await db.scheduleChangeRequest.create({
+    data: {
+      ownerId: userId, kind: 'CREATE', askedBy: 'SESSION', askedBySessionId: sessionId,
+      proposed: {
+        workspaceId, intent: 'check it daily', title: 'Owner channel check', prompt: 'check it', readBack: null,
+        rule: { kind: 'DAILY', time: '10:00' }, timezone: 'UTC', accessLevel: 'CHECK_ONLY', runLimitMinutes: 30,
+        startAt: null, endAt: null, baseline: null,
+      },
+      envelopeAsked: { workspaceId, accessLevel: 'CHECK_ONLY', runsPerWeek: 7, runLimitMinutes: 30 },
+    },
+  })).id;
+  const cardToAllow = await scheduleCard();
+  const cardToDecline = await scheduleCard();
+  const cardForASession = await scheduleCard();
+  const cardState = async (id: string) => (await db.scheduleChangeRequest.findUniqueOrThrow({ where: { id } })).state;
+
   const doors: Door[] = [
     {
       route: 'POST /owner-requests/:id/create-wiki', path: `/owner-requests/${nobody()}/create-wiki`,
@@ -227,6 +266,10 @@ test('the owner channel refuses a personal access token door by door and field b
     {
       route: 'POST /owner-requests/:id/secret/revoke', path: `/owner-requests/${secretToRevoke}/secret/revoke`,
       login: 200, observe: () => grantRow(secretToRevoke),
+    },
+    {
+      route: 'POST /owner-requests/:id/create-wiki', path: `/owner-requests/${wikiToCreate}/create-wiki`,
+      login: 200, observe: wikiCreated,
     },
     { route: 'GET /account-secrets', path: '/account-secrets', login: 200 },
     {
@@ -477,6 +520,15 @@ test('the owner channel refuses a personal access token door by door and field b
       route: 'POST /terminals/requests/:id/deny', path: `/terminals/requests/${terminalToDeny}/deny`,
       login: 200, observe: () => terminalStatus(terminalToDeny),
     },
+    // A scheduled task's create cards, pressed for real: the token writes nothing, the login's press decides the card.
+    {
+      route: 'POST /schedule-requests/:id/allow', path: `/schedule-requests/${cardToAllow}/allow`, body: {},
+      login: 200, observe: () => cardState(cardToAllow),
+    },
+    {
+      route: 'POST /schedule-requests/:id/decline', path: `/schedule-requests/${cardToDecline}/decline`,
+      login: 200, observe: () => cardState(cardToDecline),
+    },
   ];
 
   await t.test('every door in OWNER_INTERACTIVE_ROUTES has a case below, on a path that door answers, and nothing else has one', () => {
@@ -499,6 +551,18 @@ test('the owner channel refuses a personal access token door by door and field b
       if (door.observe) assert.notDeepEqual(await door.observe(), before, "the login did the door's work");
     });
   }
+
+  await t.test('POST /schedule-requests/:id/{allow,decline}: a login carrying an acting session is refused, over HTTP', async () => {
+    for (const verb of ['allow', 'decline']) {
+      const reply = await call(server!, 'POST', `/api/schedule-requests/${cardForASession}/${verb}`, login, {}, {
+        'x-orbit-session-id': sessionId,
+      });
+      assert.equal(reply.status, 403, `${verb} with a session answered ${reply.status}: ${reply.text}`);
+      assert.equal(reply.json?.code, 'SCHEDULE_DECISION_OWNER_CHANNEL_ONLY');
+    }
+    assert.equal(await cardState(cardForASession), 'PENDING', 'a session pressed nothing');
+    assert.equal(await db.schedule.count({ where: { ownerId: userId } }), 1, 'only the login\'s Create wrote a schedule');
+  });
 
   // ── (2) auth/*, admin/*, runner credentials, share links ────────────────────────────────────
 

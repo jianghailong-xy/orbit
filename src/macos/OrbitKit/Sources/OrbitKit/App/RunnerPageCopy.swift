@@ -33,6 +33,8 @@ public enum RunnerPageCopy {
     public static let RUNNER_RESOURCES_UPDATE = "Update runner"
     public static let RUNNER_RESOURCES_NO_READING = "No reading yet"
     public static let RUNNER_RESOURCES_MEMORY_FULL = "Nearly full — new sessions may be slow to start."
+    /// A managed runner that has not reported yet: its Resources and Engines say only this.
+    public static let MANAGED_RUNNER_NOT_REPORTED = "Available once the runner is ready."
 
     /// The header of an offline machine's Resources: when its last reading came, as `ago` says it (`14m ago`).
     public static func runnerResourcesLastReading(ago: String) -> String { "Offline · last reading \(ago)" }
@@ -47,8 +49,19 @@ public enum RunnerPageCopy {
     public static func runnerDiskFree(free: String) -> String { "\(free) GB free" }
 
     public static let RUNNER_MAX_CONCURRENT = "Max Concurrent"
-    public static let RUNNER_MAX_CONCURRENT_HINT =
-        "How many sessions this machine runs at once. A change applies to the next session it picks up — no restart."
+    /// Max Concurrent's dialog: when a change takes effect. The unit after the number says what it counts.
+    public static let RUNNER_MAX_CONCURRENT_HINT = "Applies to the next session it picks up — no restart."
+    /// After the dialog's number: what it counts.
+    public static let RUNNER_MAX_CONCURRENT_UNIT = "sessions at once"
+    /// The web dialog's − and + beside its field.
+    public static let RUNNER_MAX_CONCURRENT_DECREASE = "Decrease Max Concurrent"
+    public static let RUNNER_MAX_CONCURRENT_INCREASE = "Increase Max Concurrent"
+    /// The web dialog's sessions running now, while the machine is online.
+    public static func runnerRunningNow(active: Int) -> String { "\(active) running" }
+    /// Under the web dialog's field when the new limit is below what runs now: a lower limit stops nothing.
+    public static func runnerMaxBelowRunning(active: Int, max: Int) -> String {
+        "The \(active) running now carry on; new ones wait until fewer than \(max) are running."
+    }
     public static let RUNNER_EDIT = "Edit"
     public static let RUNNER_DISK = "Disk"
     public static let RUNNER_KEEP_FREE = "Keep Free"

@@ -612,15 +612,15 @@ struct WikiFirstStartPage: View {
 }
 
 /// The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④) — the home's head
-/// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
-/// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
-/// draws in its own column, its name the title and the repository and documents the line under it — what waits
+/// on a phone, the directory column's beside it. It is always a menu, even with one space, since it is the way to
+/// New wiki… (no sidebar or drawer has that row): every space, the current one ticked — a toggle per space, whose
+/// tick a menu draws in its own column, its name the title and the repository and documents the line under it — what waits
 /// in each in the row's icon cell, and under a divider New wiki… — the Create wiki form (docs/wiki-explicit-creation-
 /// design.md §3.4, board 46 part 4 ③) — then Manage spaces at the foot, into Wiki settings. Trash is not in it: it
 /// opens from Wiki settings (docs/mocks/wiki-trash/02-trash-entry).
 ///
 /// Given a `title` font, the name is the head's title (board docs/mocks/wiki-rail-name B): no capsule, the name in that
-/// type, and with several spaces a small chevron after it that opens the same menu.
+/// type, and a small chevron after it that opens the same menu.
 struct WikiSpacePicker: View {
     let space: WikiSpace
     let spaces: [WikiSpace]
@@ -639,34 +639,25 @@ struct WikiSpacePicker: View {
         }
     }
 
-    @ViewBuilder private func titled(_ name: String, names: [String: String], font: Font) -> some View {
-        if spaces.count < 2 {
-            Text(name)
-                .font(font)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityLabel(WikiCopy.spacePickerHint)
-                .accessibilityValue(name)
-        } else {
-            Menu {
-                menuRows(names)
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(name)
-                        .font(font)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.orbitMeta.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .foregroundStyle(Color.primary)
-                .contentShape(Rectangle())
+    private func titled(_ name: String, names: [String: String], font: Font) -> some View {
+        Menu {
+            menuRows(names)
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(name)
+                    .font(font)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            .menuIndicator(.hidden)
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityLabel(WikiCopy.spacePickerHint)
-            .accessibilityValue(name)
+            .foregroundStyle(Color.primary)
+            .contentShape(Rectangle())
         }
+        .menuIndicator(.hidden)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel(WikiCopy.spacePickerHint)
+        .accessibilityValue(name)
     }
 
     @ViewBuilder private func menuRows(_ names: [String: String]) -> some View {
@@ -693,36 +684,24 @@ struct WikiSpacePicker: View {
         }
     }
 
-    @ViewBuilder private func capsule(_ name: String, names: [String: String]) -> some View {
-        if spaces.count < 2 {
-            Text(name)
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.primary.opacity(0.07), in: Capsule())
-                .accessibilityLabel(WikiCopy.spacePickerHint)
-                .accessibilityValue(name)
-        } else {
-            Menu {
-                menuRows(names)
-            } label: {
-                HStack(spacing: 4) {
-                    Text(name)
-                        .font(.orbitLabel.weight(.semibold))
-                        .lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.orbitMeta.weight(.semibold))
-                }
-                .foregroundStyle(Color.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.primary.opacity(0.07), in: Capsule())
+    private func capsule(_ name: String, names: [String: String]) -> some View {
+        Menu {
+            menuRows(names)
+        } label: {
+            HStack(spacing: 4) {
+                Text(name)
+                    .font(.orbitLabel.weight(.semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.orbitMeta.weight(.semibold))
             }
-            .accessibilityLabel(WikiCopy.spacePickerHint)
-            .accessibilityValue(name)
+            .foregroundStyle(Color.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.07), in: Capsule())
         }
+        .accessibilityLabel(WikiCopy.spacePickerHint)
+        .accessibilityValue(name)
     }
 }
 

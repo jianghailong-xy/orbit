@@ -178,6 +178,22 @@ public enum SessionSettings {
         case defaultPermission, orchestration, modelRouting, promptSuggestions, recaps
     }
 
+    /// One group on the page: a row's section, Settings › Translation's, or the Prompt optimizer's.
+    public enum Group: Hashable, Sendable {
+        case row(Row)
+        case translation
+        case promptOptimizer
+    }
+
+    /// The page top to bottom: Translation sits right after Default permission and before Session
+    /// orchestration, as Android's and the web's pages have it (docs/mocks/session-translation, frame 7);
+    /// the Prompt optimizer sits right under Suggested replies (docs/mocks/prompt-optimizer, frame 1);
+    /// the rows keep their own order around them.
+    public static let groups: [Group] =
+        [.row(.defaultPermission), .translation] + Row.allCases.dropFirst().flatMap { row -> [Group] in
+            row == .promptSuggestions ? [.row(row), .promptOptimizer] : [.row(row)]
+        }
+
     public static func title(_ row: Row) -> String {
         switch row {
         case .defaultPermission: return "Default permission"
@@ -295,7 +311,7 @@ public enum SettingsCopy {
     /// Over the two switches the web page has: they are the account's, so every device follows them.
     public static let accountHeader = "Sent to all your devices"
     public static let sessionFinished = "When a session finishes"
-    public static let sessionFinishedHint = "Alert your devices when a run finishes on its own or fails for good."
+    public static let sessionFinishedHint = "Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings."
     public static let agentMessage = "When an agent asks for you"
     public static let agentMessageHint = "Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute."
     /// What alerts whatever the two switches say — the server gates only those two

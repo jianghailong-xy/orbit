@@ -106,7 +106,7 @@ class SessionMenuTest {
         await { compose.onAllNodesWithTag("session-settings").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Session settings").assertExists()
         listOf("Session", "Labels", "Public link", "Environment", "Working directory", "Compact at", "Variables", "Restart",
-            "Notifications", "When a turn finishes", "When it needs you", "Mute this session",
+            "Notifications", "When the session finishes", "When it needs you", "Mute this session",
             "Info", "Engine", "Claude Code 2.4.1", "Tokens", "1.82M", "in 1.71M · out 108K · cache 1.52M", "Cost", "$4.37", "23 turns",
             "Session ID", "Worktree and background jobs").forEach { text ->
             compose.onNodeWithTag("session-settings").performScrollToNode(hasText(text))

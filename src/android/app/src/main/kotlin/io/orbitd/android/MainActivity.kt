@@ -30,6 +30,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import io.orbitd.android.cards.NeedsYouMenuIcon
+import io.orbitd.android.cards.NeedsYouToasts
 import io.orbitd.android.auth.AuthScreen
 import io.orbitd.android.auth.AuthViewModel
 import io.orbitd.android.auth.loginBackground
@@ -48,7 +50,6 @@ import io.orbitd.android.projects.ProjectAttention
 import io.orbitd.android.projects.ProjectsScreen
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.wiki.WikiDrawerCount
-import io.orbitd.android.wiki.WikiDrawerNewRow
 import io.orbitd.android.wiki.WikiDrawerRow
 import io.orbitd.android.wiki.WikiDestination
 import io.orbitd.android.wiki.wikiEntered
@@ -64,6 +65,9 @@ import io.orbitd.android.composer.NewSessionComposer
 import io.orbitd.android.composer.NoMachineWelcomeCard
 import io.orbitd.android.composer.rememberAccountName
 import io.orbitd.android.composer.rememberManagedOffered
+import io.orbitd.android.composer.FollowManagedRunner
+import io.orbitd.android.composer.LocalManagedRunnerStatus
+import io.orbitd.android.composer.ManagedRunner
 import io.orbitd.android.composer.rememberManagedRunner
 import io.orbitd.android.composer.rememberNewAccount
 import io.orbitd.android.text.LocalReaderResources
@@ -269,7 +273,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         // landed on, so Back still reaches it; an account that has had a session keeps today's landing.
         var managedLanded by remember(signedIn.handle) { mutableStateOf(false) }
         val onlyWorkspace = workspaces.singleOrNull()?.id
-        val managedForLanding = rememberManagedRunner(management, ask = data.ready && onlyWorkspace != null && !managedLanded)
+        // Read while the directory is up: the landing below, and the drawer's workspace rows, where the managed runner asleep reads
+        // Asleep, never Offline. Nothing is read without the capability.
+        val managedForLanding = rememberManagedRunner(management, ask = data.ready)
+        FollowManagedRunner(managedForLanding, follow = data.ready && managedForLanding.shown != null)
         val managedDefault = managedForLanding.shown?.status?.workspaceId
             ?.takeIf { onlyWorkspace != null && ObjectId.same(it, onlyWorkspace) }?.let { onlyWorkspace }
         val newManagedAccount = rememberNewAccount(management, managedDefault != null && !managedLanded)
@@ -328,10 +335,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             }
                             if (dest == Destination.WIKI) WikiDrawerRow(app, signedIn.handle, drawer.isOpen, row) else row()
                         }
-                        // New wiki… (docs/wiki-explicit-creation-design.md §3.4): the Create wiki form; a wiki made opens in the Wiki.
-                        WikiDrawerNewRow(app, signedIn.handle, data, closeDrawer = { scope.launch { drawer.close() } }) {
-                            select("Wiki", OrbitRoute(Destination.WIKI, origin = Origin.DRAWER))
-                        }
                         // What sessions asked the owner to do (web `WaitingOnYouPage`), with how many are waiting.
                         NavigationDrawerItem(label = { Text(WAITING_ON_YOU) }, selected = navigation.section == WAITING_ON_YOU,
                             icon = { Icon(painterResource(R.drawable.ic_bell), null) },
@@ -346,7 +349,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             val sessions = data.sessions["open"].orEmpty().filter { ObjectId.same(it.workspace, workspace.id) }
                             NavigationDrawerItem(selected = navigation.section == workspace.id,
                                 label = { Column { Text(workspace.name); Text(listOfNotNull(runner?.name,
-                                    if (!workspace.enabled) "Disabled" else if (runner?.online == false) "Offline" else null,
+                                    if (!workspace.enabled) "Disabled" else if (runner?.online == false)
+                                        ManagedRunner.row(runner.id, managedForLanding.shown?.status)?.label ?: "Offline" else null,
                                     sessions.sumOf { it.pendingApprovals }.takeIf { it > 0 }?.let { "$it need you" },
                                     sessions.count { it.runState == "RUNNING" || it.status == "RUNNING" }.takeIf { it > 0 }?.let { "$it running" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall) } },
                                 icon = { Icon(painterResource(R.drawable.ic_workspace), null) },
@@ -402,11 +406,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                     },
                     navigationIcon = {
                         IconButton(onClick = { if (navigation.canGoBack) navigation = navigation.back() else scope.launch { focus.clearFocus(); drawer.open() } }) {
-                            Icon(painterResource(if (navigation.canGoBack) R.drawable.ic_back else R.drawable.ic_menu), if (navigation.canGoBack) "Back" else "Open navigation")
+                            // The menu carries how many wait on you (needs-you-capsule/12-once).
+                            if (navigation.canGoBack) Icon(painterResource(R.drawable.ic_back), "Back") else NeedsYouMenuIcon(app, "Open navigation")
                         }
                     }, actions = {
                         PageBar.Actions(route, this)
-                        if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { Icon(painterResource(R.drawable.ic_menu), "Open navigation") }
+                        if (navigation.canGoBack) IconButton(onClick = { scope.launch { focus.clearFocus(); drawer.open() } }) { NeedsYouMenuIcon(app, "Open navigation") }
                         // iOS: a session list is refreshed by pulling it.
                         if (route.destination != Destination.WORKSPACES && route.destination != Destination.WORKSPACE && route.destination != Destination.FOLDER)
                             IconButton(onClick = { app.realtime.refreshDirectory() }) { Icon(painterResource(R.drawable.ic_refresh), "Refresh directory") }
@@ -414,7 +419,8 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             }) { padding ->
                 Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
                     Box(Modifier.fillMaxHeight().widthIn(max = 840.dp).fillMaxWidth()) {
-                        CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) }) {
+                        CompositionLocalProvider(LocalReaderResources provides remember(signedIn.handle) { ReaderResources(app.session, signedIn.handle) },
+                            LocalManagedRunnerStatus provides managedForLanding.shown?.status) {
                         holder.SaveableStateProvider(Wire.json.encodeToString(route)) {
                             when (route.destination) {
                                 Destination.WORKSPACES -> WorkspaceHome(data, management, startSession = { openNewSession() }) { app.realtime.refreshDirectory() }
@@ -475,7 +481,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                 openSession(session)
                                 WorktreeModel(api, session, app.processScope).resolveInSession(conflict.branch, conflict.target)
                             }
-                        }, modifier = Modifier.widthIn(max = 560.dp))
+                        }, modifier = Modifier.widthIn(max = 560.dp), needsYou = { NeedsYouToasts(app, signedIn.handle, ::open) })
                 }
             }
         }

@@ -42,6 +42,13 @@ class StickySummaryTest {
         assertEquals("event:1", questions.last?.key)
     }
 
+    /** A turn that is only a note this reader cannot read draws no row of the reader's, so the bar never names it (OrbitKit). */
+    @Test fun aTurnThatIsOnlyANoteIsNoAnchor() {
+        val note = "<orbit-future-block>\n  Something a later server sends.\n</orbit-future-block>"
+        assertFalse(StickySummary.isAnchor(user(8, buildJsonObject { put("text", note); put("controlPlaneNote", note) })))
+        assertTrue(StickySummary.isAnchor(user(9, buildJsonObject { put("text", "A question\n\n$note"); put("controlPlaneNote", note) })))
+    }
+
     @Test fun aBackgroundWakeIsALineInsideAnAnswerUnlessSomebodyTypedOnIt() {
         assertFalse(StickySummary.isAnchor(user(6, buildJsonObject { put("text", wake); put("controlPlaneNote", wake) })))
         val typed = user(7, buildJsonObject { put("text", "And also this$wake"); put("controlPlaneNote", wake) })
@@ -111,5 +118,17 @@ class StickySummaryTest {
         assertEquals("a wake does not take the bar", "event:1", questions.above("event:5")?.key)
         assertEquals("event:5", questions.above("event:6")?.key)
         assertEquals("event:5", questions.last?.key)
+    }
+
+    /** A translated turn: the bar quotes what the owner wrote (`translation.original`), as the bubble does — not the English. */
+    @Test fun aTranslatedQuestionQuotesTheOwnersOwnWords() {
+        val english = "The Google sign-in button on the login page does nothing in Safari. Find out why and fix it."
+        val original = "登录页在 Safari 上点 Google 登录没反应，帮我查一下原因并修好"
+        val translated = user(1, buildJsonObject {
+            put("text", english)
+            putJsonObject("translation") { put("state", "DONE"); put("from", "zh-Hans"); put("original", original) }
+        })
+        assertEquals(original, StickySummary.words(translated))
+        assertEquals("a message without translation is unchanged", english, StickySummary.words(user(2, text(english))))
     }
 }

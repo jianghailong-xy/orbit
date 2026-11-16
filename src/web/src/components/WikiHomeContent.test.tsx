@@ -336,7 +336,7 @@ describe('the home’s first read (design §12.3.6, mock 31 ⑦)', () => {
     let answer: (directory: WikiDocsDirectory) => void = () => {};
     docsAnswer = () => new Promise((resolve) => (answer = resolve));
     const client = await open();
-    expect(words(container.querySelector('.wk-title-row .wk-space-tag'))).toBe('orbit');
+    expect(words(container.querySelector('.wk-title-row .wk-select .v'))).toBe('orbit');
     expect(words(container.querySelector('.wk-activity-btn .tp-rail-badge'))).toBe('1');
     expect(container.querySelector('.wk-home-state .wk-sk')).toBeTruthy();
     expect(container.querySelector('.wk-home-sk')?.getAttribute('aria-busy')).toBe('true');

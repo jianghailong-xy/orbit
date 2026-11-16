@@ -171,20 +171,22 @@ struct GuestSessionView: View {
     @Environment(AppModel.self) private var app
     let sessionID: String
     @State private var conversation: GuestConversationModel?
+    /// The console's rows read attachment images through the store in the environment; a guest's is
+    /// this session's own, which reads them through the guest door.
+    @State private var attachments: AttachmentImageStore?
 
     var body: some View {
         Group {
-            if let conversation, let registry = app.consoleRegistry {
-                // The console's rows read attachment images through the registry's store, as
-                // ConsoleView hands it to them.
+            if let conversation, let attachments {
                 GuestConversationPage(conversation: conversation)
-                    .environment(registry.attachments)
+                    .environment(attachments)
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .task(id: sessionID) {
-            guard let api = app.guestDoor else { return }
+            guard let api = app.guestDoor, let registry = app.consoleRegistry else { return }
+            attachments = registry.guestAttachments(sessionID)
             let account = app
             let model = GuestConversationModel(sessionID: sessionID, api: api) { [weak account] in account?.user?.name }
             conversation = model

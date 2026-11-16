@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>47 · New wiki… 移出侧栏和抽屉</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #ececef; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; }
+  .b-part { padding: 40px 48px 48px; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
+  .b-title { display: flex; align-items: center; gap: 14px; margin: 0 0 6px; font-size: 26px; font-weight: 700; }
+  .b-title .b-sub { font-size: 17px; font-weight: 400; color: #6e6e73; }
+  .b-num { width: 38px; height: 38px; border-radius: 50%; background: #1d1d1f; color: #fff; display: grid; place-items: center; font-size: 19px; }
+  .b-row { display: flex; gap: 44px; align-items: flex-start; margin-top: 26px; }
+  .b-col h3 { margin: 0 0 12px; font-size: 18px; display: flex; gap: 10px; align-items: center; }
+  .b-col h3 .b-n { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #1d1d1f; display: grid; place-items: center; font-size: 14px; }
+  .b-col h3 .b-tag { font-size: 13px; padding: 1px 8px; border-radius: 6px; background: #dcebff; color: #0a58ca; }
+  .b-col h3 .b-tag.b-gone { background: #ffe1df; color: #c0261b; }
+  .b-col h3 small { font-weight: 400; color: #6e6e73; font-size: 14px; }
+  .b-notes { max-width: 640px; margin-top: 6px; }
+  .b-note { display: flex; gap: 12px; margin: 0 0 16px; font-size: 16px; }
+  .b-note .b-m { flex: none; width: 26px; height: 26px; border-radius: 50%; background: #f08a00; color: #fff; display: grid; place-items: center; font-size: 14px; font-weight: 700; }
+  .b-note code { font: 13px "JetBrains Mono", monospace; background: #e2e2e6; padding: 1px 5px; border-radius: 4px; }
+  .b-chip { font-size: 12px; padding: 1px 7px; border-radius: 5px; margin-right: 4px; }
+  .b-chip.b-new { background: #dcebff; color: #0a58ca; } .b-chip.b-del { background: #ffe1df; color: #c0261b; } .b-chip.b-keep { background: #e2e2e6; color: #555; }
+
+  /* iPhone Pro Max, 440 × 956 pt, dark */
+  .ph { position: relative; width: 440px; height: 956px; border-radius: 56px; background: #000; overflow: hidden; color: #fff;
+        box-shadow: 0 0 0 10px #1c1c1e, 0 18px 40px rgba(0,0,0,.25); font-family: -apple-system, Inter, "Noto Sans SC", sans-serif; }
+  .ph .status { height: 62px; padding: 20px 40px 0 58px; display: flex; justify-content: space-between; font-weight: 600; font-size: 17px; }
+  .drawer { position: absolute; inset: 62px 70px 0 0; background: #1c1c1e; }
+  .ph .status { position: relative; background: #1c1c1e; }
+  .peek { position: absolute; top: 62px; right: 0; bottom: 0; width: 70px; background: #000; border-left: 1px solid #2c2c2e; }
+  .peek i { display: block; margin: 70px 0 0 10px; width: 48px; height: 48px; border-radius: 50%; background: #2c2c2e; }
+  .d-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px 10px 22px; }
+  .d-head b { font-size: 24px; }
+  .d-head i { width: 44px; height: 44px; border-radius: 50%; background: #2c2c2e; display: grid; place-items: center; font-style: normal; color: #ddd; }
+  .row { display: flex; align-items: center; gap: 14px; height: 44px; margin: 0 10px; padding: 0 12px; font-size: 18px; border-radius: 12px; position: relative; }
+  .row .ic { width: 24px; text-align: center; color: #ddd; font-size: 17px; }
+  .row .ct { margin-left: auto; color: #f08a00; font-size: 14px; }
+  .row.grey, .row.grey .ic { color: #8a8a8d; }
+  .row.sel { background: #1e2a4a; }
+  .row.sel .ic { color: #3b82f6; }
+  .row .badge { margin-left: auto; background: #4a2f1a; color: #f08a00; font-size: 13px; padding: 1px 9px; border-radius: 10px; }
+  .row .host { color: #8a8a8d; }
+  .rule { height: 1px; background: #38383a; margin: 10px 20px; }
+  .grp { color: #8a8a8d; font-size: 15px; padding: 2px 22px 6px; font-weight: 600; }
+  .fab { position: absolute; left: 14px; bottom: 34px; background: #3b82f6; color: #fff; border-radius: 26px; padding: 10px 20px; font-size: 18px; font-weight: 600; }
+  .ring { position: absolute; z-index: 5; inset: -3px; border: 2px dashed #f08a00; border-radius: 12px; }
+  .ring.red { border-color: #ff453a; }
+  .pin { position: absolute; z-index: 6; right: -14px; top: -12px; width: 24px; height: 24px; border-radius: 50%; background: #f08a00; color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+  .strike { text-decoration: line-through; text-decoration-color: #ff453a; }
+  .ghost { opacity: .45; }
+
+  /* Wiki home */
+  .wk { position: absolute; inset: 62px 0 0 0; background: #000; }
+  .wk-bar { display: flex; justify-content: space-between; padding: 6px 18px; }
+  .wk-bar i { width: 44px; height: 44px; border-radius: 50%; background: #1c1c1e; display: block; }
+  .wk-title { padding: 6px 22px 0; font-size: 34px; font-weight: 700; display: flex; align-items: baseline; gap: 8px; position: relative; width: max-content; }
+  .wk-title { z-index: 2; }
+  .wk-title .pin { color: #fff; font-size: 13px; }
+  .wk-title span { font-size: 15px; color: #8a8a8d; }
+  .wk-line { padding: 2px 22px 14px; color: #8a8a8d; font-size: 15px; }
+  .wk-card { margin: 8px 16px; height: 86px; border-radius: 14px; background: #1c1c1e; }
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+  .menu { z-index: 3; position: absolute; left: 22px; top: 120px; width: 300px; border-radius: 16px; background: rgba(44,44,46,.97); box-shadow: 0 12px 40px rgba(0,0,0,.6); overflow: visible; }
+  .mi { display: flex; gap: 12px; align-items: center; padding: 11px 16px; font-size: 17px; position: relative; }
+  .mi .ck { width: 18px; color: #fff; }
+  .mi small { display: block; color: #8a8a8d; font-size: 13px; line-height: 1.3; }
+  .mi .gl { margin-left: auto; color: #ddd; }
+  .msep { height: 8px; background: rgba(0,0,0,.35); }
+  .mline { height: 1px; background: #48484a; margin-left: 16px; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <div class="b-title"><span class="b-num">1</span>New wiki… 移出侧栏和抽屉<span class="b-sub">· 改 46 第 4 部分 ②；iPhone/iPad、Android 抽屉，Mac、web 侧栏，四端一致</span></div>
+  <div class="b-row">
+    <div class="b-col">
+      <h3><span class="b-n">①</span>今天 <small>· New wiki… 夹在 Wiki 和 Waiting on you 之间</small></h3>
+      <div class="ph">
+        <div class="status"><span>1:45</span><span>▮▮▮ 87</span></div>
+        <div class="drawer">
+          <div class="d-head"><b>Orbit</b><i>⌕</i></div>
+          <div class="row"><span class="ic">▦</span>Projects<span class="ct">5</span></div>
+          <div class="row"><span class="ic">☑</span>Tasks</div>
+          <div class="row"><span class="ic">▤</span>Wiki<span class="ct">36</span></div>
+          <div class="row grey"><span class="ic">＋</span>New wiki…<span class="ring red"></span><span class="pin">1</span></div>
+          <div class="row"><span class="ic">✋</span>Waiting on you<span class="ct">3</span></div>
+          <div class="rule"></div>
+          <div class="grp">Workspaces</div>
+          <div class="row sel"><span class="ic">▭</span>orbit-develop <span class="host">· HPC</span><span class="badge">2</span></div>
+          <div class="row"><span class="ic">▭</span>docs-site <span class="host">· workstation</span></div>
+          <div class="row"><span class="ic">▭</span>billing-service <span class="host">· HPC</span></div>
+          <div class="fab">✎ New session</div>
+        </div>
+        <div class="peek"><i></i></div>
+      </div>
+    </div>
+    <div class="b-col">
+      <h3><span class="b-n">②</span>改后 <span class="b-tag b-gone">删一行</span> <small>· 导航只剩去处</small></h3>
+      <div class="ph">
+        <div class="status"><span>1:45</span><span>▮▮▮ 87</span></div>
+        <div class="drawer">
+          <div class="d-head"><b>Orbit</b><i>⌕</i></div>
+          <div class="row"><span class="ic">▦</span>Projects<span class="ct">5</span></div>
+          <div class="row"><span class="ic">☑</span>Tasks</div>
+          <div class="row"><span class="ic">▤</span>Wiki<span class="ct">36</span></div>
+          <div class="row"><span class="ic">✋</span>Waiting on you<span class="ct">3</span></div>
+          <div class="rule"></div>
+          <div class="grp">Workspaces</div>
+          <div class="row sel"><span class="ic">▭</span>orbit-develop <span class="host">· HPC</span><span class="badge">2</span></div>
+          <div class="row"><span class="ic">▭</span>docs-site <span class="host">· workstation</span></div>
+          <div class="row"><span class="ic">▭</span>billing-service <span class="host">· HPC</span></div>
+          <div class="row"><span class="ic">▭</span>lfs-builder <span class="host">· workstation</span></div>
+          <div class="fab">✎ New session</div>
+        </div>
+        <div class="peek"><i></i></div>
+      </div>
+    </div>
+    <div class="b-col">
+      <h3><span class="b-n">③</span>入口在这里 <span class="b-tag">改</span> <small>· Wiki 页头，一个 wiki 也是菜单</small></h3>
+      <div class="ph">
+        <div class="status"><span>1:45</span><span>▮▮▮ 87</span></div>
+        <div class="wk">
+          <div class="wk-bar"><i></i><i></i></div>
+          <div class="wk-title">orbit <span>⌄</span><span class="ring"></span><span class="pin">2</span></div>
+          <div class="wk-line">github.com/…/orbit · 128 documents</div>
+          <div class="wk-card"></div><div class="wk-card"></div><div class="wk-card"></div><div class="wk-card"></div>
+          <div class="dim"></div>
+          <div class="menu">
+            <div class="mi"><span class="ck">✓</span><div>orbit<small>github.com/…/orbit · 128 documents</small></div></div>
+            <div class="msep"></div>
+            <div class="mi">New wiki…<span class="gl">＋</span><span class="ring"></span><span class="pin">3</span></div>
+            <div class="mline"></div>
+            <div class="mi">Manage spaces<span class="gl">⚙</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="b-notes">
+      <p class="b-note"><span class="b-m">1</span><span><span class="b-chip b-del">删</span>抽屉的 <b>New wiki…</b> 行。46 要它放在「Wiki 组」里、各个 wiki 之后、Trash 之前；iPhone/iPad 抽屉没有 Wiki 组，只有一行 Wiki，结果它成了顶层导航里的一行动作，把 Wiki 和 Waiting on you 隔开，而且一直在。建第二个 wiki 很少做，不该占这一格。</span></p>
+      <p class="b-note"><span class="b-m">2</span><span><span class="b-chip b-new">改</span>Wiki 页头的名字：今天只有一个 wiki 时是灰字标签、没有菜单——删了抽屉那行，就再没有地方能建第二个。改成<b>一个 wiki 也带 ⌄、也是菜单</b>（web、iOS、macOS、Android 一样）。</span></p>
+      <p class="b-note"><span class="b-m">3</span><span><span class="b-chip b-keep">沿用</span>菜单里分隔线下面的 <b>New wiki…</b>（46 第 4 部分 ③），打开同一个 Create wiki 表单；下面 Manage spaces。</span></p>
+      <p class="b-note"><span class="b-m">·</span><span>账号还没有 wiki 时不变：Wiki 页是 <code>Set up your first wiki</code> 卡。</span></p>
+      <p class="b-note"><span class="b-m">·</span><span><span class="b-chip b-del">删</span>同一行在 Mac 侧栏和 Android 抽屉也删：两处都没有 Wiki 组，都是 Wiki 行下面单独一行。web 侧栏的 Wiki 组里那一行也删（owner 11-16 定，四端一致）：组里只剩各个 wiki。</span></p>
+      <p class="b-note"><span class="b-m">·</span><span>代码：<code>DrawerWorkLogic</code> 去掉 <code>.newWiki</code>；<code>CompactShell</code> 去掉那一行；Mac <code>AgentListLogic.sidebarSections</code> 去掉 <code>newWiki</code>；Android 去掉 <code>WikiDrawerNewRow</code>；web <code>TasksSidePanel</code> 去掉 <code>tp-wiki-new</code>；各端页头切换器（web <code>WikiHeadSpace</code>、原生 <code>WikiSpacePicker</code>）去掉「一个 wiki = 标签」那一支。</span></p>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

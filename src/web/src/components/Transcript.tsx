@@ -53,6 +53,7 @@ import {
   isAsyncAgentLaunchAck,
   delegateLaunchReceipt,
   progressBadge,
+  COORDINATOR_HANDOFF_PROMPT_HEAD,
   QUESTION_RECORD_COPY,
   questionAnswerLine,
   questionLead,
@@ -66,7 +67,7 @@ import {
   type SubagentRunView,
   type TaskProgress,
 } from '@orbit/shared';
-import { DELEGATE_TOOL, delegateResultText, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
+import { DELEGATE_TOOL, delegateResultText, delegateRunId, subagentMeta, subagentWhy, subagentWhyDetails } from '../lib/subagentRuns';
 import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import {
@@ -95,6 +96,7 @@ import type { MainCheckoutChangedNotice, MainCheckoutResultNotice } from '@orbit
 import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
+import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
@@ -110,6 +112,7 @@ import { resolutionTurnLabel } from '../lib/ownerRequests';
 import { RUNNER_UPDATE_INTERRUPT_REASON, RUNNER_UPDATE_RESUME_NOTE } from '@orbit/shared';
 import { isRunnerUpdateResume, runnerUpdateInterruptedLine } from '../lib/runnerUpdateNow';
 import { parseBackgroundWake } from '../lib/backgroundWake';
+import { parseSubagentFinished, subagentFinishedOk } from '../lib/subagentFinished';
 import { parseOpenItemDelivery } from '../lib/openItemDelivery';
 import type { OpenItemDeliveryCard as OpenItemDelivery, ProjectStartedCard as Started } from '@orbit/shared';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
@@ -186,10 +189,24 @@ import { claudeRegionErrorLine } from '../lib/claudeRegion';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import 'highlight.js/styles/github.css';
+import type { ReplyTranslation, TurnTranslation } from '@orbit/shared';
+import { BILINGUAL_COLLAPSE_LINES, bilingualEnglish, bilingualLineCount, DEFAULT_AGENT_LANGUAGE } from '@orbit/shared';
+import { replyTranslationOf, showEnglishLabel, turnTranslationOf } from '../lib/translation';
+import {
+  ReplyTranslationFoot,
+  ShownOriginalProvider,
+  TranslationCtx,
+  UserTranslationFoot,
+  replyTranslationKey,
+  useReplyShownOriginal,
+  useShownOriginal,
+  userTranslationKey,
+} from './TranslationParts';
 
 /** What `Markdown` accepts as `remarkPlugins`: the array `MD` builds is annotated with it so that
  *  the plugins written into its literal cannot narrow its element type and refuse the next one. */
 type RemarkPlugins = NonNullable<ComponentProps<typeof Markdown>['remarkPlugins']>;
+type MarkdownComponents = NonNullable<ComponentProps<typeof Markdown>['components']>;
 
 // One normalized run event (subset the transcript cares about). Mirrors the SSE
 // payload the runner emits; see src/runner-go/claude.go + @orbit/shared enums.
@@ -552,6 +569,13 @@ type TextNode = {
   kind: 'user' | 'assistant' | 'thinking';
   seq: number;
   text: string;
+  // Settings › Translation (@orbit/shared translation.ts). A user message: what the owner typed and
+  // how far its translation got, `text` being the English the engine got. An agent reply: its
+  // translation into the owner's language, and — none yet in a turn whose message was translated —
+  // that one is coming (`awaitsTranslation`).
+  translation?: TurnTranslation;
+  replyTranslation?: ReplyTranslation;
+  awaitsTranslation?: boolean;
   // Thinking only: how long the stretch took, and how many adjacent blocks were folded into this
   // one row. The duration is the one the runner stored on each block (see lib/thinkingDraft); a
   // block an older runner stored has none, and its row states its size alone.
@@ -655,7 +679,16 @@ type MarkerNode = {
 };
 // The end of a finished turn (TurnFoot): when it ended, and the reply its copy button hands back —
 // the turn's last top-level assistant text, absent when it wrote none inside the loaded window.
-type DividerNode = { kind: 'divider'; seq: number; ts?: string; reply?: string };
+// `replySeq` / `replyTranslation`: the reply's own event and its translation (Settings › Translation),
+// so the foot copies the version of it on screen.
+type DividerNode = {
+  kind: 'divider';
+  seq: number;
+  ts?: string;
+  reply?: string;
+  replySeq?: number;
+  replyTranslation?: ReplyTranslation;
+};
 // `repeats` counts the identical lines folded into this one (see `engineStderr`); absent or 1
 // means the line was seen once.
 type ErrorNode = { kind: 'error'; seq: number; message: string; repeats?: number };
@@ -967,7 +1000,8 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !parseWatchWake(node.text)
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
-  && !parseBackgroundWake(node.note);
+  && !parseBackgroundWake(node.note)
+  && !parseSubagentFinished(node.note);
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   return buildTranscript(events, turnImages).nodes;
@@ -1239,6 +1273,11 @@ function buildTranscript(
   // Narration between tool calls is overwritten by whatever follows it, so what is left when the
   // turn ends is the answer the turn ended on.
   let turnReply: string | undefined;
+  let turnReplySeq: number | undefined;
+  let turnReplyTranslation: ReplyTranslation | undefined;
+  // Whether the turn now open was opened by a message the owner wrote with translation on: its
+  // replies are translated by the server, so one without a translation yet is waiting for it.
+  let turnTranslated = false;
   // The `turnHead` the turn now open is drawn from — the message that opened it, until its
   // `turn_end` closes it. What says how long that turn worked once the end arrives.
   let turnHead: TextNode['turnHead'];
@@ -1293,6 +1332,9 @@ function buildTranscript(
         // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
         // opening payload's snapshot for an exact retry, never infer a new card from text alone.
         const text = recorded ? recorded.text : p.text ? String(p.text) : '';
+        // The platform's ask for a coordinator's handoff note is not a message anyone sent: the
+        // conversation shows the handoff's own row instead (docs/coordinator-handoff.md).
+        if (text.startsWith(COORDINATOR_HANDOFF_PROMPT_HEAD)) break;
         const taskStartFromPayload = parseTaskStartCard(p);
         const retriedTaskStart = taskStartForRetry(parent, text);
         const taskStart = taskStartFromPayload ?? retriedTaskStart;
@@ -1330,11 +1372,16 @@ function buildTranscript(
           }
           break;
         }
+        const translation = turnTranslationOf(p.translation);
+        if (!parent && !p.steer && translation) {
+          turnTranslated = translation.state === 'DONE' || translation.state === 'SENT_AS_WRITTEN';
+        }
         if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
           const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
             text,
+            ...(translation ? { translation } : {}),
             note: recorded?.note,
             itemCard,
             ownerAnswer,
@@ -1422,8 +1469,20 @@ function buildTranscript(
           else {
             const siblings = into(parent);
             agentWorked();
-            siblings.push({ kind: 'assistant', seq: ev.seq, text });
-            if (siblings === roots) turnReply = text;
+            // A sub-agent's report to its caller is never translated (parentToolUseId).
+            const replyTranslation = parent ? undefined : replyTranslationOf(p.translation);
+            siblings.push({
+              kind: 'assistant',
+              seq: ev.seq,
+              text,
+              ...(replyTranslation ? { replyTranslation } : {}),
+              ...(!parent && !replyTranslation && turnTranslated ? { awaitsTranslation: true } : {}),
+            });
+            if (siblings === roots) {
+              turnReply = text;
+              turnReplySeq = ev.seq;
+              turnReplyTranslation = replyTranslation;
+            }
           }
         }
         break;
@@ -1507,10 +1566,19 @@ function buildTranscript(
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
-            : { kind: 'divider', seq: ev.seq, ts: ev.ts, reply: turnReply },
+            : {
+                kind: 'divider',
+                seq: ev.seq,
+                ts: ev.ts,
+                reply: turnReply,
+                ...(turnReplyTranslation ? { replySeq: turnReplySeq, replyTranslation: turnReplyTranslation } : {}),
+              },
         );
         turnAccountedFor = false;
         turnReply = undefined;
+        turnReplySeq = undefined;
+        turnReplyTranslation = undefined;
+        turnTranslated = false;
         break;
       }
       case 'interrupt':
@@ -1657,6 +1725,7 @@ export const SubagentWaitingCtx = createContext<ReadonlyMap<string, string>>(new
 
 function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
   const drafts = useContext(StreamingDraftsCtx);
+  const translating = useContext(TranslationCtx)?.on === true;
   // Whether the reader opened the reasoning, held here rather than in the row: the row unmounts
   // each time a block settles, and a reader who opened one wants the next block of the same turn
   // open too. A turn's end puts it back to folded. Read off the transcript's last `turn_end` rather
@@ -1677,7 +1746,15 @@ function StreamingDrafts({ lastTurnEnd }: { lastTurnEnd: number }) {
           onToggle={() => setThinkOpen((o) => !o)}
         />
       )}
-      {drafts.text && <StreamingMessage text={drafts.text} />}
+      {drafts.text && (translating ? (
+        // Settings › Translation (2A): the English is all there is until the block completes.
+        <div className="chat-translated-reply is-pending">
+          <StreamingMessage text={drafts.text} />
+          <ReplyTranslationFoot pending flipped={false} onFlip={() => {}} />
+        </div>
+      ) : (
+        <StreamingMessage text={drafts.text} />
+      ))}
     </>
   );
 }
@@ -1873,6 +1950,7 @@ export const Transcript = memo(function Transcript({
   const body = (
     <MainCheckoutResultsCtx.Provider value={mainCheckoutResults}>
       <TaskLookupCtx.Provider value={taskLookup}>
+        <ShownOriginalProvider>
         <ImagePreviewProvider>
           {head.map((insert) => (
             <Fragment key={insert.key}>{insert.element}</Fragment>
@@ -1881,6 +1959,7 @@ export const Transcript = memo(function Transcript({
           <StreamingDrafts lastTurnEnd={lastTurnEnd} />
           {after.length > 0 && <NodeList nodes={after} live={live} placed={placed} />}
         </ImagePreviewProvider>
+        </ShownOriginalProvider>
       </TaskLookupCtx.Provider>
     </MainCheckoutResultsCtx.Provider>
   );
@@ -2057,6 +2136,17 @@ function orbitTurnOf(
       category: 'watch',
       target: one && (one.kind === 'TASK' || one.kind === 'SESSION') ? { kind: one.kind, id: one.id, title: name } : null,
     };
+  }
+  // A SubAgent's end folds like a job's news: a session running several should not read as a run of
+  // rounds the reader opened. One that did not finish stays drawn, as a failed job does.
+  const subagent = parseSubagentFinished(node.note);
+  if (subagent) {
+    if (subagent.runs.some((run) => !subagentFinishedOk(run))) return null;
+    const jobs = parseBackgroundWake(subagent.rest);
+    if (jobs?.jobs.some((job) => job.status === 'failed' || job.status === 'killed')) return null;
+    const title = subagentFinishedTitle(subagent);
+    const name = subagent.runs.length === 1 ? subagent.runs[0].description : null;
+    return { ts, what: name ? `${title}: ${name}` : title, category: 'job', target: null };
   }
   const background = parseBackgroundWake(node.note);
   if (background) {
@@ -2267,7 +2357,8 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
         return (
           <SessionMessageCard
             card={node.sessionMessage}
-            text={node.text}
+            // Settings › Translation: the words in the owner's language when the turn was translated.
+            text={node.translation?.state === 'DONE' ? node.translation.original : node.text}
             seq={seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
@@ -2523,6 +2614,43 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
       // A job that ended while a turn ran is written into that turn as a steer: the same line, in
       // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
       // would — never the bubble itself.
+      //
+      // A SubAgent's end is the same kind of turn, in a block of its own (SubagentFinishedCard). A note
+      // that carries a background job's news beside it draws that line too, after the SubAgent's, as
+      // the control plane wrote them; the job's line then says how the turn went, once.
+      const subagent = parseSubagentFinished(node.note);
+      if (subagent) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        const steer = node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined;
+        const jobs = parseBackgroundWake(subagent.rest);
+        const rest = jobs ? jobs.rest : subagent.rest;
+        const attached = rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />;
+        return (
+          <>
+            <SubagentFinishedCard
+              wake={subagent}
+              seq={seq}
+              ts={node.ts}
+              undelivered={undelivered && !jobs}
+              steer={jobs ? undefined : steer}
+              queued={jobs ? undefined : queued}
+              attached={!jobs && attached}
+            />
+            {jobs && (
+              <BackgroundWakeCard
+                wake={jobs}
+                seq={seq}
+                ts={node.ts}
+                undelivered={undelivered}
+                steer={steer}
+                queued={queued}
+                attached={attached}
+              />
+            )}
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+          </>
+        );
+      }
       const background = parseBackgroundWake(node.note);
       if (background) {
         const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
@@ -2545,10 +2673,20 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           </>
         );
       }
+      // A turn with no words and no files that still carries a note is one the control plane opened
+      // for a block this client cannot read yet (a background job's stall was one, before it had its
+      // line). Drawn as a bubble it was an empty bubble in the reader's name; the note stands alone.
+      if (!queued && node.note && node.text.trim() === '' && !node.images?.length && !node.attachmentRefs?.length) {
+        return <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
+      }
       return <UserBubble node={node} queued={queued} />;
     }
     case 'assistant':
-      return <AssistantBubble text={node.text} seq={node.seq} />;
+      return node.replyTranslation || node.awaitsTranslation ? (
+        <TranslatedReply node={node} />
+      ) : (
+        <AssistantBubble text={node.text} seq={node.seq} />
+      );
     case 'thinking':
       return <Thinking text={node.text} seq={node.seq} ms={node.thinkingMs} blocks={node.blocks} />;
     case 'tool':
@@ -3259,7 +3397,21 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
   // never in it (useControlPlaneNote). An event with no note is the echo as it came, however much
   // of it looks like a block. Copying and the length cap follow the typed text for the same reason:
   // neither should be measured against a block nobody wrote.
-  const typed = node.text;
+  // Settings › Translation: a delivered message shows what the owner wrote, or — flipped — the English
+  // the agent got (`node.text`). A held one has nothing but what they wrote. Copy follows the screen.
+  const translation = node.translation;
+  const [shownOriginal, flip] = useShownOriginal(userTranslationKey(node.seq, node.turnId));
+  // "Show both languages": what they wrote on top, the English the agent got under it; no flip.
+  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.state === 'DONE';
+  const flipped = shownOriginal && !bilingual;
+  const typed = translation?.state === 'DONE' && !flipped ? translation.original : node.text;
+  const translationFoot =
+    translation && translation.state !== 'SENT_AS_WRITTEN' ? (
+      <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
+    ) : null;
+  // Only the Show original / Show translation link opens the row; bilingual's always-shown
+  // "Sent to the agent in English" ends it, flush with the bubble (02-bilingual.png).
+  const flipFoot = translation?.state === 'DONE' && !bilingual;
   // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
   // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
   const noteKind = node.note ? describeNote(node.note) : '';
@@ -3308,6 +3460,7 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
         ) : (
           shownText && <MD breaks>{shownText}</MD>
         )}
+        {bilingual && !node.shell && <BilingualEnglish text={node.text} />}
         {queued}
       </div>
       {longText && !exp && (
@@ -3317,8 +3470,12 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
-      {(typed || status || note || held) && (
+      {(typed || status || note || held || translationFoot) && (
         <div className="chat-user-meta">
+          {/* A delivered translation's flip opens the row; copy and the time stay together at its
+              end (docs/mocks/translation-user-hover). */}
+          {flipFoot && translationFoot}
+          {flipFoot && typed && <span className="chat-meta-sep">·</span>}
           {typed && (
             <button
               type="button"
@@ -3331,7 +3488,10 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
             </button>
           )}
           {typed && node.ts && <span className="chat-time">{relTime(node.ts)}</span>}
-          {typed && node.ts && (status || note || held) && <span className="chat-meta-sep">·</span>}
+          {typed && node.ts && (status || note || held || (!flipFoot && translationFoot)) && (
+            <span className="chat-meta-sep">·</span>
+          )}
+          {!flipFoot && translationFoot}
           {status}
           {held}
           {/* Named, not hidden: without it the agent answers about a quota outage nobody appears
@@ -3387,10 +3547,14 @@ function TurnAttachments({ node }: { node: TextNode }) {
 function TurnFoot({ node }: { node: DividerNode }) {
   const [copied, setCopied] = useState(false);
   const { seq, ts, reply } = node;
+  // Settings › Translation: copy the version of the reply on screen, translated unless flipped.
+  const shownOriginal = useReplyShownOriginal(node.replySeq);
   if (!reply && !ts) return <div className="chat-turn-divider" data-seq={seq} />;
+  const shownReply =
+    node.replyTranslation?.text !== undefined && !shownOriginal ? node.replyTranslation.text : reply;
   const copy = () => {
-    if (!reply) return;
-    void copyText(reply).then((ok) => {
+    if (!shownReply) return;
+    void copyText(shownReply).then((ok) => {
       if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
@@ -4044,14 +4208,48 @@ function remarkHtmlBlocks() {
   };
 }
 
+/** The tag `remarkTail` puts the tail on; `block` when it had no line to end. */
+const MD_TAIL_TAG = 'md-tail';
+const MdTailCtx = createContext<ReactNode>(null);
+
+// Stable, so a press inside the tail keeps its focus when the reply re-renders.
+function MdTail({ block }: { block?: string }) {
+  const tail = useContext(MdTailCtx);
+  return block ? <div className="md-tail-block">{tail}</div> : <>{tail}</>;
+}
+
+/** Appends the tail to the end of the last line: the last paragraph or heading, inside the last
+ *  item of a closing list. When the text ends in anything else (code, a table, a quote), on a line
+ *  of its own below. */
+function remarkTail() {
+  return (tree: any) => {
+    const place = (parent: any): boolean => {
+      const last = parent.children?.at(-1);
+      if (!last) return false;
+      if (last.type === 'paragraph' || last.type === 'heading') {
+        last.children.push({ type: 'mdTail', data: { hName: MD_TAIL_TAG } });
+        return true;
+      }
+      if (last.type === 'list' || last.type === 'listItem') return place(last);
+      return false;
+    };
+    if (!place(tree)) {
+      tree.children.push({ type: 'mdTail', data: { hName: MD_TAIL_TAG, hProperties: { block: 'true' } } });
+    }
+  };
+}
+
 export const MD = memo(function MD({
   children,
   highlight = true,
   breaks = false,
+  tail,
 }: {
   children: string;
   highlight?: boolean;
   breaks?: boolean;
+  /** Drawn at the end of the text's last line, e.g. a translated reply's flip. */
+  tail?: ReactNode;
 }) {
   // Links that name an object of this deployment become cards — but only where a conversation view
   // has asked for them, which is what `OrbitLinkCardsProvider` says. The shared page and the
@@ -4066,16 +4264,25 @@ export const MD = memo(function MD({
   // plugin handed over already called would be installed as one and asked to read a tree it was
   // never given.
   if (cards && !exporting) plugins.push([orbitLinkRemarkPlugin, { host: cards.host }]);
+  if (tail) plugins.push(remarkTail);
   return (
     <div className="md">
-      <Markdown
-        remarkPlugins={plugins}
-        rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
-        urlTransform={transcriptUrlTransform}
-        components={{ pre: CodeBlock, img: MarkdownImage, a: MarkdownLink, ...orbitLinkCardComponents }}
-      >
-        {children}
-      </Markdown>
+      <MdTailCtx.Provider value={tail}>
+        <Markdown
+          remarkPlugins={plugins}
+          rehypePlugins={highlight ? [rehypeHighlight, rehypeCodeWords] : [rehypeCodeWords]}
+          urlTransform={transcriptUrlTransform}
+          components={{
+            pre: CodeBlock,
+            img: MarkdownImage,
+            a: MarkdownLink,
+            ...orbitLinkCardComponents,
+            ...({ [MD_TAIL_TAG]: MdTail } as unknown as MarkdownComponents),
+          }}
+        >
+          {children}
+        </Markdown>
+      </MdTailCtx.Provider>
     </div>
   );
 });
@@ -4088,18 +4295,83 @@ export function AssistantBubble({
   text,
   streaming,
   seq,
+  tail,
 }: {
   text: string;
   streaming?: boolean;
   // Absent for the live draft, which has no persisted event to point at yet.
   seq?: number;
+  tail?: ReactNode;
 }) {
   return (
     <div
       className={streaming ? 'chat-msg chat-assistant chat-streaming-md' : 'chat-msg chat-assistant'}
       data-seq={seq}
     >
-      <MD highlight={!streaming}>{text}</MD>
+      <MD highlight={!streaming} tail={tail}>{text}</MD>
+    </div>
+  );
+}
+
+// An agent reply under Settings › Translation (board frames 4–6): shown in the owner's language with
+// a per-message flip to the English the agent wrote; greyed, with its chip, until the translation
+// arrives; and with a Retry when it failed — in English, which is all there is.
+function TranslatedReply({ node }: { node: TextNode }) {
+  const [shownOriginal, flip] = useShownOriginal(replyTranslationKey(node.seq));
+  const translation = node.replyTranslation;
+  // "Show both languages": the translation on top, the English the agent wrote under it; no flip.
+  const bilingual = useContext(TranslationCtx)?.bilingual === true && translation?.text !== undefined;
+  const flipped = shownOriginal && !bilingual;
+  const translated = translation?.text !== undefined && !flipped ? translation.text : node.text;
+  const pending = !translation && node.awaitsTranslation;
+  return (
+    <div className={pending ? 'chat-translated-reply is-pending' : 'chat-translated-reply'}>
+      {bilingual ? (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <div className="chat-bilingual-reply">
+            <BilingualEnglish text={node.text} collapsible />
+          </div>
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      ) : translation?.text !== undefined && !translation.failed ? (
+        // Delivered: the flip rides at the end of the reply's last line.
+        <AssistantBubble
+          text={translated}
+          seq={node.seq}
+          tail={<ReplyTranslationFoot translation={translation} seq={node.seq} flipped={flipped} onFlip={flip} />}
+        />
+      ) : (
+        <>
+          <AssistantBubble text={translated} seq={node.seq} />
+          <ReplyTranslationFoot translation={translation} pending={pending} seq={node.seq} flipped={flipped} onFlip={flip} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// "Show both languages" (docs/mocks/session-translation/02-bilingual.png): the English the agent read
+// or wrote, under a dashed divider in smaller grey text — its prose only, a code block being drawn once
+// above. A reply's English that runs over BILINGUAL_COLLAPSE_LINES lines starts as a two-line faded
+// preview with "Show English · N lines", which opens it in place (frame 3); per message, not kept.
+function BilingualEnglish({ text, collapsible = false }: { text: string; collapsible?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const agentLanguage = useContext(TranslationCtx)?.agentLanguage ?? DEFAULT_AGENT_LANGUAGE;
+  const english = bilingualEnglish(text);
+  if (!english) return null;
+  const lines = bilingualLineCount(english);
+  const collapsed = collapsible && !open && lines > BILINGUAL_COLLAPSE_LINES;
+  return (
+    <div className={collapsed ? 'chat-bilingual is-collapsed' : 'chat-bilingual'} lang={agentLanguage}>
+      <div className="chat-bilingual-text">
+        <MD breaks>{english}</MD>
+      </div>
+      {collapsed && (
+        <button type="button" className="chat-translate-action chat-bilingual-more" onClick={() => setOpen(true)}>
+          {showEnglishLabel(lines, agentLanguage)}
+        </button>
+      )}
     </div>
   );
 }
@@ -4408,6 +4680,8 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     <>
       <div
         data-seq={node.seq}
+        // Where a SubAgent's finished line finds the card it was started from (SubagentFinishedCard).
+        data-subagent-run={isDelegate && node.result ? delegateRunId(resultContent) ?? undefined : undefined}
         className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
           hasDetail && open ? ' is-open' : ''
         }`}
@@ -4957,11 +5231,11 @@ function describeTool(name: string, input: any, isShell?: boolean, outcome?: Que
           </div>
         ) : undefined,
       };
-    // Orbit's SubAgent (docs/subagent-design.md §6.4): the same purple card as Agent. Its tier, model, time
+    // Orbit's SubAgent (docs/subagent-design.md §6.4), named Agent on screen as on iOS and macOS: the same purple card as Agent. Its tier, model, time
     // and cost come from its run (ToolView); opened, it is the child's steps and the result — no prompt.
     case DELEGATE_TOOL:
       return {
-        label: 'SubAgent',
+        label: 'Agent',
         icon: <span className="chat-subagent-icon">✦</span>,
         tone: 'agent',
         summary: [i.type || 'general', i.description].filter(Boolean).join(' · '),

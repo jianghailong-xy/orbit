@@ -1157,16 +1157,6 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// starts to stop rather than after this supervisor's turn drain, so what it kills is
 	// reported inside the grace the final event flush is given (eventCtx above).
 	bg.drainOnRunnerShutdown(shutdownCtx)
-	// A runner-hosted job outlives the engine that asked for it, so it can also finish long after
-	// the last engine was recycled — with the whole point being that nobody has to sit and watch.
-	// Lend the tailer the pool's own notion of residency and the account's existing push channel,
-	// so a job that lands on a cold session says so on somebody's phone instead of waiting to be
-	// discovered. The alert is the same one `orbit notify` sends, rate limit and all, on the daemon's
-	// own route (sessionNotify).
-	bg.notifyWhenCold(
-		func() bool { return pool.engineResident(live) },
-		func(message string) error { return t.sessionNotify(job.SessionID, message) },
-	)
 	// A job that asked to wake this session does it through the control plane, which files the wake
 	// as a turn: delivered to the resident engine, or resumed into a new one when the engine that
 	// started the wait is gone. The receipt says which, for this runner's log.
@@ -1962,7 +1952,7 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 func sessionContextEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
 	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth,
-		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID:
+		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID, envScheduleRun:
 		return true
 	default:
 		return false

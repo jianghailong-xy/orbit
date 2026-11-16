@@ -547,7 +547,9 @@ final class AcceptedTurnPlaceholderTests: XCTestCase {
             evidenceReview: .object([:]), evidenceSendBack: .object([:]),
             runQuestion: .object([:]), runNotice: .object([:]), sessionOpening: .object([:]),
             placement: "accepted", createdAt: Self.filedAt, targetTurnId: "t-a", delivery: "failed",
-            deliveryCode: "CODE", deliveryReason: "reason", opening: true)
+            deliveryCode: "CODE", deliveryReason: "reason",
+            translation: .object(["state": .string("DONE"), "from": .string("zh-Hans"), "original": .string("w")]),
+            opening: true)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(full)) as? [String: Any])
         let decoded = Set(object.keys)
         XCTAssertEqual(listed.subtracting(decoded), [], "the server lists a field this end never reads")

@@ -10,11 +10,6 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// Fired (on the main actor) when the user acts on a notification.
     var onIntent: ((AppIntent) -> Void)?
 
-    /// Fired (on the main actor) for an approval that lands while Orbit is the foreground app on
-    /// iOS, where it is re-stated as the app's own card instead of a system banner (see
-    /// `willPresent`). Carries the session and the push's own line, "Needs your reply · Bash".
-    var onForegroundApproval: ((String, String) -> Void)?
-
     /// The session whose console is on screen, kept current by `AppModel.syncConsoleFocus`. The
     /// notification *logic* already skips this session (`SessionDelta.diff`'s `focusedSessionID`) —
     /// but the server's APNs approval push can't know what you are looking at, so on iOS an approval
@@ -164,8 +159,8 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// upward swipe opposite meanings (a banner tucks itself into Notification Center; a toast is
     /// gone for good). So the foreground speaks one language. The alert is still *delivered* —
     /// `.list` keeps it in Notification Center and the badge still counts it — and an approval,
-    /// the one kind that's blocking somebody, comes back as the app's own card via
-    /// `onForegroundApproval`. A settled run gets no card: in the foreground that outcome is
+    /// the one kind that's blocking somebody, is noticed by the app's own needs-you toast, read from
+    /// the needs-you rows the same snapshot brings (`AppModel.noticeNewlyWaiting`). A settled run gets no card: in the foreground that outcome is
     /// already on screen in the list, the row's status and the transcript itself.
     ///
     /// **macOS keeps the banner.** Its notifications land in a screen corner rather than over the
@@ -185,8 +180,6 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         #if os(iOS)
         if let session, PublicID.storageKey(session) != focused.map(PublicID.storageKey),
            content.categoryIdentifier == Notifications.approvalCategory {
-            let line = content.body
-            await MainActor.run { self.onForegroundApproval?(session, line) }
             // The sound stays, alone of the banner's parts: it's the one that still reaches you
             // with the app open on a desk you aren't looking at, and being audio it can't collide
             // with anything on screen. Nothing else is loud enough to warrant it — a settled run

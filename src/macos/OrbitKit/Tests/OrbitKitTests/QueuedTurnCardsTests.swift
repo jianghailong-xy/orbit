@@ -94,6 +94,9 @@ final class QueuedTurnCardsTests: XCTestCase {
         "id", "text", "attachments", "ts", "clientTurnId", "turnId", "pending", "queued", "undelivered",
         "note", "authoredByOrbit", "steer", "delivery", "withdrawable", "shell",
         "receipt", "deliveryCode", "deliveryReason", "opensTurn",
+        // Settings › Translation: how far the owner's own message got in translation — their words,
+        // not a card (`TranslationTests` covers it off the queue).
+        "translation",
     ]
 
     /// What the agent reads on such a turn: words written for it, which no card is read out of.

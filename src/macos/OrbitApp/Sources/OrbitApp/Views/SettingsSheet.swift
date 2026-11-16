@@ -42,7 +42,10 @@ struct SettingsSheet: View {
                         case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
                         case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
                         case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
-                        case .settingsPage(let page):     SettingsPageView(page: page)
+                        // Inline, as the list is: a page pushed from the list inherits that, but
+                        // one the sheet opens directly on (the composer's translation tag opens
+                        // Sessions) would otherwise get a large title drawn over its first row.
+                        case .settingsPage(let page):     SettingsPageView(page: page).navigationBarTitleDisplayMode(.inline)
                         case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                         case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
                         case .providerDetail(let providerID): ProviderDetailSettingsPage(providerID: providerID)
@@ -732,15 +735,28 @@ private struct SessionSettingsPage: View {
     @State private var promptSuggestions = true
     /// The account's switch for session recaps. Absent on the server means on.
     @State private var recaps = true
+    /// Settings › Translation: the account's switch. Absent on the server means off.
+    @State private var translation = false
+    /// Settings › Prompt optimizer: the account's switch. Absent on the server means on.
+    @State private var promptOptimizer = true
+    /// "Show both languages" (02-bilingual.png, mark A). Absent on the server means off.
+    @State private var bilingual = false
     @State private var seeded = false
 
     var body: some View {
         Form {
-            ForEach(SessionSettings.Row.allCases, id: \.self) { row in
-                Section {
-                    control(row)
-                } footer: {
-                    Text(SessionSettings.footer(row))
+            ForEach(SessionSettings.groups, id: \.self) { group in
+                switch group {
+                case .row(let row):
+                    Section {
+                        control(row)
+                    } footer: {
+                        Text(SessionSettings.footer(row))
+                    }
+                case .translation:
+                    translationSection
+                case .promptOptimizer:
+                    promptOptimizerSection
                 }
             }
         }
@@ -768,6 +784,22 @@ private struct SessionSettingsPage: View {
             guard (model.user?.preferences?.showRecaps ?? true) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(recaps: value)) }
         }
+        .onChange(of: translation) { _, value in
+            guard (model.user?.preferences?.translationEnabled ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: value)) }
+        }
+        .onChange(of: promptOptimizer) { _, value in
+            // A server without a key draws it off; that is not the owner turning it off.
+            guard !PromptOptimizer.unavailable(model.user),
+                  PromptOptimizer.switchedOn(model.user?.preferences) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: value)) }
+        }
+        .onChange(of: bilingual) { _, value in
+            guard (model.user?.preferences?.translationBilingual ?? false) != value else { return }
+            Task { await model.savePreferences(UpdatePreferencesRequest(translationBilingual: value)) }
+        }
+        // Another client changed it: follow the account.
+        .onChange(of: model.user?.preferences?.translationBilingual) { _, value in bilingual = value == true }
     }
 
     /// A row's own control: the mode is a menu on the row, as the list's Appearance is; the other four
@@ -788,6 +820,62 @@ private struct SessionSettingsPage: View {
         }
     }
 
+    /// Settings › Translation (board frame 7): the switch, Your language and Agents work in (each a
+    /// pushed list of the one shared list) and the web's words as the footer, naming the agent
+    /// language. A server without a DeepSeek key draws it all disabled with frame 2's notice.
+    @ViewBuilder private var translationSection: some View {
+        let unavailable = SessionTranslation.unavailable(model.user)
+        let prefs = model.user?.preferences
+        Section {
+            Toggle(TranslationCopy.translateConversations, isOn: $translation)
+                .accessibilityIdentifier(TranslationCopy.toggleIdentifier)
+            if unavailable {
+                Text(TranslationCopy.unavailable)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.orange)
+            }
+            NavigationLink {
+                TranslationLanguagePicker(side: .owner)
+            } label: {
+                LabeledContent(TranslationCopy.yourLanguage, value: SessionTranslation.language(prefs).name)
+            }
+            NavigationLink {
+                TranslationLanguagePicker(side: .agent)
+            } label: {
+                LabeledContent(TranslationCopy.agentsWorkIn, value: SessionTranslation.agentLanguage(prefs).name)
+            }
+            // Only while translation is on (mark A).
+            if translation {
+                Toggle(TranslationCopy.showBothLanguages, isOn: $bilingual)
+                    .accessibilityIdentifier(TranslationCopy.bilingualIdentifier)
+            }
+        } header: {
+            SettingsHeader(TranslationCopy.title)
+        } footer: {
+            Text(TranslationCopy.translateConversationsHint(SessionTranslation.agentLanguage(prefs)) + " " + TranslationCopy.bilingualFootnote
+                 + " " + TranslationCopy.footnote)
+        }
+        .disabled(unavailable)
+    }
+
+    /// Settings › Prompt optimizer (board frame 1): one account-wide switch, off by default, under
+    /// Suggested replies. A server without a DeepSeek key draws it disabled with frame 1b's notice.
+    @ViewBuilder private var promptOptimizerSection: some View {
+        let unavailable = PromptOptimizer.unavailable(model.user)
+        Section {
+            Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)
+            .accessibilityIdentifier(PromptOptimizerCopy.toggleIdentifier)
+            if unavailable {
+                Text(PromptOptimizerCopy.unavailable)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.orange)
+            }
+        } footer: {
+            Text(PromptOptimizerCopy.hint)
+        }
+        .disabled(unavailable)
+    }
+
     private func seed() {
         guard !seeded else { return }
         seeded = true
@@ -799,6 +887,47 @@ private struct SessionSettingsPage: View {
         modelRouting = p?.smartModelSelection ?? false
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
+        translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+        promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)
+        bilingual = p?.translationBilingual == true
+    }
+}
+
+/// Your language or Agents work in: the one shared list, one ticked, written the moment one is
+/// picked (board frame 7's pushed single-choice list).
+private struct TranslationLanguagePicker: View {
+    enum Side { case owner, agent }
+    let side: Side
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let prefs = model.user?.preferences
+        let current = side == .owner ? SessionTranslation.language(prefs) : SessionTranslation.agentLanguage(prefs)
+        Form {
+            Section {
+                ForEach(TranslationLanguage.allCases, id: \.self) { lang in
+                    Button {
+                        guard lang != current else { return }
+                        let patch = side == .owner
+                            ? UpdatePreferencesRequest(translationLanguage: lang.rawValue)
+                            : UpdatePreferencesRequest(translationAgentLanguage: lang.rawValue)
+                        Task { await model.savePreferences(patch) }
+                    } label: {
+                        HStack {
+                            Text(lang.name).foregroundStyle(Color.primary)
+                            Spacer()
+                            if lang == current {
+                                Image(systemName: "checkmark").foregroundStyle(.tint)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                }
+            } footer: {
+                Text(side == .owner ? TranslationCopy.yourLanguageHint : TranslationCopy.agentsWorkInHint)
+            }
+        }
+        .navigationTitle(side == .owner ? TranslationCopy.yourLanguage : TranslationCopy.agentsWorkIn)
     }
 }
 

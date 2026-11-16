@@ -328,6 +328,10 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// The rerun or observation handling it while that is in flight (§4.7 H1, §10.8), or nil — for
     /// none, and from a server that predates it.
     public let handling: OpenItemHandling?
+    /// Whether the project's coordinator can be neither asked again nor messaged right now, as the
+    /// server read it with the list. An escalated card's heading says so instead of "no one acted on
+    /// this" (`ExceptionCards.heading`). False from a server that predates it.
+    public let coordinatorUnreachable: Bool
 
     public var id: String { itemId }
 
@@ -343,7 +347,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 primaryAction: ProjectOpenItemAction? = nil, handledBy: [OpenItemFixTask]? = nil,
                 question: CoordinatorQuestion? = nil,
                 startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
-                facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil) {
+                facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil,
+                coordinatorUnreachable: Bool = false) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -370,6 +375,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.doneRequest = doneRequest
         self.facts = facts
         self.handling = handling
+        self.coordinatorUnreachable = coordinatorUnreachable
     }
 
     public init(from decoder: Decoder) throws {
@@ -407,6 +413,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         doneRequest = (try? c.decodeIfPresent(DoneRequest.self, forKey: .doneRequest)) ?? nil
         facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
         handling = (try? c.decodeIfPresent(OpenItemHandling.self, forKey: .handling)) ?? nil
+        coordinatorUnreachable = (try? c.decodeIfPresent(Bool.self, forKey: .coordinatorUnreachable)) ?? false
     }
 }
 

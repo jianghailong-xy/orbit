@@ -21,12 +21,19 @@ or infer permission from available credentials. Local fixtures are preparation e
 
 ## Image and build
 
-[Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, Codex 0.158.0,
-Claude Code 2.1.300 and a dated Debian package snapshot. Codex and Claude Code are the supplied
-engines (Claude Code runs Anthropic-dialect API keys, DeepSeek's included); Kimi, OpenCode,
-Antigravity and DeepSeek Harness are not installed. Both use their native binaries (Codex with its
-adjacent vendor tools), avoiding a Node wrapper between Orbit and the engine, and Claude Code's own
-updater is off (`DISABLE_AUTOUPDATER=1`). A neutral git identity, `Orbit Runner <runner@orbit.invalid>`,
+[Dockerfile](image/Dockerfile) pins the base images by digest, Go 1.27.1, Node 26.10.0, a dated Debian
+package snapshot and every engine Orbit runs: Codex 0.158.0, Claude Code 2.1.300 (which also runs
+Anthropic-dialect API keys, DeepSeek's included), OpenCode 1.19.5, Kimi Code 2.6.2, Antigravity CLI 1.5.9,
+Cursor CLI 2026.10.14-941492e and DeepSeek Harness 0.2.0-rc.2. [pins.json](image/pins.json) records each
+pin and where its digest comes from. Kimi Code and Antigravity CLI are fetched by URL and checked against
+the SHA-256/SHA-512 their publishers' manifests give; Codex, Claude Code and OpenCode are their npm
+packages' native binaries, avoiding a Node wrapper between Orbit and the engine. Cursor CLI and DeepSeek
+Harness are installed the way the runner installs them (the build and SHA-256 `cursor_install.go` pins,
+`npm ci` from the runner's own Harness lock) into the read-only `/opt/orbit-engines`, which
+`ORBIT_ENGINE_STORE` points the runner at; a Go spec keeps those pins in step with the runner's. Both are
+measured on Linux x64 only, so an arm64 image ships the other five. Nothing is installed or updated at
+run time (`autoInstallEngines: false`, `ORBIT_NO_ENGINE_UPDATE=1`), and Claude Code's own updater is off
+(`DISABLE_AUTOUPDATER=1`). A neutral git identity, `Orbit Runner <runner@orbit.invalid>`,
 is set at system level (`/etc/gitconfig`), so the runner's own commits (the `autoInitGit` baseline,
 finalize, checkpoints) work on a fresh volume; an identity in the repository, the user's
 `~/.gitconfig` or the environment takes precedence over it. The build checks both, and the image

@@ -469,6 +469,14 @@ private struct RunnerEngineContent: View {
                     .font(.orbitLabel)
                     .foregroundStyle(RunnerInk.red)
             }
+            // Refused because sessions are running in it: which ones, each a way to it (web parity).
+            if let blocking = removal?.blocking, !blocking.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(blocking) { session in
+                        blockingSessionRow(session)
+                    }
+                }
+            }
             if signingIn == line.id {
                 RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,
                                  onClose: { closeSignIn() }, onSignedIn: { landed(line.id) })
@@ -511,6 +519,33 @@ private struct RunnerEngineContent: View {
         .onChange(of: foldsBack(line, now: now)) { _, fold in
             if fold { closeSignIn() }
         }
+    }
+
+    /// One session a refused removal lists: its dot, its title as a link, where it stands, and Open
+    /// session — the whole row a press that opens it.
+    private func blockingSessionRow(_ session: RunnerPageFormat.BlockingSession) -> some View {
+        Button { openSession(session.id) } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Circle()
+                    .fill(RunnerInk.status(session.tone))
+                    .frame(width: 6, height: 6)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+                Text(session.title)
+                    .foregroundStyle(Color.accentColor)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if let label = session.label {
+                    Text(label)
+                        .foregroundStyle(Color.secondary)
+                }
+                Spacer(minLength: 8)
+                Text("\(RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_OPEN) →")
+                    .foregroundStyle(Color.accentColor)
+            }
+            .font(.orbitLabel)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// The row with its presses: its long-press menu, and its left swipe — on a phone (iOS 26,

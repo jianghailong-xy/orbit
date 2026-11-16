@@ -137,6 +137,18 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         /// (`CrossingBatches`), by its id (`crossing-batch-<first row>`): placed at its first row's
         /// `requestedAt` and re-read from the project's handoffs on every render, live or answered.
         case crossingBatch(batchID: String)
+        /// A scheduled task's card this conversation asked (docs/scheduled-tasks-design.md §8.1, §4): the create
+        /// card or an envelope card, by its request id, placed at its own `createdAt` and re-read from the
+        /// conversation's `GET /sessions/:id/schedule-cards` on every render.
+        case scheduleCard(requestID: String)
+        /// The record a change inside the envelope left here (§4): "Changed Codex stable check: time 10:00 →
+        /// 09:00 · Undo", placed at its own `createdAt`.
+        case scheduleRecord(scheduleID: String, revision: Int)
+        /// A scheduled task's run, at the head of its own session: "Scheduled run · planned 10:00, started 10:01 ·
+        /// access Check only · …" (§7.4), placed at the run's planned time.
+        case scheduleRunStrip(runID: String)
+        /// What that run reported, after its last event: placed at the run's end.
+        case scheduleRunReport(runID: String)
     }
 
     /// Where this row belongs, which is the whole difference between a question and a record.
@@ -226,6 +238,11 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         // The web card's DOM id, `owner-request-<id>`.
         case .ownerRequest(let requestID):        return "owner-request-\(PublicID.storageKey(requestID))"
         case .crossingBatch(let batchID):         return batchID
+        case .scheduleCard(let requestID):        return "schedule-card-\(PublicID.storageKey(requestID))"
+        case .scheduleRecord(let scheduleID, let revision):
+            return "schedule-record-\(PublicID.storageKey(scheduleID))@\(revision)"
+        case .scheduleRunStrip(let runID):        return "schedule-run-strip-\(PublicID.storageKey(runID))"
+        case .scheduleRunReport(let runID):       return "schedule-run-report-\(PublicID.storageKey(runID))"
         }
     }
 }
@@ -392,7 +409,8 @@ public enum DeliveryAnchor {
              .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion,
-             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch:
+             .coordinatorQuestionRecord, .escalatedItem, .fusePause, .ownerRequest, .crossingBatch,
+             .scheduleCard, .scheduleRecord, .scheduleRunStrip, .scheduleRunReport:
             return items.last?.id
         }
     }
@@ -451,6 +469,9 @@ public enum DeliveryAnchor {
 public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// What this conversation made as it started (`CreatedWorkspaceLine`): its first line.
     case createdWorkspace(CreatedWorkspaceLine)
+    /// A successor coordinator's handoff from the one before it (board 02 ③): the note card and
+    /// the waits that moved here, at the top of the conversation it opened.
+    case handoffReceived(SessionCoordinatorHandoffReceived)
     case loadOlder(cursor: Int)
     case item(TranscriptItem)
     /// How long a turn worked, or has been working: drawn under the message that opened it and over
@@ -459,6 +480,9 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// A stretch of work between two replies — settled thinking and tool calls — folded into one
     /// steps line (see `TranscriptRows.groupToolRuns`, `StepsSummary`).
     case steps([TranscriptItem])
+    /// Two or more Agents (`mcp__orbit__delegate`) started one after another with nothing between them,
+    /// drawn as one group (`SubagentGroup`, `TranscriptRows.groupAgents`).
+    case agents([ToolCard])
     /// Turns Orbit opened, each with everything drawn under it, folded into one row — a run of them
     /// into one group row (`OrbitExchangeFold`; web parity: `OrbitExchangeSolo` / `OrbitExchangeGroup`).
     case exchanges([OrbitExchange])
@@ -482,10 +506,13 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     public var id: String {
         switch self {
         case .createdWorkspace:      return "created-workspace"
+        case .handoffReceived:       return "coordinator-handoff-received"
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
         case .turnHead(let line):    return "turn-head-\(line.bubbleID)"
         case .steps(let items):      return items.first?.id ?? "steps-empty"
+        // The bare id of its first call, for the steps line's reason.
+        case .agents(let cards):     return cards.first?.id ?? "agents-empty"
         // The bare id of the first turn's opening bubble, for `.steps`' reason: it replaces that
         // bubble's own row, and a scroll aimed at it must still land somewhere.
         case .exchanges(let turns):  return turns.first?.id ?? "exchanges-empty"
@@ -515,6 +542,7 @@ public enum TranscriptRows {
     ///
     /// `createdWorkspace` is the conversation's first line, so it is above everything — and only once
     /// the first page is loaded: first means first, not the top of a window that starts later.
+    /// `handoffReceived` (a successor coordinator's note card) follows it, by the same rule.
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
@@ -525,9 +553,12 @@ public enum TranscriptRows {
                              recap: RecapCard? = nil,
                              foldExchanges: Bool = true,
                              watchName: ((WatchWake, WatchWakeTarget) -> String?)? = nil,
+                             handoffReceived: SessionCoordinatorHandoffReceived? = nil,
                              createdWorkspace: CreatedWorkspaceLine? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         if let createdWorkspace, !canPageOlder { rows.append(.createdWorkspace(createdWorkspace)) }
+        // The note the conversation opened with, by the same rule: first, once the first page is in.
+        if let handoffReceived, !canPageOlder { rows.append(.handoffReceived(handoffReceived)) }
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
         var anchored: [String: [LocalStatusCard]] = [:]
@@ -647,7 +678,7 @@ public enum TranscriptRows {
         // Ids are unique by construction above; a repeat could only come from a malformed stream
         // (two events sharing a tool_use id). Drop it rather than hand the List a diff that aborts.
         var seen = Set<String>()
-        let grouped = groupToolRuns(rows)
+        let grouped = groupAgents(groupToolRuns(rows))
         // The turns Orbit opened, folded with their answers (`OrbitExchangeFold`), unless the caller
         // draws every row as it is — a static export, a sub-agent's own transcript.
         let folded = foldExchanges ? OrbitExchangeFold.fold(grouped, watchName: watchName) : grouped
@@ -672,6 +703,28 @@ public enum TranscriptRows {
         for row in rows {
             if case .item(let item) = row, isStep(item) {
                 run.append(item)
+            } else {
+                flush()
+                out.append(row)
+            }
+        }
+        flush()
+        return out
+    }
+
+    /// Fold Agents started together — two or more `delegate` calls in rows of their own, one after the
+    /// other — into one group row. One alone keeps its own row; anything between two of them, a sentence
+    /// or a steps line, keeps them apart.
+    static func groupAgents(_ rows: [TranscriptRow]) -> [TranscriptRow] {
+        var out: [TranscriptRow] = []
+        var run: [ToolCard] = []
+        func flush() {
+            if run.count > 1 { out.append(.agents(run)) } else { out.append(contentsOf: run.map { .item(.toolCall($0)) }) }
+            run.removeAll()
+        }
+        for row in rows {
+            if case .item(.toolCall(let card)) = row, card.name == SubagentBlock.toolName {
+                run.append(card)
             } else {
                 flush()
                 out.append(row)
@@ -708,7 +761,7 @@ public enum TranscriptRows {
                      foldExchanges: false)
             .filter {
                 switch $0 {
-                case .item, .steps: return true
+                case .item, .steps, .agents: return true
                 default: return false
                 }
             }

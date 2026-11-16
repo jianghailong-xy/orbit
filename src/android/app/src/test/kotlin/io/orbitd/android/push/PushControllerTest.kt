@@ -81,20 +81,17 @@ class PushControllerTest {
         assertTrue(fixture.active().isEmpty())
     }
 
-    @Test fun foregroundUsesOneNoticeAndAuthorityClearsIt() = runBlocking {
+    /** A foreground approval stays in the tray, silently; the app notices it from the Open snapshot (`NeedsYouToasts`). */
+    @Test fun foregroundApprovalStaysInTheTrayAndAuthorityClearsIt() = runBlocking {
         fixture.signIn()
         fixture.push.onActivityStarted(Activity())
         val first = fixture.data()
         fixture.push.receive(first)
-        assertEquals(sid, fixture.push.notice.value?.payload?.sessionId)
-        assertEquals(1, fixture.active().size) // Also kept in the tray, silently.
-        fixture.push.dismissNotice()
+        assertEquals(1, fixture.active().size)
         fixture.push.receive(first)
-        assertNull(fixture.push.notice.value)
         fixture.push.receive(fixture.data())
         fixture.pending = false
         fixture.push.receive(fixture.sync())
-        assertNull(fixture.push.notice.value)
         assertTrue(fixture.active().isEmpty())
     }
 
@@ -112,7 +109,6 @@ class PushControllerTest {
         val silent = manager.activeNotifications.single()
         assertEquals(PushNotifications.SILENT_GROUP, silent.notification.group)
         assertEquals(Notification.GROUP_ALERT_SUMMARY, silent.notification.groupAlertBehavior)
-        assertNull(fixture.push.notice.value)
         fixture.push.onActivityStopped(activity)
         assertTrue(fixture.push.receive(fixture.data(kind = "finished", sessionId = settled)))
         val sounding = manager.activeNotifications.single { it.notification.extras.getString(Notification.EXTRA_TITLE) == "Controlled approval" && it.tag != silent.tag }

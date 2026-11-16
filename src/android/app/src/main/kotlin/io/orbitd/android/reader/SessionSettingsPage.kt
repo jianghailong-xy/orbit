@@ -148,7 +148,7 @@ private fun LazyListScope.environmentGroup(detail: JsonObject, state: S.State, r
 
 private fun LazyListScope.notificationsGroup(state: S.State, enabled: Boolean, patch: (JsonObject) -> Unit) {
     item { Header("Notifications", "iOS and Android") }
-    listOf(false to "When a turn finishes", true to "When it needs you").forEach { (needsYou, title) ->
+    listOf(false to "When the session finishes", true to "When it needs you").forEach { (needsYou, title) ->
         item {
             var choosing by remember { mutableStateOf(false) }
             val value = if (needsYou) state.notifyNeedsYou else state.notifyTurnFinished

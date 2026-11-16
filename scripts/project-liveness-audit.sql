@@ -151,6 +151,18 @@ SELECT item."project_id"                                       AS project_id,
                   AND (line_receipt."source_sha" IS NULL
                     OR upstream_receipt."source_sha" = line_receipt."source_sha"
                     OR (upstream_receipt."detail" -> 'observed' IS DISTINCT FROM 'true'::jsonb
+                      AND NOT EXISTS (
+                        SELECT 1 FROM "session_merge_receipt" named_line
+                          JOIN "session_merge_receipt" later_line
+                            ON later_line."task_id" = named_line."task_id"
+                           AND later_line."target_branch" = named_line."target_branch"
+                           AND later_line."result" = 'MERGED'
+                           AND later_line."target_sha_after" <> upstream_receipt."source_sha"
+                           AND later_line."created_at" > named_line."created_at"
+                         WHERE named_line."task_id" = owed_task."id"
+                           AND named_line."result" IN ('MERGED', 'ALREADY_MERGED')
+                           AND named_line."target_branch" = regexp_replace(upstream_line."integration_ref", '^refs/heads/', '')
+                           AND named_line."target_sha_after" = upstream_receipt."source_sha")
                       AND upstream_receipt."created_at" > line_receipt."created_at"))
              ) THEN 'ON_UPSTREAM'
              WHEN EXISTS (

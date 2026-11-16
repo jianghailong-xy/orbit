@@ -4,6 +4,10 @@ import io.orbitd.android.core.auth.*
 import io.orbitd.android.core.cards.ClaudeRegion
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.net.*
+import io.orbitd.android.core.promptoptimizer.PromptOptimizationRequest
+import io.orbitd.android.core.promptoptimizer.PromptOptimizer
+import io.orbitd.android.core.promptoptimizer.PromptOptimizerState
+import io.orbitd.android.core.promptoptimizer.optimizePrompt
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.directory.directoryError
 import io.orbitd.android.management.RunnerPage
@@ -70,6 +74,65 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         launch { persist() }
     }
     fun clearError() { mutable.update { it.copy(error = null) } }
+
+    // Prompt optimizer (docs/prompt-optimizer-design.md, board docs/mocks/prompt-optimizer), iOS ConsoleModel's. Every rule is
+    // PromptOptimizerState's; this runs the request and puts text in the box.
+    private var optimizeJob: Job? = null
+    private fun optimizer(change: (PromptOptimizerState) -> PromptOptimizerState) = mutable.update { it.copy(optimizer = change(it.optimizer)) }
+
+    /** ✦ Optimize pressed (frame 2): the draft goes to the server with this session — or, for a new session, the workspace picked (a
+     * bare machine's has none yet). Pressed while busy (frame 3), it cancels. Nothing in the box changes until Use. */
+    fun optimize() {
+        if (state.value.optimizer.isOptimizing) { cancelOptimize(); return }
+        val draft = state.value.draft.text
+        val trimmed = draft.trim()
+        if (trimmed.isEmpty()) return
+        optimizer { it.start(draft) }
+        val request = PromptOptimizationRequest(trimmed.take(PromptOptimizer.MAX_DRAFT_CHARS),
+            sessionId = if (target == null) sessionId else null, workspaceId = target?.workspaceId?.takeIf { it.isNotEmpty() })
+        optimizeJob?.cancel()
+        optimizeJob = scope.launch {
+            try {
+                val result = auth.optimizePrompt(handle, request)
+                optimizer { it.succeeded(result) }
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (_: Exception) { optimizer { it.failedNow() } }
+        }
+    }
+
+    /** The busy button pressed again: the press is dropped, the draft is as it was. */
+    fun cancelOptimize() {
+        optimizeJob?.cancel(); optimizeJob = null
+        optimizer { it.cancel() }
+    }
+
+    /** Try again (frame 4's, or frame 6's failure line): the box's draft as it is now goes out again. */
+    fun retryOptimize() { optimizer { it.dismiss() }; optimize() }
+
+    /** × / back / swipe down: the sheet (or the failure line) goes; the draft is kept. */
+    fun dismissOptimization() = optimizer { it.dismiss() }
+
+    fun toggleOptimizationGloss() = optimizer { it.toggleGloss() }
+
+    /** Use, or Edit, then use: the suggestion replaces the draft's words (attachments stay), the caret at its end. */
+    fun useOptimization() {
+        val text = state.value.optimizer.suggestion?.insertText ?: return
+        val current = state.value.draft.text
+        optimizer { it.use(current) }
+        edit(text, text.length, text.length)
+    }
+
+    /** Frame 5's Undo: the owner's own draft comes back. */
+    fun undoOptimization() {
+        val o = state.value.optimizer
+        val current = state.value.draft.text
+        val draft = o.undoDraft?.takeIf { o.offersUndo(current) } ?: return
+        optimizer { it.undo(current) }
+        edit(draft, draft.length, draft.length)
+    }
+
+    /** The Undo toast went: Undo is no longer offered; a send of the unedited text still skips translation. */
+    fun forgetOptimizationUndo() = optimizer { it.forgetUndo() }
     /** Why the box won't do what was asked of it, said as an error: there until dismissed. */
     fun refuse(message: String) { mutable.update { it.copy(error = message) } }
     /** Whether [effective] — a session's detail, or a draft's workspace, under the picks held for it — runs on DeepSeek Harness: its
@@ -199,7 +262,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     }
                 }
                 val id = UUID.randomUUID().toString()
-                val body = if (target != null) {
+                // D2: the unedited gloss goes with the optimizer's agent-language prompt as its translation — on a turn, a revive and
+                // a new session's opening message alike. Send never waits for the optimizer: a press still out, or a sheet still open, goes.
+                val optimizedTranslation = state.value.optimizer.optimizedTranslation(draft.text)
+                cancelOptimize(); dismissOptimization()
+                val body = PromptOptimizer.withOptimizedTranslation(if (target != null) {
                     buildCreateBody(detail, content, shell, draft.attachments, seedModel, newWorkspace)
                 } else buildJsonObject {
                     if (endpoint == "resume") {
@@ -209,7 +276,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
                     if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
                     putJsonArray("attachmentIds") { draft.attachments.forEach { add(it.remoteId!!) } }
-                }
+                }, optimizedTranslation)
                 val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments)
                 mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList(), pending = pending)) }
                 try { persist() } catch (e: Exception) {
@@ -218,6 +285,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     throw e
                 }
                 transmit(pending, firstAttempt = true)
+                // The optimized text is spent.
+                optimizer { it.sent() }
             } finally { mutable.update { it.copy(busy = false, waiting = false) } }
         }
     }
@@ -240,6 +309,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
             transmit(pending, firstAttempt = true)
         } finally { mutable.update { it.copy(busy = false) } }
     }
+    /** The context dialog's Compact (board 03): the engine's `/compact`, sent as [sendMessage] sends, a refusal shown as the box's. */
+    fun compact() { launch { sendMessage(CoordinatorHandoffCopy.COMPACT_COMMAND) } }
     fun retrySend() {
         if (state.value.busy || state.value.waiting) return
         if (state.value.acknowledgementPending) {
@@ -305,6 +376,17 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * with it — the runner's jobs, a dev server or watcher among them, and the engine's own shells, Monitors and background workflows.
      * The session is not ended: its next turn runs in it. The one interrupt that asks for this; a bare one kills nothing. */
     fun stop() = control("interrupt", body = buildJsonObject { put("stopBackgroundWork", true) })
+    /** Settings › Translation's doors on one message (`turns/:id/translation/retry`, `…/send-as-written`, `events/:seq/translation/retry`):
+     * a press of their own, which neither waits for the box nor holds it — a message can be sent while another one's translation is
+     * retried — and goes once while it is out. What came of it arrives on the session's stream; a refusal is the box's error. */
+    private val translationPresses = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun translationAction(endpoint: String) {
+        if (!translationPresses.add(endpoint)) return
+        launch {
+            try { api.mutation(endpoint, null, HttpMethod.POST); refresh() }
+            finally { translationPresses.remove(endpoint) }
+        }
+    }
     fun control(endpoint: String, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null) {
         if (state.value.busy || state.value.waiting) return
         mutable.update { it.copy(busy = true, error = null) }

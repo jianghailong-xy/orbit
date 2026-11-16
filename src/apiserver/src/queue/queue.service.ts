@@ -119,6 +119,13 @@ import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/
 import { DISPATCH_PAUSED } from './dispatch-pause';
 import { CLAUDE_REGION_ERROR_PREFIX, claudeRegionHold } from '../runners/runner-region';
 import { openingTurnId } from '../sessions/orbit-authored-turn';
+import {
+  runAccessLevel,
+  scheduleRunAgentFields,
+  scheduleRunPermissionMode,
+  scheduleRunAllowedTools,
+  scheduleRunDisallowedTools,
+} from '../schedules/schedule-access';
 
 /** What a claim attempt answers when another transaction holds the row it picked (FOR UPDATE NOWAIT, 55P03). */
 const LOST_LOCK = Symbol('the claim lost the row lock');
@@ -518,6 +525,15 @@ export class QueueService {
               OR s.id = ANY(${runner.onlySessionIds ? [...runner.onlySessionIds] : null}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
+            -- Settings › Translation (sessions/turn-translation.ts): a new or revived session whose only
+            -- work is the owner's message, HELD while it is translated or after its translation failed,
+            -- waits for that message. Releasing it wakes the queue again.
+            AND NOT (
+              EXISTS (SELECT 1 FROM "conversation_turn" held
+                       WHERE held."session_id" = s.id AND held."status" = 'HELD')
+              AND NOT EXISTS (SELECT 1 FROM "conversation_turn" work
+                               WHERE work."session_id" = s.id AND work."status" IN ('PENDING', 'IN_FLIGHT'))
+            )
             -- An unresolved/disabled configured identity must never become a Claude job. A shared
             -- provider resolves for an admin's session only (usableProviderScope): a member's is never claimed.
             --
@@ -845,6 +861,8 @@ export class QueueService {
         // The workspace's standing "always allow" grants ride along: they are what turns an
         // approval a human already answered into one this session never has to ask again.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+        // A scheduled task's run: its level decides the tools it may and may not call (§6.2, schedule-access.ts).
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
         task: {
           select: {
             codeless: true,
@@ -1191,6 +1209,9 @@ export class QueueService {
       // The same for the wiki (ORBIT_WIKI, wiki/wiki-rollout.ts): `wikiDisabled` when it is not on for the owner, so
       // the runner spawns the session without the wiki tools.
       ...wikiClaimFields(currentWikiRollout(), session.ownerId),
+      // A scheduled task's run (docs/scheduled-tasks-design.md §7.1): the runner spawns it with ORBIT_SCHEDULE_RUN=1,
+      // which is what lists schedule_run_report in its `orbit mcp`. Absent for every other session.
+      ...(session.scheduleRunId ? { scheduleRun: true } : {}),
       // Lets `orbit mcp` shrink its wait budget with depth, so a nested session_create(wait)
       // cannot outlast the one waiting on it.
       spawnDepth: session.spawnDepth,
@@ -1201,12 +1222,22 @@ export class QueueService {
         model: runnerModel,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
-        allowedTools: dispatchAllowedTools(
+        // A scheduled run is held to the level it started with (runAccessLevel, design §6.2).
+        allowedTools: scheduleRunAllowedTools(
+          dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
+          runAccessLevel(session.scheduleRun),
           provider,
-          ALWAYS_ALLOWED_TOOLS,
           workspace?.permissionRules ?? [],
+          session.assignedRunner?.capabilities,
         ),
-        disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
+        disallowedTools: scheduleRunDisallowedTools(
+          (workspace?.disallowedTools as string[] | null) ?? [],
+          runAccessLevel(session.scheduleRun),
+          provider,
+          session.assignedRunner?.capabilities,
+        ),
+        // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
+        ...scheduleRunAgentFields(runAccessLevel(session.scheduleRun)),
         // Configured providers still borrow one of these runtimes, so the same runtime-level
         // guard applies to API/MCP/old-client input as it does to built-in identities; their
         // vendor-defined model space is exempt from the Claude allow-list though.
@@ -1215,7 +1246,10 @@ export class QueueService {
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          permissionMode,
+          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
+          scheduleRunPermissionMode(
+            permissionMode, runAccessLevel(session.scheduleRun), provider, session.assignedRunner?.capabilities,
+          ),
           customRow?.enabled === true,
           session.assignedRunner?.runsAsRoot,
           session.assignedRunner?.modelCatalog,

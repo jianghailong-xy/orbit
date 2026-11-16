@@ -1333,6 +1333,22 @@ button.toast--pill:focus-visible {
 .tp-account-current-theme {
   margin-left: auto;
 }
+/* A machine's state in the account menu's Machines level: green online, grey otherwise. A circle, not the 14px
+   icon slot's width (Floating.css widens every icon to it): centred in the slot, over Add a machine's +. */
+.orbit-menu-icon > .tp-account-machine-dot {
+  display: inline-block;
+  align-self: center;
+  flex: none;
+  width: 8px;
+  min-width: 8px;
+  height: 8px;
+  margin: 0 3px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.tp-account-machine-dot[data-online='true'] {
+  background: var(--success-solid);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
@@ -8073,6 +8089,24 @@ button.chat-jump-start:hover {
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
+/* A delivered message's Show original / Show translation, and bilingual's "Sent to the agent in English"
+   (docs/mocks/translation-user-hover): shown on hover with copy and time; always on a touch screen. */
+.chat-user-meta > .chat-translate-foot.is-hover {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-hover,
+.chat-user-meta > .chat-translate-foot.is-hover:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .chat-user-meta > .chat-translate-foot.is-hover {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .chat-user-wrap:hover .chat-user-meta > *,
 .chat-user-meta:focus-within > * {
   opacity: 1;
@@ -8144,6 +8178,336 @@ button.chat-jump-start:hover {
   font-size: 12px;
   line-height: 1.4;
   color: var(--text-3);
+}
+/* Settings › Translation (docs/mocks/session-translation, frames 4–6): the foot under a translated
+   message — "Translated · Show original" and its flip — the chips while a translation is under way,
+   and the failures with their way out. Muted like the steer state; a failure owns the error colour. */
+.chat-translate-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.chat-translate-foot.is-reply {
+  display: flex;
+  margin: 2px 0 6px;
+  /* Under the reply's text, which .chat-assistant insets by 12px. */
+  padding: 0 12px;
+}
+/* A delivered reply's flip, at the end of its last line (docs/mocks/translation-reply-hover):
+   invisible but in the line, so a hover never re-wraps the text; shown while the reply is hovered,
+   the flip has focus, or the original is on screen. Without hover (touch), its own line as before. */
+.chat-translate-foot.is-reply.is-tail {
+  display: inline-flex;
+  margin: 0 0 0 8px;
+  padding: 0;
+  vertical-align: baseline;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.chat-translated-reply:hover .chat-translate-foot.is-tail,
+.chat-translate-foot.is-tail:focus-within,
+.chat-translate-foot.is-tail.is-flipped {
+  opacity: 1;
+}
+.md-tail-block {
+  margin-top: 2px;
+}
+.md-tail-block > .chat-translate-foot.is-reply.is-tail {
+  margin: 0;
+}
+@media (hover: none) {
+  .chat-translate-foot.is-reply.is-tail {
+    display: flex;
+    margin: 2px 0 0;
+    opacity: 1;
+  }
+}
+.chat-translate-foot.is-error {
+  color: var(--error-solid);
+}
+.chat-translate-sep {
+  color: var(--text-3);
+}
+.chat-translate-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-2);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.chat-translate-foot.is-error .chat-translate-action {
+  color: var(--error-solid);
+}
+.chat-translate-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.chat-translate-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--fill-2, rgba(0, 0, 0, 0.05));
+  color: var(--text-2);
+}
+/* A reply still in English because its translation is on its way (2A): greyed until it is swapped. */
+.chat-translated-reply.is-pending .chat-assistant {
+  color: var(--text-2);
+}
+/* "Show both languages" (docs/mocks/session-translation/02-bilingual.png): the English under a dashed
+   divider, a size smaller and grey. In the owner's bubble it sits inside the bubble; under a reply it
+   takes the reply text's 12px inset. A long reply's English starts as two faded lines (frame 3). */
+.chat-bilingual {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.chat-bilingual-reply {
+  padding: 0 12px;
+}
+.chat-bilingual-reply .chat-bilingual {
+  margin-top: 2px;
+}
+.chat-bilingual.is-collapsed .chat-bilingual-text {
+  max-height: calc(2 * 1.55em);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent);
+}
+.chat-bilingual-more {
+  margin-top: 2px;
+  font-size: 12px;
+}
+/* The composer's "<Language> → English" tag (6A): a quiet pill that opens Settings › Translation. */
+.composer-translation-tag {
+  flex: none;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--text-2);
+  background: var(--fill-1, transparent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.composer-translation-tag:hover {
+  color: var(--text-1);
+}
+/* Prompt optimizer (docs/mocks/prompt-optimizer, frames 2–6): ✦ Optimize beside Send, and the
+   suggestion card (or the failure line) above the composer, as the slash menu sits. */
+/* A 32px circle like `+` and Send, neutral so Send stays the one blue control. Its slot never
+   changes size (empty draft, busy), so nothing in the toolbar moves around it. */
+.composer-optimize {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.composer-optimize:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.composer-optimize:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.composer-optimize:disabled {
+  color: var(--text-4);
+  cursor: default;
+}
+.composer-optimize-spin {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--text-3);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: composer-optimize-spin 0.9s linear infinite;
+}
+@keyframes composer-optimize-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.composer-optimized {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 19;
+  display: flex;
+  flex-direction: column;
+  max-height: min(60vh, 520px);
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px var(--fill-inset);
+  overflow: hidden;
+}
+.composer-optimized-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 16px;
+  background: var(--brand-tint);
+  font-size: 13px;
+}
+.composer-optimized-title {
+  flex: 1;
+  color: var(--brand);
+  font-weight: 500;
+}
+.composer-optimized-earlier {
+  color: var(--warning);
+  font-size: 12px;
+}
+.composer-optimized-close {
+  flex: none;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.composer-optimized-close:hover {
+  color: var(--text-1);
+}
+.composer-optimized-text {
+  padding: 12px 16px 8px;
+  overflow-y: auto;
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.composer-optimized-added {
+  background: var(--success-bg);
+  color: inherit;
+  border-radius: 2px;
+}
+.composer-optimized-used {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.composer-optimized-chip {
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-2);
+  line-height: 20px;
+}
+.composer-optimized-agent-note {
+  padding: 0 16px 10px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.composer-optimized-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.composer-optimized-use,
+.composer-optimized-edit,
+.composer-optimized-retry {
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.composer-optimized-use {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: var(--invert-text);
+}
+.composer-optimized-use:hover {
+  background: var(--brand-strong);
+}
+.composer-optimized-retry {
+  border-color: transparent;
+  background: none;
+  color: var(--text-2);
+}
+.composer-optimized-hint {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.composer-optimize-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.composer-optimized-head .composer-optimize-link {
+  color: var(--brand);
+  font-size: 12px;
+}
+.composer-optimize-failed {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  background: var(--error-bg);
+  color: var(--error);
+  font-size: 13px;
+}
+.composer-optimize-failed .composer-optimize-link {
+  font-weight: 500;
+}
+.composer-optimize-failed .composer-optimized-close {
+  margin-left: auto;
+}
+/* Frame 2: the server cannot translate, and says who can change that. */
+.settings-translation-notice {
+  margin: 4px 0 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--warning-border, rgba(217, 119, 6, 0.35));
+  border-radius: 6px;
+  background: var(--warning-bg, rgba(253, 230, 138, 0.25));
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
 }
 /* The way to take a steer back sits in that same 12px line. On a touch screen it keeps its size
    and takes the height a finger needs; the margin gives the padding back, so the line stays put. */
@@ -9337,16 +9701,13 @@ button.chat-jump-start:hover {
   line-height: 1.55;
   color: var(--text-2);
 }
-/* Room at the end of the last line for the ⋯ (07-last-line B): as wide as the part of it inside the
+/* Room at the end of the last line for the × (07-last-line B): as wide as the part of it inside the
    line, plus a gap, so the words never run under it. A last line with no room for it leaves it a
    line of its own. */
 .chat-recap-line::after {
   content: '';
   display: inline-block;
   width: 24px;
-}
-.chat-recap.is-busy .chat-recap-line {
-  opacity: 0.45;
 }
 /* The head runs into the recap: the word and when it was written, then the sentence. */
 .chat-recap-head {
@@ -9362,10 +9723,9 @@ button.chat-jump-start:hover {
 .chat-recap-when {
   margin-left: 4px;
 }
-/* The ⋯ that holds Refresh and hide (×), at the end of the last line: centred on it, hanging 6px past
-   the line's end as the glyph's padding. Shown under the pointer, on keyboard focus, while its menu is
-   open and while a refresh asks; hidden otherwise but still in place, so the words never move when it
-   appears. */
+/* The × that hides the recap, at the end of the last line: centred on it, hanging 6px past the line's
+   end as the glyph's padding. Shown under the pointer and on keyboard focus; hidden otherwise but still
+   in place, so the words never move when it appears. */
 .chat-recap-actions {
   position: absolute;
   right: -6px;
@@ -9375,12 +9735,10 @@ button.chat-jump-start:hover {
   transition: opacity 0.12s ease-out;
 }
 .chat-recap:hover .chat-recap-actions,
-.chat-recap.is-busy .chat-recap-actions,
-.chat-recap.is-open .chat-recap-actions,
 .chat-recap-actions:has(:focus-visible) {
   opacity: 1;
 }
-.chat-recap-more {
+.chat-recap-hide {
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -9392,12 +9750,9 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   cursor: pointer;
 }
-.chat-recap-more:hover:not(:disabled) {
+.chat-recap-hide:hover {
   background: var(--bg-hover);
   color: var(--text-2);
-}
-.chat-recap-more:disabled {
-  cursor: default;
 }
 /* A screen with no hover has no way to show it: there it stays, as on the phones' native cards. */
 @media (hover: none) {
@@ -10168,6 +10523,13 @@ button.chat-jump-start:hover {
      lines and inflate the spacing. */
   white-space: normal;
 }
+
+/* The English is Markdown (.md sets its own 14px): a size smaller than the words above it. Kept after .md itself, whose rule it narrows. */
+.chat-bilingual .md {
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
 .md > *:first-child {
   margin-top: 0;
 }
@@ -11276,8 +11638,10 @@ button.chat-jump-start:hover {
 }
 /* A decision recorded from the conversation, kept where it was made (`EvidenceDecisionReceipt`):
    the card's frame at rest, without the brand tone of a question that is waiting for somebody.
-   Two classes, because `.approval-card` is written further down and would win at one. */
+   Two classes, because `.approval-card` is written further down and would win at one. It is kept
+   to the width of the conversation's other cards (`.crc`), not stretched across the stream. */
 .approval-card.evidence-decision-receipt {
+  max-width: 720px;
   border-color: var(--border);
   background: var(--bg-raised);
 }
@@ -13508,6 +13872,9 @@ button.chat-jump-start:hover {
    (docs/mocks/owner-answer-sent-card/tone.html). Dashed while the turn handing it over waits on the
    queue, as a queued message is. */
 .review-card-preview.answered-question-card {
+  /* The margin `approval-card` gives every other card, which this preview's own class replaces:
+     without it, questions answered back to back draw as one block with three borders. */
+  margin: 10px 0;
   gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--border);
@@ -17828,6 +18195,64 @@ button.chat-jump-start:hover {
   margin-top: 7px;
   font-size: 11.5px;
   color: var(--text-3);
+}
+/* The sessions an account removal was refused over, each a way to that session. */
+.re-blocking {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.re-blocking li + li {
+  border-top: 1px solid var(--error-border);
+}
+.re-blocking-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+.re-blocking-row:hover {
+  background: var(--error-bg);
+}
+.re-blocking-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.re-blocking-dot.running {
+  background: var(--success-solid);
+}
+.re-blocking-dot.waiting {
+  background: var(--warning);
+}
+.re-blocking-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--brand);
+  font-weight: 500;
+}
+.re-blocking-row:hover .re-blocking-title {
+  text-decoration: underline;
+}
+.re-blocking-state {
+  flex: none;
+}
+.re-blocking-open {
+  flex: none;
+  margin-left: auto;
+  color: var(--brand);
+  font-size: 11.5px;
 }
 .re-cmd {
   display: inline-block;
@@ -23279,6 +23704,10 @@ div.landing-jobs-open {
   color: var(--text-2);
   font-size: 12px;
 }
+/* A quiet job's last output, inside the fold under its row (it stays out of the fold only on a failure). */
+.bgwake-job > .bgwake-output {
+  margin-top: 6px;
+}
 .bgwake-output > summary {
   list-style: none;
   cursor: pointer;
@@ -23349,6 +23778,149 @@ div.landing-jobs-open {
   flex-wrap: wrap;
   justify-content: flex-start;
   row-gap: 2px;
+}
+/* A SubAgent's end (SubagentFinishedCard): the same line, marked with the SubAgent card's own purple ✦
+   so it reads back to the card that started it, and what it handed back kept under the line. */
+.sawake .bgwake-mark {
+  font-size: 12px;
+  line-height: 1;
+}
+/* Purple only while it finished: scoped so the dark theme's purple never outranks the error tone. */
+.sawake:not(.is-failed) .bgwake-mark {
+  color: #7c3aed;
+}
+:root[data-theme='dark'] .sawake:not(.is-failed) .bgwake-mark {
+  color: #a78bfa;
+}
+.sawake.is-failed .bgwake-mark {
+  color: var(--error-solid);
+}
+.sawake-meta-runs {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  color: var(--text-3);
+}
+.sawake-meta-name {
+  color: var(--text-2);
+}
+.sawake-run-id {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+}
+.sawake-card-link {
+  color: var(--brand);
+}
+.sawake-outcome,
+.sawake-runs {
+  margin: 4px 0 6px 22px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--error-solid);
+  border-radius: 0 6px 6px 0;
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.sawake-outcome:not(.is-failed),
+.sawake-runs {
+  border-left-color: #c4b5fd;
+}
+:root[data-theme='dark'] .sawake-outcome:not(.is-failed),
+:root[data-theme='dark'] .sawake-runs {
+  border-left-color: rgba(167, 139, 250, 0.5);
+}
+.sawake-reason {
+  color: var(--error);
+}
+.sawake-reason + .sawake-result,
+.sawake-reason + .sawake-noresult {
+  margin-top: 4px;
+}
+.sawake-noresult {
+  color: var(--text-3);
+  font-style: italic;
+}
+.sawake-result-md .md > :first-child {
+  margin-top: 0;
+}
+.sawake-result-md .md > :last-child {
+  margin-bottom: 0;
+}
+/* Three lines of it until asked, clamped on the Markdown's own box and line height so the cut lands
+   on a line boundary (inline code chips included) and the third line ends in the ellipsis. No
+   max-height: one taken from the wrapper's font size cut the third line through its glyphs. */
+.sawake-result-md.is-clamped > .md {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.sawake-result-md.is-clamped > .md > * {
+  margin: 0;
+}
+.sawake-result-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sawake-result-toggle .anticon {
+  font-size: 9px;
+}
+.sawake-runs {
+  list-style: none;
+}
+.sawake-run + .sawake-run {
+  margin-top: 8px;
+}
+.sawake-run-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.sawake-run-mark {
+  flex: none;
+  width: 14px;
+  color: var(--success-solid);
+}
+.sawake-run.is-failed .sawake-run-mark,
+.sawake-run.is-failed .sawake-run-name {
+  color: var(--error);
+}
+.sawake-run-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sawake-run-line {
+  margin-left: 20px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.sawake-run-line .md,
+.sawake-run-line .md > * {
+  display: inline;
+  margin: 0;
+}
+.sawake-run-line.is-reason {
+  color: var(--error);
+}
+.sawake.is-failed > .bgwake-fold > .bgwake-row .bgwake-status,
+.sawake-run.is-failed .bgwake-status {
+  background: var(--error-bg);
+  color: var(--error);
+}
+.sawake-run-line.is-empty {
+  font-style: italic;
 }
 /* An exception item's delivery to the coordinator (components/OpenItemDeliveryCard.tsx): the same
    card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields
@@ -25428,7 +26000,6 @@ button.project-open-item-action:disabled {
   .wk-trash-acts { grid-column: 2; }
   .wk-trash-row .wk-trash-error { grid-column: 2; }
 }
-.tp-group-wiki .tp-wiki-new { color: var(--text-3); }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
@@ -26603,10 +27174,11 @@ button.agent-progress-agent:hover {
 .wt-recovery-link:disabled { opacity: .55; cursor: default; }
 .wt-recovery-snapshot.is-stale { opacity: .45; }
 .wt-recovery .wt-recovery-failure { color: var(--error); }
-/* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue. */
-.wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 12px 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: var(--brand); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
+/* The merge slot while a merge operation is pending: what Orbit is doing, since when, on which runner. Amber once overdue.
+   A row of the branch bar in the repair row's language (.wt-repair-row), not a box of its own inside the bar's border. */
+.wt-merge-op { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 34px; padding: 3px 6px 3px 10px; border-top: 1px solid var(--border-subtle); font-size: 12px; color: var(--brand); }
 .wt-merge-op span { color: var(--text-2); }
-.wt-merge-op.is-overdue { color: var(--warning); background: color-mix(in srgb, var(--warning) 10%, var(--bg-raised)); }
+.wt-merge-op.is-overdue { color: var(--warning); }
 .wt-recovery-files { margin: 10px 0; }
 .wt-recovery-files ul { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
 .wt-recovery-files code { font-size: 11px; }
@@ -28314,6 +28886,13 @@ button.agent-progress-agent:hover {
 .confirm-criterion-shot { display: flex; gap: 10px; align-items: flex-end; }
 .confirm-criterion-shot img { max-width: 220px; max-height: 140px; border: 1px solid var(--border-subtle); border-radius: 6px; }
 .acceptance-mode-row { margin-top: 4px; }
+/* A tool card's description in the owner's language (Settings › Translation, 3A), over the input. */
+.approval-translated-desc {
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
 
 /* Settings → Terminals (TerminalsPage) */
 .terminals-empty {

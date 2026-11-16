@@ -213,6 +213,34 @@ struct UserTurnRow: View {
             WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
                               undelivered: undelivered, onWithdraw: cancel,
                               queued: queued != nil)
+        } else if let subagent = SubagentFinishedText.parse(wakeNote) {
+            // A SubAgent's end is the same kind of turn, in a block of its own: one line in the
+            // agent's stream (web parity: `SubagentFinishedCard.tsx`). A note that carries a
+            // background job's news beside it draws that line too, after the SubAgent's, as the
+            // control plane wrote them; the job's line then says how the turn went, once.
+            let steerState = BackgroundWakeCard.steerState(steer: b.steer, delivery: b.delivery,
+                                                           undelivered: b.undelivered)
+            VStack(alignment: .leading, spacing: 6) {
+                if let jobs = BackgroundWakeText.parse(subagent.rest) {
+                    SubagentFinishedLineView(wake: subagent, ts: b.ts, queued: queued != nil)
+                    BackgroundWakeCardView(wake: jobs, ts: b.ts,
+                                           undelivered: undelivered,
+                                           attached: attachedRest(jobs),
+                                           onCancelQueued: cancel,
+                                           steerState: steerState,
+                                           queued: queued != nil)
+                } else {
+                    SubagentFinishedLineView(wake: subagent, ts: b.ts,
+                                             undelivered: undelivered,
+                                             attached: attachedRest(subagent),
+                                             onCancelQueued: cancel,
+                                             steerState: steerState,
+                                             queued: queued != nil)
+                }
+                if queued == nil, BackgroundWakeCard.drawsBubble(text: b.text) {
+                    UserBubbleView(bubble: withoutNote(b))
+                }
+            }
         } else if let background = BackgroundWakeText.parse(wakeNote) {
             // A turn the control plane opened for a background job's news, or for a wakeup
             // coming due, is nobody's message either: the block IS the turn, so it is read off
@@ -239,6 +267,11 @@ struct UserTurnRow: View {
                     UserBubbleView(bubble: withoutNote(b))
                 }
             }
+        } else if BackgroundWakeCard.drawsNoteAlone(text: b.text, hasAttachments: !b.attachments.isEmpty,
+                                                    note: b.note, queued: queued != nil) {
+            // A turn nobody typed, carrying only a block this client cannot read yet: the note alone,
+            // never an empty bubble in the reader's name (web parity: `Transcript.tsx`'s fallback).
+            if let attached = b.attached { AttachedNoteEntry(attached: attached) }
         } else if let sender = b.externalSender {
             // Somebody other than the owner — a connected Feishu group's member, or a guest the owner
             // invited — sent it (`externalSender`, `ExternalSender.parse`): still their words in a bubble,
@@ -253,6 +286,12 @@ struct UserTurnRow: View {
     /// What the wake card did NOT take, as the entry folded inside it — so a mixed note still shows
     /// its other blocks instead of repeating the wake beneath the card.
     private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
+        let kind = wake.rest.isEmpty ? "" : describeNote(wake.rest)
+        return kind.isEmpty ? nil : (kind: kind, text: wake.rest)
+    }
+
+    /// What the SubAgent's line did NOT take, as the entry folded inside it.
+    private func attachedRest(_ wake: SubagentFinished) -> (kind: String, text: String)? {
         let kind = wake.rest.isEmpty ? "" : describeNote(wake.rest)
         return kind.isEmpty ? nil : (kind: kind, text: wake.rest)
     }

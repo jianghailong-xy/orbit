@@ -3,8 +3,10 @@ import {
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
 import type { GuestSessionSummary, SessionGuestPerson } from '@orbit/shared';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { enqueueSessionInvite, SESSION_INVITE } from '../email/email-outbox';
+import type { OpenedFile } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
@@ -80,6 +82,7 @@ export class SessionGuestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
+    private readonly attachments: AttachmentsService,
   ) {}
 
   // ── The owner's side ─────────────────────────────────────────────────────────────────────────
@@ -337,6 +340,17 @@ export class SessionGuestsService {
     if (!Number.isFinite(n)) throw new BadRequestException('seq must be a number');
     await this.invitation(guestId, sessionId);
     return this.sessions.getSharedEventFull(sessionId, Math.trunc(n));
+  }
+
+  /**
+   * The bytes of a file in the session's transcript — an image a turn carried — as `/shared/:token/attachments/:id`
+   * serves a session link's: only one of this session's, or 404.
+   */
+  async attachment(guestId: string, sessionId: string, attachmentId: string): Promise<OpenedFile> {
+    await this.invitation(guestId, sessionId);
+    const file = await this.attachments.open({ id: attachmentId, sessionId });
+    if (!file) throw new NotFoundException('attachment not found');
+    return file;
   }
 
   /**
