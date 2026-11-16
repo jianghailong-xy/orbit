@@ -458,6 +458,8 @@ public enum RunnerPageCopy {
     }
     /// After a signed-out reason on an Install failed panel, whose engine's Sign In is above it.
     public static func agentFixSignInAbove(engine: String) -> String { " Sign in to \(engine) above to use this." }
+    /// The same, after a signed-out reason on the web's Update engines report, which sits above its engine rows.
+    public static func agentFixSignInBelow(engine: String) -> String { " Sign in to \(engine) below to use this." }
     /// The head of what a press that didn't start a session says, before the server's own sentence.
     public static let AGENT_FIX_FAILED = "Couldn’t start the agent"
     /// The Needs Attention card's second action, beside Update Engines Now; `engine` is the CLI's own name.
