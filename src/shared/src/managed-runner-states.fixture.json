@@ -653,7 +653,7 @@
       "display": {
         "kind": "modelUnavailable",
         "title": "Your managed runner needs a model",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
         "retry": false,
         "ensure": false,
         "signIn": true,
@@ -675,7 +675,7 @@
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
           "retryable": true
         },
         "retryAfter": null,
@@ -728,7 +728,7 @@
       "display": {
         "kind": "modelUnavailable",
         "title": "Your managed runner needs a model",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
         "retry": false,
         "ensure": false,
         "signIn": true,
@@ -750,7 +750,7 @@
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
           "retryable": true
         },
         "retryAfter": null,
@@ -1159,6 +1159,65 @@
         "retryAfter": null,
         "initialProvider": "claude",
         "firstSessionProvider": "claude",
+        "actions": {
+          "canEnsure": false,
+          "canWake": true,
+          "canSleep": false,
+          "canRetry": false,
+          "canDelete": false
+        },
+        "workspacePublicId": null,
+        "runnerPublicId": "2zQeDGWFFAgN2112jNTf7"
+      }
+    },
+    {
+      "name": "sleeping: waiting for a login",
+      "server": {
+        "enabled": true,
+        "available": true,
+        "mapping": {
+          "managementState": "SLEEPING",
+          "desiredState": "SLEEPING",
+          "revision": 12,
+          "generation": 1,
+          "lastErrorCode": "MODEL_UNAVAILABLE"
+        },
+        "runner": {
+          "status": "OFFLINE",
+          "lastHeartbeatAt": "2026-10-09T06:00:00.000Z"
+        }
+      },
+      "display": {
+        "kind": "sleeping",
+        "title": "Managed runner asleep",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
+        "retry": false,
+        "ensure": false,
+        "signIn": true,
+        "acceptsWork": true,
+        "startsNewSession": false,
+        "moving": false
+      },
+      "setupState": "preparing",
+      "status": {
+        "contractVersion": 1,
+        "enabled": true,
+        "revision": 12,
+        "managementState": "SLEEPING",
+        "desiredState": "SLEEPING",
+        "runnerId": "2zQeDGWFFAgN2112jNTf7",
+        "workspaceId": null,
+        "heartbeatStatus": "OFFLINE",
+        "lastHeartbeatAt": "2026-10-09T06:00:00.000Z",
+        "usable": false,
+        "reason": {
+          "code": "MODEL_UNAVAILABLE",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
+          "retryable": true
+        },
+        "retryAfter": null,
+        "initialProvider": null,
+        "firstSessionProvider": null,
         "actions": {
           "canEnsure": false,
           "canWake": true,
@@ -1785,7 +1844,7 @@
       "display": {
         "kind": "failed",
         "title": "Managed runner failed",
-        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+        "detail": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
         "retry": true,
         "ensure": false,
         "signIn": true,
@@ -1807,7 +1866,7 @@
         "usable": false,
         "reason": {
           "code": "MODEL_UNAVAILABLE",
-          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.",
+          "message": "The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.",
           "retryable": true
         },
         "retryAfter": null,

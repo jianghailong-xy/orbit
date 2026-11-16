@@ -64,7 +64,7 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
             "actions":{"canWake":true}}"""
         Fleet.MANAGED_MODEL -> """{"contractVersion":1,"enabled":true,"revision":6,"managementState":"STARTING","desiredState":"RUNNING",
             "runnerId":"$rid","workspaceId":null,"heartbeatStatus":"ONLINE","lastHeartbeatAt":"${ago(0)}","usable":false,
-            "reason":{"code":"MODEL_UNAVAILABLE","message":"The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.","retryable":true},
+            "reason":{"code":"MODEL_UNAVAILABLE","message":"The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.","retryable":true},
             "retryAfter":null,"initialProvider":null,"firstSessionProvider":null,"actions":{"canEnsure":false,"canWake":false,"canSleep":false,
             "canRetry":false,"canDelete":false},"runnerPublicId":"$rid"}"""
         else -> """{"contractVersion":1,"enabled":true,"revision":8,"managementState":"READY","desiredState":"RUNNING","runnerId":"$rid",
