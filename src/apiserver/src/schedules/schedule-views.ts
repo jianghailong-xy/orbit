@@ -10,6 +10,7 @@
  * server and the clients cannot word a line two ways (schedule-copy.spec.ts).
  */
 import {
+  SCHEDULE_COPY,
   scheduleCostsText,
   scheduleCreateNotice,
   scheduleCreateWhen,
@@ -32,6 +33,18 @@ export { scheduleMayText };
 /** "Daily 10:00", "Weekdays at 09:00", "Mondays 10:00", "Mon, Thu 10:00", "Once": the cards' short form. */
 export function scheduleRuleText(rule: ScheduleRule): string {
   return sharedRuleText(rule as SharedRule, 'short');
+}
+
+/**
+ * The inspector's "What it does" (§9.2): the agent's read-back of the schedule as it is now, or, when a change of the
+ * rule or zone came without one, the When part from the current rule ("Every day at 23:46 · Asia/Shanghai · Codex
+ * stable check"), so it never names a time the schedule no longer runs at.
+ */
+export function scheduleReadBack(s: Pick<Schedule, 'readBack' | 'rule' | 'timezone' | 'title'>): string {
+  if (s.readBack) return s.readBack;
+  const rule = s.rule as unknown as ScheduleRule;
+  const when = rule.kind === 'ONCE' ? [scheduleRuleText(rule), rule.at.replace('T', ' ')] : [sharedRuleText(rule as SharedRule, 'long')];
+  return [...when, s.timezone, s.title].join(SCHEDULE_COPY.separator);
 }
 
 interface WorkspaceRef {

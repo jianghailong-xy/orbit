@@ -30,6 +30,8 @@ export class ScheduleUpdateDto {
   @IsOptional() @ValidateIf((_, v) => v !== null) @IsDateString() endAt?: string | null;
   @IsOptional() @IsIn(['CHECK_ONLY', 'OPEN_PR']) accessLevel?: 'CHECK_ONLY' | 'OPEN_PR';
   @IsOptional() @IsInt() @Min(1) runLimitMinutes?: number;
+  /** The schedule read back as it is after this change; a rule change without one leaves the read to derive it. */
+  @IsOptional() @IsString() @MaxLength(500) readBack?: string;
   /** Another workspace of the owner's: always outside the envelope, so it waits on a card. */
   @IsOptional() @IsPublicId() workspaceId?: string;
 }

@@ -143,7 +143,13 @@ export type ScheduleDecisionResult =
 
 /** What a change may touch. `intent` changes only when the person restates the goal (§8.2). */
 export interface SchedulePatch {
+  /** Dropped when the patch only reschedules (`isOnlyReschedule`): a correction of the time is not a new goal. */
   intent?: string;
+  /**
+   * A new read-back for the schedule as it is after the change, at most 500 characters. Not a setting: no revision
+   * records it. A rule or time-zone change without one clears the stored one, and the read derives it.
+   */
+  readBack?: string;
   title?: string;
   prompt?: string;
   rule?: unknown;
@@ -156,7 +162,9 @@ export interface SchedulePatch {
 
 export type ScheduleCreateResult =
   | { outcome: 'CREATED'; schedule: Schedule }
-  | { outcome: 'PENDING'; request: ScheduleChangeRequest };
+  | { outcome: 'PENDING'; request: ScheduleChangeRequest }
+  /** §8.1: the calling session already created this one (same workspace, same title or intent); no card was raised. */
+  | { outcome: 'EXISTS'; schedule: Schedule };
 
 export type ScheduleAppliedResult =
   | { outcome: 'APPLIED'; schedule: Schedule; revision: number }
@@ -164,14 +172,36 @@ export type ScheduleAppliedResult =
 
 export type ScheduleUpdateResult = ScheduleAppliedResult | { outcome: 'PENDING'; request: ScheduleChangeRequest };
 
+/** An update's result, and whether the intent it carried was left alone because the patch only reschedules. */
+export type ScheduleUpdateAnswer = ScheduleUpdateResult & { intentKept?: boolean };
+
 type Tx = Prisma.TransactionClient;
 
 /** The fields a revision records, as stored JSON. */
 type FieldValues = Record<string, unknown>;
 
 const PATCH_FIELDS = [
-  'intent', 'title', 'prompt', 'rule', 'timezone', 'endAt', 'accessLevel', 'runLimitMinutes', 'workspaceId',
+  'intent', 'title', 'prompt', 'rule', 'timezone', 'endAt', 'accessLevel', 'runLimitMinutes', 'workspaceId', 'readBack',
 ] as const;
+
+/** The fields that say when and how much a schedule runs: a change of these alone is no restated goal (§8.2). */
+const RESCHEDULE_FIELDS = ['rule', 'timezone', 'endAt', 'accessLevel', 'runLimitMinutes'] as const;
+
+/**
+ * Whether `patch` changes only when and how much the schedule runs, besides any intent and read-back it carries:
+ * the person corrected the time, the frequency or the limits ("make it weekly", "change it back to 09:00"), which
+ * §8.2 says leaves what was asked alone. A new prompt, title or workspace may come with a restated goal.
+ */
+export function isOnlyReschedule(patch: SchedulePatch): boolean {
+  if (patch.prompt !== undefined || patch.title !== undefined || patch.workspaceId !== undefined) return false;
+  return RESCHEDULE_FIELDS.some((key) => patch[key] !== undefined);
+}
+
+/** Title or intent compared as a person reads them: case, spacing and surrounding whitespace aside. */
+function sameWords(a: string, b: string): boolean {
+  const norm = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
+  return norm(a) === norm(b);
+}
 
 interface ResolvedActor {
   changedBy: ScheduleChangedBy;
@@ -265,6 +295,12 @@ function checkRunLimit(minutes: number): void {
 function checkAccessLevel(level: unknown): asserts level is AccessLevel {
   if (level !== 'CHECK_ONLY' && level !== 'OPEN_PR') {
     throw refusal('BAD_REQUEST', 'SCHEDULE_ACCESS_LEVEL_INVALID', 'An access level is CHECK_ONLY or OPEN_PR.');
+  }
+}
+
+function checkReadBack(value: unknown): void {
+  if (typeof value !== 'string' || value.length > 500) {
+    throw refusal('BAD_REQUEST', 'SCHEDULE_FIELD_INVALID', 'A read-back is one sentence of at most 500 characters.');
   }
 }
 
@@ -367,6 +403,15 @@ export class SchedulesService {
           this.assertEnforceable(who.session.engine, normalized.accessLevel);
           this.assertWithinSessionMode(who.session, normalized.accessLevel);
         }
+        if (actor.kind === 'SESSION') {
+          // §8.1: a session that already created this schedule is changing it, not asking for a second one.
+          const mine = await tx.schedule.findMany({
+            where: { ownerId: actor.ownerId, createdFromSessionId: actor.sessionId, workspaceId, state: { not: 'ENDED' } },
+            orderBy: { createdAt: 'desc' },
+          });
+          const existing = mine.find((s) => sameWords(s.title, normalized.title) || sameWords(s.intent, normalized.intent));
+          if (existing) return { outcome: 'EXISTS' as const, schedule: existing };
+        }
         await this.assertUnderLimit(tx, actor.ownerId);
         if (actor.kind === 'SESSION') {
           const request = await tx.scheduleChangeRequest.create({
@@ -394,8 +439,12 @@ export class SchedulesService {
   // -------------------------------------------------------------------------------------------------------------
 
   /** §4: inside the envelope it applies at once; outside it waits on a request only the OWNER's Allow applies. */
-  async update(actor: ScheduleActor, scheduleId: string, patch: SchedulePatch): Promise<ScheduleUpdateResult> {
+  async update(actor: ScheduleActor, scheduleId: string, patch: SchedulePatch): Promise<ScheduleUpdateAnswer> {
     if (actor.kind === 'PAT') throw patRefusal();
+    if (patch.readBack !== undefined) checkReadBack(patch.readBack);
+    // §8.2: "make it weekly" is a correction of the time, not a restated goal; what was asked stays.
+    const intentKept = patch.intent !== undefined && isOnlyReschedule(patch);
+    if (intentKept) patch = { ...patch, intent: undefined };
     const alerts: ScheduleAlert[] = [];
     const result = await withTransactionRetry(
       this.prisma,
@@ -418,7 +467,7 @@ export class SchedulesService {
       loggedRetry(this.logger, 'schedules.update'),
     );
     await this.alert(alerts);
-    return result;
+    return intentKept ? { ...result, intentKept } : result;
   }
 
   // -------------------------------------------------------------------------------------------------------------
@@ -895,7 +944,16 @@ export class SchedulesService {
         after[key] = stored(afterValues[key]);
       }
     }
-    if (Object.keys(after).length === 0) return { outcome: 'UNCHANGED', schedule };
+    // The read-back describes the schedule as it is now: a new one when the change brings one, none (so the read
+    // derives it) when the rule or zone moved without one.
+    const readBack = patch.readBack !== undefined
+      ? patch.readBack.trim() || null
+      : 'rule' in after || 'timezone' in after ? null : schedule.readBack;
+    if (Object.keys(after).length === 0) {
+      if (readBack === schedule.readBack) return { outcome: 'UNCHANGED', schedule };
+      const reread = await tx.schedule.update({ where: { id: schedule.id }, data: { readBack } });
+      return { outcome: 'UNCHANGED', schedule: reread };
+    }
 
     const revision = schedule.revision + 1;
     const updated = await tx.schedule.update({
@@ -916,6 +974,7 @@ export class SchedulesService {
         endedAt: state === 'ENDED' ? (schedule.state === 'ENDED' ? schedule.endedAt : now) : null,
         nextDueAt: due,
         revision,
+        readBack,
       },
     });
     await tx.scheduleRevision.create({
@@ -980,6 +1039,7 @@ export class SchedulesService {
         state: 'ACTIVE',
         nextDueAt: due,
         createdFromSessionId,
+        readBack: input.readBack,
       },
     });
     await tx.scheduleRevision.create({
@@ -1112,9 +1172,7 @@ export class SchedulesService {
     else if (!cardTakesZone) {
       throw refusal('BAD_REQUEST', 'SCHEDULE_TIMEZONE_REQUIRED', 'A schedule needs an IANA time zone.');
     }
-    if (input.readBack != null && (typeof input.readBack !== 'string' || input.readBack.length > 500)) {
-      throw refusal('BAD_REQUEST', 'SCHEDULE_FIELD_INVALID', 'A read-back is one sentence of at most 500 characters.');
-    }
+    if (input.readBack != null) checkReadBack(input.readBack);
     if (input.findings != null && (typeof input.findings !== 'string' || input.findings.length > 60)) {
       throw refusal('BAD_REQUEST', 'SCHEDULE_FIELD_INVALID', 'findings is a plural noun of at most 60 characters.');
     }
