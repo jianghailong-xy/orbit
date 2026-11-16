@@ -3777,6 +3777,13 @@ export class RunnerApiController {
     if (attempt && Number.isNaN(attempt.getTime())) {
       throw new BadRequestException('attempt must be the request this reports on');
     }
+    // Of the ids a refusal names, only sessions this runner runs are kept: a machine's report must not put
+    // another account's session ids on its row, even though the page reads only the viewer's back.
+    const named = status === 'failed' ? accountInUseSessionIds(body) : [];
+    const sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
+      where: { id: { in: named }, assignedRunnerId: runnerId },
+      select: { id: true },
+    })).map((row) => row.id).sort((x, y) => named.indexOf(x) - named.indexOf(y));
     const { count } = await this.prisma.runner.updateMany({
       where: {
         id: runnerId,
@@ -3796,7 +3803,7 @@ export class RunnerApiController {
         codexAccountRemoveMessage: status === 'failed' ? (body.message ?? null) : null,
         // The sessions a refusal names, which the page lists (accountRemoveSessionsOf reads only those
         // this runner runs for the viewer); a success, or any other refusal, names none.
-        codexAccountRemoveSessions: status === 'failed' ? accountInUseSessionIds(body) : [],
+        codexAccountRemoveSessions: sessionIds,
       },
     });
     // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing

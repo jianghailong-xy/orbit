@@ -962,6 +962,24 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessionIds: [of.runner.activateSessionId] } }),
   },
+  // A refused account removal of B's own runner, naming A's session as one using the account. Only sessions assigned to
+  // the reporting runner are kept on its row (runner-api.controller.ts applyAccountRemoveResult), and the page reads
+  // back only the viewer's on that runner (runners.service.ts accountRemoveSessionsOf): A's is answered and stored as
+  // an id that names nothing.
+  'POST /runner/account-remove-result body sessionIds[]': {
+    as: RUNNER,
+    request: (of) => ({
+      params: {},
+      body: { engine: 'codex', status: 'failed', message: 'in use', sessionIds: [of.runner.machineSessionId] },
+    }),
+  },
+  'POST /runner/codex-account-remove-result body sessionIds[]': {
+    as: RUNNER,
+    request: (of) => ({
+      params: {},
+      body: { engine: 'codex', status: 'failed', message: 'in use', sessionIds: [of.runner.machineSessionId] },
+    }),
+  },
   // B's own claim of an operation of its own, but A's operation named.
   'POST /runner/codex-rate-limit-reset-result body operationId': {
     as: RUNNER,
