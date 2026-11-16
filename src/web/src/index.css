@@ -1275,7 +1275,9 @@ button.toast--pill:focus-visible {
   min-width: 0;
   max-width: calc(100vw - 16px);
 }
-.tp-account-menu .orbit-menu-item {
+/* Its levels (Appearance, Machines) draw their rows as tall as its own. */
+.tp-account-menu .orbit-menu-item,
+.tp-account-submenu .orbit-menu-item {
   min-height: 44px;
 }
 .tp-account-menu .orbit-menu-item.tp-account-profile {

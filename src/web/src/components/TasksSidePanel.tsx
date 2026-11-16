@@ -1272,6 +1272,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                   if (mode !== it.key) setMode(it.key);
                 },
               })),
+              popupClassName: 'tp-account-submenu',
             },
             // Every machine, a level down with its state, as Settings lists them: there is no one Machines page to
             // open, so the row picks one. With none yet it is the way to add the first.
@@ -1322,6 +1323,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       onSelect: () => navigate('/settings/machines/new'),
                     },
                   ],
+                  popupClassName: 'tp-account-submenu',
                 }
               : {
                   key: 'machines',
