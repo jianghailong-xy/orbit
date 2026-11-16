@@ -18,6 +18,10 @@ public enum QueuedCapacity {
     public static let RUN_FULL_TAG = "run full"
     public static let BATCH_FULL_TITLE = "Batch full"
     public static let BATCH_FULL_TAG = "batch full"
+    /// Web `CAPACITY_HELD_LINE`: the session list's line for any of the three (board
+    /// session-row-runner-full, the owner's pick C). The row's own time already counts the wait, so
+    /// the line adds no clock; which gate is full is the row's tooltip (`rowHint`) on the Mac.
+    public static let CAPACITY_HELD_LINE = "Waiting for a free slot"
 
     /// Whether a full runner, run or batch holds this session: queued, and the server named that gate.
     public static func holds(_ s: Session) -> Bool {
@@ -68,6 +72,13 @@ public enum QueuedCapacity {
         }
         let sessions = limit == 1 ? "1 session" : "\(limit) sessions"
         return "\(who) is running \(active) of \(sessions). This message is sent as soon as one finishes."
+    }
+
+    /// The list row's tooltip: the popover's title, sentence and wait, one per line; nil for a row no
+    /// full runner, run or batch holds. Web `capacityHeldHint`.
+    public static func rowHint(_ s: Session, machine: String?, now: Date) -> String? {
+        guard holds(s) else { return nil }
+        return [title(s), messageText(s, machine: machine), waited(s, now: now)].compactMap { $0 }.joined(separator: "\n")
     }
 
     /// `Waiting 15 min`, from when the session went PENDING; nil with no clock to read. Web
