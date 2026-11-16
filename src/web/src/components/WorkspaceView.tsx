@@ -1357,7 +1357,9 @@ export const sessionLine = (
   // and the strip above its composer read the same.
   const resume = resumeWords(s, watching?.line);
   if (live && resume && state === 'AWAITING_INPUT') return { text: resume, tone: 'watching' };
-  if (parked) return { text: `${parked.text}…`, tone: 'background' };
+  // A background process it left up does not take the line from what the session said or was told:
+  // the unanswered message, the recap and the reply all outrank it (the owner, 2026-11-16). The row's
+  // glyph still says a process is up; the words only fill a row that has nothing else to say.
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
@@ -1371,6 +1373,7 @@ export const sessionLine = (
   if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
     return { text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
+  if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
   return { text: statusLabel(s), tone: 'preview' };
