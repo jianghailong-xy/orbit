@@ -1414,7 +1414,14 @@ private extension View {
     /// shows only in the root nav bar (pushed pages keep the system back button).
     func drawerToggle(open: @escaping () -> Void) -> some View {
         toolbar {
-            ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+            // iOS 26 draws a shared platter's content with the glass's vibrancy, which washed the
+            // orange count out to a pale, see-through amber; the button draws its own glass instead.
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+            }
         }
     }
 }
@@ -1428,22 +1435,35 @@ private struct DrawerToggleButton: View {
     var body: some View {
         let waiting = model.needsYouSessions.count
         Button(action: open) {
-            Image(systemName: "line.3.horizontal")
-                .overlay(alignment: .topTrailing) {
-                    if waiting > 0 {
-                        Text("\(waiting)")
-                            .font(.caption2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .background(Color.orange, in: Capsule())
-                            .offset(x: 10, y: -10)
-                            .accessibilityHidden(true)
-                    }
-                }
+            if #available(iOS 26.0, *) {
+                // The circle the shared platter drew, with the count outside the glass so it stays solid.
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+                    .glassEffect(.regular.interactive(), in: Circle())
+                    .overlay(alignment: .topTrailing) { count(waiting).offset(x: 4, y: -4) }
+            } else {
+                Image(systemName: "line.3.horizontal")
+                    .overlay(alignment: .topTrailing) { count(waiting).offset(x: 10, y: -10) }
+            }
         }
         .accessibilityLabel("Open navigation")
         .accessibilityValue(waiting > 0 ? "\(waiting) waiting on you" : "")
+    }
+
+    @ViewBuilder
+    private func count(_ waiting: Int) -> some View {
+        if waiting > 0 {
+            Text("\(waiting)")
+                .font(.caption2.weight(.bold).monospacedDigit())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .frame(minWidth: 16, minHeight: 16)
+                .background(Color.orange, in: Capsule())
+                .accessibilityHidden(true)
+        }
     }
 }
 
