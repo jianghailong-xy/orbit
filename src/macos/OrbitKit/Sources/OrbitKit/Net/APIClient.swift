@@ -667,12 +667,38 @@ public final class APIClient: @unchecked Sendable {
         try await get("guest-sessions/\(sessionID)/events/\(seq)")
     }
 
-    /// A guest's message — text only, a turn of the owner's session, which restarts it when it has
-    /// ended. Web parity: `sendGuestTurn`.
+    /// The bytes of an image or file a turn of the shared session carried: the owner's
+    /// `attachments/:id` answers a guest 404. Web parity: `fetchGuestAttachmentObjectUrl`.
+    public func guestAttachment(_ sessionID: String, id: String) async throws -> Data {
+        try await send(makeRequest("guest-sessions/\(sessionID)/attachments/\(id)", method: "GET",
+                                   body: Optional<Empty>.none))
+    }
+
+    /// Upload one image for a guest's next message (`POST /guest-sessions/:id/attachments`): PNG,
+    /// JPEG, WebP or GIF, at most 5 MB. Answers the attachment id `sendGuestTurn` carries; a 404 is
+    /// "no longer shared".
     @discardableResult
-    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String) async throws -> GuestTurnAccepted {
+    public func uploadGuestAttachment(_ sessionID: String, filename: String, mimeType: String,
+                                      data: Data) async throws -> String {
+        let boundary = "orbit.\(UUID().uuidString)"
+        var req = try makeRequest("guest-sessions/\(sessionID)/attachments", method: "POST",
+                                  body: Optional<Empty>.none)
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Multipart.body(boundary: boundary, fieldName: "file",
+                                      filename: filename, mimeType: mimeType, fileData: data)
+        let respData = try await send(req)
+        return try decoder.decode(AttachmentRef.self, from: respData).id
+    }
+
+    /// A guest's message — text, images uploaded through `uploadGuestAttachment`, or both — a turn of
+    /// the owner's session, which restarts it when it has ended. No images omits `attachmentIds`.
+    /// Web parity: `sendGuestTurn`.
+    @discardableResult
+    public func sendGuestTurn(_ sessionID: String, clientTurnId: String, content: String,
+                              attachmentIds: [String] = []) async throws -> GuestTurnAccepted {
         try await post("guest-sessions/\(sessionID)/turns",
-                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content))
+                       body: GuestTurnRequest(clientTurnId: clientTurnId, content: content,
+                                              attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
     }
 
     // MARK: personal access tokens — listed and revoked here, issued only on the web
@@ -2204,14 +2230,6 @@ public final class APIClient: @unchecked Sendable {
 
     public func refreshDiff(sessionID: String) async throws {
         _ = try await postRaw("sessions/\(sessionID)/diff/refresh", body: Optional<Empty>.none)
-    }
-
-    // MARK: recap
-
-    /// Write this session's recap again now, past the settle hooks' two-minute window — the
-    /// conversation's Recap card's refresh. Answers once the pass has finished, with what it did.
-    public func refreshRecap(sessionID: String) async throws -> RecapOutcome {
-        try await postEmpty("sessions/\(sessionID)/recap")
     }
 
     public func commit(sessionID: String) async throws {

@@ -45,3 +45,31 @@ export function assertValidUpload(
     throw new PayloadTooLargeException(`file exceeds ${MAX_UPLOAD_BYTES} bytes`);
   }
 }
+
+/**
+ * The images a composer sends as inline pictures, and their cap: the owner's composers check these before an upload
+ * (web WorkspaceView ALLOWED_IMAGE_TYPES / MAX_IMAGE_BYTES), and the guest door holds a guest's upload to them
+ * (session-guests.service.ts uploadImage), so a guest's image is what an owner's could be.
+ */
+export const COMPOSER_IMAGE_TYPES: readonly string[] = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+export const MAX_COMPOSER_IMAGE_BYTES = 5 * 1024 * 1024;
+export const GUEST_IMAGE_TYPE_REFUSED = 'A guest can attach PNG, JPEG, WebP or GIF images only.';
+export const GUEST_IMAGE_TOO_LARGE = 'Image exceeds the 5MB limit';
+
+/** Whether the first bytes of a file are what `type`, one of COMPOSER_IMAGE_TYPES, begins with. */
+export function imageBytesMatch(type: string, head: Uint8Array): boolean {
+  const at = (offset: number, ascii: string) =>
+    [...ascii].every((ch, i) => head[offset + i] === ch.charCodeAt(0));
+  switch (type) {
+    case 'image/png':
+      return head[0] === 0x89 && at(1, 'PNG\r\n\x1a\n');
+    case 'image/jpeg':
+      return head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+    case 'image/gif':
+      return at(0, 'GIF87a') || at(0, 'GIF89a');
+    case 'image/webp':
+      return at(0, 'RIFF') && at(8, 'WEBP');
+    default:
+      return false;
+  }
+}

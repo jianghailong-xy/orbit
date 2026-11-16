@@ -3060,7 +3060,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0860 adds a nullable schedule_run.access_level, backfilled from schedule for started runs, and
       // workspace_permission_rule.from_schedule_run (NOT NULL with a constant default, no row marked); neither table is
       // one of the preserved relations, and no trigger, function or DONE fence changes.
-      '0860_schedule_check_only_asks'],
+      '0860_schedule_check_only_asks',
+      // 0870 adds managed_runner.image_roll_to (nullable, no default); 0880 adds attachment.uploaded_by_guest_id
+      // (nullable, no default). Neither table is one of the preserved relations, and no trigger, function or DONE fence
+      // changes.
+      '0870_managed_runner_image_roll',
+      '0880_attachment_guest_uploader',
+      // 0910_account_remove_sessions adds runner.codex_account_remove_sessions (UUID[], NOT NULL with a constant
+      // default, no backfill); runner is not one of the preserved relations, and no trigger, function or DONE fence
+      // changes.
+      '0910_account_remove_sessions'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

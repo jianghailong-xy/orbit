@@ -197,6 +197,28 @@ func TestSubagentNoProviderLeftIsTheResult(t *testing.T) {
 	}
 }
 
+const oauthExpired = "Failed to authenticate: OAuth session expired and could not be refreshed"
+
+// A failed login on the first candidate: the runner asks for the next one, as after a usage limit.
+func TestSubagentMovesToTheNextCandidateAfterAFailedLogin(t *testing.T) {
+	rig := &subagentFallbackRig{
+		children: []ExecResult{
+			{Status: stSucceeded, Result: oauthExpired},
+			{Status: stSucceeded, Result: "Fixed it in a_test.go"},
+		},
+		answers: []func(http.ResponseWriter){
+			moveTo(2, providerCodex, "gpt-5.5", "Moved to gpt-5.5 on codex after claude-opus-5-5's login failed"),
+		},
+	}
+	report := rig.run(t)
+	if len(rig.fallbacks) != 1 || rig.fallbacks[0]["error"] != oauthExpired {
+		t.Fatalf("fallback asks = %v, want one carrying the login failure's words", rig.fallbacks)
+	}
+	if len(rig.ran) != 2 || report.Status != subagentStatusDone || report.Model != "gpt-5.5" {
+		t.Fatalf("ran %q, report = %+v", rig.ran, report)
+	}
+}
+
 func TestSubagentLimitFailureReadsOnlyLimitsAndCapacity(t *testing.T) {
 	cases := []struct {
 		res  ExecResult
@@ -209,6 +231,11 @@ func TestSubagentLimitFailureReadsOnlyLimitsAndCapacity(t *testing.T) {
 		{ExecResult{Status: stSucceeded, Result: "The pool was at capacity, so I resized it."}, nil, false},
 		{ExecResult{Status: stFailed, ErrorMsg: "API Error: 500"}, nil, false},
 		{ExecResult{}, errors.New("the engine ended without a result: no output"), false},
+		// A failed login moves too; the server refuses the move when the caller named the model.
+		{ExecResult{Status: stSucceeded, Result: oauthExpired}, nil, true},
+		{ExecResult{Status: stFailed, ErrorMsg: "Not logged in · Please run /login"}, nil, true},
+		{ExecResult{Status: stFailed, ErrorMsg: "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare"}, nil, false},
+		{ExecResult{Status: stSucceeded, Result: "The deploy log said Failed to authenticate, so I rotated the key."}, nil, false},
 	}
 	for _, c := range cases {
 		if _, got := subagentLimitFailure(c.res, c.err); got != c.want {

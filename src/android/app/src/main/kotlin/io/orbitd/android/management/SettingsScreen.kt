@@ -445,7 +445,7 @@ internal fun TranslationGroup(user: JsonObject?, ready: Boolean, write: (String,
 
 /**
  * The Sessions page's Prompt optimizer group (board frames 1 and 1b; iOS SessionSettings' promptOptimizerSection): one account-wide
- * switch, absent = off, with what it does as the group's footer. A server without a DeepSeek key ([user]'s `promptOptimizerAvailable`
+ * switch, absent = on (only false turns it off), with what it does as the group's footer. A server without a DeepSeek key ([user]'s `promptOptimizerAvailable`
  * false) draws it off and disabled with the notice under it, whatever the preference says. No NEW badge.
  */
 @Composable

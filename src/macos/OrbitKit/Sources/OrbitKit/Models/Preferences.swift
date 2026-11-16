@@ -52,7 +52,8 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// The providers SubAgents may not use, by slug (docs/subagent-design.md §7). Absent: none blocked.
     public let subagentBlockedProviders: [String]?
     /// Settings › Prompt optimizer (@orbit/shared prompt-optimizer.ts): whether the composer offers
-    /// ✦ Optimize. Absent means off. Tolerant like the switches above.
+    /// ✦ Optimize. Absent means on; only an explicit `false` turns it off (owner's decision of
+    /// 2026-11-16) — read it through `PromptOptimizer.switchedOn`. Tolerant like the switches above.
     public let promptOptimizer: Bool?
 
     /// Whether smart model selection is on for this account — only an explicit `true` turns it on.

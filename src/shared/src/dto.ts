@@ -1990,6 +1990,9 @@ export interface AccountRemoveResult {
   message?: string;
   /** The `attempt` of the request this reports on. */
   attempt?: string;
+  /** With `failed` because the account is in use: the sessions running in it, which the control
+   *  plane names by title in the message the page shows. */
+  sessionIds?: string[];
 }
 
 /** @deprecated The same result on the codex-named route; read AccountRemoveResult. */
@@ -2162,9 +2165,10 @@ export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
  * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
- * (the runner can't update itself, or its updates are turned off) is the runner's own.
+ * (the runner can't update itself, or its updates are turned off) is the runner's own, and so is
+ * `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines they name).
  */
-export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed';
+export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed' | 'engineUpdateFailed';
 
 /** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
  *  most recently used workspace runs on is signed out there. */
@@ -2173,7 +2177,7 @@ export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSigne
 /** An agent already at work on one warning: the session a press started, while it is open. */
 export interface RunnerAgentFixing {
   kind: RunnerAttentionFixKind;
-  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate`. */
+  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate` and `engineUpdateFailed`. */
   engine: ReportedEngine | null;
   sessionId: string;
   workspaceId: string;
@@ -2356,6 +2360,17 @@ export interface RunnerAccountRemoveState {
   /** The machine's own words when it failed: the account is in use by a session, the runner is too
    *  old to remove accounts at all, or the directory would not go away. */
   message: string | null;
+  /** With `failed` because the account is in use: the sessions the machine named as running in it,
+   *  as far as the viewer can see them, oldest first. Absent otherwise (and from an older server),
+   *  and then `message` alone says what happened. */
+  sessions?: RunnerAccountRemoveSession[];
+}
+
+/** A session that keeps an account from being removed: what the runner's page lists and opens. */
+export interface RunnerAccountRemoveSession {
+  id: string;
+  title: string;
+  status: RunStatus;
 }
 
 /** @deprecated Codex's name for the same state; read RunnerAccountRemoveState, whose `engine` says
@@ -2490,8 +2505,10 @@ export interface SubagentCandidateTarget {
   note?: string;
 }
 
-/** How one attempt of a SubAgent run ended: still running, a usage-limit or capacity failure it moved on from, or the run's end. */
-export type SubagentAttemptOutcome = 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | Exclude<SubagentRunStatus, 'RUNNING'>;
+/** How one attempt of a SubAgent run ended: still running, a usage-limit, capacity or login failure it moved on from,
+ *  or the run's end. */
+export type SubagentAttemptOutcome =
+  'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | Exclude<SubagentRunStatus, 'RUNNING'>;
 
 /** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
 export interface SubagentAttempt extends SubagentCandidateTarget {
@@ -2512,7 +2529,7 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
 
 /** The runner's ask for the next candidate after a child failed on a usage limit or capacity (§4.3). */
 export interface SubagentFallbackRequest {
-  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit or capacity error. */
+  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit, capacity or login error. */
   error: string;
   /** The definition's read-only flag and permission mode, as the start sent them. */
   readonly?: boolean;

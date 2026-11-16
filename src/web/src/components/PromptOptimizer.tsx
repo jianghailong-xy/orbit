@@ -6,7 +6,7 @@ import {
   type PromptOptimizationContextUsed,
   type PromptOptimizationRequest,
 } from '@orbit/shared';
-import { optimizePrompt } from '../api';
+import { optimizePrompt, type OptimizedSend } from '../api';
 import { meQuery } from '../lib/queries';
 import { translationLanguageOf } from '../lib/translation';
 import { showToast } from '../lib/toastStore';
@@ -19,15 +19,30 @@ import { showToast } from '../lib/toastStore';
 
 /** Where a draft's context comes from: a session supplies its own; a new draft names its workspace. */
 export type PromptOptimizerTarget = Omit<PromptOptimizationRequest, 'draft'> & {
-  /** The optimized text just put in the box, or null when the owner's own text is back (Undo). The
-   *  send compares against it (D2): unedited, it goes with `skipTranslation: true`. */
-  onInserted: (text: string | null) => void;
+  /** What Use just put in the box, or null when the owner's own text is back (Undo). The send compares
+   *  against it (D2): unedited, it goes as optimizedSendOf says. */
+  onInserted: (inserted: OptimizedInsert | null) => void;
 };
+
+/** What Use put in the box: the owner-language reading copy with the optimizer's agent-language prompt as
+ *  its translation when Translation is on (D2), or the prompt alone. */
+export interface OptimizedInsert {
+  text: string;
+  translation?: string;
+}
+
+/** The body fields a send of the unedited inserted text carries: its ready translation, or "send as written". */
+export const optimizedSendOf = (inserted: OptimizedInsert): OptimizedSend =>
+  inserted.translation !== undefined ? { optimizedTranslation: inserted.translation } : { skipTranslation: true };
+
+/** D2: with Translation on the box gets the owner's language, and the agent the optimizer's own prompt. */
+const insertOf = (result: PromptOptimization): OptimizedInsert =>
+  result.gloss ? { text: result.gloss, translation: result.text } : { text: result.text };
 
 type OptimizerState =
   | { kind: 'idle' }
   | { kind: 'busy'; draft: string }
-  | { kind: 'card'; draft: string; result: PromptOptimization; gloss: boolean }
+  | { kind: 'card'; draft: string; result: PromptOptimization; flipped: boolean }
   | { kind: 'failed'; draft: string };
 
 export const OPTIMIZE_SHORTCUT = /Mac|iPhone|iPad/.test(typeof navigator === 'undefined' ? '' : navigator.platform)
@@ -71,7 +86,7 @@ export function usePromptOptimizer({
   resetKey: string | null;
 }) {
   const me = useQuery(meQuery());
-  const on = !!target && me.data?.promptOptimizerAvailable === true && me.data?.preferences?.promptOptimizer === true;
+  const on = !!target && me.data?.promptOptimizerAvailable === true && me.data?.preferences?.promptOptimizer !== false;
   const [state, setState] = useState<OptimizerState>({ kind: 'idle' });
   // The press now in flight; a cancel or a newer press makes its answer nobody's.
   const inFlight = useRef<AbortController | null>(null);
@@ -94,8 +109,20 @@ export function usePromptOptimizer({
   useEffect(() => cancel, [cancel]);
 
   const trimmed = text.trim();
+  // A send empties the box: the card (or the press still under way) was about the draft that just went.
+  const hadDraft = useRef(trimmed !== '');
+  useEffect(() => {
+    const had = hadDraft.current;
+    hadDraft.current = trimmed !== '';
+    if (!had || trimmed !== '') return;
+    cancel();
+    setState((s) => (s.kind === 'idle' ? s : { kind: 'idle' }));
+  }, [trimmed, cancel]);
   const busy = state.kind === 'busy';
-  const buttonShown = on && !disabled && (busy || (trimmed !== '' && !shellMode && !onlyCommand(trimmed)));
+  // The button keeps its slot whenever the optimizer is on, so the toolbar never shifts as the
+  // draft fills or empties: it is only disabled when there is nothing it can do.
+  const buttonShown = on && !disabled;
+  const buttonEnabled = buttonShown && (busy || (trimmed !== '' && !shellMode && !onlyCommand(trimmed)));
 
   const start = useCallback(() => {
     const t = targetRef.current;
@@ -110,7 +137,7 @@ export function usePromptOptimizer({
       (result) => {
         if (inFlight.current !== controller) return;
         inFlight.current = null;
-        setState({ kind: 'card', draft, result, gloss: false });
+        setState({ kind: 'card', draft, result, flipped: false });
       },
       () => {
         if (inFlight.current !== controller) return;
@@ -145,10 +172,11 @@ export function usePromptOptimizer({
   const use = useCallback(
     (edit: boolean) => {
       if (state.kind !== 'card') return;
-      const inserted = state.result.text;
+      const insert = insertOf(state.result);
+      const inserted = insert.text;
       undo.current = { previous: textRef.current, inserted };
       setText(inserted);
-      targetRef.current?.onInserted(inserted);
+      targetRef.current?.onInserted(insert);
       setState({ kind: 'idle' });
       showToast({
         message: 'Draft replaced with the optimized prompt',
@@ -173,7 +201,7 @@ export function usePromptOptimizer({
     if (e.nativeEvent.isComposing) return false;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.shiftKey && !e.altKey && (e.code === 'KeyO' || e.key.toLowerCase() === 'o')) {
-      if (!buttonShown) return false;
+      if (!buttonEnabled) return false;
       e.preventDefault();
       press();
       return true;
@@ -202,6 +230,7 @@ export function usePromptOptimizer({
     state,
     busy,
     buttonShown,
+    buttonEnabled,
     press,
     onKeyDown,
     card:
@@ -214,7 +243,7 @@ export function usePromptOptimizer({
           onEditUse={() => use(true)}
           onTryAgain={start}
           onDismiss={dismiss}
-          onToggleGloss={() => setState((s) => (s.kind === 'card' ? { ...s, gloss: !s.gloss } : s))}
+          onFlip={() => setState((s) => (s.kind === 'card' ? { ...s, flipped: !s.flipped } : s))}
         />
       ) : null,
   };
@@ -229,7 +258,7 @@ function PromptOptimizerCard({
   onEditUse,
   onTryAgain,
   onDismiss,
-  onToggleGloss,
+  onFlip,
 }: {
   state: Extract<OptimizerState, { kind: 'card' } | { kind: 'failed' }>;
   earlier: boolean;
@@ -238,7 +267,7 @@ function PromptOptimizerCard({
   onEditUse: () => void;
   onTryAgain: () => void;
   onDismiss: () => void;
-  onToggleGloss: () => void;
+  onFlip: () => void;
 }) {
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Escape') {
@@ -260,15 +289,17 @@ function PromptOptimizerCard({
       </div>
     );
   }
-  const { result, gloss } = state;
-  const glossShown = gloss && !!result.gloss;
+  // D2: with a reading copy (Translation on) the card opens in the owner's language, as Use inserts it;
+  // the link flips to the prompt the agent receives.
+  const { result, flipped } = state;
+  const glossShown = !flipped && !!result.gloss;
   return (
     <div className="composer-optimized" role="region" aria-label="Optimized prompt" onKeyDown={onKeyDown}>
       <div className="composer-optimized-head">
         <span className="composer-optimized-title">✦ Optimized prompt</span>
         {earlier && <span className="composer-optimized-earlier">Based on an earlier draft</span>}
         {result.gloss && (
-          <button type="button" className="composer-optimize-link" onClick={onToggleGloss}>
+          <button type="button" className="composer-optimize-link" onClick={onFlip}>
             {glossShown ? `Show in ${TRANSLATION_LANGUAGE_NAMES[result.language] ?? result.language}` : `Show in ${glossLanguage}`}
           </button>
         )}
@@ -297,6 +328,11 @@ function PromptOptimizerCard({
               {usedLabel(used)}
             </span>
           ))}
+        </div>
+      )}
+      {result.gloss && (
+        <div className="composer-optimized-agent-note">
+          The agent receives the {TRANSLATION_LANGUAGE_NAMES[result.language] ?? result.language} version.
         </div>
       )}
       <div className="composer-optimized-actions">

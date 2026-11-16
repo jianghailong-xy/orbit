@@ -118,6 +118,8 @@ internal fun PromptOptimizationCard(optimization: PromptOptimization, basedOnEar
         }
         if (optimization.gloss != null || optimization.chips.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (optimization.gloss != null) Text(PromptOptimizerCopy.agentReceives(optimization.promptLanguage),
+                    Modifier.testTag("composer-optimization-agent-note"), style = MaterialTheme.typography.bodySmall, color = muted)
                 if (optimization.gloss != null) Text(
                     if (showingGloss) PromptOptimizerCopy.showPrompt(optimization.promptLanguage) else PromptOptimizerCopy.showIn(ownerLanguage),
                     Modifier.testTag("composer-optimization-gloss").clickable(role = Role.Button, onClick = toggleGloss).padding(vertical = 4.dp),

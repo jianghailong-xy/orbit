@@ -366,9 +366,14 @@ struct ToolApprovalCard: View {
 
     private var actions: some View {
         ApprovalActions {
-            allowButton
-            if Approvals.offersCreateAndStart(toolName: approval.toolName ?? "", input: approval.input) {
-                createAndStartButton
+            if createAndStartLeads {
+                createAndStartButton(prominent: true)
+                allowButton(prominent: false)
+            } else {
+                allowButton(prominent: true)
+                if Approvals.offersCreateAndStart(toolName: approval.toolName ?? "", input: approval.input) {
+                    createAndStartButton(prominent: false)
+                }
             }
             if !rememberRules.isEmpty { rememberButton(rememberRules) }
             denyButton
@@ -631,12 +636,18 @@ struct ToolApprovalCard: View {
         }
     }
 
-    private var allowButton: some View {
-        Button { decide(console, approval, .allow) } label: {
+    /// Create and start leads the card where it is offered, unless the task was filed held
+    /// (`Approvals.createAndStartLeads`); Create it then sits beside it, bordered.
+    private var createAndStartLeads: Bool {
+        Approvals.createAndStartLeads(toolName: approval.toolName ?? "", input: approval.input)
+    }
+
+    @ViewBuilder private func allowButton(prominent: Bool) -> some View {
+        let button = Button { decide(console, approval, .allow) } label: {
             Text(allowLabel)
                 .approvalActionLabel()
         }
-        .buttonStyle(.borderedProminent)
+        if prominent { button.buttonStyle(.borderedProminent) } else { button.buttonStyle(.bordered) }
     }
 
     /// The yes, in the words of what it does. A batch names its count, because the question above
@@ -655,14 +666,14 @@ struct ToolApprovalCard: View {
     }
     /// The single-task card's second yes, offered only when nothing would start the task otherwise and
     /// the runner that filed the card acts on the choice (`Approvals.offersCreateAndStart`): it creates
-    /// the task and starts its run in the same press. Bordered, so Create it stays the card's one filled
-    /// answer.
-    private var createAndStartButton: some View {
-        Button { decide(console, approval, .allow, startAfterCreate: true) } label: {
+    /// the task and starts its run in the same press. Filled where it leads the card, bordered on a
+    /// held task, where Create it stays the one filled answer.
+    @ViewBuilder private func createAndStartButton(prominent: Bool) -> some View {
+        let button = Button { decide(console, approval, .allow, startAfterCreate: true) } label: {
             Text(Approvals.createAndStartAction)
                 .approvalActionLabel()
         }
-        .buttonStyle(.bordered)
+        if prominent { button.buttonStyle(.borderedProminent) } else { button.buttonStyle(.bordered) }
     }
     // Secondary "allow": same intent as Allow, so a bordered button (not plain text) that keeps
     // Allow the one filled/prominent action. The exact scope it will remember rides in monospace.

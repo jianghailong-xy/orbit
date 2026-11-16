@@ -182,6 +182,16 @@ export function offersCreateAndStart(a: ApprovalInfo): boolean {
   return input.acceptsStartAfterCreate === true && input.preview?.needsManualStart === 1;
 }
 
+/**
+ * Whether Create and start is the card's primary answer, Enter included, with Create it beside it:
+ * whenever it is offered, except on a task the agent filed with `autoRunWhenReady: false`. That is a
+ * hold someone asked for, and pressing Enter out of habit should not start what they held.
+ * macOS/iOS: `Approvals.createAndStartLeads`; Android: `ApprovalRules.createAndStartLeads`.
+ */
+export function createAndStartLeads(a: ApprovalInfo): boolean {
+  return offersCreateAndStart(a) && (a.input as { autoRunWhenReady?: unknown }).autoRunWhenReady !== false;
+}
+
 /** Under a new project's criteria: approving the create is not confirming them — the project's
  *  start card asks that, once its coordinator has a plan to start. */
 export const CREATE_CRITERIA_CONFIRMED_AT_START = 'You’ll confirm these when the project starts.';
@@ -711,7 +721,13 @@ export function ApprovalPanel({
   const keys = useCardKeyClaim(armed && !isQuestion, anchor);
   // Plain card: Enter approves; ⌘/Ctrl + Enter always-allows (only when that option exists).
   // Questions have no submit hotkey — they submit only via the Submit button.
-  useApproveHotkey(keys, () => onDecide(approval.id, 'allow'), { requireMod: false, anchor });
+  // Where Create and start leads, Enter presses it: the hint and the key go with the filled button.
+  const startLeads = createAndStartLeads(approval);
+  const startAfterCreate = () => onDecide(approval.id, 'allow', undefined, undefined, undefined, true);
+  useApproveHotkey(keys, () => (startLeads ? startAfterCreate() : onDecide(approval.id, 'allow')), {
+    requireMod: false,
+    anchor,
+  });
   useApproveHotkey(keys && rules.length > 0, () => {
     if (rules.length) onDecide(approval.id, 'allow', undefined, undefined, rules);
   }, { anchor });
@@ -787,6 +803,17 @@ export function ApprovalPanel({
                           : provider
                             ? `🔌 Confirm: ${provider.verb} provider${provider.name ? ` “${provider.name}”` : ''}?`
                             : `🔓 Approve tool call: ${approval.toolName}`;
+  const createAndStartButton = (tone: 'primary' | 'accent') => (
+    <CardActionButton
+      tone={tone}
+      disabled={!answerable}
+      title="Create the task and start its run now, so you are not asked again to start it."
+      onClick={startAfterCreate}
+    >
+      {CREATE_AND_START}
+      {keys && tone === 'primary' && <span className="approval-kbd">{ENTER_HINT}</span>}
+    </CardActionButton>
+  );
   return (
     <ReviewCard enabled={compact} title={heading}
       summary={markdownToPlainLines(plan || create?.prose || '')}
@@ -838,8 +865,9 @@ export function ApprovalPanel({
       {!answerable && <UnanswerableNote />}
       {untranslated && answerable && <UntranslatedFoot id={approval.id} held={untranslated} onDecide={onDecide} />}
       <CardActions className="approval-actions">
+        {startLeads && createAndStartButton('primary')}
         <CardActionButton
-          tone="primary"
+          tone={startLeads ? 'accent' : 'primary'}
           disabled={!answerable}
           onClick={() => onDecide(approval.id, 'allow')}
         >
@@ -866,20 +894,10 @@ export function ApprovalPanel({
                             : provider
                               ? PROVIDER_ACTIONS[provider.verb]
                               : 'Approve'}
-          {keys && <span className="approval-kbd">{ENTER_HINT}</span>}
+          {keys && !startLeads && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
-        {/* A second yes, beside the first rather than in its place: the press above stays the
-            plain create it always was, Enter included. */}
-        {offersCreateAndStart(approval) && (
-          <CardActionButton
-            tone="accent"
-            disabled={!answerable}
-            title="Create the task and start its run now, so you are not asked again to start it."
-            onClick={() => onDecide(approval.id, 'allow', undefined, undefined, undefined, true)}
-          >
-            {CREATE_AND_START}
-          </CardActionButton>
-        )}
+        {/* On a held task Create and start is still offered, but second: Create it keeps Enter. */}
+        {offersCreateAndStart(approval) && !startLeads && createAndStartButton('accent')}
         {rules.length > 0 && (
           <CardActionButton
             tone="accent"

@@ -375,3 +375,63 @@ describe('on an engine\'s Install failed panel', () => {
     expect(fixButton(row('claude'))).toBeNull();
   });
 });
+
+describe('on the Update engines report (docs/mocks/engine-update-fix-with-agent)', () => {
+  const REPORT = 'Claude Code — already current (2.1.325)\nCodex — updated 0.168.2 → 0.169.0\nOpenCode — update timed out after 5m0s';
+  /** vmi3753066 after Update engines: OpenCode's update timed out; Claude Code signed in. */
+  const updated = (over: Partial<Runner> = {}) =>
+    machine({
+      name: 'vmi3753066',
+      install: relay({ status: 'failed', command: 'orbit engine-update', message: REPORT, mode: 'update' }),
+      agentFix: ready({ workspaceName: 'orbit-develop' }),
+      ...over,
+    });
+  const report = () => $('.rd-engine-relay');
+
+  it('sits before Dismiss and says where it runs; a press starts one session for the machine', async () => {
+    const runner = updated();
+    const { sent } = await mount(runner);
+    expect($$('.rd-engine-relay-row.bad', report()).map(text)).toEqual(['OpenCode — update timed out after 5m0s']);
+    expect($$('.agent-fix-row button', report()).map((b) => text(b))).toEqual(['Fix with an agent', 'Dismiss']);
+    expect(lineOf(report())).toBe('Starts a session in orbit-develop on this machine, with Claude Code.');
+
+    thenServe({
+      ...runner,
+      agentFix: ready({ workspaceName: 'orbit-develop', fixing: [{ kind: 'engineUpdateFailed', engine: null, sessionId: SESSION, workspaceId: 'ws1', workspaceName: 'orbit-develop' }] }),
+    });
+    await click(fixButton(report())!);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/attention/engineUpdateFailed/fix`, body: {} }]);
+
+    // Fixing: the report stays, the button gives way to the session, Dismiss stays.
+    expect(fixButton(report())).toBeNull();
+    expect(lineOf(report())).toBe('An agent is fixing this in orbit-develop · Open session');
+    expect($<HTMLAnchorElement>('.agent-fix-line a', report()).getAttribute('href')).toBe(`/sessions/${SESSION}`);
+    expect($$('button', report()).map((b) => text(b))).toEqual(['Dismiss']);
+  });
+
+  it('is disabled with the reason, pointing at the engine rows below it', async () => {
+    const { sent } = await mount(updated({
+      agentFix: ready({
+        workspaceName: 'orbit-develop',
+        blocked: { code: 'engineSignedOut', message: "An agent can't run here: orbit-develop uses Claude Code, which is signed out on this machine." },
+      }),
+    }));
+    const pressed = fixButton(report())!;
+    expect(pressed.hasAttribute('disabled') || pressed.getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(lineOf(report())).toBe(
+      "An agent can't run here: orbit-develop uses Claude Code, which is signed out on this machine. Sign in to Claude Code below to use this.",
+    );
+    await click(pressed);
+    expect(sent).toEqual([]);
+  });
+
+  it('is not on a report with nothing failed: the one an agent\'s re-run leaves', async () => {
+    await mount(updated({
+      install: relay({ status: 'done', command: 'orbit engine-update', message: 'Codex — already current (0.169.0)\nOpenCode — updated 1.0.98 → 1.0.112', mode: 'update' }),
+    }));
+    expect(text($('.rd-engine-relay-row', report()))).toBe('Nothing here needs your attention.');
+    expect(fixButton(report())).toBeNull();
+    expect(lineOf(report())).toBeNull();
+    expect($$('button', report()).map((b) => text(b))).toEqual(['Dismiss']);
+  });
+});

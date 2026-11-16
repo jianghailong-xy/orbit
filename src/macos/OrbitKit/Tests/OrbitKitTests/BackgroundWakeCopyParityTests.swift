@@ -261,14 +261,13 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
                        "Still running · 1m in · has written nothing yet")
     }
 
-    /// A turn that is only a note draws the note alone on both ends, never an empty bubble.
+    /// A turn that is only a note is never an empty bubble on either end. The web draws it as the
+    /// generic From Orbit line (`orbitOnlyTurn` → `OrbitEventLine`, owner rule 2026-11-16), which
+    /// replaced the bare note; the clauses of `orbitOnlyTurn` are pinned in OrbitEventCopyParityTests.
     func testATurnThatIsOnlyANoteIsDrawnAloneWhereTheWebDrawsIt() throws {
         let transcript = try flat(Self.webTranscript)
-        assertBuilt(transcript,
-                    "if (!queued && node.note && node.text.trim() === '' && !node.images?.length && !node.attachmentRefs?.length) {",
-                    "when a turn is only a note", Self.webTranscript)
-        assertBuilt(transcript, "return <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;",
-                    "the note drawn alone", Self.webTranscript)
+        assertBuilt(transcript, "if (orbitOnlyTurn(node)) {", "when a turn is only a note", Self.webTranscript)
+        assertBuilt(transcript, "<OrbitEventLine", "the note drawn as the From Orbit line", Self.webTranscript)
     }
 
     func testHowAJobCameOutIsSaidInTheSameWords() throws {

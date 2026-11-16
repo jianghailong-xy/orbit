@@ -256,6 +256,8 @@ internal object AccountCopy {
 internal object RunnerAccountCopy {
     /** The question in front of Default's Remove…, and an added account's while Default is removed. */
     fun removeTitle(name: String) = "Remove $name?"
+    /** Removing an added account while Default is in use. */
+    const val REMOVE_DETAIL = "Workspaces using it switch to Default."
     /** Removing Default, which only Orbit stops using; [cli] is the CLI's own name (Codex, Claude Code). */
     fun defaultRemoveDetail(runner: String, cli: String) = "Orbit stops using it on $runner. Its sign-in stays on the machine, and $cli in a " +
         "terminal there keeps working. Workspaces set to it run on Automatic."
@@ -270,6 +272,19 @@ internal object RunnerAccountCopy {
     /** That line's button, which brings Default back. */
     const val USE_AGAIN = "Use again"
     fun useAgainFailed(name: String) = "Couldn’t use $name again"
+    /** Over the sessions a refused removal lists, when one session is running in the account; [engine] is the CLI's own name (Codex,
+     * Claude Code). */
+    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is running on it — end the session below, then remove it"
+    /** The same, when several sessions are running in it. */
+    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are running on it — end them, then remove it"
+    /** Each listed session's way to it. */
+    const val IN_USE_OPEN = "Open session"
+    /** A listed session in a turn (RUNNING, or PENDING on its way to one). */
+    const val IN_USE_RUNNING = "Running"
+    /** A listed session between turns (AWAITING_INPUT): its process still holds the account. */
+    const val IN_USE_WAITING = "Waiting for input"
+    /** A listed session with no title yet. */
+    const val IN_USE_UNTITLED = "Untitled session"
 }
 
 /**
@@ -1338,6 +1353,29 @@ internal object RunnerPage {
         return (state.str("status") == "pending") to (if (state.str("status") == "failed") state.str("message") else null)
     }
 
+    /** A session a refused removal names as running in the account: its title, and its RunStatus as the server says it. */
+    data class InUseSession(val id: String, val title: String, val status: String?)
+
+    /** The sessions the machine refused this account's removal over (`sessions`): none unless it was refused for them, and none from a
+     * server older than the list. */
+    fun inUseSessions(state: JsonObject?, engine: String, account: String): List<InUseSession> {
+        if (state == null || state.str("engine") != engine || state.str("account") != account || state.str("status") != "failed") return emptyList()
+        return state.list("sessions").mapNotNull { session -> session.str("id")?.let { InUseSession(it, session.str("title").orEmpty(), session.str("status")) } }
+    }
+
+    /** What stands over those sessions in place of the machine's sentence, the engine named as its CLI is. */
+    fun inUseHeading(engine: String, count: Int) =
+        if (count == 1) RunnerAccountCopy.inUseOne(engineName(engine)) else RunnerAccountCopy.inUseMany(engineName(engine), count)
+
+    fun inUseTitle(session: InUseSession) = session.title.ifBlank { RunnerAccountCopy.IN_USE_UNTITLED }
+
+    /** A listed session's state, and its dot's tone: in a turn (green), waiting for input (amber), else no words and a grey dot. */
+    fun inUseStatus(status: String?): Pair<String?, String?> = when (status) {
+        "RUNNING", "PENDING" -> RunnerAccountCopy.IN_USE_RUNNING to "ok"
+        "AWAITING_INPUT" -> RunnerAccountCopy.IN_USE_WAITING to "warn"
+        else -> null to null
+    }
+
     /** The Default an engine leaves out while its owner removed it from Orbit (`removedDefault`: its directory, and its name if it was
      * renamed), which the engine page names after the accounts that remain, with the way back. The server marks an engine only while
      * the runner reports another account of it, so this is null whenever Default is in use. */
@@ -1362,13 +1400,12 @@ internal object RunnerPage {
 
     /** The question before [line]'s Remove…, title and body. Default's, and an added account's while Default is removed, are the web's:
      * that only Orbit stops using Default; that the added account's workspaces then run on Automatic, or, for the last account Orbit
-     * uses there, that Orbit uses Default again. An added account's while Default is in use is the page's own, as it was. */
+     * uses there, that Orbit uses Default again; while Default is in use, that its workspaces switch to Default. */
     fun removeQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
         val name = displayName(runner)
         val title = RunnerAccountCopy.removeTitle(line.name)
         if (line.isDefault) return title to RunnerAccountCopy.defaultRemoveDetail(name, engineName(health.text("engine")))
-        val removed = removedDefault(health) ?: return "Remove “${line.name}” from $name?" to
-            "${line.home ?: "Its sign-in"} goes from this machine, and sessions stop running on it. Default is untouched."
+        val removed = removedDefault(health) ?: return title to RunnerAccountCopy.REMOVE_DETAIL
         return title to if (othersStaying(runner, health, line.id) > 0) RunnerAccountCopy.removeDetailAutomatic(name)
             else RunnerAccountCopy.removeDetailLast(name, removedDefaultName(removed))
     }

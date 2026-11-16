@@ -120,6 +120,10 @@ export interface CreateSessionDto {
   /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the text is the optimizer's English, sent as
    *  inserted, so Settings › Translation does not hold or translate it. The turn carries no `translation`. */
   skipTranslation?: boolean;
+  /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the optimizer's prompt in the agent language, sent
+   *  beside the owner-language text Use put in the box. Under Settings › Translation the message is held as usual
+   *  and released with this text, with no translator call. Ignored when the owner's Translation is off. */
+  optimizedTranslation?: string;
 }
 
 export interface SessionTurnDto {
@@ -142,6 +146,10 @@ export interface SessionTurnDto {
   /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the text is the optimizer's English, sent as
    *  inserted, so Settings › Translation does not hold or translate it. The turn carries no `translation`. */
   skipTranslation?: boolean;
+  /** Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): the optimizer's prompt in the agent language, sent
+   *  beside the owner-language text Use put in the box. Under Settings › Translation the message is held as usual
+   *  and released with this text, with no translator call. Ignored when the owner's Translation is off. */
+  optimizedTranslation?: string;
 }
 
 /** Stop the running turn, and — when a follow-up rides along — queue what to do instead,

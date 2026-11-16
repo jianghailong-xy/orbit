@@ -425,10 +425,11 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
       assert.ok(!text(claimed).includes(secret), 'the claim carried the login');
     }
     assert.equal((await sessionRow(session)).poolCodexAccountId, pool.accountId, 'the session names the account it runs on');
-    // The token names its (pool, person, session) and no account at all (migration 0355).
+    // The token names its (pool, person, session) and no account at all (migration 0355). Its account and key
+    // columns (0800) are a SubAgent's child's alone: a session's own claim leaves both empty.
     const minted = await db.poolLoginToken.findMany({ where: { sessionId: session } });
     assert.deepEqual(minted.map((row) => [row.poolId, row.userId]), [[pool.id, owner.id]]);
-    assert.deepEqual(Object.keys(minted[0]).filter((column) => column.includes('account')), []);
+    assert.deepEqual([minted[0].accountId, minted[0].keyId], [null, null]);
     assert.ok(!JSON.stringify(minted).includes(token), 'the token is stored, not its hash');
     // The session's own read names no account id.
     assert.ok(!text(await sessions.get(owner.id, session)).includes(pool.accountId), 'a session read names the account id');

@@ -682,17 +682,58 @@ public enum RunnerPageFormat {
     }
 
     /// What became of the last removal asked of this account: under way, or refused in the machine's
-    /// own words. Nil when the last removal was another account's.
+    /// own words. Nil when the last removal was another account's. Refused because sessions are running
+    /// in the account, it says so in the page's words and lists them (`blocking`, web `BlockingSessions`).
     public struct AccountRemoval: Equatable, Sendable {
         public let pending: Bool
         public let refused: String?
+        public let blocking: [BlockingSession]
+
+        public init(pending: Bool, refused: String?, blocking: [BlockingSession] = []) {
+            self.pending = pending
+            self.refused = refused
+            self.blocking = blocking
+        }
+    }
+
+    /// One session a refused removal lists: its title, or Untitled session; a dot — green in a turn,
+    /// orange waiting for input, grey otherwise — and the word for the first two; opened by `id`.
+    public struct BlockingSession: Equatable, Sendable, Identifiable {
+        public let id: String
+        public let title: String
+        public let tone: Tone
+        public let label: String?
+
+        public init(_ session: RunnerAccountRemoveSession) {
+            id = session.id
+            let trimmed = session.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            title = trimmed.isEmpty ? RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_UNTITLED : trimmed
+            switch session.status {
+            case .running?, .pending?:
+                tone = .ok
+                label = RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_RUNNING
+            case .awaitingInput?:
+                tone = .warn
+                label = RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_WAITING
+            default:
+                tone = .muted
+                label = nil
+            }
+        }
     }
 
     public static func removal(_ state: RunnerAccountRemoveState?, engine: String,
                                account: String) -> AccountRemoval? {
         guard let state, state.engine == engine, state.account == account else { return nil }
-        return AccountRemoval(pending: state.status == "pending",
-                              refused: state.status == "failed" ? state.message : nil)
+        let failed = state.status == "failed"
+        let blocking = failed ? state.sessions.map(BlockingSession.init) : []
+        let refused: String?
+        switch blocking.count {
+        case 0: refused = failed ? state.message : nil
+        case 1: refused = RunnerAccountCopy.runnerAccountInUseOne(engine: engineName(engine))
+        default: refused = RunnerAccountCopy.runnerAccountInUseMany(engine: engineName(engine), count: blocking.count)
+        }
+        return AccountRemoval(pending: state.status == "pending", refused: refused, blocking: blocking)
     }
 
     /// Whether an account's swipe and long-press menu offer Remove: every account the runner added,
@@ -719,8 +760,7 @@ public enum RunnerPageFormat {
     /// terminal keeps working (the web's words, `RunnerAccountCopy`). An added account's sign-in goes from
     /// the machine: while Default is removed from Orbit its workspaces go to Automatic, or — for the last
     /// account Orbit uses there — to Default, by its name, which Orbit then uses again (the web's words
-    /// too), never to a Default as though it were in use; while Default is, the page's own question,
-    /// which says Default is untouched.
+    /// too), never to a Default as though it were in use; while Default is, to Default (the web's words).
     public static func removalQuestion(_ line: AccountLine, health: RunnerEngineHealth,
                                        runner: Runner) -> RemovalQuestion {
         let machine = displayName(runner)
@@ -735,10 +775,8 @@ public enum RunnerPageFormat {
                                        ? RunnerAccountCopy.runnerAccountRemoveDetailAutomatic(runner: machine)
                                        : RunnerAccountCopy.runnerAccountRemoveDetailLast(runner: machine, name: name))
         }
-        let place = line.home ?? "Its sign-in"
-        return RemovalQuestion(title: "Remove “\(line.name)” from \(machine)?",
-                               message: "\(place) goes from this machine, and sessions stop running on it. "
-                                   + "Default is untouched.")
+        return RemovalQuestion(title: RunnerAccountCopy.runnerAccountRemoveTitle(name: line.name),
+                               message: RunnerAccountCopy.RUNNER_ACCOUNT_REMOVE_DETAIL)
     }
 
     /// What a Default removed from Orbit is called: the name it was given in Orbit, else `Default` (web

@@ -2585,8 +2585,15 @@ func buildOperationCatalog() []*operation {
 				"its account pools. One key can run on several engines: a DeepSeek key on Claude Code, OpenCode and " +
 				"DeepSeek Harness. Read this before pinning a `provider` or an `engine` on a task or session: a key's slug " +
 				"is derived from its label, not chosen, so it cannot be guessed from the vendor's name, and a slug that is " +
-				"not on this list is refused with \"provider not available\".",
-			"inputSchema": obj(map[string]interface{}{}),
+				"not on this list is refused with \"provider not available\". With `workspace` (one of this account's " +
+				"workspaces, by name or id) it answers instead for that workspace's runner: every provider × engine with " +
+				"`usable` true or false as SubAgent routing judges it (installed, signed in, quota, the SubAgent block " +
+				"list), a one-line `reason` when false, and the models usable there; the pair its sessions start on is " +
+				"marked `default`. Call it this way before delegate(workspace) or session_create on another workspace, " +
+				"to learn whether that machine can run what you mean to ask of it.",
+			"inputSchema": obj(map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "A workspace of this account, by name or id: judge every provider × engine against its runner instead of listing them."},
+			}),
 		},
 		{
 			"name": "provider_create",
@@ -2814,7 +2821,7 @@ func buildOperationCatalog() []*operation {
 			},
 			map[string]interface{}{
 				"name":        "session_merge",
-				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict. Without waitSeconds this only QUEUES the merge: the reply is outcome PENDING with no receipt, and its next names the read to make (session_get after afterSeconds, or merge_receipts) — it never says the merge worked. With waitSeconds the reply waits for the outcome and carries the receipt itself. A session merging ITSELF is asked during its own turn, so its merge is queued when that turn ends rather than refused: the reply says so at once (mergeAfterTurn, or outcome AFTER_TURN with waitSeconds), and merge_receipts has the outcome afterwards.",
+				"description": "Merge a session's git worktree branch into its target branch (default: the runner's main/master). Only for worktree-isolated sessions; fails cleanly on conflict. Without waitSeconds this only QUEUES the merge: the reply is outcome PENDING with no receipt, and its next names the read to make (session_get after afterSeconds, or merge_receipts) — it never says the merge worked. With waitSeconds the reply waits for the outcome and carries the receipt itself. A merge does not wait for the session's turn: it lands what the branch has committed when it starts, so commit first, and a session can merge itself mid-turn and wait for its own receipt. Only on a runner too old to merge beside a turn is a session's merge of itself queued for when its turn ends (mergeAfterTurn, or outcome AFTER_TURN with waitSeconds), with merge_receipts holding the outcome afterwards.",
 				"inputSchema": obj(map[string]interface{}{
 					"sessionId":    sessionIDProp,
 					"targetBranch": str,
@@ -3652,9 +3659,9 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" coding-engine process. Use this instead of Bash with run_in_background: a shell started that" +
 				" way is a child of the engine, so recycling the engine (idle TTL, memory pressure) kills it" +
 				" mid-build. A job started here ends only when it exits, when the session ends, or when you" +
-				" kill it. A merge or commit of this session neither waits for it nor stops it: both run" +
-				" beside it and name it in their receipt, and a commit takes any file it is still writing as" +
-				" that file stands. Read its output with bg_output. To be woken when it ends or has news, set" +
+				" kill it. A merge of this session neither waits for it nor stops it: a merge lands only what" +
+				" the branch has committed. A commit of the checkout is refused while it runs, so a file it is" +
+				" still writing is never committed half-written. Read its output with bg_output. To be woken when it ends or has news, set" +
 				" wakeOnExit or wakeOnOutput; to be woken if it goes quiet while still running, set wakeOnStall:" +
 				" Orbit then tells this session what happened, even if this coding-engine process has been" +
 				" recycled in the meantime — so a wait for CI or a deploy can end your turn instead of holding it" +
@@ -3939,7 +3946,7 @@ var agentCLICapabilities = []cliCapabilitySpec{
 }
 
 var providerCLICapabilities = []cliCapabilitySpec{
-	{Tool: "provider_list", Argv: []string{"orbit", "provider", "list"}, Usage: "orbit provider list [--json]", Arguments: []string{"--json"}},
+	{Tool: "provider_list", Argv: []string{"orbit", "provider", "list"}, Usage: "orbit provider list [--workspace NAME_OR_ID] [--json]", Arguments: []string{"--workspace <name or id> (judge every provider × engine against that workspace's runner)", "--json"}},
 	{Tool: "provider_create", Argv: []string{"orbit", "provider", "create"}, Usage: "orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]", Arguments: []string{"--label <text> (required)", "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol the endpoint speaks: Anthropic Messages, OpenAI Responses, Moonshot, Gemini or a Cursor User API Key; it decides which engines can run the key)", "--base-url <url> (required but for --runtime cursor; resolved on the runner the session runs on)", "--api-key <key> | --api-key-file - (required)", "--models <json array> (required but for --runtime cursor; [{value,label,contextWindow?,reasoningLevels?}])", "--default-model <model id>", "--json"}, Mutates: true},
 	{Tool: "provider_update", Argv: []string{"orbit", "provider", "update"}, Usage: "orbit provider update SLUG [options]", Arguments: []string{"[slug] (required)", "--label <text>", "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol the endpoint speaks)", "--base-url <url>", "--api-key <key> | --api-key-file -", "--models <json array> (replaces the list)", "--default-model <model id>", "--json"}, Mutates: true},
 	{Tool: "provider_delete", Argv: []string{"orbit", "provider", "delete"}, Usage: "orbit provider delete SLUG [--json]", Arguments: []string{"[slug] (required)", "--json"}, Mutates: true},

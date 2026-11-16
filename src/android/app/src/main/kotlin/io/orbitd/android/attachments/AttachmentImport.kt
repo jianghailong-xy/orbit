@@ -7,7 +7,12 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import io.orbitd.android.composer.ComposerModel
 import io.orbitd.android.composer.StagedAttachment
+import io.orbitd.android.core.guests.GuestConversation
+import io.orbitd.android.core.guests.GuestImages
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.UUID
@@ -66,4 +71,44 @@ fun importAttachment(context: Context, model: ComposerModel, uri: Uri, source: S
     }, release = {
         if (persisted) runCatching { resolver.releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
     })
+}
+
+/** An image for a guest's message (the guest door takes PNG, JPEG, WebP or GIF up to 5 MB, [GuestImages]): one of those types goes
+ * as its own bytes, anything else the picker hands over (HEIC, say) is converted to PNG as the owner's composer converts photos. A
+ * file that cannot be read says why under the box. */
+fun importGuestImage(context: Context, scope: CoroutineScope, model: GuestConversation, uri: Uri, source: String) {
+    val resolver = context.contentResolver
+    scope.launch {
+        try {
+            val (name, mime, bytes) = withContext(Dispatchers.IO) {
+                fun open() = resolver.openInputStream(uri) ?: error("File permission expired. Select the file again.")
+                val type = resolver.getType(uri).orEmpty()
+                if (type in GuestImages.TYPES) {
+                    var name = if (source == "paste") "pasted" else "image"
+                    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                        if (it.moveToFirst()) name = it.getString(0) ?: name
+                    }
+                    // Read no further than past the limit: that is enough to know it is over.
+                    val output = ByteArrayOutputStream()
+                    open().use { input ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (output.size() <= GuestImages.MAX_BYTES) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                    Triple(name, type, output.toByteArray())
+                } else {
+                    val output = ByteArrayOutputStream()
+                    val bitmap = decodeAttachmentImage(::open)
+                    try { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "Couldn't convert this image." } }
+                    finally { bitmap.recycle() }
+                    Triple(if (source == "paste") "pasted.png" else "photo.png", "image/png", output.toByteArray())
+                }
+            }
+            model.attach(name, mime, bytes)
+        } catch (cancel: CancellationException) { throw cancel }
+        catch (failure: Exception) { model.refuse(failure.message ?: "Couldn't read this image.") }
+    }
 }

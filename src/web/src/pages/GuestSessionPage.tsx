@@ -1,18 +1,22 @@
-import { ArrowUpOutlined, LoadingOutlined } from '@ant-design/icons';
+import { ArrowUpOutlined, CloseOutlined, LoadingOutlined, PictureOutlined } from '@ant-design/icons';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import {
   ApiError,
+  fetchGuestAttachmentObjectUrl,
   getGuestEventFull,
   getGuestEventPage,
   getGuestEventsAfter,
   getGuestSession,
   sendGuestTurn,
+  uploadGuestAttachment,
   type GuestSessionNow,
   type SharedEvent,
 } from '../api';
-import { EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript } from '../components/Transcript';
+import { AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript } from '../components/Transcript';
+import { Image } from '../components/ui/Image';
+import { ALLOWED_IMAGE_TYPES, type ComposerImage, useComposerImages } from '../components/WorkspaceView';
 import { memoizeEventFull } from '../lib/eventFull';
 import { meQuery } from '../lib/queries';
 import { newRunRequestToken } from '../lib/runRequestToken';
@@ -61,9 +65,10 @@ export function GuestLinkRedirect() {
  * The guest view (docs/session-guests-design.md §4; boards docs/mocks/share-links/10-session-guests-3 and
  * 11-guest-one-link-2): a session someone invited you to reply in, drawn in your own app where `/sessions/<id>`
  * finds no session of yours (D9). Its head — title, `Shared by <owner>`, the session's status and a Guest badge —
- * over the Transcript the guest door projects, followed as the public page follows it, and a composer that only
- * takes text: no mode, model or effort, no `!` shell, no attachments. A message is a turn of the owner's session, on
- * the owner's machine; one to an ended session restarts it there.
+ * over the Transcript the guest door projects, followed as the public page follows it, and a composer that takes
+ * words and images — pasted, dropped or picked, PNG, JPEG, WebP or GIF up to 5MB as the owner's composer takes them,
+ * uploaded through the guest door and previewed until sent: no mode, model or effort, no `!` shell, no other files.
+ * A message is a turn of the owner's session, on the owner's machine; one to an ended session restarts it there.
  */
 export function GuestSessionView({ sessionId }: { sessionId: string }) {
   return <GuestConversation key={sessionId} sessionId={sessionId} />;
@@ -86,6 +91,8 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   const { data, isLoading, error } = useQuery(guestSessionQuery(sessionId));
   const me = useQuery(meQuery());
   const fetchFull = useMemo(() => memoizeEventFull((seq: number) => getGuestEventFull(sessionId, seq)), [sessionId]);
+  // A turn's images are read through the guest door: the owner's `/attachments/:id` answers a guest 404.
+  const resolveAttachment = useMemo(() => (id: string) => fetchGuestAttachmentObjectUrl(sessionId, id), [sessionId]);
 
   const [older, setOlder] = useState<SharedEvent[]>([]);
   const [newer, setNewer] = useState<SharedEvent[]>([]);
@@ -94,6 +101,15 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [images, setImages] = useState<ComposerImage[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const uploadImage = useCallback((file: File) => uploadGuestAttachment(sessionId, file), [sessionId]);
+  // The owner composer's staging, held to its pictures and sent through the guest door.
+  const { addImage, removeImage } = useComposerImages(true, sessionId, setImages, { upload: uploadImage, imagesOnly: true });
+  const readyIds = images.flatMap((im) => (im.status === 'done' && im.id ? [im.id] : []));
+  const uploading = images.some((im) => im.status === 'uploading');
+  const addFiles = (files: File[]) => files.forEach((f) => void addImage(f));
   // Bumped by a send, so the follow loop asks at once for the echo and the run it started.
   const [kick, setKick] = useState(0);
   const afterRef = useRef(0);
@@ -233,14 +249,23 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
     };
   }, [head?.title]);
 
+  const canSend = (!!draft.trim() || readyIds.length > 0) && !uploading && !sending;
   const send = () => {
     const content = draft.trim();
-    if (!content || sending) return;
+    if (!canSend) return;
+    const sent = images;
     setSending(true);
     setSendError(null);
-    sendGuestTurn(sessionId, { clientTurnId: newRunRequestToken(), content })
+    sendGuestTurn(sessionId, {
+      clientTurnId: newRunRequestToken(),
+      content,
+      ...(readyIds.length ? { attachmentIds: readyIds } : {}),
+    })
       .then(() => {
         setDraft('');
+        // The transcript draws the sent images from the guest door now; the local previews are done with.
+        sent.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
+        setImages((prev) => prev.filter((im) => !sent.includes(im)));
         setKick((k) => k + 1);
       })
       .catch((e) => {
@@ -285,12 +310,65 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
           </div>
         )}
         <form
-          className="guest-composer"
+          className={`guest-composer${dragging ? ' is-dragging' : ''}`}
           onSubmit={(e) => {
             e.preventDefault();
             send();
           }}
+          onDragOver={(e) => {
+            if (!Array.from(e.dataTransfer?.types ?? []).includes('Files')) return;
+            // preventDefault marks the composer a drop target; without it the browser opens the file.
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            setDragging(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+          }}
+          onDrop={(e) => {
+            setDragging(false);
+            const files = Array.from(e.dataTransfer?.files ?? []);
+            if (!files.length) return;
+            e.preventDefault();
+            addFiles(files);
+          }}
         >
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept={ALLOWED_IMAGE_TYPES.join(',')}
+            multiple
+            hidden
+            data-testid="guest-image-input"
+            onChange={(e) => {
+              addFiles(Array.from(e.target.files ?? []));
+              e.target.value = '';
+            }}
+          />
+          {images.length > 0 && (
+            <div className="composer-attachments guest-composer-attachments">
+              {images.map((im) => (
+                <span key={im.uid} className="composer-pill composer-attach">
+                  {im.previewUrl && (
+                    <Image className="composer-attach-thumb" src={im.previewUrl} alt="" label={im.name || 'Preview image'} />
+                  )}
+                  {im.status === 'uploading' && (
+                    <span className="composer-attach-spin">
+                      <LoadingOutlined spin />
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="composer-attach-remove"
+                    onClick={() => removeImage(im.uid)}
+                    aria-label="Remove image"
+                  >
+                    <CloseOutlined />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <textarea
             className="guest-composer-input"
             aria-label="Message"
@@ -298,6 +376,17 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
             rows={1}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            // A screenshot pasted from the clipboard is staged as an image; pasted text is left alone.
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData?.items ?? [])
+                .filter((it) => it.kind === 'file')
+                .map((it) => it.getAsFile())
+                .filter((f): f is File => !!f);
+              if (files.length) {
+                e.preventDefault();
+                addFiles(files);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
@@ -306,12 +395,21 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
             }}
           />
           <div className="guest-composer-foot">
+            <button
+              type="button"
+              className="guest-composer-attach"
+              aria-label="Attach image"
+              title="Attach image"
+              onClick={() => imageInputRef.current?.click()}
+            >
+              <PictureOutlined />
+            </button>
             <span className={`guest-composer-hint${sendError ? ' is-error' : ''}`}>{sendError ?? hint}</span>
             <button
               type="submit"
               className="guest-composer-send"
               aria-label="Send"
-              disabled={!draft.trim() || sending}
+              disabled={!canSend}
             >
               {sending ? <LoadingOutlined spin /> : <ArrowUpOutlined />}
             </button>
@@ -347,9 +445,11 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
       >
         <div className="share-inner">
           <PublicLinkResolverCtx.Provider value={NOTHING_ELSE_SHARED}>
-            <EventFullCtx.Provider value={fetchFull}>
-              <Transcript events={events} />
-            </EventFullCtx.Provider>
+            <AttachmentResolverContext.Provider value={resolveAttachment}>
+              <EventFullCtx.Provider value={fetchFull}>
+                <Transcript events={events} />
+              </EventFullCtx.Provider>
+            </AttachmentResolverContext.Provider>
           </PublicLinkResolverCtx.Provider>
         </div>
       </main>

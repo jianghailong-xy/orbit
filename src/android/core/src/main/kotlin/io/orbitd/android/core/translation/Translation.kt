@@ -79,7 +79,8 @@ object Translation {
     fun bilingual(preferences: JsonObject?): Boolean =
         enabled(preferences) && (preferences?.get("translationBilingual") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
 
-    /** Over this many lines a reply's English starts collapsed to a two-line preview (frame 3, B): BILINGUAL_COLLAPSE_LINES. */
+    /** Over this many lines the English of a reply drawn whole (its blocks do not pair, [bilingualPairs]) starts collapsed to a
+     *  two-line preview (frame 3, B): BILINGUAL_COLLAPSE_LINES. An interleaved reply never collapses. */
     const val BILINGUAL_COLLAPSE_LINES = 6
     /** A source line wraps every this many characters, for the count: BILINGUAL_LINE_CHARS. */
     const val BILINGUAL_LINE_CHARS = 60
@@ -114,6 +115,127 @@ object Translation {
         when { rest.startsWith("```") -> "```"; rest.startsWith("~~~") -> "~~~"; else -> null }
     }
     private fun isFence(line: String, fence: String): Boolean = leadingSpaces(line)?.startsWith(fence) == true
+
+    /** One block kind of [bilingualPairs]. */
+    enum class BlockKind { PARAGRAPH, HEADING, ITEM, QUOTE, OTHER }
+
+    /**
+     * One block of the translation, in order: [text] without its indentation (an item's without its [marker], a quote's without its
+     * `>`s, a heading's whole line), and [original] the matching block of the original in the same form — a heading's words alone.
+     * [BlockKind.OTHER] carries no original.
+     */
+    data class BilingualPair(val kind: BlockKind, val depth: Int, val marker: String?, val text: String, val original: String?) {
+        /** An ordered item's number ("3." → 3); null for a bullet. */
+        val number: Int? get() = marker?.takeIf { it.first() in '0'..'9' }?.dropLast(1)?.toIntOrNull()
+    }
+
+    private class Block(val kind: BlockKind, val depth: Int, val marker: String?, val body: String, val words: String)
+
+    private val PAIR_HEADING = Regex("^ {0,3}(#{1,6})(?: +|$)(.*)$")
+    private val PAIR_ITEM = Regex("^( *)([-*+]|[0-9]{1,9}[.)])( +|$)(.*)$")
+    private val PAIR_BREAK = Regex("^ {0,3}([-*_])(?: *\\1){2,} *$")
+    private val PAIR_FENCE = Regex("^ *(```|~~~)")
+    private val PAIR_QUOTE = Regex("^ {0,3}>")
+    private val PAIR_TABLE = Regex("^ *\\|")
+    private val PAIR_IMAGES = Regex("^(?:!\\[[^\\]]*\\]\\([^)]*\\)\\s*)+$")
+    private val PAIR_HEADING_CLOSE = Regex("(?:^| +)#+ *$")
+    private val PAIR_QUOTE_MARK = Regex("^ {0,3}> ?")
+
+    private fun indentOf(line: String): Int = line.takeWhile { it == ' ' }.length
+    private fun dedent(line: String, n: Int): String = line.substring(minOf(n, indentOf(line)))
+    private fun startsBlock(line: String): Boolean =
+        PAIR_FENCE.containsMatchIn(line) || PAIR_HEADING.containsMatchIn(line) || PAIR_BREAK.containsMatchIn(line) ||
+            PAIR_ITEM.containsMatchIn(line) || PAIR_QUOTE.containsMatchIn(line) || PAIR_TABLE.containsMatchIn(line)
+
+    private fun bilingualBlocks(text: String): List<Block> {
+        val lines = text.replace(Regex("\r\n?"), "\n").split("\n")
+        val blocks = mutableListOf<Block>()
+        // The content column of each open list item, innermost last.
+        val items = mutableListOf<Int>()
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i]
+            if (line.isBlank()) { i++; continue }
+            val indent = indentOf(line)
+            while (items.isNotEmpty() && indent < items.last()) items.removeAt(items.size - 1)
+            val depth = items.size
+            fun push(kind: BlockKind, body: String, words: String = body) { blocks.add(Block(kind, depth, null, body, words)) }
+            // A fence opens at most 3 spaces in from the column its block sits at, and closes the same way.
+            val base = if (depth > 0) items[depth - 1] else 0
+            val rest = line.trimStart()
+            val opener = if (indent - base <= 3) listOf("```", "~~~").firstOrNull { rest.startsWith(it) } else null
+            if (opener != null) {
+                var close = i + 1
+                while (close < lines.size && !(indentOf(lines[close]) - base <= 3 && lines[close].trimStart().startsWith(opener))) close++
+                if (close < lines.size) {
+                    push(BlockKind.OTHER, lines.subList(i, close + 1).joinToString("\n") { dedent(it, indent) })
+                    i = close + 1
+                    continue
+                }
+            }
+            val heading = PAIR_HEADING.find(line)
+            if (heading != null) {
+                push(BlockKind.HEADING, line.trim(), heading.groupValues[2].replace(PAIR_HEADING_CLOSE, "").trim())
+                i++
+                continue
+            }
+            if (PAIR_BREAK.containsMatchIn(line)) {
+                push(BlockKind.OTHER, line.trim())
+                i++
+                continue
+            }
+            val item = PAIR_ITEM.find(line)
+            if (item != null) {
+                val spaces = item.groupValues[3].length
+                val column = indent + item.groupValues[2].length + (if (spaces in 1..4) spaces else 1)
+                val body = mutableListOf(item.groupValues[4])
+                i++
+                while (i < lines.size && !lines[i].isBlank() && !startsBlock(lines[i])) { body.add(dedent(lines[i], column)); i++ }
+                val joined = body.joinToString("\n")
+                blocks.add(Block(BlockKind.ITEM, depth, item.groupValues[2], joined, joined))
+                items.add(column)
+                continue
+            }
+            if (PAIR_QUOTE.containsMatchIn(line)) {
+                val body = mutableListOf<String>()
+                while (i < lines.size && PAIR_QUOTE.containsMatchIn(lines[i])) { body.add(lines[i].replaceFirst(PAIR_QUOTE_MARK, "")); i++ }
+                push(BlockKind.QUOTE, body.joinToString("\n"))
+                continue
+            }
+            if (PAIR_TABLE.containsMatchIn(line)) {
+                val body = mutableListOf<String>()
+                while (i < lines.size && PAIR_TABLE.containsMatchIn(lines[i])) { body.add(dedent(lines[i], indent)); i++ }
+                push(BlockKind.OTHER, body.joinToString("\n"))
+                continue
+            }
+            val body = mutableListOf(dedent(line, indent))
+            i++
+            while (i < lines.size && !lines[i].isBlank() && !startsBlock(lines[i])) { body.add(dedent(lines[i], indent)); i++ }
+            val joined = body.joinToString("\n")
+            push(if (PAIR_IMAGES.containsMatchIn(joined.trim())) BlockKind.OTHER else BlockKind.PARAGRAPH, joined)
+        }
+        return blocks
+    }
+
+    /**
+     * "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): the translation's blocks with the
+     * original's matched under them, or null when the two do not split into the same pairable blocks — draw the reply whole, as before
+     * (frame 4). Line for line the rule of @orbit/shared `bilingualPairs` and OrbitKit `BilingualPairs.pairs`, all three walked through
+     * src/shared/src/bilingual-pairs.fixture.json: blocks split by lines (fenced code, heading, list item with its continuation lines,
+     * quote, table, thematic break, else paragraph); depth is how many list items a block sits inside; paragraphs, headings, items and
+     * quotes pair, the rest is drawn once from the translation; the pairable sequences must match in count, kind and depth.
+     */
+    fun bilingualPairs(translation: String, original: String): List<BilingualPair>? {
+        val ours = bilingualBlocks(translation)
+        val theirs = bilingualBlocks(original).filter { it.kind != BlockKind.OTHER }
+        val pairable = ours.filter { it.kind != BlockKind.OTHER }
+        if (pairable.isEmpty() || pairable.size != theirs.size) return null
+        if (pairable.indices.any { pairable[it].kind != theirs[it].kind || pairable[it].depth != theirs[it].depth }) return null
+        var k = 0
+        return ours.map { b ->
+            BilingualPair(b.kind, b.depth, b.marker, b.body, if (b.kind == BlockKind.OTHER) null else theirs[k++].words)
+        }
+    }
 
     /** `GET /users/me`'s `translationAvailable`: the server holds a DeepSeek key. Absent (an older server) reads as unable. */
     fun available(user: JsonObject?): Boolean = (user?.get("translationAvailable") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true

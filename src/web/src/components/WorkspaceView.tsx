@@ -323,6 +323,7 @@ import {
   type SessionFolder,
   type SessionListItem,
   sendTurn,
+  type OptimizedSend,
   type TaskRunRoute,
   unpinSession,
   updateSessionConfig,
@@ -632,7 +633,13 @@ import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { useOpenTaskOverPage } from '../lib/taskInPlace';
-import { OPTIMIZE_SHORTCUT, usePromptOptimizer, type PromptOptimizerTarget } from './PromptOptimizer';
+import {
+  OPTIMIZE_SHORTCUT,
+  optimizedSendOf,
+  usePromptOptimizer,
+  type OptimizedInsert,
+  type PromptOptimizerTarget,
+} from './PromptOptimizer';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -692,8 +699,8 @@ interface ComposerSendVars {
    *  that a refusal about who holds the task is answered where the press was — on the card, whose
    *  offer to re-send is what stopped being true — instead of twice, in two places at once. */
   source?: 'autoRetry';
-  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English. */
-  skipTranslation?: boolean;
+  /** Prompt optimizer (D2): the text is still exactly what Use put in the box. */
+  optimized?: OptimizedSend;
   /** A machine's first session: which machine, and the folder of the workspace it makes, sent instead
    *  of a workspace. */
   firstWorkspace?: { runnerId: string; folder: NewWorkspaceRequest };
@@ -703,10 +710,13 @@ interface ComposerSendVars {
 }
 
 // The image types Claude takes as inline content blocks: shown as a thumbnail and capped
-// tighter (kept in sync with the runner's image-block dispatch). Anything else is a generic
-// file — any type, up to the server's 25MB cap (attachments.media.ts).
-const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+// tighter (kept in sync with the runner's image-block dispatch, and with the guest door's
+// COMPOSER_IMAGE_TYPES / MAX_COMPOSER_IMAGE_BYTES in attachments.media.ts). Anything else is a
+// generic file — any type, up to the server's 25MB cap (attachments.media.ts).
+export const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** What a composer that takes only pictures (a guest's) says of anything else. */
+export const IMAGES_ONLY_REFUSED = 'Only PNG, JPEG, WebP or GIF images can be attached';
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 // What a staged picture's thumbnail is called when its file has no name. The thumbnail is the button that opens the
 // picture in the viewer and is named by the file; the picture itself stays decorative (`alt=""`).
@@ -2480,9 +2490,9 @@ export function WorkspaceView({
   const canHover = useMediaQuery('(hover: hover)');
   const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
-  // The prompt optimizer's text, while it is what Use put in the box (D2): a send of exactly it is
-  // already English and skips Translation. Any other text is translated as usual.
-  const [optimizedInsert, setOptimizedInsert] = useState<string | null>(null);
+  // The prompt optimizer's text, while it is what Use put in the box (D2): a send of exactly it goes with
+  // the optimizer's own translation, or as written. Any other text is translated as usual.
+  const [optimizedInsert, setOptimizedInsert] = useState<OptimizedInsert | null>(null);
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
   // text it annotates — a token the user edits stops matching and simply travels as prose.
@@ -2792,6 +2802,8 @@ export function WorkspaceView({
   const [stuck, setStuck] = useState<
     { seq: string | null; text: string; loading?: boolean } | null
   >(null);
+  // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
+  const stuckBarRef = useRef<HTMLButtonElement>(null);
   // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
   // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
@@ -4648,11 +4660,21 @@ export function WorkspaceView({
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
-    let cur: HTMLElement | null = null;
+    let at = -1;
     for (const b of bubbles) {
-      if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
+      if (b.getBoundingClientRect().bottom <= topY + 1) at++;
       else break;
     }
+    // The bar sits above the scroller, so drawing or dropping it moves the transcript by its height
+    // whenever the scroll position has to give way: at the tail, which stays pinned. A turn Orbit
+    // opened hides the bar as it leaves the top, and with the bar gone that turn came back into view,
+    // which raised the bar again, which pushed it out — the bar flickered at a frame's pace. So while
+    // the bar is up, such a turn only takes it down once it is above the top by the bar's own height,
+    // and the question the bar names until then is the one before it.
+    const barHeight = stuckBarRef.current?.offsetHeight ?? 0;
+    if (at >= 0 && barHeight > 0 && bubbles[at].hasAttribute('data-orbit-round')
+      && bubbles[at].getBoundingClientRect().bottom > topY + 1 - barHeight) at--;
+    const cur: HTMLElement | null = at >= 0 ? bubbles[at] : null;
     if (cur?.hasAttribute('data-orbit-round')) {
       setStuck(null);
     } else if (cur) {
@@ -5806,7 +5828,7 @@ export function WorkspaceView({
           shell ? 'shell' : undefined,
           intent,
           operation.clientTurnId,
-          vars.skipTranslation,
+          vars.optimized,
         );
         // The server decides this under the same Session row lock as enqueue/claim. Missing
         // placement is a protocol error; local idle state is never used to infer delivery.
@@ -5861,7 +5883,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             intent,
             operation.clientTurnId,
-            vars.skipTranslation,
+            vars.optimized,
           );
           const placement = turnPlacementOf(res);
           const queuedItem =
@@ -5913,7 +5935,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             operation.clientTurnId,
             vars.stopSessionId,
-            vars.skipTranslation,
+            vars.optimized,
           );
           // The task moved on to another run and the server delivered this there. Nothing was
           // placed on THIS row, so there is no placement to honour and no bubble to paint here —
@@ -6008,7 +6030,7 @@ export function WorkspaceView({
         shell,
         // Composed on a folder's page: the session starts in that folder.
         ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
-        ...(vars.skipTranslation ? { skipTranslation: true } : {}),
+        ...vars.optimized,
       });
       // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
@@ -7314,14 +7336,14 @@ export function WorkspaceView({
       else setText('');
       return;
     }
-    // D2: still exactly what the optimizer put in the box, so it is English already.
-    const skipTranslation = optimizedInsert !== null && c === optimizedInsert.trim();
+    // D2: still exactly what the optimizer put in the box, so it needs no translator.
+    const optimized = optimizedInsert !== null && c === optimizedInsert.text.trim() ? optimizedSendOf(optimizedInsert) : undefined;
     setOptimizedInsert(null);
     sendFromComposer({
       content: materializeReferences(c, composerRefs),
       images: readyImages,
       intent,
-      ...(skipTranslation ? { skipTranslation: true } : {}),
+      ...(optimized ? { optimized } : {}),
     });
   };
   // Open the new-session draft for this workspace. A /sessions/<id> URL carries no
@@ -10569,6 +10591,7 @@ export function WorkspaceView({
 
         {stuck && (
           <button
+            ref={stuckBarRef}
             className={stuck.loading ? 'chat-sticky-question chat-sticky-loading' : 'chat-sticky-question'}
             title={stuck.text}
             onClick={() => {
@@ -10706,12 +10729,10 @@ export function WorkspaceView({
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
-                  Keyed by the session like its siblings, so a refresh in flight stays with the
-                  conversation that asked for it. */}
+                  Keyed by the session like its siblings. */}
               {selected && selectedId && selectedRecap && transcriptEvents.length > 0 && (
                 <SessionRecapCard
                   key={`recap:${selectedId}`}
-                  sessionId={selectedId}
                   text={selectedRecap}
                   recapAt={selectedSession?.recapAt ?? null}
                   onHide={hideSelectedRecap}
@@ -12591,23 +12612,22 @@ export function SessionComposer({
             {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
           </button>
         )}
+        {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with
+            nothing to optimize: a button that came and went with the draft moved every control to
+            its left. Busy, the spinner takes the same slot. */}
         {optimizer.buttonShown && (
           <button
             type="button"
-            className={optimizer.busy ? 'composer-optimize composer-optimize-busy' : 'composer-optimize'}
+            className="composer-optimize"
             onClick={optimizer.press}
+            disabled={!optimizer.buttonEnabled}
             aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
-            title={optimizer.busy ? 'Press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
+            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
           >
             {optimizer.busy ? (
-              <>
-                <span className="composer-optimize-spin" aria-hidden="true" />
-                Optimizing…
-              </>
+              <span className="composer-optimize-spin" aria-hidden="true" />
             ) : (
-              <>
-                <span aria-hidden="true">✦</span> Optimize
-              </>
+              <span aria-hidden="true">✦</span>
             )}
           </button>
         )}
@@ -13214,13 +13234,17 @@ export function usePendingTray({
 /**
  * The composer's pictures and files (`SessionComposer`'s attachment row): checked, uploaded at once as staged chips —
  * to the session when there is one, unscoped for a message that makes one — and handed back out of a sent message by
- * their ids. The session page and the wiki chat panel each stage into a list of their own.
+ * their ids. The session page and the wiki chat panel each stage into a list of their own; the guest view stages
+ * pictures only (`imagesOnly`) and uploads them through the guest door (`upload`).
  */
 export function useComposerImages(
   canAttach: boolean | undefined,
   sessionId: string | undefined,
   setImages: Dispatch<SetStateAction<ComposerImage[]>>,
+  opts?: { upload?: (file: File) => Promise<{ id: string }>; imagesOnly?: boolean },
 ) {
+  const upload = opts?.upload;
+  const imagesOnly = opts?.imagesOnly === true;
   const message = useToast();
   const imageUid = useRef(0);
   // Validate, then upload an attachment as a staged chip. Uploaded eagerly (not on send) so
@@ -13235,6 +13259,10 @@ export function useComposerImages(
         return;
       }
       const isInlineImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+      if (imagesOnly && !isInlineImage) {
+        message.error(IMAGES_ONLY_REFUSED);
+        return;
+      }
       const cap = isInlineImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
       if (file.size <= 0) {
         message.error(`${file.name || 'File'} is empty`);
@@ -13251,7 +13279,7 @@ export function useComposerImages(
         { uid, file, name: file.name, mime: file.type, size: file.size, previewUrl, status: 'uploading' },
       ]);
       try {
-        const { id } = await uploadAttachment(file, sessionId);
+        const { id } = await (upload ? upload(file) : uploadAttachment(file, sessionId));
         setImages((prev) => prev.map((im) => (im.uid === uid ? { ...im, status: 'done', id } : im)));
       } catch (e) {
         // Drop the failed chip and free its preview; the toast explains why.
@@ -13263,7 +13291,7 @@ export function useComposerImages(
         );
       }
     },
-    [canAttach, sessionId, setImages, message],
+    [canAttach, sessionId, setImages, message, upload, imagesOnly],
   );
   // Hand attachments already on the control plane back to the composer as staged chips. There is no
   // blob to make and none is wanted: the bytes are under `id`, which is all a send references, so a

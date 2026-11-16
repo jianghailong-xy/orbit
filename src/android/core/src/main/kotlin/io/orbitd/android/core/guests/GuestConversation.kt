@@ -7,11 +7,14 @@ import io.orbitd.android.core.realtime.RunEvent
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -29,14 +32,28 @@ data class GuestView(
     val hasOlder: Boolean = false,
     val loadingOlder: Boolean = false,
     val draft: String = "",
+    /** The images staged for the next message, in the order they were added. */
+    val images: List<GuestImage> = emptyList(),
     val sending: Boolean = false,
     val sendError: String? = null,
-)
+) {
+    /** An image is still on its way to the door: a send waits for it. */
+    val uploading: Boolean get() = images.any { it.uploading }
+    /** Words, images or both, and no message already on its way. */
+    val canSend: Boolean get() = (draft.isNotBlank() || images.isNotEmpty()) && !sending && !gone
+}
+
+/** One image staged for the guest's next message: [attachmentId] once the door has it, [error] when its upload failed. */
+data class GuestImage(val id: String, val name: String, val mime: String, val size: Int, val attachmentId: String? = null,
+    val error: String? = null) {
+    val uploading: Boolean get() = attachmentId == null && error == null
+}
 
 /**
  * One guest view's reads and its one write (web `GuestConversation`): the root, the follow loop at [GuestFollow]'s cadence, older pages,
- * and a text-only message. A send asks at once and keeps asking every 4 s until the run it started has been seen. A 404 at any point is
- * the not-shared state, and nothing is read after it. [initial] is the root an owner's 404 already read, so the view opens on it.
+ * and a message — words, images or both, each image uploaded as it is staged. A send waits for the uploads still running, asks at
+ * once and keeps asking every 4 s until the run it started has been seen. A 404 at any point is the not-shared state, and nothing is
+ * read after it. [initial] is the root an owner's 404 already read, so the view opens on it.
  */
 class GuestConversation(
     private val api: OrbitApi,
@@ -54,6 +71,8 @@ class GuestConversation(
     private var expecting = false
     private var followed = false
     private val kick = Channel<Unit>(Channel.CONFLATED)
+    private val uploads = mutableMapOf<String, Job>()
+    private val imageBytes = mutableMapOf<String, ByteArray>()
 
     init { initial?.let(::seed) }
 
@@ -131,16 +150,63 @@ class GuestConversation(
 
     fun edit(text: String) = mutable.update { it.copy(draft = text, sendError = null) }
 
-    /** Sends the draft as a turn of the owner's session, then asks at once for its echo and the run it started. */
+    /** Stages an image for the next message and uploads it at once. One the door would refuse — not PNG, JPEG, WebP or GIF, or over
+     * 5 MB — is not staged: the line under the box says why. */
+    fun attach(name: String, mime: String, bytes: ByteArray) {
+        if (mutable.value.sending || mutable.value.gone) return
+        GuestImages.rejection(mime, bytes.size)?.let { refusal -> mutable.update { it.copy(sendError = refusal) }; return }
+        val image = GuestImage(UUID.randomUUID().toString(), name, mime, bytes.size)
+        imageBytes[image.id] = bytes
+        mutable.update { it.copy(images = it.images + image, sendError = null) }
+        val upload = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val attachmentId = api.uploadGuestAttachment(handle, id, name, mime, bytes)
+                staged(image.id) { it.copy(attachmentId = attachmentId) }
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (failure: Exception) {
+                if (gone(failure)) mutable.update { it.copy(gone = true) }
+                else staged(image.id) {
+                    it.copy(error = (failure as? ApiError)?.messages?.firstOrNull() ?: failure.message ?: "Upload failed")
+                }
+            } finally { uploads.remove(image.id) }
+        }
+        uploads[image.id] = upload
+        upload.start()
+    }
+
+    private fun staged(imageId: String, change: (GuestImage) -> GuestImage) =
+        mutable.update { view -> view.copy(images = view.images.map { if (it.id == imageId) change(it) else it }) }
+
+    /** An image that could not be read on this device: the line under the box says why. */
+    fun refuse(message: String) = mutable.update { it.copy(sendError = message) }
+
+    /** Takes a staged image out of the next message, its upload stopped if it is still running. */
+    fun removeImage(imageId: String) {
+        if (mutable.value.sending) return
+        uploads.remove(imageId)?.cancel()
+        imageBytes.remove(imageId)
+        mutable.update { view -> view.copy(images = view.images.filterNot { it.id == imageId }) }
+    }
+
+    /** A staged image's own bytes, for its preview. */
+    fun imageBytes(imageId: String): ByteArray? = imageBytes[imageId]
+
+    /** Sends the draft and the staged images as a turn of the owner's session — once every upload still running has finished — then
+     * asks at once for its echo and the run it started. */
     fun send() {
         val content = mutable.value.draft.trim()
-        if (content.isEmpty() || mutable.value.sending || mutable.value.gone) return
+        if (!mutable.value.canSend || (content.isEmpty() && mutable.value.images.isEmpty())) return
         mutable.update { it.copy(sending = true, sendError = null) }
         scope.launch {
             try {
-                api.sendGuestTurn(handle, id, newTurnId(), content)
+                while (uploads.isNotEmpty()) uploads.values.toList().joinAll()
+                if (mutable.value.gone) return@launch
+                val images = mutable.value.images
+                check(images.all { it.attachmentId != null }) { GuestImages.FAILED_UPLOADS }
+                api.sendGuestTurn(handle, id, newTurnId(), content, images.mapNotNull { it.attachmentId })
                 expecting = true
-                mutable.update { it.copy(draft = "") }
+                images.forEach { imageBytes.remove(it.id) }
+                mutable.update { view -> view.copy(draft = "", images = view.images.filterNot { it in images }) }
                 kick.trySend(Unit)
             } catch (cancel: CancellationException) { throw cancel }
             catch (failure: Exception) {

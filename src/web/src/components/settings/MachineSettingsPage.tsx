@@ -1,5 +1,5 @@
 import { AgentFixButton, AgentFixLine } from '../AgentFix';
-import { agentFixView, attentionFixTarget } from '../../lib/agentFix';
+import { ENGINE_UPDATE_FIX_TARGET, agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
   CloudDownloadOutlined,
@@ -19,7 +19,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type LoginEngine } from '@orbit/shared';
+import { engineUpdateFailedLines, engineUpdateLineFailed, type LoginEngine } from '@orbit/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, cleanUpWorkspaceRepo } from '../../api';
@@ -222,12 +222,6 @@ export function machinePagePollMs(runners: Runner[] | undefined, runnerId: strin
         !!r.engines?.some((e) => e.engine === r.accountRemove?.engine &&
           e.accounts?.some((a) => a.id === r.accountRemove?.account))));
   return inFlight ? 4_000 : 15_000;
-}
-
-/** Whether one line of an engine-update report is a failure: the runner's own rule for failing the
- *  whole run (`updateRunFailed`, src/runner-go/engineinstall.go), read per line. */
-function engineUpdateLineFailed(line: string): boolean {
-  return line.includes('update failed') || line.includes('timed out') || line.includes('does not run');
 }
 
 /** The lines of an update run that need the person reading it: the failures, and an install Orbit
@@ -505,6 +499,10 @@ export function MachineSettingsPage() {
   const relay = runner.install;
   const updating = relay?.mode === 'update';
   const relayInFlight = relay?.status === 'pending' || relay?.status === 'installing';
+  // A finished run with a failed line can be handed to an agent; the server reads the same lines.
+  const updateFixView = updating && engineUpdateFailedLines(relay?.message).length > 0
+    ? agentFixView(runner.agentFix, ENGINE_UPDATE_FIX_TARGET, 'report')
+    : null;
 
   const openRename = () => {
     setRenameVal(shownName);
@@ -897,11 +895,19 @@ export function MachineSettingsPage() {
               </div>
             )}
             {(relay.status === 'done' || relay.status === 'failed') && (
-              <div className="rd-engine-relay-hint">
+              <div className="rd-engine-relay-hint agent-fix-row">
+                {/* Fix with an agent, before Dismiss, while the report has a failed line (lib/agentFix.ts). */}
+                {updateFixView && updateFixView.state !== 'fixing' && (
+                  <AgentFixButton view={updateFixView} target={ENGINE_UPDATE_FIX_TARGET} runnerId={runner.id} />
+                )}
+                {updateFixView?.state === 'fixing' && <AgentFixLine view={updateFixView} />}
                 <button className="re-link" type="button" onClick={() => dismissEngineUpdate.mutate()}>
                   Dismiss
                 </button>
               </div>
+            )}
+            {(relay.status === 'done' || relay.status === 'failed') && updateFixView?.state !== 'fixing' && (
+              <AgentFixLine view={updateFixView} />
             )}
           </div>
         )}

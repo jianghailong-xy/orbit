@@ -155,17 +155,17 @@ export function lastTypedUserMessageText(
 const TAG_LABEL: Record<string, string> = {
   'list-conditions': 'list conditions',
   'orbit-session-message': 'session message',
-  // The runner's note after a Feishu group member's message (runner-go external_sender.go).
-  'orbit-external-sender': 'sender note',
   'orbit-session-reply': 'session reply',
 };
 
 /** Blocks describeNote leaves unnamed, so a note holding only them draws no line (owner, 2026-11-14):
  *  a coordinator's standing role and the background-jobs inventory are Orbit's routine, and a
  *  `#`-reference's task or list is already a link in the bubble's own words. The fold still opens to
- *  them beside any other block. */
+ *  them beside any other block. The runner's note after a Feishu member's or a guest's message
+ *  (runner-go external_sender.go) only repeats the bubble's "From <name>" head, so it draws no line either. */
 const UNNAMED_TAGS: ReadonlySet<string> = new Set([
   'orbit_project_coordinator_context',
+  'orbit-external-sender',
   'referenced-task',
   'referenced-list',
   'background-jobs',

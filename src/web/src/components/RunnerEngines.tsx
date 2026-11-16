@@ -12,6 +12,7 @@ import {
   type LoginEngine,
   type PlanUsage,
   type PlanUsageSnapshot,
+  type RunnerAccountRemoveSession,
   type RunnerAccountRemoveState,
   type RunnerEngineAccount,
   type ReportedEngine,
@@ -79,8 +80,15 @@ import {
   runnerEngineNext,
 } from '../lib/runnerCopy';
 import {
+  RUNNER_ACCOUNT_IN_USE_OPEN,
+  RUNNER_ACCOUNT_IN_USE_RUNNING,
+  RUNNER_ACCOUNT_IN_USE_UNTITLED,
+  RUNNER_ACCOUNT_IN_USE_WAITING,
   RUNNER_DEFAULT_USE_AGAIN,
+  runnerAccountInUseMany,
+  runnerAccountInUseOne,
   runnerAccountRemoveDetailAutomatic,
+  RUNNER_ACCOUNT_REMOVE_DETAIL,
   runnerAccountRemoveDetailLast,
   runnerAccountRemoveTitle,
   runnerDefaultRemoveDetail,
@@ -1284,6 +1292,8 @@ function AccountRow({
   const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
   const removing = beingRemoved(runner, engine, account.id);
   const refused = mine?.status === 'failed' ? mine.message : null;
+  // The sessions the machine named as running in it, when that is why it refused.
+  const blocking = mine?.status === 'failed' ? (mine.sessions ?? []) : [];
   const remove = useMutation({
     mutationFn: () =>
       api<RunnerAccountRemoveState>(
@@ -1318,8 +1328,7 @@ function AccountRow({
     description: isDefault
       ? runnerDefaultRemoveDetail(runnerName, engineNameOf(engine))
       : !defaultRemoved
-        ? `Its sign-in is deleted from ${runnerName}. ` +
-          `Workspaces set to this account run on ${defaultName}.`
+        ? RUNNER_ACCOUNT_REMOVE_DETAIL
         : others > 0
           ? runnerAccountRemoveDetailAutomatic(runnerName)
           : runnerAccountRemoveDetailLast(runnerName, defaultName),
@@ -1447,9 +1456,16 @@ function AccountRow({
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a
           session is running on that account, or the runner is too old to remove one at all. */}
-      {refused && (
+      {(refused || blocking.length > 0) && (
         <div className="re-panel bad">
-          <div className="re-panel-row">{refused}</div>
+          <div className="re-panel-row">
+            {blocking.length === 0
+              ? refused
+              : blocking.length === 1
+                ? runnerAccountInUseOne(engineNameOf(engine))
+                : runnerAccountInUseMany(engineNameOf(engine), blocking.length)}
+          </div>
+          {blocking.length > 0 && <BlockingSessions sessions={blocking} />}
           <div className="re-panel-hint">
             {tildePath(accountDir(account))} on {runner.displayName || runner.name} is untouched.
           </div>
@@ -1461,6 +1477,28 @@ function AccountRow({
         </div>
       )}
     </div>
+  );
+}
+
+/** The sessions keeping an account from being removed, each opening its session: end them there. */
+function BlockingSessions({ sessions }: { sessions: RunnerAccountRemoveSession[] }) {
+  return (
+    <ul className="re-blocking">
+      {sessions.map((s) => {
+        const tone = s.status === 'RUNNING' || s.status === 'PENDING' ? 'running' : s.status === 'AWAITING_INPUT' ? 'waiting' : 'other';
+        const label = tone === 'running' ? RUNNER_ACCOUNT_IN_USE_RUNNING : tone === 'waiting' ? RUNNER_ACCOUNT_IN_USE_WAITING : null;
+        return (
+          <li key={s.id}>
+            <Link className="re-blocking-row" to={`/sessions/${encodeId(s.id)}`}>
+              <span className={`re-blocking-dot ${tone}`} aria-hidden />
+              <span className="re-blocking-title">{s.title.trim() || RUNNER_ACCOUNT_IN_USE_UNTITLED}</span>
+              {label && <span className="re-blocking-state">{label}</span>}
+              <span className="re-blocking-open">{RUNNER_ACCOUNT_IN_USE_OPEN} →</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
