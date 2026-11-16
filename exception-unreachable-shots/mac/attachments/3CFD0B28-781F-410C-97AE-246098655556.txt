@@ -1,0 +1,4 @@
+mac-unreach: no window after launch; pressing ⌘N
+mac-unreach: 1 window(s)
+mac-unreach: shows the coordinator can’t take messages
+mac-unreach: shows fix the task branch.

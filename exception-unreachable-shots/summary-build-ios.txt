@@ -1,0 +1,8 @@
+Test Case '-[LandingSessionProbeUITests.ExceptionUnreachableTests testReachableCoordinator]' started.
+Test Case '-[LandingSessionProbeUITests.ExceptionUnreachableTests testReachableCoordinator]' passed (69.502 seconds).
+Test Case '-[LandingSessionProbeUITests.ExceptionUnreachableTests testUnreachableCoordinator]' started.
+Test Case '-[LandingSessionProbeUITests.ExceptionUnreachableTests testUnreachableCoordinator]' passed (25.016 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 94.518 (94.522) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 94.518 (94.524) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 94.518 (94.527) seconds
+** TEST SUCCEEDED **

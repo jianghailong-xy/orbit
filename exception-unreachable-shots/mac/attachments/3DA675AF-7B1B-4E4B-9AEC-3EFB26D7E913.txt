@@ -1,0 +1,4 @@
+mac-reach: no window after launch; pressing ⌘N
+mac-reach: 1 window(s)
+mac-reach: shows no one acted on this for 2h 56m
+mac-reach: shows or ask the coordinator to do it.
