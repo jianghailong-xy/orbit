@@ -368,7 +368,7 @@ final class SettingsStackWiringTests: XCTestCase {
         let form = code(try slice(try appSource("Views/SettingsAdminView.swift"),
                                   from: "#if os(macOS)\n/// macOS Settings", to: "// MARK: - Admin"))
         XCTAssertTrue(form.contains("AccountAvatar(name: u.name ?? u.email, diameter: 40)"))
-        XCTAssertTrue(form.contains(".fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image])"))
+        XCTAssertTrue(form.contains(".fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image], onCompletion: photoChosen)"))
         XCTAssertTrue(form.contains("NSImage(contentsOf: url)?.orbitAvatarJPEG()"))
         XCTAssertTrue(form.contains("accountMessage = await model.saveAvatar(jpeg)"))
         XCTAssertTrue(form.contains("accountMessage = await model.removeAvatar()"))
