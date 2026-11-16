@@ -2121,7 +2121,7 @@ final class ConsoleModel {
     }
 
     var availability: SendAvailability {
-        isDraft ? (managed?.blocksNewSession == true ? .blocked : .sendNow)
+        isDraft ? .sendNow
                 : ComposerLogic.availability(status: sessionStatus, capabilities: sendCapabilities)
     }
 

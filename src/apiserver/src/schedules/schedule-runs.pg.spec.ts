@@ -895,15 +895,15 @@ test('§5.2 a managed runner asleep is not absent: the run opens its session, wh
   reset();
   at('2026-11-14T00:00:00Z');
   const w = await world('managed', { runnerStatus: RunnerStatus.OFFLINE });
-  // The managed runner's default workspace is another one on the same machine: the default's first-session runtime
-  // preflight is not what this test is about.
-  const home = await db.workspace.create({ data: { ownerId: w.ownerId, runnerId: w.runnerId, name: 'managed-home', enabled: true } });
   await db.managedRunner.create({
     data: {
-      ownerId: w.ownerId, runnerId: w.runnerId, defaultWorkspaceId: home.id,
+      ownerId: w.ownerId, runnerId: w.runnerId,
       clusterKey: 'lab', namespace: `ns-${RUN}`, pvcName: `mr-data-${w.runnerId}`,
     },
   });
+  // Asleep after it had been ready: its last report has the runtime the run starts on signed in, so the managed
+  // first-session preflight (a runtime the runner has ready) is met; that preflight is not what this test is about.
+  await db.runner.update({ where: { id: w.runnerId }, data: { engines: [{ engine: 'claude', installed: true, auth: 'yes' }] } });
   const s = await created(w);
   at('2026-11-14T02:00:00Z');
   const { started } = await fireAndStart(s.id);

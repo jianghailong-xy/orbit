@@ -31,7 +31,6 @@ import io.orbitd.android.management.Ink
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.management.RunnerPage
-import io.orbitd.android.management.RunnerSignInCard
 import io.orbitd.android.management.copyText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -43,7 +42,7 @@ import java.util.UUID
 
 /*
  * A new account's welcome card (docs/mocks/new-user-onboarding, board 02, the owner's picks A/A/A/A): the web's WelcomeCard.tsx on
- * Android. Three steps — a computer, a model, a first message — on the managed runner's default workspace draft, on a bare machine's
+ * Android. Three steps — a computer, a model, a first message — on a bare machine's
  * setup card, and on the home of an account with no machine. Only while the account has never had a session; nothing is stored.
  */
 
@@ -96,6 +95,8 @@ internal fun rememberManagedOffered(api: ManagementApi, enabled: Boolean = true)
 internal class ManagedRunnerReader(private val api: ManagementApi) {
     var shown by mutableStateOf<ManagedRunner.Shown?>(null)
         private set
+    var loaded by mutableStateOf(false)
+        private set
     var busy by mutableStateOf(false)
         private set
     /** A refused Retry or Set up, in the server's words. */
@@ -105,6 +106,7 @@ internal class ManagedRunnerReader(private val api: ManagementApi) {
     suspend fun read() {
         val status = runCatching { ManagedRunner.status(api.get("managed-runner")) }.getOrNull()
         shown = ManagedRunner.display(status)?.let { ManagedRunner.Shown(status!!, it) }
+        loaded = true
     }
 
     suspend fun retry() = act("Couldn't retry the managed runner") { status ->
@@ -232,19 +234,6 @@ internal fun WelcomeExamples(step: Int, picked: String, onPick: (String) -> Unit
     }
 }
 
-/** A step drawn as one line once it is done. */
-@Composable
-private fun DoneLine(title: String, detail: String, onChange: (() -> Unit)? = null) {
-    SetupStepRow(number = 0, done = true) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            if (onChange != null) Text(MachineSetupCopy.SETUP_CHANGE, style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable(role = Role.Button, onClick = onChange))
-        }
-    }
-}
-
 /**
  * The managed runner's state in the shared display's words, with only the actions the server allows: Retry, Set up, and the way to the
  * runner's runtimes when what it lacks is one signed in (the web's ManagedRunnerNotice).
@@ -278,80 +267,6 @@ internal fun ManagedRunnerNotice(reader: ManagedRunnerReader, shown: ManagedRunn
             if (display.ensure) Button(enabled = !reader.busy, onClick = { scope.launch { reader.ensure() } }) { Text(ManagedRunner.ENSURE) }
         }
         reader.refusal?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.red) }
-    }
-}
-
-/**
- * A new account's first draft in its managed runner's default workspace: the runner Orbit starts for it, a model to run on, and a
- * first message (board 02, P1 and P2). It stands where the engine row stands for everybody else; the composer under it is the page's.
- */
-@Composable
-internal fun ManagedWelcomeCard(
-    name: String?,
-    reader: ManagedRunnerReader,
-    shown: ManagedRunner.Shown,
-    runner: JsonObject?,
-    online: Boolean,
-    engine: String,
-    credential: SetupCredential,
-    composerText: String,
-    /** A first session can be sent now (`startsNewSession`): it starts, or waits for the runner. */
-    startsNow: Boolean,
-    managementApi: ManagementApi,
-    onOpenRunner: (String) -> Unit,
-    onOwnInstead: () -> Unit,
-    onExample: (String) -> Unit,
-    /** Use an API key instead: the draft's key when one can run there, else where a key is connected (the web's pickApiKey). */
-    onUseKey: () -> Unit,
-    onChangeCredential: () -> Unit,
-    onSignedIn: () -> Unit,
-) {
-    val machine = runner?.let(RunnerPage::displayName).orEmpty()
-    val up = shown.display.kind in ManagedRunner.UP || online
-    val signedIn = credential.done
-    val ready = startsNow && up && signedIn
-    WelcomeSurface("welcome-card") {
-        WelcomeHead(name)
-        HorizontalDivider(Modifier.padding(top = 12.dp))
-
-        if (up) DoneLine(WelcomeCopy.WELCOME_COMPUTER_DONE, WelcomeCopy.welcomeComputerReady(machine))
-        else SetupStepRow(number = 1, done = false) {
-            StepTitle(WelcomeCopy.WELCOME_COMPUTER)
-            StepHelp(WelcomeCopy.WELCOME_COMPUTER_MANAGED)
-            // The managed runner's own state, its Retry and Set up included: the same words as everywhere.
-            ManagedRunnerNotice(reader, shown, onOpenRunner)
-            LinkText(WelcomeCopy.WELCOME_OWN_INSTEAD, onOwnInstead)
-        }
-        HorizontalDivider()
-
-        when (credential) {
-            SetupCredential.SignedIn ->
-                DoneLine(WelcomeCopy.WELCOME_MODEL_DONE, "${ProviderEngines.cliName(engine)} signed in on $machine")
-            is SetupCredential.OnKey -> DoneLine(WelcomeCopy.WELCOME_MODEL_DONE,
-                "${credential.label} · ${if (credential.pool) MachineSetupCopy.SETUP_ON_A_POOL else MachineSetupCopy.SETUP_ON_A_KEY}", onChangeCredential)
-            else -> SetupStepRow(number = 2, done = false) {
-                StepTitle(WelcomeCopy.WELCOME_MODEL)
-                StepHelp(WelcomeCopy.WELCOME_MODEL_HELP)
-                if (runner != null && online && engine in ProviderEngines.LOGIN_ENGINES) Box(Modifier.padding(top = 8.dp)) {
-                    key(engine) {
-                        RunnerSignInCard(api = managementApi, runner = runner, engine = engine, onUseApiKey = onUseKey,
-                            onSignedIn = onSignedIn, apiKeyLabel = WelcomeSignInCopy.USE_API_KEY_INSTEAD,
-                            apiKeyHint = WelcomeSignInCopy.KEY_HINT)
-                    }
-                } else Later(WelcomeCopy.WELCOME_AFTER_COMPUTER)
-            }
-        }
-        HorizontalDivider()
-
-        WelcomeExamples(step = 3, picked = composerText, onPick = onExample)
-        HorizontalDivider()
-
-        Text(
-            when { ready -> WelcomeCopy.WELCOME_FOOT_READY; startsNow -> WelcomeCopy.WELCOME_FOOT_SEND_NOW; else -> WelcomeCopy.WELCOME_FOOT_WAIT },
-            style = MaterialTheme.typography.bodySmall,
-            color = if (ready) Ink.green else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp).testTag("welcome-foot"),
-        )
     }
 }
 

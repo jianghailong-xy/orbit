@@ -17,7 +17,7 @@
  * a key. Then:
  *   - the status names that key as what a first session starts on, before READY, so the clients offer the
  *     first session (task T07);
- *   - its default workspace starts on that key (the derived default before the runner was ever ready);
+ *   - its owner-created workspace starts on that key (the derived default before the runner was ever ready);
  *   - a first session on Claude Code's own sign-in is still refused MODEL_UNAVAILABLE: nobody could have
  *     signed it in on a runner that has never come up;
  *   - its first session with nothing named, and then one naming the key, are queued — 201 PENDING, on the
@@ -279,10 +279,15 @@ test('a new account queues its first session while its managed runner waits for 
     assert.equal((waiting.lastError as { code: string }).code, MANAGED_RUNNER_CAPACITY_UNAVAILABLE);
     assert.equal((await db.runner.findUniqueOrThrow({ where: { id: waiting.runnerId } })).engines, null, 'it has never reported its engines');
 
-    // The default workspace, as it is listed before anything ran in it (its default is checked below).
+    assert.equal(waiting.defaultWorkspaceId, null);
+    assert.deepEqual((await call(server, 'GET', '/api/workspaces', fresh.token)).json, []);
+    const made = await call(server, 'POST', '/api/workspaces', fresh.token,
+      { name: 'Project', runnerId: waiting.runnerId, newFolder: 'project' });
+    assert.equal(made.status, 201, made.text);
+    assert.equal(made.json.workDir, '/var/lib/orbit/home/orbit-repos/project');
     type Listed = { id: string; lastProvider: string; lastEngine: string; providerBuiltin: boolean };
     const listed = async () => ((await call(server, 'GET', '/api/workspaces', fresh.token)).json as Listed[])
-      .find((w) => toUuid(w.id) === waiting.defaultWorkspaceId)!;
+      .find((w) => toUuid(w.id) === toUuid(made.json.id))!;
     const keyless = await listed();
 
     // With no key there is nothing a first session could start on: the status names none, no client
@@ -294,6 +299,11 @@ test('a new account queues its first session while its managed runner waits for 
     const keylessFirst = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: keyless.id, prompt: 'hello', title: 'no key yet' });
     assert.equal(keylessFirst.status, 409, keylessFirst.text);
     assert.equal(keylessFirst.json.code, MODEL_UNAVAILABLE);
+    const newFolderAsk = { assignedRunnerId: waiting.runnerId, newWorkspace: { newFolder: 'first-session' }, prompt: 'hello' };
+    const noKeyNew = await call(server, 'POST', '/api/sessions', fresh.token, newFolderAsk);
+    assert.equal(noKeyNew.status, 409, noKeyNew.text);
+    assert.equal(noKeyNew.json.code, MODEL_UNAVAILABLE);
+    assert.equal(await db.workspace.count({ where: { runnerId: waiting.runnerId } }), 1, 'a refusal creates no workspace');
 
     // A Kimi (Moonshot) key: it runs on Kimi Code, which the managed image installs, so before the runner has
     // reported anything the status names that key for a first session (refused in the 2026-11-14 rollout,
@@ -324,13 +334,25 @@ test('a new account queues its first session while its managed runner waits for 
     assert.equal(signIn.status, 409, signIn.text);
     assert.equal(signIn.json.code, MODEL_UNAVAILABLE);
 
-    // The first session, nothing named: queued on the key. Then one naming the key.
-    const first = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: workspace.id, prompt: 'the first message', title: 'first, nothing named' });
-    assert.equal(first.status, 201, `T06 saw 409 MODEL_UNAVAILABLE here: ${first.text}`);
-    assert.deepEqual([first.json.status, first.json.provider, first.json.engine], ['PENDING', slug, 'claude']);
-    const named = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: workspace.id, prompt: 'the second message', title: 'naming the key', provider: slug });
+    // The first session makes its workspace: no provider named still queues it on the owner's key.
+    const named = await call(server, 'POST', '/api/sessions', fresh.token, { ...newFolderAsk, title: 'first in a new workspace' });
     assert.equal(named.status, 201, named.text);
     assert.deepEqual([named.json.status, named.json.provider, named.json.engine], ['PENDING', slug, 'claude']);
+    const newWorkspace = await db.workspace.findUniqueOrThrow({ where: { id: toUuid(named.json.workspaceId) } });
+    assert.equal(newWorkspace.workDir, '/var/lib/orbit/home/orbit-repos/first-session');
+    const first = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: workspace.id, prompt: 'the second message', title: 'existing workspace, nothing named' });
+    assert.equal(first.status, 201, first.text);
+    assert.deepEqual([first.json.status, first.json.provider, first.json.engine], ['PENDING', slug, 'claude']);
+    // After a conversation anywhere on this runner, the first-session guard is no longer applied,
+    // including in a different workspace. Keep it queued behind the two claimed below.
+    const later = await call(server, 'POST', '/api/sessions', fresh.token,
+      { assignedRunnerId: waiting.runnerId, newWorkspace: { newFolder: 'later' }, provider: 'claude', prompt: 'later' });
+    assert.equal(later.status, 201, later.text);
+    const laterExisting = await call(server, 'POST', '/api/sessions', fresh.token,
+      { workspaceId: workspace.id, provider: 'claude', prompt: 'also later' });
+    assert.equal(laterExisting.status, 201, laterExisting.text);
+
+
     // Before anything ran there, the workspace's default was already that key: what the first session took.
     assert.deepEqual([workspace.lastProvider, workspace.lastEngine, workspace.providerBuiltin], [slug, 'claude', false]);
 
@@ -361,13 +383,26 @@ test('a new account queues its first session while its managed runner waits for 
     const readyStatus = (await call(server, 'GET', '/api/managed-runner', fresh.token)).json;
     assert.deepEqual([readyStatus.managementState, readyStatus.initialProvider, readyStatus.firstSessionProvider], ['READY', slug, slug]);
     // It claims the sessions that waited, in the order they were queued, each on the key.
-    for (const queued of [first, named]) {
+    for (const queued of [named, first]) {
       const claimed = await claim(ready.runnerId);
       assert.equal(toUuid(claimed.sessionId), toUuid(queued.json.id), `${backend}: the queued session is claimed`);
       assert.equal(claimed.provider, 'claude');
       assert.equal(claimed.agent.env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
     }
     assert.equal((await db.session.findUniqueOrThrow({ where: { id: toUuid(first.json.id) } })).status, 'RUNNING');
+    // Once reported, both routes use create-workdir/v2's home rule, including while asleep.
+    await db.runner.update({ where: { id: ready.runnerId }, data: {
+      reposRoot: '/home/orbit/orbit-repos', capabilities: ['create-workdir/v1', 'create-workdir/v2'], capabilitiesReportedAt: new Date(),
+    } });
+    const reportedFolder = await call(server, 'POST', '/api/workspaces', fresh.token,
+      { name: 'Reported project', runnerId: ready.runnerId, newFolder: 'reported-project' });
+    assert.equal(reportedFolder.status, 201, reportedFolder.text);
+    assert.equal(reportedFolder.json.workDir, '/home/orbit/reported-project');
+    const reportedSession = await call(server, 'POST', '/api/sessions', fresh.token,
+      { assignedRunnerId: ready.runnerId, newWorkspace: { newFolder: 'reported-session' }, provider: slug, prompt: 'hello' });
+    assert.equal(reportedSession.status, 201, reportedSession.text);
+    assert.equal((await db.workspace.findUniqueOrThrow({ where: { id: toUuid(reportedSession.json.workspaceId) } })).workDir, '/home/orbit/reported-session');
+
   }
 
   await t.test('Kubernetes: the first session is queued while the runner waits for capacity, and runs once it is READY', async () => {

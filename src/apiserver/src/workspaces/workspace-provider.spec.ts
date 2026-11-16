@@ -52,7 +52,7 @@ test('workspace-spawned children are excluded, so a scripted probe cannot re-poi
 
 test('only conversations a person opened count, so a coordinator or a wiki chat cannot re-point the workspace', async () => {
   // Every branch of the query reads the same predicate: the LATERAL that picks the session, and the two
-  // "no history yet" guards of a managed default workspace.
+  // "no history yet" guards of a workspace on a managed runner.
   const { prisma, seen } = prismaStub();
   await lastProviderByWorkspace(prisma, ['a1']);
   assert.equal((seen.sql ?? '').match(/opened_by = 'PERSON'/g)?.length, 3);
@@ -97,10 +97,10 @@ test('the seed of a session an older replica wrote derives its engine by the old
   assert.deepEqual(await agentProviderSeed(prisma, 'a1'), { engine: 'codex', provider: 'anthropic', providerBuiltin: false, model: null });
 });
 
-test("a managed default workspace with no history starts on what its runner was READY with: a runtime, or the owner's key", async () => {
+test("a workspace on a managed runner with no history starts on what its runner was READY with: a runtime, or the owner's key", async () => {
   const { prisma: queried, seen } = prismaStub();
   await lastProviderByWorkspace(queried, ['a1']);
-  assert.match(seen.sql ?? '', /m\.owner_id::text\s+FROM a\s+JOIN managed_runner m ON m\.default_workspace_id = a\.id AND m\.initial_provider IS NOT NULL/);
+  assert.match(seen.sql ?? '', /m\.owner_id::text\s+FROM a\s+JOIN workspace w ON w\.id = a\.id\s+JOIN managed_runner m ON m\.runner_id = w\.runner_id AND m\.initial_provider IS NOT NULL/);
 
   const asked: unknown[] = [];
   const rows = [
@@ -119,10 +119,10 @@ test("a managed default workspace with no history starts on what its runner was 
   assert.deepEqual(asked, [{ where: { slug: 'deepseek', OR: [{ ownerId: 'o1' }, { ownerId: null }] }, select: { runtime: true } }]);
 });
 
-test("a managed default workspace whose runner was never ready starts on the owner's own key, or on the floor without one", async () => {
+test("a workspace on a managed runner whose runner was never ready starts on the owner's own key, or on the floor without one", async () => {
   const { prisma: queried, seen } = prismaStub();
   await lastProviderByWorkspace(queried, ['a1']);
-  assert.match(seen.sql ?? '', /true, m\.owner_id::text\s+FROM a\s+JOIN managed_runner m ON m\.default_workspace_id = a\.id AND m\.initial_provider IS NULL\s+WHERE NOT EXISTS/);
+  assert.match(seen.sql ?? '', /true, m\.owner_id::text\s+FROM a\s+JOIN workspace w ON w\.id = a\.id\s+JOIN managed_runner m ON m\.runner_id = w\.runner_id AND m\.initial_provider IS NULL\s+WHERE NOT EXISTS/);
 
   const keys = [
     // A key named like a built-in runtime is passed over, as READY passes it over.
