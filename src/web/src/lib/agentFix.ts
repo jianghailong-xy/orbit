@@ -19,13 +19,18 @@ export interface AgentFixTarget {
 export function attentionFixTarget(item: AttentionItem): AgentFixTarget | null {
   if (item.kind === 'engineNotUpdating') {
     const engine = typeof item.params.engine === 'string' ? (item.params.engine as ReportedEngine) : null;
-    return engine ? { kind: 'engineNotUpdating', engine, body: { engine } } : null;
+    return engine ? engineNotUpdatingFixTarget(engine) : null;
   }
   if (item.kind === 'cannotSelfUpdate') {
     const latest = typeof item.params.latest === 'string' ? item.params.latest : undefined;
     return { kind: 'cannotSelfUpdate', engine: null, body: latest ? { latest } : {} };
   }
   return null;
+}
+
+/** An engine that won't update: its Needs Attention card, and the warning panel on its engine row. */
+export function engineNotUpdatingFixTarget(engine: ReportedEngine): AgentFixTarget {
+  return { kind: 'engineNotUpdating', engine, body: { engine } };
 }
 
 /** An engine's Install failed panel. */

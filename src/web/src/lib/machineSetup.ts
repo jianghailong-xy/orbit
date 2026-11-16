@@ -1,10 +1,13 @@
 import {
   CREATE_WORKDIR_CAPABILITY,
+  managedSetupState,
+  type ManagedRunnerStatus,
   DIR_PROBE_CAPABILITY,
   type DirProbe,
   type LoginEngine,
   type NewWorkspaceRequest,
   type RunnerEngineHealth,
+  newFolderRoot,
 } from '@orbit/shared';
 import { encodeId } from './idCodec';
 import {
@@ -14,7 +17,6 @@ import {
   SETUP_NOT_GIT,
   setupCouldNotCheck,
   setupGit,
-  setupNewFolderExists,
   setupNewFolderIsFile,
   setupNoSuchDirectory,
   setupNotADirectory,
@@ -36,38 +38,14 @@ export const machineDraftPath = (runnerId: string): string => `/runners/${encode
 export const machineName = (runner: { name: string; displayName?: string | null }): string =>
   runner.displayName || runner.name;
 
-/** Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no workspace
- *  of this account on them: an offline one is already what Machines & models says needs you. */
+/** Machines without a workspace, in list order: online machines and managed machines accepting queued work. */
 export function machinesToSetUp<R extends { id: string; online?: boolean }>(
   runners: readonly R[],
   workspaces: readonly OrderableWorkspace[],
+  managedStatus?: ManagedRunnerStatus | null,
 ): R[] {
   const taken = new Set(workspaces.map(workspaceRunnerId));
-  return runners.filter((runner) => runner.online && !taken.has(runner.id));
-}
-
-/** Whether the directory `orbit register` ran in is worth asking about: the two answers a path can give
- *  on its face are left unasked. `undefined` when there is nothing to ask. */
-export function registerDirToProbe(registerDir: string | null | undefined): string | undefined {
-  const dir = registerDir?.trim().replace(/(?<=.)\/+$/, '');
-  return !dir || dir === '~' || dir === '/' ? undefined : dir;
-}
-
-/** Rule 2: a checked register directory is offered only when it is a folder that exists and is neither
- *  the home directory nor the root. The installer runs where the terminal stands, which is usually
- *  home, and all of home is no default. */
-export function isOfferedFolder(probe: DirProbe | null | undefined): probe is DirProbe {
-  return !!probe && !probe.error && probe.exists && probe.isDir && !probe.isHome && probe.path !== '/';
-}
-
-export type FolderChoice = 'suggested' | 'new' | 'other';
-
-/** Rule 2 again: the register directory leads when it is a git repository; otherwise a new folder. The
- *  rest is what a machine that can't make one leaves. */
-export function defaultFolderChoice(suggested: DirProbe | null, offersNewFolder: boolean): FolderChoice {
-  if (suggested?.isGit) return 'suggested';
-  if (offersNewFolder) return 'new';
-  return suggested ? 'suggested' : 'other';
+  return runners.filter((runner) => (runner.online || managedSetupState(runner.id, managedStatus) !== null) && !taken.has(runner.id));
 }
 
 /** Whether a machine can be asked about a path at all, and whether it can make a new folder: the
@@ -76,6 +54,11 @@ export const answersDirProbe = (runner: { capabilities?: string[] }): boolean =>
   !!runner.capabilities?.includes(DIR_PROBE_CAPABILITY);
 export const makesNewFolders = (runner: { capabilities?: string[]; reposRoot?: string | null }): boolean =>
   !!runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY) && !!runner.reposRoot?.trim();
+
+/** The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2, its
+ *  Repos Folder on an older one (@orbit/shared newFolderRoot, as the server joins it). */
+export const newFolderRootOf = (runner: { capabilities?: string[]; reposRoot?: string | null }): string =>
+  newFolderRoot(runner.reposRoot ?? '', runner.capabilities);
 
 /** Whether a machine too old to answer gets there by itself: not one that reports its updater off, or
  *  unable to write where it is installed. One too old to report anything still updates itself. */
@@ -99,10 +82,10 @@ export function isValidNewFolder(name: string): boolean {
   return /^[A-Za-z0-9._-]{1,64}$/.test(name) && name !== '.' && name !== '..';
 }
 
-/** Where a new folder lands: `<reposRoot>/<name>`, as the server joins it. */
-export function newFolderPath(reposRoot: string, name: string): string {
-  const separator = reposRoot.includes('\\') && !reposRoot.includes('/') ? '\\' : '/';
-  return `${reposRoot.replace(/[/\\]+$/, '')}${separator}${name}`;
+/** Where a new folder lands: `<root>/<name>`, as the server joins it. */
+export function newFolderPath(root: string, name: string): string {
+  const separator = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  return `${root.replace(/[/\\]+$/, '')}${separator}${name}`;
 }
 
 /** The workspace name a folder gives, as the server derives it (§3.2): its last segment. */
@@ -129,25 +112,25 @@ export function folderVerdict(probe: DirProbe, machine: string): FolderVerdict {
   return { tone: probe.isGit ? 'ok' : 'warn', text: `${SETUP_FOUND_PREFIX}${short}`, short, usable: true };
 }
 
-/** What a new folder's name finds at `<reposRoot>/<name>`, asked before anything is sent. Nothing there is what a
- *  new folder starts as; a directory is used as it stands, with what is in it, so it isn't said to start empty; a
- *  file can't become one. */
+/** What the folder step's name finds at `<root>/<name>`, asked before anything is sent. Nothing there is a new
+ *  folder, made as the session starts; a directory is used as it stands, read as any folder is; a file can't
+ *  become one. */
 export function newFolderVerdict(probe: DirProbe, machine: string): FolderVerdict {
   const refused = (text: string): FolderVerdict => ({ tone: 'bad', text, short: text, usable: false });
   if (probe.error) return refused(setupCouldNotCheck(machine, probe.error));
   if (!probe.exists) return { tone: 'ok', text: SETUP_NEW_FOLDER_META, short: SETUP_NEW_FOLDER_DONE, usable: true };
   if (!probe.isDir) return refused(setupNewFolderIsFile(machine));
-  return { tone: 'warn', text: setupNewFolderExists(machine), short: folderVerdict(probe, machine).short, usable: true };
+  return folderVerdict(probe, machine);
 }
 
 /** What Use this folder picks on that answer: a new folder while nothing is there, else the directory that is,
  *  which is then a folder like any other and is sent by its path. */
-export function newFolderPick(probe: DirProbe, name: string, reposRoot: string, machine: string): PickedFolder | null {
+export function newFolderPick(probe: DirProbe, name: string, root: string, machine: string): PickedFolder | null {
   const verdict = newFolderVerdict(probe, machine);
   if (!verdict.usable) return null;
   return probe.exists
     ? { kind: 'existing', path: probe.path, note: verdict.short }
-    : { kind: 'new', name, path: newFolderPath(reposRoot, name) };
+    : { kind: 'new', name, path: newFolderPath(root, name) };
 }
 
 /** The folder step's answer, once the person has pressed Use this folder. */

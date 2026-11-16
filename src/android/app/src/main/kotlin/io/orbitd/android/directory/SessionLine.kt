@@ -79,8 +79,6 @@ data class SessionLine(val text: String, val tone: Tone) {
             if (live && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
             // The same place for a wait the server reports and this caller holds no watch for (OrbitKit `resumesOnItsOwn`).
             if (live && s.resumesOnItsOwn) return SessionLine(SessionLineCopy.waitingToResume, Tone.WATCHING)
-            // Parked, with a background process still up: not idle, not the agent working either.
-            if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
             // A message that never got an answer is newer than the reply before it, and what the session waits on.
             s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
@@ -89,6 +87,9 @@ data class SessionLine(val text: String, val tone: Tone) {
             // it was written is the Recap card's to say, at the conversation's end ([RecapCard]).
             if (recaps) s.recapText?.trim()?.takeIf { it.isNotEmpty() }?.let { return SessionLine(it, Tone.PREVIEW) }
             s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
+            // Parked, with a background process still up. It never takes the line from the unanswered message, the recap or the
+            // reply (the owner, 2026-11-16; OrbitKit parity): the glyph already says a process is up.
+            if (live) s.runningBgCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.bgRunning(it)), Tone.BACKGROUND) }
             // Nothing to preview: the run's own state word, so the row still says what happened.
             return SessionLine(SessionHeader.statusWord(s, now = now), Tone.PREVIEW)
         }
@@ -261,13 +262,17 @@ internal fun DirectorySession.isRunning(): Boolean {
     }
 }
 
-/** Whether its glyph breathes (`WorkspaceActivityLogic.isRunningJob`): parked with a background job in flight, and nothing
+/** Whether its glyph is the terminal (`SessionStatusGlyph`'s `terminal`): parked with a background process up, and nothing
  * louder — no spinner, and no watch, whose eye takes the place. */
-internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean {
+internal fun DirectorySession.hasBackgroundProcess(watching: WatchSessionSummary? = null): Boolean {
     if (pendingApprovals > 0 || confirmationUnderReview != null || effectiveRunState != RunState.AWAITING_INPUT) return false
     if (engineTurnActive == true || (runningSubagentCount ?: 0) > 0 || watching != null || resumesOnItsOwn) return false
-    return (runningBgCount ?: 0) > 0 && runningBgJobCount > 0
+    return (runningBgCount ?: 0) > 0
 }
+
+/** Whether that terminal breathes (`WorkspaceActivityLogic.isRunningJob`): at least one of those processes is a job in flight. */
+internal fun DirectorySession.isRunningJob(watching: WatchSessionSummary? = null): Boolean =
+    hasBackgroundProcess(watching) && runningBgJobCount > 0
 
 private val DirectorySession.reviewerTitle get() = (confirmationUnderReview?.get("reviewerTitle") as? JsonPrimitive)?.contentOrNull
 

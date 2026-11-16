@@ -174,7 +174,7 @@ class RemoveDefaultPageTest {
             """"message":"codex account $WORK is in use by a session running on this machine — end that session, then remove it",""" +
             """"sessions":[{"id":"s-run","title":"Fix the login redirect","status":"RUNNING"},{"id":"s-wait","title":" ","status":"AWAITING_INPUT"}]}"""
         page("engine:codex")
-        await("This Codex account can’t be removed while 2 sessions are running on it — end them, then remove it")
+        await("This Codex account can’t be removed while 2 sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account")
         assertEquals("the machine's sentence gives way", 0, shown("is in use by a session"))
         await("Fix the login redirect"); await(RunnerAccountCopy.IN_USE_UNTITLED)
         await(RunnerAccountCopy.IN_USE_RUNNING); await(RunnerAccountCopy.IN_USE_WAITING)

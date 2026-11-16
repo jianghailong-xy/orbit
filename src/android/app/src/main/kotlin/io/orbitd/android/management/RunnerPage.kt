@@ -272,11 +272,11 @@ internal object RunnerAccountCopy {
     /** That line's button, which brings Default back. */
     const val USE_AGAIN = "Use again"
     fun useAgainFailed(name: String) = "Couldn’t use $name again"
-    /** Over the sessions a refused removal lists, when one session is running in the account; [engine] is the CLI's own name (Codex,
-     * Claude Code). */
-    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is running on it — end the session below, then remove it"
-    /** The same, when several sessions are running in it. */
-    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are running on it — end them, then remove it"
+    /** Over the sessions a refused removal lists, when one session is in the account — running or between turns, either holds it;
+     * [engine] is the CLI's own name (Codex, Claude Code). */
+    fun inUseOne(engine: String) = "This $engine account can’t be removed while a session is on it — to keep the session, switch it to another account and send it a message, or end it below; then remove the account"
+    /** The same, when several sessions are in it. */
+    fun inUseMany(engine: String, count: Int) = "This $engine account can’t be removed while $count sessions are on it — to keep them, switch each to another account and send it a message, or end them; then remove the account"
     /** Each listed session's way to it. */
     const val IN_USE_OPEN = "Open session"
     /** A listed session in a turn (RUNNING, or PENDING on its way to one). */
@@ -701,9 +701,10 @@ internal object RunnerPage {
             })
     }
 
-    /** The open session at work on this warning: the same kind and, but for cannotSelfUpdate, the same engine. */
+    /** The open session at work on this warning: the same kind and, but for the machine's own (cannotSelfUpdate, engineUpdateFailed),
+     * the same engine. */
     fun agentFixing(fix: AgentFix, kind: String, engine: String?): AgentFixing? =
-        fix.fixing.firstOrNull { it.kind == kind && (kind == "cannotSelfUpdate" || it.engine == engine) }
+        fix.fixing.firstOrNull { it.kind == kind && (kind == "cannotSelfUpdate" || kind == "engineUpdateFailed" || it.engine == engine) }
 
     /** A Needs Attention card's Fix with an agent: only an engine that won't update and a runner that can't update itself — work on the
      * machine — and nothing at all while it is offline. Blocked otherwise, the button stays, disabled, over the server's reason. */
@@ -720,7 +721,19 @@ internal object RunnerPage {
      * signed-out engine's reason adds that its sign-in is on the rows above. */
     fun agentFixOnInstall(runner: JsonObject, engine: String): AgentFixView? {
         val fix = agentFixOf(runner) ?: return null
-        agentFixing(fix, "installFailed", engine)?.let { return AgentFixView(it, enabled = false, line = null) }
+        return agentFixOnPanel(fix, "installFailed", engine)
+    }
+
+    /** Under an Update Engines Now report (docs/mocks/engine-update-fix-with-agent/03-mobile.png): only while the finished run has a
+     * failed line, drawn red; then as on an Install failed panel, the engine rows being above it here too. */
+    fun agentFixOnUpdate(runner: JsonObject): AgentFixView? {
+        val fix = agentFixOf(runner) ?: return null
+        if (updateRelayLines(runner.obj("install")).none { it.failed }) return null
+        return agentFixOnPanel(fix, "engineUpdateFailed", null)
+    }
+
+    private fun agentFixOnPanel(fix: AgentFix, kind: String, engine: String?): AgentFixView {
+        agentFixing(fix, kind, engine)?.let { return AgentFixView(it, enabled = false, line = null) }
         if (fix.blockedCode != null) {
             val signIn = if (fix.blockedCode == "engineSignedOut") RunnerCopy.agentFixSignIn(fix.engineName ?: engineName(fix.engine.orEmpty())) else ""
             return AgentFixView(null, enabled = false, line = (fix.blockedMessage.orEmpty() + signIn).ifEmpty { null })
@@ -732,10 +745,11 @@ internal object RunnerPage {
     /** POST runners/:id/attention/:kind/fix answers the session it started: {sessionId, workspaceId, workspaceName, title}. */
     fun agentFixPath(runner: String, kind: String) = "runners/$runner/attention/$kind/fix"
 
-    /** Its body: the engine for engineNotUpdating and installFailed; for cannotSelfUpdate the newest runner release this client knows. */
+    /** Its body: the engine for engineNotUpdating and installFailed; for cannotSelfUpdate the newest runner release this client knows;
+     * nothing for engineUpdateFailed. */
     fun agentFixBody(kind: String, engine: String?, latest: String?) = buildJsonObject {
         if (kind == "cannotSelfUpdate") latest?.takeIf { it.isNotEmpty() }?.let { put("latest", it) }
-        else engine?.let { put("engine", it) }
+        else if (kind != "engineUpdateFailed") engine?.let { put("engine", it) }
     }
 
     private fun undismissedUpdateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean): Pair<String, String>? {
@@ -958,7 +972,8 @@ internal object RunnerPage {
      * report it is judged by runsAsRoot, as before: a regular user stays on its version until someone runs the command.
      */
     private fun cannotSelfUpdateItem(runner: JsonObject, latest: String?, offline: Boolean): AttentionItem? {
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // A version that isn't a release number (a managed runner's managed-<sha>, a dev build) is behind nothing.
+        val version = runner.str("version")?.trim()?.takeIf { Regex("^[vV]?[0-9]").containsMatchIn(it) } ?: return null
         if (latest.isNullOrEmpty() || compareRunnerVersions(version, latest) >= 0) return null
         val command = RunnerCopy.UPGRADE_COMMAND
         val report = runner.obj("selfUpdate")

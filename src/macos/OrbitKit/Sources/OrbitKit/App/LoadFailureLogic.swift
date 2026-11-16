@@ -109,7 +109,7 @@ public enum LoadFailureLogic {
     /// chosen anything yet, so this fetch decides afresh — a workspace deleted since the snapshot
     /// was written isn't kept.
     ///
-    /// `firstOnlineMachine` is the first runner online, which is where an account with no workspace
+    /// `firstOnlineMachine` is the first runner online or eligible for managed setup, where an account with no workspace
     /// lands rather than on a page of engines.
     public static func defaultLanding(agents: ListLoadState,
                                       orderedAgentIDs: [String],

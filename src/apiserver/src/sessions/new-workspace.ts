@@ -1,4 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
+import { CREATE_WORKDIR_CAPABILITY, MANAGED_RUNNER_REPOS_ROOT, newFolderRoot } from '@orbit/shared';
 
 /**
  * The workspace POST /sessions makes with a session, read from the request (docs/first-workspace-contract.md §3): the
@@ -57,12 +58,44 @@ export function readNewWorkspace(
     }
     return { runnerId, workDir: dir };
   }
-  if (typeof newFolder !== 'string' || !NEW_FOLDER.test(newFolder) || newFolder === '.' || newFolder === '..') {
+  if (!isNewFolderName(newFolder)) {
     throw new BadRequestException(
       'newWorkspace.newFolder must be one folder name of 1 to 64 letters, digits, ".", "_" or "-", other than "." and ".."',
     );
   }
   return { runnerId, newFolder };
+}
+
+/** One folder name the runner makes under its reposRoot: §3.1's rule, for a body that names one outside `newWorkspace`. */
+export function isNewFolderName(value: unknown): value is string {
+  return typeof value === 'string' && NEW_FOLDER.test(value) && value !== '.' && value !== '..';
+}
+
+/**
+ * Where a new folder goes on this runner: `<home>/<folder>` on one that declares create-workdir/v2 (home being the directory
+ * its reposRoot sits in), `<reposRoot>/<folder>` on an older one (@orbit/shared newFolderRoot), or the 409 when the runner cannot make one — too old
+ * to declare `create-workdir/v1`, or without a reported reposRoot. Shared by POST /sessions and POST /workspaces.
+ *
+ * A managed runner that has not reported yet — still being set up, or never woken since — makes it in its image's
+ * fixed repos folder (MANAGED_RUNNER_REPOS_ROOT), so its first workspace can be made before it is up
+ * (docs/managed-runner-no-default-workspace.md).
+ */
+export function newFolderWorkDirOn(
+  runner: { reposRoot: string | null; capabilities: readonly string[]; capabilitiesReportedAt: Date | null; managedRunner?: { id: string } | null },
+  folder: string,
+): string {
+  if (runner.managedRunner && !runner.capabilitiesReportedAt) return newFolderWorkDir(MANAGED_RUNNER_REPOS_ROOT, folder);
+  const reposRoot = runner.reposRoot?.trim();
+  const makesFolders = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CREATE_WORKDIR_CAPABILITY);
+  if (!makesFolders || !reposRoot) {
+    throw new ConflictException({
+      code: 'NEW_FOLDER_UNSUPPORTED',
+      message: makesFolders
+        ? 'This runner has not reported its Repos Folder, so it cannot make a new folder. Choose an existing folder.'
+        : 'This runner is too old to make a new folder — update it, or choose an existing folder.',
+    });
+  }
+  return newFolderWorkDir(newFolderRoot(reposRoot, runner.capabilities), folder);
 }
 
 /** A workspace's name from its folder: the path's last segment, trailing separators aside; the path itself for `/`. */

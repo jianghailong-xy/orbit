@@ -328,8 +328,6 @@ struct ComposerView: View {
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
         // A new account's welcome card above: what to write (docs/mocks/new-user-onboarding).
         if console.welcomes, console.replyContext == nil { return WelcomeCopy.WELCOME_PLACEHOLDER }
-        // A machine's new session page has no workspace to send to, and no question to answer.
-        if let machine = console.machinePlaceholder { return machine }
         // A wiki chat's panel says what to ask, unless a reply has its own words.
         if console.replyContext == nil, let emptyPlaceholder { return emptyPlaceholder }
         return console.replyContext?.placeholder ?? "Message…"
@@ -384,14 +382,13 @@ struct ComposerView: View {
             || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)
     }
 
-    /// Frame 4's card: above the composer on a Mac, the body of the sheet over it on a phone.
-    private func optimizationCard(_ optimization: PromptOptimization, sheet: Bool) -> some View {
+    /// Frame 4's card above the composer on a Mac.
+    private func optimizationCard(_ optimization: PromptOptimization) -> some View {
         PromptOptimizationCard(
             optimization: optimization,
             basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
             showingPrompt: $console.promptOptimizer.showingPrompt,
             glossLanguage: SessionTranslation.language(app.user?.preferences),
-            sheet: sheet,
             use: { console.useOptimization(edit: false) },
             editThenUse: editThenUseOptimization,
             tryAgain: { console.retryOptimizePrompt() },
@@ -417,10 +414,10 @@ struct ComposerView: View {
     }
     #endif
 
-    /// The composer's translation tag: Settings › Sessions, where Translation is.
+    /// The composer's translation tag: Settings › General, where Translation is.
     private func openTranslationSettings() {
         #if os(iOS)
-        app.nav.openSettings(at: .sessions)
+        app.nav.openSettings(at: .general)
         #else
         app.selectedSection = .settings
         #endif
@@ -513,7 +510,7 @@ struct ComposerView: View {
             // until Use. A phone shows the same card as a sheet (below).
             #if os(macOS)
             if let optimization = console.promptOptimizer.suggestion {
-                optimizationCard(optimization, sheet: false)
+                optimizationCard(optimization)
             }
             #endif
 
@@ -613,9 +610,14 @@ struct ComposerView: View {
         // Frame 4 on a phone: the suggestion is a sheet over the composer, with the same actions.
         .sheet(isPresented: optimizationSheetShown) {
             if let optimization = console.promptOptimizer.suggestion {
-                optimizationCard(optimization, sheet: true)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                PromptOptimizationSheet(
+                    optimization: optimization,
+                    basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
+                    showingPrompt: $console.promptOptimizer.showingPrompt,
+                    use: { console.useOptimization(edit: false) },
+                    edit: editThenUseOptimization,
+                    tryAgain: { console.retryOptimizePrompt() },
+                    dismiss: { console.dismissOptimization() })
             }
         }
         #endif
@@ -692,7 +694,19 @@ struct ComposerView: View {
             // Tab takes the offered suggestion, as on the web; with none on offer it moves focus as
             // it always has. The box is empty whenever one is offered, so no `/` menu is open.
             .onKeyPress(keys: [.tab]) { press in
-                guard press.modifiers.isEmpty, offeredSuggestion != nil else { return .ignored }
+                guard press.modifiers.isEmpty else { return .ignored }
+                // Tab is the optimizer's key in the box, as on the web: Use on its card, and on a draft
+                // it can take, Optimize. While a press is out, and on a spent draft, Tab moves focus.
+                if console.promptOptimizer.suggestion != nil, !showSlash {
+                    console.useOptimization(edit: false)
+                    return .handled
+                }
+                if !showSlash,
+                   console.promptOptimizer.tabOptimizes(on: PromptOptimizer.isOn(app.user), text: console.composerText) {
+                    console.optimizePrompt()
+                    return .handled
+                }
+                guard offeredSuggestion != nil else { return .ignored }
                 acceptSuggestion()
                 return .handled
             }
@@ -735,7 +749,7 @@ struct ComposerView: View {
             Spacer(minLength: 8).layoutPriority(-1)
             // No model to show where a first session cannot start yet: the managed default workspace
             // before its runner was ever ready (`ConsoleModel.managed`), as on the web.
-            if console.managed?.blocksNewSession != true { modelMenu }
+            modelMenu
             // A session on an account pool spends one of its accounts at a time: name that account
             // beside the quota, which is that account's own (web parity — the pool's name is the
             // model control's provider row, and says nothing about whose quota this is). Beside
@@ -1787,13 +1801,20 @@ struct ComposerView: View {
     }
 
     #if os(iOS)
-    /// Photos-library picks: PhotosUI hands back the original bytes (often HEIC/JPEG); normalize to
-    /// PNG — one of the server's inline-image types — before uploading via the shared attach path.
+    /// Photos-library picks: PhotosUI hands back the original bytes (often HEIC/JPEG);
+    /// `orbitPhotoUpload` turns them into an inline image under the cap before the shared attach path.
     private func attachPhotos(_ items: [PhotosPickerItem]) async {
         for item in items {
             guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
-            let png = PlatformImage(data: data)?.orbitPNGData() ?? data
-            console.attach(filename: "photo.png", mimeType: "image/png", data: png)
+            guard let photo = orbitPhotoUpload(data) else {
+                console.statusMessage = "Couldn\u{2019}t read that photo"
+                continue
+            }
+            if let reason = Attachments.rejectReason(mimeType: photo.mimeType, byteCount: photo.data.count) {
+                console.statusMessage = reason
+                continue
+            }
+            console.attach(filename: photo.filename, mimeType: photo.mimeType, data: photo.data)
         }
     }
 
@@ -1807,10 +1828,11 @@ struct ComposerView: View {
         }
     }
 
-    /// Clipboard image → PNG (the server's inline-image type) → the shared attach path.
+    /// Clipboard image → PNG (the server's inline-image type) → the shared paste path, which
+    /// shrinks one past the cap and enforces it.
     private func attachClipboardImage(_ image: UIImage) async {
         guard let png = image.orbitPNGData() else { return }
-        console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
+        await console.attachPastedImage(pngData: png)
     }
     #endif
 }

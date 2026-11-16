@@ -239,7 +239,8 @@ test('managed runners wake on demand and sleep through the real application', {
     const ensured = await call(server, 'POST', '/api/managed-runner/ensure', token, { idempotencyKey: `ensure-${label}` });
     assert.equal(ensured.status, 202, ensured.text);
     const ready = await upAndReady(user.id, 1);
-    return { userId: user.id, token, mapping: ready };
+    const workspace = await db.workspace.create({ data: { ownerId: user.id, runnerId: ready.runnerId, targetRunnerId: ready.runnerId, name: 'Project', workDir: '/tmp/project' } });
+    return { userId: user.id, token, mapping: ready, workspaceId: workspace.id };
   }
 
   /**
@@ -265,9 +266,10 @@ test('managed runners wake on demand and sleep through the real application', {
 
   /** A session of the runner's default workspace, as earlier work left it. */
   async function session(m: ManagedRunner, status: string, extra: Record<string, unknown> = {}): Promise<string> {
+    const workspace = await db.workspace.create({ data: { ownerId: m.ownerId, runnerId: m.runnerId, targetRunnerId: m.runnerId, name: 'Project', workDir: '/tmp/project' } });
     const id = randomUUID();
     const columns: Record<string, unknown> = {
-      id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: m.defaultWorkspaceId, assigned_runner_id: m.runnerId,
+      id, owner_id: m.ownerId, creator_id: m.ownerId, workspace_id: workspace.id, assigned_runner_id: m.runnerId,
       title: 'earlier work', prompt: 'the opening prompt', provider: 'claude', provider_builtin: true, status, num_turns: 1,
       runtime_session_id: randomUUID(), ...extra,
     };
@@ -314,7 +316,7 @@ test('managed runners wake on demand and sleep through the real application', {
   await t.test('(2) an executable task wakes it: Run Now of a task assigned to its workspace', async () => {
     const o = await owner('task');
     const asleep = await putToSleep(o);
-    const created = await call(server, 'POST', '/api/tasks', o.token, { title: 'build the thing', description: 'build it', assigneeId: o.mapping.defaultWorkspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
+    const created = await call(server, 'POST', '/api/tasks', o.token, { title: 'build the thing', description: 'build it', assigneeId: o.workspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
     assert.equal(created.status, 201, created.text);
     const ran = await call(server, 'POST', `/api/tasks/${created.json.id}/execute`, o.token, {});
     assert.ok(ran.status === 200 || ran.status === 201, ran.text);
@@ -343,7 +345,7 @@ test('managed runners wake on demand and sleep through the real application', {
     await sql.query(`UPDATE "session" SET status = 'AWAITING_INPUT' WHERE id = $1`, [parked]); // its turn ran
 
     asleep = await putToSleep(o);
-    const created = await call(server, 'POST', '/api/tasks', o.token, { title: 'nightly', description: 'run at its time', assigneeId: o.mapping.defaultWorkspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
+    const created = await call(server, 'POST', '/api/tasks', o.token, { title: 'nightly', description: 'run at its time', assigneeId: o.workspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
     assert.equal(created.status, 201, created.text);
     await sql.query(`UPDATE "task" SET "run_at" = now() - interval '1 second' WHERE id = $1`, [toUuid(created.json.id)]);
     // The task scheduler's own pass (every minute in the application), taken now rather than waited for.
@@ -459,11 +461,7 @@ test('managed runners wake on demand and sleep through the real application', {
          VALUES (gen_random_uuid(), 'laptop', $1, $2, 'ONLINE', now(), 2) RETURNING id`,
       [user.id, sha256(credential)],
     )).rows[0].id as string;
-    const workspaceId = (await sql.query(
-      `INSERT INTO workspace (id, name, owner_id, runner_id, target_runner_id, work_dir) VALUES (gen_random_uuid(), 'repo', $1, $2, $2, '/srv/repo') RETURNING id`,
-      [user.id, runnerId],
-    )).rows[0].id as string;
-    const parked = await session({ ownerId: user.id, runnerId, defaultWorkspaceId: workspaceId } as ManagedRunner, 'AWAITING_INPUT');
+    const parked = await session({ ownerId: user.id, runnerId } as ManagedRunner, 'AWAITING_INPUT');
     const sent = await call(server, 'POST', `/api/sessions/${parked}/turns`, token, { clientTurnId: randomUUID(), content: 'hi' });
     assert.equal(sent.status, 201, sent.text);
     const beat = await call(server, 'POST', '/api/runner/heartbeat', credential, { version: '0.1.0', managedWorkload: IDLE }, {});
@@ -543,7 +541,7 @@ test('managed runners wake on demand and sleep through the real application', {
       }
       // Scheduled work: a task whose run time came, started by the task scheduler's pass — first, while
       // nothing else is queued for the runner (that pass starts no more than the runner can claim).
-      const later = await call(server, 'POST', '/api/tasks', o.token, { title: 'nightly while disabled', description: 'run at its time', assigneeId: o.mapping.defaultWorkspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
+      const later = await call(server, 'POST', '/api/tasks', o.token, { title: 'nightly while disabled', description: 'run at its time', assigneeId: o.workspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
       assert.equal(later.status, 201, later.text);
       const nightly = toUuid(later.json.id);
       await sql.query(`UPDATE "task" SET "run_at" = now() - interval '1 second' WHERE id = $1`, [nightly]);
@@ -554,7 +552,7 @@ test('managed runners wake on demand and sleep through the real application', {
       assert.equal(sent.status, 201, sent.text);
       assert.equal((await db.session.findUniqueOrThrow({ where: { id: parked } })).status, 'PENDING');
       // An executable task: Run Now.
-      const task = await call(server, 'POST', '/api/tasks', o.token, { title: 'build while disabled', description: 'build it', assigneeId: o.mapping.defaultWorkspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
+      const task = await call(server, 'POST', '/api/tasks', o.token, { title: 'build while disabled', description: 'build it', assigneeId: o.workspaceId, completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0 });
       assert.equal(task.status, 201, task.text);
       const ran = await call(server, 'POST', `/api/tasks/${task.json.id}/execute`, o.token, {});
       assert.ok(ran.status === 200 || ran.status === 201, ran.text);

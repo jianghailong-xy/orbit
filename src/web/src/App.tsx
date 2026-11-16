@@ -1,3 +1,4 @@
+import { managedSetupState } from '@orbit/shared';
 import { Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getToken } from './api';
@@ -149,16 +150,9 @@ function LoginRedirect() {
 // The default landing (bare root, and where login/setup bounce to): the first workspace's session
 // list — the same destination as clicking that workspace in the sidebar. Resolving "the first workspace"
 // needs the workspaces list, so this is a component (not a static <Navigate>). With no workspace to open
-// yet, fall back to onboarding: a brand-new account (no runners) → the registration guide; the first
-// machine online → its new session page, where its first workspace is made in the conversation
-// (board rule 11); every machine offline → the first machine's Settings page, which says so. BootGate pre-warms both
-// queries, so on a fresh load these read straight from cache and redirect in one shot.
-//
-// An account with no runner at all, while the server offers managed runners
-// (docs/managed-runner-design.md), is shown its managed runner's state there instead — Set up, or
-// why there is none — with the registration guide a link away. That is the only landing that asks:
-// every other one makes exactly the requests it made before, and with the capability missing or
-// off this one still ends at the registration guide.
+// yet, open the first machine ready for setup: one online, or the managed runner accepting queued work.
+// Other offline machines open Settings. With no machine, show managed setup when offered, otherwise
+// the registration guide. BootGate pre-warms the workspace and runner lists.
 function DefaultLanding() {
   const workspaces = useQuery(workspacesQuery());
   const runners = useQuery(runnersQuery());
@@ -168,9 +162,9 @@ function DefaultLanding() {
       : undefined;
   const listed = workspaces.isFetched && runners.isFetched;
   const runnerList = runners.data ?? [];
-  const managed = useManagedRunner(listed && !first && runnerList.length === 0);
+  const managed = useManagedRunner(listed && !first);
   if (first) return <Navigate to={`/workspaces/${encodeId(first.id)}`} replace />;
-  if (!listed || (runnerList.length === 0 && !managed.settled)) {
+  if (!listed || (!first && !managed.settled)) {
     return (
       <main className="app-main">
         <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
@@ -186,7 +180,7 @@ function DefaultLanding() {
       <Navigate to="/runners/register" replace />
     );
   }
-  const online = runnerList.find((runner) => runner.online);
+  const online = runnerList.find((runner) => runner.online || managedSetupState(runner.id, managed.managed?.status) !== null);
   if (online) return <Navigate to={machineDraftPath(online.id)} replace />;
   return <Navigate to={`/settings/machines/${runnerList[0].id}`} replace />;
 }

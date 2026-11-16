@@ -1451,33 +1451,7 @@ struct NewSessionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if managedWelcome, let managed = draft.managed {
-                // A new account's first draft here (docs/mocks/new-user-onboarding, board 02 P1/P2): the
-                // welcome card stands where the runner's state and the engine hero stand for everybody else.
-                ScrollView {
-                    ManagedWelcomeCard(draft: draft, managed: managed, runner: managedRunnerRow,
-                                       engine: welcomeEngine, credential: welcomeCredential,
-                                       keyToUse: MachineSetup.firstKey(in: engines, preferring: welcomeEngine.rawValue),
-                                       machine: managedRunnerRow.map(RunnerPageFormat.displayName) ?? "")
-                        .frame(maxWidth: 620)
-                        .frame(maxWidth: .infinity)
-                        .padding([.horizontal, .top], 14)
-                    Color.clear.frame(height: .composerBandFade)
-                }
-                .fadesIntoComposerBand()
-                #if os(iOS)
-                .scrollDismissesKeyboard(.interactively)
-                #endif
-            } else if let managed = draft.managed, managed.blocksNewSession {
-                // The managed runner's default workspace before its runner was ever ready: there is
-                // no engine for a first session yet (the server would refuse it), so the runner's
-                // state stands where the engine would, and the composer below sends nothing.
-                ManagedRunnerBanner(display: managed.display, runnerID: managed.runnerID)
-                    .padding(.horizontal, 24)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    // The same room above the band as the hero it stands in for.
-                    .padding(.bottom, .composerBandFade)
-            } else if draft.localStatusCards.isEmpty {
+            if draft.localStatusCards.isEmpty {
                 VStack(spacing: 18) {
                     // Which engine runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then the engine's name as the
@@ -1576,8 +1550,7 @@ struct NewSessionView: View {
             ComposerBand {
                 // The managed runner's state, as the live console shows it, unless it already stands
                 // in the hero's place above, or in the welcome card's first step.
-                if !managedWelcome {
-                    if let managed = draft.managed, managed.showsBanner, !managed.blocksNewSession {
+                    if let managed = draft.managed, managed.showsBanner {
                         if managed.display.kind == .sleeping {
                             // Asleep is not a fault: the shared calm line, and sending wakes it.
                             Text(ManagedRunnerCopy.Asleep.composer)
@@ -1591,7 +1564,6 @@ struct NewSessionView: View {
                                 .padding(.bottom, .composerBandGap)
                         }
                     }
-                }
                 // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
                 if let msg = draft.statusMessage {
                     HStack {
@@ -1618,17 +1590,8 @@ struct NewSessionView: View {
             if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
                 draft.pickDraftAccount(pick.engine, pick.account)
             }
-            // What waited on this machine before it got this workspace.
-            if let held = app.consoleRegistry?.takeDraftMessage(agentID: agent.id) {
-                draft.restoreHeld(held)
-            }
             await draft.prepareDraft()
         }
-        // Whether this account has never had a session, read as the managed default draft appears.
-        .task(id: managedDraft) {
-            if managedDraft { await app.readNewAccount() }
-        }
-        .onChange(of: managedWelcome, initial: true) { _, now in draft.welcomes = now }
         // @State keeps this ConsoleModel alive while the parent AgentsModel finishes its
         // best-effort provider/runner requests. Push those later snapshots into the draft so a
         // custom provider adopts its real default even if the draft's own request failed.
@@ -1707,35 +1670,6 @@ struct NewSessionView: View {
     private var currentProviderChoice: ProviderChoice {
         currentEngine.provider
             ?? SessionProviderChoices.current(engine: draft.engine, provider: draft.provider, in: [], sources: sources)
-    }
-
-    // MARK: a new account's welcome card (docs/mocks/new-user-onboarding)
-
-    /// This draft is in the managed runner's default workspace (web `managedDraft`).
-    private var managedDraft: Bool {
-        Welcome.isManagedDefaultDraft(status: app.managedRunner?.status, workspaceID: agent.id)
-    }
-
-    /// The welcome card stands here: the managed default draft of an account that never had a session.
-    private var managedWelcome: Bool {
-        managedDraft && draft.managed != nil && app.newAccount == true
-    }
-
-    private var managedRunnerRow: Runner? {
-        (draft.managed?.runnerID ?? agent.runnerId).flatMap { app.agents?.runnerRow($0) }
-    }
-
-    /// Before a first session can start there is no draft engine to sign in, so the runner's own first one.
-    private var welcomeEngine: LoginEngine {
-        Welcome.engine(draftEngine: draft.engine, startsNow: draft.managed?.blocksNewSession != true,
-                       runner: managedRunnerRow)
-    }
-
-    /// The model step's answer: the draft's provider once a first session can start, else none.
-    private var welcomeCredential: SetupCredential {
-        guard let runner = managedRunnerRow else { return .signIn }
-        let provider: ProviderChoice? = draft.managed?.blocksNewSession == true ? nil : currentProviderChoice
-        return MachineSetup.credential(runner: runner, engine: welcomeEngine.rawValue, provider: provider)
     }
 
     /// The full model name (the composer footer only carries a truncated one). No funding label:
@@ -1944,12 +1878,13 @@ struct StatusGlyphView: View {
 
 /// The slim status cue used by the compact (iPhone) lists — the essence of the leading
 /// `StatusGlyphView`, distilled to what must never go silent: a spinner while working, an amber dot
-/// when it needs you (approval), a red dot on failure, and — since a job in flight became a state
-/// the product shows — a breathing terminal for background work, and the strip's eye for a session
-/// a watch will resume. The calm states (dormant / done / queued, and processes merely left running)
-/// show nothing: the surrounding row states them in words + colour and in its VoiceOver value, so
-/// the jump-back lists (the grouped session list and the drawer's Recents) stay light. Shared so
-/// both show the exact same cue.
+/// when it needs you (approval), a red dot on failure, the strip's eye for a session a watch will
+/// resume, and the two states where something is still under way without the agent generating —
+/// the clock of a session queued for a slot, and the terminal of a background process (breathing
+/// for a job in flight, still for a process merely left up), each the glyph the web row draws.
+/// The settled states (waiting for a reply, ended, succeeded) show nothing: the surrounding row
+/// states them in words + colour and in its VoiceOver value, so the jump-back lists (the grouped
+/// session list and the drawer's Recents) stay light. Shared so both show the exact same cue.
 struct SessionLiveIndicator: View {
     let session: Session
     /// The live watches that will resume this session (`AgentSessionRow.watching`); nil where a list
@@ -1970,9 +1905,10 @@ struct SessionLiveIndicator: View {
         // not a process). The glyph has already let a question for you or work of its own outrank it.
         case (.symbol("eye"), _):
             Image(systemName: "eye").font(.orbitGlyph).foregroundStyle(.secondary)
-        // Under review (contract §5 N3): the clock the macOS row and the web glyph draw, in the
-        // quiet tone — the report is somebody else's to look at first, and nothing here is amber.
-        case (.symbol("clock"), .neutral) where session.confirmationUnderReview != nil:
+        // Under review (contract §5 N3), or queued for a slot (a full runner, the Claude region): the
+        // clock the macOS row and the web glyph draw, in the quiet tone — the session is waiting on
+        // somebody else, not on you, and nothing here is amber.
+        case (.symbol("clock"), .neutral):
             Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
         // The one background state that is NOT quiet. A compact row's only live cue used to go
         // silent here, which is exactly the reading the session row stopped giving: a job in
@@ -1982,6 +1918,11 @@ struct SessionLiveIndicator: View {
         // value (`SessionHeader.statusWord`), which is why this carries no label of its own.
         case (.symbol, .neutral) where glyph.pulse:
             BreathingGlyph(systemImage: "terminal")
+        // A process merely left up (a dev server, a watcher): the same terminal, still. The row's line
+        // already says "Background process running", and the glyph now says it too — without motion,
+        // so a service that never exits cannot make the row look busy.
+        case (.symbol("terminal"), _):
+            Image(systemName: "terminal").font(.orbitGlyph).foregroundStyle(.secondary)
         case (_, .warning): Circle().fill(.orange).frame(width: 7, height: 7)
         case (_, .error):   Circle().fill(.red).frame(width: 7, height: 7)
         default:            EmptyView()

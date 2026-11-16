@@ -554,6 +554,31 @@ export function useSessionStream({
     let es: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
+    // The pending cards, read again each time the stream opens. A card's `approval_resolved` is
+    // live-only (seq 0): a stream that was closed when another client answered it — a tab in the
+    // background while the owner answers on the phone, a dropped socket — never sees it, and the
+    // replay that resumes the stream holds only stored events. Without this read the card stays
+    // on screen, still pressable, until the session is opened again.
+    // The frames that arrive while the read is in flight are newer than its snapshot, so they win
+    // over it: a card resolved meanwhile stays gone, one raised meanwhile stays shown.
+    let approvalsGeneration = 0;
+    let approvalsLive: { raised: Map<string, ApprovalInfo>; resolved: Set<string> } | null = null;
+    const refreshApprovals = (): void => {
+      const generation = ++approvalsGeneration;
+      const live = { raised: new Map<string, ApprovalInfo>(), resolved: new Set<string>() };
+      approvalsLive = live;
+      listApprovals(selectedId)
+        .then((rows) => {
+          if (closed || generation !== approvalsGeneration) return;
+          approvalsLive = null;
+          const fetched = rows.filter((row) => !live.resolved.has(row.id));
+          const ids = new Set(fetched.map((row) => row.id));
+          setApprovals([...fetched, ...[...live.raised.values()].filter((card) => !ids.has(card.id))]);
+        })
+        .catch(() => {
+          if (generation === approvalsGeneration) approvalsLive = null;
+        });
+    };
     // Queue refreshes can overlap when another client quickly adds/withdraws turns. Only the most
     // recently requested snapshot may paint, or a slower stale response can resurrect a cancelled
     // row. The snapshot is authoritative for rows known when its request began; reconcile below
@@ -601,6 +626,7 @@ export function useSessionStream({
               current,
               selectedId,
               knownAcceptedBefore,
+              rows.some((row) => row.opening && turnPlacementOf(row) !== 'accepted'),
             ),
           );
           const serverQueued = rows.flatMap((row) => {
@@ -633,6 +659,11 @@ export function useSessionStream({
     // so a cursor the client can't get past is a loop, not a retry — see reseed().
     let seqAtConnect = -1;
     let stalled = 0;
+    // Set when the window is about to be filled by a cursor-less replay rather than a page: a tail
+    // page that failed (seedTail, reseed). No page said where the window's older edge is, so the
+    // first event the replay brings decides it (push). Left unset, the edge read "nothing older", and
+    // a session whose replay began mid-conversation could never be scrolled back past that point.
+    let olderEdgeUnknown = false;
     const writeCache = (): void => {
       // A window opened at a record ends at a gap, not at the tail: a reopen must not resume from it.
       if (newerCursorRef.current !== null) return;
@@ -665,6 +696,11 @@ export function useSessionStream({
       seedAbort.abort();
     };
     const push = (ev: RunEvent): void => {
+      if (olderEdgeUnknown && isSeq(ev.seq)) {
+        olderEdgeUnknown = false;
+        oldestSeqRef.current = ev.seq;
+        hasMoreOlderRef.current = ev.seq > 1; // seqs start at 1; a page before it answers the rest
+      }
       accRef.current = [...accRef.current, ev];
       writeCache();
       setEvents(accRef.current);
@@ -728,6 +764,7 @@ export function useSessionStream({
       } catch {
         // Leave lastSeq at 0 and let the reconnect below carry it: a cursor-less connect is
         // server-capped, so the fallback for a failed re-seed is still a bounded replay.
+        olderEdgeUnknown = true;
       }
       if (closed) return;
       // `fails` is deliberately NOT reset: re-seeding is a different way to spend the same retry
@@ -744,6 +781,8 @@ export function useSessionStream({
       seqAtConnect = lastSeq;
       lastMsgAt = Date.now();
       es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
+      // Once the stream is subscribed, so nothing resolved after the read can slip between the two.
+      es.onopen = () => refreshApprovals();
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
         fails = 0; // a message means the stream is healthy
@@ -855,6 +894,9 @@ export function useSessionStream({
         // transcript reducer.
         if (ev.type === 'approval_request') {
           const p = ev.payload as { id: string; toolName: string; input: unknown; toolUseId?: string; translation?: ApprovalInfo['translation'] };
+          if (approvalsLive && !approvalsLive.raised.has(p.id)) {
+            approvalsLive.raised.set(p.id, { ...p, sessionId: selectedId, status: 'PENDING', createdAt: new Date().toISOString() } as ApprovalInfo);
+          }
           // A card the server has translated is published again with the same id, carrying
           // `translation` (Settings › Translation, 3A): it replaces the card's display text, nothing else.
           setApprovals((prev) =>
@@ -882,7 +924,11 @@ export function useSessionStream({
         }
         if (ev.type === 'approval_resolved') {
           const id = ev.payload?.id as string | undefined;
-          if (id) setApprovals((prev) => prev.filter((x) => x.id !== id));
+          if (id) {
+            approvalsLive?.raised.delete(id);
+            approvalsLive?.resolved.add(id);
+            setApprovals((prev) => prev.filter((x) => x.id !== id));
+          }
           return;
         }
         if (seen.current.has(ev.seq)) return;
@@ -1156,6 +1202,7 @@ export function useSessionStream({
       }
       // Every attempt failed. Clear the skeleton anyway rather than spin forever — the SSE
       // replay below is the remaining path to content.
+      olderEdgeUnknown = true;
       if (!closed) setSeeding(false);
     };
     // A link to one record: the page around it — or, for a record that is not this session's, the

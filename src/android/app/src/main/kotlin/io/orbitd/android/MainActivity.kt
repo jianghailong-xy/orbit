@@ -187,6 +187,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
     key(accountKey) {
         val api = remember(signedIn.handle) { DirectoryApi(app.session, signedIn.handle) }
         val management = remember(signedIn.handle) { ManagementApi(app.session, signedIn.handle, app.processScope) }
+        // Admin is a drawer row for an admin, as iOS's is, since Settings' list took the web nav's groups and lost its row.
+        var admin by remember(signedIn.handle) { mutableStateOf(false) }
+        LaunchedEffect(management) {
+            admin = try { (management.get("users/me") as? kotlinx.serialization.json.JsonObject)?.text("role") == "ADMIN" }
+                catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (_: Exception) { false }
+        }
         val scopeList = remember(api) { SessionScopeList(api) }
         val data by rememberDirectoryData(app, signedIn.handle)
         val live by remember(app) { app.realtime.state.map { it.handle to it.invalidationRevision }.distinctUntilChanged() }
@@ -232,8 +238,13 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         // A page sending the reader to a destination: its root, whatever was showing.
         fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
         val workspaces = orderedWorkspaces(data.workspaces)
-        val machinesToSetUp = MachineSetup.machinesToSetUp(data.effectiveRunnerRows, data.effectiveWorkspaceRows)
-        val firstOnline = MachineSetup.firstOnlineRunnerId(data.effectiveRunnerRows)
+        val managedForLanding = rememberManagedRunner(management, ask = data.ready)
+        FollowManagedRunner(managedForLanding, follow = data.ready && managedForLanding.shown != null)
+        val managedStatus = managedForLanding.shown?.status
+        val managedOfferedForLanding = rememberManagedOffered(management, data.ready)
+        val managedLandingReady = managedOfferedForLanding == false || managedForLanding.loaded
+        val machinesToSetUp = MachineSetup.machinesToSetUp(data.effectiveRunnerRows, data.effectiveWorkspaceRows, managedStatus = managedStatus)
+        val firstOnline = MachineSetup.firstOnlineRunnerId(data.effectiveRunnerRows, managedStatus = managedStatus)
         fun openNewSession(origin: Origin = Origin.LIST) {
             val workspace = route.workspaceId ?: workspaces.firstOrNull()?.id
             when {
@@ -243,12 +254,12 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             }
         }
         // Rule 10 & 11: with no workspaces, an online machine lands on its new session page; if all machines are offline, lands on Machines & models.
-        LaunchedEffect(route, data.ready, data.workspaces.isEmpty(), data.effectiveRunnerRows.isNotEmpty(), firstOnline, navigation.canGoBack, navigation.pending) {
+        LaunchedEffect(route, data.ready, data.workspaces.isEmpty(), data.effectiveRunnerRows.isNotEmpty(), firstOnline, managedLandingReady, navigation.canGoBack, navigation.pending) {
             if (data.ready && data.workspaces.isEmpty() &&
                 route.destination == Destination.WORKSPACES && !navigation.canGoBack && navigation.pending == null) {
                 if (firstOnline != null) {
                     land(machineDraftDestination(firstOnline), OrbitRoute(Destination.DRAFT, id = firstOnline))
-                } else if (data.effectiveRunnerRows.isNotEmpty()) {
+                } else if (managedLandingReady && data.effectiveRunnerRows.isNotEmpty()) {
                     land("settings", OrbitRoute(Destination.RUNNER))
                 }
             }
@@ -271,26 +282,6 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
             val before = navigation
             navigation = before.landHome(workspaces.map { it.id }.filterNot { ObjectId.same(it, deletedWorkspace) }, lastWorkspace.id, opened, provisionalLanding)
             if (!data.cached) provisionalLanding = null else if (navigation !== before) provisionalLanding = rootOf(navigation)
-        }
-        // A new account whose only workspace is its managed runner's default lands on that workspace's draft, where the welcome card
-        // stands (docs/mocks/new-user-onboarding; the web's DefaultLanding + WorkspaceView). Once per sign-in, over the list the launch
-        // landed on, so Back still reaches it; an account that has had a session keeps today's landing.
-        var managedLanded by remember(signedIn.handle) { mutableStateOf(false) }
-        val onlyWorkspace = workspaces.singleOrNull()?.id
-        // Read while the directory is up: the landing below, and the drawer's workspace rows, where the managed runner asleep reads
-        // Asleep, never Offline. Nothing is read without the capability.
-        val managedForLanding = rememberManagedRunner(management, ask = data.ready)
-        FollowManagedRunner(managedForLanding, follow = data.ready && managedForLanding.shown != null)
-        val managedDefault = managedForLanding.shown?.status?.workspaceId
-            ?.takeIf { onlyWorkspace != null && ObjectId.same(it, onlyWorkspace) }?.let { onlyWorkspace }
-        val newManagedAccount = rememberNewAccount(management, managedDefault != null && !managedLanded)
-        LaunchedEffect(newManagedAccount, managedDefault, route, navigation.canGoBack) {
-            val workspace = managedDefault ?: return@LaunchedEffect
-            if (!newManagedAccount || managedLanded || navigation.canGoBack) return@LaunchedEffect
-            if (route.destination == Destination.WORKSPACE && ObjectId.same(route.id, workspace)) {
-                managedLanded = true
-                open(OrbitRoute(Destination.DRAFT, workspaceId = workspace))
-            }
         }
         // A merge's push (A11-9) names its project only: once the directory is read, its sessions page lands as the project's root
         // over the workspace the drawer's row would pick (iOS 6b4bef713 `openProjectMerge`).
@@ -352,6 +343,9 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                             onClick = { select(WAITING_ON_YOU, OrbitRoute(Destination.WAITING_ON_YOU, origin = Origin.DRAWER)) },
                             badge = { WaitingOnYouDrawerCount(remember(signedIn.handle) { OwnerRequestStore.of(app.session, signedIn.handle, app.processScope) }, projects.projects, revision, terminalsChanged) },
                             modifier = Modifier.testTag("drawer:waiting-on-you"))
+                        if (admin) NavigationDrawerItem(label = { Text("Admin") }, selected = route.destination == Destination.SETTINGS && route.id == "admin",
+                            icon = { Icon(painterResource(R.drawable.ic_admin), null) }, modifier = Modifier.testTag("drawer:admin"),
+                            onClick = { scope.launch { drawer.close() }; open(OrbitRoute(Destination.SETTINGS, "admin", origin = Origin.DRAWER)) })
                         SectionHeading("Workspaces")
                         DrawerUnreachableRow(data) { app.realtime.refreshDirectory() }
                         if (data.ready && data.workspaces.isEmpty() && machinesToSetUp.isEmpty()) Text(MachineSetupCopy.NO_WORKSPACES_YET, Modifier.padding(16.dp))

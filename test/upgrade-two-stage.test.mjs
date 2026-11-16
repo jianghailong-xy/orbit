@@ -70,6 +70,17 @@ case "$side $*" in
   "build info --format "*) [ -n "${'$'}{FAKE_UNTRUSTED:-}" ] || echo "$FAKE_REGISTRY_NAME false"; echo "docker.io true" ;;
   "build inspect --format {{.Image}} orbit-web") echo "sha256:${'0'.repeat(64)}" ;;
   "build push "*) echo "$2" >>"$FAKE_REGISTRY" ;;
+  # The build host's disk, where a case gives it one: its images (FAKE_LOCAL_IMAGES), the ones a container uses
+  # (FAKE_IN_USE), and its free KiB (FAKE_FREE_KB), which each removal and prune adds to as the case says.
+  "build image ls --format "*) cat "$FAKE_LOCAL_IMAGES" 2>/dev/null || true ;;
+  "build rmi "*)
+    if grep -qxF "$2" "${'$'}{FAKE_IN_USE:-/dev/null}"; then echo "conflict: a container is using $2" >&2; exit 1; fi
+    grep -vxF "$2" "$FAKE_LOCAL_IMAGES" >"$FAKE_LOCAL_IMAGES.new" || true
+    mv "$FAKE_LOCAL_IMAGES.new" "$FAKE_LOCAL_IMAGES"
+    echo $(($(cat "$FAKE_FREE_KB") + ${'$'}{FAKE_RMI_FREES_KB:-0})) >"$FAKE_FREE_KB" ;;
+  "build builder prune "*)
+    [ -z "${'$'}{FAKE_FREE_KB:-}" ] || echo $(($(cat "$FAKE_FREE_KB") + ${'$'}{FAKE_PRUNE_FREES_KB:-0})) >"$FAKE_FREE_KB" ;;
+  "build system df") echo "TYPE TOTAL ACTIVE SIZE RECLAIMABLE" ;;
   "target ps -aq "*)
     service="$(printf '%s\n' "$@" | sed -n 's/^label=com.docker.compose.service=//p')"
     [ ! -e "$state/$service" ] || echo "c-$service" ;;
@@ -143,6 +154,11 @@ mkdir -p "$FAKE_TARGET_TMP"
 cd "$FAKE_TARGET_HOME" && exec env -i PATH="$PATH" HOME="$HOME" FAKE_SIDE=target TMPDIR="$FAKE_TARGET_TMP" \
   $(env | grep -E '^FAKE_[A-Z_]+=' | grep -v '^FAKE_SIDE=') bash -c "$*"
 `;
+// df answers from FAKE_FREE_KB where a case sets one, and with a terabyte free where none does.
+const FAKE_DF = String.raw`#!/usr/bin/env bash
+kb="$(cat "${'$'}{FAKE_FREE_KB:-/nonexistent}" 2>/dev/null || echo 1073741824)"
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\nfake 0 0 %s 0%% /\n' "$kb"
+`;
 // The boot check, as CI runs it: what it was asked to boot is all a case needs.
 const FAKE_BOOT_CHECK = '#!/usr/bin/env bash\nprintf "build\\t-\\tboot-check %s %s\\n" "$ORBIT_APISERVER_IMAGE" "$ORBIT_WEB_IMAGE" >>"$FAKE_DOCKER_LOG"\n';
 // A plain-HTTP registry answers here only where a case says so.
@@ -163,7 +179,7 @@ function makeFixture(t) {
   writeFileSync(path.join(checkout, '.env'), 'JWT_SECRET=build\nPROVIDER_SECRET_KEY=build\nRUNNER_LINK_SIGNING_KEY=build\n');
   const bin = path.join(root, 'bin');
   mkdirSync(bin);
-  for (const [name, body] of [['docker', FAKE_DOCKER], ['ssh', FAKE_SSH], ['curl', FAKE_CURL]]) {
+  for (const [name, body] of [['docker', FAKE_DOCKER], ['ssh', FAKE_SSH], ['curl', FAKE_CURL], ['df', FAKE_DF]]) {
     writeFileSync(path.join(bin, name), body);
     chmodSync(path.join(bin, name), 0o755);
   }
@@ -667,6 +683,71 @@ test('a deploy that cannot run changes nothing on either host', { skip: !compose
   run = fixture.run(upgrade, ['--deploy', commit, '--pull-base']);
   assert.equal(run.status, 0, run.output);
   assert.equal(upped(run)[0], 'postgres');
+});
+
+test('a build short of room removes earlier release images, then prunes, and stops if that is not enough', { skip: !compose && 'needs docker compose' }, (t) => {
+  const fixture = makeFixture(t);
+  const upgrade = UPGRADES[0];
+  const GiB = 1024 * 1024;
+  const old = fixture.commit('an earlier release');
+  const commit = fixture.commit('this release');
+  const disk = (free, images, inUse = []) => {
+    const files = { FAKE_FREE_KB: path.join(fixture.root, 'free'), FAKE_LOCAL_IMAGES: path.join(fixture.root, 'images'), FAKE_IN_USE: path.join(fixture.root, 'in-use') };
+    writeFileSync(files.FAKE_FREE_KB, `${free * GiB}\n`);
+    writeFileSync(files.FAKE_LOCAL_IMAGES, `${images.join('\n')}\n`);
+    writeFileSync(files.FAKE_IN_USE, `${inUse.join('\n')}\n`);
+    return files;
+  };
+  const earlier = [`${REGISTRY}/orbit-apiserver:${old}`, `${REGISTRY}/orbit-web:${old}`, `${REGISTRY}/orbit-managed-runner:${old}`];
+  const running = `${REGISTRY}/orbit-apiserver:${'1'.repeat(40)}`;
+  const linkImage = `${REGISTRY}/orbit-link-gateway:${fixture.linkTag()}`;
+  const others = ['orbit-web:previous-release', 'postgres:16-alpine', 'unrelated:latest'];
+  const rmis = (run) => run.build.filter((call) => call.args.startsWith('rmi ')).map((call) => call.args.slice(4));
+  const prunes = (run) => run.build.filter((call) => /^(builder|image) prune/.test(call.args)).map((call) => call.args);
+
+  // Room enough: nothing is removed or pruned.
+  let files = disk(40, [...earlier, linkImage]);
+  let run = fixture.run(upgrade, ['--build-only'], files);
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(rmis(run), []);
+  assert.deepEqual(prunes(run), []);
+
+  // 3 GiB free, 5 GiB back per image: the earlier release images go, and that is enough. This release's images, one a
+  // container uses, and images that are not the registry's releases stay; nothing is pruned.
+  writeFileSync(fixture.registry, '');
+  files = disk(3, [...earlier, running, linkImage, ...others], [running]);
+  run = fixture.run(upgrade, ['--build-only'], { ...files, FAKE_RMI_FREES_KB: `${5 * GiB}` });
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(rmis(run), [...earlier, running]);
+  assert.deepEqual(readFileSync(files.FAKE_LOCAL_IMAGES, 'utf8').trim().split('\n'), [running, linkImage, ...others]);
+  assert.deepEqual(prunes(run), []);
+  assert.match(run.stdout, /3 GiB free on .* under the 15 GiB a build needs: making room/);
+  assert.match(run.stdout, /18 GiB free: room made/);
+  assert.match(run.stdout, new RegExp(`✓ Release ${commit} is in`));
+  const rmiAt = run.build.findIndex((call) => call.args.startsWith('rmi '));
+  const buildAt = run.build.findIndex((call) => call.args.startsWith('compose build'));
+  assert.ok(rmiAt >= 0 && rmiAt < buildAt, 'room is made before the build');
+
+  // No release images to remove: dangling images, then week-old build cache, then all of it.
+  writeFileSync(fixture.registry, '');
+  files = disk(2, others);
+  run = fixture.run(upgrade, ['--build-only'], { ...files, FAKE_PRUNE_FREES_KB: `${7 * GiB}` });
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(prunes(run), ['image prune -f', 'builder prune -f --filter until=168h', 'builder prune -af']);
+
+  // Still short after all of it: stopped before anything is built or pushed.
+  writeFileSync(fixture.registry, '');
+  files = disk(2, others);
+  run = fixture.run(upgrade, ['--build-only'], files);
+  assert.notEqual(run.status, 0, run.output);
+  assert.match(run.stderr, /2 GiB free on .* under the\s+15 GiB a build needs[^]*Nothing was built/);
+  assert.ok(!run.build.some((call) => /^(compose build|build |push )/.test(call.args)), run.output);
+  assert.equal(readFileSync(fixture.registry, 'utf8'), '');
+
+  // The threshold is the host's to set.
+  run = fixture.run(upgrade, ['--build-only'], { ...files, ORBIT_BUILD_MIN_FREE_GB: '1' });
+  assert.equal(run.status, 0, run.output);
+  assert.deepEqual(rmis(run), []);
 });
 
 test('a host\'s own Compose files, named in COMPOSE_FILE, are rendered with the release and left as they are', { skip: !compose && 'needs docker compose' }, (t) => {

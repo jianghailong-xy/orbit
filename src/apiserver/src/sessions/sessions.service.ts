@@ -130,7 +130,6 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
-  CREATE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
   type TranslationActionResponse,
@@ -250,7 +249,7 @@ import {
 import {
   folderNameOf,
   freeWorkspaceName,
-  newFolderWorkDir,
+  newFolderWorkDirOn,
   readNewWorkspace,
   type NewWorkspaceTarget,
 } from './new-workspace';
@@ -353,7 +352,7 @@ import {
   resumeBlockedRefusal, sessionRecoveryBody, sessionRefusal,
 } from './session-recovery';
 import { claudeRegionCreateRefusal, isClaudeRegionError, regionCredentialOf } from '../runners/runner-region';
-import { assertManagedFirstSessionRuntime } from '../managed-runners/managed-runner-supply';
+import { assertManagedFirstSessionRuntime, managedFirstSessionKey } from '../managed-runners/managed-runner-supply';
 import {
   MANAGED_RUNNER_DEMAND,
   NOT_MANAGED,
@@ -933,6 +932,37 @@ function refuseUnlessProjectFinished(project: { status: string } | null | undefi
 /** A seed as the resolution read it: an anchor's carries the session it came from (start-anchor.ts). */
 type ReadSeed = AgentProviderSeed & Partial<Pick<AnchorSeed, 'anchor'>>;
 
+/**
+ * The columns "Resolve in session" clears on its session row (resume → createTurn's
+ * `clearSettledWorktreeState`): a settled merge or commit result, whose failure the rebase it asks for
+ * makes stale. One still pending is an operation queued or running, and is left to finish. Read from the
+ * row as locked by the write it goes into.
+ */
+function settledWorktreeStateCleared(session: Pick<Session, 'mergeStatus' | 'commitStatus'>): Prisma.SessionUncheckedUpdateInput {
+  return {
+    ...(session.mergeStatus && session.mergeStatus !== 'pending'
+      ? {
+          mergeStatus: null,
+          mergeOperationId: null,
+          mergeOperationOwner: null,
+          mergeError: null,
+          mergedAt: null,
+          mergedSourceSha: null,
+          branchMerged: null,
+        }
+      : {}),
+    ...(session.commitStatus && session.commitStatus !== 'pending'
+      ? {
+          commitStatus: null,
+          commitOperationId: null,
+          commitOperationOwner: null,
+          commitError: null,
+          commitResultMessage: null,
+        }
+      : {}),
+  };
+}
+
 @Injectable()
 export class SessionsService {
   private readonly logger = new Logger(SessionsService.name);
@@ -1288,9 +1318,6 @@ export class SessionsService {
     let workspaceEnv: unknown;
     // The accounts the workspace pins its sessions to, whose sign-ins the preflight below judges.
     let accountChoices: WorkspaceAccountChoices | undefined;
-    // Set when the workspace is a managed runner's default workspace: that runner, whose first
-    // session is held to the runtimes it has ready (see the preflight below).
-    let managedRunnerId: string | undefined;
     if (!assignedRunnerId && dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
@@ -1304,7 +1331,6 @@ export class SessionsService {
           antigravityAccount: true,
           kimiAccount: true,
           cursorAccount: true,
-          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -1320,14 +1346,12 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
-      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     } else if (dto.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: dto.workspaceId, ownerId, deletedAt: null },
         select: {
           enableWorktree: true, enabled: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true,
           kimiAccount: true, cursorAccount: true,
-          managedRunnerDefault: { select: { runnerId: true } },
         },
       });
       if (!workspace) throw new ForbiddenException('workspace not found');
@@ -1335,7 +1359,6 @@ export class SessionsService {
       enableWorktree = workspace.enableWorktree;
       workspaceEnv = workspace.env;
       accountChoices = workspace;
-      managedRunnerId = workspace.managedRunnerDefault?.runnerId;
     }
     if (!assignedRunnerId) {
       throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
@@ -1350,7 +1373,16 @@ export class SessionsService {
     // caller changes engine) — else where this project last started, derived rather than stored (see
     // workspace-provider.ts for why a workspace holds no provider of its own). Anything named is
     // resolved rather than trusted: a command-line caller typed it, and no picker checked it first.
-    const resolved = await this.startResolution(ownerId, { ...dto, anchor: opts?.anchor });
+    // A workspace made with this session has no id for workspace-provider to seed yet. Give an
+    // unnamed start on a managed runner the same initial provider as an existing empty workspace.
+    let newWorkspaceProvider: string | undefined;
+    if (newWorkspace && !dto.engine && !dto.provider && !opts?.anchor) {
+      const managed = await this.prisma.managedRunner.findUnique({
+        where: { runnerId: newWorkspace.runnerId }, select: { initialProvider: true },
+      });
+      if (managed) newWorkspaceProvider = managed.initialProvider ?? await managedFirstSessionKey(this.prisma, ownerId) ?? undefined;
+    }
+    const resolved = await this.startResolution(ownerId, { ...dto, provider: dto.provider ?? newWorkspaceProvider, anchor: opts?.anchor });
     const { provider, providerBuiltin } = resolved;
     // The model as asked; an old OpenCode request's `orbit-<key>/<model>` is stored as its bare id.
     const model = resolved.model ?? undefined;
@@ -1518,6 +1550,8 @@ export class SessionsService {
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
         // The region check's verdict (docs/claude-region-check-contract.md §12, below).
         region: true,
+        // Set on a managed runner, whose first session is held to the runtimes it has ready (below).
+        managedRunner: { select: { id: true } },
       },
     });
     if (runtime === AgentProvider.DSH) {
@@ -1616,12 +1650,13 @@ export class SessionsService {
     if (refusal && targetRunner) {
       throw new EngineSignedOutConflict(runtime, refusal, assignedRunnerId, engineSignInAction(runtime, targetRunner));
     }
-    // A managed runner installs no engine on demand, so its default workspace's first session runs on
-    // a runtime it reported ready — the default derived above is the one it became READY with — or is
-    // refused MODEL_UNAVAILABLE here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3).
-    if (managedRunnerId && managedRunnerId === assignedRunnerId && targetRunner && dto.workspaceId) {
+    // A managed runner installs no engine on demand, so its first session runs on a runtime it reported
+    // ready — the default derived above is the one it became READY with — or is refused MODEL_UNAVAILABLE
+    // here (docs/managed-runner-design.md, "Provisioning retry wake and sleep" 3). Keyed on the runner,
+    // whichever workspace the session is in or makes (docs/managed-runner-no-default-workspace.md).
+    if (targetRunner?.managedRunner) {
       await assertManagedFirstSessionRuntime(this.prisma, {
-        workspaceId: dto.workspaceId,
+        runnerId: assignedRunnerId,
         runtime,
         bringsOwnCredentials,
         workspaceEnv,
@@ -1854,25 +1889,15 @@ export class SessionsService {
     }
     const runner = await this.prisma.runner.findFirst({
       where: { id: ask.runnerId, ownerId },
-      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true },
+      select: { id: true, reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
     });
     if (!runner) throw new ForbiddenException('runner not found');
     if (ask.workDir !== undefined) {
       return { runnerId: runner.id, workDir: ask.workDir, name: folderNameOf(ask.workDir), autoCreateWorkDir: false };
     }
-    const reposRoot = runner.reposRoot?.trim();
-    const makesFolders = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CREATE_WORKDIR_CAPABILITY);
-    if (!makesFolders || !reposRoot) {
-      throw new ConflictException({
-        code: 'NEW_FOLDER_UNSUPPORTED',
-        message: makesFolders
-          ? 'This runner has not reported its Repos Folder, so it cannot make a new folder. Choose an existing folder.'
-          : 'This runner is too old to make a new folder — update it, or choose an existing folder.',
-      });
-    }
     return {
       runnerId: runner.id,
-      workDir: newFolderWorkDir(reposRoot, ask.newFolder),
+      workDir: newFolderWorkDirOn(runner, ask.newFolder),
       name: ask.newFolder,
       autoCreateWorkDir: true,
     };
@@ -6970,7 +6995,9 @@ export class SessionsService {
       // Settings › Translation: written HELD, routed and woken only once translated (releaseHeldTurn).
       if (translateFrom && dto.content) {
         return {
-          turn: await this.insertHeldTurnLocked(tx, ownerId, session, dto, translateFrom, intent, wikiContext),
+          turn: await this.insertHeldTurnLocked(
+            tx, ownerId, session, dto, translateFrom, intent, wikiContext, opts?.clearSettledWorktreeState === true,
+          ),
           placement: 'queued' as const,
           wakeQueue: false,
           wakeInbox: false,
@@ -7214,26 +7241,7 @@ export class SessionsService {
           // "Resolve in session" uses the live-session resume route. Clear its
           // settled receipt in this same row-locked update, never from the stale
           // fast-read snapshot: a newly queued/claimed epoch must win instead.
-          ...(opts?.clearSettledWorktreeState && session.mergeStatus && session.mergeStatus !== 'pending'
-            ? {
-                mergeStatus: null,
-                mergeOperationId: null,
-                mergeOperationOwner: null,
-                mergeError: null,
-                mergedAt: null,
-                mergedSourceSha: null,
-                branchMerged: null,
-              }
-            : {}),
-          ...(opts?.clearSettledWorktreeState && session.commitStatus && session.commitStatus !== 'pending'
-            ? {
-                commitStatus: null,
-                commitOperationId: null,
-                commitOperationOwner: null,
-                commitError: null,
-                commitResultMessage: null,
-              }
-            : {}),
+          ...(opts?.clearSettledWorktreeState ? settledWorktreeStateCleared(session) : {}),
         },
       });
       return {
@@ -7296,6 +7304,7 @@ export class SessionsService {
     from: TranslationLanguage,
     intent: SessionTurnIntent | undefined,
     wikiContext: WikiChatContext | null,
+    clearSettledWorktreeState: boolean,
   ): Promise<ConversationTurn> {
     const content = dto.content!;
     const attachmentIds = await this.assertLinkableAttachments(ownerId, session.id, dto.clientTurnId, dto.attachmentIds, tx);
@@ -7318,6 +7327,10 @@ export class SessionsService {
         // The owner took over, as in createTurn.
         retryAt: null,
         retryClaimedAt: null,
+        // "Resolve in session" with translation on arrives here rather than at createTurn's update: its
+        // settled merge or commit result is cleared all the same, under this same row lock. Otherwise the
+        // failure outlives the rebase it asked for, and the bar draws it over a branch that has moved on.
+        ...(clearSettledWorktreeState ? settledWorktreeStateCleared(session) : {}),
       },
     });
     return turn;

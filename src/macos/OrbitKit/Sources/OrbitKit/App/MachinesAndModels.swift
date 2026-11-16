@@ -96,6 +96,12 @@ public enum MachinesAndModels {
         /// What it means: "Last seen 1d ago · its subscriptions are unavailable until it’s back".
         public let detail: String
 
+        /// A machine's line rather than a pool's: Settings' Machines page holds these, its Providers page the rest.
+        public var isMachine: Bool {
+            if case .poolUnavailable = kind { return false }
+            return true
+        }
+
         public var id: String {
             switch kind {
             case .offline(let runnerID): return "offline:\(runnerID)"

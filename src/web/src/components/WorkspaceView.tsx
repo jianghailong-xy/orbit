@@ -1,5 +1,7 @@
 import {
   COORDINATOR_HANDOFF_COPY,
+  managedSetupState,
+  firstSessionProvider,
   type MergeRecoveryAction,
   type ProjectSidebarTaskCounts,
   type SessionCoordinatorHandoff,
@@ -253,10 +255,9 @@ import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
-import { HeldFirstMessage, MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
+import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
-import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
-import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
+import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
 import { managedRowOf, managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
@@ -367,7 +368,7 @@ import {
   SessionCriteriaDecisionCard,
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
-import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
+import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
 import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
@@ -492,7 +493,6 @@ import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import type {
-  NewWorkspaceRequest,
   SessionSourceLanding,
   SessionTurnIntent,
   SessionTurnPlacement,
@@ -525,13 +525,11 @@ import {
   newWorkspaceOf,
   SETUP_CONNECTING_POLL_MS,
   SETUP_POLL_MS,
+  type PickedFolder,
 } from '../lib/machineSetup';
 import {
   composerPlaceholderFor,
-  HELD_ALREADY_WAITING,
-  HELD_ALREADY_WAITING_DETAIL,
 } from '../lib/machineSetupCopy';
-import { useMachineSetup, type HeldMessage } from '../lib/useMachineSetup';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -701,11 +699,8 @@ interface ComposerSendVars {
   source?: 'autoRetry';
   /** Prompt optimizer (D2): the text is still exactly what Use put in the box. */
   optimized?: OptimizedSend;
-  /** A machine's first session: which machine, and the folder of the workspace it makes, sent instead
-   *  of a workspace. */
-  firstWorkspace?: { runnerId: string; folder: NewWorkspaceRequest };
-  /** The message that waited under the setup card, going by itself: the composer has nothing to do
-   *  with it by now, and what it holds may be somebody's next thought. */
+  /** Sent by no composer (Compact, from the Context popover): the composer has nothing to do with it,
+   *  and what it holds may be somebody's next thought. */
   held?: boolean;
 }
 
@@ -1045,9 +1040,11 @@ const STRANDED_AFTER_MS = 400;
 const STICKY_LABEL = 'Your question';
 /** A card still waiting on the reader, in the order the transcript draws them: a tool approval or
  *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
- *  item. Answered and snoozed forms carry none of these. */
+ *  item. Answered and snoozed forms carry none of these. On a phone a coordinator's question is its
+ *  `ReviewCard` preview, the form itself in the dialog the preview opens: the preview is the one
+ *  in the transcript, under the card's `question-<itemId>` id. */
 export const WAITING_CARD_SELECTOR =
-  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), [data-open-item]';
+  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"], [data-open-item]';
 /** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
  *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
 export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);
@@ -1359,7 +1356,9 @@ export const sessionLine = (
   // and the strip above its composer read the same.
   const resume = resumeWords(s, watching?.line);
   if (live && resume && state === 'AWAITING_INPUT') return { text: resume, tone: 'watching' };
-  if (parked) return { text: `${parked.text}…`, tone: 'background' };
+  // A background process it left up does not take the line from what the session said or was told:
+  // the unanswered message, the recap and the reply all outrank it (the owner, 2026-11-16). The row's
+  // glyph still says a process is up; the words only fill a row that has nothing else to say.
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
@@ -1373,6 +1372,7 @@ export const sessionLine = (
   if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
     return { text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
+  if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
   return { text: statusLabel(s), tone: 'preview' };
@@ -2508,8 +2508,6 @@ export function WorkspaceView({
   // mirrors `text` so the switch effect (below) can stash the *outgoing* draft without
   // re-running on every keystroke; prevDraftKey tracks which target `text` belongs to.
   const draftKey = selectedId ?? 'new';
-  // What a machine's new session page has been told: its folder, and the message waiting on it.
-  const setup = useMachineSetup(runner.id);
   const drafts = useRef<Map<string, string>>(new Map());
   const textRef = useRef('');
   const prevDraftKey = useRef(draftKey);
@@ -3859,6 +3857,7 @@ export function WorkspaceView({
   // message (board rule 1). Only while the list says so; a machine with one is sent on to it
   // (WorkspaceConsole).
   const bareMachine = machineDraft && workspacesQ.isSuccess && workspacesForRunner.length === 0;
+  const managedSetup = managedSetupState(runner.id, managed?.status);
   // While the card is up its machine is read every few seconds, and more often while it is still connecting:
   // its first heartbeat is what opens the folder step (lib/machineSetup SETUP_POLL_MS).
   const machineConnecting = bareMachine && isConnecting(runner);
@@ -3867,9 +3866,6 @@ export function WorkspaceView({
     enabled: bareMachine,
     refetchInterval: machineConnecting ? SETUP_CONNECTING_POLL_MS : SETUP_POLL_MS,
   });
-  // A machine still connecting takes no work, but a message sent on its setup page only waits under the card
-  // (board rule 6), as both steps do: the composer stays open for it. An offline one says so (board 02).
-  const composerTakesWork = runnerTakesWork || machineConnecting;
   const lockedWorkspace = useMemo(
     () => (lockedWorkspaceId ? (workspacesForRunner.find((a) => a.id === lockedWorkspaceId) ?? null) : null),
     [workspacesForRunner, lockedWorkspaceId],
@@ -3908,20 +3904,10 @@ export function WorkspaceView({
   // workspaces/workspace-provider.ts): a workspace holds neither of its own. `provider` is the
   // deprecated alias of `lastProvider`, still served for older native builds.
   const lastWorkspaceProvider =
-    pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? firstEngineOn(runner.engines) : 'claude');
+    pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? (managedSetup && managed && firstSessionProvider(managed.status)) || firstEngineOn(runner.engines) : 'claude');
   const lastWorkspaceEngine = sessionEngineOf(pickedWorkspace?.lastEngine, lastWorkspaceProvider, configuredProviders);
   const pickedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
   const pickedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
-  // The managed runner's default workspace has no engine for a first session until its runner has
-  // been ready with one (`initialProvider`): before that the server refuses the session with
-  // MODEL_UNAVAILABLE, so the draft offers no default engine and shows the runner's state instead.
-  const managedDraftBlocked =
-    !selected &&
-    !!managed &&
-    !managed.display.startsNewSession &&
-    !!workspaceId &&
-    !!managed.status.workspaceId &&
-    routeId(managed.status.workspaceId) === routeId(workspaceId);
   // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
   // its workspace like the provider pick. Without one a new session starts where Automatic or its
   // workspace says.
@@ -4138,34 +4124,8 @@ export function WorkspaceView({
     () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
     [pickedEngine, pickedProvider, draftEngines, choiceSources],
   );
-  // The setup card's second step, and whether the next send makes the workspace. Rule 5: it follows
-  // the composer, so a key picked in the Provider menu answers it as well as a sign-in does.
-  const setupCredential = setupCredentialOf(runner, pickedEngine, currentDraftEngine.provider);
-  const setupReady =
-    bareMachine &&
-    !!setup.folder &&
-    !!runner.online &&
-    (setupCredential.step === 'signedIn' || setupCredential.step === 'onKey');
-  // A new account's first draft wears the welcome card (docs/mocks/new-user-onboarding): on its managed
-  // runner's default workspace in place of the runner's notice and the engine hero, and on a bare
-  // machine as the setup card's greeting. Only while the account has never had a session.
-  const managedDraft =
-    !selected &&
-    !!managed &&
-    !!workspaceId &&
-    !!managed.status.workspaceId &&
-    routeId(managed.status.workspaceId) === routeId(workspaceId);
-  const newAccount = useNewAccount(composing && (bareMachine || managedDraft));
-  const managedWelcome = newAccount && managedDraft && !bareMachine;
+  const newAccount = useNewAccount(composing && bareMachine);
   const machineWelcome = newAccount && bareMachine;
-  // Before a first session can start there is no draft engine to sign in, so the runner's own first one.
-  const welcomeEngine: LoginEngine =
-    !managedDraftBlocked && isLoginProvider(pickedEngine) ? (pickedEngine as LoginEngine) : firstEngineOn(runner.engines);
-  const welcomeCredential = setupCredentialOf(
-    runner,
-    welcomeEngine,
-    managedDraftBlocked && !draftHere ? null : currentDraftEngine.provider,
-  );
   // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
   // provider of it reads, listed or not (a key since removed, the legacy built-in `dsh`).
   const shownEngineProviders = useMemo(
@@ -4220,11 +4180,6 @@ export function WorkspaceView({
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
-  };
-  // A first message from the welcome card: into the composer, to be read, changed and sent there.
-  const pickWelcomeExample = (example: string): void => {
-    setText(example);
-    setTimeout(() => taRef.current?.focus(), 0);
   };
   // The setup card's Use an API key (rule 5): with a key or pool that can run here, that is the draft's
   // credential, this engine's first; with none yet, the keys are where one is connected.
@@ -5999,14 +5954,11 @@ export function WorkspaceView({
       const created = await createInteractiveSession({
         prompt: content,
         assignedRunnerId: runner.id,
-        // A machine's first session names a folder, and the workspace is made with it, in one
-        // transaction (docs/first-workspace-contract.md §3).
-        ...(vars.firstWorkspace ? { newWorkspace: vars.firstWorkspace.folder } : { workspaceId }),
+        workspaceId,
         // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
         // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
         // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
-        // A workspace about to be made has nothing to inherit, so its first session always names it.
-        ...(draftHere || vars.firstWorkspace ? { engine: pickedEngine, provider: pickedProvider } : {}),
+        ...(draftHere ? { engine: pickedEngine, provider: pickedProvider } : {}),
         model: createModel,
         permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
@@ -6039,12 +5991,11 @@ export function WorkspaceView({
         id: created.id,
         created: true,
         permissionMode: modeWasEdited ? MODE_TO_PERMISSION[mode] : undefined,
-        madeWorkspaceId: vars.firstWorkspace ? (created.workspaceId ?? undefined) : undefined,
         clientTurnId: operation.clientTurnId,
       };
     },
     onSuccess: (
-      { id, turnId, queuedItem, created, permissionMode: sentMode, madeWorkspaceId, clientTurnId, routedToSessionId },
+      { id, turnId, queuedItem, created, permissionMode: sentMode, clientTurnId, routedToSessionId },
       vars,
     ) => {
       if (sendOperationRef.current?.clientTurnId === clientTurnId) {
@@ -6078,17 +6029,11 @@ export function WorkspaceView({
       // highlight blips to that workspace until this session's fetch lands. Mirrors
       // getSession's shape; the background refetch fills in the rest.
       if (created) {
-        const inWorkspace = madeWorkspaceId ?? workspaceId;
         qc.setQueryData(sessionQuery(id).queryKey, {
           id,
           assignedRunnerId: runner.id,
-          workspace: inWorkspace ? { id: inWorkspace } : null,
+          workspace: workspaceId ? { id: workspaceId } : null,
         });
-      }
-      // The card's work is done: the machine has its workspace, and the sidebar's row changes with it.
-      if (vars.firstWorkspace) {
-        setup.finish(vars.firstWorkspace.runnerId);
-        void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
       }
       // The provider pick is deliberately not written back — see DRAFT_PROVIDER_PREFIX. The session
       // carries its own binding, and the workspace's default keeps meaning "what this project starts
@@ -6189,12 +6134,9 @@ export function WorkspaceView({
         send.mutate({ ...vars, intent: 'NEXT_TURN' });
         return;
       }
-      // Sent by itself, so it stays where it waited and says so there: it is in no composer to keep,
-      // and the toast below would be gone by the time anyone looks.
+      // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
       if (vars.held) {
-        if (vars.firstWorkspace?.runnerId === runner.id) setup.failHeld(e.message);
-        // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
-        else if (!vars.firstWorkspace) message.error("Couldn't compact", e.message);
+        message.error("Couldn't compact", e.message);
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));
@@ -7139,40 +7081,26 @@ export function WorkspaceView({
     nextTurnQueued: visibleQueuedTurns.some((turn) => turn.placement === 'queued' && turn.delivery == null),
   });
 
-  // The composer's send, on a machine's setup page. Ready, it makes the workspace with the session.
-  // Not ready, the message waits under the card (board rule 6) and leaves the composer the way a sent
-  // one does: it goes by itself once both steps are done. One waits at a time, since what is waiting
-  // is a session's first message.
+  // The setup card's Create workspace (owner 2026-11-16): the workspace alone, in the folder and under the
+  // name the card was given. The list then says the machine has one, and the console moves on to its new
+  // session page (WorkspaceConsole), with the engine and credential picked here as its draft's.
+  const createWorkspace = useMutation({
+    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string }) =>
+      api<{ id: string }>('/workspaces', {
+        method: 'POST',
+        body: { name, runnerId: runner.id, ...newWorkspaceOf(folder) },
+      }),
+    onSuccess: async (made) => {
+      if (draftHere) setDraftPick({ ...draftHere, workspaceId: made.id });
+      await qc.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+
+  // A machine's own page sends nothing: with no workspace it is the setup card's, which makes one, and
+  // with one it is on its way to that workspace's page.
   const sendFromComposer = (vars: ComposerSendVars): void => {
-    if (!machineDraft) {
-      send.mutate(vars);
-      return;
-    }
-    // Not known yet, or on the way to the workspace it turns out to have: nothing to send it with.
-    if (!bareMachine) return;
-    if (setup.held) {
-      message.info(HELD_ALREADY_WAITING, HELD_ALREADY_WAITING_DETAIL);
-      return;
-    }
-    if (setupReady && setup.folder) {
-      send.mutate({ ...vars, firstWorkspace: { runnerId: runner.id, folder: newWorkspaceOf(setup.folder) } });
-      return;
-    }
-    setup.hold({
-      content: vars.content,
-      ...(vars.shell ? { shell: true } : {}),
-      ...(vars.images.length > 0
-        ? {
-            attachments: vars.images.flatMap((im) =>
-              im.id ? [{ id: im.id, mime: im.mime || 'application/octet-stream', name: im.name }] : [],
-            ),
-          }
-        : {}),
-    });
-    setText('');
-    setComposerRefs({});
-    vars.images.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
-    setImages([]);
+    if (machineDraft) return;
+    send.mutate(vars);
   };
 
   const onSend = (intentOverride?: SessionTurnIntent): void => {
@@ -7391,8 +7319,7 @@ export function WorkspaceView({
     : (!!text.trim() || readyImages.length > 0) &&
       !send.isPending &&
       !uploading &&
-      composerTakesWork &&
-      !managedDraftBlocked &&
+      runnerTakesWork &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -8007,15 +7934,6 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing],
   );
-  // Withdraw the message waiting under the setup card: its words and files go back to the composer,
-  // the way a queued message's do, an explicit press that a draft keeps its place above.
-  const withdrawHeld = (): void => {
-    const held = setup.held;
-    if (!held) return;
-    setup.withdraw();
-    if (held.content.trim()) restoreUndelivered?.(held.shell ? `!${held.content}` : held.content, held.attachments);
-    else stageRestored(held.attachments);
-  };
   // The main checkout behind this console (docs/main-checkout-git-contract.md): its card and result lines in the
   // conversation, its bar above the worktree bar, and the review drawer they open.
   const consoleWorkspace = workspacesForRunner.find((a) => a.id === consoleWorkspaceId);
@@ -8081,35 +7999,6 @@ export function WorkspaceView({
     cleanUp: mainCheckoutCleanUp,
     viewChanges: viewSessionChanges,
   });
-  // Both steps done with a message waiting: it goes, with nobody pressing anything (rule 6). Once per
-  // waiting message: the send makes a workspace, so it must not go twice, and a refusal leaves it
-  // waiting on the person (`error`) rather than on another try.
-  const heldSent = useRef<HeldMessage | null>(null);
-  useEffect(() => {
-    const held = setup.held;
-    if (!held || held.error || !setupReady || !setup.folder || send.isPending || heldSent.current === held) return;
-    heldSent.current = held;
-    send.mutate({
-      content: held.content,
-      images: [],
-      attachmentIds: held.attachments?.map((attachment) => attachment.id),
-      shell: held.shell,
-      intent: 'NEXT_TURN',
-      firstWorkspace: { runnerId: runner.id, folder: newWorkspaceOf(setup.folder) },
-      held: true,
-    });
-    // `send` is a new object every render, and its pending state is the part this reads.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setup.held, setup.folder, setupReady, send.isPending]);
-  // The machine got a workspace some other way (another tab, the form on its page): the console moves
-  // on to it, and what was being set up here no longer applies. What was waiting comes back to the
-  // composer rather than vanishing.
-  useEffect(() => {
-    if (!machineDraft || !workspacesQ.isSuccess || bareMachine || send.isPending) return;
-    if (setup.held) withdrawHeld();
-    if (setup.held || setup.folder) setup.finish(runner.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineDraft, workspacesQ.isSuccess, bareMachine, send.isPending, setup.held, setup.folder]);
   // Steer is offered while a turn runs on an engine that can take a message into one (the server
   // still asks the runner, and refuses one too old).
   const steerOffered = !!live && selectedRunStatus === 'RUNNING' && runtimeTakesMidTurnSteer(selectedEngine);
@@ -8907,7 +8796,7 @@ export function WorkspaceView({
     // the Provider menu lists any (every row is the session's own engine's); a workspace on another
     // machine; and a check now, where this runner checks at all (`region` is null where it doesn't).
     otherProvider:
-      configEditable && !managedDraftBlocked && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
+      configEditable && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
     moveSession: selectedSession ? () => openMove(selectedSession) : undefined,
     checkAgain: runner.region ? regionCheck.checkAgain : undefined,
     busy: retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
@@ -9439,9 +9328,7 @@ export function WorkspaceView({
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : managedWelcome || (machineWelcome && composerTakesWork)
-          ? WELCOME_PLACEHOLDER
-        : managedDraftBlocked || !composerTakesWork
+        : !runnerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
@@ -9635,9 +9522,11 @@ export function WorkspaceView({
                 // A phone opens the coordinator's conversation itself, with no push into the project's
                 // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
                 // A row whose line says a member is waiting on you opens that member instead, at its
-                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting).
-                const waiting = s.line.tone === 'approval' && s.target.kind === 'session' &&
-                  s.target.id !== coordinator?.id ? s.target.id : null;
+                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting) — and the
+                // coordinator itself, waiting on you with a question, opens at that card too
+                // (owner 2026-11-16, docs/mocks/coordinator-question-jump).
+                const waiting = s.line.tone === 'approval' && s.target.kind === 'session'
+                  ? s.target.id : null;
                 const opens = waiting ?? coordinator?.id;
                 setWaitingReveal(waiting);
                 if (isMobile && opens) navigateWithPaneSlide('push', () =>
@@ -9935,6 +9824,8 @@ export function WorkspaceView({
 
   return (
     <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}${isScheduleRun && !composing ? ' is-schedule-run' : ''}`}>
+      {/* A machine with no workspace has no sessions to list: its setup page is the card alone. */}
+      {!bareMachine && <>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -10093,6 +9984,7 @@ export function WorkspaceView({
         role="separator"
         aria-orientation="vertical"
       />
+      </>}
 
       <div
         className="workspace-view"
@@ -10132,7 +10024,9 @@ export function WorkspaceView({
           )
         ) : (
         <>
-        <div className="workspace-header">
+        {/* A machine with no workspace: the card says whose it is, so no session title above it. A phone keeps the
+            header for its way back. */}
+        {(!bareMachine || isMobile) && <div className="workspace-header">
           {isMobile && (
             <button
               type="button"
@@ -10491,7 +10385,7 @@ export function WorkspaceView({
               />
             </>
           )}
-        </div>
+        </div>}
 
         {selected && !selectedTrashed && !composing && (
           <ShareModal
@@ -10586,6 +10480,16 @@ export function WorkspaceView({
             // buttons up here would be two faces racing for one answer.
             onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
             crossings={crossingCards.pointers}
+            // The coordinator's open questions, from the read `CoordinatorQuestions` draws their
+            // cards from at this conversation's foot, so the line and the cards cannot disagree.
+            questions={coordinatedProjectId ? coordinatorQuestions(openItems.data).map((row) => ({
+              itemId: row.itemId,
+              question: row.question?.question ?? row.title,
+              ageSeconds: (() => {
+                const at = Date.parse(row.waitingSince);
+                return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
+              })(),
+            })) : []}
           />
         )}
 
@@ -11046,46 +10950,17 @@ export function WorkspaceView({
               <div className="msc-draft">
                 <MachineSetupCard
                   runner={runner}
-                  fleet={fleet}
-                  engine={pickedEngine}
-                  credential={setupCredential}
-                  folder={setup.folder}
-                  ready={setupReady}
-                  onFolder={setup.pickFolder}
-                  onEngine={(engine) => pickDraft(engine as AgentProvider, engine)}
-                  onUseApiKey={pickApiKey}
-                  welcome={machineWelcome ? { composerText: text, onExample: pickWelcomeExample } : undefined}
+                  managed={managed}
+                  onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
+                  creating={createWorkspace.isPending}
+                  createError={createWorkspace.error?.message ?? null}
+                  welcome={machineWelcome}
                 />
-                {setup.held && (
-                  <HeldFirstMessage
-                    held={setup.held}
-                    machine={machineName(runner)}
-                    sending={send.isPending}
-                    onWithdraw={withdrawHeld}
-                    onRetry={setup.retryHeld}
-                  />
-                )}
                 {localStatusCards.map((card) => (
                   <RevealedOnArrival key={card.id}>
                     <SessionStatusCard card={card} />
                   </RevealedOnArrival>
                 ))}
-              </div>
-            </div>
-          ) : managedWelcome && managed ? (
-            <div key="welcome" className="workspace-sessions workspace-draft">
-              <div className="msc-draft">
-                <ManagedWelcomeCard
-                  managed={managed}
-                  runner={runner}
-                  engine={welcomeEngine}
-                  credential={welcomeCredential}
-                  composerText={text}
-                  startsNow={!managedDraftBlocked}
-                  onExample={pickWelcomeExample}
-                  onUseApiKey={pickApiKey}
-                  onChangeCredential={() => pickDraft(welcomeEngine as AgentProvider, welcomeEngine)}
-                />
               </div>
             </div>
           ) : composing ? (
@@ -11096,7 +10971,7 @@ export function WorkspaceView({
               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              {!machineDraft && !managedDraftBlocked && (
+              {!machineDraft && (
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}
@@ -11141,7 +11016,8 @@ export function WorkspaceView({
           )}
         </div>
 
-      <div className="workspace-composer">
+      {/* A machine with no workspace has nothing to send to: its setup card makes the workspace. */}
+      {!bareMachine && <div className="workspace-composer">
         {/* The reader's messages nothing has read yet: the conversation's next lines, so the band's
             first member, right under the conversation and above the parking strip below
             (docs/mocks/pending-tray-above-parking, decided 2026-10-28). */}
@@ -11151,7 +11027,7 @@ export function WorkspaceView({
         />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
-        {managed && managed.display.kind !== 'available' && !managedWelcome && (
+        {managed && managed.display.kind !== 'available' && !(bareMachine && managedSetup) && (
           // Asleep is not a fault: one calm line that sending wakes it, rather than the notice.
           managedHeadRow?.asleep && managedHeadRow.kind === 'sleeping' ? (
             <div className="managed-runner-composer-line" role="status" data-kind="sleeping">
@@ -11379,7 +11255,6 @@ export function WorkspaceView({
           permissionSemanticsFor={permissionSemanticsFor}
           shownEngine={shownEngine}
           configEditable={configEditable}
-          managedDraftBlocked={managedDraftBlocked}
           modelMenuOpen={modelMenuOpen}
           setModelMenuOpen={setModelMenuOpen}
           setProviderMenuOpen={setProviderMenuOpen}
@@ -11452,7 +11327,7 @@ export function WorkspaceView({
             }}
           />
         )}
-      </div>
+      </div>}
         </>
         )}
       </div>
@@ -11578,7 +11453,6 @@ export interface SessionComposerProps {
   permissionSemanticsFor: (label: string) => { shortNote?: string } | null | undefined;
   shownEngine: AgentProvider;
   configEditable: boolean | undefined;
-  managedDraftBlocked: boolean | undefined;
   modelMenuOpen: boolean;
   setModelMenuOpen: (open: boolean) => void;
   setProviderMenuOpen: (open: boolean) => void;
@@ -11654,7 +11528,6 @@ export function SessionComposer({
   permissionSemanticsFor,
   shownEngine,
   configEditable,
-  managedDraftBlocked,
   modelMenuOpen,
   setModelMenuOpen,
   setProviderMenuOpen,
@@ -11723,6 +11596,7 @@ export function SessionComposer({
     if (!queueOffered) setQueueOffer(false);
   }, [queueOffered]);
   const suggestionHintId = useId();
+  const optimizeHintId = useId();
   // The composer's last tap on a touch screen, to tell a double-tap from two taps; `held` is the
   // timer that hands a held first tap on as the box's focus.
   const lastComposerTap = useRef<{ at: number; x: number; y: number; held?: number } | null>(null);
@@ -12147,7 +12021,7 @@ export function SessionComposer({
         maxLength={MAX_PROMPT_CHARS}
         placeholder={offeredSuggestion ? '' : composerPlaceholder}
         measureKey={measureOnPlaceholder ? composerPlaceholder : undefined}
-        aria-describedby={offeredSuggestion ? suggestionHintId : undefined}
+        aria-describedby={offeredSuggestion ? suggestionHintId : optimizer.tabOptimizes ? optimizeHintId : undefined}
         value={text}
         disabled={composerDisabled}
         // Typing exits history recall: the next Up starts fresh from this draft.
@@ -12359,6 +12233,12 @@ export function SessionComposer({
           </span>
         </div>
       )}
+      {/* The box's description while Tab optimizes; a touch screen, with no Tab, hears nothing. */}
+      {optimizer.tabOptimizes && (
+        <span id={optimizeHintId} className="sr-only">
+          <span className="composer-suggestion-tab-hint">Press Tab to optimize this draft.</span>
+        </span>
+      )}
       </div>
       <div className="composer-toolbar">
         {/* In shell mode this stops being a menu: the `❯` below is a button on its own that leaves
@@ -12519,9 +12399,6 @@ export function SessionComposer({
             way a reference composer writes "model · effort" as one button: the model in the
             label's colour, the effort after it in the secondary one. The menu behind it
             (`modelMenuItems`) keeps each field's own rules. */}
-        {/* No model to show where a first session cannot start yet: the managed default
-            workspace before its runner was ever ready (`managedDraftBlocked`). */}
-        {!managedDraftBlocked && (
           <span className="composer-pill composer-model-pill">
             <Menu
               side="top"
@@ -12569,7 +12446,6 @@ export function SessionComposer({
               }
             />
           </span>
-        )}
         {shownPool && shownPoolAccount && (
           <Tooltip content={poolAccountHelp(shownPool, shownPoolAccount)}>
             <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
@@ -12622,7 +12498,7 @@ export function SessionComposer({
             onClick={optimizer.press}
             disabled={!optimizer.buttonEnabled}
             aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
-            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
+            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · Tab · ${OPTIMIZE_SHORTCUT}`}
           >
             {optimizer.busy ? (
               <span className="composer-optimize-spin" aria-hidden="true" />

@@ -372,14 +372,15 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     return stateIs(o, 'SLEEPING', undefined, 300_000);
   }
 
-  /** A parked Codex session of the runner's default workspace, as earlier work would have left it. */
+  /** A parked Codex session of an owner-created workspace on the runner, as earlier work would have left it. */
   async function parkedSession(m: ManagedRunner): Promise<string> {
+    const workspace = await db.workspace.create({ data: { ownerId: m.ownerId, runnerId: m.runnerId, targetRunnerId: m.runnerId, name: 'Project', workDir: '/tmp/project' } });
     const id = randomUUID();
     await sql.query(
       `INSERT INTO "session" (id, owner_id, creator_id, workspace_id, assigned_runner_id, title, prompt, provider, provider_builtin, engine,
                               status, num_turns, runtime_session_id, started_at, updated_at)
        VALUES ($1, $2, $2, $3, $4, 'earlier work', 'the opening prompt', 'codex', true, 'codex', 'AWAITING_INPUT', 1, $5, now(), now())`,
-      [id, m.ownerId, m.defaultWorkspaceId, m.runnerId, randomUUID()],
+      [id, m.ownerId, workspace.id, m.runnerId, randomUUID()],
     );
     return id;
   }
@@ -625,7 +626,7 @@ test('the Docker backend on real Docker', { skip: !CONFIG || !PG_URL, concurrenc
     const asleep = await mappingOf(alice);
     const at = new Date();
     const created = await api('POST', '/api/tasks', alice.token, {
-      title: 'build the thing', description: 'build it', assigneeId: asleep.defaultWorkspaceId,
+      title: 'build the thing', description: 'build it', assigneeId: (await db.workspace.create({ data: { ownerId: asleep.ownerId, runnerId: asleep.runnerId, targetRunnerId: asleep.runnerId, name: 'Task project', workDir: '/tmp/task-project' } })).id,
       completionCriterion: 'EXECUTABLE', acceptanceCommand: 'true', acceptanceExpectedExitCode: 0,
     });
     assert.equal(created.status, 201, created.text);

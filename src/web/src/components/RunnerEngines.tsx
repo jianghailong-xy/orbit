@@ -21,7 +21,7 @@ import {
   type RunnerRemovedDefault,
 } from '@orbit/shared';
 import { api } from '../api';
-import { agentFixView, installFixTarget } from '../lib/agentFix';
+import { agentFixView, engineNotUpdatingFixTarget, installFixTarget } from '../lib/agentFix';
 import { AgentFixButton, AgentFixLine } from './AgentFix';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
 import { AccountPauseActions, AccountPauseStatus, type AccountPauseControls } from './AccountPause';
@@ -742,6 +742,8 @@ function EngineRow({
     : updateNoteOf(health?.update, undefined, engine === 'cursor', engineUpdateDismissedFor(runner, engine));
   const warn = note?.tone === 'warn' && !offline;
   const dismissWarning = useDismissEngineUpdateWarning(runner.id);
+  // Fix with an agent on this row's update warning: the same fix the machine's Needs Attention card starts.
+  const updateFixView = warn ? agentFixView(runner.agentFix, engineNotUpdatingFixTarget(engine), 'panel') : null;
 
   const action = () => {
     if (antigravity?.supported === false) return null;
@@ -761,7 +763,9 @@ function EngineRow({
       // Signed in (on the key or on Google), or a check that got no answer: nothing to sign in to
       // on the row. An unanswered check keeps its action in More, like every engine's.
       if ((kind === 'in' && !envKey) || kind === 'unknown') return null;
-      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
+      // Signed out, it reads Sign in like every engine's row (the panel it opens names Google); on the
+      // machine's Gemini key, naming Google is what tells this sign-in from the key.
+      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>{envKey ? 'Sign in with Google' : 'Sign in'}</Button>;
     }
     if (offline) {
       // Nothing on an offline machine can be pressed. An engine with a sign-in still shows where
@@ -1020,7 +1024,7 @@ function EngineRow({
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
       {cursorHint && <div className="re-panel-hint re-login-note">{cursorHint}</div>}
       {openCodeHint && <div className="re-panel-hint re-login-note">{openCodeHint}</div>}
-      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
+      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note re-google-terms"><GoogleSignInTerms /></div>}
 
       {/* The relay panels. Each one is the row's own news, so it opens under the row it belongs
           to rather than as a page-level banner. */}
@@ -1074,6 +1078,15 @@ function EngineRow({
               lives now, and telling someone to open a terminal for something the UI can do was
               only ever a symptom of the button being on the wrong page. On that page its Update
               engines is already above, and the link would only lead back to it. */}
+          {/* Fix with an agent, beside the panel's own links (lib/agentFix.ts). */}
+          {updateFixView && (
+            <div className="re-panel-hint agent-fix-row">
+              {updateFixView.state === 'fixing'
+                ? <AgentFixLine view={updateFixView} />
+                : <AgentFixButton view={updateFixView} target={engineNotUpdatingFixTarget(engine)} runnerId={runner.id} />}
+            </div>
+          )}
+          {updateFixView?.state !== 'fixing' && <AgentFixLine view={updateFixView} />}
           <div className="re-panel-hint">
             Orbit tries every 30 min.
             {/* Until the next release: only a warning against a known latest has one to wait for. */}

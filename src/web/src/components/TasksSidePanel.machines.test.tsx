@@ -170,6 +170,8 @@ describe('Machines in the account menu', () => {
     expect(accountRow('old-linux')!.textContent).toBe('old-linuxOffline');
     expect(accountRow('old-linux')!.querySelector('.tp-account-machine-dot')!.getAttribute('data-online')).toBe('false');
     expect(accountRow('Add a machine')).toBeDefined();
+    // The level's rows are as tall as the account menu's own (index.css .tp-account-submenu).
+    expect(accountRow('MacBook Pro')!.closest('[role="menu"]')!.classList.contains('tp-account-submenu')).toBe(true);
 
     await press(accountRow('old-linux'));
     expect(pathname).toBe('/settings/machines/r3');
