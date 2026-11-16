@@ -259,7 +259,7 @@ import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './Machin
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
-import { managedRowOf, managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
+import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
   currentEngineChoice,
@@ -1418,8 +1418,8 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string) => ({
-  runnerName: s.assignedRunner?.displayName || s.assignedRunner?.name || fallbackRunner,
+const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+  runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
   permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
 });
 
@@ -2370,6 +2370,9 @@ export function WorkspaceView({
   // A task opens over this conversation, not on its own page (lib/taskInPlace).
   const openTaskOverPage = useOpenTaskOverPage();
   const [searchParams, setSearchParams] = useSearchParams();
+  // How this console names its machine: Orbit Cloud for the account's managed runner (machineName).
+  const managedRunnerId = useManagedRunnerId() ?? managed?.status.runnerId ?? null;
+  const runnerShownName = machineName(runner, managedRunnerId);
   // Merge and Commit finish asynchronously on a runner heartbeat. Keep accepted operations by
   // session id so their result continues polling even if the user opens another conversation.
   const pendingOperationSeq = useRef(0);
@@ -3503,10 +3506,10 @@ export function WorkspaceView({
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
-        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled,
+      effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
       resolvedWorkspaceId],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
@@ -4341,7 +4344,7 @@ export function WorkspaceView({
     activeSlots,
     runner.maxConcurrent,
     (selectedSession ?? selected) as QueuedGate | null,
-    machineName(runner),
+    runnerShownName,
   );
   const selectedStartingSession = selectedSession ?? selected;
   const selectedIsQueued = selected
@@ -4402,7 +4405,7 @@ export function WorkspaceView({
             session: selectedSession as NeverStartedSession,
             runtime: selectedRuntime,
             keyName: selectedKeyName,
-            runnerName: runner.displayName || runner.name,
+            runnerName: runnerShownName,
             region: runner.region ?? null,
           })
         : null,
@@ -4413,8 +4416,7 @@ export function WorkspaceView({
       selectedMissing,
       selectedRuntime,
       selectedKeyName,
-      runner.displayName,
-      runner.name,
+      runnerShownName,
       runner.region,
     ],
   );
@@ -4686,13 +4688,13 @@ export function WorkspaceView({
   const queuedHeldTag = runnerUpdatingGate ? (
     <RunnerUpdatingTag
       gate={runnerUpdatingGate}
-      machine={machineName(runner)}
+      machine={runnerShownName}
       actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
       updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
     />
   ) : capacityGate ? (
     // A full runner, run or batch, said in the same places by the same rules (board queued-card-runner-full ②④).
-    <CapacityHeldTag gate={capacityGate} machine={machineName(runner)} />
+    <CapacityHeldTag gate={capacityGate} machine={runnerShownName} />
   ) : null;
   // The reader's own waiting messages sit in the tray, which carries the tag itself; only where nothing
   // anywhere is waiting does it fall back to the last message they sent.
@@ -7033,13 +7035,13 @@ export function WorkspaceView({
       : undefined;
     const rows = localStatusRows({
       surface: 'Web',
-      runnerName: runner.displayName || runner.name,
+      runnerName: runnerShownName,
       runnerOnline: runner.online,
       activeSessions: runner.activeSessions,
       maxConcurrent: runner.maxConcurrent,
       sessionTitle: selected?.title ?? (selectedMissing ? 'Session not found' : null),
       sessionStatus: selectedSession
-        ? statusLabel(selectedSession, selectedWatchingWord, machineName(runner))
+        ? statusLabel(selectedSession, selectedWatchingWord, runnerShownName)
         : selectedMissing
           ? 'not found'
           : null,
@@ -8078,7 +8080,7 @@ export function WorkspaceView({
     () => ({
       provider: outageProvider,
       cursor: cursorQuotaHelp,
-      runnerName: runner.name,
+      runnerName: runnerShownName,
       retryAt: detailForSelected?.retryAt ?? null,
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
@@ -8151,7 +8153,7 @@ export function WorkspaceView({
       // Rebuilt each render, so compared by what it says; its press only opens a draft.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       JSON.stringify(cursorQuotaHelp),
-      runner.name,
+      runnerShownName,
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
@@ -8270,7 +8272,7 @@ export function WorkspaceView({
   // Title shown above the session list (and in the draft header). /sessions/<id>
   // has no workspace in the URL, so fall back to the open session's workspace, then runner.
   const headWorkspaceName =
-    lockedWorkspace?.name ?? selected?.workspace?.name ?? runner.displayName ?? runner.name;
+    lockedWorkspace?.name ?? selected?.workspace?.name ?? runnerShownName;
 
   // ── Folders (docs/session-folders-move-design.md §3, §7) ──
   // In and out of a folder's page is a change of the `folder` param on whichever route the console
@@ -8676,7 +8678,7 @@ export function WorkspaceView({
     () => ({
       provider: shownProvider,
       keyName: selectedKeyName,
-      runnerName: runner.displayName || runner.name,
+      runnerName: runnerShownName,
       runnerId: runner.id,
       account: signedOutAccount?.id,
       accountLabel: signedOutAccount ? accountNameOf(signedOutAccount) : null,
@@ -8726,8 +8728,7 @@ export function WorkspaceView({
       shownProvider,
       shownEngine,
       selectedKeyName,
-      runner.name,
-      runner.displayName,
+      runnerShownName,
       runner.id,
       signedOutAccount,
       runner.version,
@@ -9080,7 +9081,7 @@ export function WorkspaceView({
       ? []
       : [{ key: `provider-group:${key}`, type: 'group' as const, label, children: choices.flatMap(providerRows) }];
   // The machine the session's engine runs on, as its sign-in group names it.
-  const runnerLabel = runner.displayName || runner.name;
+  const runnerLabel = runnerShownName;
   const listedChoices = shownProviderListed ? providerSwitchChoices : providerSwitchChoices.slice(1);
   const ownCredential = listedChoices.filter((c) => c.kind === 'login' || c.kind === 'opencode');
   // A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run, so its
@@ -9283,7 +9284,7 @@ export function WorkspaceView({
     ? ''
     : handingOver
       ? COORDINATOR_HANDOFF_COPY.badgeHandingOver
-      : statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner));
+      : statusLabel(selectedSession ?? selected, selectedWatchingWord, runnerShownName);
   // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
   // session's bottom, and the label itself — one read of one helper, so the words and the ink are
   // not decided twice.
@@ -9338,7 +9339,7 @@ export function WorkspaceView({
                 ? CURSOR_RUNNING_PLACEHOLDER
                 : 'Reply…'
               : machineDraft
-                ? composerPlaceholderFor(machineName(runner))
+                ? composerPlaceholderFor(runnerShownName)
                 : 'Send this workspace a task…';
   // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
   // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
@@ -9585,7 +9586,7 @@ export function WorkspaceView({
         // merged row for both status surfaces so the banner and its list warning point at
         // the same canonical obligation during that refresh gap.
         const watching = sessionWatching(watchingBySession, s.id);
-        const line = sessionLine(actionSession, openable, watching, recapsEnabled, machineName(runner));
+        const line = sessionLine(actionSession, openable, watching, recapsEnabled, runnerShownName);
         const drag = swipeDrag?.id === s.id ? swipeDrag : null;
         const swipeTx = drag
           ? drag.dx
@@ -9731,7 +9732,7 @@ export function WorkspaceView({
               style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
             >
               <span className="session-icon">
-                <StatusIcon session={actionSession} watching={watching?.word} machine={machineName(runner)} />
+                <StatusIcon session={actionSession} watching={watching?.word} machine={runnerShownName} />
               </span>
               <div className="session-main">
                 {renaming ? (
@@ -10161,7 +10162,7 @@ export function WorkspaceView({
             )}
           </div>
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
-          <RunnerUpdateIndicator runner={runner} machine={machineName(runner)} />
+          <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
           {selected && !composing && (
             <>
               {titleBarProjectId && !selectedTrashed && (
@@ -10393,7 +10394,7 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, machineName(runner))}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -10406,7 +10407,7 @@ export function WorkspaceView({
             onToggleTag={toggleTag}
             tagsSaving={setTagsMut.isPending}
             engineName={selectedSession?.engine ? engineTitle.name : null}
-            runnerName={runner ? machineName(runner) : null}
+            runnerName={runner ? runnerShownName : null}
             accountLabel={
               // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
               shownProviderRow?.kind === 'login'
@@ -10421,7 +10422,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, machineName(runner))}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
           />
         )}
         <SessionMoveModal
@@ -10548,7 +10549,7 @@ export function WorkspaceView({
                 <CreatedWorkspaceLine
                   sessionId={selectedId}
                   workspace={{ ...detailForSelected.workspace, name: detailForSelected.workspace.name }}
-                  machine={machineName(runner)}
+                  machine={runnerShownName}
                   runnerId={runner.id}
                 />
               )}
@@ -10570,9 +10571,9 @@ export function WorkspaceView({
                   {runnerUpdatingGate ? (
                     <RunnerUpdatingQueued
                       gate={runnerUpdatingGate}
-                      machine={machineName(runner)}
+                      machine={runnerShownName}
                       onOpenSession={(id) => navigate(sessionPath(id))}
-                      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+                      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={runnerShownName} />}</div>}
                     />
                   ) : (
                     <>
