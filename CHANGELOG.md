@@ -59,7 +59,8 @@ notes' lists of migrations and security fixes.
   have written. `project_create` and `session_create` keep a receipt per request id, so a retried create
   returns the first one.
 - Managed runners in Machines & models on macOS, iOS and Android. Their image bundles every supported engine, and
-  a hosted runner left on an earlier image rolls onto the profile's once idle.
+  a hosted runner left on an earlier image rolls onto the profile's once idle. A managed runner no longer has a
+  Default workspace: it is set up from the same card as any machine.
 - Guests see a shared session's images and attach their own, and the invite field suggests people invited
   before (`GET /sessions/:id/guests/suggestions`).
 - Fix with an agent under a failed Update engines report (web, iOS, Android).
@@ -145,11 +146,12 @@ These were merged before `v0.1.260` was tagged, but that release did not move th
 
 ### Upgrade notes
 
-- Twenty-two additive migrations since `v0.1.260`, from `0524_subagent_run` to `0910_account_remove_sessions`;
-  eleven are numbered below `0760`, the newest a 0.1.260 database has, and `prisma migrate deploy` applies them
-  all. Runners self-update; the update to 0.1.261 is taken under the rules of the runner it replaces. Before
-  rolling back to `v0.1.260`, relabel the sessions schedules started and clear messages held for their
-  translation. See the [release notes](release-notes/0.1.261.md).
+- Twenty-three migrations since `v0.1.260`, from `0524_subagent_run` to `0930_managed_runner_no_default_workspace`,
+  all additive but `0930`, which releases and soft-deletes managed runners' unused Default workspaces. Eleven are
+  numbered below `0760`, the newest a 0.1.260 database has, and `prisma migrate deploy` applies them all. Runners
+  self-update; the update to 0.1.261 is taken under the rules of the runner it replaces. Before rolling back to
+  `v0.1.260`, relabel the sessions schedules started and clear messages held for their translation; where managed
+  runners are in use, fix forward instead. See the [release notes](release-notes/0.1.261.md).
 
 ## 0.1.257 to 0.1.260
 
