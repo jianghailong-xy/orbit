@@ -1,6 +1,10 @@
 # Setting up a managed runner from an existing account (design, 2026-11-14)
 
 Status: proposed, waiting for the owner's decisions D1–D5. Design only: no product code is changed.
+
+Amended 2026-11-16 by [managed-runner-signed-in-accounts-design.md](managed-runner-signed-in-accounts-design.md) (D3 A there):
+an account with a live login session now gets its managed runner from the server within five minutes, its own
+machines or not, so the entry below and D3's confirmation remain only for an account the server has not reached yet.
 Board: [docs/mocks/managed-runner-existing-account-entry/board.html](mocks/managed-runner-existing-account-entry/board.html)
 (rendered as `board-1.png` … `board-5.png` beside it).
 

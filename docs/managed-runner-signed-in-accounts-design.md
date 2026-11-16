@@ -1,6 +1,6 @@
 # Every signed-in account gets its managed runner (design, 2026-11-16)
 
-Status: proposed, waiting for the owner's decisions D1–D4. Design only: no product code is changed.
+Status: decided 2026-11-16, D1–D4 all A (the owner); implemented on this branch ("Implementation record" below).
 Board: [docs/mocks/managed-runner-signed-in-accounts/board.html](mocks/managed-runner-signed-in-accounts/board.html) (rendered as `board-1.png` … `board-5.png` beside it).
 It amends [managed-runner-design.md](managed-runner-design.md) ("Default disabled gate" and the sign-in hook record)
 and [managed-runner-existing-account-entry-design.md](managed-runner-existing-account-entry-design.md) (D3).
@@ -40,26 +40,27 @@ Production on 2026-11-16 (read-only queries on 10.66.0.4):
 ## Proposal
 
 **The rule:** with the switch on and the environment available, every eligible account with a live login session
-has a mapping. A sign-in still creates one at once; a sweep in the apiserver creates the rest.
+has a mapping. A sign-in still creates one at once; the signed-in pass in the apiserver creates the rest.
 
-### The sweep
+### The signed-in pass
 
-- **Where.** A new `managed-runner-sweep.ts`, driven by `ManagedRunnerService` next to the worker it already
-  starts in `onModuleInit`. It is constructed and started only when `gate.enabled && runtime.available`, as the
-  worker is; off, no timer exists, so the boot spec's tripwire (`managed-runner-boot.pg.spec.ts`) stays as it is.
+- **Where.** `managed-runner-signed-in.ts`, run by `ManagedRunnerService` next to the worker it already starts in
+  `onModuleInit`. It is constructed and started only when `gate.enabled && runtime.available`, as the worker is;
+  off, no timer exists, so the boot spec's tripwire (`managed-runner-boot.pg.spec.ts`) stays as it is.
 - **When.** Once right after start, so turning the switch on reaches every signed-in account within one pass; then
-  every `lifecycle.signedInSweepSeconds` (new profile field, default 300, 60–86400). A refresh-only user is reached
-  at most five minutes after their next use.
-- **Whom.** One query: accounts with `disabled_at IS NULL`, at least one `refresh_token` with `revoked_at IS NULL`
-  and `expires_at > now()`, and no `managed_runner` row at all, oldest refresh activity first, at most
-  `MANAGED_RUNNER_PASS_BATCH` (50) per pass. Each one is still asked the eligibility rule (`EVERY_ACCOUNT` today)
-  through `enabledAccountsOnly`, as a sign-in is.
+  every `SIGNED_IN_PASS_SECONDS` (300). A refresh-only user is reached at most five minutes after their next use.
+- **Whom.** Accounts with `disabled_at IS NULL`, at least one `refresh_token` with `revoked_at IS NULL` and
+  `expires_at > now()` (the schema's own definition of a live login session), and no `managed_runner` row at all,
+  read 50 at a time by id until the last page. Each one is still asked the eligibility rule (`EVERY_ACCOUNT` today)
+  through `enabledAccountsOnly`, as a sign-in is; every page is read, so accounts the rule refuses never keep the
+  ones after them waiting.
 - **What.** The same `createMapping` a sign-in uses, with the request key `signed-in:<uuid>`, then one
   `worker.kick()` for the whole pass. Placement, capacity admission and provisioning are unchanged: a mapping beyond
-  the pool's room waits in `WAITING_CAPACITY` and starts by itself when room frees up.
-- **Several replicas.** Each replica may sweep. The owner's unique key on `managed_runner` makes a second create
-  read the winner (the existing P2002 path), so two replicas never make two mappings. A transaction advisory lock
-  around the pass keeps the duplicate work down to one replica; it is an optimization, not the guarantee.
+  the pool's room waits in `WAITING_CAPACITY` and starts by itself when room frees up. An account whose mapping
+  cannot be written is logged and left to the next pass; with no host to place one on, the pass stops.
+- **Several replicas.** Each replica runs the pass. The owner's unique key on `managed_runner` makes a second
+  create read the winner (the existing P2002 path), so two replicas, or a pass and a sign-in, never make two
+  mappings.
 - **What it never does.** It does not recreate a mapping that exists in any state, `DELETED` included (deleted
   data is not brought back, as `ensure` already refuses). It does not wake, retry or touch an existing mapping. It
   does not read or change anything on the refresh or login path.
@@ -68,11 +69,11 @@ has a mapping. A sign-in still creates one at once; a sweep in the apiserver cre
 
 - `GET /managed-runner` stays a read with no side effect; PATs with `runners:read` still cannot cause a write.
 - Token refresh, logout and password change stay exactly as they are.
-- `signedIn` stays: it is the immediate path, and the sweep is the one that catches everybody else.
-- Turning the switch off freezes management as today: no sweep, no new mapping, nothing stopped or deleted.
+- `signedIn` stays: it is the immediate path, and the pass is the one that catches everybody else.
+- Turning the switch off freezes management as today: no pass, no new mapping, nothing stopped or deleted.
 - Clients need no change. A new mapping shows up as the "Managed runner" machine and its default workspace through
   the reads they already make; the Set up entry disappears because `display.ensure` turns false. The Set up page and
-  its confirmation stay for an account the sweep has not reached yet.
+  its confirmation stay for an account the pass has not reached yet.
 
 ### Copy
 
@@ -81,34 +82,45 @@ None new. The states a new mapping goes through (`Starting`, `Waiting for capaci
 
 ## Decisions
 
+Taken 2026-11-16: **all A**.
+
 | | A (recommended) | B | Why A |
 | --- | --- | --- | --- |
-| **D1** What creates the mapping for an account already signed in | The server sweep of live login sessions above | The status read `GET /managed-runner` creates one for a session caller | A keeps every read free of writes and the auth path untouched. B turns a GET polled every 30 s on most Web screens into a write, and reaches an account only while one of its clients has a screen open that reads it (and an old client version may read it nowhere). |
+| **D1** What creates the mapping for an account already signed in | The signed-in pass above | The status read `GET /managed-runner` creates one for a session caller | A keeps every read free of writes and the auth path untouched. B turns a GET polled every 30 s on most Web screens into a write, and reaches an account only while one of its clients has a screen open that reads it (and an old client version may read it nowhere). |
 | **D2** Which accounts count as signed in | Any live login session (unrevoked, unexpired refresh token): 6 accounts today | Only those whose session was used in the last 7 days: 5 today | The sliding 30-day token already expires dormant sessions; a narrower window is a second clock to explain. |
 | **D3** Accounts that already have their own machines | Included: they get a managed runner and its workspace like everyone else | Only accounts with no runner at all | A sign-in already gives them one today, so A makes the two paths agree. It does reverse the spirit of the 11-14 D3 (an existing account confirms before a workspace appears in its sidebar); B keeps that, but leaves those accounts on the Set up button. |
 | **D4** Capacity on production | Deploy as is: 2 of the 6 start at once, 4 wait in `Waiting for capacity` until a runner sleeps | Raise `capacity.maxActiveUsers` and the Pod limit in `profile.json` on 10.66.0.4 before the deploy | A changes nothing operational, and the wait is shown and resolves by itself. B is an operator change to the pool on orbit-ws03, which is the owner's to approve. |
 
-## Changes
+## Implementation record
 
-1. `src/apiserver/src/managed-runners/managed-runner-sweep.ts`: the query and the pass.
-2. `managed-runner.service.ts`: starts and stops the sweep beside the worker; `createMapping` used as is.
-3. `managed-runner-profile.ts`: `lifecycle.signedInSweepSeconds`, validated, default 300.
-4. Docs: managed-runner-design.md ("Default disabled gate" rows and the sign-in hook record),
-   `managed-runner-sign-in.ts`'s comment, the existing-account entry design (D3 note), configuration.md for the new
-   field.
+1. `src/apiserver/src/managed-runners/managed-runner-signed-in.ts`: the query (`signedInWithoutMapping`) and the
+   pass's timer (`SignedInPassTimer`: one pass at a time, a failing pass logged, the timer unref'd).
+2. `managed-runner.service.ts`: `provisionSignedIn`, started and stopped beside the worker; `createMapping` as is.
+3. Docs: managed-runner-design.md ("Default disabled gate" row and the sign-in hook record), the comments of
+   `managed-runner-sign-in.ts`, and the existing-account entry design (D3 note).
+
+Two departures from the proposal as first written: the interval is a constant, not a new profile field (nobody
+asked to tune it, and an existing `profile.json` stays valid untouched); and there is no advisory lock between
+replicas, since the owner's unique key already makes the duplicate work harmless.
 
 ## Verification
 
-- Unit: the query's predicates (disabled, revoked, expired, an existing mapping of any state, the batch order).
-- pg spec, on a real PostgreSQL with a stub backend:
-  1. switch on, an account with a live refresh token and no mapping → exactly one mapping, runner and workspace
-     after one pass, with a `signed-in:` key;
-  2. only revoked or expired refresh tokens → nothing;
-  3. a disabled account, and one the eligibility rule refuses → nothing;
-  4. a `DELETED` mapping → not recreated;
-  5. two services sweeping the same database at once → one mapping per account;
-  6. a full pool → the new mapping is `WAITING_CAPACITY`, and starts when a reservation is released;
-  7. a refresh issues tokens and writes nothing managed (unchanged behaviour, now asserted).
-- `managed-runner-boot.pg.spec.ts` unchanged and green: off, no timer and no managed write.
-- Production, after the deploy and with the owner's go: the 6 accounts have mappings within one pass; their states
-  match D4's expectation; the account that only refreshed since 11-09 shows its managed runner without pressing Set up.
+- `managed-runner-signed-in.spec.ts` (no database): off and unavailable read nothing; every page is read past a full
+  page the rule refuses; a failing account is skipped, no host stops the pass; the manager is woken once; the timer
+  runs at start and on every interval, one pass at a time, through a failing pass, until stopped; the service starts
+  it only when on with an environment.
+- `managed-runner-signed-in.pg.spec.ts`, over a real PostgreSQL and the fake cluster:
+  1. an account with a live refresh token, its own machine and workspace, and no mapping → one mapping, runner and
+     default workspace from one pass, keyed `signed-in:`, provisioned to READY; its own rows untouched; a second
+     pass makes nothing;
+  2. only revoked tokens, only expired ones, or none → nothing;
+  3. a disabled account, and one the eligibility rule refuses → nothing (the rule is never asked about the
+     disabled one);
+  4. a `DELETED` and a `FAILED` mapping → left byte for byte as stored;
+  5. two services passing at once, with a sign-in of one of the accounts → one mapping, runner and workspace each;
+  6. a full pool → the new mapping is recorded and waits in `WAITING_CAPACITY`.
+- Unchanged and green: `managed-runner-sign-in.spec.ts` and `.pg.spec.ts` (refresh, logout, a password change and
+  the reads still create nothing), `managed-runner-boot.pg.spec.ts` (off: no timer, no managed write).
+- Production, after the deploy and with the owner's go: the 6 accounts have mappings within one pass and all
+  start (the pool was raised to 32 overcommitted runners on 2026-11-16, superseding D4's "2 start, 4 wait"); the account that only refreshed since 11-09 shows its managed runner without pressing
+  Set up.
