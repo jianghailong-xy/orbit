@@ -12,7 +12,12 @@
  *       as a roll; it accepts, exits, and wakes at once as the next generation on the new image, on the same PVC;
  *   (2) busy on a previous image — work in the records or in its report — it is left READY;
  *   (3) demand before it accepts calls the roll off: READY, claims open; idle again, it rolls;
- *   (4) on the current image, idle for less than the interval, nothing happens.
+ *   (4) on the current image, idle for less than the interval, nothing happens;
+ *   (5) the node pulls the new image for longer than the startup deadline (production, 2026-11-16: 48 minutes against
+ *       30): the Pending Pod is waited on, not failed STARTUP_TIMEOUT, and it is READY once it reports in; a pull
+ *       error still fails at the deadline;
+ *   (6) a mapping an earlier version failed STARTUP_TIMEOUT while its Pod was still pulling is taken up again by
+ *       itself once that instance reports in, with no owner's retry; one whose instance stays silent stays FAILED.
  *
  * Not destructive: every row belongs to a user this run creates, and each world has a pool of its own.
  */
@@ -213,5 +218,129 @@ test('a managed runner on a previous image rolls onto the new one when idle', {
     const still = await w.mappingOf(ownerId);
     assert.equal(still.imageRollTo, null);
     assert.equal(still.stopRequestedAt, null);
+  });
+
+  /**
+   * Rolls a READY runner up to the moment its next generation's Pod has been made on the new image, with the node
+   * still pulling that image: Pending, its init container waiting as the kubelet reports a pull in progress.
+   */
+  async function rolledOntoPullingPod(w: ManagedRunnerWorld, label: string) {
+    const { ownerId, mapping } = await w.readyRunner(label);
+    const { manager } = upgrade(w);
+    w.advance(1_000);
+    await w.heartbeat(mapping.runnerId);
+    assert.equal(await manager.reconcile(mapping.id), 'DRAINING');
+    await acceptAndExit(w, await w.mappingOf(ownerId));
+    w.cluster.podPhase = 'Pending';
+    const outcomes: ReconcileOutcome[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      const m = await w.mappingOf(ownerId);
+      if (m.managementState === 'STARTING' && m.generation > mapping.generation && m.podUid) break;
+      outcomes.push(await manager.reconcile(m.id));
+    }
+    const starting = await w.mappingOf(ownerId);
+    assert.equal(starting.managementState, 'STARTING', outcomes.join(' → '));
+    assert.equal(starting.generation, mapping.generation + 1);
+    const pod = managedPodName(starting.runnerId);
+    pull(w, pod, 'PodInitializing');
+    return { ownerId, manager, starting, pod };
+  }
+
+  const containersOf = (p: Pod, key: 'initContainers' | 'containers') => (Array.isArray(p.spec[key]) ? (p.spec[key] as Array<{ name: string }>) : []);
+
+  /** The kubelet's report of a Pod whose init container's image is being pulled (`reason` PodInitializing), or failed to (ErrImagePull…). */
+  function pull(w: ManagedRunnerWorld, pod: string, reason: string): void {
+    w.cluster.mutate<Pod>('pods', pod, (p) => {
+      p.status = {
+        phase: 'Pending',
+        initContainerStatuses: containersOf(p, 'initContainers').map((c) => ({ name: c.name, state: { waiting: { reason } } })),
+        containerStatuses: containersOf(p, 'containers').map((c) => ({ name: c.name, state: { waiting: { reason: 'PodInitializing' } } })),
+      };
+    });
+  }
+
+  /** The pull is done: the init container ran, the runner runs. */
+  function pulled(w: ManagedRunnerWorld, pod: string): void {
+    w.cluster.mutate<Pod>('pods', pod, (p) => {
+      p.status = {
+        phase: 'Running',
+        initContainerStatuses: containersOf(p, 'initContainers').map((c) => ({ name: c.name, state: { terminated: { exitCode: 0, reason: 'Completed' } } })),
+        containerStatuses: containersOf(p, 'containers').map((c) => ({ name: c.name, state: { running: { startedAt: w.now().toISOString() } } })),
+      };
+    });
+  }
+
+  await t.test('(5) the new image\'s pull outlasts the startup deadline: the Pod is waited on, and READY once it reports in', async () => {
+    const w = managedRunnerWorld(db);
+    const { ownerId, manager, starting, pod } = await rolledOntoPullingPod(w, 'roll-slow-pull');
+    const deadlineMs = w.profile.lifecycle.startupDeadlineSeconds * 1000;
+
+    // Past the deadline, and past it again, with the pull still going: not a silent runner.
+    for (let i = 0; i < 3; i += 1) {
+      w.advance(deadlineMs + 1_000);
+      assert.equal(await manager.reconcile(starting.id), 'WAITING', `pull still in progress, deadline ${i + 1} passed`);
+    }
+    const waiting = await w.mappingOf(ownerId);
+    assert.equal(waiting.managementState, 'STARTING', 'not FAILED STARTUP_TIMEOUT');
+    assert.equal(waiting.lastError, null);
+    assert.ok(waiting.startupDeadlineAt! > w.now(), 'the deadline runs again from the last look at the pull');
+    assert.equal(waiting.podUid, starting.podUid, 'the same Pod is waited on');
+
+    // The pull ends, the runner starts and reports in: READY, on the same Pod.
+    pulled(w, pod);
+    w.advance(1_000);
+    await w.heartbeat(starting.runnerId);
+    assert.equal(await manager.reconcile(starting.id), 'READY');
+    const ready = await w.mappingOf(ownerId);
+    assert.equal(ready.podUid, starting.podUid);
+    assert.equal(ready.generation, starting.generation);
+    assert.equal(w.cluster.count('delete', 'pods'), 1, 'only the previous generation\'s Pod was deleted');
+
+    // A pull that failed is not a pull in progress: the deadline fails it as before.
+    const w2 = managedRunnerWorld(db);
+    const failing = await rolledOntoPullingPod(w2, 'roll-pull-error');
+    pull(w2, failing.pod, 'ImagePullBackOff');
+    w2.advance(deadlineMs + 1_000);
+    assert.equal(await failing.manager.reconcile(failing.starting.id), 'FAILED');
+    assert.equal(((await w2.mappingOf(failing.ownerId)).lastError as { code: string }).code, 'STARTUP_TIMEOUT');
+  });
+
+  await t.test('(6) failed STARTUP_TIMEOUT while its Pod pulled: taken up again once that instance reports in', async () => {
+    const w = managedRunnerWorld(db);
+    const { ownerId, manager, starting, pod } = await rolledOntoPullingPod(w, 'roll-failed-pull');
+    // What production's mappings were left in by a version that failed a pulling Pod at its deadline.
+    await db.managedRunner.update({
+      where: { id: starting.id },
+      data: {
+        managementState: 'FAILED',
+        stateEnteredAt: w.now(),
+        startupDeadlineAt: w.now(),
+        lastError: { code: 'STARTUP_TIMEOUT', message: 'The runner did not report in before its startup deadline. It can be retried.', retryable: true, detail: 'no fresh heartbeat' },
+        revision: { increment: 1 },
+      },
+    });
+
+    // Still silent: it stays FAILED, as any silent runner does.
+    w.advance(60_000);
+    assert.equal(await manager.reconcile(starting.id), 'FAILED');
+    assert.equal((await w.mappingOf(ownerId)).managementState, 'FAILED');
+    assert.ok((await manager.dueMappings(100)).includes(starting.id), 'the sweep looks at it again');
+
+    // The pull ends and the instance of this generation reports in: back without a retry, on the same Pod.
+    pulled(w, pod);
+    w.advance(1_000);
+    await w.heartbeat(starting.runnerId);
+    const outcomes: ReconcileOutcome[] = [];
+    for (let i = 0; i < 4 && outcomes.at(-1) !== 'READY'; i += 1) {
+      outcomes.push(await manager.reconcile(starting.id));
+      w.advance(1_000);
+      await w.heartbeat(starting.runnerId);
+    }
+    assert.equal(outcomes.at(-1), 'READY', outcomes.join(' → '));
+    const ready = await w.mappingOf(ownerId);
+    assert.equal(ready.podUid, starting.podUid, 'the same Pod');
+    assert.equal(ready.generation, starting.generation, 'the same generation');
+    assert.equal(ready.lastError, null);
+    assert.equal(w.cluster.count('delete', 'pods'), 1, 'only the previous generation\'s Pod was deleted');
   });
 });
