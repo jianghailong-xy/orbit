@@ -144,8 +144,12 @@ final class TranslationTests: XCTestCase {
                                                     bilingual: true))
         XCTAssertNil(SessionTranslation.userEnglish("x", TurnTranslation(state: .sentAsWritten, from: .zhHans, original: "x"),
                                                     bilingual: true))
-        XCTAssertEqual(SessionTranslation.replyEnglish("Done.", ReplyTranslation(lang: .zhHans, text: "好了"), bilingual: true),
-                       "Done.")
+        // A reply drawn whole: one whose blocks do not pair (two paragraphs translated as one).
+        XCTAssertEqual(SessionTranslation.replyEnglish("Done.\n\nAll tests pass.",
+                                                       ReplyTranslation(lang: .zhHans, text: "好了，测试全部通过。"), bilingual: true),
+                       "Done.\n\nAll tests pass.")
+        // One that pairs is drawn block by block instead, with no English under it.
+        XCTAssertNil(SessionTranslation.replyEnglish("Done.", ReplyTranslation(lang: .zhHans, text: "好了"), bilingual: true))
         XCTAssertNil(SessionTranslation.replyEnglish("Done.", ReplyTranslation(lang: .zhHans, failed: true), bilingual: true))
         XCTAssertNil(SessionTranslation.replyEnglish("Done.", nil, bilingual: true))
         // With it on the bubble shows what they wrote whatever the old flip said; copy follows.

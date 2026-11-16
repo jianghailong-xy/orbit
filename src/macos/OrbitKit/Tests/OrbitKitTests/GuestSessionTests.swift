@@ -172,8 +172,49 @@ final class GuestSessionTests: XCTestCase {
         XCTAssertEqual(recorder.sent.first?.method, "POST")
         XCTAssertEqual(recorder.sent.first?.path, "/api/guest-sessions/34A/turns")
         let body = try JSONSerialization.jsonObject(with: Data(recorder.sent.first!.body.utf8)) as? [String: String]
-        // Nothing but the key and the words: no mode, model, effort or attachment.
+        // Nothing but the key and the words: no mode, model or effort, and no images named.
         XCTAssertEqual(body, ["clientTurnId": "k1", "content": "Please run the tests"])
+    }
+
+    func testAMessageCarriesItsImagesAndMayBeImagesAlone() async throws {
+        let recorder = answer(#"{"turnId":"T9","revived":false}"#, status: 201)
+        try await client().sendGuestTurn("34A", clientTurnId: "k1", content: "", attachmentIds: ["att1", "att2"])
+        XCTAssertEqual(recorder.sent.first?.path, "/api/guest-sessions/34A/turns")
+        let body = try JSONSerialization.jsonObject(with: Data(recorder.sent.first!.body.utf8)) as? [String: Any]
+        XCTAssertEqual(body?["clientTurnId"] as? String, "k1")
+        XCTAssertEqual(body?["content"] as? String, "")
+        XCTAssertEqual(body?["attachmentIds"] as? [String], ["att1", "att2"])
+    }
+
+    func testAnImageUploadsThroughTheGuestDoorNotTheOwnersAttachments() async throws {
+        let recorder = answer(#"{"id":"att7"}"#, status: 201)
+        let id = try await client().uploadGuestAttachment("34A", filename: "shot.png", mimeType: "image/png",
+                                                          data: Data("png".utf8))
+        XCTAssertEqual(id, "att7")
+        let sent = try XCTUnwrap(recorder.sent.first)
+        XCTAssertEqual(sent.method, "POST")
+        XCTAssertEqual(sent.path, "/api/guest-sessions/34A/attachments")
+        XCTAssertNil(sent.query, "no sessionId query: the session is in the path")
+        XCTAssertTrue(sent.body.contains(#"Content-Disposition: form-data; name="file"; filename="shot.png""#))
+        XCTAssertTrue(sent.body.contains("Content-Type: image/png"))
+    }
+
+    func testTheGuestComposerTakesTheOwnersFourImageTypesUpTo5MB() {
+        for type in ["image/png", "image/jpeg", "image/webp", "image/gif"] {
+            XCTAssertNil(GuestComposer.rejectReason(mimeType: type, byteCount: 1024), type)
+        }
+        XCTAssertEqual(GuestComposer.rejectReason(mimeType: "application/pdf", byteCount: 1024),
+                       "A guest can attach PNG, JPEG, WebP or GIF images only.")
+        XCTAssertEqual(GuestComposer.rejectReason(mimeType: "image/heic", byteCount: 1024), GuestComposer.imagesOnly)
+        XCTAssertNil(GuestComposer.rejectReason(mimeType: "image/png", byteCount: 5 * 1024 * 1024))
+        XCTAssertEqual(GuestComposer.rejectReason(mimeType: "image/png", byteCount: 5 * 1024 * 1024 + 1),
+                       "Image exceeds the 5MB limit")
+    }
+
+    func testAnImageAloneCanBeSentButNothingAtAllCannot() {
+        XCTAssertTrue(GuestComposer.canSend(text: "", imageCount: 1))
+        XCTAssertTrue(GuestComposer.canSend(text: "hi", imageCount: 0))
+        XCTAssertFalse(GuestComposer.canSend(text: "  \n ", imageCount: 0))
     }
 
     func testAnImageIsReadThroughTheDoorNotTheOwnersAttachments() async throws {

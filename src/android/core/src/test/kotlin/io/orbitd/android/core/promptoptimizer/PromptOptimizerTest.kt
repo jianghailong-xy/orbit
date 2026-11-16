@@ -135,10 +135,11 @@ class PromptOptimizerTest {
     private fun user(prefs: String, available: Boolean?): JsonObject = Wire.json.parseToJsonElement(
         """{"id":"u","email":"a@b.c","preferences":$prefs${available?.let { ",\"promptOptimizerAvailable\":$it" } ?: ""}}""").jsonObject
 
-    @Test fun theSwitchIsOffUnlessExactlyTrueAndTheServerCan() {
-        assertFalse("absent is off", PromptOptimizer.isOn(user("{}", true)))
+    @Test fun theSwitchIsOnUnlessExactlyFalseAndTheServerCan() {
+        assertTrue("absent is on", PromptOptimizer.isOn(user("{}", true)))
         assertFalse(PromptOptimizer.isOn(user("""{"promptOptimizer":false}""", true)))
-        assertFalse("a stray value reads as absent", PromptOptimizer.isOn(user("""{"promptOptimizer":"true"}""", true)))
+        assertTrue("a stray value reads as absent", PromptOptimizer.isOn(user("""{"promptOptimizer":"false"}""", true)))
+        assertFalse("absent, but no server key", PromptOptimizer.isOn(user("{}", false)))
         assertTrue(PromptOptimizer.isOn(user("""{"promptOptimizer":true}""", true)))
         assertFalse(PromptOptimizer.isOn(user("""{"promptOptimizer":true}""", false)))
         assertFalse("a payload that does not say", PromptOptimizer.isOn(user("""{"promptOptimizer":true}""", null)))

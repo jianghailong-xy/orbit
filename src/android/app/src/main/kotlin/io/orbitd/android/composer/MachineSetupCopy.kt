@@ -21,19 +21,17 @@ object MachineSetupCopy {
     const val SETUP_FOLDER = "Folder"
     fun setupFolderHelp(machine: String): String =
         "Where on $machine should sessions work? They can read and change everything in it."
-    const val SETUP_REGISTER_DIR = "Where you ran orbit register"
-    const val SETUP_NEW_FOLDER = "A new folder"
     const val SETUP_NEW_FOLDER_NAME = "name"
-    const val SETUP_NEW_FOLDER_META = "Starts empty. Ask for a clone or a new project in your first message."
+    const val SETUP_FOLDER_HINT = "Uses this folder if it exists, otherwise creates it."
+    const val SETUP_NEW_FOLDER_META = "New folder · created as the session starts."
     const val SETUP_NEW_FOLDER_DONE = "new folder · created as the session starts"
     const val SETUP_NEW_FOLDER_INVALID = "Use letters, digits, dots, dashes and underscores, up to 64 characters."
-    fun setupNewFolderExists(machine: String): String =
-        "This folder already exists on $machine. Sessions will use what’s in it."
     fun setupNewFolderIsFile(machine: String): String =
         "There’s already a file with this name on $machine. Pick another name."
-    fun setupOtherFolder(machine: String): String = "Another folder on $machine"
-
-    // From GitHub (docs/mocks/github-workspace, board 01 P1–P4): the fourth option, between A new folder and Another folder.
+    // From GitHub (docs/mocks/github-workspace, board 01 P1–P4; board 04 A): a row under the folder's name field, behind an "or"
+    // rule, that swaps the step to the repository picker; the link under the picker swaps it back.
+    const val SETUP_OR = "or"
+    const val SETUP_FOLDER_NAME_INSTEAD = "Type a folder name instead"
     const val SETUP_FROM_GITHUB = "From GitHub"
     const val SETUP_NEW_TAG = "NEW"
     const val SETUP_GITHUB_META =

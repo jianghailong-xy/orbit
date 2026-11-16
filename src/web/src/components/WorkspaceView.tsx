@@ -253,7 +253,7 @@ import { InitializeGitSteps, SessionOutputs } from './SessionOutputs';
 import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
-import { HeldFirstMessage, MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
+import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
 import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
@@ -367,7 +367,7 @@ import {
   SessionCriteriaDecisionCard,
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
-import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
+import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
 import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
@@ -492,7 +492,6 @@ import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import type {
-  NewWorkspaceRequest,
   SessionSourceLanding,
   SessionTurnIntent,
   SessionTurnPlacement,
@@ -522,18 +521,18 @@ import {
   isConnecting,
   machineDraftPath,
   machineName,
+  newWorkspaceName,
   newWorkspaceOf,
   SETUP_CONNECTING_POLL_MS,
   SETUP_POLL_MS,
+  type PickedFolder,
 } from '../lib/machineSetup';
 import {
   CLONE_RETRY_FAILED,
   composerPlaceholderFor,
-  HELD_ALREADY_WAITING,
-  HELD_ALREADY_WAITING_DETAIL,
 } from '../lib/machineSetupCopy';
 import { githubRepositoryOf, hearClone, retryClone } from '../lib/workspaceClone';
-import { useMachineSetup, type HeldMessage } from '../lib/useMachineSetup';
+import { useMachineSetup } from '../lib/useMachineSetup';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -703,19 +702,19 @@ interface ComposerSendVars {
   source?: 'autoRetry';
   /** Prompt optimizer (D2): the text is still exactly what Use put in the box. */
   optimized?: OptimizedSend;
-  /** A machine's first session: which machine, and the folder of the workspace it makes, sent instead
-   *  of a workspace. */
-  firstWorkspace?: { runnerId: string; folder: NewWorkspaceRequest };
-  /** The message that waited under the setup card, going by itself: the composer has nothing to do
-   *  with it by now, and what it holds may be somebody's next thought. */
+  /** Sent by no composer (Compact, from the Context popover): the composer has nothing to do with it,
+   *  and what it holds may be somebody's next thought. */
   held?: boolean;
 }
 
 // The image types Claude takes as inline content blocks: shown as a thumbnail and capped
-// tighter (kept in sync with the runner's image-block dispatch). Anything else is a generic
-// file — any type, up to the server's 25MB cap (attachments.media.ts).
-const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+// tighter (kept in sync with the runner's image-block dispatch, and with the guest door's
+// COMPOSER_IMAGE_TYPES / MAX_COMPOSER_IMAGE_BYTES in attachments.media.ts). Anything else is a
+// generic file — any type, up to the server's 25MB cap (attachments.media.ts).
+export const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** What a composer that takes only pictures (a guest's) says of anything else. */
+export const IMAGES_ONLY_REFUSED = 'Only PNG, JPEG, WebP or GIF images can be attached';
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 // What a staged picture's thumbnail is called when its file has no name. The thumbnail is the button that opens the
 // picture in the viewer and is named by the file; the picture itself stays decorative (`alt=""`).
@@ -1044,9 +1043,11 @@ const STRANDED_AFTER_MS = 400;
 const STICKY_LABEL = 'Your question';
 /** A card still waiting on the reader, in the order the transcript draws them: a tool approval or
  *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
- *  item. Answered and snoozed forms carry none of these. */
+ *  item. Answered and snoozed forms carry none of these. On a phone a coordinator's question is its
+ *  `ReviewCard` preview, the form itself in the dialog the preview opens: the preview is the one
+ *  in the transcript, under the card's `question-<itemId>` id. */
 export const WAITING_CARD_SELECTOR =
-  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), [data-open-item]';
+  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"], [data-open-item]';
 /** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
  *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
 export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);
@@ -1358,7 +1359,9 @@ export const sessionLine = (
   // and the strip above its composer read the same.
   const resume = resumeWords(s, watching?.line);
   if (live && resume && state === 'AWAITING_INPUT') return { text: resume, tone: 'watching' };
-  if (parked) return { text: `${parked.text}…`, tone: 'background' };
+  // A background process it left up does not take the line from what the session said or was told:
+  // the unanswered message, the recap and the reply all outrank it (the owner, 2026-11-16). The row's
+  // glyph still says a process is up; the words only fill a row that has nothing else to say.
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
@@ -1372,6 +1375,7 @@ export const sessionLine = (
   if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
     return { text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
+  if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
   return { text: statusLabel(s), tone: 'preview' };
@@ -2801,6 +2805,8 @@ export function WorkspaceView({
   const [stuck, setStuck] = useState<
     { seq: string | null; text: string; loading?: boolean } | null
   >(null);
+  // The bar while it is drawn: its height is how far its own coming and going moves the transcript.
+  const stuckBarRef = useRef<HTMLButtonElement>(null);
   // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
   // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
   const [openItemsAbove, setOpenItemsAbove] = useState('');
@@ -3864,9 +3870,6 @@ export function WorkspaceView({
     enabled: bareMachine,
     refetchInterval: machineConnecting ? SETUP_CONNECTING_POLL_MS : SETUP_POLL_MS,
   });
-  // A machine still connecting takes no work, but a message sent on its setup page only waits under the card
-  // (board rule 6), as both steps do: the composer stays open for it. An offline one says so (board 02).
-  const composerTakesWork = runnerTakesWork || machineConnecting;
   const lockedWorkspace = useMemo(
     () => (lockedWorkspaceId ? (workspacesForRunner.find((a) => a.id === lockedWorkspaceId) ?? null) : null),
     [workspacesForRunner, lockedWorkspaceId],
@@ -4664,11 +4667,21 @@ export function WorkspaceView({
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-orbit-round]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
-    let cur: HTMLElement | null = null;
+    let at = -1;
     for (const b of bubbles) {
-      if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
+      if (b.getBoundingClientRect().bottom <= topY + 1) at++;
       else break;
     }
+    // The bar sits above the scroller, so drawing or dropping it moves the transcript by its height
+    // whenever the scroll position has to give way: at the tail, which stays pinned. A turn Orbit
+    // opened hides the bar as it leaves the top, and with the bar gone that turn came back into view,
+    // which raised the bar again, which pushed it out — the bar flickered at a frame's pace. So while
+    // the bar is up, such a turn only takes it down once it is above the top by the bar's own height,
+    // and the question the bar names until then is the one before it.
+    const barHeight = stuckBarRef.current?.offsetHeight ?? 0;
+    if (at >= 0 && barHeight > 0 && bubbles[at].hasAttribute('data-orbit-round')
+      && bubbles[at].getBoundingClientRect().bottom > topY + 1 - barHeight) at--;
+    const cur: HTMLElement | null = at >= 0 ? bubbles[at] : null;
     if (cur?.hasAttribute('data-orbit-round')) {
       setStuck(null);
     } else if (cur) {
@@ -5993,14 +6006,11 @@ export function WorkspaceView({
       const created = await createInteractiveSession({
         prompt: content,
         assignedRunnerId: runner.id,
-        // A machine's first session names a folder, and the workspace is made with it, in one
-        // transaction (docs/first-workspace-contract.md §3).
-        ...(vars.firstWorkspace ? { newWorkspace: vars.firstWorkspace.folder } : { workspaceId }),
+        workspaceId,
         // Only an explicit pick travels, and it is the pair — the engine the hero picked and the
         // credential of it (docs/provider-engine-contract.md §3.2). Leaving both off keeps the
         // server's inherit-from-workspace path, which re-checks that pair as it starts the session.
-        // A workspace about to be made has nothing to inherit, so its first session always names it.
-        ...(draftHere || vars.firstWorkspace ? { engine: pickedEngine, provider: pickedProvider } : {}),
+        ...(draftHere ? { engine: pickedEngine, provider: pickedProvider } : {}),
         model: createModel,
         permissionMode: createPermissionMode,
         // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
@@ -6033,12 +6043,11 @@ export function WorkspaceView({
         id: created.id,
         created: true,
         permissionMode: modeWasEdited ? MODE_TO_PERMISSION[mode] : undefined,
-        madeWorkspaceId: vars.firstWorkspace ? (created.workspaceId ?? undefined) : undefined,
         clientTurnId: operation.clientTurnId,
       };
     },
     onSuccess: (
-      { id, turnId, queuedItem, created, permissionMode: sentMode, madeWorkspaceId, clientTurnId, routedToSessionId },
+      { id, turnId, queuedItem, created, permissionMode: sentMode, clientTurnId, routedToSessionId },
       vars,
     ) => {
       if (sendOperationRef.current?.clientTurnId === clientTurnId) {
@@ -6072,17 +6081,11 @@ export function WorkspaceView({
       // highlight blips to that workspace until this session's fetch lands. Mirrors
       // getSession's shape; the background refetch fills in the rest.
       if (created) {
-        const inWorkspace = madeWorkspaceId ?? workspaceId;
         qc.setQueryData(sessionQuery(id).queryKey, {
           id,
           assignedRunnerId: runner.id,
-          workspace: inWorkspace ? { id: inWorkspace } : null,
+          workspace: workspaceId ? { id: workspaceId } : null,
         });
-      }
-      // The card's work is done: the machine has its workspace, and the sidebar's row changes with it.
-      if (vars.firstWorkspace) {
-        setup.finish(vars.firstWorkspace.runnerId);
-        void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
       }
       // The provider pick is deliberately not written back — see DRAFT_PROVIDER_PREFIX. The session
       // carries its own binding, and the workspace's default keeps meaning "what this project starts
@@ -6183,12 +6186,9 @@ export function WorkspaceView({
         send.mutate({ ...vars, intent: 'NEXT_TURN' });
         return;
       }
-      // Sent by itself, so it stays where it waited and says so there: it is in no composer to keep,
-      // and the toast below would be gone by the time anyone looks.
+      // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
       if (vars.held) {
-        if (vars.firstWorkspace?.runnerId === runner.id) setup.failHeld(e.message);
-        // Compact, from the Context popover: no composer holds it, so the toast is where it fails.
-        else if (!vars.firstWorkspace) message.error("Couldn't compact", e.message);
+        message.error("Couldn't compact", e.message);
         return;
       }
       setText((draft) => composerDraftAfterSend(draft, false));
@@ -7133,40 +7133,27 @@ export function WorkspaceView({
     nextTurnQueued: visibleQueuedTurns.some((turn) => turn.placement === 'queued' && turn.delivery == null),
   });
 
-  // The composer's send, on a machine's setup page. Ready, it makes the workspace with the session.
-  // Not ready, the message waits under the card (board rule 6) and leaves the composer the way a sent
-  // one does: it goes by itself once both steps are done. One waits at a time, since what is waiting
-  // is a session's first message.
+  // The setup card's Create workspace (owner 2026-11-16): the workspace alone, in the folder the card
+  // picked. The list then says the machine has one, and the console moves on to its new session page
+  // (WorkspaceConsole), with the engine and credential picked here as its draft's.
+  const createWorkspace = useMutation({
+    mutationFn: (folder: PickedFolder) =>
+      api<{ id: string }>('/workspaces', {
+        method: 'POST',
+        body: { name: newWorkspaceName(folder), runnerId: runner.id, ...newWorkspaceOf(folder) },
+      }),
+    onSuccess: async (made) => {
+      if (draftHere) setDraftPick({ ...draftHere, workspaceId: made.id });
+      setup.finish(runner.id);
+      await qc.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+
+  // A machine's own page sends nothing: with no workspace it is the setup card's, which makes one, and
+  // with one it is on its way to that workspace's page.
   const sendFromComposer = (vars: ComposerSendVars): void => {
-    if (!machineDraft) {
-      send.mutate(vars);
-      return;
-    }
-    // Not known yet, or on the way to the workspace it turns out to have: nothing to send it with.
-    if (!bareMachine) return;
-    if (setup.held) {
-      message.info(HELD_ALREADY_WAITING, HELD_ALREADY_WAITING_DETAIL);
-      return;
-    }
-    if (setupReady && setup.folder) {
-      send.mutate({ ...vars, firstWorkspace: { runnerId: runner.id, folder: newWorkspaceOf(setup.folder) } });
-      return;
-    }
-    setup.hold({
-      content: vars.content,
-      ...(vars.shell ? { shell: true } : {}),
-      ...(vars.images.length > 0
-        ? {
-            attachments: vars.images.flatMap((im) =>
-              im.id ? [{ id: im.id, mime: im.mime || 'application/octet-stream', name: im.name }] : [],
-            ),
-          }
-        : {}),
-    });
-    setText('');
-    setComposerRefs({});
-    vars.images.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
-    setImages([]);
+    if (machineDraft) return;
+    send.mutate(vars);
   };
 
   const onSend = (intentOverride?: SessionTurnIntent): void => {
@@ -7385,7 +7372,7 @@ export function WorkspaceView({
     : (!!text.trim() || readyImages.length > 0) &&
       !send.isPending &&
       !uploading &&
-      composerTakesWork &&
+      runnerTakesWork &&
       !managedDraftBlocked &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
@@ -8001,15 +7988,6 @@ export function WorkspaceView({
           },
     [selectedTrashed, selectedMissing],
   );
-  // Withdraw the message waiting under the setup card: its words and files go back to the composer,
-  // the way a queued message's do, an explicit press that a draft keeps its place above.
-  const withdrawHeld = (): void => {
-    const held = setup.held;
-    if (!held) return;
-    setup.withdraw();
-    if (held.content.trim()) restoreUndelivered?.(held.shell ? `!${held.content}` : held.content, held.attachments);
-    else stageRestored(held.attachments);
-  };
   // The main checkout behind this console (docs/main-checkout-git-contract.md): its card and result lines in the
   // conversation, its bar above the worktree bar, and the review drawer they open.
   const consoleWorkspace = workspacesForRunner.find((a) => a.id === consoleWorkspaceId);
@@ -8075,35 +8053,13 @@ export function WorkspaceView({
     cleanUp: mainCheckoutCleanUp,
     viewChanges: viewSessionChanges,
   });
-  // Both steps done with a message waiting: it goes, with nobody pressing anything (rule 6). Once per
-  // waiting message: the send makes a workspace, so it must not go twice, and a refusal leaves it
-  // waiting on the person (`error`) rather than on another try.
-  const heldSent = useRef<HeldMessage | null>(null);
-  useEffect(() => {
-    const held = setup.held;
-    if (!held || held.error || !setupReady || !setup.folder || send.isPending || heldSent.current === held) return;
-    heldSent.current = held;
-    send.mutate({
-      content: held.content,
-      images: [],
-      attachmentIds: held.attachments?.map((attachment) => attachment.id),
-      shell: held.shell,
-      intent: 'NEXT_TURN',
-      firstWorkspace: { runnerId: runner.id, folder: newWorkspaceOf(setup.folder) },
-      held: true,
-    });
-    // `send` is a new object every render, and its pending state is the part this reads.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setup.held, setup.folder, setupReady, send.isPending]);
   // The machine got a workspace some other way (another tab, the form on its page): the console moves
-  // on to it, and what was being set up here no longer applies. What was waiting comes back to the
-  // composer rather than vanishing.
+  // on to it, and what was being set up here no longer applies.
   useEffect(() => {
-    if (!machineDraft || !workspacesQ.isSuccess || bareMachine || send.isPending) return;
-    if (setup.held) withdrawHeld();
-    if (setup.held || setup.folder) setup.finish(runner.id);
+    if (!machineDraft || !workspacesQ.isSuccess || bareMachine) return;
+    if (setup.folder) setup.finish(runner.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineDraft, workspacesQ.isSuccess, bareMachine, send.isPending, setup.held, setup.folder]);
+  }, [machineDraft, workspacesQ.isSuccess, bareMachine, setup.folder]);
   // Steer is offered while a turn runs on an engine that can take a message into one (the server
   // still asks the runner, and refuses one too old).
   const steerOffered = !!live && selectedRunStatus === 'RUNNING' && runtimeTakesMidTurnSteer(selectedEngine);
@@ -9444,9 +9400,9 @@ export function WorkspaceView({
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : managedWelcome || (machineWelcome && composerTakesWork)
+        : managedWelcome
           ? WELCOME_PLACEHOLDER
-        : managedDraftBlocked || !composerTakesWork
+        : managedDraftBlocked || !runnerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
@@ -9640,9 +9596,11 @@ export function WorkspaceView({
                 // A phone opens the coordinator's conversation itself, with no push into the project's
                 // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
                 // A row whose line says a member is waiting on you opens that member instead, at its
-                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting).
-                const waiting = s.line.tone === 'approval' && s.target.kind === 'session' &&
-                  s.target.id !== coordinator?.id ? s.target.id : null;
+                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting) — and the
+                // coordinator itself, waiting on you with a question, opens at that card too
+                // (owner 2026-11-16, docs/mocks/coordinator-question-jump).
+                const waiting = s.line.tone === 'approval' && s.target.kind === 'session'
+                  ? s.target.id : null;
                 const opens = waiting ?? coordinator?.id;
                 setWaitingReveal(waiting);
                 if (isMobile && opens) navigateWithPaneSlide('push', () =>
@@ -9940,6 +9898,8 @@ export function WorkspaceView({
 
   return (
     <div ref={setSplitEl} className={`workspace-split${selectedId || composingRoute || landingsProjectId ? ' show-conversation' : ''}${isScheduleRun && !composing ? ' is-schedule-run' : ''}`}>
+      {/* A machine with no workspace has no sessions to list: its setup page is the card alone. */}
+      {!bareMachine && <>
       <aside className={`session-col${listProjectId ? ' session-project-page' : ''}`} style={{ width: colWidth }}>
         {listProjectId ? projectPageHead(leaveProjectSessions, FOLDER_COPY.back(headWorkspaceName), <LeftOutlined />) : openFolder ? (
           // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
@@ -10098,6 +10058,7 @@ export function WorkspaceView({
         role="separator"
         aria-orientation="vertical"
       />
+      </>}
 
       <div
         className="workspace-view"
@@ -10137,7 +10098,9 @@ export function WorkspaceView({
           )
         ) : (
         <>
-        <div className="workspace-header">
+        {/* A machine with no workspace: the card says whose it is, so no session title above it. A phone keeps the
+            header for its way back. */}
+        {(!bareMachine || isMobile) && <div className="workspace-header">
           {isMobile && (
             <button
               type="button"
@@ -10496,7 +10459,7 @@ export function WorkspaceView({
               />
             </>
           )}
-        </div>
+        </div>}
 
         {selected && !selectedTrashed && !composing && (
           <ShareModal
@@ -10591,11 +10554,22 @@ export function WorkspaceView({
             // buttons up here would be two faces racing for one answer.
             onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
             crossings={crossingCards.pointers}
+            // The coordinator's open questions, from the read `CoordinatorQuestions` draws their
+            // cards from at this conversation's foot, so the line and the cards cannot disagree.
+            questions={coordinatedProjectId ? coordinatorQuestions(openItems.data).map((row) => ({
+              itemId: row.itemId,
+              question: row.question?.question ?? row.title,
+              ageSeconds: (() => {
+                const at = Date.parse(row.waitingSince);
+                return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
+              })(),
+            })) : []}
           />
         )}
 
         {stuck && (
           <button
+            ref={stuckBarRef}
             className={stuck.loading ? 'chat-sticky-question chat-sticky-loading' : 'chat-sticky-question'}
             title={stuck.text}
             onClick={() => {
@@ -10733,12 +10707,10 @@ export function WorkspaceView({
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
-                  Keyed by the session like its siblings, so a refresh in flight stays with the
-                  conversation that asked for it. */}
+                  Keyed by the session like its siblings. */}
               {selected && selectedId && selectedRecap && transcriptEvents.length > 0 && (
                 <SessionRecapCard
                   key={`recap:${selectedId}`}
-                  sessionId={selectedId}
                   text={selectedRecap}
                   recapAt={selectedSession?.recapAt ?? null}
                   onHide={hideSelectedRecap}
@@ -11060,17 +11032,11 @@ export function WorkspaceView({
                   onFolder={setup.pickFolder}
                   onEngine={(engine) => pickDraft(engine as AgentProvider, engine)}
                   onUseApiKey={pickApiKey}
-                  welcome={machineWelcome ? { composerText: text, onExample: pickWelcomeExample } : undefined}
+                  onCreate={() => setup.folder && createWorkspace.mutate(setup.folder)}
+                  creating={createWorkspace.isPending}
+                  createError={createWorkspace.error?.message ?? null}
+                  welcome={machineWelcome}
                 />
-                {setup.held && (
-                  <HeldFirstMessage
-                    held={setup.held}
-                    machine={machineName(runner)}
-                    sending={send.isPending}
-                    onWithdraw={withdrawHeld}
-                    onRetry={setup.retryHeld}
-                  />
-                )}
                 {localStatusCards.map((card) => (
                   <RevealedOnArrival key={card.id}>
                     <SessionStatusCard card={card} />
@@ -11147,7 +11113,8 @@ export function WorkspaceView({
           )}
         </div>
 
-      <div className="workspace-composer">
+      {/* A machine with no workspace has nothing to send to: its setup card makes the workspace. */}
+      {!bareMachine && <div className="workspace-composer">
         {/* The reader's messages nothing has read yet: the conversation's next lines, so the band's
             first member, right under the conversation and above the parking strip below
             (docs/mocks/pending-tray-above-parking, decided 2026-10-28). */}
@@ -11458,7 +11425,7 @@ export function WorkspaceView({
             }}
           />
         )}
-      </div>
+      </div>}
         </>
         )}
       </div>
@@ -12618,23 +12585,22 @@ export function SessionComposer({
             {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
           </button>
         )}
+        {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with
+            nothing to optimize: a button that came and went with the draft moved every control to
+            its left. Busy, the spinner takes the same slot. */}
         {optimizer.buttonShown && (
           <button
             type="button"
-            className={optimizer.busy ? 'composer-optimize composer-optimize-busy' : 'composer-optimize'}
+            className="composer-optimize"
             onClick={optimizer.press}
+            disabled={!optimizer.buttonEnabled}
             aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
-            title={optimizer.busy ? 'Press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
+            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
           >
             {optimizer.busy ? (
-              <>
-                <span className="composer-optimize-spin" aria-hidden="true" />
-                Optimizing…
-              </>
+              <span className="composer-optimize-spin" aria-hidden="true" />
             ) : (
-              <>
-                <span aria-hidden="true">✦</span> Optimize
-              </>
+              <span aria-hidden="true">✦</span>
             )}
           </button>
         )}
@@ -13241,13 +13207,17 @@ export function usePendingTray({
 /**
  * The composer's pictures and files (`SessionComposer`'s attachment row): checked, uploaded at once as staged chips —
  * to the session when there is one, unscoped for a message that makes one — and handed back out of a sent message by
- * their ids. The session page and the wiki chat panel each stage into a list of their own.
+ * their ids. The session page and the wiki chat panel each stage into a list of their own; the guest view stages
+ * pictures only (`imagesOnly`) and uploads them through the guest door (`upload`).
  */
 export function useComposerImages(
   canAttach: boolean | undefined,
   sessionId: string | undefined,
   setImages: Dispatch<SetStateAction<ComposerImage[]>>,
+  opts?: { upload?: (file: File) => Promise<{ id: string }>; imagesOnly?: boolean },
 ) {
+  const upload = opts?.upload;
+  const imagesOnly = opts?.imagesOnly === true;
   const message = useToast();
   const imageUid = useRef(0);
   // Validate, then upload an attachment as a staged chip. Uploaded eagerly (not on send) so
@@ -13262,6 +13232,10 @@ export function useComposerImages(
         return;
       }
       const isInlineImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+      if (imagesOnly && !isInlineImage) {
+        message.error(IMAGES_ONLY_REFUSED);
+        return;
+      }
       const cap = isInlineImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
       if (file.size <= 0) {
         message.error(`${file.name || 'File'} is empty`);
@@ -13278,7 +13252,7 @@ export function useComposerImages(
         { uid, file, name: file.name, mime: file.type, size: file.size, previewUrl, status: 'uploading' },
       ]);
       try {
-        const { id } = await uploadAttachment(file, sessionId);
+        const { id } = await (upload ? upload(file) : uploadAttachment(file, sessionId));
         setImages((prev) => prev.map((im) => (im.uid === uid ? { ...im, status: 'done', id } : im)));
       } catch (e) {
         // Drop the failed chip and free its preview; the toast explains why.
@@ -13290,7 +13264,7 @@ export function useComposerImages(
         );
       }
     },
-    [canAttach, sessionId, setImages, message],
+    [canAttach, sessionId, setImages, message, upload, imagesOnly],
   );
   // Hand attachments already on the control plane back to the composer as staged chips. There is no
   // blob to make and none is wanted: the bytes are under `id`, which is all a send references, so a

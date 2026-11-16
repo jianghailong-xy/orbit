@@ -233,12 +233,15 @@ export function queuedTurnEvent(turn: QueuedTurnRow): UserTurnEvent {
  * lists the opening as the accepted head until the runner echoes it, so a snapshot carrying a row is
  * that same message under its id (`opening`), and the id-less copy gives way to it: one bubble, not
  * two. A server that does not list the opening returns nothing for it, and the local copy stays.
+ * An opening held for its translation is listed as queued, not accepted (`openingQueued`): the queued
+ * row draws it with its chip, so the id-less copy gives way to that row just the same.
  */
 export function reconcileAcceptedUserTurnSnapshot(
   snapshot: readonly AcceptedUserTurn[],
   current: readonly AcceptedUserTurn[],
   sessionId: string,
   knownBefore: ReadonlySet<string>,
+  openingQueued = false,
 ): AcceptedUserTurn[] {
   const next = current.filter((turn) => turn.sessionId !== sessionId);
   const included = new Set<string>();
@@ -257,7 +260,7 @@ export function reconcileAcceptedUserTurnSnapshot(
     included.add(turn.key);
   }
 
-  const openingListed = snapshot.some((turn) => turn.opening);
+  const openingListed = openingQueued || snapshot.some((turn) => turn.opening);
   for (const turn of current) {
     if (turn.sessionId !== sessionId || included.has(turn.key)) continue;
     if (openingListed && turn.source === 'local' && turn.turnId === undefined) continue;

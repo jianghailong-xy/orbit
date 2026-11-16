@@ -9,7 +9,8 @@ import type { GuestSession, GuestSessionNow, SharedEvent } from '../api';
 /**
  * The guest view (docs/session-guests-design.md §4; boards docs/mocks/share-links/10-session-guests-3 and
  * 11-guest-one-link-2), mounted whole over the guest door as `/sessions/<id>` draws it in the app's pane: the frame says who shared it, how it stands and that the reader is
- * a Guest; the composer only takes text and says where it runs; the session waiting on its owner, having ended, and
+ * a Guest; the composer takes words and images (pasted, dropped or picked, uploaded through the guest door) and says
+ * where it runs; the session waiting on its owner, having ended, and
  * no longer being shared each read as the board draws them; and what the conversation adds is followed.
  */
 
@@ -21,11 +22,13 @@ vi.mock('../api', async (importOriginal) => ({
   getGuestEventsAfter: vi.fn(),
   getGuestEventFull: vi.fn(),
   sendGuestTurn: vi.fn(),
+  uploadGuestAttachment: vi.fn(),
   fetchAttachmentObjectUrl: vi.fn(),
   fetchGuestAttachmentObjectUrl: vi.fn(),
 }));
 const {
   api, ApiError, fetchAttachmentObjectUrl, fetchGuestAttachmentObjectUrl, getGuestSession, getGuestEventsAfter, sendGuestTurn,
+  uploadGuestAttachment,
 } = await import('../api');
 const { GuestLinkRedirect, GuestSessionView } = await import('./GuestSessionPage');
 const { encodeId } = await import('../lib/idCodec');
@@ -120,7 +123,7 @@ beforeEach(() => {
     if (path === '/users/me') return { id: 'u-alice', name: 'Alice Chen', email: 'alice@example.com' };
     throw new Error(`unexpected ${path}`);
   });
-  for (const fn of [getGuestSession, getGuestEventsAfter, sendGuestTurn]) vi.mocked(fn).mockReset();
+  for (const fn of [getGuestSession, getGuestEventsAfter, sendGuestTurn, uploadGuestAttachment]) vi.mocked(fn).mockReset();
   vi.mocked(getGuestEventsAfter).mockImplementation(async () => now('RUNNING', []));
 });
 
@@ -131,7 +134,7 @@ afterEach(async () => {
 });
 
 describe('the guest page', { timeout: 30_000 }, () => {
-  it('running: Shared by, the status and Guest, the transcript, and a composer that only takes text', async () => {
+  it('running: Shared by, the status and Guest, the transcript, and a composer of words and images', async () => {
     vi.mocked(getGuestSession).mockResolvedValue(head('RUNNING'));
     await visit();
     expect(vi.mocked(getGuestSession)).toHaveBeenCalledWith(encodeId(SESSION), 200);
@@ -145,11 +148,12 @@ describe('the guest page', { timeout: 30_000 }, () => {
     expect(heads).toEqual(['You', 'From Ravi Kumar']);
     expect(page()).toContain('Can we give pg specs a retry budget');
     expect(page()).toContain('at most twice');
-    // Text and Send, nothing else: no mode, model or effort chips, no attachments.
+    // Words, an image picker and Send, nothing else: no mode, model or effort chips, no other files.
     const form = q('form.guest-composer')!;
     expect(q<HTMLTextAreaElement>('textarea.guest-composer-input')!.placeholder).toBe('Message Lin Wei’s agent…');
-    expect([...form.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Send']);
-    expect(form.querySelector('input')).toBeNull();
+    expect([...form.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Attach image', 'Send']);
+    const inputs = [...form.querySelectorAll('input')];
+    expect(inputs.map((i) => [i.type, i.accept])).toEqual([['file', 'image/png,image/jpeg,image/webp,image/gif']]);
     expect(hint()).toBe('Runs on Lin Wei’s machine');
     expect(q('.guest-waiting')).toBeNull();
   });
@@ -189,6 +193,71 @@ describe('the guest page', { timeout: 30_000 }, () => {
     expect(page()).toContain('That reads as a message, not a command.');
     expect([...container.querySelectorAll('.chat-user-from')].map((el) => el.textContent)).toEqual(['You', 'From Ravi Kumar', 'You']);
     expect(q<HTMLTextAreaElement>('textarea.guest-composer-input')!.value).toBe('');
+  });
+
+  it('an image picked, previewed and removable, goes out through the guest door with the words', async () => {
+    vi.mocked(getGuestSession).mockResolvedValue(head('RUNNING'));
+    vi.mocked(sendGuestTurn).mockResolvedValue({ turnId: 't9', revived: false });
+    vi.mocked(uploadGuestAttachment).mockImplementation(async (_id, file) => ({ id: `id-${file.name}` }));
+    URL.createObjectURL = vi.fn((f: Blob) => `blob:${(f as File).name}`);
+    URL.revokeObjectURL = vi.fn();
+    await visit();
+    const pick = async (...files: File[]) => {
+      const input = q<HTMLInputElement>('input[type="file"]')!;
+      Object.defineProperty(input, 'files', { value: files, configurable: true });
+      await act(async () => {
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await settle();
+    };
+    await pick(new File([new Uint8Array([1])], 'one.png', { type: 'image/png' }), new File([new Uint8Array([2])], 'two.jpg', { type: 'image/jpeg' }));
+    expect(vi.mocked(uploadGuestAttachment).mock.calls.map(([id, f]) => [id, f.name])).toEqual([
+      [encodeId(SESSION), 'one.png'], [encodeId(SESSION), 'two.jpg'],
+    ]);
+    expect([...container.querySelectorAll('.composer-attach img')].map((img) => img.getAttribute('src'))).toEqual(['blob:one.png', 'blob:two.jpg']);
+    // Removed before sending: it does not go.
+    await act(async () => {
+      container.querySelectorAll<HTMLButtonElement>('.composer-attach-remove')[1]!.click();
+    });
+    expect(container.querySelectorAll('.composer-attach')).toHaveLength(1);
+    await typeAndSend('This is what I see');
+    const [, body] = vi.mocked(sendGuestTurn).mock.calls[0]!;
+    expect(Object.keys(body).sort()).toEqual(['attachmentIds', 'clientTurnId', 'content']);
+    expect(body).toMatchObject({ content: 'This is what I see', attachmentIds: ['id-one.png'] });
+    expect(container.querySelectorAll('.composer-attach')).toHaveLength(0);
+  });
+
+  it('an image pasted or dropped is staged; an image alone may be sent; a file that is no image is not taken', async () => {
+    vi.mocked(getGuestSession).mockResolvedValue(head('RUNNING'));
+    vi.mocked(sendGuestTurn).mockResolvedValue({ turnId: 't9', revived: false });
+    vi.mocked(uploadGuestAttachment).mockImplementation(async (_id, file) => ({ id: `id-${file.name}` }));
+    URL.createObjectURL = vi.fn((f: Blob) => `blob:${(f as File).name}`);
+    URL.revokeObjectURL = vi.fn();
+    await visit();
+    const send = q<HTMLButtonElement>('button.guest-composer-send')!;
+    expect(send.disabled).toBe(true);
+    const pasted = new File([new Uint8Array([1])], 'pasted.png', { type: 'image/png' });
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { items: [{ kind: 'file', getAsFile: () => pasted }] } });
+    await act(async () => {
+      q('textarea.guest-composer-input')!.dispatchEvent(paste);
+    });
+    await settle();
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    const dropped = new File([new Uint8Array([2])], 'dropped.webp', { type: 'image/webp' });
+    const notImage = new File([new Uint8Array([3])], 'notes.pdf', { type: 'application/pdf' });
+    Object.defineProperty(drop, 'dataTransfer', { value: { files: [dropped, notImage], types: ['Files'] } });
+    await act(async () => {
+      q('form.guest-composer')!.dispatchEvent(drop);
+    });
+    await settle();
+    expect(vi.mocked(uploadGuestAttachment).mock.calls.map(([, f]) => f.name)).toEqual(['pasted.png', 'dropped.webp']);
+    expect(send.disabled).toBe(false);
+    await act(async () => {
+      send.click();
+    });
+    await settle();
+    expect(vi.mocked(sendGuestTurn).mock.calls[0]![1]).toMatchObject({ content: '', attachmentIds: ['id-pasted.png', 'id-dropped.webp'] });
   });
 
   it('follows a running session on the public page’s clock: asked again after four seconds, the new reply below', async () => {

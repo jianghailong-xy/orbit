@@ -44,7 +44,7 @@ function matches(row: Row, where: Row): boolean {
   });
 }
 
-function harness(opts: { status?: RunStatus; preferences?: Row } = {}) {
+function harness(opts: { status?: RunStatus; preferences?: Row; session?: Row } = {}) {
   const session: Row = {
     id: SESSION_ID,
     ownerId: OWNER_ID,
@@ -56,6 +56,7 @@ function harness(opts: { status?: RunStatus; preferences?: Row } = {}) {
     assignedRunnerId: null,
     mergeStatus: null,
     commitStatus: null,
+    ...opts.session,
   };
   const preferences = opts.preferences ?? { translationEnabled: true, translationLanguage: 'zh-Hans' };
   const turns: Row[] = [];
@@ -467,4 +468,62 @@ test('skipTranslation (the prompt optimizer\'s English): the send is not held, c
   assert.equal(h.wakes.queue, 1);
   await h.service.translationsSettled();
   assert.equal(bodies.length, 0);
+});
+
+// ── "Resolve in session" with translation on ─────────────────────────────────────────────────────
+
+const SETTLED_MERGE = {
+  mergeStatus: 'conflict',
+  mergeOperationId: '33333333-3333-4333-8333-333333333333',
+  mergeOperationOwner: '44444444-4444-4444-8444-444444444444',
+  mergeError: 'CONFLICT (content): Merge conflict in src/a.ts',
+  mergedAt: null,
+  mergedSourceSha: 'abc123',
+  branchMerged: false,
+};
+const SETTLED_COMMIT = {
+  commitStatus: 'error',
+  commitOperationId: '55555555-5555-4555-8555-555555555555',
+  commitOperationOwner: '66666666-6666-4666-8666-666666666666',
+  commitError: 'nothing to commit',
+  commitResultMessage: null,
+};
+
+test('Resolve in session with translation on clears the settled merge and commit results, as it does with it off', async () => {
+  stubDeepSeek(['hang']);
+  const h = harness({ session: { ...SETTLED_MERGE, ...SETTLED_COMMIT } });
+  await h.service.resume(OWNER_ID, SESSION_ID, { clientTurnId: 'client-1', content: ORIGINAL }, { translate: true });
+  // The message is held for its translation, not delivered yet…
+  assert.equal(h.turns.length, 1);
+  assert.equal(h.turns[0].status, 'HELD');
+  // …and the stale failure is gone all the same, so the bar offers Merge again once the rebase is done
+  // instead of drawing the old conflict over a branch that has moved on.
+  for (const field of ['mergeStatus', 'mergeOperationId', 'mergeOperationOwner', 'mergeError', 'mergedAt', 'mergedSourceSha', 'branchMerged',
+    'commitStatus', 'commitOperationId', 'commitOperationOwner', 'commitError', 'commitResultMessage']) {
+    assert.equal(h.session[field], null, `${field} was left on the row`);
+  }
+});
+
+test('Resolve in session with translation on leaves a merge or commit still pending alone', async () => {
+  stubDeepSeek(['hang']);
+  const pending = {
+    ...SETTLED_MERGE, mergeStatus: 'pending', mergeError: null,
+    ...SETTLED_COMMIT, commitStatus: 'pending', commitError: null,
+  };
+  const h = harness({ session: pending });
+  await h.service.resume(OWNER_ID, SESSION_ID, { clientTurnId: 'client-1', content: ORIGINAL }, { translate: true });
+  assert.equal(h.turns[0].status, 'HELD');
+  assert.equal(h.session.mergeStatus, 'pending');
+  assert.equal(h.session.mergeOperationId, pending.mergeOperationId);
+  assert.equal(h.session.commitStatus, 'pending');
+  assert.equal(h.session.commitOperationId, pending.commitOperationId);
+});
+
+test('an ordinary translated send leaves a settled merge result where it is', async () => {
+  stubDeepSeek(['hang']);
+  const h = harness({ session: SETTLED_MERGE });
+  await h.send();
+  assert.equal(h.turns[0].status, 'HELD');
+  assert.equal(h.session.mergeStatus, 'conflict');
+  assert.equal(h.session.mergeError, SETTLED_MERGE.mergeError);
 });

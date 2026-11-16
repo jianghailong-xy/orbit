@@ -1,9 +1,16 @@
+import { open } from 'node:fs/promises';
 import {
   BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
-import type { GuestSessionSummary, SessionGuestPerson } from '@orbit/shared';
+import { uuidToBase62, type GuestSessionSummary, type SessionGuestPerson, type SessionGuestSuggestion } from '@orbit/shared';
+import {
+  assertValidUpload, COMPOSER_IMAGE_TYPES, GUEST_IMAGE_TOO_LARGE, GUEST_IMAGE_TYPE_REFUSED, imageBytesMatch,
+  MAX_COMPOSER_IMAGE_BYTES,
+} from '../attachments/attachments.media';
 import { AttachmentsService } from '../attachments/attachments.service';
+import type { FileUpload } from '../files/file-upload-storage';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { enqueueSessionInvite, SESSION_INVITE } from '../email/email-outbox';
 import type { OpenedFile } from '../files/files.service';
@@ -39,18 +46,24 @@ export const GUEST_DAILY_CAP_REACHED =
   `You’ve sent ${GUEST_DAILY_TURNS} messages to this session today, the most a guest can. Try again after midnight UTC.`;
 
 /**
- * The fields a guest's turn may carry: the key, the words, and the routing an owner's composer leaves to the server.
- * Anything else — `kind` (a shell turn), `attachmentIds`, and every override a resume would apply (model,
- * permissionMode, effort, provider, fastMode, engine, account, ...) — is refused by name, 400, before anything is
- * written. A whitelist, so a field SessionTurnDto or SessionResumeDto gains later is refused here too.
+ * The fields a guest's turn may carry: the key, the words, the images the guest uploaded to the session, and the
+ * routing an owner's composer leaves to the server. Anything else — `kind` (a shell turn) and every override a resume
+ * would apply (model, permissionMode, effort, provider, fastMode, engine, account, ...) — is refused by name, 400,
+ * before anything is written. A whitelist, so a field SessionTurnDto or SessionResumeDto gains later is refused here too.
  */
-const GUEST_TURN_FIELDS: ReadonlySet<string> = new Set(['clientTurnId', 'content', 'intent']);
+const GUEST_TURN_FIELDS: ReadonlySet<string> = new Set(['clientTurnId', 'content', 'intent', 'attachmentIds']);
 /** The only `intent` a guest may name: a message queued for the next turn, which is also what omitting it may route to. */
 const GUEST_TURN_INTENTS: ReadonlySet<unknown> = new Set([undefined, 'NEXT_TURN']);
 export const guestFieldRefused = (field: string) => `A guest can't set ${field} on a message.`;
+/** What a guest turn naming an attachment that is not one of the guest's own images of this session answers, 400. */
+export const guestAttachmentRefused = (publicId: string) =>
+  `Attachment ${publicId} isn't an image you uploaded to this conversation.`;
 
 /** Midnight UTC of today: a guest's day (§6 rule 5). */
 const utcMidnight = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+/** How many people the email field may suggest; the client shows five, filtered by what is typed. */
+export const GUEST_SUGGESTIONS_LIMIT = 50;
 
 /** A live invitation as the guest door reads it: whose session, and the guest's name for the turn. */
 interface LiveInvitation {
@@ -61,10 +74,14 @@ interface LiveInvitation {
   openedAt: Date | null;
 }
 
-/** The body of `POST /guest-sessions/:id/turns`: `clientTurnId`, `content` and `intent`; anything else is refused by name. */
+/**
+ * The body of `POST /guest-sessions/:id/turns`: `clientTurnId`, `content`, `intent` and `attachmentIds`; anything else
+ * is refused by name.
+ */
 export interface GuestTurnBody {
   clientTurnId?: unknown;
   content?: unknown;
+  attachmentIds?: unknown;
   [field: string]: unknown;
 }
 
@@ -136,6 +153,32 @@ export class SessionGuestsService {
         opened: r.openedAt !== null,
         emailSentAt: sent.get(r.userId)?.toISOString() ?? null,
       })),
+    };
+  }
+
+  /**
+   * The people the owner has invited before, to any of their sessions, newest invitation first, for the email field
+   * (board docs/mocks/share-links/14-guest-suggestions). People who can already reply in this session are left out;
+   * someone removed or who left is kept. Only the owner's own invitations are read, so nothing here is an email the
+   * owner has not typed themselves; a disabled account, which invite refuses, is left out.
+   */
+  async suggestions(ownerId: string, sessionId: string): Promise<{ people: SessionGuestSuggestion[] }> {
+    await this.ownedSession(ownerId, sessionId, { live: false, write: false });
+    const rows = await this.prisma.$queryRaw<{ name: string; email: string; last_invited_at: Date }[]>`
+      SELECT u."name", u."email", max(g."added_at") AS "last_invited_at"
+      FROM "session_guest" g
+      JOIN "user" u ON u."id" = g."user_id"
+      WHERE g."owner_id" = ${ownerId}::uuid
+        AND u."disabled_at" IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "session_guest" here
+          WHERE here."session_id" = ${sessionId}::uuid AND here."user_id" = g."user_id" AND here."removed_at" IS NULL
+        )
+      GROUP BY u."id", u."name", u."email"
+      ORDER BY "last_invited_at" DESC, u."email" ASC
+      LIMIT ${GUEST_SUGGESTIONS_LIMIT}`;
+    return {
+      people: rows.map((r) => ({ name: r.name, email: r.email, lastInvitedAt: r.last_invited_at.toISOString() })),
     };
   }
 
@@ -354,10 +397,54 @@ export class SessionGuestsService {
   }
 
   /**
+   * A guest's image for their next message: kept as a row of the owner's session that names the guest
+   * (AttachmentsService.createForGuest), as the owner's composer upload to it would be. Only an image the owner's
+   * composer sends as one — PNG, JPEG, WebP or GIF, whose first bytes are that type's, at most 5 MB — is taken; anything
+   * else is refused before it is kept, and the route removes its temporary file.
+   */
+  async uploadImage(guestId: string, sessionId: string, file: FileUpload | undefined): Promise<{ id: string }> {
+    const invitation = await this.invitation(guestId, sessionId);
+    assertValidUpload(file);
+    const upload = file as FileUpload;
+    const type = upload.mimetype.split(';', 1)[0]!.trim().toLowerCase();
+    if (!COMPOSER_IMAGE_TYPES.includes(type) || !imageBytesMatch(type, await firstBytes(upload.path))) {
+      throw new BadRequestException(GUEST_IMAGE_TYPE_REFUSED);
+    }
+    if (upload.size > MAX_COMPOSER_IMAGE_BYTES) throw new PayloadTooLargeException(GUEST_IMAGE_TOO_LARGE);
+    return this.attachments.createForGuest(invitation.ownerId, sessionId, guestId, { ...upload, mimetype: type });
+  }
+
+  /**
+   * The ids of a guest turn's images, each one this guest uploaded to this session through the guest door and an image
+   * the composer sends as one; the first that is not — the owner's, another guest's, another session's, a file that is
+   * no image, an expired one or no attachment at all — is refused by its id, 400, before anything is written.
+   */
+  private async guestImages(guestId: string, sessionId: string, attachmentIds: unknown): Promise<string[]> {
+    if (attachmentIds === undefined) return [];
+    if (!Array.isArray(attachmentIds) || attachmentIds.some((id) => typeof id !== 'string')) {
+      throw new BadRequestException('attachmentIds must be a list of attachment ids');
+    }
+    const ids = [...new Set(attachmentIds as string[])];
+    if (ids.length === 0) return [];
+    const theirs = await this.prisma.attachment.findMany({
+      where: {
+        id: { in: ids }, sessionId, uploadedByGuestId: guestId, mimeType: { in: [...COMPOSER_IMAGE_TYPES] }, expiredAt: null,
+      },
+      select: { id: true },
+    });
+    const found = new Set(theirs.map((a) => a.id));
+    const refused = ids.find((id) => !found.has(id));
+    if (refused) throw new BadRequestException(guestAttachmentRefused(uuidToBase62(refused)));
+    return ids;
+  }
+
+  /**
    * A guest's message: a turn of the owner's session (§5), written by SessionsService as the owner with the guest as
-   * its external sender, and one `session.guest.turn` activity row beside it. A session that has ended is resumed
-   * (D5) with its own mode, model and provider: only `clientTurnId` and `content` reach the service, so there is no
-   * override to take. A message to a live session is queued or steered as the owner's would be.
+   * its external sender, and one `session.guest.turn` activity row beside it. Its images are the guest's own uploads
+   * (guestImages), linked to the turn as an owner turn's are, so the runner hands the owner's agent that turn's images
+   * as it does any. A session that has ended is resumed (D5) with its own mode, model and provider: only
+   * `clientTurnId`, `content` and `attachmentIds` reach the service, so there is no override to take. A message to a
+   * live session is queued or steered as the owner's would be. One message is one toward the day's cap, images or not.
    */
   async turn(guestId: string, sessionId: string, body: GuestTurnBody) {
     const invitation = await this.invitation(guestId, sessionId);
@@ -366,10 +453,15 @@ export class SessionGuestsService {
       if (!GUEST_TURN_FIELDS.has(field)) throw new BadRequestException(guestFieldRefused(field));
     }
     if (!GUEST_TURN_INTENTS.has(fields.intent)) throw new BadRequestException(guestFieldRefused('intent'));
-    const { clientTurnId, content } = fields;
+    const { clientTurnId } = fields;
+    const content = fields.content ?? '';
     const intent = fields.intent as 'NEXT_TURN' | undefined;
     if (typeof clientTurnId !== 'string' || clientTurnId.trim() === '') throw new BadRequestException('clientTurnId is required');
-    if (typeof content !== 'string' || content.trim() === '') throw new BadRequestException('content is required');
+    const attachmentIds = await this.guestImages(guestId, sessionId, fields.attachmentIds);
+    // Images may go out on their own, as an owner's may.
+    if (typeof content !== 'string' || (content.trim() === '' && attachmentIds.length === 0)) {
+      throw new BadRequestException('content is required');
+    }
     // A key is the session's, whoever chose it: one the owner (or another guest) already used is not this guest's
     // to replay, whatever its words.
     const taken = await this.prisma.conversationTurn.findUnique({
@@ -380,7 +472,7 @@ export class SessionGuestsService {
       throw new ConflictException('clientTurnId was already used in this session');
     }
     const externalSender: ExternalTurnSender = { source: 'ORBIT_GUEST', id: guestId, name: invitation.guestName };
-    const dto = { clientTurnId, content, ...(intent ? { intent } : {}) };
+    const dto = { clientTurnId, content, ...(intent ? { intent } : {}), ...(attachmentIds.length ? { attachmentIds } : {}) };
     // Written with the turn, so a replay of this clientTurnId neither counts nor records anything again.
     const onTurnWritten = async (tx: Prisma.TransactionClient, turn: { id: string }) => {
       await this.countGuestTurn(tx, invitation.guestRowId);
@@ -471,6 +563,18 @@ export class SessionGuestsService {
     // Their messages still queued go with them, as a removal's do (§6 rule 6).
     if (!(await this.endInvitation(sessionId, guestId, 'LEFT'))) throw notShared();
     return { ok: true };
+  }
+}
+
+/** The first bytes of an uploaded file, enough to tell the composer's image types apart (imageBytesMatch). */
+async function firstBytes(path: string): Promise<Uint8Array> {
+  const handle = await open(path, 'r');
+  try {
+    const head = new Uint8Array(12);
+    const { bytesRead } = await handle.read(head, 0, head.length, 0);
+    return head.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
   }
 }
 

@@ -174,7 +174,7 @@ internal fun GithubFolderOption(
     }
 
     Column(
-        Modifier.fillMaxWidth().padding(start = 36.dp, end = 10.dp, bottom = 8.dp).testTag("setup-github-option"),
+        Modifier.fillMaxWidth().padding(top = 6.dp).testTag("setup-github-option"),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         @Composable

@@ -1132,6 +1132,22 @@ export const DIR_PROBE_CAPABILITY = 'dir-probe/v1';
  *  workspace in a new folder only on a runner that declares it. */
 export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
 
+/** What a runner declares when it makes a new folder in its home directory, the directory its reported reposRoot
+ *  sits in (`<home>/orbit-repos`): POST /sessions `newFolder` is then `<home>/<name>` (newFolderRoot) rather than
+ *  `<reposRoot>/<name>`. */
+export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
+
+/** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
+ *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
+export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
+  const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
+  if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
+  const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'));
+  if (cut < 0) return root;
+  // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
+  return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
  *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
 export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
@@ -1234,7 +1250,7 @@ export interface DirProbeAnswer {
 export interface NewWorkspaceRequest {
   /** A folder on that machine, already confirmed there through the directory probe relay. */
   workDir?: string;
-  /** A new folder under the runner's reposRoot: one path segment of 1–64 characters from
+  /** A new folder in the runner's newFolderRoot (home, or reposRoot on an older runner): one path segment of 1–64 characters from
    *  [A-Za-z0-9._-], not `.` or `..`. The runner makes it before the session's engine starts. */
   newFolder?: string;
   /** A clone of one of the caller's GitHub repositories into `<reposRoot>/<folder>`
@@ -2244,9 +2260,10 @@ export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
  * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
- * (the runner can't update itself, or its updates are turned off) is the runner's own.
+ * (the runner can't update itself, or its updates are turned off) is the runner's own, and so is
+ * `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines they name).
  */
-export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed';
+export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed' | 'engineUpdateFailed';
 
 /** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
  *  most recently used workspace runs on is signed out there. */
@@ -2255,7 +2272,7 @@ export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSigne
 /** An agent already at work on one warning: the session a press started, while it is open. */
 export interface RunnerAgentFixing {
   kind: RunnerAttentionFixKind;
-  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate`. */
+  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate` and `engineUpdateFailed`. */
   engine: ReportedEngine | null;
   sessionId: string;
   workspaceId: string;
@@ -2438,6 +2455,17 @@ export interface RunnerAccountRemoveState {
   /** The machine's own words when it failed: the account is in use by a session, the runner is too
    *  old to remove accounts at all, or the directory would not go away. */
   message: string | null;
+  /** With `failed` because the account is in use: the sessions the machine named as running in it,
+   *  as far as the viewer can see them, oldest first. Absent otherwise (and from an older server),
+   *  and then `message` alone says what happened. */
+  sessions?: RunnerAccountRemoveSession[];
+}
+
+/** A session that keeps an account from being removed: what the runner's page lists and opens. */
+export interface RunnerAccountRemoveSession {
+  id: string;
+  title: string;
+  status: RunStatus;
 }
 
 /** @deprecated Codex's name for the same state; read RunnerAccountRemoveState, whose `engine` says

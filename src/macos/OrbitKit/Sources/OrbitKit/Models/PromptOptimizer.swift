@@ -153,7 +153,10 @@ public enum PromptOptimizerCopy {
     public static let editThenUse = "Edit, then use"
     public static let tryAgain = "Try again"
     public static let dismiss = "Dismiss"
-    public static let escDismisses = "Esc dismisses · your draft is kept"
+    /// The Mac card's keys: Tab in the box is Use (as it takes a reply suggestion), Esc dismisses.
+    public static let keysHint = "Tab uses it · Esc dismisses · your draft is kept"
+    /// The key drawn inside Use on a Mac.
+    public static let useKey = "Tab"
     /// From the gloss the card opens on to the prompt the agent receives: the prompt's own language
     /// ("Show in English"), or "Show original" for a code this client does not know.
     public static func showPrompt(_ language: TranslationLanguage?) -> String {
@@ -181,9 +184,14 @@ extension TranslationLanguage {
 // MARK: - Rules
 
 public enum PromptOptimizer {
+    /// The account's switch: absent means on, and only an explicit `false` turns it off.
+    public static func switchedOn(_ preferences: UserPreferences?) -> Bool {
+        preferences?.promptOptimizer != false
+    }
+
     /// Whether the account offers ✦ Optimize: switched on, and the server able to.
     public static func isOn(_ user: User?) -> Bool {
-        user?.preferences?.promptOptimizer == true && user?.promptOptimizerAvailable == true
+        switchedOn(user?.preferences) && user?.promptOptimizerAvailable == true
     }
 
     /// Whether Settings draws the switch disabled with frame 1b's notice. Only a `me` that says so:

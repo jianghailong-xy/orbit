@@ -50,9 +50,14 @@ struct UserBubbleView: View {
     @Environment(\.sessionImagePreview) private var sessionPreview
     /// Set while the session is held by its runner's update, naming the bubble whose foot row says so.
     @Environment(\.runnerUpdatingFoot) private var runnerUpdatingFoot
-    /// This bubble's `Queued · runner updating`, where it is the one the update holds.
+    /// This bubble's `Queued · runner updating` (or `· runner full`), where it is the one held. That
+    /// includes a message the server has accepted but no runner has taken yet: it is not on its way
+    /// anywhere while the runner is full, so it says so in place of "Sending…" (web parity: the
+    /// accepted placeholder carries the tag). A message on the queue or written into a turn has its
+    /// own line for that.
     private var heldFoot: RunnerUpdatingFoot? {
-        guard let foot = runnerUpdatingFoot, foot.bubbleID == bubble.id, !bubble.pending else { return nil }
+        guard let foot = runnerUpdatingFoot, foot.bubbleID == bubble.id,
+              !bubble.pending || (!bubble.queued && !bubble.steer && !bubble.undelivered) else { return nil }
         return foot
     }
 
@@ -310,6 +315,9 @@ struct UserBubbleView: View {
                 } else if bubble.pending, bubble.translation?.held == true {
                     // Held for its translation: the line under the meta says where it is (1A / 4A).
                     EmptyView()
+                } else if bubble.pending, heldFoot != nil {
+                    // Accepted, and held by a full runner or its update: the tag below says so.
+                    EmptyView()
                 } else if bubble.pending {
                     if bubble.queued { QueuedWord() } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }
                     // A queued message can be withdrawn until the runner leases it (web parity). Offered
@@ -437,6 +445,12 @@ struct AssistantBubbleView: View {
         #endif
     }
 
+    /// "Show both languages" with a reply whose blocks pair: drawn block by block, each original under
+    /// its translation (03-interleaved.png). Nil draws it as before, whole (frame 4).
+    private var pairs: [BilingualPairs.Pair]? {
+        SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual)
+    }
+
     /// Waiting for its translation (2A): streaming while the account translates, or settled in a
     /// translated turn before the server's `translation` event has come.
     private var awaiting: Bool {
@@ -452,7 +466,10 @@ struct AssistantBubbleView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
-                if bubble.isFinalized {
+                if bubble.isFinalized, let pairs {
+                    // Both languages, block by block (03-interleaved.png).
+                    InterleavedReplyView(pairs: pairs)
+                } else if bubble.isFinalized {
                     MarkdownView(source: SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,
                                                                     flipped: flipped && !bilingual),
                                  tail: tail)

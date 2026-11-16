@@ -153,7 +153,7 @@ final class MachineSetupWiringTests: XCTestCase {
         let page = try app("Views/MachineSetupCard.swift")
         let notice = try slice(page, from: "private var notice: String? {", to: "private func noticeLine(")
         try assertInOrder(notice, ["if offline {", "MachineSetup.isConnecting(runner) ? MachineSetupCopy.setupConnecting(machine: machine)",
-                                   ": MachineSetupCopy.setupOffline(machine: machine)", "guard !probes else { return nil }",
+                                   ": MachineSetupCopy.setupOffline(machine: machine)", "guard !probes || !MachineSetup.makesNewFolders(runner) else { return nil }",
                                    "MachineSetupCopy.setupUpdating(machine: machine)"],
                           "connecting before offline, and only a machine that is here is said to update itself")
         let loop = try slice(page, from: ".task(id: runnerID) {", to: ".onChange(of: runner, initial: true)")
@@ -161,25 +161,59 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertFalse(loop.contains(".seconds(5)"), "a fixed beat would hold a connecting machine's folder step back")
     }
 
-    /// A new folder's name is asked about where it would go, and the register directory's question, taken by
-    /// another, is asked again.
-    func testTheFolderQuestionsShareTheMachinesOneSlot() throws {
+    /// The folder step is one name in the machine's home: asked about where it would go, and picked on the answer.
+    func testTheFolderStepIsOneNameAskedAboutWhereItWouldGo() throws {
         let page = try app("Views/MachineSetupCard.swift")
-        let options = try slice(page, from: "private struct FolderOptions: View {", to: "private func row(")
-        try assertInOrder(options, ["case .new:", "case .answered(let probe)? = newAnswer",
-                                    "MachineSetup.newFolderPick(probe, name: name, reposRoot: runner.reposRoot ?? \"\", machine: machine)"],
-                          "a new folder is picked on the machine's answer")
-        XCTAssertTrue(options.contains("return MachineSetup.newFolderPath(reposRoot: runner.reposRoot ?? \"\", name: name)"))
-        try assertInOrder(options, ["attempt: online ? 1 + registerAttempt : 0)) {",
-                                    ".onChange(of: DirProbeRelay.asksAgain(registered, online: online, otherWaiting: waiting)) { _, again in",
-                                    "if again { registerAttempt += 1 }",
-                                    ".task(id: Question(path: newFolderQuestion, attempt: newAttempt)) {",
-                                    "await app.probeDir(runnerID: runner.id, path: asked, ask: true)"],
-                          "the register question asked again, and the name's own")
-        let line = try slice(page, from: "@ViewBuilder private var newFolderLine: some View {", to: "private var otherRow: some View {")
-        try assertInOrder(line, ["MachineSetupCopy.SETUP_NEW_FOLDER_INVALID", "MachineSetup.newFolderVerdict(probe, machine: machine)",
-                                 "noAnswer { newAttempt += 1 }", "checking"],
+        try assertInOrder(page, ["FolderName(runner: runner, disabled: offline || !probes || !MachineSetup.makesNewFolders(runner),"],
+                          "a machine that can't make a folder can't be typed into")
+        let step = try slice(page, from: "private struct FolderName: View {", to: "private var checking: some View {")
+        XCTAssertTrue(step.contains("private var root: String { MachineSetup.newFolderRoot(runner) }"))
+        try assertInOrder(step, ["case .answered(let probe)? = answer", "MachineSetup.isValidNewFolder(name), let found",
+                                 "MachineSetup.newFolderPick(found, name: name, root: root, machine: machine)"],
+                          "the folder is picked on the machine's answer")
+        XCTAssertTrue(step.contains("return MachineSetup.newFolderPath(root: root, name: name)"))
+        try assertInOrder(step, ["Text(MachineSetup.newFolderPath(root: root, name: \"\"))",
+                                 ".accessibilityLabel(MachineSetupCopy.SETUP_FOLDER)",
+                                 ".task(id: Question(path: question, attempt: attempt)) {",
+                                 "await app.probeDir(runnerID: runner.id, path: asked, ask: true)"],
+                          "the field after its fixed root, and the name's question")
+        let line = try slice(step, from: "@ViewBuilder private var line: some View {", to: "\n    }\n")
+        try assertInOrder(line, ["MachineSetupCopy.SETUP_FOLDER_HINT", "MachineSetupCopy.SETUP_NEW_FOLDER_INVALID",
+                                 "MachineSetup.newFolderVerdict(found, machine: machine)", "noAnswer { attempt += 1 }", "checking"],
                           "what the name says as it is checked")
+        for gone in ["SETUP_REGISTER_DIR", "setupOtherFolder", "FolderChoice", "registerDir"] {
+            XCTAssertFalse(page.contains(gone), "the folder step still has \(gone)")
+        }
+    }
+
+    /// Board 04 A: From GitHub is a row under the name, behind an "or" rule, locked only offline; pressing it swaps the
+    /// step to the repository picker, which has its own Use and the way back; which is open is kept with the page.
+    func testFromGithubIsARowUnderTheNameThatSwapsTheStepToThePicker() throws {
+        let page = try app("Views/MachineSetupCard.swift")
+        let open = try slice(page, from: "private var folderOpenStep: some View {", to: "private var engineName: String")
+        try assertInOrder(open, ["if let github, setup.githubOpen {",
+                                 "GithubStep(runner: runner, integration: github, disabled: offline,",
+                                 "onBack: { setup.githubOpen = false }",
+                                 "githubDisabled: offline,",
+                                 "onGithub: github == nil ? nil : { setup.githubOpen = true }"],
+                          "the picker once From GitHub is pressed, else the name with the row under it")
+        XCTAssertTrue(page.contains("private var github: GithubIntegration? { app.github?.available == true ? app.github : nil }"),
+                      "offered only where the deployment has a GitHub App")
+        let name = try slice(page, from: "private struct FolderName: View {", to: "private var checking: some View {")
+        try assertInOrder(name, ["Button(MachineSetupCopy.SETUP_USE_FOLDER)", "if let onGithub {", "MachineSetupCopy.SETUP_OR",
+                                 "Button(action: onGithub)", "MachineSetupCopy.SETUP_FROM_GITHUB", "SetupNewTag()",
+                                 "MachineSetupCopy.SETUP_GITHUB_META", ".disabled(githubDisabled)"],
+                          "the or rule, then the row, under Use This Folder")
+        let step = try slice(page, from: "private struct GithubStep: View {", to: "private struct FolderName: View {")
+        try assertInOrder(step, ["MachineSetupCopy.SETUP_FOLDER", "MachineSetupCopy.setupFolderHelp(",
+                                 "MachineSetupCopy.SETUP_FROM_GITHUB", "SetupNewTag()",
+                                 "GithubFolderOption(runner: runner, integration: integration, disabled: disabled,",
+                                 "if integration.connected && !integration.needsReconnect {",
+                                 "MachineSetupCopy.SETUP_USE_REPOSITORY",
+                                 "Button(MachineSetupCopy.SETUP_FOLDER_NAME_INSTEAD, action: onBack)"],
+                          "the picker, Use This Repository once connected, and the way back")
+        let model = try app("MachineSetupModel.swift")
+        XCTAssertTrue(model.contains("var githubOpen = false"), "kept with the page, so GitHub's sign-in comes back to it")
     }
 
     func testTheWaitingMessageGoesByItselfAndARefusalStaysOnIt() throws {

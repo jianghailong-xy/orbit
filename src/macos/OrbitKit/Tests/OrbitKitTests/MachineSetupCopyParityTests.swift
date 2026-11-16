@@ -16,8 +16,14 @@ final class MachineSetupCopyParityTests: XCTestCase {
 
     /// Sentences of pages these clients don't have: the web's approval page, and its register guide's
     /// Settings variant (these clients register from the machine's own card, which says `REGISTER_NEXT`).
+    /// The `…CREATE` lines are the web setup card's own (web 27a0dedbf, owner 2026-11-16): there the card
+    /// alone makes the workspace with a Create button, while these clients still make it by sending, and
+    /// keep `SETUP_LEAD`, `SETUP_FOOT` and `setupReady`; `setupReadyCreateClone` is that card's line for a repository
+    /// (board 04), where these clients keep `setupReadyClone`.
     private static let webOnly: Set<String> = ["ENROLL_NEXT_TITLE", "ENROLL_NEXT_BODY", "ENROLL_OPEN_MACHINE",
-                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty"]
+                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty",
+                                               "SETUP_LEAD_CREATE", "SETUP_FOOT_CREATE", "setupReadyCreate",
+                                               "setupReadyCreateClone", "SETUP_CREATE", "setupCreateFailed"]
 
     /// Sentences these clients say and the web doesn't, each checked on its own terms below.
     private static let thisClientsOwn: Set<String> = [
@@ -74,9 +80,8 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("SETUP_LEAD", MachineSetupCopy.SETUP_LEAD),
         ("SETUP_OPEN_MACHINE", MachineSetupCopy.SETUP_OPEN_MACHINE),
         ("SETUP_FOLDER", MachineSetupCopy.SETUP_FOLDER),
-        ("SETUP_REGISTER_DIR", MachineSetupCopy.SETUP_REGISTER_DIR),
-        ("SETUP_NEW_FOLDER", MachineSetupCopy.SETUP_NEW_FOLDER),
         ("SETUP_NEW_FOLDER_NAME", MachineSetupCopy.SETUP_NEW_FOLDER_NAME),
+        ("SETUP_FOLDER_HINT", MachineSetupCopy.SETUP_FOLDER_HINT),
         ("SETUP_NEW_FOLDER_META", MachineSetupCopy.SETUP_NEW_FOLDER_META),
         ("SETUP_NEW_FOLDER_DONE", MachineSetupCopy.SETUP_NEW_FOLDER_DONE),
         ("SETUP_NEW_FOLDER_INVALID", MachineSetupCopy.SETUP_NEW_FOLDER_INVALID),
@@ -105,6 +110,8 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("SETUP_FROM_GITHUB", MachineSetupCopy.SETUP_FROM_GITHUB),
         ("SETUP_NEW_TAG", MachineSetupCopy.SETUP_NEW_TAG),
         ("SETUP_GITHUB_META", MachineSetupCopy.SETUP_GITHUB_META),
+        ("SETUP_OR", MachineSetupCopy.SETUP_OR),
+        ("SETUP_FOLDER_NAME_INSTEAD", MachineSetupCopy.SETUP_FOLDER_NAME_INSTEAD),
         ("SETUP_CONNECT_GITHUB", MachineSetupCopy.SETUP_CONNECT_GITHUB),
         ("SETUP_CONNECT_GITHUB_META", MachineSetupCopy.SETUP_CONNECT_GITHUB_META),
         ("SETUP_RECONNECT_GITHUB", MachineSetupCopy.SETUP_RECONNECT_GITHUB),
@@ -138,9 +145,7 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("setupUpdating", MachineSetupCopy.setupUpdating(machine: "${machine}")),
         ("setupNeedsUpdate", MachineSetupCopy.setupNeedsUpdate(machine: "${machine}")),
         ("setupFolderHelp", MachineSetupCopy.setupFolderHelp(machine: "${machine}")),
-        ("setupNewFolderExists", MachineSetupCopy.setupNewFolderExists(machine: "${machine}")),
         ("setupNewFolderIsFile", MachineSetupCopy.setupNewFolderIsFile(machine: "${machine}")),
-        ("setupOtherFolder", MachineSetupCopy.setupOtherFolder(machine: "${machine}")),
         ("setupChecking", MachineSetupCopy.setupChecking(machine: "${machine}")),
         ("setupNoSuchDirectory", MachineSetupCopy.setupNoSuchDirectory(machine: "${machine}")),
         ("setupNotADirectory", MachineSetupCopy.setupNotADirectory(machine: "${machine}")),

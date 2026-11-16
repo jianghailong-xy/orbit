@@ -10,7 +10,8 @@ import { newWorkspaceOf, type PickedFolder } from '../lib/machineSetup';
 
 /**
  * From GitHub on a machine's setup card (docs/github-workspace-design.md §8, docs/mocks/github-workspace board 01
- * P1–P4), over the integration's routes and the directory probe relay as they answer.
+ * P1–P4, placed by board 04 A: a row under the folder's name that swaps the step to the picker), over the
+ * integration's routes and the directory probe relay as they answer.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -107,6 +108,9 @@ function Page({ runner, start, ready }: { runner: never; start: PickedFolder | n
       }}
       onEngine={vi.fn()}
       onUseApiKey={vi.fn()}
+      onCreate={vi.fn()}
+      creating={false}
+      createError={null}
     />
   );
 }
@@ -149,16 +153,15 @@ function said(element: Element | null | undefined): string {
   while (walk.nextNode()) pieces.push(walk.currentNode.textContent ?? '');
   return pieces.join(' ').replace(/\s+/g, ' ').trim();
 }
-const titles = () => [...host!.querySelectorAll('.msc-option .msc-option-title')].map((t) => said(t));
-const radio = (label: string) =>
-  [...host!.querySelectorAll<HTMLElement>('.msc-option')].find((option) => said(option).startsWith(label));
-const checked = () => said(host!.querySelector('.msc-option:has([data-checked]) .msc-option-title'));
+const githubRow = () => host!.querySelector<HTMLButtonElement>('.msc-github-row');
+/** The step on From GitHub: the picker, under its title. */
+const step = () => host!.querySelector<HTMLElement>('.msc-github');
 const button = (label: string) => [...host!.querySelectorAll<HTMLButtonElement>('button')].find((b) => said(b) === label);
 const press = async (element: HTMLElement) => {
   await act(async () => element.click());
   await settle();
 };
-const chooseGithub = async () => press(radio('From GitHub')!.querySelector<HTMLElement>('[role="radio"]')!);
+const chooseGithub = async () => press(githubRow()!);
 async function type(input: HTMLInputElement, value: string): Promise<void> {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
@@ -166,6 +169,8 @@ async function type(input: HTMLInputElement, value: string): Promise<void> {
   });
 }
 const repoRows = () => [...host!.querySelectorAll('.ghp-item')].map((row) => said(row));
+/** Main's step: one folder name in the machine's home. */
+const nameField = () => host!.querySelector<HTMLInputElement>('.msc-input input[aria-label="Folder"]')!;
 const folderField = () =>
   [...host!.querySelectorAll<HTMLInputElement>('.msc-input input')].find((input) => input.getAttribute('aria-label') === 'name')!;
 
@@ -212,18 +217,49 @@ describe('the option', () => {
   it('is not offered where the deployment has no GitHub App: the card is today’s', async () => {
     view = integration({ available: false, connected: false, login: null, installations: [], installUrl: null });
     await open();
-    expect(titles()).toEqual(['A new folder', 'Another folder on orbit@austin']);
+    expect(githubRow()).toBeNull();
+    expect(host!.querySelector('.msc-or')).toBeNull();
+    expect(nameField()).toBeTruthy();
   });
 
   it('nor where the integration can’t be read', async () => {
     view = null;
     await open();
-    expect(titles()).toEqual(['A new folder', 'Another folder on orbit@austin']);
+    expect(githubRow()).toBeNull();
   });
 
-  it('stands between A new folder and Another folder', async () => {
+  it('is a row under the folder’s name, behind an “or”, saying what it is', async () => {
     await open();
-    expect(titles()).toEqual(['A new folder', 'From GitHub NEW', 'Another folder on orbit@austin']);
+    expect(said(host!.querySelector('.msc-or'))).toBe('or');
+    expect(said(githubRow())).toBe(
+      'From GitHub NEW Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.',
+    );
+    // The name field comes first: the row follows the field and its button.
+    const order = [...host!.querySelectorAll('.msc-folder, .msc-github-row')].map((e) => e.className.split(' ')[0]);
+    expect(order).toEqual(['msc-folder', 'msc-github-row']);
+  });
+
+  it('swaps the step to the picker, and Type a folder name instead swaps it back', async () => {
+    await open();
+    await chooseGithub();
+    expect(step()).toBeTruthy();
+    expect(said(step()!.querySelector('.msc-github-title'))).toBe('From GitHub NEW');
+    expect(host!.querySelector('.msc-github-row')).toBeNull();
+    await press(button('Type a folder name instead')!);
+    expect(step()).toBeNull();
+    expect(nameField()).toBeTruthy();
+    expect(githubRow()).toBeTruthy();
+  });
+
+  it('is offline’s only lock: a machine that can’t make folders may still be asked to clone', async () => {
+    await open({ runner: machine({ capabilities: ['dir-probe/v1', 'clone-workdir/v1'] }) });
+    expect(nameField().disabled).toBe(true);
+    expect(githubRow()!.disabled).toBe(false);
+    await act(async () => root!.unmount());
+    root = null;
+    host!.remove();
+    await open({ runner: machine({ online: false, status: 'OFFLINE' }) });
+    expect(githubRow()!.disabled).toBe(true);
   });
 });
 
@@ -235,12 +271,13 @@ describe('P1: not connected', () => {
   it('says what it is and offers Connect GitHub', async () => {
     await open();
     await chooseGithub();
-    const option = radio('From GitHub')!;
+    const option = step()!;
     expect(said(option)).toContain(
       'Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.',
     );
     expect(said(option)).toContain('Connect GitHub Opens GitHub, then comes back here.');
-    expect(button('Use this repository')!.disabled).toBe(true);
+    // Nothing to pick until GitHub is connected, so no Use this repository yet.
+    expect(button('Use this repository')).toBeUndefined();
   });
 
   it('Connect leaves for GitHub, coming back to this page, and the card comes back on From GitHub', async () => {
@@ -254,15 +291,15 @@ describe('P1: not connected', () => {
     // GitHub sends the browser back: the same page, opened again.
     view = integration();
     await open();
-    expect(checked()).toBe('From GitHub NEW');
-    expect(said(radio('From GitHub'))).toContain('Signed in to GitHub as @octo-dev · 14 repositories');
+    expect(step()).toBeTruthy();
+    expect(said(step())).toContain('Signed in to GitHub as @octo-dev · 14 repositories');
   });
 
   it('a connection GitHub no longer takes asks to reconnect', async () => {
     view = integration({ needsReconnect: true });
     await open();
     await chooseGithub();
-    expect(said(radio('From GitHub'))).toContain('@octo-dev needs to sign in again.');
+    expect(said(step())).toContain('@octo-dev needs to sign in again.');
     expect(button('Reconnect GitHub')).toBeTruthy();
   });
 });
@@ -317,9 +354,9 @@ describe('P3: a repository picked', () => {
     await pickWeb();
     expect(said(host!.querySelector('.ghp-picked'))).toBe('orbit-labs/orbit-web main Change');
     expect(folderField().value).toBe('orbit-web');
-    expect(said(host!.querySelector('.msc-option:has([data-checked]) .msc-prefix'))).toBe(`${ROOT}/`);
+    expect(said(step()!.querySelector('.msc-prefix'))).toBe(`${ROOT}/`);
     expect(vi.mocked(askDirProbe).mock.calls.map(([, path]) => path)).toContain(`${ROOT}/orbit-web`);
-    expect(said(radio('From GitHub'))).toContain('Cloned before the session starts. Work lands back on GitHub. Other branch');
+    expect(said(step())).toContain('Cloned before the session starts. Work lands back on GitHub. Other branch');
   });
 
   it('Use this repository picks the clone, sent as newWorkspace.github', async () => {
@@ -342,7 +379,7 @@ describe('P3: a repository picked', () => {
     await pickWeb();
     await type(folderField(), 'orbit-runner');
     await wait(450);
-    expect(said(radio('From GitHub'))).toContain('This folder already exists on orbit@austin. Pick another name.');
+    expect(said(step())).toContain('This folder already exists on orbit@austin. Pick another name.');
     expect(button('Use this repository')!.disabled).toBe(true);
   });
 
@@ -389,10 +426,10 @@ describe('P4: picked, and ready', () => {
     );
   });
 
-  it('the ready sentence says the clone comes first', async () => {
+  it('the ready sentence says the clone comes before the first session', async () => {
     await open({ start: clone, ready: true });
     expect(said(host!.querySelector('.msc-foot'))).toBe(
-      'Ready. Send a task — Orbit clones orbit-labs/orbit-web into ~/orbit-repos/orbit-web and adds the workspace “orbit-web” as it starts.',
+      'Ready. Orbit adds the workspace “orbit-web” and clones orbit-labs/orbit-web into ~/orbit-repos/orbit-web before its first session starts.',
     );
   });
 });
@@ -401,13 +438,13 @@ describe('a machine that can’t clone yet', () => {
   it('says it updates itself first, and offers nothing to pick', async () => {
     await open({ runner: machine({ capabilities: ['dir-probe/v1', 'create-workdir/v1'] }) });
     await chooseGithub();
-    expect(said(radio('From GitHub'))).toContain('orbit@austin updates itself first: this version can’t clone yet.');
+    expect(said(step())).toContain('orbit@austin updates itself first: this version can’t clone yet.');
     expect(host!.querySelector('.ghp-search')).toBeNull();
   });
 
   it('one whose updater is off says it can’t', async () => {
     await open({ runner: machine({ capabilities: ['dir-probe/v1'], selfUpdate: { state: 'disabledByEnv' } }) });
     await chooseGithub();
-    expect(said(radio('From GitHub'))).toContain('orbit@austin can’t clone on this version, and it can’t update itself.');
+    expect(said(step())).toContain('orbit@austin can’t clone on this version, and it can’t update itself.');
   });
 });

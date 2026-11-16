@@ -60,7 +60,7 @@ struct GithubFolderOption: View {
 
     private var folderQuestion: String? {
         guard repo != nil, !disabled, MachineSetup.isValidNewFolder(name) else { return nil }
-        return MachineSetup.newFolderPath(reposRoot: reposRoot, name: name)
+        return MachineSetup.newFolderPath(root: reposRoot, name: name)
     }
 
     var body: some View {
@@ -285,7 +285,7 @@ struct GithubFolderOption: View {
             .padding(.top, 4)
         }
         HStack(spacing: 4) {
-            Text(MachineSetup.newFolderPath(reposRoot: reposRoot, name: ""))
+            Text(MachineSetup.newFolderPath(root: reposRoot, name: ""))
                 .font(.orbitMono)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

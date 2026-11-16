@@ -1,5 +1,9 @@
 /** Recovery travels on the existing fenced merge operation. Old clients keep reading message. */
 export const SESSION_MERGE_RECOVERY_V1 = 'session-merge-recovery-v1';
+/** The runner merges a session's branch whether or not a turn is running in its checkout: a merge reads only
+ *  the commit the branch is at when it starts and never touches the checkout. Without it, a merge waits for the
+ *  turn and a turn waits for the merge, as they always have. */
+export const SESSION_MERGE_BESIDE_TURN_V1 = 'session-merge-beside-turn-v1';
 /** `confirm-landed` is the owner's Done on an ALREADY_LANDED check (see mergeRecoveryConfirmable). The server
  *  records the session merged by itself and no runner is sent anything; clients that predate it never offer it. */
 export type MergeRecoveryAction = 'preview' | 'apply' | 'sync-local' | 'confirm-landed';

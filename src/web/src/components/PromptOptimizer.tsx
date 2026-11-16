@@ -86,7 +86,7 @@ export function usePromptOptimizer({
   resetKey: string | null;
 }) {
   const me = useQuery(meQuery());
-  const on = !!target && me.data?.promptOptimizerAvailable === true && me.data?.preferences?.promptOptimizer === true;
+  const on = !!target && me.data?.promptOptimizerAvailable === true && me.data?.preferences?.promptOptimizer !== false;
   const [state, setState] = useState<OptimizerState>({ kind: 'idle' });
   // The press now in flight; a cancel or a newer press makes its answer nobody's.
   const inFlight = useRef<AbortController | null>(null);
@@ -109,8 +109,20 @@ export function usePromptOptimizer({
   useEffect(() => cancel, [cancel]);
 
   const trimmed = text.trim();
+  // A send empties the box: the card (or the press still under way) was about the draft that just went.
+  const hadDraft = useRef(trimmed !== '');
+  useEffect(() => {
+    const had = hadDraft.current;
+    hadDraft.current = trimmed !== '';
+    if (!had || trimmed !== '') return;
+    cancel();
+    setState((s) => (s.kind === 'idle' ? s : { kind: 'idle' }));
+  }, [trimmed, cancel]);
   const busy = state.kind === 'busy';
-  const buttonShown = on && !disabled && (busy || (trimmed !== '' && !shellMode && !onlyCommand(trimmed)));
+  // The button keeps its slot whenever the optimizer is on, so the toolbar never shifts as the
+  // draft fills or empties: it is only disabled when there is nothing it can do.
+  const buttonShown = on && !disabled;
+  const buttonEnabled = buttonShown && (busy || (trimmed !== '' && !shellMode && !onlyCommand(trimmed)));
 
   const start = useCallback(() => {
     const t = targetRef.current;
@@ -183,13 +195,13 @@ export function usePromptOptimizer({
     [state, setText, restore, taRef],
   );
 
-  /** The composer box's keys, read before its own: the shortcut, ⌘Z after Use, and Esc on the card.
+  /** The composer box's keys, read before its own: the shortcut, ⌘Z after Use, Tab and Esc on the card.
    *  True when the key was the optimizer's. */
   const onKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>): boolean => {
     if (e.nativeEvent.isComposing) return false;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.shiftKey && !e.altKey && (e.code === 'KeyO' || e.key.toLowerCase() === 'o')) {
-      if (!buttonShown) return false;
+      if (!buttonEnabled) return false;
       e.preventDefault();
       press();
       return true;
@@ -201,6 +213,13 @@ export function usePromptOptimizer({
       }
       e.preventDefault();
       restore();
+      return true;
+    }
+    // Tab takes the card, as it takes a reply suggestion: the same key for "use what is offered".
+    // A menu open above has already had the key; on the card's own buttons Tab still moves focus.
+    if (e.key === 'Tab' && state.kind === 'card' && !mod && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      use(false);
       return true;
     }
     if (e.key === 'Escape' && (state.kind === 'card' || state.kind === 'failed')) {
@@ -218,6 +237,7 @@ export function usePromptOptimizer({
     state,
     busy,
     buttonShown,
+    buttonEnabled,
     press,
     onKeyDown,
     card:
@@ -323,8 +343,11 @@ function PromptOptimizerCard({
         </div>
       )}
       <div className="composer-optimized-actions">
-        <button type="button" className="composer-optimized-use" onClick={onUse}>
+        <button type="button" className="composer-optimized-use" aria-keyshortcuts="Tab" onClick={onUse}>
           Use
+          <kbd className="composer-optimized-key" aria-hidden="true">
+            Tab
+          </kbd>
         </button>
         <button type="button" className="composer-optimized-edit" onClick={onEditUse}>
           Edit, then use
@@ -332,7 +355,9 @@ function PromptOptimizerCard({
         <button type="button" className="composer-optimized-retry" onClick={onTryAgain}>
           Try again
         </button>
-        <span className="composer-optimized-hint">Esc dismisses · your draft is kept</span>
+        <span className="composer-optimized-hint">
+          <span className="composer-optimized-tab-hint">Tab uses it · </span>Esc dismisses · your draft is kept
+        </span>
       </div>
     </div>
   );

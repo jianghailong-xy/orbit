@@ -90,6 +90,14 @@ const STEPS = {
   ],
 } as const satisfies Record<string, Said>;
 
+/**
+ * An item the owner holds names the coordinator only while its card can ask it again (c2420ff05,
+ * `ASK_COORDINATOR_AGAIN`). Here it never can: the delivery card does not read the coordinator's
+ * conversation at all, and this spec's coordinator, where there is one, is not a conversation a
+ * message reaches. So the owner's sentence ends at its own step, and the coordinator's keeps the clause.
+ */
+const ownersStep = (sentence: string): string => sentence.replace(' or ask the coordinator to fix it.', '.');
+
 /** A full 40-hex object name, which is the only kind a job column and a receipt accept. */
 const sha = (nibble: string) => nibble.repeat(40);
 const UPSTREAM_TIP = sha('9');
@@ -287,8 +295,8 @@ test('the sentences about a merge into main name the project’s main branch, an
           assert.equal(item.assignee, 'OWNER', 'CONTROL: the project has no coordinator, so the item is the owner’s');
           assert.equal(item.title, said(upstream, failure.title));
           assert.deepEqual(await nextStep(w, item.id), {
-            listed: said(upstream, failure.step),
-            card: said(upstream, failure.step),
+            listed: ownersStep(said(upstream, failure.step)),
+            card: ownersStep(said(upstream, failure.step)),
           });
         });
     }
@@ -338,7 +346,7 @@ test('the sentences about a merge into main name the project’s main branch, an
           },
           select: { id: true },
         });
-        const expected = said(upstream, shape.step);
+        const expected = shape.assignee === 'OWNER' ? ownersStep(said(upstream, shape.step)) : said(upstream, shape.step);
         assert.deepEqual(await nextStep(w, item.id), { listed: expected, card: expected },
           `${shape.kind} with the ${shape.assignee.toLowerCase()}`);
       }

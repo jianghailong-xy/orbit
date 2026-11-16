@@ -40,7 +40,9 @@ import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * The setup card's From GitHub option (board 01 P1–P4, web `GithubFolderOption.tsx`): offered only where the deployment has the App,
+ * The setup card's From GitHub (board 01 P1–P4 in board 04 A's place, web `MachineSetupCard.tsx` + `GithubFolderOption.tsx`): a row
+ * under the folder's name behind an "or" rule, offered only where the deployment has the App, which swaps the step to the picker and
+ * back again with Type a folder name instead;
  * Connect until the account is connected, the repository list, a picked repository with its folder's verdict, and what Use This
  * Repository picks. Each state is drawn to a PNG.
  */
@@ -77,7 +79,7 @@ class GithubFolderOptionTest {
     }
 
     private fun card(github: FakeGithub, runner: JsonObject = cloningRunner(), state: MachineSetupState = MachineSetupState(),
-                     ready: Boolean = false) {
+                     ready: Boolean = false, online: Boolean = true) {
         val api = api()
         compose.setContent {
             OrbitTheme(darkTheme = false) {
@@ -86,7 +88,7 @@ class GithubFolderOptionTest {
                         var shown by androidx.compose.runtime.remember { mutableStateOf(state) }
                         Column(Modifier.verticalScroll(rememberScrollState()).padding(14.dp)) {
                             MachineSetupCard(
-                                runner = runner, online = true, state = shown, engine = "claude", credential = SetupCredential.SignedIn,
+                                runner = runner, online = online, state = shown, engine = "claude", credential = SetupCredential.SignedIn,
                                 ready = ready, otherEngines = emptyList(), keyToUse = null, managementApi = api,
                                 probeDir = { path, _ -> probe(path) },
                                 onPickFolder = { picks += it; shown = shown.pick(it) },
@@ -102,7 +104,7 @@ class GithubFolderOptionTest {
 
     private fun chooseFromGithub() {
         compose.ghAwait(MachineSetupCopy.SETUP_FROM_GITHUB)
-        compose.onNodeWithText(MachineSetupCopy.SETUP_FROM_GITHUB, useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("setup-github-row").performClick()
         compose.waitForIdle()
     }
 
@@ -110,9 +112,49 @@ class GithubFolderOptionTest {
 
     @Test fun notOfferedWhereTheDeploymentHasNoApp() {
         card(FakeGithub(GithubIntegration(available = false, connected = false)))
-        compose.ghAwait(MachineSetupCopy.SETUP_NEW_FOLDER)
+        compose.ghAwait(MachineSetupCopy.SETUP_FOLDER_HINT)
         compose.waitForIdle()
         compose.onAllNodesWithText(MachineSetupCopy.SETUP_FROM_GITHUB, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithText(MachineSetupCopy.SETUP_OR, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    /** Board 04 A: the name field stays the step; From GitHub is the row under it, and the picker goes back to the name. */
+    @Test fun theRowUnderTheNameSwapsTheStepToThePickerAndBack() {
+        card(FakeGithub(FakeGithub.connected()))
+        compose.ghAwait(MachineSetupCopy.SETUP_FROM_GITHUB)
+        compose.ghAwait(MachineSetupCopy.SETUP_FOLDER_HINT)
+        compose.onNodeWithText(MachineSetupCopy.SETUP_OR, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(MachineSetupCopy.SETUP_GITHUB_META, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText(MachineSetupCopy.SETUP_NEW_TAG, useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("setup-new-folder-name").assertExists()
+        compose.onNodeWithTag("setup-github-row").assertIsEnabled()
+        compose.ghShot("00-from-github-row")
+
+        chooseFromGithub()
+        compose.ghAwait(MachineSetupCopy.setupGithubAccount("ada", 14))
+        compose.onNodeWithTag("setup-new-folder-name").assertDoesNotExist()
+        compose.onNodeWithTag("setup-github-row").assertDoesNotExist()
+        compose.onNodeWithText(MachineSetupCopy.SETUP_FOLDER, useUnmergedTree = true).assertExists()
+
+        compose.onNodeWithTag("setup-folder-name-instead").performClick()
+        compose.waitForIdle()
+        compose.ghAwait(MachineSetupCopy.SETUP_FOLDER_HINT)
+        compose.onNodeWithTag("setup-new-folder-name").assertExists()
+        compose.onNodeWithTag("setup-github-row").assertExists()
+        compose.onAllNodesWithText(MachineSetupCopy.SETUP_GITHUB_SEARCH, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    /** The row is not the name field's lock: a machine too old to make folders may still clone. Only an offline one can't be asked. */
+    @Test fun theRowFollowsTheMachineBeingOnlineNotTheNameFieldsLock() {
+        card(FakeGithub(FakeGithub.connected()), runner = cloningRunner(makesFolders = false))
+        compose.ghAwait(MachineSetupCopy.SETUP_FROM_GITHUB)
+        compose.onNodeWithTag("setup-github-row").assertIsEnabled()
+    }
+
+    @Test fun anOfflineMachinesRowCannotBePressed() {
+        card(FakeGithub(FakeGithub.connected()), online = false)
+        compose.ghAwait(MachineSetupCopy.SETUP_FROM_GITHUB)
+        compose.onNodeWithTag("setup-github-row").assertIsNotEnabled()
     }
 
     @Test fun notConnectedOffersConnectAndStaysChosenAcrossTheTripToGithub() {
@@ -122,7 +164,9 @@ class GithubFolderOptionTest {
         compose.ghAwait(MachineSetupCopy.SETUP_GITHUB_META)
         compose.ghAwait(MachineSetupCopy.SETUP_CONNECT_GITHUB_META)
         compose.onNodeWithText(MachineSetupCopy.SETUP_NEW_TAG).assertExists()
-        useButton().assertIsNotEnabled()
+        // Nothing to use until the account is connected: the step offers Connect, and the way back.
+        useButton().assertDoesNotExist()
+        compose.onNodeWithTag("setup-folder-name-instead").assertExists()
         compose.ghShot("01-from-github-not-connected")
 
         compose.onNodeWithTag("setup-github-connect").performClick()
@@ -135,7 +179,9 @@ class GithubFolderOptionTest {
         compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         compose.ghAwait(MachineSetupCopy.setupGithubAccount("ada", 14))
-        compose.onNode(hasText(MachineSetupCopy.SETUP_FROM_GITHUB, substring = true) and isSelected(), useUnmergedTree = false).assertExists()
+        // Still on the picker it left from, not back on the folder's name.
+        compose.onNodeWithTag("setup-new-folder-name").assertDoesNotExist()
+        compose.onNodeWithTag("setup-folder-name-instead").assertExists()
     }
 
     @Test fun needsReconnectSaysWhoAndAFailedStartSaysWhy() {

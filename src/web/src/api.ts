@@ -10,6 +10,7 @@ import type {
   PromptOptimizationRequest,
   ReplyTranslationRetryResponse,
   SessionGuestPerson,
+  SessionGuestSuggestion,
   TranslationActionResponse,
   TurnTranslation,
   SubagentRunView,
@@ -1812,6 +1813,9 @@ export const getSessionGuests = (sessionId: string) =>
  *  `No Orbit account uses this email.` */
 export const inviteSessionGuest = (sessionId: string, email: string) =>
   api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests`, { method: 'POST', body: { email } });
+/** People the owner invited before, to any session, who can't yet reply in this one: newest first, up to 50. */
+export const getSessionGuestSuggestions = (sessionId: string) =>
+  api<{ people: SessionGuestSuggestion[] }>(`/sessions/${sessionId}/guests/suggestions`);
 export const removeSessionGuest = (sessionId: string, userId: string) =>
   api<{ guests: SessionGuestPerson[] }>(`/sessions/${sessionId}/guests/${userId}`, { method: 'DELETE' });
 
@@ -1842,8 +1846,21 @@ export const fetchGuestAttachmentObjectUrl = async (id: string, attachmentId: st
   const res = await authedFetch(`/api${guestPath(id)}/attachments/${encodeURIComponent(attachmentId)}`);
   return userFileUrl(await attachmentBlob(res, attachmentId));
 };
-/** A guest's message: text only, a turn of the owner's session (resumed when it has ended). */
-export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string }) =>
+/** A guest's image for their next message, through the guest door (multipart, as `uploadAttachment`): a PNG, JPEG,
+ *  WebP or GIF of at most 5MB, the owner composer's images. Returns the id `sendGuestTurn` names it by. */
+export const uploadGuestAttachment = async (id: string, file: File): Promise<{ id: string }> => {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authedFetch(`/api${guestPath(id)}/attachments`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    throw new ApiError(msg.message || res.statusText, res.status);
+  }
+  return (await res.json()) as { id: string };
+};
+/** A guest's message: words and the images they uploaded here, a turn of the owner's session (resumed when it has
+ *  ended). */
+export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string; attachmentIds?: string[] }) =>
   api<{ turnId: string; revived: boolean }>(`${guestPath(id)}/turns`, { method: 'POST', body });
 
 /** The public attachment route: no bearer, so a browser can be sent straight to it. */
@@ -2265,17 +2282,6 @@ export const getWorktreeFile = async (idOrPublicId: string, path: string, signal
   }
   return res.blob();
 };
-
-/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
- *  it wrote none. */
-export type RecapOutcome =
-  | { written: true; recapText: string; recapEventSeq: number }
-  | { written: false; reason: string };
-
-/** Rewrite this session's recap now, past the settle hooks' two-minute window (POST
- *  /sessions/:id/recap). Answers once the pass has finished, with what it did. */
-export const refreshSessionRecap = (idOrPublicId: string) =>
-  api<RecapOutcome>(`/sessions/${idOrPublicId}/recap`, { method: 'POST' });
 
 /** Enable per-session worktree isolation for a workspace whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline

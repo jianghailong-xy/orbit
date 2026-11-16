@@ -7,10 +7,14 @@ recommendation on 2026-11-15 ("As suggested").
 ## Decisions
 
 - **Composer button, preview first.** With the account switch on, the composer shows **✦ Optimize**
-  (board frame 2). The result is a card above the composer (frame 4). The input box changes only when
+  (board frame 2) as a 32px ✦ icon beside Send, named by its tooltip and accessible label. The owner
+  changed it from the board's labelled pill on 2026-11-16: that pill came and went with the draft and
+  moved every toolbar control to its left. The result is a card above the composer (frame 4). The input box changes only when
   the owner presses **Use** or **Edit, then use**. Nothing is sent until they press Send. Send never
   waits for the optimizer.
-- **Off by default.** The switch is `User.preferences.promptOptimizer`; absent means off. It lives in
+- **On by default** (the owner's decision of 2026-11-16; it shipped off by default). The switch is
+  `User.preferences.promptOptimizer`: absent means on, and turning it off writes `false`, the only
+  value that reads off — the same reading as Suggested replies. It lives in
   Settings › General › Composer, under Suggested replies. Without the server's `DEEPSEEK_API_KEY` it is
   drawn disabled with the notice from frame 1b.
 - **D1 A: context is what the server already holds.** One DeepSeek call per press, with no runner
@@ -33,7 +37,8 @@ recommendation on 2026-11-15 ("As suggested").
   is sent and the send is translated as usual. A translation keeps text that is already in the agent
   language unchanged.
 - **D3 A: the card above the composer.** Text added from context is tinted. Actions are Use, Edit then
-  use, Try again, and × / Esc (dismiss, draft kept). After Use, an "Undo" toast (and ⌘Z in the box)
+  use, Try again, and × / Esc (dismiss, draft kept). Tab in the composer box is Use on web and Mac (the
+  key that takes a reply suggestion; board docs/mocks/prompt-optimizer-use-key). After Use, an "Undo" toast (and ⌘Z in the box)
   restores the owner's draft. On the phone the card is a sheet over the composer with the same actions.
 
 ## Wire contract (`src/shared/src/prompt-optimizer.ts`)
@@ -79,5 +84,6 @@ recommendation on 2026-11-15 ("As suggested").
 ## Clients
 
 Web, iOS/macOS (OrbitKit) and Android draw board frames 1–6. Android follows iOS for anything the
-board leaves open. Each client keeps the button hidden when the box is empty, in shell mode, and for a
-draft that is only a `/command`. The web shortcut is ⌘⇧O / Ctrl⇧O.
+board leaves open. Each client keeps the button in its slot whenever the switch is on, and disabled when the box is
+empty, in shell mode, and for a draft that is only a `/command`; busy, a spinner takes the same slot, so
+the toolbar never shifts. The web shortcut is ⌘⇧O / Ctrl⇧O.

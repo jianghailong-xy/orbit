@@ -185,6 +185,211 @@ public enum BilingualEnglish {
     }
 }
 
+/// "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): an agent
+/// reply drawn block by block, each paragraph, list item, heading or quote in the owner's language with
+/// its original right under it. Line for line the rule of @orbit/shared `bilingualPairs` (and Android
+/// `Translation.bilingualPairs`), all three walked through `src/shared/src/bilingual-pairs.fixture.json`:
+///
+///  - Both texts split into blocks by lines: a fenced code block (``` or ~~~ opening and the same fence
+///    closing, at most 3 spaces in from the block's column; an unclosed fence is not one), a heading, a
+///    list item with the lines that continue it, a quote (consecutive `>` lines), a table (consecutive
+///    lines starting with `|`), a thematic break, and otherwise a paragraph.
+///  - `depth` is how many list items the block sits inside, by indentation.
+///  - Paragraphs, headings, items and quotes pair; code, tables, breaks and image-only paragraphs are
+///    `.other`: drawn once, from the translation, and dropped from the original.
+///  - The pairable sequences must match in count, kind and depth, or `pairs` is nil and the reply is
+///    drawn whole as before (frame 4). Nothing to pair is nil too.
+public enum BilingualPairs {
+    public enum Kind: String, Codable, Equatable, Sendable {
+        case paragraph, heading, item, quote, other
+    }
+
+    /// One block of the translation, in order: `text` without its indentation (an item's without its
+    /// `marker`, a quote's without its `>`s, a heading's whole line), and `original` the matching block
+    /// of the original in the same form — a heading's words alone. `.other` carries no original.
+    public struct Pair: Codable, Equatable, Sendable {
+        public let kind: Kind
+        public let depth: Int
+        public let marker: String?
+        public let text: String
+        public let original: String?
+
+        public init(kind: Kind, depth: Int, marker: String? = nil, text: String, original: String? = nil) {
+            self.kind = kind
+            self.depth = depth
+            self.marker = marker
+            self.text = text
+            self.original = original
+        }
+
+        /// An ordered item's number ("3." → 3); nil for a bullet.
+        public var number: Int? {
+            guard let marker, let first = marker.first, first.isASCII, first.isNumber else { return nil }
+            return Int(marker.dropLast())
+        }
+    }
+
+    private struct Block {
+        let kind: Kind
+        let depth: Int
+        let marker: String?
+        let body: String
+        let words: String
+    }
+
+    private static func re(_ pattern: String) -> NSRegularExpression {
+        // The patterns are literals below; one that does not compile is a programming error.
+        try! NSRegularExpression(pattern: pattern)
+    }
+
+    private static let fence = re("^ *(```|~~~)")
+    private static let heading = re("^ {0,3}(#{1,6})(?: +|$)(.*)$")
+    private static let item = re("^( *)([-*+]|[0-9]{1,9}[.)])( +|$)(.*)$")
+    private static let breakRule = re("^ {0,3}([-*_])(?: *\\1){2,} *$")
+    private static let quote = re("^ {0,3}>")
+    private static let table = re("^ *\\|")
+    private static let images = re("^(?:!\\[[^\\]]*\\]\\([^)]*\\)\\s*)+$")
+    private static let headingClose = re("(?:^| +)#+ *$")
+    private static let quoteMark = re("^ {0,3}> ?")
+
+    /// The groups of `pattern`'s first match in `s` ("" for a group that took no part), or nil.
+    private static func match(_ pattern: NSRegularExpression, _ s: String) -> [String]? {
+        let ns = s as NSString
+        guard let m = pattern.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        return (0..<m.numberOfRanges).map {
+            let r = m.range(at: $0)
+            return r.location == NSNotFound ? "" : ns.substring(with: r)
+        }
+    }
+
+    private static func test(_ pattern: NSRegularExpression, _ s: String) -> Bool { match(pattern, s) != nil }
+
+    private static func replace(_ pattern: NSRegularExpression, _ s: String, with template: String = "") -> String {
+        pattern.stringByReplacingMatches(in: s, range: NSRange(location: 0, length: (s as NSString).length),
+                                         withTemplate: template)
+    }
+
+    private static func indentOf(_ line: String) -> Int { line.prefix { $0 == " " }.count }
+
+    private static func dedent(_ line: String, _ n: Int) -> String { String(line.dropFirst(min(n, indentOf(line)))) }
+
+    private static func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private static func isBlank(_ line: String) -> Bool { trimmed(line).isEmpty }
+
+    private static func trimStart(_ s: String) -> Substring {
+        s.drop { $0.unicodeScalars.allSatisfy(CharacterSet.whitespacesAndNewlines.contains) }
+    }
+
+    private static func startsBlock(_ line: String) -> Bool {
+        test(fence, line) || test(heading, line) || test(breakRule, line) || test(item, line)
+            || test(quote, line) || test(table, line)
+    }
+
+    private static func blocks(_ text: String) -> [Block] {
+        let lines = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
+        var blocks: [Block] = []
+        // The content column of each open list item, innermost last.
+        var items: [Int] = []
+        var i = 0
+        while i < lines.count {
+            let line = lines[i]
+            if isBlank(line) { i += 1; continue }
+            let indent = indentOf(line)
+            while let last = items.last, indent < last { items.removeLast() }
+            let depth = items.count
+            func push(_ kind: Kind, _ body: String, _ words: String? = nil) {
+                blocks.append(Block(kind: kind, depth: depth, marker: nil, body: body, words: words ?? body))
+            }
+            // A fence opens at most 3 spaces in from the column its block sits at, and closes the same way.
+            let base = depth > 0 ? items[depth - 1] : 0
+            let rest = String(trimStart(line))
+            let opener: String? = indent - base <= 3 ? (rest.hasPrefix("```") ? "```" : rest.hasPrefix("~~~") ? "~~~" : nil) : nil
+            if let opener {
+                var close = i + 1
+                while close < lines.count,
+                      !(indentOf(lines[close]) - base <= 3 && trimStart(lines[close]).hasPrefix(opener)) {
+                    close += 1
+                }
+                if close < lines.count {
+                    push(.other, lines[i...close].map { dedent($0, indent) }.joined(separator: "\n"))
+                    i = close + 1
+                    continue
+                }
+            }
+            if let h = match(heading, line) {
+                push(.heading, trimmed(line), trimmed(replace(headingClose, h[2])))
+                i += 1
+                continue
+            }
+            if test(breakRule, line) {
+                push(.other, trimmed(line))
+                i += 1
+                continue
+            }
+            if let m = match(item, line) {
+                let spaces = m[3].count
+                let column = indent + m[2].count + (spaces >= 1 && spaces <= 4 ? spaces : 1)
+                var body = [m[4]]
+                i += 1
+                while i < lines.count, !isBlank(lines[i]), !startsBlock(lines[i]) {
+                    body.append(dedent(lines[i], column))
+                    i += 1
+                }
+                let joined = body.joined(separator: "\n")
+                blocks.append(Block(kind: .item, depth: depth, marker: m[2], body: joined, words: joined))
+                items.append(column)
+                continue
+            }
+            if test(quote, line) {
+                var body: [String] = []
+                while i < lines.count, test(quote, lines[i]) {
+                    body.append(replace(quoteMark, lines[i]))
+                    i += 1
+                }
+                push(.quote, body.joined(separator: "\n"))
+                continue
+            }
+            if test(table, line) {
+                var body: [String] = []
+                while i < lines.count, test(table, lines[i]) {
+                    body.append(dedent(lines[i], indent))
+                    i += 1
+                }
+                push(.other, body.joined(separator: "\n"))
+                continue
+            }
+            var body = [dedent(line, indent)]
+            i += 1
+            while i < lines.count, !isBlank(lines[i]), !startsBlock(lines[i]) {
+                body.append(dedent(lines[i], indent))
+                i += 1
+            }
+            let joined = body.joined(separator: "\n")
+            push(test(images, trimmed(joined)) ? .other : .paragraph, joined)
+        }
+        return blocks
+    }
+
+    /// The translation's blocks with the original's matched under them, or nil when the two do not
+    /// split into the same pairable blocks (draw the reply whole, as before; frame 4).
+    public static func pairs(_ translation: String, _ original: String) -> [Pair]? {
+        let ours = blocks(translation)
+        let theirs = blocks(original).filter { $0.kind != .other }
+        let pairable = ours.filter { $0.kind != .other }
+        guard !pairable.isEmpty, pairable.count == theirs.count else { return nil }
+        for (a, b) in zip(pairable, theirs) where a.kind != b.kind || a.depth != b.depth { return nil }
+        var k = 0
+        return ours.map { (b: Block) -> Pair in
+            guard b.kind != .other else { return Pair(kind: b.kind, depth: b.depth, marker: b.marker, text: b.body) }
+            defer { k += 1 }
+            return Pair(kind: b.kind, depth: b.depth, marker: b.marker, text: b.body, original: theirs[k].words)
+        }
+    }
+}
+
 /// Where one of the owner's messages is in translation (`TurnTranslationState`).
 public enum TurnTranslationState: String, Codable, Equatable, Sendable {
     /// Being translated; not delivered to the engine yet ("Translating…").
@@ -374,12 +579,21 @@ public enum SessionTranslation {
         return english.isEmpty ? nil : english
     }
 
-    /// The English under an agent reply with both languages on: the event's own text, once there is
-    /// a translation to sit above it. Nil draws no block (pending, failed, or off).
+    /// The English under an agent reply with both languages on, drawn whole under the divider: the
+    /// event's own text, once there is a translation to sit above it and only when the two do not pair
+    /// block by block (`replyPairs`). Nil draws no block (pending, failed, off, or interleaved).
     public static func replyEnglish(_ text: String, _ translation: ReplyTranslation?, bilingual: Bool) -> String? {
-        guard bilingual, translation?.text != nil else { return nil }
+        guard bilingual, let translated = translation?.text, BilingualPairs.pairs(translated, text) == nil else { return nil }
         let english = BilingualEnglish.prose(text)
         return english.isEmpty ? nil : english
+    }
+
+    /// An agent reply with both languages on, block by block (03-interleaved.png): the translation's
+    /// blocks with the original's under them. Nil draws the reply as before (pending, failed, off, or
+    /// the two not pairing, frame 4).
+    public static func replyPairs(_ text: String, _ translation: ReplyTranslation?, bilingual: Bool) -> [BilingualPairs.Pair]? {
+        guard bilingual, let translated = translation?.text else { return nil }
+        return BilingualPairs.pairs(translated, text)
     }
 
     /// Whether Settings draws the switch disabled with the notice (board frame 2). Only a `me` that

@@ -191,15 +191,26 @@ struct PromptOptimizationCard: View {
 
     private var actions: some View {
         HStack(spacing: 8) {
-            Button(PromptOptimizerCopy.use, action: use)
-                .buttonStyle(.borderedProminent)
+            Button(action: use) {
+                #if os(macOS)
+                // The key inside the button, as the web draws it; the box's Tab presses it.
+                HStack(spacing: 6) {
+                    Text(PromptOptimizerCopy.use)
+                    Text(PromptOptimizerCopy.useKey).font(.caption).opacity(0.75)
+                }
+                #else
+                Text(PromptOptimizerCopy.use)
+                #endif
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityLabel(PromptOptimizerCopy.use)
             Button(PromptOptimizerCopy.editThenUse, action: editThenUse)
                 .buttonStyle(.bordered)
             Button(PromptOptimizerCopy.tryAgain, action: tryAgain)
                 .buttonStyle(.borderless)
             Spacer(minLength: 4)
             #if os(macOS)
-            Text(PromptOptimizerCopy.escDismisses)
+            Text(PromptOptimizerCopy.keysHint)
                 .font(.caption).foregroundStyle(.tertiary)
                 .lineLimit(1)
             #endif

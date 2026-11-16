@@ -365,7 +365,7 @@ public struct RunnerAgentFix: Codable, Equatable, Sendable {
 }
 
 /// An agent at work on one warning (@orbit/shared `RunnerAgentFixing`): `kind` is a
-/// `RunnerAttentionFixKind`'s raw value; `engine` is nil for `cannotSelfUpdate`.
+/// `RunnerAttentionFixKind`'s raw value; `engine` is nil for `cannotSelfUpdate` and `engineUpdateFailed`.
 public struct RunnerAgentFixing: Codable, Equatable, Sendable {
     public let kind: String
     public let engine: String?
@@ -388,6 +388,8 @@ public enum RunnerAttentionFixKind: String, Codable, Equatable, Sendable {
     case engineNotUpdating
     case cannotSelfUpdate
     case installFailed
+    /// An Update Engines Now report with a failed line: the machine's, whichever engines failed.
+    case engineUpdateFailed
 }
 
 /// POST /runners/:id/attention/:kind/fix body: `engine` for `engineNotUpdating` and `installFailed`,
@@ -1298,6 +1300,11 @@ public struct TurnAccepted: Codable, Sendable {
     /// turn instead of queued behind it (`SteerDelivery`). Nil from a server that predates the
     /// kind, which is the pre-steer behaviour: queued.
     public let kind: String?
+    /// Where the server put this turn, decided under the Session row lock: `accepted` (the
+    /// executable head, delivered now), `queued` (waiting behind a turn in flight) or `steer`.
+    /// Authoritative over the send's own guess (`ComposerLogic.willQueue`), which reads a status
+    /// that can be stale — web parity: `turnPlacementOf`. Nil from a server that predates it.
+    public let placement: String?
     /// Where the message actually landed, when that is not the session it was sent to.
     ///
     /// A task has one run at a time, and the platform re-dispatches a failed one within seconds —
@@ -2222,20 +2229,4 @@ public struct SessionSearchResponse: Codable, Equatable, Sendable {
     /// The match count to display. An older server sends no total, and a page with nothing behind
     /// it is its own total either way.
     public var effectiveTotal: Int { total ?? hits.count }
-}
-
-/// What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it
-/// wrote none — the answer of `POST /sessions/:id/recap` (`APIClient.refreshRecap`).
-public struct RecapOutcome: Decodable, Equatable, Sendable {
-    public let written: Bool
-    /// The recap the pass wrote; nil when it wrote none.
-    public let recapText: String?
-    /// Why it wrote none (`RecapCard.notice(for:)`); nil when it wrote.
-    public let reason: String?
-
-    public init(written: Bool, recapText: String? = nil, reason: String? = nil) {
-        self.written = written
-        self.recapText = recapText
-        self.reason = reason
-    }
 }

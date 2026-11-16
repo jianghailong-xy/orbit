@@ -107,6 +107,9 @@ Optimize For 只在第 5 条（没人给档位）时抬档：Balance 至少 M，
 1. owner 在 SubAgents 设置里屏蔽的 Provider；
 2. `usableProviderScope` 之外的（共享 Provider 只给管理员）；
 3. 父会话所在 runner 上没装、没登录、区域不可用的引擎（`task-route-decision.ts` `engineState` 已有这些读法）；
+   区域不可用只去掉 `claude` 引擎上对 Anthropic 的凭据（`credentialIsAnthropicBound`：Claude 自己的登录、Claude 号池、
+   `anthropic` preset 或 anthropic.com 的 key），理由 `claude can’t use Anthropic on <runner>`；DeepSeek 等 key 和别的引擎照常
+   （docs/claude-region-check-contract.md §8）。远程 delegate 和 `provider_list --workspace` 走同一个判断；
 4. 额度 ≥ 90%（`ENGINE_QUOTA_LIMIT`）或账号暂停中的；
 5. **没有档位的模型**。自定义 endpoint 的模型要先在 Providers 页标档位才进池；点名（§4.1 第 1 条）不受影响。
 

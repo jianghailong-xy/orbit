@@ -81,9 +81,9 @@ internal class FakeGithub(
 internal fun ghJson(raw: String): JsonObject = Wire.json.parseToJsonElement(raw).jsonObject
 
 /** A machine that clones: it declares clone-workdir/v1 and has a Repos Folder. */
-internal fun cloningRunner(clones: Boolean = true) = ghJson("""{"id":"r1","name":"austin-mac","displayName":"orbit@austin","online":true,
+internal fun cloningRunner(clones: Boolean = true, makesFolders: Boolean = true) = ghJson("""{"id":"r1","name":"austin-mac","displayName":"orbit@austin","online":true,
     "lastHeartbeatAt":"2026-11-16T11:59:50Z","reposRoot":"/Users/austin/orbit-repos",
-    "capabilities":["dir-probe/v1","create-workdir/v1"${if (clones) ",\"clone-workdir/v1\"" else ""}]}""")
+    "capabilities":["dir-probe/v1"${if (makesFolders) ",\"create-workdir/v1\"" else ""}${if (clones) ",\"clone-workdir/v1\"" else ""}]}""")
 
 /** Where the screenshots go: outside the repository, for the reviewer (ORBIT_SHOTS_DIR), or the build's evidence folder. */
 internal val shotsDir: File by lazy {

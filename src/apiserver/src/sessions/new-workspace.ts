@@ -1,4 +1,5 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
+import { CREATE_WORKDIR_CAPABILITY, newFolderRoot } from '@orbit/shared';
 
 /**
  * The workspace POST /sessions makes with a session, read from the request (docs/first-workspace-contract.md §3): the
@@ -97,7 +98,7 @@ export function readNewWorkspace(
     }
     return { runnerId, workDir: dir };
   }
-  if (typeof newFolder !== 'string' || !NEW_FOLDER.test(newFolder) || newFolder === '.' || newFolder === '..') {
+  if (!isNewFolderName(newFolder)) {
     throw new BadRequestException(
       'newWorkspace.newFolder must be one folder name of 1 to 64 letters, digits, ".", "_" or "-", other than "." and ".."',
     );
@@ -105,29 +106,57 @@ export function readNewWorkspace(
   return { runnerId, newFolder };
 }
 
-/** `newWorkspace.github` held to §5.3's 400s: a repository id, and a ref and a folder each by its rule when given. */
-function readGithub(value: unknown): NewWorkspaceGithubAsk {
+/** `github` held to §5.3's 400s: a repository id, and a ref and a folder each by its rule when given. `field` is where
+ *  the body carried it, for the refusal to name: POST /sessions `newWorkspace.github`, POST /workspaces `github`. */
+export function readGithub(value: unknown, field = 'newWorkspace.github'): NewWorkspaceGithubAsk {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new BadRequestException('newWorkspace.github must be { repoId, ref?, folder? }');
+    throw new BadRequestException(`${field} must be { repoId, ref?, folder? }`);
   }
   const { repoId, ref, folder, ...rest } = value as Record<string, unknown>;
   if (Object.keys(rest).length > 0) {
-    throw new BadRequestException(`newWorkspace.github takes repoId, ref and folder, not ${Object.keys(rest).join(', ')}`);
+    throw new BadRequestException(`${field} takes repoId, ref and folder, not ${Object.keys(rest).join(', ')}`);
   }
   const id = typeof repoId === 'number' && Number.isSafeInteger(repoId) ? String(repoId) : repoId;
   if (typeof id !== 'string' || !GITHUB_REPO_ID.test(id)) {
-    throw new BadRequestException('newWorkspace.github.repoId must be the GitHub repository id, a positive whole number');
+    throw new BadRequestException(`${field}.repoId must be the GitHub repository id, a positive whole number`);
   }
   if (ref !== undefined && ref !== null && (typeof ref !== 'string' || !isCloneRef(ref))) {
-    throw new BadRequestException('newWorkspace.github.ref must be a branch or tag name');
+    throw new BadRequestException(`${field}.ref must be a branch or tag name`);
   }
   if (folder !== undefined && folder !== null
     && (typeof folder !== 'string' || !NEW_FOLDER.test(folder) || folder === '.' || folder === '..')) {
     throw new BadRequestException(
-      'newWorkspace.github.folder must be one folder name of 1 to 64 letters, digits, ".", "_" or "-", other than "." and ".."',
+      `${field}.folder must be one folder name of 1 to 64 letters, digits, ".", "_" or "-", other than "." and ".."`,
     );
   }
   return { repoId: id, ref: typeof ref === 'string' ? ref : null, folder: typeof folder === 'string' ? folder : null };
+}
+
+/** One folder name the runner makes under its reposRoot: §3.1's rule, for a body that names one outside `newWorkspace`. */
+export function isNewFolderName(value: unknown): value is string {
+  return typeof value === 'string' && NEW_FOLDER.test(value) && value !== '.' && value !== '..';
+}
+
+/**
+ * Where a new folder goes on this runner: `<home>/<folder>` on one that declares create-workdir/v2 (home being the directory
+ * its reposRoot sits in), `<reposRoot>/<folder>` on an older one (@orbit/shared newFolderRoot), or the 409 when the runner cannot make one — too old
+ * to declare `create-workdir/v1`, or without a reported reposRoot. Shared by POST /sessions and POST /workspaces.
+ */
+export function newFolderWorkDirOn(
+  runner: { reposRoot: string | null; capabilities: readonly string[]; capabilitiesReportedAt: Date | null },
+  folder: string,
+): string {
+  const reposRoot = runner.reposRoot?.trim();
+  const makesFolders = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CREATE_WORKDIR_CAPABILITY);
+  if (!makesFolders || !reposRoot) {
+    throw new ConflictException({
+      code: 'NEW_FOLDER_UNSUPPORTED',
+      message: makesFolders
+        ? 'This runner has not reported its Repos Folder, so it cannot make a new folder. Choose an existing folder.'
+        : 'This runner is too old to make a new folder — update it, or choose an existing folder.',
+    });
+  }
+  return newFolderWorkDir(newFolderRoot(reposRoot, runner.capabilities), folder);
 }
 
 /** A workspace's name from its folder: the path's last segment, trailing separators aside; the path itself for `/`. */

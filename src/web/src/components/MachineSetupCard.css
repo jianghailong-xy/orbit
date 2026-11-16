@@ -112,43 +112,16 @@
   line-height: 19px;
 }
 
-.msc .msc-options {
+.msc-folder {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+  align-items: flex-start;
+  gap: 4px;
   margin-top: 10px;
-  font-size: 13px;
-  line-height: normal;
 }
 
-.msc .msc-option {
-  display: flex;
+.msc-folder .msc-input {
   width: 100%;
-  box-sizing: border-box;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.msc .msc-option:has([data-checked]) {
-  border-color: var(--brand-border);
-  background: var(--brand-tint);
-}
-
-.msc .msc-option .orbit-choice-label {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
-
-.msc-option-title {
-  font-weight: 500;
 }
 
 .msc-path {
@@ -252,34 +225,6 @@
    `.workspace-scroll-wrap > .workspace-sessions` padding), where a Withdraw under it would read as dimmed. */
 .msc-revealed {
   scroll-margin-bottom: 24px;
-}
-
-/* The first message, held until the card is done: the bubble it will be, with its state under it. Its
-   copy and time row is the sent message's, so it has no place here. */
-.msc-held {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  margin-top: 14px;
-}
-
-.msc-held .chat-user-wrap {
-  margin: 0 0 0 auto;
-}
-
-.msc-held .chat-user-meta {
-  display: none;
-}
-
-.msc-held-state {
-  margin-top: 4px;
-  color: var(--text-3);
-  font-size: 12px;
-  text-align: right;
-}
-
-.msc-held-error {
-  color: var(--error);
 }
 
 /* The conversation's first line, in the small centred type of the app's own notes. */
@@ -519,4 +464,83 @@ a.msc-change:hover {
 .ghp-foot a {
   color: var(--brand);
   text-decoration: none;
+}
+
+/* Create workspace: the card's one way out, under its foot (owner 2026-11-16). */
+.msc-create {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.msc-create-error {
+  margin-top: 8px;
+  color: var(--error);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+/* From GitHub under the folder's name (docs/mocks/github-workspace, board 04 A): an "or" rule, then a row that swaps the
+   step to the repository picker. */
+.msc-or {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 520px;
+  margin-top: 14px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.msc-or::before,
+.msc-or::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.msc-github-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msc-github-row:hover:enabled,
+.msc-github-row:focus-visible {
+  background: var(--bg-hover);
+}
+
+.msc-github-row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.msc-github-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.msc-github-mark {
+  margin-top: 3px;
+  font-size: 16px;
+}
+
+.msc-github-title {
+  font-weight: 600;
+}
+
+.msc-back {
+  margin-top: 6px;
 }

@@ -741,8 +741,8 @@ private struct SessionSettingsPage: View {
     @State private var recaps = true
     /// Settings › Translation: the account's switch. Absent on the server means off.
     @State private var translation = false
-    /// Settings › Prompt optimizer: the account's switch. Absent on the server means off.
-    @State private var promptOptimizer = false
+    /// Settings › Prompt optimizer: the account's switch. Absent on the server means on.
+    @State private var promptOptimizer = true
     /// "Show both languages" (02-bilingual.png, mark A). Absent on the server means off.
     @State private var bilingual = false
     @State private var seeded = false
@@ -793,7 +793,9 @@ private struct SessionSettingsPage: View {
             Task { await model.savePreferences(UpdatePreferencesRequest(translationEnabled: value)) }
         }
         .onChange(of: promptOptimizer) { _, value in
-            guard (model.user?.preferences?.promptOptimizer ?? false) != value else { return }
+            // A server without a key draws it off; that is not the owner turning it off.
+            guard !PromptOptimizer.unavailable(model.user),
+                  PromptOptimizer.switchedOn(model.user?.preferences) != value else { return }
             Task { await model.savePreferences(UpdatePreferencesRequest(promptOptimizer: value)) }
         }
         .onChange(of: bilingual) { _, value in
@@ -890,7 +892,7 @@ private struct SessionSettingsPage: View {
         promptSuggestions = p?.suggestedReplies ?? true
         recaps = p?.showRecaps ?? true
         translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
-        promptOptimizer = !PromptOptimizer.unavailable(model.user) && p?.promptOptimizer == true
+        promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)
         bilingual = p?.translationBilingual == true
     }
 }

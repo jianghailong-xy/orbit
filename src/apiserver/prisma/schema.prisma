@@ -1062,6 +1062,9 @@ model Runner {
   codexAccountRemoveAccount String?   @map("codex_account_remove_account")
   codexAccountRemoveStatus  String?   @map("codex_account_remove_status")
   codexAccountRemoveMessage String?   @map("codex_account_remove_message")
+  // With a removal refused because the account is in use: the sessions the runner named as running in
+  // it, which the page lists by title (migration 0910). Empty otherwise.
+  codexAccountRemoveSessions String[] @default([]) @map("codex_account_remove_sessions") @db.Uuid
   // When the current removal was asked for: the identity every report names, and the deadline an
   // abandoned one is swept by.
   codexAccountRemoveAt      DateTime? @map("codex_account_remove_at")
@@ -3367,6 +3370,10 @@ model Attachment {
   /// counts, duration and failed and skipped names. Metadata, so it outlives the bytes when they
   /// expire (§2.8). NULL on every other row.
   testReportSummary Json?   @map("test_report_summary")
+  /// The session guest who uploaded this image through the guest door (0880, docs/session-guests-design.md §5): a
+  /// guest's turn may name only rows carrying its own id here. NULL on every other row. No relation, as
+  /// session_guest's owner_id has none.
+  uploadedByGuestId String? @map("uploaded_by_guest_id") @db.Uuid
   createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([ownerId])

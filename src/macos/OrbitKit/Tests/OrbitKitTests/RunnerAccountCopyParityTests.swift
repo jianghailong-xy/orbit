@@ -77,6 +77,11 @@ final class RunnerAccountCopyParityTests: XCTestCase {
 
     private static let constants: [(name: String, value: String)] = [
         ("RUNNER_DEFAULT_USE_AGAIN", RunnerAccountCopy.RUNNER_DEFAULT_USE_AGAIN),
+        ("RUNNER_ACCOUNT_IN_USE_OPEN", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_OPEN),
+        ("RUNNER_ACCOUNT_IN_USE_RUNNING", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_RUNNING),
+        ("RUNNER_ACCOUNT_IN_USE_WAITING", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_WAITING),
+        ("RUNNER_ACCOUNT_IN_USE_UNTITLED", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_UNTITLED),
+        ("RUNNER_ACCOUNT_REMOVE_DETAIL", RunnerAccountCopy.RUNNER_ACCOUNT_REMOVE_DETAIL),
     ]
 
     /// This end's templates, each handed the web's own interpolations as its values.
@@ -88,6 +93,10 @@ final class RunnerAccountCopyParityTests: XCTestCase {
                                                                                           name: "${name}")),
         ("runnerDefaultRemovedLine", RunnerAccountCopy.runnerDefaultRemovedLine(name: "${name}", dir: "${dir}")),
         ("runnerDefaultUseAgainFailed", RunnerAccountCopy.runnerDefaultUseAgainFailed(name: "${name}")),
+        ("runnerAccountInUseOne", RunnerAccountCopy.runnerAccountInUseOne(engine: "${engine}")),
+        // A count no sentence says otherwise, put back as the web's `${count}`.
+        ("runnerAccountInUseMany", RunnerAccountCopy.runnerAccountInUseMany(engine: "${engine}", count: 90_001)
+            .replacingOccurrences(of: "90001", with: "${count}")),
     ]
 
     /// The web's declarations this end has nowhere to say, and why.

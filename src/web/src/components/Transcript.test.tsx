@@ -1733,10 +1733,14 @@ describe('injected context in a user bubble', () => {
     expect(html).not.toContain('Orbit attached');
   });
 
-  it('does not offer to copy a message whose only text was injected', () => {
+  // Owner rule 2026-11-16: a turn whose only text was injected is nobody's message — the From Orbit line in the
+  // agent's stream (OrbitEventLine), naming the block, never the reader's bubble.
+  it('draws a message whose only text was injected as the From Orbit line, with nothing to copy', () => {
     const html = renderToStaticMarkup(<Transcript events={[userEvent(appended, appended)]} />);
 
-    expect(html).toContain('Orbit attached');
+    expect(html).toContain('From Orbit');
+    expect(html).toContain('list conditions');
+    expect(html).not.toContain('chat-user');
     expect(html).not.toContain('aria-label="Copy message"');
   });
 });

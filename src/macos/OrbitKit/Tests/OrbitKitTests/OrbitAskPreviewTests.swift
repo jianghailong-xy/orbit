@@ -575,6 +575,19 @@ final class OrbitAskPreviewTests: XCTestCase {
         }
     }
 
+    func testCreateAndStartLeadsUnlessTheTaskWasFiledHeld() {
+        XCTAssertTrue(Approvals.createAndStartLeads(toolName: "orbit_task_create", input: forecast("needsManualStart")))
+        // A hold the agent was asked for: offered, but Create it stays the filled answer.
+        let held = json("""
+            {"title":"Write the 2.5 release notes","completionCriterion":"EXECUTABLE","acceptsStartAfterCreate":true,
+             "autoRunWhenReady":false,"preview":{"taskCount":1,"needsManualStart":1,"lists":[]}}
+            """)
+        XCTAssertTrue(Approvals.offersCreateAndStart(toolName: "orbit_task_create", input: held))
+        XCTAssertFalse(Approvals.createAndStartLeads(toolName: "orbit_task_create", input: held))
+        // Not offered, so it cannot lead.
+        XCTAssertFalse(Approvals.createAndStartLeads(toolName: "orbit_task_create", input: forecast("startingNow")))
+    }
+
     func testCreateAndStartSendsTheStartAndCreateItSendsNoStartKeyAtAll() throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
@@ -598,32 +611,38 @@ final class OrbitAskPreviewTests: XCTestCase {
         return String(text[lower.lowerBound..<upper.lowerBound])
     }
 
-    /// The card draws Create and start right after Create it, only when the shared rule offers it,
-    /// and the press reaches the console as the choice that sends Create and start's own body. A
-    /// source scan, for the reason the blocker card's is one: SwiftUI does not exist here.
-    func testTheCardOffersCreateAndStartAfterCreateItAndThePressSendsIt() throws {
+    /// The card leads with Create and start where the shared rule says so, Create it bordered beside
+    /// it; on a held task Create it leads and Create and start follows where offered. The press reaches
+    /// the console as the choice that sends Create and start's own body. A source scan, for the reason
+    /// the blocker card's is one: SwiftUI does not exist here.
+    func testTheCardLeadsWithCreateAndStartAndThePressSendsIt() throws {
         let card = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift")
 
         let actions = try section(card, from: "private var actions: some View {",
                                   to: "@ViewBuilder private var details: some View")
-        let order = ["allowButton",
+        let order = ["if createAndStartLeads {",
+                     "createAndStartButton(prominent: true)",
+                     "allowButton(prominent: false)",
+                     "} else {",
+                     "allowButton(prominent: true)",
                      "if Approvals.offersCreateAndStart(toolName: approval.toolName ?? \"\", input: approval.input) {",
-                     "createAndStartButton",
+                     "createAndStartButton(prominent: false)",
                      "denyButton"].map { actions.range(of: $0)?.lowerBound }
         XCTAssertFalse(order.contains(nil), "the card's actions lost a part: \(actions)")
         XCTAssertEqual(order.compactMap { $0 }, order.compactMap { $0 }.sorted(),
-                       "Create and start sits right after Create it, offered by the shared rule")
+                       "Create and start leads where the rule says so, and follows Create it otherwise")
+        XCTAssertTrue(card.contains("Approvals.createAndStartLeads(toolName: approval.toolName ?? \"\", input: approval.input)"))
 
-        let button = try section(card, from: "private var createAndStartButton: some View {",
+        let button = try section(card, from: "private func createAndStartButton(prominent: Bool) -> some View {",
                                  to: "private func rememberButton(")
         XCTAssertTrue(button.contains("decide(console, approval, .allow, startAfterCreate: true)"), button)
         XCTAssertTrue(button.contains("Text(Approvals.createAndStartAction)"), button)
-        XCTAssertTrue(button.contains(".buttonStyle(.bordered)") && !button.contains(".borderedProminent"),
-                      "a secondary yes, beside the filled one")
-        // Create it keeps its press, its words and its fill.
-        let allow = try section(card, from: "private var allowButton: some View {", to: "private var allowLabel")
-        XCTAssertTrue(allow.contains("decide(console, approval, .allow) }") && allow.contains(".borderedProminent"),
-                      allow)
+        let fill = "if prominent { button.buttonStyle(.borderedProminent) } else { button.buttonStyle(.bordered) }"
+        XCTAssertTrue(button.contains(fill), "filled only where it leads")
+        // Create it keeps its press and its words; its fill follows whether it leads.
+        let allow = try section(card, from: "private func allowButton(prominent: Bool) -> some View {",
+                                to: "private var allowLabel")
+        XCTAssertTrue(allow.contains("decide(console, approval, .allow) }") && allow.contains(fill), allow)
         XCTAssertTrue(card.contains("if create != nil { return \"Create it\" }"))
         let press = try section(card, from: "private func decide(_ console: ConsoleModel,",
                                 to: "private func nonEmpty(")

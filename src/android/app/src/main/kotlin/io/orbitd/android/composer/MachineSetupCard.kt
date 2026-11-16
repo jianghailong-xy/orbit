@@ -20,7 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -84,12 +84,13 @@ internal fun MachineSetupCard(
     val machine = RunnerPage.displayName(runner)
     val offline = !online
     val probes = MachineSetup.answersDirProbe(runner)
+    val makesNewFolders = MachineSetup.makesNewFolders(runner)
     val engineName = ProviderEngines.cliName(engine)
 
     val notice = when {
         // Never heard from is a machine still coming up, not one gone away, nor one too old to check folders.
         offline -> if (MachineSetup.isConnecting(runner)) MachineSetupCopy.setupConnecting(machine) else MachineSetupCopy.setupOffline(machine)
-        !probes -> if (MachineSetup.updatesItself(runner)) MachineSetupCopy.setupUpdating(machine)
+        !(probes && makesNewFolders) -> if (MachineSetup.updatesItself(runner)) MachineSetupCopy.setupUpdating(machine)
             else MachineSetupCopy.setupNeedsUpdate(machine)
         else -> null
     }
@@ -144,7 +145,7 @@ internal fun MachineSetupCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(notice, style = MaterialTheme.typography.bodySmall, color = Ink.amber)
-                    if (!offline && !probes && !MachineSetup.updatesItself(runner)) {
+                    if (!offline && !(probes && makesNewFolders) && !MachineSetup.updatesItself(runner)) {
                         Text(
                             MachineSetupCopy.SETUP_OPEN_MACHINE,
                             style = MaterialTheme.typography.labelMedium,
@@ -191,10 +192,10 @@ internal fun MachineSetupCard(
                         )
                     }
                 } else {
-                    FolderOptionsSection(
+                    FolderStep(
                         runner = runner,
                         online = online,
-                        disabled = offline || !probes,
+                        disabled = offline || !probes || !makesNewFolders,
                         probeDir = probeDir,
                         onPick = onPickFolder,
                         github = githubSource,
@@ -388,8 +389,13 @@ private fun OtherEngineButtons(otherEngines: List<String>, offline: Boolean, onU
     }
 }
 
+/**
+ * Step one before it has an answer: the folder's name, or, where the deployment has Orbit's GitHub App, a repository cloned from GitHub
+ * (docs/mocks/github-workspace board 04 A). The name is the step; From GitHub is a row under it that swaps the step to the repository
+ * picker. A sign-in to GitHub goes through the browser, and the card comes back on the picker (board 01, note 2).
+ */
 @Composable
-private fun FolderOptionsSection(
+private fun FolderStep(
     runner: JsonObject,
     online: Boolean,
     disabled: Boolean,
@@ -399,11 +405,8 @@ private fun FolderOptionsSection(
     onOpenGithubSettings: () -> Unit,
 ) {
     val runnerId = runner.text("id").orEmpty()
-    val machine = RunnerPage.displayName(runner)
-    val offersNewFolder = MachineSetup.makesNewFolders(runner)
-    // Kept across the page being made again: a GitHub sign-in goes through the browser, and From GitHub is still the choice after it
-    // (board 01, note 2).
-    var touched by rememberSaveable(runnerId) { mutableStateOf<FolderChoice?>(null) }
+    // Kept across the page being made again, which is where a sign-in in the browser comes back to.
+    var githubOpen by rememberSaveable(runnerId) { mutableStateOf(false) }
     // From GitHub (docs/github-workspace-design.md §8): offered only where the deployment has a GitHub App. Read again each time the app
     // comes back to the front, which is where a sign-in in the browser ends; the last answer stands while it is read.
     var integration by remember(runnerId) { mutableStateOf<GithubIntegration?>(null) }
@@ -411,90 +414,151 @@ private fun FolderOptionsSection(
     LaunchedEffect(runnerId, resumes) {
         integration = try { github.integration() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { integration }
     }
-    val offersGithub = integration?.available == true
-    var githubCandidate by remember(runnerId) { mutableStateOf<PickedFolder?>(null) }
-    var newName by remember(runnerId) { mutableStateOf("") }
+    val current = integration?.takeIf { it.available }
+    if (current != null && githubOpen) {
+        GithubStep(runner, current, github, disabled = !online, probeDir, onPick, onOpenGithubSettings, onBack = { githubOpen = false })
+    } else {
+        FolderNameSection(runner, disabled, probeDir, onPick)
+        if (current != null) GithubRow(enabled = online) { githubOpen = true }
+    }
+}
+
+/** Board 04 A: an "or" rule, then From GitHub with its NEW tag and what it does. Not the name field's lock: a machine too old to make
+ *  folders may clone, and the picker says when it can't. */
+@Composable
+private fun GithubRow(enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        HorizontalDivider(Modifier.weight(1f))
+        MetaText(MachineSetupCopy.SETUP_OR)
+        HorizontalDivider(Modifier.weight(1f))
+    }
+    Row(
+        Modifier
+            .padding(top = 8.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+            .alpha(if (enabled) 1f else 0.6f)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .testTag("setup-github-row"),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(painterResource(R.drawable.ic_github), null, Modifier.padding(top = 2.dp).size(16.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            GithubTitle()
+            MetaText(MachineSetupCopy.SETUP_GITHUB_META)
+        }
+    }
+}
+
+/** From GitHub and its NEW tag, as the row and the picker's step both say it. */
+@Composable
+private fun GithubTitle(mark: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (mark) Icon(painterResource(R.drawable.ic_github), null, Modifier.size(15.dp))
+        Text(MachineSetupCopy.SETUP_FROM_GITHUB, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            MachineSetupCopy.SETUP_NEW_TAG,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                .padding(horizontal = 5.dp, vertical = 1.dp),
+        )
+    }
+}
+
+/** Step one on From GitHub (board 04 A, P3's picker): the repository and the folder it is cloned into, Use This Repository once the
+ *  account is connected, and the way back to a folder's name. */
+@Composable
+private fun GithubStep(
+    runner: JsonObject,
+    integration: GithubIntegration,
+    github: GithubSource,
+    disabled: Boolean,
+    probeDir: suspend (path: String, ask: Boolean) -> DirProbeRelay.Outcome,
+    onPick: (PickedFolder) -> Unit,
+    onOpenSettings: () -> Unit,
+    onBack: () -> Unit,
+) {
+    var candidate by remember(runner.text("id")) { mutableStateOf<PickedFolder?>(null) }
+    Text(MachineSetupCopy.SETUP_FOLDER, fontWeight = FontWeight.SemiBold)
+    Text(
+        MachineSetupCopy.setupFolderHelp(RunnerPage.displayName(runner)),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Box(Modifier.padding(top = 8.dp)) { GithubTitle(mark = true) }
+    GithubFolderOption(
+        runner = runner,
+        integration = integration,
+        github = github,
+        disabled = disabled,
+        probeDir = probeDir,
+        onCandidate = { candidate = it },
+        onEnter = { candidate?.let(onPick) },
+        onOpenSettings = onOpenSettings,
+    )
+    if (integration.connected && !integration.needsReconnect) {
+        Button(
+            onClick = { candidate?.let(onPick) },
+            enabled = candidate != null && !disabled,
+            shape = CircleShape,
+            modifier = Modifier.padding(top = 9.dp),
+        ) {
+            Text(MachineSetupCopy.SETUP_USE_REPOSITORY)
+        }
+    }
+    Box(Modifier.padding(top = 6.dp)) {
+        ChangeLink(MachineSetupCopy.SETUP_FOLDER_NAME_INSTEAD, enabled = true, tag = "setup-folder-name-instead", onClick = onBack)
+    }
+}
+
+/**
+ * Step one before it has an answer: one folder name in the machine's home (its Repos Folder on an older runner), which the machine
+ * itself checks as it is typed. A folder that is there is used; one that isn't is made.
+ */
+@Composable
+private fun FolderNameSection(
+    runner: JsonObject,
+    disabled: Boolean,
+    probeDir: suspend (path: String, ask: Boolean) -> DirProbeRelay.Outcome,
+    onPick: (PickedFolder) -> Unit,
+) {
+    val runnerId = runner.text("id").orEmpty()
+    val machine = RunnerPage.displayName(runner)
+    val root = MachineSetup.newFolderRootOf(runner)
     var typed by remember(runnerId) { mutableStateOf("") }
-    var registered by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
-    var newAnswer by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
-    var typedAnswer by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
-    // Check again, for each question. The register directory's is asked again by itself.
+    var answer by remember(runnerId) { mutableStateOf<DirProbeRelay.Outcome?>(null) }
+    // Check again.
     var attempt by remember(runnerId) { mutableIntStateOf(0) }
-    var newAttempt by remember(runnerId) { mutableIntStateOf(0) }
-    var registerAttempt by remember(runnerId) { mutableIntStateOf(0) }
 
-    val name = newName.trim()
-    val path = typed.trim()
-    val reposRoot = runner.text("reposRoot").orEmpty()
+    val name = typed.trim()
+    val found = (answer as? DirProbeRelay.Outcome.Answered)?.probe
+    val candidate = if (found != null && MachineSetup.isValidNewFolder(name)) MachineSetup.newFolderPick(found, name, root, machine) else null
 
-    val suggested = (registered as? DirProbeRelay.Outcome.Answered)?.probe?.takeIf(MachineSetup::isOfferedFolder)
-    val choice = touched ?: MachineSetup.defaultFolderChoice(suggested, offersNewFolder)
-    val checked = (typedAnswer as? DirProbeRelay.Outcome.Answered)?.probe
-    val found = (newAnswer as? DirProbeRelay.Outcome.Answered)?.probe
-
-    val candidate: PickedFolder? = when (choice) {
-        FolderChoice.SUGGESTED -> suggested?.let {
-            PickedFolder.Existing(it.path, MachineSetup.folderVerdict(it, machine).short)
-        }
-        FolderChoice.NEW -> if (offersNewFolder && MachineSetup.isValidNewFolder(name) && found != null) {
-            MachineSetup.newFolderPick(found, name, reposRoot, machine)
-        } else null
-        FolderChoice.GITHUB -> if (offersGithub) githubCandidate else null
-        FolderChoice.OTHER -> checked?.let {
-            val verdict = MachineSetup.folderVerdict(it, machine)
-            if (verdict.usable) PickedFolder.Existing(it.path, verdict.short) else null
-        }
-    }
-
-    val registerDir = if (MachineSetup.answersDirProbe(runner)) MachineSetup.registerDirToProbe(runner.text("registerDir")) else null
-    LaunchedEffect(runnerId, registerDir, online, registerAttempt) {
-        registered = null
-        if (registerDir == null) return@LaunchedEffect
-        registered = try {
-            probeDir(registerDir, online)
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    // Where a new folder's name would go, asked about as it is typed: a folder, or a file, may be there already.
-    val newQuery = if (choice == FolderChoice.NEW && offersNewFolder && !disabled && MachineSetup.isValidNewFolder(name)) {
-        MachineSetup.newFolderPath(reposRoot, name)
-    } else null
-    LaunchedEffect(runnerId, newQuery, newAttempt) {
-        newAnswer = null
-        if (newQuery == null) return@LaunchedEffect
+    // The name is asked about where it would go, as it is typed: a folder, or a file, may be there already.
+    val query = if (!disabled && MachineSetup.isValidNewFolder(name)) MachineSetup.newFolderPath(root, name) else null
+    LaunchedEffect(runnerId, query, attempt) {
+        answer = null
+        if (query == null) return@LaunchedEffect
         delay(300)
-        newAnswer = try {
-            probeDir(newQuery, true)
+        answer = try {
+            probeDir(query, true)
         } catch (cancel: CancellationException) {
             throw cancel
         } catch (e: Exception) {
-            DirProbeRelay.Outcome.Answered(DirProbe(path = newQuery, exists = false, isDir = false, isGit = false, isHome = false, error = e.message ?: "Request failed"))
+            DirProbeRelay.Outcome.Answered(DirProbe(path = query, exists = false, isDir = false, isGit = false, isHome = false, error = e.message ?: "Request failed"))
         }
     }
-
-    val otherQuery = if (choice == FolderChoice.OTHER && !disabled && path.isNotEmpty()) path else null
-    LaunchedEffect(runnerId, otherQuery, attempt) {
-        typedAnswer = null
-        if (otherQuery == null) return@LaunchedEffect
-        delay(300)
-        typedAnswer = try {
-            probeDir(otherQuery, true)
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (e: Exception) {
-            DirProbeRelay.Outcome.Answered(DirProbe(path = otherQuery, exists = false, isDir = false, isGit = false, isHome = false, error = e.message ?: "Request failed"))
-        }
-    }
-
-    // A path asked before the machine had answered about the register directory took that question's place (one question per
-    // machine, contract §2): it is asked again once nothing else here waits, so the suggestion still comes.
-    val waiting = (newQuery != null && newAnswer == null) || (otherQuery != null && typedAnswer == null)
-    val askRegisteredAgain = DirProbeRelay.asksAgain(registered, online, waiting)
-    LaunchedEffect(askRegisteredAgain) { if (askRegisteredAgain) registerAttempt++ }
 
     Text(MachineSetupCopy.SETUP_FOLDER, fontWeight = FontWeight.SemiBold)
     Text(
@@ -504,181 +568,49 @@ private fun FolderOptionsSection(
     )
 
     Column(
-        Modifier
-            .padding(top = 8.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .alpha(if (disabled) 0.5f else 1f),
+        Modifier.padding(top = 8.dp).fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (suggested != null) {
-            val verdict = MachineSetup.folderVerdict(suggested, machine)
-            FolderOptionRow(
-                selected = choice == FolderChoice.SUGGESTED,
-                enabled = !disabled,
-                onClick = { touched = FolderChoice.SUGGESTED },
-            ) {
+        OutlinedTextField(
+            value = typed,
+            onValueChange = { typed = it },
+            // The folder it goes in is fixed; on a phone a long one is cut from its start, so the field keeps room to type in.
+            prefix = {
                 Text(
-                    suggested.path,
-                    style = MaterialTheme.typography.bodySmall,
+                    MachineSetup.newFolderPath(root, ""),
                     fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.MiddleEllipsis,
-                )
-                VerdictText(verdict.text, verdict.tone)
-                Text(
-                    MachineSetupCopy.SETUP_REGISTER_DIR,
-                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.StartEllipsis,
+                    modifier = Modifier.widthIn(max = 160.dp),
                 )
+            },
+            placeholder = { Text(MachineSetupCopy.SETUP_NEW_FOLDER_NAME) },
+            singleLine = true,
+            enabled = !disabled,
+            isError = name.isNotEmpty() && !MachineSetup.isValidNewFolder(name),
+            textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.None,
+                autoCorrectEnabled = false,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(onDone = { candidate?.let(onPick) }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = MachineSetupCopy.SETUP_FOLDER }
+                .testTag("setup-new-folder-name"),
+        )
+        when {
+            name.isEmpty() -> MetaText(MachineSetupCopy.SETUP_FOLDER_HINT)
+            !MachineSetup.isValidNewFolder(name) -> VerdictText(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
+            found != null -> {
+                val verdict = MachineSetup.newFolderVerdict(found, machine)
+                // Nothing there yet reads as a note; anything there says what it is.
+                if (found.exists) VerdictText(verdict.text, verdict.tone) else MetaText(verdict.text)
             }
-        }
-        if (offersNewFolder) {
-            if (suggested != null) HorizontalDivider(Modifier.padding(start = 36.dp))
-            Column {
-                FolderOptionRow(
-                    selected = choice == FolderChoice.NEW,
-                    enabled = !disabled,
-                    onClick = { touched = FolderChoice.NEW },
-                ) {
-                    Text(MachineSetupCopy.SETUP_NEW_FOLDER, style = MaterialTheme.typography.bodyMedium)
-                    // Chosen, what it says goes under its name, as the web's does, and as the name is checked.
-                    if (choice != FolderChoice.NEW) MetaText(MachineSetupCopy.SETUP_NEW_FOLDER_META)
-                }
-                if (choice == FolderChoice.NEW) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(start = 36.dp, end = 10.dp, bottom = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            // The folder it goes in shares the row with the name: on a phone a long one is cut from its start, so the
-                            // field keeps room to type in (it was measured first and left the field a sliver).
-                            Text(
-                                MachineSetup.newFolderPath(reposRoot, ""),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.StartEllipsis,
-                                modifier = Modifier.weight(1f, fill = false),
-                            )
-                            OutlinedTextField(
-                                value = newName,
-                                onValueChange = { touched = FolderChoice.NEW; newName = it },
-                                placeholder = { Text(MachineSetupCopy.SETUP_NEW_FOLDER_NAME) },
-                                singleLine = true,
-                                enabled = !disabled,
-                                textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
-                                keyboardOptions = KeyboardOptions(
-                                    capitalization = KeyboardCapitalization.None,
-                                    autoCorrectEnabled = false,
-                                    imeAction = ImeAction.Done,
-                                ),
-                                keyboardActions = KeyboardActions(onDone = { candidate?.let(onPick) }),
-                                modifier = Modifier.weight(1f).testTag("setup-new-folder-name"),
-                            )
-                        }
-                        // What a new folder is while nothing is typed, then what the machine finds where it would go.
-                        when {
-                            name.isEmpty() -> MetaText(MachineSetupCopy.SETUP_NEW_FOLDER_META)
-                            !MachineSetup.isValidNewFolder(name) ->
-                                VerdictText(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
-                            found != null -> {
-                                val verdict = MachineSetup.newFolderVerdict(found, machine)
-                                // Nothing there yet reads as the board draws a new folder; anything there says what it means.
-                                if (verdict.tone == FolderVerdict.Tone.OK) MetaText(verdict.text) else VerdictText(verdict.text, verdict.tone)
-                            }
-                            newAnswer != null -> NoAnswerRow(machine) { newAttempt++ }
-                            else -> CheckingText(machine)
-                        }
-                    }
-                }
-            }
-        }
-        val currentIntegration = integration
-        if (offersGithub && currentIntegration != null) {
-            if (suggested != null || offersNewFolder) HorizontalDivider(Modifier.padding(start = 36.dp))
-            Column {
-                FolderOptionRow(
-                    selected = choice == FolderChoice.GITHUB,
-                    enabled = !disabled,
-                    onClick = { touched = FolderChoice.GITHUB },
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(painterResource(R.drawable.ic_github), null, Modifier.size(15.dp))
-                        Text(MachineSetupCopy.SETUP_FROM_GITHUB, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            MachineSetupCopy.SETUP_NEW_TAG,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                                .padding(horizontal = 5.dp, vertical = 1.dp),
-                        )
-                    }
-                }
-                if (choice == FolderChoice.GITHUB) {
-                    GithubFolderOption(
-                        runner = runner,
-                        integration = currentIntegration,
-                        github = github,
-                        disabled = disabled,
-                        probeDir = probeDir,
-                        onCandidate = { githubCandidate = it },
-                        onEnter = { githubCandidate?.let(onPick) },
-                        onOpenSettings = onOpenGithubSettings,
-                    )
-                }
-            }
-        }
-        if (suggested != null || offersNewFolder || offersGithub) HorizontalDivider(Modifier.padding(start = 36.dp))
-        Column {
-            FolderOptionRow(
-                selected = choice == FolderChoice.OTHER,
-                enabled = !disabled,
-                onClick = { touched = FolderChoice.OTHER },
-            ) {
-                Text(MachineSetupCopy.setupOtherFolder(machine), style = MaterialTheme.typography.bodyMedium)
-            }
-            if (choice == FolderChoice.OTHER) {
-                Column(
-                    Modifier.fillMaxWidth().padding(start = 36.dp, end = 10.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    OutlinedTextField(
-                        value = typed,
-                        onValueChange = { touched = FolderChoice.OTHER; typed = it },
-                        placeholder = { Text("/path/to/project") },
-                        singleLine = true,
-                        enabled = !disabled,
-                        textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.None,
-                            autoCorrectEnabled = false,
-                            imeAction = ImeAction.Done,
-                        ),
-                        keyboardActions = KeyboardActions(onDone = { candidate?.let(onPick) }),
-                        modifier = Modifier.fillMaxWidth().testTag("setup-other-folder-path"),
-                    )
-                    if (path.isNotEmpty()) {
-                        when {
-                            checked != null -> {
-                                val verdict = MachineSetup.folderVerdict(checked, machine)
-                                VerdictText(verdict.text, verdict.tone)
-                            }
-                            typedAnswer != null -> NoAnswerRow(machine) { attempt++ }
-                            else -> CheckingText(machine)
-                        }
-                    }
-                }
-            }
+            answer != null -> NoAnswerRow(machine) { attempt++ }
+            else -> CheckingText(machine)
         }
     }
 
@@ -688,33 +620,7 @@ private fun FolderOptionsSection(
         shape = CircleShape,
         modifier = Modifier.padding(top = 9.dp),
     ) {
-        Text(if (choice == FolderChoice.GITHUB) MachineSetupCopy.SETUP_USE_REPOSITORY else MachineSetupCopy.SETUP_USE_FOLDER)
-    }
-}
-
-@Composable
-private fun FolderOptionRow(
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, role = Role.RadioButton, onClick = onClick)
-            .semantics { this.selected = selected }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            if (selected) "✓" else "",
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(18.dp),
-        )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp), content = content)
+        Text(MachineSetupCopy.SETUP_USE_FOLDER)
     }
 }
 
@@ -749,6 +655,7 @@ internal fun VerdictText(text: String, tone: FolderVerdict.Tone) {
     }
     Text(text, style = MaterialTheme.typography.labelSmall, color = color)
 }
+
 
 /**
  * The first message, waiting under the card for both steps (rule 6): the user bubble it will be, with what it is waiting for beneath

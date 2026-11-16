@@ -549,6 +549,15 @@ private fun RunnerDetail(api: ManagementApi, id: String, revision: Long, open: (
                     HorizontalDivider()
                     TextButton(onClick = { updateEngines() }, enabled = !RunnerPage.engineUpdateInFlight(runner.obj("install"))) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
                     RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
+                    // A failed line: an agent can be sent to fix it, under the report (docs/mocks/engine-update-fix-with-agent/03-mobile.png).
+                    RunnerPage.agentFixOnUpdate(runner)?.let { view ->
+                        Column(Modifier.padding(vertical = 6.dp)) {
+                            AgentFixButton(view, "update-fix", model.agentFixPressing) {
+                                scope.launch { show(model.fixWithAgent(id, "engineUpdateFailed", null, null)) }
+                            }
+                            AgentFixLine(view, "update-fix:line") { open(OrbitRoute(Destination.SESSION, it, origin = Origin.LINK)) }
+                        }
+                    }
                     TextButton(onClick = { scope.launch {
                         notice.show(model.press { api.post("runners/$id/refresh-models") } ?: "Re-reading this machine’s model lists — the picker updates within a minute.")
                     } }) { Text(RunnerCopy.REFRESH_MODEL_LISTS) }
@@ -991,7 +1000,7 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                             foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
                             signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
                             rename = { renaming = line }, remove = { removing = line }, pause = { pausing = line },
-                            resume = { scope.launch { show(pause(line, null)) } })
+                            resume = { scope.launch { show(pause(line, null)) } }, openSession = ::openSession)
                     }
                     // A Default removed from Orbit ends the accounts that remain, with the way back.
                     RunnerPage.removedDefault(health)?.let { removed ->
@@ -1029,6 +1038,15 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                     scope.launch { show(model.press { api.post("runners/$id/engine-update") }) }
                 }) { Text(RunnerCopy.UPDATE_ENGINES_NOW) }
                 RunnerPage.updateRelayLines(runner.obj("install")).forEach { Text(it.text, style = MaterialTheme.typography.labelMedium, color = if (it.failed) Ink.red else Ink.muted) }
+                // A failed line: an agent can be sent to fix it, under the report, as on an Install failed panel.
+                RunnerPage.agentFixOnUpdate(runner)?.let { view ->
+                    Column(Modifier.padding(bottom = 8.dp)) {
+                        AgentFixButton(view, "update-fix", model.agentFixPressing) {
+                            scope.launch { show(model.fixWithAgent(id, "engineUpdateFailed", null, null)) }
+                        }
+                        AgentFixLine(view, "update-fix:line", ::openSession)
+                    }
+                }
             }
             Spacer(Modifier.height(48.dp))
         }
@@ -1123,7 +1141,7 @@ private const val PAUSE_SCOPE = "Personal account · This runner. Paused session
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
                        signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, removable: Boolean, foldsBack: Boolean, signIn: () -> Unit,
                        close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit,
-                       regionBlocked: Boolean = false) {
+                       openSession: (String) -> Unit, regionBlocked: Boolean = false) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
     val paused = RunnerPage.isPaused(line.pausedUntil, now)
@@ -1190,7 +1208,10 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                 OutlinedButton(onClick = signIn, enabled = !signInBlocked) { Text(AccountCopy.RENEW) }
             }
         }
-        removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
+        // Refused over sessions running in it: those sessions, each a way to it, in place of the machine's sentence.
+        val inUse = RunnerPage.inUseSessions(runner.obj("accountRemove"), engine, line.id)
+        if (inUse.isNotEmpty()) AccountInUse(engine, inUse, openSession)
+        else removal?.second?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.red) }
         if (signingIn) RunnerSignInCard(api, runner, engine, account = line.signInAccount, autoStart = true, onClose = close, onSignedIn = landed)
         else {
             // Paused is the row's state; Resume and a new duration are its menu's.
@@ -1200,6 +1221,28 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
             // accounts, Add Account is where another joins. An account signed in is signed in again from its menu.
             if (canSignIn && (!line.envKey || alone) && line.auth != "yes") OutlinedButton(onClick = signIn, enabled = !signInBlocked) {
                 Text(if (line.envKey) AccountCopy.SIGN_IN_WITH_GOOGLE else RunnerCopy.SIGN_IN)
+            }
+        }
+    }
+}
+
+/** A removal refused over sessions running in the account: what to do, then each session — its dot, title, state and Open session. */
+@Composable
+private fun AccountInUse(engine: String, sessions: List<RunnerPage.InUseSession>, openSession: (String) -> Unit) {
+    Column(Modifier.testTag("account-in-use")) {
+        Text(RunnerPage.inUseHeading(engine, sessions.size), style = MaterialTheme.typography.labelMedium, color = Ink.red)
+        sessions.forEach { session ->
+            val (label, tone) = RunnerPage.inUseStatus(session.status)
+            Row(Modifier.fillMaxWidth().clickable(role = Role.Button) { openSession(session.id) }.padding(vertical = 6.dp)
+                .testTag("account-in-use:${session.id}"), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.padding(end = 8.dp).size(6.dp).clip(CircleShape).background(Ink.tone(tone)))
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(RunnerPage.inUseTitle(session), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    label?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = Ink.muted) }
+                }
+                Text(RunnerAccountCopy.IN_USE_OPEN, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary)
             }
         }
     }

@@ -55,6 +55,13 @@ export class CreateWorkspaceDto {
   // the project directory it runs in. Both are otherwise minted by `orbit register`.
   @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
+  /** In place of workDir: a new folder of this name under the runner's reposRoot, made by the runner before
+   *  this workspace's first session starts (the claim's createWorkDir). Needs runnerId. */
+  @IsOptional() @IsString() newFolder?: string;
+  /** In place of workDir and newFolder: a clone of one of the caller's GitHub repositories, { repoId, ref?, folder? }
+   *  (docs/github-workspace-design.md §5.3), into `<reposRoot>/<folder>`. Needs runnerId. Read and refused as POST
+   *  /sessions `newWorkspace.github` is; the runner clones it on its next reconcile, and sessions wait for the clone. */
+  @IsOptional() @IsObject() github?: Record<string, unknown>;
   // Explicit repository address; when empty, the runner's directory probe can backfill it from
   // origin. Used for project integration, never to clone or change the checkout.
   @IsOptional() @IsString() repoUrl?: string;
