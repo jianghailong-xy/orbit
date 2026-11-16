@@ -760,8 +760,7 @@ public enum RunnerPageFormat {
     /// terminal keeps working (the web's words, `RunnerAccountCopy`). An added account's sign-in goes from
     /// the machine: while Default is removed from Orbit its workspaces go to Automatic, or — for the last
     /// account Orbit uses there — to Default, by its name, which Orbit then uses again (the web's words
-    /// too), never to a Default as though it were in use; while Default is, the page's own question,
-    /// which says Default is untouched.
+    /// too), never to a Default as though it were in use; while Default is, to Default (the web's words).
     public static func removalQuestion(_ line: AccountLine, health: RunnerEngineHealth,
                                        runner: Runner) -> RemovalQuestion {
         let machine = displayName(runner)
@@ -776,10 +775,8 @@ public enum RunnerPageFormat {
                                        ? RunnerAccountCopy.runnerAccountRemoveDetailAutomatic(runner: machine)
                                        : RunnerAccountCopy.runnerAccountRemoveDetailLast(runner: machine, name: name))
         }
-        let place = line.home ?? "Its sign-in"
-        return RemovalQuestion(title: "Remove “\(line.name)” from \(machine)?",
-                               message: "\(place) goes from this machine, and sessions stop running on it. "
-                                   + "Default is untouched.")
+        return RemovalQuestion(title: RunnerAccountCopy.runnerAccountRemoveTitle(name: line.name),
+                               message: RunnerAccountCopy.RUNNER_ACCOUNT_REMOVE_DETAIL)
     }
 
     /// What a Default removed from Orbit is called: the name it was given in Orbit, else `Default` (web

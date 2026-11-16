@@ -88,6 +88,7 @@ import {
   runnerAccountInUseMany,
   runnerAccountInUseOne,
   runnerAccountRemoveDetailAutomatic,
+  RUNNER_ACCOUNT_REMOVE_DETAIL,
   runnerAccountRemoveDetailLast,
   runnerAccountRemoveTitle,
   runnerDefaultRemoveDetail,
@@ -1327,8 +1328,7 @@ function AccountRow({
     description: isDefault
       ? runnerDefaultRemoveDetail(runnerName, engineNameOf(engine))
       : !defaultRemoved
-        ? `Its sign-in is deleted from ${runnerName}. ` +
-          `Workspaces set to this account run on ${defaultName}.`
+        ? RUNNER_ACCOUNT_REMOVE_DETAIL
         : others > 0
           ? runnerAccountRemoveDetailAutomatic(runnerName)
           : runnerAccountRemoveDetailLast(runnerName, defaultName),

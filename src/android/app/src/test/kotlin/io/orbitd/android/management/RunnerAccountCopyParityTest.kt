@@ -34,6 +34,7 @@ class RunnerAccountCopyParityTest {
             "runnerAccountRemoveDetailLast" to RunnerAccountCopy.removeDetailLast("{runner}", "{name}"),
             "runnerDefaultRemovedLine" to RunnerAccountCopy.defaultRemovedLine("{name}", "{dir}"),
             "RUNNER_DEFAULT_USE_AGAIN" to RunnerAccountCopy.USE_AGAIN,
+            "RUNNER_ACCOUNT_REMOVE_DETAIL" to RunnerAccountCopy.REMOVE_DETAIL,
             "runnerDefaultUseAgainFailed" to RunnerAccountCopy.useAgainFailed("{name}"),
             "runnerAccountInUseOne" to RunnerAccountCopy.inUseOne("{engine}"),
             "runnerAccountInUseMany" to RunnerAccountCopy.inUseMany("{engine}", 7).replace("7", "{count}"),

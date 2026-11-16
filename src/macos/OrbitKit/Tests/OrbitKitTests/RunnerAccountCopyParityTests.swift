@@ -81,6 +81,7 @@ final class RunnerAccountCopyParityTests: XCTestCase {
         ("RUNNER_ACCOUNT_IN_USE_RUNNING", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_RUNNING),
         ("RUNNER_ACCOUNT_IN_USE_WAITING", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_WAITING),
         ("RUNNER_ACCOUNT_IN_USE_UNTITLED", RunnerAccountCopy.RUNNER_ACCOUNT_IN_USE_UNTITLED),
+        ("RUNNER_ACCOUNT_REMOVE_DETAIL", RunnerAccountCopy.RUNNER_ACCOUNT_REMOVE_DETAIL),
     ]
 
     /// This end's templates, each handed the web's own interpolations as its values.
