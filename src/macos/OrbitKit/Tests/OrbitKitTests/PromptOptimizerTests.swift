@@ -121,20 +121,34 @@ final class PromptOptimizerTests: XCTestCase {
 
     // MARK: - The button (frame 2)
 
-    func testTheButtonShowsForAWordedDraftWithTheSwitchOn() {
-        XCTAssertTrue(PromptOptimizer.showsButton(on: true, text: "fix the login redirect bug"))
-        XCTAssertTrue(PromptOptimizer.showsButton(on: true, text: "/review the auth module"),
-                      "a command with words after it is a draft")
-        XCTAssertFalse(PromptOptimizer.showsButton(on: false, text: "fix the login redirect bug"), "switch off")
+    func testTheButtonIsDrawnWheneverTheSwitchIsOn() {
+        XCTAssertTrue(PromptOptimizer.showsButton(on: true), "drawn whatever the box holds, so its slot stays")
+        XCTAssertFalse(PromptOptimizer.showsButton(on: false), "switch off")
     }
 
-    func testTheButtonHidesForAnEmptyBoxAShellCommandAndABareSlashCommand() {
-        XCTAssertFalse(PromptOptimizer.showsButton(on: true, text: ""))
-        XCTAssertFalse(PromptOptimizer.showsButton(on: true, text: "  \n "))
-        XCTAssertFalse(PromptOptimizer.showsButton(on: true, text: "!ls -la"), "shell mode")
-        XCTAssertFalse(PromptOptimizer.showsButton(on: true, text: " !git status"))
-        XCTAssertFalse(PromptOptimizer.showsButton(on: true, text: "/compact"), "only a /command")
-        XCTAssertFalse(PromptOptimizer.showsButton(on: true, text: "/compact  "))
+    func testTheButtonIsEnabledForAWordedDraft() {
+        XCTAssertTrue(PromptOptimizer.enablesButton(on: true, text: "fix the login redirect bug", busy: false))
+        XCTAssertTrue(PromptOptimizer.enablesButton(on: true, text: "/review the auth module", busy: false),
+                      "a command with words after it is a draft")
+        XCTAssertFalse(PromptOptimizer.enablesButton(on: false, text: "fix the login redirect bug", busy: false),
+                       "switch off")
+    }
+
+    func testTheButtonIsPresentButDisabledForAnEmptyBoxAShellCommandAndABareSlashCommand() {
+        for text in ["", "  \n ", "!ls -la", " !git status", "/compact", "/compact  "] {
+            XCTAssertTrue(PromptOptimizer.showsButton(on: true), "still drawn for \(text.debugDescription)")
+            XCTAssertFalse(PromptOptimizer.enablesButton(on: true, text: text, busy: false),
+                           "disabled for \(text.debugDescription)")
+        }
+    }
+
+    func testTheBusyButtonStaysPressableToCancel() {
+        XCTAssertTrue(PromptOptimizer.enablesButton(on: true, text: "", busy: true),
+                      "busy, it cancels even if the box was emptied meanwhile")
+    }
+
+    func testTheSlotIsSendsSize() {
+        XCTAssertEqual(PromptOptimizer.buttonSide, 32, "Send's 32 pt")
     }
 
     // MARK: - The card's text
@@ -334,13 +348,39 @@ final class PromptOptimizerWiringTests: XCTestCase {
 
     func testTheComposerDrawsTheButtonTheMacCardAndThePhoneSheet() throws {
         let composer = try source(app + "Views/ComposerView.swift")
-        XCTAssertTrue(composer.contains("PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)"))
-        XCTAssertTrue(composer.contains("PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing) { console.optimizePrompt() }"))
+        XCTAssertTrue(composer.contains("console.promptOptimizer.isOptimizing || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user))"),
+                      "drawn whenever the switch is on, not only once there is a draft")
+        XCTAssertTrue(composer.contains("PromptOptimizer.enablesButton(on: PromptOptimizer.isOn(app.user), text: console.composerText,\n                                      busy: console.promptOptimizer.isOptimizing)"))
+        XCTAssertTrue(composer.contains("PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing,\n                                     enabled: optimizeEnabled) { console.optimizePrompt() }"))
         XCTAssertTrue(composer.contains("#if os(macOS)\n            if let optimization = console.promptOptimizer.suggestion {\n                optimizationCard(optimization, sheet: false)"),
                       "a Mac draws the card above the composer")
         XCTAssertTrue(composer.contains(".sheet(isPresented: optimizationSheetShown) {"), "a phone draws it as a sheet")
         XCTAssertTrue(composer.contains("PromptOptimizationFailureLine(retry:"))
         XCTAssertTrue(composer.contains("if console.promptOptimizer.offersUndo(current: console.composerText) {"))
+    }
+
+    func testTheButtonKeepsOneSlotIdleAndBusyAndIsDisabledRatherThanRemoved() throws {
+        let views = try source(app + "Views/PromptOptimizerViews.swift")
+        let start = try XCTUnwrap(views.range(of: "struct PromptOptimizeButton: View {"))
+        let end = try XCTUnwrap(views.range(of: "struct PromptOptimizationCard: View {"))
+        let button = String(views[start.lowerBound..<end.lowerBound])
+        XCTAssertTrue(button.contains("""
+                        if busy {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("✦").font(.system(size: 17, weight: .medium))
+                        }
+                    }
+                    .foregroundStyle(Color.secondary)
+                    .frame(width: PromptOptimizer.buttonSide, height: PromptOptimizer.buttonSide)
+        """), "the spinner and ✦ share one fixed frame, so busy moves nothing")
+        XCTAssertEqual(button.components(separatedBy: ".frame(").count - 1, 1, "one frame, for both states")
+        XCTAssertFalse(button.contains("Text(PromptOptimizerCopy.optimizing)"), "no wider busy label")
+        XCTAssertFalse(button.contains("Color.accentColor"), "neutral, so Send stays the only blue control")
+        XCTAssertTrue(button.contains(".disabled(!enabled)"))
+        XCTAssertTrue(button.contains(".accessibilityLabel(busy ? PromptOptimizerCopy.optimizing : PromptOptimizerCopy.optimize)"))
+        XCTAssertEqual(PromptOptimizerCopy.optimize, "Optimize this draft")
+        XCTAssertTrue(PromptOptimizerCopy.optimizeHelp.hasPrefix("Optimize this draft"))
     }
 
     func testSendsCarryTheFlagFromTheState() throws {

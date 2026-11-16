@@ -136,10 +136,10 @@ object PromptOptimizerCopy {
     const val UNAVAILABLE = "This server has no DeepSeek key (DEEPSEEK_API_KEY), so it cannot optimize prompts."
 
     // Composer (frames 2–3)
-    const val OPTIMIZE = "Optimize"
-    const val OPTIMIZING = "Optimizing…"
-    const val OPTIMIZE_HELP = "Have DeepSeek improve this draft before you send it"
-    const val CANCEL_HELP = "Stop optimizing"
+    /** The ✦ icon's name, said aloud. */
+    const val OPTIMIZE = "Optimize this draft"
+    /** Busy, the spinner's name: pressing it cancels. */
+    const val OPTIMIZING = "Optimizing… press to cancel"
 
     // The suggestion (frame 4)
     const val CARD_TITLE = "Optimized prompt"
@@ -191,15 +191,23 @@ object PromptOptimizer {
      * not a server without a key. */
     fun unavailable(user: JsonObject?): Boolean = available(user) == false
 
-    /** Whether the composer shows ✦ Optimize for this draft (frame 2, the web's and iOS's rules): the account has it on, and the box
-     * holds words — not empty, not a `!` shell command, and not only a `/command`. */
-    fun showsButton(on: Boolean, text: String): Boolean {
+    /** Whether the composer draws ✦ at all: whenever the account has it on, whatever the box holds, so the button keeps its slot and no
+     * toolbar control moves as the draft fills or empties (iOS's `showsButton(on:)`). */
+    fun showsButton(on: Boolean): Boolean = on
+
+    /** Whether the drawn button can be pressed (the web's and iOS's rules): busy, it always can (it cancels); otherwise the box holds
+     * words — not empty, not a `!` shell command, and not only a `/command`. */
+    fun enablesButton(on: Boolean, text: String, busy: Boolean): Boolean {
+        if (busy) return true
         if (!on) return false
         val trimmed = text.trim()
         if (trimmed.isEmpty() || trimmed.startsWith("!")) return false
         if (trimmed.startsWith("/") && trimmed.none { it.isWhitespace() }) return false
         return true
     }
+
+    /** The button's square slot, in dp: Send's 32 (iOS's `buttonSide`). Idle (✦) and busy (a spinner) draw in this one box. */
+    const val BUTTON_SIDE_DP = 32
 
     /** A send body, with `optimizedTranslation` added when [translation] is set (D2); otherwise exactly as it was. */
     fun withOptimizedTranslation(body: JsonObject, translation: String?): JsonObject =

@@ -184,10 +184,12 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
         else if (imeWasUp) { imeWasUp = false; if (inputFocused) focusManager.clearFocus() }
     }
     val focusField: () -> Unit = { focus.requestFocus(); keyboard?.show() }
-    // Prompt optimizer (board docs/mocks/prompt-optimizer, frames 2–6; iOS ComposerView): ✦ Optimize beside Send while the account has
-    // it on and the box holds a draft it can improve — and, while a press is out, as the busy button that cancels it.
+    // Prompt optimizer (board docs/mocks/prompt-optimizer, frames 2–6; iOS ComposerView): ✦ beside Send whenever the account has it on,
+    // so its slot never comes and goes with the draft; pressable when the box holds a draft it can improve, and while a press is out, as
+    // the busy button that cancels it.
     val optimizer = state.optimizer
-    val showsOptimize = optimizer.isOptimizing || PromptOptimizer.showsButton(LocalPromptOptimizer.current, field.text)
+    val showsOptimize = optimizer.isOptimizing || PromptOptimizer.showsButton(LocalPromptOptimizer.current)
+    val optimizeEnabled = PromptOptimizer.enablesButton(LocalPromptOptimizer.current, field.text, optimizer.isOptimizing)
     // Edit, then use: the box takes the caret once the sheet's window has given the focus back (A08i, as [focusRequest]).
     var editFocus by remember { mutableIntStateOf(0) }
     LaunchedEffect(editFocus) {
@@ -327,8 +329,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort"))) {
                     models = true; model.loadCatalog()
                 }
-                // Frame 2's ✦ Optimize beside Send; frame 3's busy "Optimizing…", which cancels when pressed.
-                if (showsOptimize) PromptOptimizeButton(busy = optimizer.isOptimizing, enabled = state.loaded, press = model::optimize)
+                // Frame 2's ✦ beside Send, disabled with nothing to optimize; frame 3's spinner in the same slot, which cancels when pressed.
+                if (showsOptimize) PromptOptimizeButton(busy = optimizer.isOptimizing, enabled = state.loaded && optimizeEnabled,
+                    press = model::optimize)
                 val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
                 // With nothing typed, Send is Stop wherever there is something to stop — a turn running, one the engine started for
                 // itself, or work left running under a parked turn (A07-20, iOS 593920cea). Steer and Queue for next turn still ask for

@@ -2,6 +2,7 @@ package io.orbitd.android.composer
 
 import androidx.compose.ui.test.*
 import io.orbitd.android.core.net.ApiResponse
+import io.orbitd.android.core.promptoptimizer.PromptOptimizer
 import io.orbitd.android.core.promptoptimizer.PromptOptimizerCopy
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.CompletableDeferred
@@ -65,7 +66,7 @@ internal object PromptOptimizerFixture {
 
 /**
  * Android's prompt optimizer in the composer over the controlled server, as iOS draws it on a phone (docs/prompt-optimizer-design.md,
- * board frames 2–6; OrbitKit PromptOptimizerTests): ✦ Optimize's visibility, the busy press that cancels, the suggestion sheet that
+ * board frames 2–6; OrbitKit PromptOptimizerTests): ✦'s fixed slot and disabled state, the busy press that cancels, the suggestion sheet that
  * leaves the box alone until Use, Undo, × and the failure line, and `optimizedTranslation` only on a send of the unedited gloss.
  */
 class PromptOptimizerShellTest : ComposerShellTest() {
@@ -84,15 +85,38 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         await { has(hasTestTag("composer-optimization-card")) }
     }
 
-    @Test fun theButtonShowsForAWordedDraftAndHidesForAnEmptyBoxAShellCommandAndABareSlashCommand() {
+    @Test fun theButtonIsAlwaysDrawnAndDisabledForAnEmptyBoxAShellCommandAndABareSlashCommand() {
         PromptOptimizerFixture.install()
         signIn(); openSession()
-        assertFalse("an empty box", has(button))
-        type("fix the login redirect bug"); await { has(button and hasText(PromptOptimizerCopy.OPTIMIZE, substring = true)) }
-        type("!ls -la"); await { !has(button) }
-        type("/compact"); await { !has(button) }
-        type("/review the auth module"); await { has(button) }
-        type("  "); await { !has(button) }
+        await { has(button) }
+        assertTrue("an empty box: drawn, disabled", has(button and isNotEnabled()))
+        type("fix the login redirect bug"); await { has(button and isEnabled() and hasContentDescription(PromptOptimizerCopy.OPTIMIZE)) }
+        type("!ls -la"); await { has(button and isNotEnabled()) }
+        type("/compact"); await { has(button and isNotEnabled()) }
+        type("/review the auth module"); await { has(button and isEnabled()) }
+        type("  "); await { has(button and isNotEnabled()) }
+    }
+
+    @Test fun theSlotIsTheSameIdleAndBusySoNoToolbarControlMoves() {
+        val gate = CompletableDeferred<Unit>()
+        PromptOptimizerFixture.install()
+        ComposerShell.gates[PromptOptimizerFixture.CALL] = gate
+        signIn(); openSession()
+        await { has(button) }
+        fun bounds(m: SemanticsMatcher) = compose.onNode(m).fetchSemanticsNode().boundsInRoot
+        val send = hasTestTag("composer-send")
+        val empty = bounds(button)
+        type(PromptOptimizerFixture.DRAFT)
+        await { has(button and isEnabled()) }
+        val idle = bounds(button)
+        val sendIdle = bounds(send)
+        assertEquals("typing the first words moves nothing", empty, idle)
+        assertEquals(PromptOptimizer.BUTTON_SIDE_DP.toFloat(), with(compose.density) { idle.width.toDp().value }, 0.5f)
+        compose.onNode(button).performClick()
+        await { has(button and hasContentDescription(PromptOptimizerCopy.OPTIMIZING)) }
+        assertEquals("busy, the spinner takes the same slot", idle, bounds(button))
+        assertEquals("and Send does not move", sendIdle, bounds(send))
+        gate.complete(Unit)
     }
 
     private fun neverDrawn(on: Boolean?, available: Boolean) {
@@ -117,7 +141,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         type(PromptOptimizerFixture.DRAFT)
         await { has(button) }
         compose.onNode(button).performClick()
-        await { has(button and hasText(PromptOptimizerCopy.OPTIMIZING, substring = true)) }
+        await { has(button and hasContentDescription(PromptOptimizerCopy.OPTIMIZING)) }
         // The session's own id (either form is a public id to the server), and no workspace: the session supplies it.
         val asked = ComposerShell.body(PromptOptimizerFixture.CALL)!!
         assertEquals(setOf("draft", "sessionId"), asked.keys)
@@ -125,7 +149,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         assertTrue(ObjectId.same(asked["sessionId"]!!.jsonPrimitive.content, ComposerShell.SESSION))
         // Busy, the box stays editable and the press cancels: the late answer is dropped.
         compose.onNode(button).performClick()
-        await { has(button and hasText(PromptOptimizerCopy.OPTIMIZE, substring = true)) }
+        await { has(button and hasContentDescription(PromptOptimizerCopy.OPTIMIZE)) }
         gate.complete(Unit)
         compose.waitForIdle()
         assertFalse(has(hasTestTag("composer-optimization-card")))

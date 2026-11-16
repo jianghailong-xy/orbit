@@ -154,19 +154,26 @@ class PromptOptimizerTest {
 
     // The button (frame 2)
 
-    @Test fun theButtonShowsForAWordedDraftWithTheSwitchOn() {
-        assertTrue(PromptOptimizer.showsButton(true, "fix the login redirect bug"))
-        assertTrue("a command with words after it is a draft", PromptOptimizer.showsButton(true, "/review the auth module"))
-        assertFalse("switch off", PromptOptimizer.showsButton(false, "fix the login redirect bug"))
+    @Test fun theButtonIsDrawnWheneverTheSwitchIsOn() {
+        assertTrue("drawn whatever the box holds, so its slot stays", PromptOptimizer.showsButton(true))
+        assertFalse("switch off", PromptOptimizer.showsButton(false))
     }
 
-    @Test fun theButtonHidesForAnEmptyBoxAShellCommandAndABareSlashCommand() {
-        assertFalse(PromptOptimizer.showsButton(true, ""))
-        assertFalse(PromptOptimizer.showsButton(true, "  \n "))
-        assertFalse("shell mode", PromptOptimizer.showsButton(true, "!ls -la"))
-        assertFalse(PromptOptimizer.showsButton(true, " !git status"))
-        assertFalse("only a /command", PromptOptimizer.showsButton(true, "/compact"))
-        assertFalse(PromptOptimizer.showsButton(true, "/compact  "))
+    @Test fun theButtonIsEnabledForAWordedDraft() {
+        assertTrue(PromptOptimizer.enablesButton(true, "fix the login redirect bug", busy = false))
+        assertTrue("a command with words after it is a draft", PromptOptimizer.enablesButton(true, "/review the auth module", busy = false))
+        assertFalse("switch off", PromptOptimizer.enablesButton(false, "fix the login redirect bug", busy = false))
+    }
+
+    @Test fun theButtonIsPresentButDisabledForAnEmptyBoxAShellCommandAndABareSlashCommand() {
+        for (text in listOf("", "  \n ", "!ls -la", " !git status", "/compact", "/compact  ")) {
+            assertTrue("still drawn for '$text'", PromptOptimizer.showsButton(true))
+            assertFalse("disabled for '$text'", PromptOptimizer.enablesButton(true, text, busy = false))
+        }
+    }
+
+    @Test fun theBusyButtonStaysPressableToCancel() {
+        assertTrue("busy, it cancels even if the box was emptied meanwhile", PromptOptimizer.enablesButton(true, "", busy = true))
     }
 
     // The card's text

@@ -19,7 +19,7 @@ class PromptOptimizerCopyParityTest {
             field.isAccessible = true
             (runCatching { field.get(PromptOptimizerCopy) }.getOrNull() as? String)?.let { field.name to it }
         }.toMap()
-        assertEquals(18, words.size)
+        assertEquals(16, words.size)
         assertEquals("PromptOptimizerCopy strings not in PromptOptimizer.swift", emptyMap<String, String>(),
             words.filterValues { !swift.contains("\"$it\"") })
     }

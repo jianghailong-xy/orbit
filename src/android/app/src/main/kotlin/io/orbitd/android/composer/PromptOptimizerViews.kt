@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -51,26 +53,21 @@ internal fun promptOptimizationText(optimization: PromptOptimization): Annotated
     }
 }
 
-/** Frame 2's ✦ Optimize beside Send, and frame 3's busy "Optimizing…", which cancels when pressed. */
+/** Frame 2's ✦ beside Send, a square icon there whenever the optimizer is on: disabled with nothing to optimize, and busy (frame 3) a
+ * spinner in the same box, which cancels when pressed — so neither typing nor pressing moves a toolbar control. Neutral, not the accent,
+ * so Send stays the only primary-coloured control (iOS's PromptOptimizeButton). */
 @Composable
 internal fun PromptOptimizeButton(busy: Boolean, enabled: Boolean, press: () -> Unit) {
-    val accent = MaterialTheme.colorScheme.primary
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Row(Modifier.padding(end = 6.dp).testTag("composer-optimize")
-        .semantics { contentDescription = if (busy) "${PromptOptimizerCopy.OPTIMIZING} ${PromptOptimizerCopy.CANCEL_HELP}" else PromptOptimizerCopy.OPTIMIZE_HELP }
-        .clip(RoundedCornerShape(50))
-        .background(if (busy) muted.copy(alpha = 0.08f) else accent.copy(alpha = 0.10f), RoundedCornerShape(50))
-        .border(1.dp, if (busy) muted.copy(alpha = 0.25f) else accent.copy(alpha = 0.25f), RoundedCornerShape(50))
+    Box(Modifier.padding(end = 6.dp).testTag("composer-optimize")
+        .size(PromptOptimizer.BUTTON_SIDE_DP.dp)
+        .clip(CircleShape)
         .clickable(enabled = enabled, role = Role.Button, onClick = press)
-        .heightIn(min = 32.dp).padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        if (busy) {
-            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = muted)
-            Text(PromptOptimizerCopy.OPTIMIZING, color = muted, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        } else {
-            Text("✦", color = accent, style = MaterialTheme.typography.labelLarge)
-            Text(PromptOptimizerCopy.OPTIMIZE, color = accent, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-        }
+        .semantics { contentDescription = if (busy) PromptOptimizerCopy.OPTIMIZING else PromptOptimizerCopy.OPTIMIZE }
+        .alpha(if (enabled) 1f else 0.4f),
+        contentAlignment = Alignment.Center) {
+        if (busy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = muted)
+        else Text("✦", color = muted, style = MaterialTheme.typography.titleMedium)
     }
 }
 

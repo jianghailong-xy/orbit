@@ -59,7 +59,7 @@ class PromptOptimizerFramesTest : ComposerShellTest() {
         // The keyboard is not up in Robolectric, so the box sits where the phone's would with the keyboard down, as on iOS's frames.
         PromptOptimizerFrames.shot(compose, "2-button")
         compose.onNode(button).performClick()
-        await { has(button and hasText(PromptOptimizerCopy.OPTIMIZING, substring = true)) }
+        await { has(button and hasContentDescription(PromptOptimizerCopy.OPTIMIZING)) }
         PromptOptimizerFrames.shot(compose, "3-optimizing")
         gate.complete(Unit)
         await { has(hasTestTag("composer-optimization-card")) }

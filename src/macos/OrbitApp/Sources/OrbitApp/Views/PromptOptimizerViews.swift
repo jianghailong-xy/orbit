@@ -9,37 +9,42 @@ import OrbitKit
 /// The tint of text the optimizer added from context (frame 4).
 private let addedTint = Color.green.opacity(0.18)
 
-/// Frame 2's ✦ Optimize beside Send, and frame 3's busy "Optimizing…", which cancels when pressed.
+/// Frame 2's ✦ beside Send, a square icon in Send's size, there whenever the optimizer is on: disabled
+/// with nothing to optimize, and busy (frame 3) a spinner in the same frame, which cancels when pressed.
+/// Neutral, not the accent, so Send stays the only blue control.
 struct PromptOptimizeButton: View {
     let busy: Bool
+    let enabled: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
+            ZStack {
                 if busy {
-                    ProgressView().controlSize(.mini)
-                    Text(PromptOptimizerCopy.optimizing)
+                    ProgressView().controlSize(.small)
                 } else {
-                    Text("✦")
-                    Text(PromptOptimizerCopy.optimize)
+                    Text("✦").font(.system(size: 17, weight: .medium))
                 }
             }
-            .font(.orbitLabel.weight(.medium))
-            .foregroundStyle(busy ? Color.secondary : Color.accentColor)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 9)
-            .frame(height: 26)
-            .background(busy ? Color.primary.opacity(0.05) : Color.accentColor.opacity(0.10), in: Capsule())
-            .overlay(Capsule().strokeBorder(busy ? Color.primary.opacity(0.12) : Color.accentColor.opacity(0.25),
-                                            lineWidth: 1))
-            .contentShape(Capsule())
+            .foregroundStyle(Color.secondary)
+            .frame(width: PromptOptimizer.buttonSide, height: PromptOptimizer.buttonSide)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(busy ? PromptOptimizerCopy.cancelHelp : PromptOptimizerCopy.optimizeHelp)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .help(busy ? PromptOptimizerCopy.optimizing : idleHelp)
         .accessibilityIdentifier(PromptOptimizerCopy.buttonIdentifier)
         .accessibilityLabel(busy ? PromptOptimizerCopy.optimizing : PromptOptimizerCopy.optimize)
+    }
+
+    /// ⌘⇧O is the Mac's only (ComposerView), so only the Mac's tooltip names it.
+    private var idleHelp: String {
+        #if os(macOS)
+        PromptOptimizerCopy.optimizeHelp
+        #else
+        PromptOptimizerCopy.optimize
+        #endif
     }
 }
 

@@ -377,11 +377,16 @@ struct ComposerView: View {
                 && session?.effectiveLifecycleState == .open)
     }
 
-    /// Frame 2's ✦ Optimize: the account has it on and the box holds a draft it can improve (the
-    /// web's rules, `PromptOptimizer.showsButton`); while a press is out it stays, as the busy button.
+    /// Frame 2's ✦: drawn whenever the account has it on, so its slot never comes and goes with the
+    /// draft; pressable when the box holds a draft it can improve (the web's rules,
+    /// `PromptOptimizer.enablesButton`), and always while a press is out, which it cancels.
     private var showsOptimize: Bool {
-        console.promptOptimizer.isOptimizing
-            || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)
+        console.promptOptimizer.isOptimizing || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user))
+    }
+
+    private var optimizeEnabled: Bool {
+        PromptOptimizer.enablesButton(on: PromptOptimizer.isOn(app.user), text: console.composerText,
+                                      busy: console.promptOptimizer.isOptimizing)
     }
 
     /// Frame 4's card: above the composer on a Mac, the body of the sheet over it on a phone.
@@ -771,9 +776,11 @@ struct ComposerView: View {
                                        modelLine: console.engine == CursorRuntime.engine ? cursorModelLine : nil,
                                        actions: contextActions)
             }
-            // Frame 2: ✦ Optimize beside Send once there is a draft; frame 3: busy, it cancels.
+            // Frame 2: ✦ beside Send whenever the optimizer is on, disabled with nothing to optimize;
+            // frame 3: busy, a spinner in the same slot, and pressing it cancels.
             if showsOptimize {
-                PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing) { console.optimizePrompt() }
+                PromptOptimizeButton(busy: console.promptOptimizer.isOptimizing,
+                                     enabled: optimizeEnabled) { console.optimizePrompt() }
                     #if os(macOS)
                     .keyboardShortcut("o", modifiers: [.command, .shift])
                     #endif

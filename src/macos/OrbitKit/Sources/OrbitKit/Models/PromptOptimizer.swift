@@ -139,10 +139,12 @@ public enum PromptOptimizerCopy {
     public static let toggleIdentifier = "settings.promptOptimizer.enabled"
 
     // Composer (frames 2–3)
-    public static let optimize = "Optimize"
-    public static let optimizing = "Optimizing…"
-    public static let optimizeHelp = "Have DeepSeek improve this draft before you send it"
-    public static let cancelHelp = "Stop optimizing"
+    /// The ✦ icon's name: its accessibility label, and its tooltip where there is no shortcut.
+    public static let optimize = "Optimize this draft"
+    /// Busy, the spinner's name and tooltip: pressing it cancels.
+    public static let optimizing = "Optimizing… press to cancel"
+    /// The Mac tooltip, with the shortcut it has there.
+    public static let optimizeHelp = "Optimize this draft · ⌘⇧O"
     public static let buttonIdentifier = "composer.optimize"
 
     // The suggestion (frame 4)
@@ -197,16 +199,24 @@ public enum PromptOptimizer {
         user?.promptOptimizerAvailable == false
     }
 
-    /// Whether the composer shows ✦ Optimize for this draft (frame 2, the web's rules): the account
-    /// has it on, and the box holds words — not empty, not a `!` shell command, and not only a
-    /// `/command`.
-    public static func showsButton(on: Bool, text: String) -> Bool {
+    /// Whether the composer draws ✦ Optimize at all: whenever the account has it on, whatever the box
+    /// holds, so the button keeps its slot and no toolbar control moves as the draft fills or empties.
+    public static func showsButton(on: Bool) -> Bool { on }
+
+    /// Whether the drawn button can be pressed (the web's rules): busy, it always can (it cancels);
+    /// otherwise the box holds words — not empty, not a `!` shell command, and not only a `/command`.
+    public static func enablesButton(on: Bool, text: String, busy: Bool) -> Bool {
+        if busy { return true }
         guard on else { return false }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("!") else { return false }
         if trimmed.hasPrefix("/"), !trimmed.contains(where: { $0.isWhitespace }) { return false }
         return true
     }
+
+    /// The button's square slot, in points: Send's size. Idle (✦) and busy (a spinner) draw in this
+    /// one frame, so pressing it moves nothing.
+    public static let buttonSide: Double = 32
 
     /// The line a failed press shows (frame 6). Every failure says the same: the draft is untouched.
     public static func failureLine(_ error: Error) -> String { PromptOptimizerCopy.failed }
