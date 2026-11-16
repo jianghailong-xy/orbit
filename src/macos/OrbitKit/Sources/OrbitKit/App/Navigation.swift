@@ -186,7 +186,7 @@ public struct NavState: Equatable, Sendable {
         settingsPresented = true
     }
 
-    /// Put Settings up open on one of its pages — the composer's translation tag opens Sessions,
+    /// Put Settings up open on one of its pages — the composer's translation tag opens General,
     /// where Translation is (board decision 6A).
     public mutating func openSettings(at page: SettingsPage) {
         settingsPresented = true

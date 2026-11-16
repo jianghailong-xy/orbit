@@ -207,7 +207,7 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 				"type":        "boolean",
 				"description": "Return at once and be woken with the result when the SubAgent ends (default false, or the type's is_background).",
 			},
-			"resume":    str("The runId of a finished SubAgent of this session that ran on this machine, to continue: it keeps its own conversation and gets prompt as its next message. A remote one (workspace or needs) cannot be resumed."),
+			"resume":    str("The runId of a finished SubAgent of this session to continue: it keeps its own conversation and gets prompt as its next message. A remote one continues on the workspace it ran on, in a new worktree of that workspace's HEAD: what it changed before was discarded. Leave out workspace and needs."),
 			"workspace": str("Run on another workspace of this repository, by name (e.g. one on a Mac). Runs on that workspace's own HEAD and returns text only. Check it first with provider_list(workspace): it says which providers and models that workspace's runner can run, and why not."),
 			"needs": map[string]interface{}{
 				"type": "array", "items": map[string]interface{}{"type": "string"},
@@ -621,7 +621,7 @@ type subagentRecord struct {
 	// StateDir is the directory whose engine state holds the conversation: the scratch dir of the run that opened
 	// it, which every resume of it runs its engine state from again ("" for an engine that keeps none there).
 	StateDir string `json:"stateDir,omitempty"`
-	// Workspace is the workspace a remote run ran on: its tree is discarded when it ends, so it cannot be resumed.
+	// Workspace is the workspace a remote run ran on, whose runner keeps its conversation; a resume goes there.
 	Workspace string `json:"workspace,omitempty"`
 }
 
@@ -748,7 +748,7 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 			return subagentReport{}, err
 		}
 		if subagentWantsRemote(args) {
-			return subagentReport{}, errors.New("resume continues a SubAgent on this machine; leave out workspace and needs, or start a new SubAgent with the full brief")
+			return subagentReport{}, errors.New("resume continues a SubAgent where it ran; leave out workspace and needs, or start a new SubAgent with the full brief")
 		}
 	}
 	if strings.TrimSpace(toolUseID) == "" {
@@ -766,6 +766,11 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		toolUseID = "delegate_" + strings.TrimPrefix(id, "bgj_")
 	}
 	body := subagentStartBody(args, def, toolUseID, background)
+	if resumeFrom != nil && resumeFrom.Workspace != "" {
+		// The server sends it to the workspace and runner that ran it, which continues its conversation (§10.2).
+		body["resumeOf"] = resumeFrom.RunID
+		body["prompt"] = prompt
+	}
 	if description := strings.TrimSpace(getString(args, "description")); description != "" {
 		body["description"] = description
 	}
@@ -782,6 +787,12 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		defer s.subagents.mu.Unlock()
 		return existing.reportLocked(), nil
 	}
+	if created.Remote == nil && resumeFrom != nil && resumeFrom.Workspace != "" {
+		// A control plane from before remote resume opened a run here, with no conversation to continue.
+		why := "the control plane cannot continue a SubAgent that ran on another workspace yet. Start a new SubAgent with the full brief instead"
+		s.patchSubagent(created.RunID, subagentReport{RunID: created.RunID, Status: subagentStatusFailed, Result: "The SubAgent failed: " + why + "."}, nil, false)
+		return subagentReport{}, errors.New(why)
+	}
 	if created.Remote != nil {
 		// Another workspace's runner runs it (§10): this one follows its events into the session's stream.
 		ctx, cancel := context.WithCancel(context.Background())
@@ -793,7 +804,7 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		}
 		s.subagents.add(run)
 		s.bg.subagentsLive.Add(1)
-		// So a resume after this process restarts is refused for what it is, not as a run that left nothing.
+		// So a resume after this process restarts still knows where it ran.
 		dir := subagentDir(s.sessionID, run.id)
 		_ = os.MkdirAll(dir, 0o700)
 		_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Type: run.kind, Workspace: run.workspace})
@@ -1435,7 +1446,8 @@ var subagentResumeless = map[string]string{}
 // subagentResumeRefusal refuses a resume the run's engine cannot do, before any run is opened for it.
 func subagentResumeRefusal(rec *subagentRecord) error {
 	if rec.Workspace != "" {
-		return fmt.Errorf("SubAgent %s ran on workspace %s, whose tree is discarded when it ends, so it cannot be resumed. Start a new SubAgent with the full brief instead", rec.RunID, rec.Workspace)
+		// Its conversation is on that workspace's runner, which answers for it.
+		return nil
 	}
 	if why, ok := subagentResumeless[rec.Engine]; ok {
 		return fmt.Errorf("SubAgent %s ran on %s, which cannot resume a SubAgent's conversation (%s). Start a new SubAgent with the full brief instead", rec.RunID, rec.Engine, why)

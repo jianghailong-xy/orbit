@@ -31,8 +31,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     private val job = SupervisorJob(parent.coroutineContext[Job])
     private val scope = CoroutineScope(parent.coroutineContext + job)
     internal val api = ComposerApi(auth, handle, sessionId, target)
-    /** Set by a bare machine's new session page to decide whether Send holds the message or creates the workspace and session. */
-    var machineSend: ((HeldMessage) -> MachineSend)? = null
     private val key = "composer-v1:${ObjectId.canonical(sessionId) ?: sessionId}"
     private val disk = Mutex()
     private val uploadSlots = Semaphore(2)
@@ -200,6 +198,8 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
      * [queueForNextTurn]: Send's other way while a turn runs (decided 2026-10-16, docs/mocks/steer-tray) — queued for the next turn
      * (`intent: NEXT_TURN`) instead of into this one. Otherwise no intent goes out and the server places the message as it always has. */
     fun send(seedModel: String? = null, queueForNextTurn: Boolean = false) {
+        // A machine with no workspace sends nothing: its page is the setup card, which makes the workspace.
+        if (target?.isMachineDraft == true) return
         if (!state.value.loaded || state.value.busy || state.value.waiting || state.value.draft.pending != null || state.value.draft.createdSessionId != null) return
         mutable.update { it.copy(waiting = true, error = null, notice = null) }
         launch {
@@ -209,16 +209,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 mutable.update { it.copy(busy = true, waiting = false) }
                 val draft = state.value.draft
                 check(draft.attachments.all { it.remoteId != null }) { "Retry or remove failed uploads before sending." }
-                val detail = if (target?.isMachineDraft == true) {
-                    runCatching { api.detail() }.getOrElse {
-                        val runner = state.value.catalog?.runner
-                        MachineSetup.machineDraft(
-                            target.runnerId.orEmpty(),
-                            runner?.let(RunnerPage::displayName) ?: target.runnerId.orEmpty(),
-                            runner?.let(MachineSetup::firstEngineOn) ?: ProviderEngines.CLAUDE,
-                        )
-                    }
-                } else api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
+                val detail = api.detail() // Revalidate resume/capabilities at the actual send, not from cache.
                 if (draft.text.trim().takeWhile { !it.isWhitespace() } == "/status") {
                     // The engine first, as the rows of iOS's status card name it (A07-19 (c), iOS cef3c3f83 `statusRows`).
                     val engine = ProviderEngines.cliName(ProviderChoices.engine(JsonObject(detail + draft.resumeConfig),
@@ -237,37 +228,13 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 if (shell && executesDsh(JsonObject(detail + draft.resumeConfig))) { refuse(DshRuntime.SHELL_REFUSAL); return@launch }
                 val content = if (shell) raw.drop(1).trim() else raw
                 if (content.isEmpty() && (shell || draft.attachments.isEmpty())) return@launch
-                var newWorkspace: NewWorkspaceRequest? = null
-                if (target?.isMachineDraft == true) {
-                    val decision = machineSend?.invoke(HeldMessage(content = content, shell = shell, attachments = draft.attachments))
-                        ?: MachineSend.Hold
-                    when (decision) {
-                        MachineSend.Nothing -> return@launch
-                        MachineSend.AlreadyWaiting -> {
-                            OrbitToasts.show(MachineSetupCopy.HELD_ALREADY_WAITING, detail = MachineSetupCopy.HELD_ALREADY_WAITING_DETAIL, tone = ToastTone.INFO)
-                            return@launch
-                        }
-                        MachineSend.Hold -> {
-                            mutable.update {
-                                it.copy(
-                                    draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList()),
-                                    error = null,
-                                    notice = null,
-                                )
-                            }
-                            persist()
-                            return@launch
-                        }
-                        is MachineSend.Create -> newWorkspace = decision.newWorkspace
-                    }
-                }
                 val id = UUID.randomUUID().toString()
                 // D2: the unedited gloss goes with the optimizer's agent-language prompt as its translation — on a turn, a revive and
                 // a new session's opening message alike. Send never waits for the optimizer: a press still out, or a sheet still open, goes.
                 val optimizedTranslation = state.value.optimizer.optimizedTranslation(draft.text)
                 cancelOptimize(); dismissOptimization()
                 val body = PromptOptimizer.withOptimizedTranslation(if (target != null) {
-                    buildCreateBody(detail, content, shell, draft.attachments, seedModel, newWorkspace)
+                    buildCreateBody(detail, content, shell, draft.attachments, seedModel)
                 } else buildJsonObject {
                     if (endpoint == "resume") {
                         draft.resumeConfig.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
@@ -537,25 +504,13 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         shell: Boolean,
         attachments: List<StagedAttachment>,
         seedModel: String?,
-        newWorkspace: NewWorkspaceRequest?,
     ): JsonObject {
         val config = state.value.draft.resumeConfig
         return buildJsonObject {
             config.filterKeys { it != "account" }.forEach { (k, v) -> put(k, v) }
             if (config["model"] == null) seedModel?.let { put("model", it) }
-            if (newWorkspace != null) {
-                put("assignedRunnerId", target?.runnerId ?: detail.text("runnerId").orEmpty())
-                put("newWorkspace", newWorkspace.toJson())
-                val effective = JsonObject(detail + config)
-                val engine = config.text("engine") ?: state.value.catalog?.engineOf(effective)
-                    ?: detail.text("lastEngine") ?: ProviderEngines.CLAUDE
-                val provider = config.text("provider") ?: detail.text("lastProvider") ?: engine
-                put("engine", engine)
-                put("provider", provider)
-            } else {
-                put("workspaceId", target!!.workspaceId)
-                target.folderId?.let { put("folderId", it) }
-            }
+            put("workspaceId", target!!.workspaceId)
+            target.folderId?.let { put("folderId", it) }
             put("prompt", content)
             put("shell", shell)
             config.text("account")?.let { account ->
@@ -565,59 +520,6 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                 }
             }
             putJsonArray("attachmentIds") { attachments.mapNotNull { it.remoteId }.forEach { add(it) } }
-        }
-    }
-
-    /**
-     * The message that waited under a machine's setup card, going by itself (rule 6): the composer's current draft is untouched.
-     * Answers null on success, or why it was refused.
-     */
-    suspend fun sendHeld(held: HeldMessage, newWorkspace: NewWorkspaceRequest, seedModel: String? = null): String? {
-        if (target == null) return null
-        mutable.update { it.copy(busy = true, error = null, notice = null) }
-        return try {
-            val detail = draftOrSessionDetail()
-            val body = buildCreateBody(detail, held.content, held.shell, held.attachments, seedModel, newWorkspace)
-            val accepted = api.mutation("create", body)
-            val created = accepted.text("id") ?: error("Creation response has no session id.")
-            mutable.update {
-                it.copy(
-                    draft = it.draft.copy(resumeConfig = JsonObject(emptyMap()), createdSessionId = created),
-                    notice = "Message accepted.",
-                    error = null,
-                    acknowledgementPending = false,
-                    switchNote = null,
-                )
-            }
-            held.attachments.forEach { auth.writeData(handle, DataKind.DRAFT, "$key:attachment:${it.id}", ByteArray(0)) }
-            persist()
-            refresh()
-            null
-        } catch (cancel: CancellationException) {
-            throw cancel
-        } catch (e: Exception) {
-            failure(e)
-        } finally {
-            mutable.update { it.copy(busy = false) }
-        }
-    }
-
-    /** A waiting message taken back: its words and files return to the composer under any draft. */
-    fun restoreHeld(held: HeldMessage) {
-        val body = if (held.shell) "!${held.content}" else held.content
-        fun apply(draft: ComposerDraft): ComposerDraft {
-            val next = if (held.content.isEmpty()) draft else draft.under(body)
-            return next.copy(attachments = next.attachments + held.attachments)
-        }
-        if (state.value.loaded) {
-            mutable.update { it.copy(draft = apply(it.draft)) }
-            launch { persist() }
-        } else {
-            launch {
-                withTimeoutOrNull(10_000) { state.first { it.loaded } } ?: return@launch
-                mutable.update { it.copy(draft = apply(it.draft)) }
-                persist()
-            }
         }
     }
 

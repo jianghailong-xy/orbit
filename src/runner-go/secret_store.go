@@ -105,6 +105,9 @@ type secretStore struct {
 	// scanMu runs one removal scan at a time; scans counts the ones not yet finished.
 	scanMu sync.Mutex
 	scans  sync.WaitGroup
+	// flushMu runs one flushRemoved at a time: each finished scan flushes, and so does every reconcile, and two
+	// flushes reading owedRem before either cleared it would report the same removal twice.
+	flushMu sync.Mutex
 
 	ready     chan struct{}
 	readyOnce sync.Once
@@ -727,6 +730,8 @@ func (s *secretStore) flushRemoved() {
 	if s == nil {
 		return
 	}
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
 	s.mu.Lock()
 	owed := make(map[string]string, len(s.owedRem))
 	for id, note := range s.owedRem {

@@ -3007,6 +3007,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// The turn the latest `result` answered, which a prompt_suggestion arriving after it is filed
 	// against. Empty when that result failed or closed a turn the engine started on its own.
 	var lastAnsweredTurnID string
+	// Whether a compaction boundary has gone by since the last result: what tells a `/compact`
+	// turn's result from the resume carrier it otherwise looks exactly like.
+	var compactedThisTurn bool
 	targetFenceTripped := false
 scanLoop:
 	for sc.Scan() {
@@ -3055,6 +3058,9 @@ scanLoop:
 			version, _ := msg["claude_code_version"].(string)
 			rt.noteAnnouncedVersion(version)
 		}
+		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" {
+			compactedThisTurn = true
+		}
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes
 		// in a pipe. Replays arrive in the order the frames were read, so the oldest
@@ -3099,7 +3105,9 @@ scanLoop:
 			// the reply the user is waiting for — and leave `pending` untouched: the message
 			// that was fed is still unanswered, and the result of the work it actually starts
 			// is what acks it.
-			if isResumeCarrierResult(r, lastAssistantText) {
+			compacted := compactedThisTurn
+			compactedThisTurn = false
+			if isResumeCarrierResult(r, lastAssistantText, compacted) {
 				continue
 			}
 			var turnID string

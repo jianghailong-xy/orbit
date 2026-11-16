@@ -218,7 +218,13 @@ struct UserBubbleView: View {
     /// shows its timestamp on hover alone.
     /// A steer keeps its line up after it settles too: unlike a message, whose reply is its
     /// receipt, "Read in this turn" is the only thing that ever says the engine took it.
-    private var unconfirmed: Bool { bubble.pending || bubble.undelivered || bubble.steer }
+    private var unconfirmed: Bool { awaitingServer || bubble.undelivered || bubble.steer }
+
+    /// Still on its way to the server: sent from here with no answer yet, or on the queue behind
+    /// another turn. A message the server has accepted is sent, whether or not a runner has picked it
+    /// up, and reads as one — its time, not "Sending…" (web parity: the accepted placeholder
+    /// `acceptedUserTurnEvent` draws the time `acceptedAt`).
+    private var awaitingServer: Bool { bubble.pending && (bubble.queued || bubble.turnId == nil) }
 
     /// Touch has no hover, so a hover-gated copy button can never be reached on iOS: the only user
     /// turns copyable from a phone were the ones whose row is pinned up anyway (a steer, a send in
@@ -318,8 +324,8 @@ struct UserBubbleView: View {
                 } else if bubble.pending, heldFoot != nil {
                     // Accepted, and held by a full runner or its update: the tag below says so.
                     EmptyView()
-                } else if bubble.pending {
-                    if bubble.queued { QueuedWord() } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }
+                } else if awaitingServer {
+                    if bubble.queued { QueuedWord(label: "Queued for next turn") } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }
                     // A queued message can be withdrawn until the runner leases it (web parity). Offered
                     // only once the server `turnId` is known — the DELETE keys on it — which lands a tick
                     // after send. `contentShape` widens the small hit target for touch.
@@ -331,8 +337,9 @@ struct UserBubbleView: View {
                         .padding(.leading, 2).contentShape(Rectangle())
                     }
                 } else if let ts = bubble.ts, let rel = RelativeTime.format(ts) {
-                    // Only ever reached on a settled turn — every other branch above is a state that
-                    // stays on screen. Gated here rather than on the row so the copy button beside it
+                    // Reached on a settled turn, and on one the server accepted that no runner has
+                    // echoed yet (stamped with when it was accepted) — every other branch above is a
+                    // state that stays on screen. Gated here rather than on the row so the copy button beside it
                     // can be shown on its own (see `copyShown` / `timeShown`).
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                         .opacity(timeShown ? 1 : 0)

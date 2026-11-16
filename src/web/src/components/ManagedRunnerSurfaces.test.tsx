@@ -151,6 +151,22 @@ describe("the managed runner's machine page", () => {
     expect(page.querySelector('.managed-runner-notice')).toBeNull();
   });
 
+  const wakes = () => apiMock.mock.calls.filter(([path]) => path === '/managed-runner/wake');
+
+  it('asleep while it waits for a login: opening its page wakes it, once, so it can be signed in', async () => {
+    server.status = state('sleeping: waiting for a login');
+    const page = await machinePage(MANAGED);
+    expect(page.querySelector('.managed-runner-notice')?.getAttribute('data-kind')).toBe('sleeping');
+    expect(wakes()).toHaveLength(1);
+    expect(wakes()[0][1]).toMatchObject({ method: 'POST', body: { idempotencyKey: expect.any(String) } });
+  });
+
+  it('asleep with a runtime signed in: opening its page leaves it asleep', async () => {
+    server.status = state('sleeping');
+    await machinePage(MANAGED);
+    expect(wakes()).toHaveLength(0);
+  });
+
   it('feature off: the managed runner shows by heartbeat, and its status is never read', async () => {
     server.capabilities = OFF;
     const page = await machinePage(MANAGED);

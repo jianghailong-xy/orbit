@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.directoryError
@@ -195,6 +196,10 @@ private fun ManagedWelcomeDraft(
     )
 }
 
+/**
+ * A machine with no workspace (owner 2026-11-16, docs/mocks/new-folder-in-home/workspace-card-with-name): its page is the setup card
+ * alone, which makes the workspace with `POST /workspaces`, and then moves on to the new workspace's new session page.
+ */
 @Composable
 private fun MachineDraftComposer(
     app: OrbitApplication,
@@ -206,9 +211,7 @@ private fun MachineDraftComposer(
     land: (String, OrbitRoute) -> Unit,
 ) {
     val target = remember(runnerId) { DraftTarget(workspaceId = "", runnerId = runnerId) }
-    val model = remember(handle, target) { app.composer(handle, target.key, target) }
-    val state by model.state.collectAsState()
-    val setupState = app.machineSetup(handle, runnerId)
+    val api = remember(handle, target) { ComposerApi(app.session, handle, target.key, target) }
     val managementApi = remember(handle) { ManagementApi(app.session, handle, app.processScope) }
     val scope = rememberCoroutineScope()
     val resumed = rememberResumed()
@@ -216,199 +219,73 @@ private fun MachineDraftComposer(
 
     var liveRunner by remember(runnerId) { mutableStateOf<JsonObject?>(null) }
     val directoryRunner = data.effectiveRunnerRows.firstOrNull { ObjectId.same(it.text("id"), runnerId) }
-    val runner = liveRunner ?: state.catalog?.runner ?: directoryRunner
+    val runner = liveRunner ?: directoryRunner
+    var creating by remember(runnerId) { mutableStateOf(false) }
+    var createError by remember(runnerId) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(model) {
-        if (model.state.value.let { it.catalog == null && !it.catalogLoading }) {
-            model.loadCatalog()
-        }
-    }
-
-    LaunchedEffect(model, runnerId, resumed) {
+    LaunchedEffect(api, runnerId, resumed) {
         if (!resumed) return@LaunchedEffect
-        runCatching { model.api.runner(runnerId) }.getOrNull()?.let { liveRunner = it }
+        runCatching { api.runner(runnerId) }.getOrNull()?.let { liveRunner = it }
         while (true) {
-            // More often while it is still connecting: its first heartbeat opens the folder step.
+            // More often while it is still connecting: its first heartbeat opens the folder field.
             delay(MachineSetup.refreshMs(liveRunner))
-            runCatching { model.api.runner(runnerId) }.getOrNull()?.let { liveRunner = it }
-            model.refreshCatalog()
+            runCatching { api.runner(runnerId) }.getOrNull()?.let { liveRunner = it }
         }
     }
 
-    val openRunner = { rId: String, eng: String -> open(OrbitRoute(Destination.RUNNER, rId, recordId = "engine:$eng")) }
-
-    val firstEngine = runner?.let(MachineSetup::firstEngineOn) ?: ProviderEngines.CLAUDE
-    val draftWorkspace = runner?.let {
-        MachineSetup.machineDraft(it.text("id") ?: runnerId, RunnerPage.displayName(it), firstEngine)
-    }
-    val effective = draftWorkspace?.let { JsonObject(it + state.draft.resumeConfig) } ?: state.draft.resumeConfig
-    val engine = state.draft.resumeConfig.text("engine")
-        ?: state.catalog?.engineOf(effective)
-        ?: firstEngine
-    val providerSlug = state.draft.resumeConfig.text("provider") ?: engine
-    val antigravityKey = state.catalog?.antigravityKeyAvailable(effective) == true
-    val engines = state.catalog?.engines(
-        preferred = listOf(engine to providerSlug),
-        antigravityKey = antigravityKey,
-    ).orEmpty()
-    val providerOption = state.catalog?.current(engine, providerSlug, antigravityKey)
-    val credential = runner?.let { MachineSetup.credential(it, engine, providerOption) } ?: SetupCredential.SignIn
     val online = runner != null && !RunnerPage.isOffline(runner, nowMs)
     val existingWorkspace = data.workspaces.firstOrNull { ObjectId.same(it.runnerId, runnerId) }
     val bare = data.ready && existingWorkspace == null
-    val ready = MachineSetup.isReady(bare = bare, folder = setupState.folder, online = online, credential = credential)
-    // A new account's first machine: the setup card greets it and offers first messages (docs/mocks/new-user-onboarding).
+    // A new account's first machine: the setup card greets it (docs/mocks/new-user-onboarding).
     val machineWelcome = rememberNewAccount(managementApi, bare) && bare
     val welcomeName = rememberAccountName(managementApi, machineWelcome)
-    var focusRequest by remember(target) { mutableIntStateOf(0) }
-    val otherEngines = runner?.let {
-        MachineSetup.otherEngines(it, engine, state.catalog?.fleet ?: data.effectiveRunnerRows)
-    }.orEmpty()
-    val keyToUse = MachineSetup.firstKey(engines, preferring = engine)
 
-    // A machine's first workspace has no session a person opened yet, so no lastModel: the runner or key default.
-    val seed = if (state.draft.resumeConfig["model"] != null) null else state.catalog?.liveLastModel(engine, providerSlug, draftWorkspace)
-
-    SideEffect {
-        model.machineSend = { heldMessage ->
-            val decision = app.machineSetup(handle, runnerId).send(bare = bare, ready = ready)
-            if (decision == MachineSend.Hold) {
-                app.updateMachineSetup(handle, runnerId) { it.hold(heldMessage) }
-            }
-            decision
-        }
-    }
-
-    // Both steps done with a message waiting: it goes by itself (rule 6).
-    LaunchedEffect(ready, setupState.held, state.busy) {
-        val current = app.machineSetup(handle, runnerId)
-        val taken = current.takeHeldToSend(ready = ready, busy = state.busy) ?: return@LaunchedEffect
-        val (nextState, pair) = taken
-        val (message, folder) = pair
-        app.updateMachineSetup(handle, runnerId) { nextState }
-        app.processScope.launch {
-            val why = model.sendHeld(message, folder, seed)
-            if (why != null) {
-                app.updateMachineSetup(handle, runnerId) { it.failHeld(why) }
-            }
-        }
-    }
-
-    LaunchedEffect(state.draft.createdSessionId, state.acknowledgementPending) {
-        state.draft.createdSessionId?.takeUnless { state.acknowledgementPending }?.let { id ->
-            app.updateMachineSetup(handle, runnerId) { it.finish() }
-            open(OrbitRoute(Destination.SESSION, id, origin = route.origin))
-            model.consumeCreated()
-        }
-    }
-
-    // Rule 9 / handoff: if the machine gets a workspace while nothing is in flight, hand off any waiting message to it.
-    LaunchedEffect(existingWorkspace?.id, setupState.sendingHeld, state.busy, state.draft.createdSessionId) {
+    // The machine has a workspace (made here, or elsewhere meanwhile): on to its new session page.
+    LaunchedEffect(existingWorkspace?.id, creating) {
         val ws = existingWorkspace ?: return@LaunchedEffect
-        if (setupState.sendingHeld || state.busy || state.draft.createdSessionId != null) return@LaunchedEffect
-        val (_, held) = app.machineSetup(handle, runnerId).withdraw()
-        app.updateMachineSetup(handle, runnerId) { it.finish() }
-        if (held != null) {
-            val wsTarget = DraftTarget(ws.id)
-            app.composer(handle, wsTarget.key, wsTarget).restoreHeld(held)
-        }
+        if (creating) return@LaunchedEffect
         land(ws.id, OrbitRoute(Destination.DRAFT, workspaceId = ws.id, origin = route.origin))
     }
 
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val composerHeight = if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
-        val scrollState = rememberScrollState()
-        LaunchedEffect(setupState.held != null) {
-            if (setupState.held != null) {
-                scrollState.scrollTo(scrollState.maxValue)
-            }
-        }
-        Column(Modifier.fillMaxSize()) {
-            Column(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-            ) {
-                if (runner != null) {
-                    MachineSetupCard(
-                        runner = runner,
-                        online = online,
-                        state = setupState,
-                        engine = engine,
-                        credential = credential,
-                        ready = ready,
-                        otherEngines = otherEngines,
-                        keyToUse = keyToUse,
-                        managementApi = managementApi,
-                        probeDir = { path, ask -> model.api.probeDir(runner.text("id") ?: runnerId, path, ask) },
-                        onPickFolder = { picked ->
-                            app.updateMachineSetup(handle, runnerId) { it.pick(picked) }
-                        },
-                        onUseEngine = { nextEngine ->
-                            model.config(buildJsonObject {
-                                put("engine", nextEngine)
-                                put("provider", nextEngine)
-                            })
-                        },
-                        onUseKey = {
-                            keyToUse?.let { pick ->
-                                model.config(buildJsonObject {
-                                    put("engine", pick.engine)
-                                    put("provider", pick.provider)
-                                })
-                            }
-                        },
-                        onOpenMachine = {
-                            open(OrbitRoute(Destination.RUNNER, runner.text("id") ?: runnerId))
-                        },
-                        onSignedIn = {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        if (runner != null) {
+            MachineSetupCard(
+                runner = runner,
+                online = online,
+                probeDir = { path, ask -> api.probeDir(runner.text("id") ?: runnerId, path, ask) },
+                onCreate = { folder, name ->
+                    creating = true
+                    createError = null
+                    scope.launch {
+                        try {
+                            val made = api.createWorkspace(MachineSetup.createWorkspaceBody(name, runner.text("id") ?: runnerId, folder))
+                            val id = made.text("id") ?: error("The server didn't answer the workspace's id.")
                             app.realtime.refreshDirectory()
-                            scope.launch {
-                                runCatching { model.api.runner(runnerId) }.getOrNull()?.let { liveRunner = it }
-                                model.refreshCatalog()
-                            }
-                        },
-                        welcome = if (!machineWelcome) null else MachineWelcome(
-                            name = welcomeName,
-                            composerText = state.draft.text,
-                            onExample = { text -> model.edit(text, text.length, text.length); focusRequest++ },
-                            onOpenKeys = { open(OrbitRoute(Destination.RUNNER)) },
-                        ),
-                    )
-                    setupState.held?.let { held ->
-                        HeldFirstMessageView(
-                            held = held,
-                            machine = RunnerPage.displayName(runner),
-                            sending = setupState.sendingHeld,
-                            onWithdraw = {
-                                val (nextState, withdrawn) = app.machineSetup(handle, runnerId).withdraw()
-                                app.updateMachineSetup(handle, runnerId) { nextState }
-                                if (withdrawn != null) model.restoreHeld(withdrawn)
-                            },
-                            onRetry = {
-                                app.updateMachineSetup(handle, runnerId) { it.retryHeld() }
-                            },
-                        )
+                            land(id, OrbitRoute(Destination.DRAFT, workspaceId = id, origin = route.origin))
+                        } catch (cancel: CancellationException) {
+                            throw cancel
+                        } catch (e: Exception) {
+                            createError = if (e is ApiError) e.messages.firstOrNull() ?: directoryError(e) else directoryError(e)
+                        } finally {
+                            creating = false
+                        }
                     }
-                } else if (data.ready) {
-                    Text("This runner is no longer on your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    CircularProgressIndicator()
-                }
-            }
-            val session = draftWorkspace?.let {
-                SessionState(
-                    target.key,
-                    snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()),
-                    fresh = true,
-                )
-            }
-            Box(Modifier.heightIn(max = composerHeight)) {
-                SessionComposer(app, handle, target.key, session, target, focusRequest = focusRequest, openRunner = openRunner,
-                    placeholder = if (machineWelcome && runner != null && (online || MachineSetup.isConnecting(runner))) WelcomeCopy.WELCOME_PLACEHOLDER else null)
-            }
+                },
+                creating = creating,
+                createError = createError,
+                onOpenMachine = { open(OrbitRoute(Destination.RUNNER, runner.text("id") ?: runnerId)) },
+                welcome = machineWelcome,
+                welcomeName = welcomeName,
+            )
+        } else if (data.ready) {
+            Text("This runner is no longer on your account.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            CircularProgressIndicator()
         }
     }
 }

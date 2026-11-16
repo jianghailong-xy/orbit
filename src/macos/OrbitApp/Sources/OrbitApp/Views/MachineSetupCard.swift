@@ -1,12 +1,11 @@
 import SwiftUI
 import OrbitKit
 
-// A machine with no workspace (docs/mocks/first-workspace-in-conversation, board 03 and the rules of
-// 04): its own new session page, where the engine hero stands for a machine that has one. A card asks
-// the two things only the owner can answer, the folder sessions may read and change and the coding CLI
-// they run on; what is sent before both are done waits under it; and the first message makes the
-// workspace. The web's MachineSetupCard, iOS-ized as the board draws it: grouped options with a tick,
-// capsule buttons. The rules are OrbitKit's (`MachineSetup`, `MachineSetupState`).
+// A machine with no workspace (docs/mocks/new-folder-in-home/workspace-card-with-name, owner 2026-11-16):
+// its own new session page, which the setup card fills alone. The card makes the machine's first
+// workspace from a folder and a name, with Create workspace beside the name; signing in a coding CLI is
+// left to the new workspace's sessions. The web's MachineSetupCard, iOS-ized: capsule buttons. The rules
+// are OrbitKit's (`MachineSetup`, `WorkspaceNameField`).
 
 /// The setup card's colours, shared with the welcome card that grows out of it (`WelcomeCard`).
 enum SetupInk {
@@ -67,7 +66,7 @@ extension View {
 }
 
 /// A machine's own new session page. The machine's row is read again while the page is up, so a
-/// sign-in landing, a runner updating itself or a machine coming back moves the card by itself.
+/// runner updating itself or a machine coming back moves the card by itself.
 struct MachineDraftPage: View {
     @Environment(AppModel.self) private var app
     let runnerID: String
@@ -110,15 +109,15 @@ struct MachineDraftPage: View {
                     app.leaveMachineDraft(runnerID)
                     return
                 }
-                // More often while it is still connecting: its first heartbeat opens the folder step.
+                // More often while it is still connecting: its first heartbeat opens the folder field.
                 try? await Task.sleep(for: .seconds(MachineSetup.refreshSeconds(for: runner)))
             }
         }
         .onChange(of: runner, initial: true) { _, _ in adopt() }
         .onChange(of: setup == nil) { _, _ in adopt() }
         .onChange(of: bare) { _, _ in adopt() }
-        // The machine got a workspace some other way, or from a first send still being settled: the
-        // page moves on to it once nothing of its own is out.
+        // The machine got a workspace some other way, or from a create still being settled: the page
+        // moves on to it once nothing of its own is out.
         .onChange(of: movedOn, initial: true) { _, now in
             if now { app.machineGotWorkspace(runnerID) }
         }
@@ -153,115 +152,120 @@ struct MachineDraftPage: View {
 
     private func adopt() {
         guard let runner else { return }
-        setup?.adopt(runner: runner, bare: bare, fleet: app.agents?.runnerRows ?? [])
+        setup?.adopt(runner: runner, bare: bare)
     }
 }
 
+/// The page is the card alone (owner 2026-11-16): no composer under it, and nothing waiting there.
 private struct MachineDraftContent: View {
     @Environment(AppModel.self) private var app
     let setup: MachineSetupModel
 
-    /// A new account's bare machine: the card greets it and offers first messages (web `machineWelcome`).
+    /// A new account's bare machine: the card greets it (web `machineWelcome`).
     private var welcome: Bool { app.newAccount == true && setup.bare }
 
-    /// What moves the waiting message: it goes when this says it can.
-    private struct Send: Equatable {
-        let ready: Bool
-        let held: HeldMessage?
-        let busy: Bool
-    }
-
     var body: some View {
-        let draft = setup.draft
-        let ready = setup.ready
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 12) {
-                        MachineSetupCard(setup: setup, ready: ready, welcome: welcome)
-                        if let held = setup.state.held, let registry = app.consoleRegistry {
-                            HeldFirstMessageView(held: held, machine: RunnerPageFormat.displayName(setup.runner),
-                                                 sending: setup.state.sendingHeld,
-                                                 onWithdraw: { setup.withdraw() }, onRetry: { setup.retryHeld() })
-                                // The bubble's own surroundings in a transcript (`ConsoleView`).
-                                .environment(registry.attachments)
-                                .environment(draft.createdTasks)
-                                .id(HeldFirstMessageView.anchor)
-                        }
-                        ForEach(draft.localStatusCards) { card in
-                            SessionStatusCardView(card: card)
-                        }
-                    }
-                    .frame(maxWidth: 620)
-                    .frame(maxWidth: .infinity)
-                    .padding([.horizontal, .top], 14)
-                    Color.clear.frame(height: .composerBandFade)
-                }
-                .fadesIntoComposerBand()
-                #if os(iOS)
-                .scrollDismissesKeyboard(.interactively)   // swipe the card to lower the keyboard
-                #endif
-                // What lands under the card can land below the fold.
-                .onChange(of: setup.state.held != nil) { _, waiting in
-                    if waiting { withAnimation { proxy.scrollTo(HeldFirstMessageView.anchor, anchor: .bottom) } }
-                }
-            }
-            ComposerBand {
-                if let msg = draft.statusMessage {
-                    HStack {
-                        Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
-                        Spacer()
-                        Button { draft.statusMessage = nil } label: { Image(systemName: "xmark") }
-                            .buttonStyle(.plain).foregroundStyle(.secondary)
-                    }
-                    .padding(.bottom, .composerBandGap)
-                }
-                ComposerView(console: draft)
-            }
+        ScrollView {
+            MachineSetupCard(setup: setup, welcome: welcome)
+                .frame(maxWidth: 620)
+                .frame(maxWidth: .infinity)
+                .padding(14)
         }
-        .task { await draft.prepareDraft() }
-        // A new account's first machine wears the welcome card (docs/mocks/new-user-onboarding): read
-        // whether it is one as the page appears, as the web's query does.
+        #if os(iOS)
+        .scrollDismissesKeyboard(.interactively)   // swipe the card to lower the keyboard
+        #endif
+        // A new account's first machine wears the welcome card's head (docs/mocks/new-user-onboarding):
+        // read whether it is one as the page appears, as the web's query does.
         .task { await app.readNewAccount() }
-        // The welcome placeholder, except on a machine that is offline, which keeps its own.
-        .onChange(of: welcome && setup.online, initial: true) { _, now in draft.welcomes = now }
-        // Both steps done with a message waiting: it goes by itself (rule 6).
-        .onChange(of: Send(ready: ready, held: setup.state.held, busy: draft.sending), initial: true) { _, _ in
-            setup.sendHeldIfReady()
-        }
     }
 }
 
-/// The card: the machine's name, then the two steps, then what happens when you send.
+/// The card (docs/mocks/new-folder-in-home/workspace-card-with-name): the machine's first workspace, made
+/// from one folder name in the machine's home (its Repos Folder on an older runner), which the machine checks
+/// as it is typed, and a name that follows the folder's until it is edited. Signing in a coding CLI is not
+/// asked here: the new workspace's sessions ask for it where they need it.
 private struct MachineSetupCard: View {
     @Environment(AppModel.self) private var app
     let setup: MachineSetupModel
-    let ready: Bool
     /// A new account's first machine (docs/mocks/new-user-onboarding): the welcome card's head in place
-    /// of "Set up <machine>", and its first messages to try as a third step.
+    /// of "New workspace on <machine>".
     var welcome = false
+
+    /// What the machine said about where the folder would go, for the path it was asked.
+    @State private var answer: Answer?
+    /// Check again: the same path asked once more.
+    @State private var attempt = 0
+
+    private struct Answer: Equatable {
+        let path: String
+        let outcome: DirProbeRelay.Outcome
+    }
+
+    private struct Question: Equatable {
+        let path: String?
+        let attempt: Int
+    }
 
     private var runner: Runner { setup.runner }
     private var machine: String { RunnerPageFormat.displayName(runner) }
     private var offline: Bool { !setup.online }
-    private var probes: Bool { MachineSetup.answersDirProbe(runner) }
+    private var checksFolders: Bool { MachineSetup.checksFolders(runner) }
+    /// Nothing can be checked or made here yet: the notice says why.
+    private var disabled: Bool { offline || !checksFolders }
+    private var root: String { MachineSetup.newFolderRoot(runner) }
+    private var folder: String { setup.folder }
+
+    /// The folder is asked about where it would go, as it is typed: a folder, or a file, may be there already.
+    private var question: String? {
+        guard !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }
+        return MachineSetup.newFolderPath(root: root, name: folder)
+    }
+
+    /// The answer to the question standing now; one to an earlier name is no answer to this one.
+    private var current: DirProbeRelay.Outcome? {
+        guard let answer, let question, answer.path == question else { return nil }
+        return answer.outcome
+    }
+
+    private var found: DirProbe? {
+        guard case .answered(let probe)? = current else { return nil }
+        return probe
+    }
+
+    private var candidate: PickedFolder? {
+        guard MachineSetup.isValidNewFolder(folder), let found else { return nil }
+        return MachineSetup.newFolderPick(found, name: folder, root: root, machine: machine)
+    }
+
+    private var canCreate: Bool {
+        MachineSetup.canCreate(pick: candidate, name: setup.name.name(folder: folder), online: !offline,
+                               checksFolders: checksFolders, creating: setup.creating)
+    }
+
+    private func create() {
+        guard canCreate, let candidate else { return }
+        Task { await setup.create(candidate, in: app) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if welcome { WelcomeHead() } else { head }
             if let notice { noticeLine(notice) }
             Divider().padding(.top, 12)
-            step(number: 1, done: setup.state.folder != nil) { folderStep }
-            Divider()
-            step(number: 2, done: setup.credential.done) { engineStep }
-            Divider()
-            if welcome {
-                WelcomeExamplesStep(step: 3, console: setup.draft)
-                Divider()
-            }
-            foot
+            folderField
+                .padding(.top, 11)
+            nameField
+                .padding(.vertical, 11)
         }
         .setupCardSurface()
+        // As it is typed, once it has settled.
+        .task(id: Question(path: question, attempt: attempt)) {
+            guard let asked = question else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            let outcome = await app.probeDir(runnerID: runner.id, path: asked, ask: true)
+            if !Task.isCancelled { answer = Answer(path: asked, outcome: outcome) }
+        }
     }
 
     private var head: some View {
@@ -272,9 +276,9 @@ private struct MachineSetupCard: View {
                 .frame(width: 30, height: 30)
                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text(MachineSetupCopy.setupTitle(machine: machine))
+                Text(MachineSetupCopy.setupNewWorkspaceTitle(machine: machine))
                     .font(.headline)
-                Text(MachineSetupCopy.SETUP_LEAD)
+                Text(MachineSetupCopy.setupNewWorkspaceLead(machine: machine))
                     .font(.orbitListSubtitle)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -282,16 +286,16 @@ private struct MachineSetupCard: View {
         }
     }
 
-    /// Why a step can't be done yet: the machine isn't here (rule 1), or it can't be asked about a path. Never
-    /// heard from is a machine still coming up, not one gone away, nor one too old to check folders.
+    /// Why nothing can be checked yet: the machine isn't here, or it can't be asked about a path. Never heard
+    /// from is a machine still coming up, not one gone away, nor one too old to check folders.
     private var notice: String? {
         if offline {
-            return MachineSetup.isConnecting(runner) ? MachineSetupCopy.setupConnecting(machine: machine)
-                : MachineSetupCopy.setupOffline(machine: machine)
+            return MachineSetup.isConnecting(runner) ? MachineSetupCopy.setupConnectingCreate(machine: machine)
+                : MachineSetupCopy.setupOfflineCreate(machine: machine)
         }
-        guard !probes || !MachineSetup.makesNewFolders(runner) else { return nil }
+        guard !checksFolders else { return nil }
         return MachineSetup.updatesItself(runner)
-            ? MachineSetupCopy.setupUpdating(machine: machine)
+            ? MachineSetupCopy.setupUpdatingCreate(machine: machine)
             : MachineSetupCopy.setupNeedsUpdate(machine: machine)
     }
 
@@ -301,7 +305,7 @@ private struct MachineSetupCard: View {
                 .font(.orbitLabel)
                 .foregroundStyle(SetupInk.warn)
                 .fixedSize(horizontal: false, vertical: true)
-            if !offline, !(probes && MachineSetup.makesNewFolders(runner)), !MachineSetup.updatesItself(runner) { openMachine }
+            if !offline, !checksFolders, !MachineSetup.updatesItself(runner) { openMachine }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -316,236 +320,85 @@ private struct MachineSetupCard: View {
             .foregroundStyle(Color.accentColor)
     }
 
-    private func step<Content: View>(number: Int, done: Bool, @ViewBuilder content: @escaping () -> Content) -> some View {
-        SetupStepRow(number: number, done: done, content: content)
-    }
+    // MARK: the folder
 
-    @ViewBuilder private var folderStep: some View {
-        if let folder = setup.state.folder {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(MachineSetupCopy.SETUP_FOLDER).fontWeight(.semibold)
-                    Text(folder.path)
-                        .font(.orbitMono)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Spacer(minLength: 4)
-                    change { setup.pick(nil) }
-                }
-                Text(folderNote(folder))
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        } else {
-            FolderName(runner: runner, disabled: offline || !probes || !MachineSetup.makesNewFolders(runner)) { setup.pick($0) }
-        }
-    }
-
-    private func folderNote(_ folder: PickedFolder) -> String {
-        switch folder {
-        case .existing(_, let note): return note
-        case .new: return MachineSetupCopy.SETUP_NEW_FOLDER_DONE
-        }
-    }
-
-    private var engineName: String { ProviderEngines.cliName(setup.draft.engine) }
-
-    @ViewBuilder private var engineStep: some View {
-        switch setup.credential {
-        case .signedIn:
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(engineName).fontWeight(.semibold)
-                Text(MachineSetupCopy.setupSignedIn(machine: machine))
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-            }
-        case .onKey(let label, let pool):
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(label).fontWeight(.semibold).lineLimit(1)
-                Text(pool ? MachineSetupCopy.SETUP_ON_A_POOL : MachineSetupCopy.SETUP_ON_A_KEY)
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                // Back to a sign-in: this engine's, or for one that has none, the machine's first.
-                change {
-                    setup.useEngine(LoginEngine(rawValue: setup.draft.engine) ?? MachineSetup.firstEngineOn(runner.engines))
-                }
-            }
-        case .signIn:
-            signInHead
-            // Nothing to drive offline; the notice says so.
-            if !offline, let engine = LoginEngine(rawValue: setup.draft.engine) {
-                RunnerSignInView(runnerID: runner.id, engine: engine,
-                                 onSignedIn: { Task { await app.agents?.refreshRunnerSnapshot() } },
-                                 signInTitle: RunnerPageCopy.RUNNER_SIGN_IN,
-                                 onUseApiKey: setup.keyToUse == nil ? nil : { setup.useKey() })
-                    .id(engine)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.small)
-                    .padding(.top, 7)
-            }
-            alternatives
-        case .notInstalled:
-            signInHead
-            Text(MachineSetupCopy.setupNotInstalled(engine: engineName, machine: machine))
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-                .padding(.top, 4)
-            openMachine
-            alternatives
-        }
-    }
-
-    private var signInHead: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(MachineSetupCopy.setupSignIn(engine: engineName, machine: machine))
-                .fontWeight(.semibold)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(MachineSetupCopy.SETUP_SIGN_IN_HELP)
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    /// Rule 5: the machine's other sign-ins.
-    @ViewBuilder private var alternatives: some View {
-        ForEach(setup.otherEngines) { other in
-            Button(MachineSetupCopy.setupUseEngine(engine: other.displayName)) { setup.useEngine(other) }
-                .buttonStyle(.plain)
-                .font(.orbitLabel)
-                .foregroundStyle(Color.accentColor)
-                .disabled(offline)
-                .padding(.top, 6)
-        }
-    }
-
-    private func change(_ action: @escaping () -> Void) -> some View {
-        Button(MachineSetupCopy.SETUP_CHANGE, action: action)
-            .buttonStyle(.plain)
-            .font(.orbitLabel)
-            .foregroundStyle(Color.accentColor)
-            .disabled(offline)
-    }
-
-    private var foot: some View {
-        Group {
-            if ready, let folder = setup.state.folder {
-                Text(MachineSetupCopy.setupReady(workspace: folder.workspaceName, path: folder.path))
-                    .foregroundStyle(SetupInk.found)
-            } else {
-                Text(MachineSetupCopy.SETUP_FOOT)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .font(.orbitLabel)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.top, 8)
-    }
-}
-
-/// Step one before it has an answer: one folder name in the machine's home (its Repos Folder on an older runner),
-/// which the machine itself checks as it is typed. A folder that is there is used; one that isn't is made.
-private struct FolderName: View {
-    @Environment(AppModel.self) private var app
-    let runner: Runner
-    let disabled: Bool
-    let onPick: (PickedFolder) -> Void
-
-    @State private var typed = ""
-    /// What the machine said about where the name would go. Nil while there is no answer yet.
-    @State private var answer: DirProbeRelay.Outcome?
-    /// Check again: the same path asked once more.
-    @State private var attempt = 0
-
-    private var machine: String { RunnerPageFormat.displayName(runner) }
-    private var root: String { MachineSetup.newFolderRoot(runner) }
-    private var name: String { typed.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    private var found: DirProbe? {
-        guard case .answered(let probe)? = answer else { return nil }
-        return probe
-    }
-
-    private var candidate: PickedFolder? {
-        guard MachineSetup.isValidNewFolder(name), let found else { return nil }
-        return MachineSetup.newFolderPick(found, name: name, root: root, machine: machine)
-    }
-
-    private struct Question: Equatable {
-        let path: String?
-        let attempt: Int
-    }
-
-    /// The name is asked about where it would go, as it is typed: a folder, or a file, may be there already.
-    private var question: String? {
-        guard !disabled, MachineSetup.isValidNewFolder(name) else { return nil }
-        return MachineSetup.newFolderPath(root: root, name: name)
-    }
-
-    var body: some View {
-        Text(MachineSetupCopy.SETUP_FOLDER).fontWeight(.semibold)
-        Text(MachineSetupCopy.setupFolderHelp(machine: machine))
-            .font(.orbitLabel)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+    private var folderField: some View {
         VStack(alignment: .leading, spacing: 3) {
+            Text(MachineSetupCopy.SETUP_FOLDER).fontWeight(.semibold)
             HStack(spacing: 4) {
                 Text(MachineSetup.newFolderPath(root: root, name: ""))
                     .font(.orbitMono)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
-                field(MachineSetupCopy.SETUP_NEW_FOLDER_NAME, text: $typed)
+                TextField(MachineSetupCopy.SETUP_NEW_FOLDER_NAME,
+                          text: Binding(get: { setup.typed }, set: { setup.typed = $0 }))
+                    .textFieldStyle(.roundedBorder)
+                    .font(.orbitMono)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                    .onSubmit { create() }
                     .accessibilityLabel(MachineSetupCopy.SETUP_FOLDER)
             }
-            line
-        }
-        .padding(.top, 8)
-        .disabled(disabled)
-        Button(MachineSetupCopy.SETUP_USE_FOLDER) {
-            if let candidate { onPick(candidate) }
-        }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .controlSize(.small)
-        .fontWeight(.semibold)
-        .disabled(candidate == nil || disabled)
-        .padding(.top, 9)
-        // As it is typed, once it has settled.
-        .task(id: Question(path: question, attempt: attempt)) {
-            answer = nil
-            guard let asked = question else { return }
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            let outcome = await app.probeDir(runnerID: runner.id, path: asked, ask: true)
-            if !Task.isCancelled { answer = outcome }
+            .disabled(disabled || setup.creating)
+            folderLine
         }
     }
 
-    /// What the name says: what the step does while nothing is typed, then what the machine finds where it would go.
-    @ViewBuilder private var line: some View {
-        if name.isEmpty {
-            meta(MachineSetupCopy.SETUP_FOLDER_HINT)
-        } else if !MachineSetup.isValidNewFolder(name) {
-            verdictLine(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, tone: .bad)
-        } else if let found {
-            let verdict = MachineSetup.newFolderVerdict(found, machine: machine)
-            // Nothing there yet reads as a note; anything there says what it is.
-            if found.exists { verdictLine(verdict.text, tone: verdict.tone) } else { meta(verdict.text) }
-        } else if answer != nil {
+    /// What the folder says: what the field does while nothing is typed, then what the machine finds where it
+    /// would go; or, after a refused Create workspace, why.
+    @ViewBuilder private var folderLine: some View {
+        switch MachineSetup.folderLine(folder: folder, createError: setup.createError, found: found,
+                                       unanswered: current != nil && found == nil, machine: machine) {
+        case .meta(let text):
+            meta(text)
+        case .verdict(let text, let tone):
+            verdictLine(text, tone: tone)
+        case .createFailed(let text):
+            verdictLine(text, tone: .bad)
+        case .noAnswer:
             noAnswer { attempt += 1 }
-        } else {
-            checking
+        case .checking:
+            Text(MachineSetupCopy.setupChecking(machine: machine))
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
         }
     }
 
-    private var checking: some View {
-        Text(MachineSetupCopy.setupChecking(machine: machine))
-            .font(.orbitLabel)
-            .foregroundStyle(.secondary)
+    // MARK: the name
+
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(MachineSetupCopy.SETUP_NAME).fontWeight(.semibold)
+            HStack(spacing: 8) {
+                // The folder's until it is edited; from then on what was typed, emptied included.
+                TextField(WorkspaceNameField.placeholder(folder: folder),
+                          text: Binding(get: { setup.name.shown(folder: folder) },
+                                        set: { setup.name.edit($0, folder: folder) }))
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { create() }
+                    .accessibilityLabel(MachineSetupCopy.SETUP_NAME)
+                    .disabled(disabled || setup.creating)
+                Button(action: create) {
+                    HStack(spacing: 6) {
+                        if setup.creating { ProgressView().controlSize(.mini) }
+                        Text(MachineSetupCopy.SETUP_CREATE)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .fontWeight(.semibold)
+                .disabled(!canCreate)
+            }
+            let line = setup.name.line(folder: folder)
+            if line.bad { verdictLine(line.text, tone: .bad) } else { meta(line.text) }
+        }
     }
+
+    // MARK: lines
 
     /// A check the machine gave no answer to, and the way to ask it again.
     private func noAnswer(again: @escaping () -> Void) -> some View {
@@ -570,82 +423,6 @@ private struct FolderName: View {
             .font(.orbitLabel)
             .foregroundStyle(tone == .ok ? SetupInk.found : tone == .warn ? SetupInk.warn : Color.red)
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private func field(_ prompt: String, text: Binding<String>) -> some View {
-        TextField(prompt, text: text)
-            .textFieldStyle(.roundedBorder)
-            .font(.orbitMono)
-            .autocorrectionDisabled()
-            #if os(iOS)
-            .textInputAutocapitalization(.never)
-            #endif
-            .onSubmit { if let candidate { onPick(candidate) } }
-    }
-}
-
-/// The first message, waiting under the card for both steps: the bubble it will be, with what it is
-/// waiting for beneath it and the way to take it back (rule 6). It goes by itself; only a refusal stops
-/// it, and then it stays here, saying why, until it is tried again or taken back.
-private struct HeldFirstMessageView: View {
-    static let anchor = "held-first-message"
-
-    let held: HeldMessage
-    let machine: String
-    let sending: Bool
-    let onWithdraw: () -> Void
-    let onRetry: () -> Void
-
-    var body: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            UserTurnRow(bubble: UserBubble(
-                id: Self.anchor, text: held.content,
-                attachments: held.attachments.map { TurnAttachment(id: $0.id, mime: $0.mimeType, name: $0.filename) },
-                pending: false, shell: held.shell))
-            Group {
-                if sending {
-                    Text(MachineSetupCopy.HELD_SENDING)
-                } else {
-                    // On one line where it fits; on a phone the sentence keeps its own, whole.
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            state
-                            presses
-                        }
-                        VStack(alignment: .trailing, spacing: 3) {
-                            state
-                            presses
-                        }
-                    }
-                }
-            }
-            .font(.orbitLabel)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.trailing)
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    @ViewBuilder private var state: some View {
-        if let error = held.error {
-            Text(MachineSetupCopy.heldFailed(why: error))
-                .foregroundStyle(.red)
-        } else {
-            Text(MachineSetupCopy.heldWaiting(machine: machine))
-        }
-    }
-
-    private var presses: some View {
-        HStack(spacing: 8) {
-            if held.error != nil { press(MachineSetupCopy.HELD_TRY_AGAIN, onRetry) }
-            press(MachineSetupCopy.HELD_WITHDRAW, onWithdraw)
-        }
-    }
-
-    private func press(_ title: String, _ action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.accentColor)
     }
 }
 

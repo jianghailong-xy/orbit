@@ -328,8 +328,6 @@ struct ComposerView: View {
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
         // A new account's welcome card above: what to write (docs/mocks/new-user-onboarding).
         if console.welcomes, console.replyContext == nil { return WelcomeCopy.WELCOME_PLACEHOLDER }
-        // A machine's new session page has no workspace to send to, and no question to answer.
-        if let machine = console.machinePlaceholder { return machine }
         // A wiki chat's panel says what to ask, unless a reply has its own words.
         if console.replyContext == nil, let emptyPlaceholder { return emptyPlaceholder }
         return console.replyContext?.placeholder ?? "Message…"
@@ -384,14 +382,13 @@ struct ComposerView: View {
             || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)
     }
 
-    /// Frame 4's card: above the composer on a Mac, the body of the sheet over it on a phone.
-    private func optimizationCard(_ optimization: PromptOptimization, sheet: Bool) -> some View {
+    /// Frame 4's card above the composer on a Mac.
+    private func optimizationCard(_ optimization: PromptOptimization) -> some View {
         PromptOptimizationCard(
             optimization: optimization,
             basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
             showingPrompt: $console.promptOptimizer.showingPrompt,
             glossLanguage: SessionTranslation.language(app.user?.preferences),
-            sheet: sheet,
             use: { console.useOptimization(edit: false) },
             editThenUse: editThenUseOptimization,
             tryAgain: { console.retryOptimizePrompt() },
@@ -417,10 +414,10 @@ struct ComposerView: View {
     }
     #endif
 
-    /// The composer's translation tag: Settings › Sessions, where Translation is.
+    /// The composer's translation tag: Settings › General, where Translation is.
     private func openTranslationSettings() {
         #if os(iOS)
-        app.nav.openSettings(at: .sessions)
+        app.nav.openSettings(at: .general)
         #else
         app.selectedSection = .settings
         #endif
@@ -513,7 +510,7 @@ struct ComposerView: View {
             // until Use. A phone shows the same card as a sheet (below).
             #if os(macOS)
             if let optimization = console.promptOptimizer.suggestion {
-                optimizationCard(optimization, sheet: false)
+                optimizationCard(optimization)
             }
             #endif
 
@@ -613,9 +610,14 @@ struct ComposerView: View {
         // Frame 4 on a phone: the suggestion is a sheet over the composer, with the same actions.
         .sheet(isPresented: optimizationSheetShown) {
             if let optimization = console.promptOptimizer.suggestion {
-                optimizationCard(optimization, sheet: true)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                PromptOptimizationSheet(
+                    optimization: optimization,
+                    basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
+                    showingPrompt: $console.promptOptimizer.showingPrompt,
+                    use: { console.useOptimization(edit: false) },
+                    edit: editThenUseOptimization,
+                    tryAgain: { console.retryOptimizePrompt() },
+                    dismiss: { console.dismissOptimization() })
             }
         }
         #endif
@@ -693,9 +695,15 @@ struct ComposerView: View {
             // it always has. The box is empty whenever one is offered, so no `/` menu is open.
             .onKeyPress(keys: [.tab]) { press in
                 guard press.modifiers.isEmpty else { return .ignored }
-                // The optimizer's card open over a draft: Tab is its Use, the same key's same meaning.
+                // Tab is the optimizer's key in the box, as on the web: Use on its card, and on a draft
+                // it can take, Optimize. While a press is out, and on a spent draft, Tab moves focus.
                 if console.promptOptimizer.suggestion != nil, !showSlash {
                     console.useOptimization(edit: false)
+                    return .handled
+                }
+                if !showSlash,
+                   console.promptOptimizer.tabOptimizes(on: PromptOptimizer.isOn(app.user), text: console.composerText) {
+                    console.optimizePrompt()
                     return .handled
                 }
                 guard offeredSuggestion != nil else { return .ignored }

@@ -28,10 +28,12 @@ public enum PendingTray {
     /// Whether a bubble on the queue waits in the tray rather than in the transcript's tail: the
     /// reader's own words still on their way — queued for the next turn, or a steer no runner has
     /// taken yet. What Orbit queued stays in the tail as its card, and a message whose delivery
-    /// settled undelivered stays in the conversation with that outcome. Web parity:
-    /// `WorkspaceView.tsx`'s `inPendingTray`.
+    /// settled undelivered stays in the conversation with that outcome, and so does one held for its
+    /// translation, with its chip or its failure (Settings › Translation, board frame 6): the tray only
+    /// waits for the engine. Web parity: `WorkspaceView.tsx`'s `inPendingTray`.
     public static func holds(_ bubble: UserBubble) -> Bool {
         !bubble.undelivered && !SteerDelivery.settles(bubble.delivery) && SteerDelivery.isReadersOwn(bubble)
+            && bubble.translation?.held != true
     }
 
     /// The tray's rows, in the order they were sent: the reader's steers nothing has read
@@ -60,19 +62,14 @@ public enum PendingTray {
             let intoTurn = bubble.steer || steering
             let taking = asked(withdrawing, bubble)
             let busy = taking || steering
-            // Settings › Translation: held for its translation, it says where that is (4A / 1A) and
-            // cannot be steered — nothing can deliver it until it is translated or sent as written.
-            let held = bubble.translation?.held == true
-            let heldState = bubble.translation?.state == .failed ? TranslationCopy.sendFailed : TranslationCopy.translating
             return PendingTrayRow(
                 bubble: bubble, heading: intoTurn ? .currentTurn : .nextTurn, text: text(of: bubble),
-                state: taking ? "Withdrawing…" : held ? heldState
-                    : intoTurn ? SteerDelivery.state(nil).label : "Queued for next turn",
+                state: taking ? "Withdrawing…" : intoTurn ? SteerDelivery.state(nil).label : "Queued for next turn",
                 busy: busy,
                 // Not handed to a runner yet, either way: the server takes it back alone — once its
                 // turn id, which the DELETE keys on, is known.
                 offersWithdraw: !busy && bubble.turnId != nil && (!bubble.steer || SteerDelivery.offersWithdraw(bubble)),
-                offersSteer: !busy && !held && !intoTurn && !bubble.shell && bubble.turnId != nil && steerOffered)
+                offersSteer: !busy && !intoTurn && !bubble.shell && bubble.turnId != nil && steerOffered)
         }
         // A row this end just sent has no receipt time yet: it is the newest. Stable for the rest.
         return (unread + queued).enumerated()

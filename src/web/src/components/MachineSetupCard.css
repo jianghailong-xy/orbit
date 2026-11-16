@@ -68,8 +68,7 @@
   color: var(--text-1);
 }
 
-.msc-notice a,
-.msc-not-installed a {
+.msc-notice a {
   color: var(--brand);
 }
 
@@ -112,18 +111,6 @@
   line-height: 19px;
 }
 
-.msc-folder {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  margin-top: 10px;
-}
-
-.msc-folder .msc-input {
-  width: 100%;
-}
-
 .msc-path {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 12.5px;
@@ -157,6 +144,41 @@
   color: var(--text-3);
 }
 
+.msc-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msc-field > .msc-input,
+.msc-row {
+  margin-top: 6px;
+}
+
+.msc-field > .msc-input {
+  display: flex;
+  max-width: none;
+}
+
+.msc-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.msc-row .msc-input {
+  flex: 1;
+  max-width: none;
+}
+
+.msc-line {
+  margin-top: 4px;
+  min-height: 17px;
+}
+
 .msc-input {
   max-width: 380px;
 }
@@ -165,10 +187,6 @@
   color: var(--text-3);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 12px;
-}
-
-.msc-use {
-  margin-top: 10px;
 }
 
 .msc-done-line {
@@ -206,19 +224,6 @@
 
 .msc-step .rsi {
   margin-top: 8px;
-}
-
-.msc-foot {
-  margin-top: 14px;
-  padding-top: 11px;
-  border-top: 1px solid var(--border-subtle);
-  color: var(--text-3);
-  font-size: 12px;
-  line-height: 17px;
-}
-
-.msc-foot.ready {
-  color: var(--success);
 }
 
 /* What lands under the card is brought into view whole: its end stops above the pane's 20px fade (the
@@ -322,15 +327,3 @@ a.msc-change:hover {
 }
 
 /* Create workspace: the card's one way out, under its foot (owner 2026-11-16). */
-.msc-create {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-.msc-create-error {
-  margin-top: 8px;
-  color: var(--error);
-  font-size: 12px;
-  line-height: 17px;
-}
