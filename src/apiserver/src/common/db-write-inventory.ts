@@ -131,10 +131,18 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   },
   {
     at: 'projects/project-open-item.service.ts#answerOpenItem', shape: 'TX_RETRIED',
-    locks: 'Owner item CAS (rank 60), then linked OPEN session requests (rank 60).',
+    locks: 'Owner item CAS (rank 60), then the automatic project_ruling INSERT (writeAutoRuling; its project FK takes the project FOR KEY SHARE), then linked OPEN session requests (rank 60).',
     identity: 'Item id and OPEN predicate; one answer restarts the linked questions deadline.', isolation: '', attempts: 4,
     replay: 'Re-read the committed rows; rollback discards all linked writes and a committed outcome is never replaced.',
     effects: 'Answer delivery after commit.',
+    answer: 'Typed 503 after retry exhaustion; the caller may retry the same request.',
+  },
+  {
+    at: 'projects/project-ruling.ts#recordProjectRuling', shape: 'TX_RETRIED',
+    locks: 'Reads the superseded ruling, then one project_ruling INSERT (its project FK takes the project FOR KEY SHARE), then a CAS UPDATE of the superseded ruling by id on superseded_by_id IS NULL. No other row.',
+    identity: 'None: each call records one ruling. A superseded ruling is the CAS predicate, so a second record superseding it is refused rather than written twice.', isolation: '', attempts: 4,
+    replay: 'Re-read the superseded ruling inside the closure; rollback discards the INSERT with the CAS.',
+    effects: 'None.',
     answer: 'Typed 503 after retry exhaustion; the caller may retry the same request.',
   },
   {
@@ -2896,6 +2904,7 @@ export interface TransactionParticipant {
  * silently.
  */
 export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'projects/project-ruling.ts#writeAutoRuling', under: 'projectOpenItem.answerOpenItem: after the item CAS to RESOLVED/ANSWERED, one project_ruling INSERT (ASK_OWNER, the item as its source; project_ruling_ask_owner_source_key holds it to one per question)' },
   { at: 'schedules/schedule-attention.ts#closeScheduleItems', under: "every scheduleRuns unit that ends or syncs a run, and schedules.decide, .resume and applyLocked's end: under the advisory key and the schedule row FOR UPDATE they hold, one UPDATE of that schedule's PENDING SCHEDULE_* owner_request rows to WITHDRAWN or DONE" },
   { at: 'schedules/schedule-attention.ts#fileScheduleItem', under: "scheduleRuns.report, .fail, .start, .holdRefused, .syncApprovalItems and schedules.update and .undo: under the advisory key and the schedule row FOR UPDATE they hold, one owner_request INSERT ON CONFLICT (asked_by_session_id, client_request_id) DO NOTHING" },
   { at: 'schedules/schedule-runs.service.ts#failLocked', under: 'scheduleRuns.start and .fail: under the advisory key and the schedule row FOR UPDATE they hold, one UPDATE of the run (FAILED, or QUEUED for a retry) and the schedule UPDATE of consecutive_failures' },

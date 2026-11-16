@@ -411,7 +411,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
       projectMembership: coordinator,
       coordinatorHandoffReceived: {
         handoffFromSessionId: PREVIOUS,
-        note: 'Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nAgreed with the owner\n- Don’t merge Payment retries before Friday’s release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.',
+        note: 'Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nRulings not yet recorded\n- Don’t merge Payment retries before Friday’s release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.',
         handedOverAt: '2026-11-14T07:42:00Z',
         movedWaits: [
           { id: 'w1', label: 'Fix login redirect reaching Done', paused: false },
@@ -423,7 +423,7 @@ describe('Compact and Start a new coordinator', { timeout: 120_000 }, () => {
     await waitFor(() => expect(mounted().querySelector('.handoff-card')).not.toBeNull());
     const card = mounted().querySelector('.handoff-card')!;
     expect(card.querySelector('.handoff-card-h')?.textContent).toMatch(/^Handoff from the previous coordinator · /);
-    expect([...card.querySelectorAll('h5')].map((h) => h.textContent)).toEqual(['Where things stand', 'Agreed with the owner', 'Waiting on', 'Next']);
+    expect([...card.querySelectorAll('h5')].map((h) => h.textContent)).toEqual(['Where things stand', 'Rulings not yet recorded', 'Waiting on', 'Next']);
     expect(card.querySelector('li')?.textContent).toBe('4 of 6 tasks done; Fix login redirect in review.');
     expect(mounted().querySelector('.handoff-chip')?.textContent).toBe('2 waits moved here');
     await click(card.querySelector('.handoff-card-h a'));

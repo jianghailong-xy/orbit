@@ -70,7 +70,7 @@ public enum CoordinatorHandoffCopy {
     public static func refusal(_ reason: String) -> String { "\(refused): \(reason)." }
 
     /// `COORDINATOR_HANDOFF_SECTIONS`: the note's four sections, in order.
-    public static let sections = ["Where things stand", "Agreed with the owner", "Waiting on", "Next"]
+    public static let sections = ["Where things stand", "Rulings not yet recorded", "Waiting on", "Next"]
 
     /// `COORDINATOR_HANDOFF_FAILURE_REASONS`, and the sentence a failure shows when the server sent
     /// none (`coordinatorHandoffFailureSentence`).

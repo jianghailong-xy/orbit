@@ -26,10 +26,12 @@ export const COORDINATOR_HANDOFF_TURN_PREFIX = 'coordinator-handoff:v1:';
  *  prompt by this line and keep it out of the transcript. */
 export const COORDINATOR_HANDOFF_PROMPT_HEAD = 'From Orbit · handoff note';
 
-/** The four sections the note is asked for, in order, as the successor's card titles them. */
+/** The four sections the note is asked for, in order, as the successor's card titles them. Owner rulings are
+ *  project records (`project_ruling`, coordinator handoff v2 §2): the note turn records them first, so "Rulings
+ *  not yet recorded" is normally empty. */
 export const COORDINATOR_HANDOFF_SECTIONS = [
   'Where things stand',
-  'Agreed with the owner',
+  'Rulings not yet recorded',
   'Waiting on',
   'Next',
 ] as const;

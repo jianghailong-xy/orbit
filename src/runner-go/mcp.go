@@ -1008,6 +1008,29 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		return toolResult("The item is now with the account owner, with your explanation on it.\n"+
 			prettyJSON(raw), false)
 
+	case "project_ruling_record":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		ruling := strings.TrimSpace(getString(args, "ruling"))
+		quote := strings.TrimSpace(getString(args, "quote"))
+		turnID := strings.TrimSpace(getString(args, "sourceTurnId"))
+		if ruling == "" || quote == "" || turnID == "" {
+			return toolResult("ruling, quote and sourceTurnId are required", true)
+		}
+		body := map[string]interface{}{"ruling": ruling, "quote": quote, "sourceTurnId": turnID}
+		if supersedes := strings.TrimSpace(getString(args, "supersedes")); supersedes != "" {
+			body["supersedes"] = supersedes
+		}
+		// The acting session IS the authority, as it is for ask_owner: the server checks it against the
+		// project's coordinator pointer, and checks the quote against the turn's owner text.
+		raw, err := s.t.recordProjectRuling(s.sessionID, id, body)
+		if err != nil {
+			return toolResult("record project ruling failed: "+err.Error(), true)
+		}
+		return toolResult("The ruling is recorded on the project.\n"+prettyJSON(raw), false)
+
 	case "integration_retry":
 		id := getString(args, "projectId")
 		taskID := getString(args, "taskId")

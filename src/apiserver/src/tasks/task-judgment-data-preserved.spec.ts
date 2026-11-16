@@ -3069,7 +3069,10 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0910_account_remove_sessions adds runner.codex_account_remove_sessions (UUID[], NOT NULL with a constant
       // default, no backfill); runner is not one of the preserved relations, and no trigger, function or DONE fence
       // changes.
-      '0910_account_remove_sessions'],
+      '0910_account_remove_sessions',
+      // 0970_project_ruling adds the project_ruling table (owner rulings kept on their project); no preserved relation,
+      // trigger, function or DONE fence changes.
+      '0970_project_ruling'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

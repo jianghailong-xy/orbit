@@ -296,7 +296,7 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
 
     @Test fun theSuccessorOpensWithTheNoteCardAndTheWaitsThatMoved() {
         ComposerShell.session = mapOf("coordinatorHandoffReceived" to Json.parseToJsonElement("""{"handoffFromSessionId":"34HandoffPrevious00001",
-            "note":"Handing over after Friday's release.\nWhere things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nAgreed with the owner\n- Don't merge Payment retries before Friday's release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.",
+            "note":"Handing over after Friday's release.\nWhere things stand\n- 4 of 6 tasks done; Fix login redirect in review.\nRulings not yet recorded\n- Don't merge Payment retries before Friday's release.\nWaiting on\n- Evidence for Fix login redirect.\nNext\n- Ask for the merge once that evidence is in.",
             "handedOverAt":"2026-11-14T15:42:00Z","movedWaits":[{"id":"w1","label":"Waiting for \"Fix login redirect\" to be DONE","paused":false},
             {"id":"w2","label":"Session \"Payment retries\" finishing its turn","paused":true}]}"""))
         signIn(); open("orbit-session:${ComposerShell.SESSION}")
