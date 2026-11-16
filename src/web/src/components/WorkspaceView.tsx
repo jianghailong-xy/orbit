@@ -367,7 +367,7 @@ import {
   SessionCriteriaDecisionCard,
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
-import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows } from './CoordinatorQuestionCard';
+import { AnsweredQuestionCard, CoordinatorQuestions, closedQuestionRows, coordinatorQuestions } from './CoordinatorQuestionCard';
 import { useSessionOwnerRequestInserts } from './OwnerRequestCard';
 import { ScheduleRunCrumb, scheduleRunAgentName, useScheduleRunOfSession, useSessionScheduleInserts } from './ScheduleCards';
 import {
@@ -1041,9 +1041,11 @@ const STRANDED_AFTER_MS = 400;
 const STICKY_LABEL = 'Your question';
 /** A card still waiting on the reader, in the order the transcript draws them: a tool approval or
  *  question, a request Orbit's owner door asked, a coordinator's question not yet answered, an open
- *  item. Answered and snoozed forms carry none of these. */
+ *  item. Answered and snoozed forms carry none of these. On a phone a coordinator's question is its
+ *  `ReviewCard` preview, the form itself in the dialog the preview opens: the preview is the one
+ *  in the transcript, under the card's `question-<itemId>` id. */
 export const WAITING_CARD_SELECTOR =
-  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), [data-open-item]';
+  '[data-waiting-card], .owner-request-card, .coordinator-question:not(.answered-question), .review-card[id^="question-"], [data-open-item]';
 /** How far below the scroller's top edge a revealed waiting card's top comes to rest: clear of the
  *  floating "Jump to the beginning" pill when the transcript has one (`.chat-older-top`). */
 export const waitingCardGap = (olderPill: boolean): number => (olderPill ? 48 : 12);
@@ -9571,9 +9573,11 @@ export function WorkspaceView({
                 // A phone opens the coordinator's conversation itself, with no push into the project's
                 // page (owner 2026-11-11, board 5): the title bar's button brings that page up as a sheet.
                 // A row whose line says a member is waiting on you opens that member instead, at its
-                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting).
-                const waiting = s.line.tone === 'approval' && s.target.kind === 'session' &&
-                  s.target.id !== coordinator?.id ? s.target.id : null;
+                // waiting card (owner 2026-11-14, docs/mocks/project-row-opens-waiting) — and the
+                // coordinator itself, waiting on you with a question, opens at that card too
+                // (owner 2026-11-16, docs/mocks/coordinator-question-jump).
+                const waiting = s.line.tone === 'approval' && s.target.kind === 'session'
+                  ? s.target.id : null;
                 const opens = waiting ?? coordinator?.id;
                 setWaitingReveal(waiting);
                 if (isMobile && opens) navigateWithPaneSlide('push', () =>
@@ -10527,6 +10531,16 @@ export function WorkspaceView({
             // buttons up here would be two faces racing for one answer.
             onOpenCriteria={(row) => revealCriteriaCard(row.intentId)}
             crossings={crossingCards.pointers}
+            // The coordinator's open questions, from the read `CoordinatorQuestions` draws their
+            // cards from at this conversation's foot, so the line and the cards cannot disagree.
+            questions={coordinatedProjectId ? coordinatorQuestions(openItems.data).map((row) => ({
+              itemId: row.itemId,
+              question: row.question?.question ?? row.title,
+              ageSeconds: (() => {
+                const at = Date.parse(row.waitingSince);
+                return Number.isFinite(at) ? Math.max(0, Math.floor((Date.now() - at) / 1000)) : null;
+              })(),
+            })) : []}
           />
         )}
 
