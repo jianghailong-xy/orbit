@@ -4293,7 +4293,9 @@ export class SessionsService {
       // background-job-activity.ts), so it cannot be a cardinality in the query.
       runningBgJobs: string[];
       runningBgJobActivity: Prisma.JsonValue;
-      runningSubagentCount: number;      engineTurnActive: boolean;
+      runningSubagentCount: number;
+      runningSubagentTitle: string | null;
+      engineTurnActive: boolean;
       activity: SessionActivity | null;
       engineStartedAt: Date | null;
       enginePhase: string | null;
@@ -4434,6 +4436,18 @@ export class SessionsService {
         s.running_bg_jobs AS "runningBgJobs",
         s.running_bg_job_activity AS "runningBgJobActivity",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
+        -- What the newest of those is doing, as its launch call described it (the Agent tool's and
+        -- delegate's \`description\`): the row says "Agent: <this>…" rather than only that one runs.
+        -- Launches are appended, so the last id is the newest; an id with no described call is null
+        -- and the row keeps "Running Agent…". One indexed lookup, on the few rows with one in flight.
+        (
+          SELECT NULLIF(btrim(tc.input->>'description'), '')
+          FROM tool_call tc
+          WHERE tc.session_id = s.id
+            AND tc.tool_use_id = s.running_subagents[cardinality(s.running_subagents)]
+          ORDER BY tc.started_at DESC NULLS LAST
+          LIMIT 1
+        ) AS "runningSubagentTitle",
         s.engine_turn_active AS "engineTurnActive",
         -- What it is doing beyond its status (sessionActivitySql): the one answer to whether a parked
         -- session is still working, so no client has to rebuild it from the columns around it.
@@ -4662,6 +4676,7 @@ export class SessionsService {
         runningBgCount: r.runningBgCount,
         runningBgJobCount: freshRunningBgJobs(r.runningBgJobs, r.runningBgJobActivity).length,
         runningSubagentCount: r.runningSubagentCount,
+        runningSubagentTitle: r.runningSubagentTitle,
         engineTurnActive: r.engineTurnActive,
         activity: r.activity,
         engineStartedAt: r.engineStartedAt,

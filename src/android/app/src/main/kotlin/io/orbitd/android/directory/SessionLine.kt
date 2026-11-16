@@ -58,7 +58,7 @@ data class SessionLine(val text: String, val tone: Tone) {
             if (live && s.isGenerating) {
                 s.lastToolUse?.takeIf { it.isNotEmpty() }?.let { return SessionLine(SessionLineCopy.runningTool(fmtTool(it)), Tone.RUNNING) }
                 // A sub-agent or workflow in flight: its launch cleared the tool line at once.
-                s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
+                s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
                 // The agent hasn't answered yet: the message it was sent, not the previous turn's reply.
                 s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return orbitLine(it, OrbitMessageFrom.of(s.lastUserFromOrbit)) ?: externalLine(it, ExternalSender.parse(s.lastUserFromExternal)) ?: sentLine(it, s.lastUserFrom) }
                 s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
@@ -74,7 +74,7 @@ data class SessionLine(val text: String, val tone: Tone) {
                 return SessionLine(held ?: SessionLineCopy.queued, Tone.QUEUED)
             }
             // Parked while a sub-agent or workflow it started works on: the workspace itself is still working.
-            if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.ongoing(SessionLineCopy.subagentRunning(it)), Tone.RUNNING) }
+            if (live) s.runningSubagentCount?.takeIf { it > 0 }?.let { return SessionLine(SessionLineCopy.subagentRunningLine(it, s.runningSubagentTitle), Tone.RUNNING) }
             // Parked on a live watch that will resume it, in the Watching strip's own line.
             if (live && watching != null && s.effectiveRunState == RunState.AWAITING_INPUT) return SessionLine(watching.rowLine, Tone.WATCHING)
             // The same place for a wait the server reports and this caller holds no watch for (OrbitKit `resumesOnItsOwn`).
@@ -142,6 +142,13 @@ internal object SessionLineCopy {
     fun ongoing(label: String) = "$label…"
     /** The runtime's own sub-agents and workflows (web `subagentRunningLabel`). */
     fun subagentRunning(n: Int) = if (n > 1) "Running $n agents" else "Running Agent"
+    /** The row's words for the same, naming what the newest one is doing when the server knows (`runningSubagentTitle`):
+     *  "Agent: Deploy …" for one, "Running 2 agents · Deploy …" for several, the bare label without a title (web `subagentRunningLine`). */
+    fun subagentRunningLine(n: Int, title: String?): String {
+        val t = title?.trim().orEmpty()
+        if (t.isEmpty()) return ongoing(subagentRunning(n))
+        return if (n > 1) ongoing("${subagentRunning(n)} · $t") else ongoing("Agent: $t")
+    }
     fun bgRunning(n: Int) = if (n > 1) "$n background processes running" else "Background process running"
     /** Who has a report under review: the review bar's word and its reviewer (`OwnerConfirmations.underReviewLine`). */
     fun underReviewLine(reviewerTitle: String?) = "${OwnerReview.underReview} · ${OwnerReview.reviewerName(reviewerTitle)}"
