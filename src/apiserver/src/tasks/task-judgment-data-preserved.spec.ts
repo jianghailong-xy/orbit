@@ -3064,6 +3064,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // workspace_permission_rule.from_schedule_run (NOT NULL with a constant default, no row marked); neither table is
       // one of the preserved relations, and no trigger, function or DONE fence changes.
       '0860_schedule_check_only_asks',
+      // 0870 adds runner.codex_account_remove_sessions (UUID[], NOT NULL with a constant default: catalog-only); `runner`
+      // is none of the preserved relations, no trigger, function or DONE fence changes, and no row is written.
+      '0870_account_remove_sessions',
       // 0870 adds a nullable managed_runner.image_roll_to (catalog-only); `managed_runner` is none of the preserved
       // relations, no trigger, function or DONE fence changes, and no row is written.
       '0870_managed_runner_image_roll',

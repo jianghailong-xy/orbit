@@ -1456,6 +1456,14 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'never looked up: compared with the requestId of the row the calling runner\'s own id named, and refused 400 when it differs (workspaces/main-checkout.service.ts:745)',
   'POST /runner/main-checkout/:id/result body targetSessionId':
     'never looked up nor written anywhere it names: kept on the result as the runner reported it, and read only to title the line, by id, in the row\'s own initiating session\'s transaction (workspaces/main-checkout.service.ts:483)',
+  'POST /runner/account-remove-result body sessionIds[]':
+    'never looked up when written: kept as the calling runner\'s own `codex_account_remove_sessions`, on its own row by its own id '
+      + '(runner-api/runner-api.controller.ts:3796), and read back only as sessions of the runner\'s owner assigned to that runner, '
+      + 'so another account\'s session id lists nothing (runners/runners.service.ts:1527)',
+  'POST /runner/codex-account-remove-result body sessionIds[]':
+    'never looked up when written: kept as the calling runner\'s own `codex_account_remove_sessions`, on its own row by its own id '
+      + '(runner-api/runner-api.controller.ts:3796), and read back only as sessions of the runner\'s owner assigned to that runner, '
+      + 'so another account\'s session id lists nothing (runners/runners.service.ts:1527)',
   // ── criteria met by confirmation (0545) ────────────────────────────────────────────────────────
   'POST /runner/projects/:id/criteria/:criterionId/confirmations header x-orbit-session-id': 'compared with the coordinator pointer of a project read by (id, the runner\'s owner): a session of another account is never that pointer, so it is refused 403 (projects/project-criterion-confirmation.service.ts:259)',
   'POST /runner/projects/:id/criteria/:criterionId/confirmations/withdraw header x-orbit-session-id': 'compared with the coordinator pointer of a project read by (id, the runner\'s owner): a session of another account is never that pointer, so it is refused 403 (projects/project-criterion-confirmation.service.ts:259)',
