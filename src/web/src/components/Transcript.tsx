@@ -2673,6 +2673,12 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           </>
         );
       }
+      // A turn with no words and no files that still carries a note is one the control plane opened
+      // for a block this client cannot read yet (a background job's stall was one, before it had its
+      // line). Drawn as a bubble it was an empty bubble in the reader's name; the note stands alone.
+      if (!queued && node.note && node.text.trim() === '' && !node.images?.length && !node.attachmentRefs?.length) {
+        return <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
+      }
       return <UserBubble node={node} queued={queued} />;
     }
     case 'assistant':

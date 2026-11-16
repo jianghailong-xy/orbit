@@ -13,6 +13,9 @@ import {
   ZH_SCHEDULED,
   ZH_TWO_JOBS,
   ZH_WAKE_WITH_COORDINATOR_CONTEXT,
+  EN_STALL,
+  EN_STALL_SILENT,
+  EN_TWO_STALLS,
 } from '../lib/backgroundWake.fixtures';
 import type { Runner } from './TasksSidePanel';
 import type { RunEvent } from './Transcript';
@@ -340,6 +343,70 @@ describe('a wake turn in the transcript', () => {
     expect(container.textContent).not.toContain('Orbit attached');
     // The wake itself is still the line's own subject, not one of the entry's rows.
     expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job finished');
+  });
+
+  // A quiet job's wake came in a block of its own that no client read, so it drew as an empty bubble
+  // with "⊕ Orbit attached: context" under it, opening onto the words written for the agent
+  // (docs/mocks/background-job-stall-line).
+  it('draws a job gone quiet as the same line: still running, quiet for how long, its last output in the fold', async () => {
+    await mount([wakeEvent(EN_STALL)]);
+
+    expect(container.querySelector('.chat-user'), 'no user bubble').toBeNull();
+    expect(container.textContent).not.toContain('Orbit attached');
+    expect(line().className).toContain('is-ok');
+    // Quiet is no failure: the same grey clock as a job's new output.
+    expect(row().querySelector('.bgwake-mark')?.classList.contains('is-pending')).toBe(true);
+    expect(row().querySelector('.bgwake-title')?.textContent).toBe('Background job went quiet');
+    expect(row().querySelector('.bgwake-name')?.textContent).toBe('Nightly index rebuild (6 workers)');
+    expect(row().querySelector('.bgwake-status')?.textContent).toBe('quiet 15m');
+
+    const job = fold().querySelector('.bgwake-job')!;
+    expect(job.querySelector('.bgwake-job-cmd')?.textContent).toBe('./scripts/rebuild-index.sh --workers 6');
+    const meta = [...job.querySelectorAll('.bgwake-job-meta')].map((el) => el.textContent);
+    expect(meta[0]).toBe('bgj_28a9b17fe75c · 21 B of output');
+    expect(meta[1]).toMatch(/^Still running · 15m in · last wrote .+$/);
+    // Its last output is in the fold, not under the line as a failure's is.
+    expect(job.querySelector('.bgwake-output-full')?.textContent).toBe('entries=32 workers=6');
+    expect(line().querySelector('.bgwake-tail')).toBeNull();
+    expect(fold().querySelector('details.bgwake-raw pre')?.textContent).toBe(EN_STALL);
+
+    const shown = line().cloneNode(true) as HTMLElement;
+    shown.querySelector('.bgwake-body')!.remove();
+    expect(shown.textContent).not.toContain('mcp__orbit__bg_kill');
+    expect(shown.textContent).not.toContain('bgj_');
+  });
+
+  it('says a quiet job that never wrote anything has written nothing yet, with no output to show', async () => {
+    await mount([wakeEvent(EN_STALL_SILENT)]);
+
+    expect(row().querySelector('.bgwake-name')?.textContent).toBe('pg_dump orbit > /backup/orbit.sql');
+    expect(row().querySelector('.bgwake-name')?.classList.contains('is-command')).toBe(true);
+    expect(row().querySelector('.bgwake-status')?.textContent).toBe('quiet 30m');
+    expect([...fold().querySelectorAll('.bgwake-job-meta')].map((el) => el.textContent)).toEqual([
+      'bgj_5c03e1aa90d2 · no output',
+      'Still running · 30m in · has written nothing yet',
+    ]);
+    expect(fold().querySelector('.bgwake-output')).toBeNull();
+  });
+
+  it('counts two quiet jobs on the line and says how long each has been quiet in the fold', async () => {
+    await mount([wakeEvent(EN_TWO_STALLS)]);
+
+    expect(row().querySelector('.bgwake-title')?.textContent).toBe('2 background jobs went quiet');
+    expect(row().querySelector('.bgwake-name')).toBeNull();
+    expect(row().querySelector('.bgwake-status')).toBeNull();
+    expect([...fold().querySelectorAll('.bgwake-job-exit')].map((el) => el.textContent)).toEqual([
+      'quiet 15m',
+      'quiet 10m',
+    ]);
+  });
+
+  it('draws a turn nobody typed, carrying only a block this client cannot read, as the note alone — no empty bubble', async () => {
+    const unknown = '<orbit-future-block>\n  Something a later server sends.\n</orbit-future-block>';
+    await mount([wakeEvent(unknown)]);
+
+    expect(container.querySelector('.chat-user'), 'no empty bubble').toBeNull();
+    expect(container.querySelector('.chat-injected-head')?.textContent).toContain('Orbit attached: context');
   });
 
   it('keeps the line, and the words behind a native disclosure, in an exported transcript', () => {

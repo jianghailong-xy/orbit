@@ -77,7 +77,12 @@ internal object StickySummary {
         if (event.card(cards, "watch") != null) return false
         if (event.card(cards, "ownerAnswer") != null) return false
         // A SubAgent's end is a line inside the answer too, as a background job's news is (board subagent-finished-line ①).
-        if (event.card(cards, "wake") == null && event.card(cards, "subagent") == null) return true
+        if (event.card(cards, "wake") == null && event.card(cards, "subagent") == null) {
+            // A turn that is only a note this reader cannot read draws no row of the reader's, so it heads no round (OrbitKit).
+            return cards.isNotEmpty() || !io.orbitd.android.core.cards.BackgroundWakeCard.drawsNoteAlone(event.personWords(),
+                (event.fields["attachments"] as? kotlinx.serialization.json.JsonArray).orEmpty().isNotEmpty(),
+                event.fields.string("controlPlaneNote"), queued = false)
+        }
         return event.personWords().isNotBlank()
     }
 

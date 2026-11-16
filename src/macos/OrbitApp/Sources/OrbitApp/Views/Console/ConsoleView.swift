@@ -1392,7 +1392,8 @@ struct TranscriptView: View {
         !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
                                             taskStart: b.taskStart, startedCard: b.startedCard,
                                             sessionMessage: b.sessionMessage, ownerAnswer: b.ownerAnswer,
-                                            coordinatorDelivery: b.coordinatorDelivery)
+                                            coordinatorDelivery: b.coordinatorDelivery,
+                                            hasAttachments: !b.attachments.isEmpty)
     }
 
     private var stuckBubble: UserBubble? {
