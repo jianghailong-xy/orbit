@@ -90,13 +90,17 @@ object BilingualShown {
         if (bilingual && turn?.state == Translation.TurnState.DONE) Translation.bilingualEnglish(english).ifEmpty { null } else null
 
     /** A reply drawn whole under the divider: only when its blocks do not pair with its translation's ([replyPairs], frame 4). */
-    fun replyEnglish(english: String, reply: Translation.Reply?, bilingual: Boolean): String? =
-        if (bilingual && reply?.text != null && Translation.bilingualPairs(reply.text, english) == null)
+    fun replyEnglish(english: String, reply: Translation.Reply?, bilingual: Boolean): String? {
+        val translated = reply?.text
+        return if (bilingual && translated != null && Translation.bilingualPairs(translated, english) == null)
             Translation.bilingualEnglish(english).ifEmpty { null } else null
+    }
 
     /** A reply drawn block by block, each original under its translation (03-interleaved.png); null draws it as before. */
-    fun replyPairs(english: String, reply: Translation.Reply?, bilingual: Boolean): List<Translation.BilingualPair>? =
-        if (bilingual && reply?.text != null) Translation.bilingualPairs(reply.text, english) else null
+    fun replyPairs(english: String, reply: Translation.Reply?, bilingual: Boolean): List<Translation.BilingualPair>? {
+        val translated = reply?.text
+        return if (bilingual && translated != null) Translation.bilingualPairs(translated, english) else null
+    }
 
     fun collapses(english: String): Boolean = Translation.bilingualLineCount(english) > Translation.BILINGUAL_COLLAPSE_LINES
 }
