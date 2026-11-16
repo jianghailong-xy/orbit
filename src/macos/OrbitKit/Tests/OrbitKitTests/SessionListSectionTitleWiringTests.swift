@@ -34,16 +34,7 @@ final class SessionListSectionTitleWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// One function's body, so a check can talk about the band and not about the rest of the file —
-    /// which draws plenty of other rows of its own.
-    private func body(of name: String, in source: String) -> String? {
-        guard let start = source.range(of: "func \(name)") else { return nil }
-        let rest = source[start.lowerBound...]
-        guard let end = rest.range(of: "\n    }") else { return nil }
-        return String(rest[..<end.upperBound])
-    }
-
-    /// Every titled section the session list draws goes through `titledSection` — the recency
+    /// Every titled section the session list draws goes through `TitledListSection` — the recency
     /// buckets, the Pinned title that folds, the tag buckets and the search hits'.
     func testEverySessionListSectionTitleDrawsThroughTitledSection() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
@@ -64,8 +55,10 @@ final class SessionListSectionTitleWiringTests: XCTestCase {
     /// draws no separator; the Mac keeps the system header.
     func testOnIOSTheTitleIsARowThatScrollsAway() throws {
         let agents = code(try appSource("Views/AgentsView.swift"))
-        let helper = try XCTUnwrap(body(of: "titledSection", in: agents),
-                                   "the titled-section helper is gone; these checks follow it")
+        let start = try XCTUnwrap(agents.range(of: "struct TitledListSection"),
+                                  "the titled-section view is gone; these checks follow it")
+        let rest = agents[start.lowerBound...]
+        let helper = String(rest[..<(rest.range(of: "\n}\n")?.upperBound ?? rest.endIndex)])
         let parts = helper.components(separatedBy: "#else")
         XCTAssertEqual(parts.count, 2, "one iOS branch and one Mac branch")
         let ios = parts[0], mac = parts[1]
@@ -74,6 +67,19 @@ final class SessionListSectionTitleWiringTests: XCTestCase {
         XCTAssertTrue(ios.contains(".listRowSeparator(.hidden)"), "nor draws a separator")
         XCTAssertTrue(ios.contains(".accessibilityAddTraits(.isHeader)"), "VoiceOver still reads it as a heading")
         XCTAssertTrue(mac.contains("header:"), "the Mac keeps its section header")
+    }
+
+    /// A folder's page draws its sections the way the workspace list does: every title through
+    /// `TitledListSection`, none as a pinned header.
+    func testTheFolderPageTitlesScrollAwayToo() throws {
+        let page = code(try appSource("Views/SessionFolderPage.swift"))
+        XCTAssertFalse(page.contains("} header: {"), "no section on the folder page keeps a pinned header")
+        XCTAssertTrue(page.contains("} title: {\n                Text(section.title).textCase(nil)"),
+                      "a recency bucket's title")
+        XCTAssertTrue(page.contains("} title: {\n                pinnedSectionHeader(section.title)"),
+                      "the folding Pinned title")
+        XCTAssertTrue(page.contains("} title: {\n            Text(contentSearched"), "the search hits' heading")
+        XCTAssertTrue(page.contains(".softTopEdgeEffect()"), "and meets the title area on its soft edge")
     }
 
     /// What stays at the top is the title area's own glass: the list keeps the soft top edge the

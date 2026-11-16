@@ -764,7 +764,7 @@ struct AgentPanes: View {
             // list, the header stays to bring them back. The rows are dropped here
             // rather than through `Section(isExpanded:)`, whose disclosure only draws in
             // the sidebar list style.
-            titledSection {
+            TitledListSection {
                 if !pinnedCollapsed {
                     ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                 }
@@ -772,7 +772,7 @@ struct AgentPanes: View {
                 pinnedSectionHeader(section.title)
             }
         } else {
-            titledSection {
+            TitledListSection {
                 ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
             } title: {
                 Text(section.title).textCase(nil)
@@ -1051,7 +1051,7 @@ struct AgentPanes: View {
     /// pose as a row of *this* agent's list. Tapping one opens it, switching agent if it belongs to
     /// another.
     @ViewBuilder private var searchResults: some View {
-        titledSection {
+        TitledListSection {
             ForEach(hits) { hit in
                 Button { app.route(to: .session(hit.id)) } label: {
                     SessionSearchRow(hit: hit, query: hitsQuery)
@@ -1153,7 +1153,7 @@ struct AgentPanes: View {
     /// One tag's sessions under the tag's header band. The section is the row the list's ForEach
     /// draws, so the ForEach closure holds no branch of its own.
     @ViewBuilder private func tagGroupSection(_ section: SessionTagSection) -> some View {
-        titledSection {
+        TitledListSection {
             ForEach(section.sessions) { sessionRow($0) }
         } title: {
             tagSectionHeader(section.tag)
@@ -1191,20 +1191,30 @@ struct AgentPanes: View {
         .accessibilityAddTraits(.isHeader)
         .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
     }
+}
 
-    /// A titled section of the list. On iOS the title is the section's first row rather than its
-    /// header: a plain list pins its section headers, so "Today" / "Yesterday" / Pinned stuck under
-    /// the title bar as the rows scrolled, on a glass band of their own. The owner (2026-11-16): the
-    /// titles need not stick — they scroll away with their rows, and the only glass at the top is the
-    /// title area's own soft edge (`softTopEdgeEffect`), which the rows pass under. The title row is
-    /// styled as the system header it replaces, carries no separator and cannot be selected.
-    ///
-    /// The Mac's list draws its section headers in the sidebar's own way, so there it stays a header.
-    @ViewBuilder private func titledSection<Rows: View, Title: View>(
-        @ViewBuilder _ rows: () -> Rows, @ViewBuilder title: () -> Title) -> some View {
+/// A titled section of a session list — the workspace list's and a folder page's. On iOS the title
+/// is the section's first row rather than its header: a plain list pins its section headers, so
+/// "Today" / "Yesterday" / Pinned stuck under the title bar as the rows scrolled, on a glass band of
+/// their own. The owner (2026-11-16): the titles need not stick — they scroll away with their rows,
+/// and the only glass at the top is the title area's own soft edge (`softTopEdgeEffect`), which the
+/// rows pass under. The title row is styled as the system header it replaces, carries no separator
+/// and cannot be selected.
+///
+/// The Mac's list draws its section headers in the sidebar's own way, so there it stays a header.
+struct TitledListSection<Rows: View, Title: View>: View {
+    let rows: Rows
+    let title: Title
+
+    init(@ViewBuilder _ rows: () -> Rows, @ViewBuilder title: () -> Title) {
+        self.rows = rows()
+        self.title = title()
+    }
+
+    var body: some View {
         #if os(iOS)
         Section {
-            title()
+            title
                 .font(.headline)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1212,13 +1222,13 @@ struct AgentPanes: View {
                 .listRowSeparator(.hidden)
                 .selectionDisabled()
                 .accessibilityAddTraits(.isHeader)
-            rows()
+            rows
         }
         #else
         Section {
-            rows()
+            rows
         } header: {
-            title()
+            title
         }
         #endif
     }
