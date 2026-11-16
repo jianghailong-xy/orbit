@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iOS 项目详情页 + 协调会话三张卡（效果图）· Coordinator handoff v2</title>
+<style>
+  :root {
+    --tint: #3E69F6; --tint-bg: rgba(62,105,246,.12);
+    --amber: #FF9500; --amber-ink: #B35A00; --amber-bg: rgba(255,149,0,.14);
+    --green: #34C759; --green-ink: #248A3D; --red: #FF3B30; --gray: #AEAEB2;
+    --label: #000; --label-2: rgba(60,60,67,.6); --label-3: rgba(60,60,67,.3);
+    --sep: rgba(60,60,67,.18); --surface: #fff; --grouped: #F2F2F7; --fill: rgba(0,0,0,.065);
+    --glass: rgba(255,255,255,.62); --mark: rgba(255,59,48,.85);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e4e4e9; color: #16161a; font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .b-part { padding: 40px 40px 48px; font: 15px/1.55 Inter, "Noto Sans SC", sans-serif; }
+  h1 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 8px; }
+  h2.b-h { font-size: 21px; margin: 0 0 6px; }
+  .lede { color: #55555e; max-width: 1500px; margin: 0 0 22px; }
+  code, .b-mono { font: 12.5px "JetBrains Mono", "DejaVu Sans Mono", monospace; background: #d9d9e0; border-radius: 4px; padding: 1px 5px; }
+  .b-row { display: flex; gap: 36px; align-items: flex-start; }
+  .b-col { width: 440px; flex: none; }
+  .b-col.wide { width: 560px; }
+  .b-cap { margin-top: 16px; font-size: 13.5px; line-height: 1.6; color: #4a4a52; }
+  .b-cap > b:first-child { color: #16161a; display: block; font-size: 14.5px; margin-bottom: 4px; }
+  .b-cap b { color: #16161a; }
+  .b-cap ol, .b-cap ul { margin: 6px 0 0; padding-left: 20px; }
+  .b-cap li { margin: 4px 0; }
+  .b-tag { display: inline-block; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 2px 10px; margin-bottom: 10px; }
+  .b-tag.web { background: #e0e0e6; color: #33333a; }
+  .b-tag.now { background: #ffd9d4; color: #8f1d13; }
+  .b-tag.after { background: #d6e4ff; color: #14428f; }
+  .b-num { display: inline-flex; width: 19px; height: 19px; border-radius: 50%; background: var(--amber); color: #fff; font-size: 11.5px; font-weight: 700; align-items: center; justify-content: center; margin-right: 4px; vertical-align: 1px; }
+  .b-src { color: #6b6b75; font-size: 12.5px; }
+  .b-webshot { width: 440px; display: block; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.08); background: #fff; }
+  .b-iframe { width: 440px; border: 0; display: block; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.08); background: #fff; }
+  .b-box { background: #fff; border-radius: 14px; padding: 18px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  table.b-t { border-collapse: collapse; width: 100%; font-size: 13.5px; background: #fff; border-radius: 12px; overflow: hidden; }
+  .b-t th, .b-t td { border-bottom: 1px solid #e6e6ec; padding: 8px 10px; text-align: left; vertical-align: top; }
+  .b-t th { background: #f4f4f8; font-weight: 700; color: #26262c; }
+  .b-t td.k { white-space: nowrap; font-weight: 600; }
+  .b-t .same { color: #248A3D; font-weight: 600; }
+  .b-t .diff { color: #B35A00; font-weight: 600; }
+  .b-t .miss { color: #c0281c; font-weight: 700; }
+  .b-gap { border-left: 4px solid #ff9f0a; background: #fff; border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 0 0 10px; font-size: 13.5px; }
+  .b-gap b { color: #16161a; }
+  .b-dec { background: #fff; border-radius: 14px; padding: 16px 20px; margin-bottom: 16px; }
+  .b-dec h3 { margin: 0 0 8px; font-size: 16px; }
+  .b-opts { display: flex; gap: 14px; }
+  .b-opt { flex: 1; border: 1.5px solid #dcdce3; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; }
+  .b-opt.rec { border-color: #3E69F6; background: #f3f6ff; }
+  .b-opt b { display: block; margin-bottom: 4px; }
+  .b-rec { margin-top: 8px; font-size: 13.5px; color: #14428f; font-weight: 600; }
+
+  /* ── iPhone 440 × 956 (Pro Max) ───────────────────────── */
+  .ph { width: 440px; background: var(--grouped); border-radius: 50px; overflow: hidden; position: relative; color: var(--label);
+        box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); font: 17px/1.3 Inter, "Noto Sans SC", sans-serif; padding-bottom: 30px; }
+  .ph.cont { border-radius: 18px; padding-top: 10px; }
+  .ph .fold { position: absolute; left: 0; right: 0; top: 956px; border-top: 2px dashed rgba(255,59,48,.75); z-index: 5; }
+  .ph .fold::after { content: "956 pt 首屏"; position: absolute; right: 10px; top: -20px; font-size: 11px; color: #d0281c; background: rgba(255,255,255,.9); padding: 0 4px; border-radius: 3px; }
+  .st { height: 62px; display: flex; align-items: center; justify-content: space-between; padding: 0 34px 0 44px; font-size: 17px; font-weight: 600; }
+  .st .r { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+  .nv { height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
+  .pl { display: inline-flex; align-items: center; justify-content: center; height: 44px; min-width: 44px; background: var(--glass); border-radius: 999px; font-size: 16px; font-weight: 500;
+        box-shadow: 0 1px 4px rgba(0,0,0,.08), inset 0 0 0 .5px rgba(0,0,0,.05); padding: 0 14px; gap: 7px; }
+  .pl.c { padding: 0; width: 44px; font-size: 22px; }
+  .cnt { display: inline-flex; min-width: 20px; height: 20px; border-radius: 10px; background: rgba(60,60,67,.15); color: var(--label-2); font-size: 12px; font-weight: 700; align-items: center; justify-content: center; padding: 0 6px; }
+  .hd { padding: 4px 20px 6px; }
+  .hd .t { font-size: 28px; font-weight: 700; letter-spacing: -.01em; line-height: 1.15; }
+  .hd .m { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 15px; color: var(--label-2); }
+  .chip { display: inline-block; font-size: 13px; font-weight: 600; border-radius: 6px; padding: 2px 8px; }
+  .chip.acc { color: var(--tint); background: var(--tint-bg); }
+  .hd .line { margin-top: 6px; font-size: 13px; color: var(--label-2); line-height: 1.45; }
+  .sh { display: flex; align-items: baseline; gap: 8px; padding: 22px 20px 8px; }
+  .sh b { font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+  .sh span { font-size: 14px; color: var(--label-2); }
+  .pill { font-size: 13px; font-weight: 600; border-radius: 999px; padding: 2px 9px; color: var(--label-2); background: rgba(60,60,67,.1); }
+  .cd { margin: 0 16px; background: var(--surface); border-radius: 22px; overflow: hidden; }
+  .rw { padding: 12px 16px; border-bottom: .5px solid var(--sep); font-size: 16px; }
+  .rw:last-child { border-bottom: 0; }
+  .rw .s { font-size: 13.5px; color: var(--label-2); margin-top: 3px; line-height: 1.4; }
+  .rw.lc { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .rw .v { color: var(--label-2); }
+  .mono { font: 13.5px "JetBrains Mono", "DejaVu Sans Mono", monospace; color: var(--label-2); word-break: break-all; }
+  .grp { font-size: 13px; font-weight: 600; color: #8A8A8D; letter-spacing: .02em; padding: 10px 16px 2px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; padding: 14px 16px 10px; }
+  .grid .g1 { font-size: 13.5px; color: var(--label-2); }
+  .grid .g2 { font-size: 26px; font-weight: 700; line-height: 1.15; }
+  .grid .g3 { font-size: 12px; color: var(--label-3); }
+  .meter { display: flex; gap: 3px; padding: 4px 16px 14px; }
+  .meter i { height: 6px; border-radius: 3px; display: block; }
+  .btn { display: flex; align-items: center; justify-content: center; height: 46px; border-radius: 999px; background: var(--tint); color: #fff; font-weight: 600; font-size: 16px; margin: 10px 16px 14px; position: relative; }
+  .btn .chev { position: absolute; right: 0; top: 0; bottom: 0; width: 46px; border-left: 1px solid rgba(255,255,255,.35); display: flex; align-items: center; justify-content: center; }
+  .note { margin: 6px 16px 4px; background: rgba(120,120,128,.1); border-radius: 10px; padding: 8px 12px; font-size: 14px; }
+  .note .s { color: var(--label-2); font-size: 12.5px; }
+  .radio { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }
+  .radio .o { width: 20px; height: 20px; border-radius: 50%; flex: none; margin-top: 1px; }
+  .radio .o.on { background: var(--tint); box-shadow: inset 0 0 0 5px var(--tint), inset 0 0 0 7px #fff; }
+  .radio .o.off { border: 1.5px solid var(--label-3); }
+  .lbl { font-size: 13.5px; color: var(--label-2); margin-bottom: 2px; }
+  .sw { width: 52px; height: 31px; border-radius: 16px; background: #65C466; position: relative; flex: none; }
+  .sw::after { content: ""; position: absolute; right: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+  .stp { display: inline-flex; border-radius: 8px; background: rgba(120,120,128,.12); font-size: 20px; }
+  .stp span { width: 46px; text-align: center; line-height: 32px; }
+  .stp span + span { border-left: 1px solid rgba(60,60,67,.2); }
+  .crit { display: flex; gap: 12px; padding: 14px 16px; border-bottom: .5px solid var(--sep); }
+  .om { width: 24px; height: 24px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; border: 1.5px solid rgba(0,0,0,.7); }
+  .om.met { background: #34C759; border-color: #34C759; color: #fff; }
+  .crit .tx { font-size: 15.5px; line-height: 1.38; }
+  .crit .clip { color: var(--label-2); }
+  .crit .w { margin-top: 6px; font-size: 14.5px; }
+  .crit .w b.g { color: var(--green-ink); }
+  .crit .why { font-size: 13px; color: var(--label-2); margin-top: 3px; line-height: 1.4; }
+  .crit .why a { color: var(--tint); text-decoration: none; }
+  .crit .ft { margin-top: 6px; font-size: 13px; color: var(--label-2); }
+  .crit .ft u { text-decoration: none; color: var(--tint); }
+  .band { font-size: 13px; font-weight: 600; color: #8A8A8D; padding: 12px 16px 4px; letter-spacing: .02em; }
+  .task { display: flex; gap: 10px; padding: 9px 16px; align-items: flex-start; border-bottom: .5px solid var(--sep); }
+  .task .gl { width: 14px; flex: none; margin-top: 3px; font-size: 12px; text-align: center; }
+  .task .tt { flex: 1; font-size: 15px; line-height: 1.35; }
+  .task .tags { margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+  .tg { border-radius: 5px; padding: 1px 6px; font-weight: 600; }
+  .tg.o { color: var(--amber-ink); background: var(--amber-bg); }
+  .tg.b { color: var(--tint); background: var(--tint-bg); }
+  .tg.n { color: var(--label-2); background: rgba(60,60,67,.1); }
+  .tg.w { color: var(--amber-ink); }
+  .tg.k { color: var(--tint); }
+  .task .chv { color: var(--label-3); font-size: 18px; }
+  .dim { opacity: .55; }
+  .graph { height: 170px; margin: 10px 16px 14px; border-radius: 12px; background: #f7f7fa; position: relative; font-size: 10.5px; }
+  .graph .n { position: absolute; width: 112px; padding: 4px 6px; background: #fff; border: 1px solid #d8d8df; border-radius: 6px; line-height: 1.25; }
+  .graph svg { position: absolute; inset: 0; }
+  .more { color: var(--tint); font-size: 15px; margin-top: 4px; }
+  .vall { margin: 10px 16px 4px; height: 44px; border-radius: 12px; background: rgba(120,120,128,.12); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 15.5px; color: var(--tint); }
+  .foot { font-size: 13px; color: #85858A; padding: 6px 32px 0; }
+  .mk { outline: 2px dashed var(--mark); outline-offset: 2px; border-radius: 14px; position: relative; }
+  .mk > .bd { position: absolute; top: -11px; right: 6px; display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--amber); color: #fff; font-size: 12px; font-weight: 700; align-items: center; justify-content: center; z-index: 4; }
+  .neu { background: rgba(255,214,10,.28); border-radius: 3px; }
+  .unk { background: #fff3a8; border-radius: 3px; padding: 0 2px; }
+
+  /* ── iOS transcript cards (ApprovalCards.swift / ProjectStartedCardView.swift) ── */
+  .tr { padding: 6px 16px; background: #fff; }
+  .ac { border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 12px; margin: 6px 0; }
+  .ac.green { background: rgba(52,199,89,.07); box-shadow: inset 0 0 0 1px rgba(52,199,89,.28); }
+  .ac.orange { background: rgba(255,149,0,.07); box-shadow: inset 0 0 0 1px rgba(255,149,0,.28); }
+  .ac.blue { background: rgba(0,122,255,.07); box-shadow: inset 0 0 0 1px rgba(0,122,255,.28); }
+  .ah { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+  .ah i { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-style: normal; font-size: 13px; color: #fff; }
+  .green .ah i { background: rgba(52,199,89,.16); color: #34C759; }
+  .orange .ah i { background: rgba(255,149,0,.16); color: #FF9500; }
+  .blue .ah i { background: rgba(0,122,255,.16); color: #007AFF; }
+  .ac .ln { font-size: 16px; line-height: 1.4; }
+  .ac .se { font-size: 14px; color: var(--label-2); }
+  .ac .fine { font: 12px "JetBrains Mono", "DejaVu Sans Mono", monospace; color: var(--label-2); }
+  .ac .dg { font-size: 14px; color: var(--label-2); }
+  .ps { border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; margin: 6px 0; background: rgba(62,105,246,.08); box-shadow: inset 0 0 0 1px rgba(62,105,246,.30); }
+  .ps .h { display: flex; align-items: center; gap: 6px; color: var(--tint); font-weight: 600; font-size: 14px; }
+  .ps .k { margin-left: auto; font-size: 12px; color: var(--label-2); font-weight: 500; border-radius: 999px; padding: 2px 7px; background: rgba(0,0,0,.05); box-shadow: inset 0 0 0 1px rgba(62,105,246,.3); }
+  .ps .ti { font-weight: 600; font-size: 16px; }
+  .ps .sx { font-size: 14px; color: var(--label-2); }
+  .ps .ls { background: rgba(0,0,0,.05); border-radius: 6px; padding: 2px 8px; }
+  .ps .ls div { padding: 6px 0; color: var(--tint); font-size: 14.5px; display: flex; justify-content: space-between; gap: 8px; }
+  .ps .me { font-size: 12px; color: var(--label-2); }
+  .bub { margin: 8px 0 8px auto; max-width: 78%; background: rgba(120,120,128,.14); border-radius: 18px; padding: 9px 14px; font-size: 16px; }
+  .asst { font-size: 16px; line-height: 1.45; margin: 8px 0; }
+</style>
+<body>
+
+<!-- ════════════════ PART 1 ════════════════ -->
+<section class="b-part" id="part-1">
+  <h1>iOS 项目详情页 · Coordinator handoff v2 —— 上半（标题 → How it runs）</h1>
+  <p class="lede">
+    左：<b>真实 web 页面</b>，手机宽度 440 px 下截取（当前 HEAD <code>830d3deb6</code> 的构建，ui-migration fixtures 加上这个项目的真实读数：<code>orbit project get 34ycavCsYoARJ89WqS2F6</code> 与 <code>task list --project-id</code>，读于 2026-11-16 17:40 UTC）。
+    中：iOS 今天（<code>ProjectsView.swift</code> 的 <code>ProjectDetailView</code>，iPhone 和 Mac 共用，分段顺序固定在 <code>OrbitKit/App/ProjectPageListLogic.swift:6-20</code>）。
+    右：建议。<b>结构以 web 手机版为准</b>，一一对应；iOS 只借控件样式（inset-grouped List、Toggle、Stepper、⋯ 菜单）。
+    手机按 Pro Max 440 × 956 pt 画，红虚线是首屏底。<span class="neu">黄底</span> = 真实读数里拿不到、跟 web 截图用的是同一份桩数据的值。
+  </p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag web">Web 手机版 · 真实截图 440 px</span>
+      <img class="b-webshot" src="web-1.png" alt="web phone top">
+      <div class="b-cap"><b>web 的分段顺序（从截图里取）</b>
+        标题区（Open · 6 tasks · Record as done / cancelled · Share · Copy link · ⋮ · Delete project · 集成线一栏）→ <b>Open items</b> → Work overview → Coordinator → How it runs（顶上一块 <i>Automatic On</i> 摘要）。下半见第 2 张。
+      </div>
+    </div>
+    <div class="b-col"><span class="b-tag now">① iOS 今天</span><div id="ios-top-today"></div>
+      <div class="b-cap"><b>今天和 web 的差别</b>
+        <ul>
+          <li>项目已开始，又没有要你处理的事时，<b>Open items 整段不画</b>（<code>openItemsAttention</code> PV:779 只在有事时出现），只剩工具栏的 “Open items 0” 按钮。web 这一段始终在，里面有一行 “Record as done… · not asked yet”。</li>
+          <li>How it runs 没有 web 顶部那块 <b>Automatic On</b> 摘要（web <code>ProjectRunSettings.tsx:416</code> <code>project-run-settings-summary</code>；iOS <code>runSettingsSection</code> PV:1415 第一行直接是 Delivers）。</li>
+          <li>标题区的动作收在 ⋯ 菜单里（Record as done / cancelled、Copy Link、Share…、Copy as Markdown、Delete project，PV:2514-2597），这一点符合 iOS 惯例，保持。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="b-col"><span class="b-tag after">② 建议</span><div id="ios-top-after"></div>
+      <div class="b-cap"><b>改什么</b>
+        <ol>
+          <li><span class="b-num">1</span><b>Open items 段常驻</b>，放在 web 同一位置（标题区之后）。表头 “Open items” 加上 detail “0 need you · 0 with the coordinator · oldest first”，分组 NEEDS YOU，下面一行 “Record as done…” / “not asked yet”。文案取自 web 的 open-items 段，<code>ProjectDone.notAskedYet</code>（OrbitKit <code>ProjectDone.swift:704</code>）里已经有同一个词。工具栏按钮保留，作用是从页面任何位置一键跳到这里（见待定 D3）。</li>
+          <li><span class="b-num">2</span>How it runs 的第一行改成<b>摘要行</b>：“Automatic On” / “A project branch · project/34yca… · 3 tasks at a time”，用的是 web 同一组词（<code>RUN_AUTOMATIC</code>、<code>RUN_LINE_PROJECT_BRANCH</code>、<code>shortBranch</code>、<code>runTasksAtATime</code>，在 <code>lib/projectStart.ts</code>；OrbitKit <code>RunSettings.parts</code> 也已经有同一组词，在 <code>StartProject.swift:1236</code>）。</li>
+          <li>其余各段的顺序和内容与今天相同，与 web 一一对应，见第 3 张的对照表。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ PART 2 ════════════════ -->
+<section class="b-part" id="part-2">
+  <h1>iOS 项目详情页 —— 下半（Goal → Tasks）</h1>
+  <p class="lede">web 的下半依次是：Goal → Task graph → Run queue → Acceptance criteria（手机上先显示 4 条，再加 “View all 5 criteria”）→ Instructions → Tasks（按段分组）。iOS 今天是同样的顺序：<code>ProjectPageListLogic.rows</code> 的 goal, graph, blockers, runQueue, criteria, instructions, tasks, crossings。其中 Blockers 和 Crossings 两端都是空就不画，这个项目 <code>blockers.open</code> 为空，所以两端都没有这两段。</p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag web">Web 手机版 · 真实截图（续）</span>
+      <img class="b-webshot" src="web-2.png" alt="web phone middle">
+      <div style="height:14px"></div>
+      <img class="b-webshot" src="web-3.png" alt="web phone bottom">
+    </div>
+    <div class="b-col"><span class="b-tag now">① iOS 今天</span><div id="ios-bot-today"></div>
+      <div class="b-cap"><b>今天，对着真实数据看</b>
+        <ul>
+          <li>判据 2 已满足，服务端的 <code>landingReason</code> 是 <b>IN_FLIGHT</b>（正在落地），但两端都写 “Met by its work · <b>no merge receipt either way</b>”。原因是 <code>landing</code> 为 UNKNOWN（web <code>ProjectAcceptanceCard.tsx:268</code>；iOS <code>ProjectPage.swift:933</code>），iOS 的 <code>ProjectCriterion</code> 根本没有 <code>landingReason</code> 字段（<code>Models/ProjectDetail.swift:54-75</code>）。</li>
+          <li>“Owner rulings…” 这条任务 <code>runStalled: true</code>，后台作业 10 分钟以上没有输出。web 只在 Task graph 的节点上写 “Running · Background job · no output 10+ min”（<code>projectDependencyGraph.ts:212-219</code>），两端的任务行都只写 “Running”，iOS 上哪里都看不到。</li>
+          <li>Walkthrough 这条 <code>autoRunWhenReady: false</code>，要手动开始，两端任务行都只写 “Blocked · waits 4”，看不出它解锁后也不会自己跑。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="b-col"><span class="b-tag after">② 建议</span><div id="ios-bot-after"></div>
+      <div class="b-cap"><b>改什么</b>
+        <ol>
+          <li><span class="b-num">3</span>已满足的判据，落地那半句<b>读 <code>derivedDone.criteria[].landingReason</code></b>：IN_FLIGHT 写成 “Met by its work · In flight”。用词复用 <code>ProjectDone.landingReasonLabel</code>（iOS <code>ProjectDone.swift:838-848</code> = web <code>landingReasonLabel</code>，<code>projectDone.ts</code>），Done 卡片已经在用这组词。web 和 Android 一起改（待定 D2）。没满足的判据照旧，<b>不显示落地</b>（判据 5 就是这种情况，见第 3 张）。</li>
+          <li>其余段（Goal 折叠 + More、Task graph、Run queue、先显示 4 条判据 + View all、Instructions 折叠、Tasks 分段）<b>不动</b>，与 web 一一对应。上面列的 stalled 和 start-by-hand 两个缺口 web 的任务行也没有，属于三端一起补的事，这张图不单给 iOS 画（第 3 张列为缺口）。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ PART 3 ════════════════ -->
+<section class="b-part" id="part-3">
+  <h1>对照表 · 三栏理由 · 真实数据暴露的缺口</h1>
+  <div class="b-row">
+    <div class="b-col wide" style="width:760px">
+      <h2 class="b-h">web 手机版分段 → iOS 分段（自上而下）</h2>
+      <table class="b-t">
+        <tr><th>#</th><th>web 手机版（截图）</th><th>iOS（ProjectDetailView）</th><th>状态</th></tr>
+        <tr><td>1</td><td>标题区：标题 · Open · 6 tasks · 动作按钮 · 集成线一栏</td><td><code>header()</code> PV:672，动作在 ⋯ 菜单 PV:2514，集成线 PV:724</td><td class="diff">控件不同，内容相同</td></tr>
+        <tr><td>2</td><td>Open items（0 need you · 0 with the coordinator；Record as done… not asked yet）</td><td><code>openItemsAttention</code> PV:779：没事时不画</td><td class="miss">缺 → ② <span class="b-num">1</span></td></tr>
+        <tr><td>3</td><td>Work overview（6 tasks · 7 dependencies，格子 + 进度条）</td><td><code>overviewSection</code> PV:1170</td><td class="diff">格子：web 把 0 的也画出来，iOS 只画非 0 的附加格</td></tr>
+        <tr><td>4</td><td>Coordinator（Idle · Workspace · Manual dispatch · Open coordinator ▾）</td><td><code>coordinatorSection</code> PV:1278</td><td class="same">对应</td></tr>
+        <tr><td>5</td><td>How it runs（Automatic On 摘要 → Execution → Integration → Escalate → Pause）</td><td><code>runSettingsSection</code> PV:1415，多一行 Main branch</td><td class="miss">缺摘要 → ② <span class="b-num">2</span></td></tr>
+        <tr><td>6</td><td>Goal</td><td><code>goalSection</code> PV:1831（折叠到 132 pt + More）</td><td class="same">对应</td></tr>
+        <tr><td>7</td><td>Task graph</td><td><code>graphSection</code> PV:1858</td><td class="same">对应</td></tr>
+        <tr><td>—</td><td>Blockers（空则不画）</td><td><code>blockersSection</code> PV:1871（空则不画）</td><td class="same">对应</td></tr>
+        <tr><td>8</td><td>Run queue（1 running · 1 ready）</td><td><code>runQueueSection</code> PV:1954</td><td class="same">对应</td></tr>
+        <tr><td>9</td><td>Acceptance criteria（先显示 4 条，View all 5 criteria）</td><td><code>criteriaSection</code> PV:2090（compact 先显示 4 条）</td><td class="diff">已满足那行的落地说法 → ② <span class="b-num">3</span></td></tr>
+        <tr><td>10</td><td>Instructions</td><td>PV:2361</td><td class="same">对应</td></tr>
+        <tr><td>11</td><td>Tasks（Running / Ready / Blocked by level / Done 分段）</td><td><code>tasksSection</code> PV:2376，分段文案 <code>ProjectPage.swift:1335-1345</code></td><td class="same">对应</td></tr>
+        <tr><td>—</td><td>Crossings（空则不画）</td><td>PV:2460</td><td class="same">对应</td></tr>
+      </table>
+      <p class="b-src">PV = src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectsView.swift。Android 的项目页不在这次范围内，但每条改动的「三端协同」一栏都写了 Android 要跟着做什么。</p>
+
+      <h2 class="b-h" style="margin-top:22px">每个设计决定的三栏理由</h2>
+      <table class="b-t">
+        <tr><th>决定</th><th>iOS 惯例</th><th>Orbit 一致性</th><th>三端协同</th></tr>
+        <tr><td class="k"><span class="b-num">1</span>Open items 常驻</td><td>inset-grouped List 里多一个 Section，表头加 detail，与其他段写法相同（<code>sectionHeader</code> PV:2653）。工具栏按钮继续当快捷入口。</td><td>空的时候也说 “0 need you”，用户就知道页面查过了而且什么都没有，不会以为这段没加载出来；“not asked yet” 已经是 OrbitKit 里的词。</td><td>web 手机版有这一段，iOS 不能缺。Android 项目页跟 iOS 走（memory：Android 默认跟 iOS）。</td></tr>
+        <tr><td class="k"><span class="b-num">2</span>How it runs 摘要行</td><td>设置类 List 的首行放一句总述，就像 iOS 设置里 “Wi-Fi 开 · 网络名” 那种写法；只读，不点。</td><td>与开始卡、开始回执、Project started 卡用同一组词（<code>runSettingsParts</code> / <code>RunSettings.parts</code>），用户在四个地方看到的是同一句话。</td><td>web 有（<code>project-run-settings-summary</code>），iOS 没有，按 web 补上。</td></tr>
+        <tr><td class="k"><span class="b-num">3</span>已满足判据的落地原因</td><td>不加新控件，只换一行里的半句话。</td><td>页面和 Done 卡片对同一条判据说同一句（今天页面说 “no merge receipt either way”，Done 卡片说 “In flight”）。</td><td>web 的 <code>ProjectAcceptanceCard</code>、iOS 的 <code>criterionWork</code>、Android 三端一起改，iOS 模型要先加 <code>landingReason</code> 字段（待定 D2）。</td></tr>
+        <tr><td class="k">动作收进 ⋯</td><td>iOS 导航栏右侧放 ⋯ 菜单，危险操作单独放在菜单底部。</td><td>菜单里的项和 web 的按钮一一对应，名字相同。</td><td>不是缺分段，只是控件不同。</td></tr>
+      </table>
+    </div>
+
+    <div class="b-col wide" style="width:640px">
+      <h2 class="b-h">真实数据暴露的缺口</h2>
+      <p class="b-src" style="margin-top:0">读于 2026-11-16 17:40 UTC。和 brief 写的数已经不一样了：判据 2 现在<b>已满足</b>（landingReason IN_FLIGHT），1 个任务 DONE、5 个 OPEN（brief 写的是 6 OPEN、0 met）。原因分布是 IN_FLIGHT ×1、NO_RECEIPT ×2、NO_BRANCH ×1、CODELESS ×1（brief 写的是 NO_BRANCH ×2）。maxConcurrentTasks 3、PROJECT_BRANCH、merge check 三项和 brief 一致；blockers.open 为空。</p>
+      <div class="b-gap"><b>G1 · 判据 5：<code>landing: LANDED</code> + <code>landingReason: CODELESS</code>，同时 <code>satisfied: false</code>。</b>它的唯一任务（Walkthrough）还是 OPEN、BLOCKED、从没跑过。
+        <br>· <b>项目页上看不出 “done”</b>：web 和 iOS 都只在已满足时才写落地，所以显示的是空心圈 “5” + “Not met by its work” + 卡住它的任务（下图是真实截图）。
+        <br>· <b>汇总里会被当成已落地</b>：iOS 的 “Record as done” 确认文案只把 <code>landing == "UNKNOWN"</code> 算进 “with no merge receipt”（PV:2631），判据 5 就从这个数里消失了。屏上显示 “5 stated criteria · 1 settled … · <b>4</b> with no merge receipt”，读起来像有一条已经落地。web 的 Done 汇总写 “1 no code to land”。<code>counts.landed = 1</code> 指的就是它。
+        <br>· 服务端的说法是 “没代码可落 = 已落地”，可这条判据的工作根本还没做。建议另开任务，由服务端或客户端规定：没满足的判据不进任何落地计数。
+        <img src="web-crit5.png" style="width:100%;margin-top:8px;border-radius:8px;border:1px solid #e3e3ea" alt="web criterion 5"></div>
+      <div class="b-gap"><b>G2 · 没满足的判据挂着过去式的落地原因。</b>判据 1、4 是 NO_RECEIPT，Done 汇总会写成 “<b>2 merged outside Orbit</b>”（<code>projectDone.ts</code> REASON_LABELS），判据 3 是 NO_BRANCH，会写成 “<b>1 ran without a branch</b>”。可这三条的任务一条都没跑完，有的还是 BLOCKED。和 G1 是同一类问题。</div>
+      <div class="b-gap"><b>G3 · 判据 2 已满足、正在落地（IN_FLIGHT），页面却写 “no merge receipt either way”。</b>web 和 iOS 都这样 → ② <span class="b-num">3</span>，D2。</div>
+      <div class="b-gap"><b>G4 · stalled 看不到。</b>“Owner rulings…” 的 <code>runStalled: true</code>（<code>runningLabel</code>：“Running · Background job · no output 10+ min”）只出现在 web 的 Task graph 节点上。两端的任务行和 Run queue 都只写 “Running”，iOS 上哪里都没有，OrbitKit 也没读 <code>runStalled</code>。</div>
+      <div class="b-gap"><b>G5 · 要手动开始的任务在项目页上看不出来。</b>Walkthrough 是 <code>autoRunWhenReady: false</code>，只有 Project started 卡上写了（“1 task is set to start by hand…”）。项目页两端只写 “Blocked · waits 4”。它解锁以后，iOS 会写 “Ready · can start now”（<code>ProjectPage.swift:1234</code>），可在那之前看不出来。</div>
+      <div class="b-gap"><b>G6 · 这张图有两处读不到真实值。</b>集成线的实时数字（领先 main 多少提交、Running jobs / Queued、Last landing check）要在项目会话里才能读，我这里读 <code>project integration</code> 返回 <b>403 INTEGRATION_READ_NOT_PROJECT_SESSION</b>。Work overview 的格子来自 <code>/panorama</code>，我拿不到，是按 task_list 推算的。这两处在两边用的是<b>同一份</b>桩数据（黄底），只用来对齐结构，不能当真实读数。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ PART 4 ════════════════ -->
+<section class="b-part" id="part-4">
+  <h1>iOS 协调会话 —— 项目开始后出现的三张卡</h1>
+  <p class="lede">
+    按时间排：① 判据决定的回执（web 用橙色）→ ② 开始项目的回执（蓝色，“You started the project on 5 criteria at seal 7219d1bad212”，开始于 2026-11-16 15:45:31Z，图上按 UTC+8 显示为 23:45）→ ③ Project started（开始后 9 秒送到协调会话，原文 “From Orbit · project started”，15:45:40Z）。
+    <b>宽度：手机上三张卡都占满会话栏宽度。</b>桌面 web 上，Project started 卡封顶 720 px（<code>.psc { max-width: 720px }</code>，index.css:24754）。两张回执现在没有封顶，另一条分支上有个还没提交的修复，会把它们也封到 720。到了手机上，会话栏本身窄于 720，三张卡一样宽：iOS 的 <code>orbitCardWidth()</code> 是 maxWidth 720（<code>SessionMessageCardView.swift:259-263</code>），回执是 <code>maxWidth: .infinity</code>，两边都扣 rowInsets 16（<code>ConsoleView.swift:1481-1487</code>）；Android 的 Project started 是 <code>widthIn(max=720.dp)</code>。
+  </p>
+  <div class="b-row">
+    <div class="b-col">
+      <span class="b-tag web">Web 手机版 · 用发布的 index.css 类名渲染</span>
+      <iframe class="b-iframe" src="web-cards.html" height="520" scrolling="no"></iframe>
+      <div class="b-cap"><b>web 的来源</b>
+        标记照抄 <code>CriteriaDecisionReceipt</code>（CriteriaDecisionCard.tsx:1143）、<code>AcceptanceConfirmationReceipt</code>（AcceptanceConfirmationCard.tsx:587）和 <code>ProjectStartedCard</code>（:103-169），样式只用 <code>src/web/src/index.css</code>。
+        颜色：橙色卡是 <code>--warning-bg</code> #fff4e6 / <code>--warning-border</code> #ffd591，勾是 <code>--success</code> #1a7f37；蓝色卡是 <code>--brand-tint</code> #eaf1ff / <code>--brand</code> #3370ff；Project started 卡是 <code>--brand-tint</code> + <code>--brand-border</code> #bcd3ff。
+        <br>注意：蓝色回执上的 “FROM ORBIT” 标记沿用了 <code>.criteria-provenance</code> 的<b>橙色</b>，蓝卡上挂着橙标。这是 web 自己的问题，不影响 iOS。
+        <br><span class="unk">HH:MM</span> / <span class="unk">…</span>：判据决定的记录只能从 owner 路由读，我读不到，所以时间和折叠里的摘要以你手机上看到的为准。
+      </div>
+    </div>
+    <div class="b-col"><span class="b-tag now">① iOS 今天</span><div id="ios-cards-today"></div>
+      <div class="b-cap"><b>今天</b>
+        <ul>
+          <li>判据回执是<b>绿色</b>（<code>CriteriaDecisionReceiptCard</code>，ApprovalCards.swift:2735 <code>tone: .green</code>），web 是橙色。另外 web 的折叠 “What this approved · …” <b>没有移植</b>。</li>
+          <li>开始回执的文字和 web 一致（<code>CriteriaDecision.swift:1384</code>，<code>RunSettings.parts</code>）。时间不同：iOS 不是当天时会加日期，写 “by you at 11/16 23:45”（<code>OwnerConfirmations.receiptTime</code>，OwnerConfirmation.swift:1075）；web 永远只写 “23:45”（<code>receiptClock</code>）。</li>
+          <li>Project started 卡的文字和 web 逐字一致（<code>ProjectStarted.swift:128-199</code>），色调是 accentColor，圆角 8。</li>
+          <li>“From Orbit” 在 iOS 上是卡片底部一行灰色等宽小字，web 放在表头右边做成标记。两种都是这个平台上「谁说的话」的写法，保持不动。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="b-col"><span class="b-tag after">② 建议</span><div id="ios-cards-after"></div>
+      <div class="b-cap"><b>改什么</b>
+        <ol>
+          <li><span class="b-num">4</span>判据回执改成<b>橙色</b>（<code>.approvalChrome(.orange)</code>，勾仍然是绿色字），和 web 的 <code>.criteria-decision</code> 同色，也和你在会话里看到的「橙色那张」对上（待定 D1）。</li>
+          <li><span class="b-num">5</span>补上折叠：<b>DisclosureGroup</b> “What this approved · …”，内容与 web 的 <code>SettledDiff</code> / <code>SettledProposal</code> 相同；拒绝时写 “What this refused”。同一张卡上的 “What the coordinator was told” 本来就是 iOS 的 DisclosureGroup，照它的样子做。</li>
+          <li><span class="b-num">6</span>开始回执的时间：建议 web 跟 iOS，不是当天就加日期（待定 D4）。</li>
+          <li>三张卡在手机上<b>都占满会话栏宽</b>（440 − 2×16 = 408 pt），不另设封顶，iOS 今天已经是这样。</li>
+        </ol>
+        <p style="margin:8px 0 0"><b>Android 今天</b>（三端协同）：三张卡都还没移植。判据回执和 Project started 都是通用的字段卡（<code>CardModels.kt:256</code>、<code>TranscriptCards.kt:51</code>），开始回执画成一张变暗的 “When is this project done?” 预览（<code>CardPreviews.kt:75-83</code>），<b>没有 “set to start by hand” 那一行，也没有任务列表</b>。建议另开任务，按 iOS ② 的样子移植。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════ PART 5 ════════════════ -->
+<section class="b-part" id="part-5">
+  <h1>待定 · 要你拍板</h1>
+  <div style="max-width:1400px">
+    <div class="b-dec"><h3>D1 · iOS 判据决定回执的颜色</h3>
+      <div class="b-opts">
+        <div class="b-opt rec"><b>A　橙色，与 web 相同（推荐）</b>Orbit 一致性：同一张卡三端同色，你说的「橙色那张」在手机上也是橙的。三端协同：Android 移植时也用橙色。iOS 惯例：橙色在 iOS 上表示「需要留意」，用在一张已经处理完的回执上有点重；可以只给外框和表头上色，勾仍然用绿色，表示已经办完。</div>
+        <div class="b-opt"><b>B　保持绿色</b>iOS 惯例：绿色表示「已完成」，更像回执。代价是同一条记录 web 是橙色、iOS 是绿色，切换设备时你得重新认一次，web 也就成了唯一的橙色。</div>
+      </div>
+      <div class="b-rec">推荐 A。web 那边先用橙色，就是为了把「改判据」和「开始项目」两种决定分开；iOS 改成绿色以后，两张回执的区分只剩蓝和绿。</div>
+    </div>
+    <div class="b-dec"><h3>D2 · 已满足判据的落地那半句，用 <code>landing</code> 还是 <code>landingReason</code></h3>
+      <div class="b-opts">
+        <div class="b-opt rec"><b>A　读 landingReason（推荐）</b>判据 2 写成 “Met by its work · In flight”，与 Done 卡片同一组词。三端一起改，iOS 模型要先加字段。</div>
+        <div class="b-opt"><b>B　保持 landing</b>不动代码，但判据 2 正在落地时，页面一直写 “no merge receipt either way”，和 Done 卡片说的不一样。</div>
+      </div>
+      <div class="b-rec">推荐 A。另外，没满足的判据<b>两种方案都不显示落地</b>，判据 5 那种 LANDED/CODELESS 不会被读成 done。G1/G2 是服务端计数的问题，建议另开任务。</div>
+    </div>
+    <div class="b-dec"><h3>D3 · iOS 的 Open items：页面上常驻一段，还是只靠工具栏按钮</h3>
+      <div class="b-opts">
+        <div class="b-opt rec"><b>A　常驻一段，工具栏按钮保留（推荐）</b>与 web 手机版一一对应，空的时候也写 “0 need you · 0 with the coordinator”，Record as done 那一行有地方放。</div>
+        <div class="b-opt"><b>B　只在有事时出现（今天的做法）</b>屏幕更省，可这样 iOS 就少了 web 有的一段，违反「iOS 不能缺 web 的分段」这条规则。</div>
+      </div>
+      <div class="b-rec">推荐 A。代价是首屏多占一段：Work overview 会往下挪大约 120 pt，第 1 张 ② 的虚线就是首屏底。</div>
+    </div>
+    <div class="b-dec"><h3>D4 · 开始回执的时间格式（web 只写 “23:45”，iOS 隔天写 “11/16 23:45”）</h3>
+      <div class="b-opts">
+        <div class="b-opt rec"><b>A　web 跟 iOS：不是当天就加日期（推荐）</b>回执常常是隔天才翻到，只看 “23:45” 分不清是哪天。改的是 web 的 <code>receiptClock</code>，三张回执都会受影响。</div>
+        <div class="b-opt"><b>B　iOS 跟 web：只写时间</b>更短，但隔天就分不清是哪天了。</div>
+      </div>
+      <div class="b-rec">推荐 A。Android 移植时用同一规则。</div>
+    </div>
+    <div class="b-dec"><h3>落地（按代价排）</h3>
+      <ol style="margin:0;padding-left:20px;font-size:14px">
+        <li>iOS：判据回执改成橙色（D1，一行），How it runs 加摘要行（复用 <code>RunSettings.parts</code>）。</li>
+        <li>iOS：Open items 段常驻（D3）。</li>
+        <li>web + iOS + Android：已满足判据读 landingReason（D2，iOS 模型加字段），开始回执时间格式（D4）。</li>
+        <li>iOS：判据回执的折叠（移植 SettledDiff / SettledProposal）。</li>
+        <li>另开任务：G1/G2 没满足判据的落地计数（服务端）；G4 stalled、G5 start-by-hand 的任务行标签（三端）；Android 移植三张卡。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<script>
+const PH = (inner, { cont = false, fold = false } = {}) => `<div class="ph${cont ? ' cont' : ''}">${cont ? '' : `<div class="st"><span>1:40</span><span class="r">●●●● 5G ▮</span></div>`}${fold ? '<div class="fold"></div>' : ''}${inner}</div>`;
+const MK = (n, html) => `<div class="mk"><span class="bd">${n}</span>${html}</div>`;
+const SEC = (title, detail, body, extra = '') => `<div class="sh"><b>${title}</b>${detail ? `<span>${detail}</span>` : ''}${extra}</div><div class="cd">${body}</div>`;
+
+function nav() {
+  return `<div class="nv"><span class="pl c">‹</span><span style="display:flex;gap:10px"><span class="pl">Open items <span class="cnt">0</span></span><span class="pl c">⋯</span></span></div>`;
+}
+function header() {
+  return `<div class="hd"><div class="t">Coordinator handoff v2</div>
+    <div class="m"><span class="chip acc">Open</span><span>6 tasks</span></div>
+    <div class="line">⎇ project/34ycavCsYoARJ89WqS2F6 · <span class="neu">Running jobs 0 · Queued 0 · Last landing check not checked</span></div></div>`;
+}
+function openItems() {
+  return SEC('Open items', '0 need you · 0 with the coordinator · oldest first',
+    `<div class="grp">NEEDS YOU</div><div class="rw" style="display:flex;gap:10px"><span style="color:var(--gray);font-size:10px;margin-top:5px">●</span><div><div style="color:var(--label-2);font-weight:600">Record as done…</div><div class="s">not asked yet</div></div></div>`);
+}
+function overview() {
+  const cell = (g, n, f, c) => `<div><div class="g1"><span style="color:${c}">${g}</span></div><div class="g2">${n}</div><div class="g3">${f}</div></div>`;
+  return SEC('Work overview', '6 tasks · 7 dependencies',
+    `<div class="grid neu" style="background:transparent">${cell('● Running', 1, 'task work in progress', 'var(--tint)')}${cell('▲ Ready', 1, 'can start now', 'var(--amber)')}${cell('□ Waiting', 3, 'waiting on dependencies', 'var(--gray)')}${cell('✓ Done', 1, '17% complete', 'var(--green)')}</div>
+     <div class="meter"><i style="flex:1;background:var(--tint)"></i><i style="flex:1;background:var(--amber)"></i><i style="flex:3;background:var(--gray)"></i><i style="flex:1;background:var(--green)"></i></div>`);
+}
+function coordinator() {
+  return SEC('Coordinator', '', `<div class="rw"><div style="font-weight:600">Coordinator handoff v2</div><div class="s">last active 6h ago · 1st coordinator of this project</div></div>
+    <div class="rw lc"><span>Workspace</span><span class="v">orbit-develop</span></div>
+    <div class="note"><div class="s">Manual dispatch</div>5 open tasks are coordinated from this conversation.</div>
+    <div class="btn">Open coordinator<span class="chev">⌄</span></div>`, `<span class="pill">○ Idle</span>`);
+}
+function runSettings(after) {
+  const summary = `<div class="rw" style="display:flex;gap:10px;background:rgba(62,105,246,.06)"><span style="color:var(--tint);font-size:11px;margin-top:4px">●</span><div><div style="font-weight:600">Automatic On</div><div class="s" style="color:var(--label)">A project branch · project/34yca… · 3 tasks at a time</div></div></div>`;
+  return SEC('How it runs', 'applies from the next task',
+    (after ? MK(2, summary) : '') +
+    `<div class="rw"><div class="lbl">Delivers</div><div class="radio"><span class="o on"></span><div>Code</div></div><div class="radio"><span class="o off"></span><div>Not code</div></div></div>
+     <div class="rw"><div class="lbl">Tasks land on</div>🔒 A project branch · <span class="mono">project/34ycavCsYoARJ89WqS2F6</span></div>
+     <div class="rw"><div class="lbl">Delivery</div><div class="radio"><span class="o on"></span><div>Orbit lands it</div></div><div class="radio"><span class="o off"></span><div>The agent pushes it</div></div></div>
+     <div class="rw lc"><span>Main branch</span><span class="v">🔒 <span class="mono">main</span></span></div>
+     <div class="rw lc"><span>Automatic</span><span class="sw"></span></div>
+     <div class="rw lc"><span>At most · 3 tasks at a time</span><span class="stp"><span>−</span><span>+</span></span></div>
+     <div class="rw"><div>Merge check</div><div class="mono" style="margin-top:4px">npm run build &amp;&amp; npm test -w @orbit/apiserver &amp;&amp; npm test -w @orbit/web</div></div>
+     <div class="rw lc"><span>Escalate after</span><span class="v">2 hours ⌃⌄</span></div>
+     <div class="rw" style="color:var(--tint)">Pause project</div>`);
+}
+function pageTop(after) {
+  return PH(nav() + header() + (after ? `<div style="margin:0 -0px">${MK(1, openItems())}</div>` : '') + overview() + coordinator() + runSettings(after), { fold: true });
+}
+
+function goal() {
+  return SEC('Goal', '', `<div class="rw" style="font-size:15.5px;line-height:1.42">A coordinator handoff hands over state, not just a note. Work the outgoing coordinator left running still reaches someone, the successor's conversation starts clean, its first turn costs about 15k fewer tokens, and the owner's rulings…<div class="more">More</div></div>`);
+}
+function graph() {
+  const n = (x, y, t, s, c = '#d8d8df') => `<div class="n" style="left:${x}px;top:${y}px;border-color:${c}"><b>${t}</b><br><span style="color:#888">${s}</span></div>`;
+  return SEC('Task graph', 'Prerequisite → dependent', `<div class="graph">
+    <svg width="376" height="170"><g stroke="#b8b8c2" fill="none"><path d="M120 22 C 150 22, 150 80, 250 85"/><path d="M120 22 C 150 22, 140 60, 128 60"/><path d="M120 62 C 150 62, 150 85, 250 88"/><path d="M120 102 C 150 102, 150 90, 250 90"/><path d="M120 142 C 150 142, 150 95, 250 92"/></g></svg>
+    ${n(6, 8, 'Handoff: forward wakes…', 'Queued')}${n(6, 48, 'Confirm dialog shows kind…', 'Blocked')}${n(6, 88, 'Owner rulings…', 'Running · Background job · no output 10+ min', '#ff9f0a')}${n(6, 128, 'Starts clean…', 'Done', '#34C759')}
+    ${n(252, 70, 'Walkthrough…', 'Blocked · waits 4')}</div>`);
+}
+function runQueue() {
+  return SEC('Run queue', '1 running · 1 ready',
+    `<div class="rw lc"><span style="font-size:15px">Owner rulings as project records (project_ruling, …)</span><span class="v">◌</span></div>
+     <div class="rw lc"><span style="font-size:15px">Handoff: forward SubAgent/bg_run wakes and move scheduled…</span><span class="tg b" style="font-size:13px;padding:3px 10px;border-radius:999px">Run</span></div>`);
+}
+function crit(n, text, met, work, why) {
+  return `<div class="crit"><span class="om${met ? ' met' : ''}">${n}</span><div><div class="tx">${text}<span class="clip"> …</span></div>
+    <div class="w">${work}</div>${why ? `<div class="why">${why}</div>` : ''}
+    <div class="ft">▸ <u>How it's checked</u> · Met by: its tasks ▾</div></div></div>`;
+}
+const NOTMET = '<b>Not met by its work</b>';
+const HELD = (t) => `Work filed under it has not settled by the criterion that work declared.<br><a>${t}</a> — needs evidence submitted, then an independent decision`;
+function criteria(after) {
+  const met2 = after
+    ? MK(3, `<div class="w"><b class="g">Met by its work</b> · In flight</div>`)
+    : `<div class="w"><b class="g">Met by its work</b> · no merge receipt either way</div>`;
+  return SEC('Acceptance criteria', '',
+    `<div class="rw" style="font-size:13.5px;color:var(--label-2)">5 criteria stated. Whether one is met is read off the work filed under it; nothing in Orbit judges the criteria themselves.</div>` +
+    crit(1, 'Pending work follows a handoff. A <code>delegate</code> (SubAgent) run or a <code>bg_run</code> job that ends after its coordinator handed over wakes the successor', false, NOTMET, HELD('Handoff: forward SubAgent/bg_run wakes and move scheduled wakeups to the successor') + `<br><a>Handoff confirm dialog shows each pending item's kind…</a> — needs evidence submitted, then an independent decision`) +
+    `<div class="crit"><span class="om met">2</span><div><div class="tx">A coordinator conversation does not draw a record (answered question, decision receipt, merge line, blocked promotion) stamped before the conversation was created<span class="clip"> …</span></div>${met2}<div class="ft">▸ <u>How it's checked</u> · Met by: its tasks ▾</div></div></div>` +
+    crit(3, 'A successor coordinator opens with a dated state digest rendered by the server', false, NOTMET, HELD('Successor coordinator opens with a server-rendered state digest')) +
+    crit(4, 'Owner rulings are project records. A <code>project_ruling</code> row holds the ruling sentence, the owner\'s quote, its source', false, NOTMET, HELD('Owner rulings as project records (project_ruling, project_ruling_record)')) +
+    `<div class="vall">View all 5 criteria</div><div style="text-align:center;font-size:12.5px;color:var(--label-2);padding:2px 0 12px">1 more not shown</div>`) +
+    `<div class="foot">Tasks track process · Nothing judges these criteria.</div>`;
+}
+function instructions() {
+  return SEC('Instructions', '', `<div class="rw" style="font-size:15px;line-height:1.42">Read docs/coordinator-handoff-v2-design.md and the board PNGs in docs/mocks/coordinator-handoff-v2/ first (sparse checkouts: <span class="mono">git sparse-checkout add …</span>). v1's API is in docs/coordinator-handoff.md…<div class="more">More</div></div>`);
+}
+function task(gl, glc, title, tags, dim) {
+  return `<div class="task${dim ? ' dim' : ''}"><span class="gl" style="color:${glc}">${gl}</span><div class="tt">${title}<div class="tags">${tags}</div></div><span class="chv">›</span></div>`;
+}
+function tasks() {
+  const T = '▲', O = 'var(--amber)';
+  return SEC('Tasks', '6',
+    `<div class="band">Running</div>` + task(T, O, 'Owner rulings as project records (project_ruling, project_ruling_record)', '<span class="tg b">Running</span><span class="tg k">blocks 2</span>') +
+    `<div class="band">Ready · can start now</div>` + task(T, O, 'Handoff: forward SubAgent/bg_run wakes and move scheduled wakeups to the successor', '<span class="tg o">Ready · automatic dispatch</span><span class="tg k">blocks 2</span>') +
+    `<div class="band">Blocked · topology level 1</div>` + task(T, O, 'Successor coordinator opens with a server-rendered state digest', '<span class="tg n">Blocked</span><span class="tg w">waits 1</span><span class="tg k">blocks 1</span>') +
+    task(T, O, "Handoff confirm dialog shows each pending item's kind on web, iOS/macOS and Android", '<span class="tg n">Blocked</span><span class="tg w">waits 1</span><span class="tg k">blocks 1</span>') +
+    `<div class="band">Blocked · topology level 2</div>` + task(T, O, 'Walkthrough: a real coordinator handoff with pending work, on a deployed build', '<span class="tg n">Blocked</span><span class="tg w">waits 4</span>') +
+    `<div class="band">Done / Cancelled</div>` + task('✓', 'var(--green)', 'Coordinator conversation starts clean: no records from before it was created, on all clients', '<span class="tg k">blocks 1</span>', true));
+}
+function pageBottom(after) { return PH(goal() + graph() + runQueue() + criteria(after) + instructions() + tasks(), { cont: true }); }
+
+/* ── coordinator conversation ── */
+function cards(after) {
+  const crit = after
+    ? MK(4, `<div class="ac orange"><div class="ah"><i>✓</i>Decision recorded</div><div class="ln"><span style="color:var(--green-ink)">✓ Approved by you at <span class="unk">HH:MM</span></span></div>${MK(5, `<div class="dg">▸ What this approved · <span class="unk">…</span></div>`)}<div class="fine">From Orbit</div></div>`)
+    : `<div class="ac green"><div class="ah"><i>✓</i>Decision recorded</div><div class="ln">✓ Approved by you at <span class="unk">HH:MM</span></div><div class="fine">From Orbit</div></div>`;
+  const stamp = `by you at 11/16 23:45`;
+  const start = `<div class="ac blue"><div class="ah"><i>✓</i>Decision recorded</div><div class="ln">You started the project on 5 criteria at seal 7219d1bad212</div><div class="se">project/34yca… · Automatic on · 3 tasks at a time · merge check set</div>${after ? MK(6, `<div class="fine">${stamp}</div>`) : `<div class="fine">${stamp}</div>`}<div class="fine">From Orbit</div></div>`;
+  const ps = `<div class="ps"><div class="h">▶ Project started<span class="k">Criteria confirmed</span></div><div class="ti">Coordinator handoff v2</div><div class="sx">project/34yca… · Automatic on · 3 tasks at a time · merge check set</div><div class="sx" style="color:var(--label)">1 task is set to start by hand, so it waits for the coordinator:</div><div class="ls"><div><span>Walkthrough: a real coordinator handoff with pending work, on a deployed build</span><span>›</span></div></div><div class="me">Started by you, confirming 5 criteria · a notification, not an interruption · 1h ago</div><div class="sx">▸ What the coordinator was told</div></div>`;
+  const nv = `<div class="nv"><span class="pl c">‹</span><span style="font-weight:600;font-size:16px">Coordinator handoff v2</span><span class="pl c">⋯</span></div>`;
+  return PH(nv + `<div class="tr"><div class="bub">D2 A, D3 A — Create the project</div><div class="asst" style="color:var(--label-2)">…</div>${crit}${start}${ps}</div>`);
+}
+
+document.getElementById('ios-top-today').innerHTML = pageTop(false);
+document.getElementById('ios-top-after').innerHTML = pageTop(true);
+document.getElementById('ios-bot-today').innerHTML = pageBottom(false);
+document.getElementById('ios-bot-after').innerHTML = pageBottom(true);
+document.getElementById('ios-cards-today').innerHTML = cards(false);
+document.getElementById('ios-cards-after').innerHTML = cards(true);
+</script>
+</body>
+</html>

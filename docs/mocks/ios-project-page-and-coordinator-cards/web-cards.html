@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Web cards at 440 px (shipped index.css classes)</title>
+<!-- The three cards as their components render them (CriteriaDecisionReceipt, AcceptanceConfirmationReceipt,
+     ProjectStartedCard), markup copied from src/web/src/components, styled ONLY by the shipped index.css.
+     Data: project 34ycavCsYoARJ89WqS2F6 (seal 7219d1bad212…, started 2026-11-16T15:45:31Z, shown in UTC+8). -->
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<style>
+  html, body { height: auto; overflow: visible; background: var(--bg-base, #fff); }
+  body { margin: 0; padding: 8px 12px 16px; font-family: Inter, "Noto Sans SC", sans-serif; }
+  .psc-mark svg { width: 1em; height: 1em; fill: currentColor; vertical-align: -2px; }
+  .b-unknown { background: #fff3a8; border-radius: 3px; padding: 0 2px; }
+</style>
+<body>
+  <div class="approval-card criteria-decision is-answered">
+    <div class="approval-head criteria-decision-head">
+      <span class="criteria-decision-heading">Decision recorded</span>
+      <span class="criteria-provenance">FROM ORBIT</span>
+    </div>
+    <p class="criteria-decision-receipt">
+      <span class="criteria-decision-verdict">✓ Approved by you at <span class="b-unknown">HH:MM</span></span>
+    </p>
+    <div class="approval-body criteria-decision-body">
+      <details class="criteria-decision-unchanged"><summary>What this approved · <span class="b-unknown">…</span></summary></details>
+    </div>
+  </div>
+
+  <div class="approval-card settlement-receipt">
+    <div class="approval-head settlement-card-head">
+      <span class="settlement-card-heading">Decision recorded</span>
+      <span class="criteria-provenance">FROM ORBIT</span>
+    </div>
+    <div class="approval-body settlement-receipt-body">
+      <p class="settlement-receipt-line">You started the project on 5 criteria at seal 7219d1bad212</p>
+      <p class="settlement-receipt-settings">project/34yca… · Automatic on · 3 tasks at a time · merge check set</p>
+      <p class="settlement-receipt-stamp">by you at 23:45</p>
+    </div>
+  </div>
+
+  <div class="psc-wrap">
+    <div class="psc">
+      <div class="psc-head">
+        <span class="psc-mark"><svg viewBox="64 64 896 896"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm144.1 454.9L437.7 677.8a8.02 8.02 0 01-12.7-6.5V353.7a8 8 0 0112.7-6.5L656.1 506a7.9 7.9 0 010 12.9z"/></svg></span>
+        <span>Project started</span>
+        <span class="psc-kind">Criteria confirmed</span>
+      </div>
+      <div class="psc-title">Coordinator handoff v2</div>
+      <div class="psc-settings">project/34yca… · Automatic on · 3 tasks at a time · merge check set</div>
+      <div class="psc-lead">1 task is set to start by hand, so it waits for the coordinator:</div>
+      <ul class="psc-tasks"><li><a href="#">Walkthrough: a real coordinator handoff with pending work, on a deployed build</a></li></ul>
+      <div class="psc-meta">Started by you, confirming 5 criteria · a notification, not an interruption · 1h ago</div>
+      <details class="psc-raw"><summary>What the coordinator was told</summary></details>
+    </div>
+  </div>
+</body>
+</html>
