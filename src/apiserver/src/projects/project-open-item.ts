@@ -431,12 +431,14 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   const orAsk = (clause: string): string => (ownerCannotAsk ? '' : ` or ${clause}`);
   const orFix = taskBranch && row.assignee !== 'OWNER' ? ' or file a fix task' : orAsk('ask the coordinator to fix it');
 
+  // A check that timed out did not fail on merit, so it falls through to its own sentence below,
+  // the owner's as much as the coordinator's.
   // This is the copy approved in the project effect and is intentionally byte-for-byte stable:
   // the three clients render this field, they do not translate it. Its main is the project's main
   // branch by name, so a project on main reads every sentence as it always did.
   if (row.assignee === 'OWNER' && row.kind === 'INTEGRATION_CHECK_FAILED'
       && (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION')
-      && failureClass !== 'CONFLICT') {
+      && failureClass !== 'CONFLICT' && failureClass !== 'CHECK_TIMED_OUT') {
     return `Nothing on ${taskBranch ? 'this task’s branch' : 'the project branch'} reaches ${main} until this check passes — re-run it${orAsk('ask the coordinator to fix it')}.`;
   }
 
@@ -2122,6 +2124,11 @@ interface IntegrationItemPayload {
     exitCode?: number;
     expectedExitCode?: number;
     outputTail?: string;
+    /** Set by the runner on a check it stopped at its budget. */
+    timedOut?: boolean;
+    durationMs?: number;
+    /** The budget the check was stopped at, recorded with a timed-out check's failure. */
+    timeoutSeconds?: number;
   } | null;
   errorCode?: string;
   errorDetail?: unknown;
@@ -2275,6 +2282,14 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
     const check = payload.check;
     if (!check?.name) return ['A check on the merged tree did not pass, and this item did not record which one.'];
     const tail = typeof check.outputTail === 'string' ? check.outputTail : '';
+    if (stoppedAtItsLimit(payload)) {
+      return [
+        `Check ${check.name} did not finish: the platform stopped it ${limitAndRunTime(check)}, so it reached no verdict; `
+          + 'the target branch did not move.',
+        ...(check.command ? [`It ran: ${check.command}`] : []),
+        ...(tail ? [`The end of its output:\n${clip(tail.slice(-MAX_CHECK_TAIL_IN_MESSAGE))}`] : []),
+      ];
+    }
     return [
       `Check ${check.name} exited with code ${check.exitCode} (its declaration expects ${check.expectedExitCode}); `
         + 'the target branch did not move.',
@@ -2294,6 +2309,62 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
       : []),
     ...(detail ? [`Error detail: ${clip(detail)}`] : []),
   ];
+}
+
+/** Whether the item's check was stopped by the platform at its time limit rather than ending on its own. */
+function stoppedAtItsLimit(payload: IntegrationItemPayload): boolean {
+  return payload.check?.timedOut === true || payload.failureClass === 'CHECK_TIMED_OUT';
+}
+
+/** A span of time as a reader states it: "4h 0m", "12m 5s", "40s". */
+function spanOf(ms: number): string {
+  const total = Math.round(ms / 1_000);
+  const hours = Math.floor(total / 3_600);
+  const minutes = Math.floor((total % 3_600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${total % 60}s`;
+  return `${total}s`;
+}
+
+/** A limit in seconds: "4h" or "10m" when it is a round one, else the span it is. */
+function limitOf(seconds: number): string {
+  if (seconds >= 3_600 && seconds % 3_600 === 0) return `${seconds / 3_600}h`;
+  if (seconds < 3_600 && seconds % 60 === 0) return `${seconds / 60}m`;
+  return spanOf(seconds * 1_000);
+}
+
+/**
+ * "at its 4h limit after running 4h 0m", from the check's own record: an item written before the
+ * limit was recorded says it does not know it, and a run time that was not reported is left out.
+ */
+function limitAndRunTime(check: NonNullable<IntegrationItemPayload['check']>): string {
+  const limit = typeof check.timeoutSeconds === 'number' && check.timeoutSeconds > 0
+    ? `at its ${limitOf(check.timeoutSeconds)} limit`
+    : 'at its time limit (this item did not record the limit)';
+  const ran = typeof check.durationMs === 'number' && check.durationMs > 0 ? ` after running ${spanOf(check.durationMs)}` : '';
+  return `${limit}${ran}`;
+}
+
+/**
+ * The next step of a check the platform stopped at its time limit, for a landing and a candidate alike.
+ *
+ * The same check on the same tree takes about as long again, so a rerun is advised only beside a
+ * reason the next run can be shorter; a check whose usual run is near its limit is a question for the
+ * account owner — the limit, the command, or a fix for the slow part — and not a rerun at all. Each
+ * half is written only where the cell holds its door.
+ */
+function timedOutNextStep(rerunWith: string | null, askOwnerMcp: string | null): string | null {
+  const rerun = rerunWith == null ? null
+    : 'The check ran out of time rather than failing. Run again as it stands, the same check on the same tree takes about as long and stops at the same limit, '
+      + 'so rerun it once only when you can name why the next run will be shorter — the machine was under unusual load, the output above shows a one-off hang '
+      + '(a stuck network call or lock, for example), or a fix for the slow part has landed since — and give that reason: '
+      + rerunWith;
+  const ask = askOwnerMcp == null ? null
+    : 'If this check usually takes close to its limit or longer, a rerun will time out again: do not rerun it, '
+      + `ask the account owner with ${askOwnerMcp} instead, offering options such as raising the check’s time limit, `
+      + 'changing the merge-check command (to a faster one, or a subset of it), or filing a fix task for the slow part, '
+      + 'with your recommended option and its reason.';
+  return lines(rerun, ask) || null;
 }
 
 /** What each failure class means, in the sentence a coordinator decides the next step from. */
@@ -2399,11 +2470,14 @@ function landingNextStep(
   }
   // The rerun paragraph is written only where the cell really holds that door — the classes that
   // reach here are the ones a rerun answers, and the matrix gives them the door.
-  const rerun = doors.retryMcp == null ? null
-    : `If it is not the delivery’s problem — the merge check’s baseline was repaired since, the check timed out, the integration machinery failed — queue the landing once more with ${doors.retryMcp}`
-      + ` (projectId: ${projectId}, taskId: ${taskId}, reason: why this time will be different): `
-      + 'it queues the next generation of this task’s landing; if that lands, the work goes into the project branch and on to the merge checks after it, and if it does not, a new item comes to you. '
-      + 'Whether such a landing goes ahead is yours to judge, not a question for the account owner.';
+  const queues = 'it queues the next generation of this task’s landing; if that lands, the work goes into the project branch and on to the merge checks after it, and if it does not, a new item comes to you. '
+    + 'Whether such a landing goes ahead is yours to judge, not a question for the account owner.';
+  const retryArgs = ` (projectId: ${projectId}, taskId: ${taskId}, reason: why this time will be different): `;
+  const rerun = stoppedAtItsLimit(payload)
+    ? timedOutNextStep(doors.retryMcp == null ? null : `queue the landing once more with ${doors.retryMcp}${retryArgs}${queues}`, doors.askOwnerMcp)
+    : doors.retryMcp == null ? null
+      : `If it is not the delivery’s problem — the merge check’s baseline was repaired since, the integration machinery failed — queue the landing once more with ${doors.retryMcp}`
+        + retryArgs + queues;
   return read + lines(
     'First work out whose red it is. If the delivery itself is the problem, ' + `${rework}; ${repair}`,
     rerun,
@@ -2527,12 +2601,17 @@ function promotionNextStep(
   }
   const candidate = promotionId ? uuidToBase62(promotionId) : 'this candidate’s id';
   const retry = ` (projectId: ${projectId}, promotionId: ${candidate}, reason: why this time will be different)`;
-  const rerun = doors.retryMcp == null ? null
-    : `If it is not the work’s problem — the merge check’s baseline was repaired since, the check timed out (go test hitting its default 10-minute limit, for example), the integration machinery failed — rerun this candidate’s check once with ${doors.retryMcp}`
-      + `${retry}. Once the check passes, the merge is still confirmed by the account owner on the card, `
-      + (taskBranch ? 'whatever the Automatic setting says' : 'or done automatically by the Automatic setting under its usual rule')
-      + ': this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.';
-  const tradeOff = doors.askOwnerMcp == null ? null
+  const afterPass = 'Once the check passes, the merge is still confirmed by the account owner on the card, '
+    + (taskBranch ? 'whatever the Automatic setting says' : 'or done automatically by the Automatic setting under its usual rule')
+    + ': this door only brings the candidate back to a state where it can be merged, and merges nothing for anybody.';
+  const timedOut = stoppedAtItsLimit(payload);
+  const rerun = timedOut
+    ? timedOutNextStep(doors.retryMcp == null ? null : `rerun this candidate’s check once with ${doors.retryMcp}${retry}. ${afterPass}`, doors.askOwnerMcp)
+    : doors.retryMcp == null ? null
+      : `If it is not the work’s problem — the merge check’s baseline was repaired since, the integration machinery failed — rerun this candidate’s check once with ${doors.retryMcp}`
+        + `${retry}. ${afterPass}`;
+  // A timed-out check's paragraph above already puts the limit and the command to the account owner.
+  const tradeOff = doors.askOwnerMcp == null || timedOut ? null
     : `If the merge-check command or its time limit has to change, or there is another trade-off only the account owner can decide, ask with ${doors.askOwnerMcp}`
       + ', giving at least two options, with the reason in the recommended one.';
   return about + lines(

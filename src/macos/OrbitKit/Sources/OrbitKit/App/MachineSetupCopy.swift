@@ -6,26 +6,13 @@ import Foundation
 /// it; the ones it lists as this client's own are said here and in no web file.
 public enum MachineSetupCopy {
     public static func setupTitle(machine: String) -> String { "Set up \(machine)" }
-    public static let SETUP_LEAD = "Pick where it works and sign in a coding CLI. Anything you send waits until both are done."
-    public static func setupOffline(machine: String) -> String {
-        "\(machine) is offline. It can’t check folders or sign in until it’s back."
-    }
-    public static func setupConnecting(machine: String) -> String {
-        "Waiting for \(machine) to connect. It can check folders and sign in as soon as it does."
-    }
 
-    public static func setupUpdating(machine: String) -> String {
-        "\(machine) updates itself first: this version can’t check folders yet. You can sign in meanwhile."
-    }
     public static func setupNeedsUpdate(machine: String) -> String {
         "\(machine) can’t check folders on this version, and it can’t update itself."
     }
     public static let SETUP_OPEN_MACHINE = "Open machine"
 
     public static let SETUP_FOLDER = "Folder"
-    public static func setupFolderHelp(machine: String) -> String {
-        "Where on \(machine) should sessions work? They can read and change everything in it."
-    }
     public static let SETUP_NEW_FOLDER_NAME = "name"
     public static let SETUP_FOLDER_HINT = "Uses this folder if it exists, otherwise creates it."
     public static let SETUP_NEW_FOLDER_META = "New folder · created as the session starts."
@@ -35,7 +22,6 @@ public enum MachineSetupCopy {
         "There’s already a file with this name on \(machine). Pick another name."
     }
     /// Board 03 draws it in the platform's title case; the words are the web's.
-    public static let SETUP_USE_FOLDER = "Use This Folder"
     public static let SETUP_CHANGE = "Change"
 
     public static func setupChecking(machine: String) -> String { "Checking on \(machine)…" }
@@ -52,30 +38,38 @@ public enum MachineSetupCopy {
     }
     public static let SETUP_CHECK_AGAIN = "Check again"
 
-    public static func setupSignIn(engine: String, machine: String) -> String { "Sign in \(engine) on \(machine)" }
-    public static let SETUP_SIGN_IN_HELP = "Sessions run on the coding CLIs signed in on that machine, and spend its subscription."
-    public static func setupSignedIn(machine: String) -> String { "signed in on \(machine)" }
-    public static func setupUseEngine(engine: String) -> String { "Use \(engine) instead" }
     public static let SETUP_ON_A_KEY = "API key"
     public static let SETUP_ON_A_POOL = "account pool"
-    public static func setupNotInstalled(engine: String, machine: String) -> String {
-        "\(engine) isn’t installed on \(machine)."
-    }
 
-    public static let SETUP_FOOT = "Nothing is created until you send. You can rename the workspace or change these later."
-    public static func setupReady(workspace: String, path: String) -> String {
-        "Ready. Send a task — Orbit adds the workspace “\(workspace)” for \(path) as it starts."
+
+    // The card's own lines (owner 2026-11-16, docs/mocks/new-folder-in-home/workspace-card-with-name): a
+    // machine with no workspace draws the card alone, which makes the workspace from a folder and a name,
+    // and asks no sign-in.
+    public static func setupNewWorkspaceTitle(machine: String) -> String { "New workspace on \(machine)" }
+    public static func setupNewWorkspaceLead(machine: String) -> String {
+        "Pick the folder on \(machine) this workspace works in. Its sessions can read and change everything in it."
     }
+    public static let SETUP_NEW_FOLDER_WITH_WORKSPACE = "New folder · created with the workspace."
+    public static let SETUP_NAME = "Name"
+    public static let SETUP_NAME_PLACEHOLDER = "Same as the folder"
+    public static let SETUP_NAME_HINT = "Same as the folder unless you change it. Shown in the sidebar."
+    public static let SETUP_NAME_EDITED = "Shown in the sidebar. You can rename it later."
+    public static let SETUP_NAME_EMPTY = "Give the workspace a name."
+    public static func setupOfflineCreate(machine: String) -> String {
+        "\(machine) is offline. It can’t check folders until it’s back."
+    }
+    public static func setupConnectingCreate(machine: String) -> String {
+        "Waiting for \(machine) to connect. It can check folders as soon as it does."
+    }
+    public static func setupUpdatingCreate(machine: String) -> String {
+        "\(machine) updates itself first: this version can’t check folders yet."
+    }
+    public static let SETUP_CREATE = "Create workspace"
+    public static func setupCreateFailed(why: String) -> String { "Couldn’t create the workspace: \(why)" }
 
     public static func composerPlaceholderFor(machine: String) -> String { "Send \(machine) a task…" }
 
     public static func heldWaiting(machine: String) -> String { "Waiting for \(machine) — sends once both steps are done" }
-    public static let HELD_WITHDRAW = "Withdraw"
-    public static let HELD_SENDING = "Sending…"
-    public static func heldFailed(why: String) -> String { "Couldn’t send: \(why)" }
-    public static let HELD_TRY_AGAIN = "Try again"
-    public static let HELD_ALREADY_WAITING = "One message is already waiting"
-    public static let HELD_ALREADY_WAITING_DETAIL = "Withdraw it to send a different one."
 
     public static let CREATED_WORKSPACE = "Created workspace"
     public static let CREATED_ON = "on"

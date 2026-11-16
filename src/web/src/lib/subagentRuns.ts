@@ -6,7 +6,7 @@ import { wikiDuration } from './wikiRuns';
 
 /**
  * SubAgents in the transcript (docs/subagent-design.md §6.4): what a `mcp__orbit__delegate` block shows beside
- * its call — tier, model, Why, time and cost — read from the session's `subagent_run` rows.
+ * its call — tier, model, Why and time (no cost) — read from the session's `subagent_run` rows.
  */
 
 export const DELEGATE_TOOL = 'mcp__orbit__delegate';
@@ -57,7 +57,7 @@ export function useSubagentRuns(sessionId: string, events: readonly RunEvent[]):
 
 /**
  * The block's grey meta: `M · Opus 5.5 · high`, then ` · on orbit-macos` for a run on another workspace
- * (docs/subagent-design.md §10.3), then ` · 3m 12s · $0.21` once the run has ended. Null when there is nothing
+ * (docs/subagent-design.md §10.3), then ` · 3m 12s` once the run has ended; the run's cost is not shown. Null when there is nothing
  * to say yet.
  */
 export function subagentMeta(run: SubagentRunView | undefined): string | null {
@@ -69,7 +69,6 @@ export function subagentMeta(run: SubagentRunView | undefined): string | null {
   if (run.workspaceName) parts.push(`on ${run.workspaceName}`);
   if (run.status !== 'RUNNING' && run.endedAt) {
     parts.push(wikiDuration((Date.parse(run.endedAt) - Date.parse(run.createdAt)) / 1000));
-    parts.push(`$${run.costUsd.toFixed(2)}`);
   }
   return parts.length ? parts.join(' · ') : null;
 }

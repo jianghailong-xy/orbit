@@ -88,7 +88,6 @@ describe('session-created-tasks.fixture.json', () => {
     expect(fixture.copy).toEqual(SESSION_CREATED_TASKS_COPY);
     expect(fixture.copy).toEqual({
       title: 'Tasks',
-      viewAll: 'View all in Tasks ›',
       openProject: 'Open project ›',
       replacesPrefix: 'Replaces ',
       createdInChip: 'Created in ',

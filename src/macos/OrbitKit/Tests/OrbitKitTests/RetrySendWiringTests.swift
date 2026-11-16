@@ -232,8 +232,16 @@ final class RetrySendWiringTests: XCTestCase {
     /// re-sent turn's own files is not an excuse to stop guarding it.
     func testARetryStillLeavesTheComposersOwnChipsWhereTheyAre() throws {
         let send = try sendBody()
+        // The chips go with the composer's own send, and with an armed reply's sentence built from
+        // what was typed there (`takesStagedAttachments`) — never with a retry, which passes neither.
+        XCTAssertTrue(send.contains("let takesChips = fromComposer || takesStagedAttachments"),
+                      "send() no longer decides whose chips these are from the composer")
+        let console = try source(Self.consolePath)
+        let retry = try section(console, from: "func retryLastMessage() async {", to: "// MARK: auto-retry")
+        XCTAssertFalse(retry.contains("takesStagedAttachments"),
+                       "a retry takes the composer's staged chips with it")
         for line in send.split(separator: "\n") where line.contains("pendingAttachments =") {
-            XCTAssertTrue(line.contains("fromComposer"),
+            XCTAssertTrue(line.contains("takesChips"),
                           "unguarded chip clear or restore in send() — a retry would eat or double "
                               + "the attachments staged for the next message: "
                               + "\(line.trimmingCharacters(in: .whitespaces))")

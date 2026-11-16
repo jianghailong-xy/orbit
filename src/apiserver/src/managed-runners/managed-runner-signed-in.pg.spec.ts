@@ -6,7 +6,7 @@
  *   bash scripts/run-pg-spec.sh src/apiserver/src/managed-runners/managed-runner-signed-in.pg.spec.ts
  *
  *   (1) an account signed in before the switch went on — a live refresh token, no mapping — gets
- *       exactly one mapping, its runner and its default workspace from one pass, keyed `signed-in:`,
+ *       exactly one mapping and its runner, without a workspace from one pass, keyed `signed-in:`,
  *       and the manager provisions it to READY. A second pass makes nothing more;
  *   (2) no live login session — only revoked tokens, only expired ones, or none — gets nothing;
  *   (3) a disabled account gets nothing, and neither does one the eligibility rule refuses;
@@ -28,7 +28,7 @@ import { sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { managedRunnerWorld } from '../test-support/managed-runner-world';
-import { MANAGED_RUNNER_NAME, MANAGED_WORKSPACE_NAME } from './managed-runner-resources';
+import { MANAGED_RUNNER_NAME } from './managed-runner-resources';
 import { ManagedRunnerService } from './managed-runner.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -76,9 +76,9 @@ test('every signed-in account gets its managed runner from the signed-in pass', 
     assert.equal(mapping.desiredState, 'RUNNING');
     const runner = await db.runner.findUniqueOrThrow({ where: { id: mapping.runnerId } });
     assert.equal(runner.name, MANAGED_RUNNER_NAME);
-    const workspace = await db.workspace.findUniqueOrThrow({ where: { id: mapping.defaultWorkspaceId! } });
-    assert.equal(workspace.name, MANAGED_WORKSPACE_NAME);
-    assert.equal(workspace.runnerId, mapping.runnerId);
+    assert.equal(mapping.defaultWorkspaceId, null);
+    assert.equal(await db.workspace.count({ where: { runnerId: mapping.runnerId } }), 0);
+    assert.equal((await w.service.status(ownerId)).workspaceId, null);
     assert.equal((await db.runner.findUniqueOrThrow({ where: { id: own.id } })).name, 'their-mac');
     assert.equal((await db.workspace.findUniqueOrThrow({ where: { id: ownWs.id } })).runnerId, own.id);
 
@@ -147,7 +147,7 @@ test('every signed-in account gets its managed runner from the signed-in pass', 
     const made = await mappings(owners);
     assert.deepEqual(made.map((m) => m.ownerId).sort(), [...owners].sort());
     assert.equal(await db.runner.count({ where: { ownerId: { in: owners } } }), 3, 'one runner each');
-    assert.equal(await db.workspace.count({ where: { ownerId: { in: owners } } }), 3, 'one workspace each');
+    assert.equal(await db.workspace.count({ where: { ownerId: { in: owners } } }), 0, 'no workspace is created');
     await signOut(...owners);
   });
 

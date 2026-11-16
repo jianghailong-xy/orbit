@@ -1136,6 +1136,10 @@ export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
 
 /** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
  *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
+/** A managed runner's repos folder, fixed by its image (deploy/managed-runner/image/entrypoint.py). A new folder on a
+ *  managed runner that has not reported yet goes here: every runner version can make one inside its reposRoot. */
+export const MANAGED_RUNNER_REPOS_ROOT = '/var/lib/orbit/home/orbit-repos';
+
 export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
   const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
   if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;

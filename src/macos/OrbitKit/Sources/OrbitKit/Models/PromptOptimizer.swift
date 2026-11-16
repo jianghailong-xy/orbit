@@ -141,7 +141,9 @@ public enum PromptOptimizerCopy {
     // Composer (frames 2–3)
     public static let optimize = "Optimize"
     public static let optimizing = "Optimizing…"
-    public static let optimizeHelp = "Have DeepSeek improve this draft before you send it · Tab · ⌘⇧O"
+    public static let optimizeHelp = "Have DeepSeek improve this draft before you send it"
+    /// The Mac's ✦ tooltip: optimizeHelp with the keys that press it there. Android, with no Tab, says optimizeHelp.
+    public static let optimizeHelpWithKeys = optimizeHelp + " · Tab · ⌘⇧O"
     public static let cancelHelp = "Stop optimizing"
     public static let buttonIdentifier = "composer.optimize"
 
@@ -151,6 +153,17 @@ public enum PromptOptimizerCopy {
     public static let used = "Used:"
     public static let use = "Use"
     public static let editThenUse = "Edit, then use"
+    /// A phone's shorter "Edit, then use".
+    public static let edit = "Edit"
+    /// A phone's line under the gloss (as under a bilingual message): "Sent to the agent in English",
+    /// and its Show / Hide for the prompt beneath.
+    public static func sentToAgent(_ language: TranslationLanguage?) -> String {
+        TranslationCopy.sentToAgentLabel(language ?? .agentDefault)
+    }
+    public static let show = "Show"
+    public static let hide = "Hide"
+    /// A phone's "Used:" chips as one line: "Used this session's last 106 turns · session recap".
+    public static func usedLine(_ chips: [String]) -> String { "Used " + chips.joined(separator: " · ") }
     public static let tryAgain = "Try again"
     public static let dismiss = "Dismiss"
     /// The Mac card's keys: Tab in the box is Use (as it takes a reply suggestion), Esc dismisses.

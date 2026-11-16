@@ -1,5 +1,7 @@
 import {
   CREATE_WORKDIR_CAPABILITY,
+  managedSetupState,
+  type ManagedRunnerStatus,
   DIR_PROBE_CAPABILITY,
   type DirProbe,
   type LoginEngine,
@@ -36,14 +38,14 @@ export const machineDraftPath = (runnerId: string): string => `/runners/${encode
 export const machineName = (runner: { name: string; displayName?: string | null }): string =>
   runner.displayName || runner.name;
 
-/** Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no workspace
- *  of this account on them: an offline one is already what Machines & models says needs you. */
+/** Machines without a workspace, in list order: online machines and managed machines accepting queued work. */
 export function machinesToSetUp<R extends { id: string; online?: boolean }>(
   runners: readonly R[],
   workspaces: readonly OrderableWorkspace[],
+  managedStatus?: ManagedRunnerStatus | null,
 ): R[] {
   const taken = new Set(workspaces.map(workspaceRunnerId));
-  return runners.filter((runner) => runner.online && !taken.has(runner.id));
+  return runners.filter((runner) => (runner.online || managedSetupState(runner.id, managedStatus) !== null) && !taken.has(runner.id));
 }
 
 /** Whether a machine can be asked about a path at all, and whether it can make a new folder: the
@@ -140,10 +142,6 @@ export type PickedFolder =
  *  the runner's to expand, and a workspace's workDir is not. */
 export const newWorkspaceOf = (folder: PickedFolder): NewWorkspaceRequest =>
   folder.kind === 'new' ? { newFolder: folder.name } : { workDir: folder.path };
-
-/** The workspace a picked folder makes, by its name: a new folder's own, or an existing one's last segment. */
-export const newWorkspaceName = (folder: PickedFolder): string =>
-  folder.kind === 'new' ? folder.name : folderName(folder.path);
 
 const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
 
