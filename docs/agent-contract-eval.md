@@ -48,6 +48,14 @@ the rules the scenarios turn on, as the real control plane keeps them:
 Its ledger (tasks, cards and their answers, starts, sessions, every request) is the graders' ground truth for an
 effect; the transcript is the ground truth for what the agent tried and said.
 
+It serves the routes the scenarios turn on, not the whole control plane. Any other route answers 404 with a sentence
+naming it, and the ledger records it. In the 2026-11-16 runs Codex met three routes it does not serve as the server
+does: it waited on the session it had started (`session_await`, E6), submitted evidence for its own task
+(`task_evidence_submit`, E8), and uploaded a report file (`file_upload`, E8), which the plane sends to its
+orchestration routes and so refuses with the switch off. None is a clause of the scenario it met it in, so no
+verdict turned on it. Adding them is a new plane version, and a new baseline
+([34ybbG1fWDjDK8E6YCazy](orbit-task:34ybbG1fWDjDK8E6YCazy)).
+
 ### How the real engines are driven
 
 The black-box drivers (`agent_eval_live_test.go`) use the runner's own code, so a run is a session as the runner
@@ -225,6 +233,9 @@ caught three ways:
   measured within a week of its release;
 - a run with `--claude-bin` / `--codex-bin` measures a pinned binary beside the current one, and
   `scripts/agent-eval.sh compare` reads the two reports cell by cell.
+
+Measured that way on 2026-11-16, the accepted suite passed on the pinned Codex 0.167.2 (20 runs of 20) as on 0.169.0
+(60 of 60), with the same model; the baseline holds both.
 
 A version enters the matrix in the change that records its passing report, and leaves it when the engine no longer
 offers it.

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -744,14 +745,23 @@ func (rep *evalReport) markdown() string {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %v |\n", m.Engine, m.EngineVersion, m.Model, m.Backend, m.Supported)
 	}
 	b.WriteString("\n## Scenarios\n\n")
+	// One column per cell: an engine and a model, whatever versions of the engine ran it.
 	var heads []string
+	var columns []evalMatrixEntry
 	for _, m := range rep.Matrix {
-		heads = append(heads, m.Engine+" "+m.Model)
+		head := m.Engine + " " + m.Model
+		if m.Backend != "live" {
+			head += " (" + m.Backend + ")"
+		}
+		if !slices.Contains(heads, head) {
+			heads = append(heads, head)
+			columns = append(columns, m)
+		}
 	}
 	fmt.Fprintf(&b, "| Scenario | %s |\n|%s\n", strings.Join(heads, " | "), strings.Repeat(" --- |", len(heads)+1))
 	for _, sc := range rep.Suite.Scenarios {
 		var cols []string
-		for _, m := range rep.Matrix {
+		for _, m := range columns {
 			cell, ok := rep.Summary.Cells[sc+" | "+m.Engine+"/"+m.Model+"/"+m.Backend]
 			na := false
 			for _, skip := range rep.Skipped {
@@ -888,7 +898,12 @@ func mergeEvalReports(reports []*evalReport) (*evalReport, error) {
 			out.Source.RepoSHA = "several"
 		}
 		out.Runs = append(out.Runs, rep.Runs...)
-		out.Skipped = append(out.Skipped, rep.Skipped...)
+		// A case not applicable on an engine is one skip however many of the reports name it (one per model).
+		for _, skip := range rep.Skipped {
+			if !slices.Contains(out.Skipped, skip) {
+				out.Skipped = append(out.Skipped, skip)
+			}
+		}
 		for _, m := range rep.Matrix {
 			matrix[m.key()] = m
 		}

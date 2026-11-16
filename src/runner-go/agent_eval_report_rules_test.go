@@ -177,6 +177,34 @@ func TestAgentEvalReportsMergeWithinOneSuite(t *testing.T) {
 	if _, err := mergeEvalReports([]*evalReport{claude, &other}); err == nil {
 		t.Fatal("reports of two suites merged")
 	}
+	// Two models of one engine skip the same case once, and two versions of one engine share their cells' column.
+	skip := evalSkip{Scenario: "X1-mcp-missing-cli-fallback", Engine: "claude", Reason: "not here"}
+	sonnet := buildEvalReport([]*evalRun{passingE1(t, "claude", "2.1.325", "m")}, "aaa", nil, skip)
+	opus := buildEvalReport([]*evalRun{passingE1(t, "claude", "2.1.325", "o")}, "aaa", nil, skip)
+	older := buildEvalReport([]*evalRun{passingE1(t, "claude", "2.1.324", "o")}, "aaa", nil, skip)
+	both, err := mergeEvalReports([]*evalReport{sonnet, opus, older})
+	if err != nil {
+		t.Fatal(err)
+	}
+	notApplicable := 0
+	for _, notice := range both.Gate.Notices {
+		if strings.HasPrefix(notice, "not applicable: ") {
+			notApplicable++
+		}
+	}
+	if len(both.Skipped) != 1 || notApplicable != 1 {
+		t.Fatalf("a skip named by three reports: %d skips, notices %q", len(both.Skipped), both.Gate.Notices)
+	}
+	var head string
+	for _, line := range strings.Split(both.markdown(), "\n") {
+		if strings.HasPrefix(line, "| Scenario |") {
+			head = line
+		}
+	}
+	// The matrix is in key order (claude@2.1.324/o, claude@2.1.325/m, claude@2.1.325/o): o first, then m, once each.
+	if head != "| Scenario | claude o | claude m |" {
+		t.Fatalf("the scenario table's columns are not one per engine and model: %q", head)
+	}
 }
 
 // The claim checks read a sentence that states a record or a hand-off as done, and nothing else: the replies the live
