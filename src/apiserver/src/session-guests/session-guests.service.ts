@@ -1,6 +1,6 @@
 import { open } from 'node:fs/promises';
 import {
-  BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException,
+  BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, Optional,
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
@@ -15,6 +15,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { enqueueSessionInvite, SESSION_INVITE } from '../email/email-outbox';
 import type { OpenedFile } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import type { ExternalTurnSender } from '../sessions/session-message';
 import { assertEngineSession } from '../sessions/engine-session';
@@ -60,6 +61,10 @@ export const guestAttachmentRefused = (publicId: string) =>
   `Attachment ${publicId} isn't an image you uploaded to this conversation.`;
 
 /** Midnight UTC of today: a guest's day (§6 rule 5). */
+/** A guest's live invitation to a session: not removed, not left, and the session not in the Trash. */
+const liveInvitationWhere = (guestId: string, sessionId: string): Prisma.SessionGuestWhereInput =>
+  ({ sessionId, userId: guestId, removedAt: null, session: { deletedAt: null } });
+
 const utcMidnight = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
 /** How many people the email field may suggest; the client shows five, filtered by what is typed. */
@@ -100,6 +105,9 @@ export class SessionGuestsService {
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
     private readonly attachments: AttachmentsService,
+    // Ends the guest's open streams when the invitation ends (docs/session-viewer-stream-design.md §5). Absent in the
+    // specs that build this by hand, whose streams' ping recheck is the only one there is.
+    @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
   // ── The owner's side ─────────────────────────────────────────────────────────────────────────
@@ -276,6 +284,7 @@ export class SessionGuestsService {
       return take.length;
     }, loggedRetry(this.logger, 'sessionGuests.endInvitation'));
     if (withdrawn === null) return false;
+    this.realtime?.publishViewerRevoked({ sessionId, guestId });
     if (withdrawn > 0) this.sessions.announceQueuedTurnsChanged(sessionId);
     return true;
   }
@@ -288,7 +297,7 @@ export class SessionGuestsService {
    */
   private async invitation(guestId: string, sessionId: string): Promise<LiveInvitation> {
     const row = await this.prisma.sessionGuest.findFirst({
-      where: { sessionId, userId: guestId, removedAt: null, session: { deletedAt: null } },
+      where: liveInvitationWhere(guestId, sessionId),
       select: {
         id: true,
         openedAt: true,
@@ -369,6 +378,13 @@ export class SessionGuestsService {
    *  before the guest's stream (GuestSessionsController.stream) reads anything. */
   async assertInvited(guestId: string, sessionId: string): Promise<void> {
     await this.invitation(guestId, sessionId);
+  }
+
+  /** Whether the caller still has a live invitation to the session: the guest's stream's access recheck
+   *  (docs/session-viewer-stream-design.md §5), the same read as every guest route's. */
+  async isInvited(guestId: string, sessionId: string): Promise<boolean> {
+    const row = await this.prisma.sessionGuest.findFirst({ where: liveInvitationWhere(guestId, sessionId), select: { id: true } });
+    return row !== null;
   }
 
   /**

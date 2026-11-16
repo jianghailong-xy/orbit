@@ -7,6 +7,11 @@ import { ShareLinksService } from '../share-links/share-links.service';
 export interface SharedStreamTarget {
   sessionId: string;
   toolOutput: boolean;
+  /** The link's token and id, and whether it opened the session as a conversation besides its root: what the
+   *  stream's access recheck reads again, and the revocation signals it answers to. */
+  token: string;
+  linkId: string;
+  conversation: boolean;
 }
 
 /** Where SharedStreamGuard leaves its answer on the request. */
@@ -39,7 +44,13 @@ export class SharedStreamGuard implements CanActivate {
       if (!link.sessionId) throw linkNotFound();
       sessionId = link.sessionId;
     }
-    req[SHARED_STREAM_TARGET] = { sessionId, toolOutput: link.include.toolOutput === true };
+    req[SHARED_STREAM_TARGET] = {
+      sessionId,
+      toolOutput: link.include.toolOutput === true,
+      token: req.params?.token ?? '',
+      linkId: link.id,
+      conversation: req.params?.sessionId !== undefined,
+    };
     return true;
   }
 }

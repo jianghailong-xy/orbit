@@ -5,20 +5,23 @@ import {
   defer,
   distinctUntilChanged,
   EMPTY,
+  endWith,
+  filter,
   from,
-  interval,
   map,
   merge,
   mergeMap,
   Observable,
   of,
+  share,
   Subject,
+  takeUntil,
   tap,
 } from 'rxjs';
 import { replayableEventSql } from '../common/system-noise';
 import { untilStopping } from '../common/graceful-stop';
 import { PrismaService } from '../prisma/prisma.service';
-import { RealtimeService } from '../realtime/realtime.service';
+import { RealtimeService, type ViewerRevocation } from '../realtime/realtime.service';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
 import {
   KEEPALIVE_MS,
@@ -44,14 +47,28 @@ export type ViewerStreamAudience =
 type Head = Record<string, unknown>;
 
 /**
+ * Whether the viewer may still watch, as the stream rechecks it (docs/session-viewer-stream-design.md §5): `named` says
+ * whether a revocation signal is about this stream, and `check` reads the access once more — null when it is gone,
+ * otherwise when it lapses on its own (a link's expiry), if ever. `check` throws only for a failed read, never for a
+ * refusal.
+ */
+export interface ViewerAccess {
+  named: (revocation: ViewerRevocation) => boolean;
+  check: () => Promise<{ until: Date | null } | null>;
+}
+
+/** The frame a stream ends with when the viewer's access has ended; clients show their not-shared / link-gone state. */
+export const GONE_FRAME = 'gone';
+
+/**
  * The two viewer streams' body (docs/session-viewer-stream-design.md §3–§4): the owner's stream's shape —
  * sinceSeq replay, SSE_GAP_CAP resync, SSE_REPLAY_CAP tail, replayThenLive over RealtimeService.streamForRun, a
  * ping every ~20 s, an end as the apiserver stops — with every frame through the viewer projection
  * (viewer-stream.ts) and `status` replaced by `head` frames.
  *
  * Access is the route's to check BEFORE this is called (a guard: a stream's 200 is on the wire before anything
- * here runs). Revocation (a `gone` frame) and the anonymous caps are their own tasks; the hooks they need are the
- * one place a stream is opened (`stream`) and the keepalive below, where a ping-time recheck belongs.
+ * here runs); after that this rechecks it (§5) — once as the stream opens, on every revocation signal that names the
+ * stream, at every ping, and when a link's expiry comes due — and when it is gone sends `{type:'gone'}` and ends.
  */
 @Injectable()
 export class ViewerStreamService {
@@ -65,7 +82,12 @@ export class ViewerStreamService {
     private readonly sessions: SessionsService,
   ) {}
 
-  stream(sessionId: string, audience: ViewerStreamAudience, opts: { sinceSeq?: string; maxPayload?: number }): Observable<MessageEvent> {
+  stream(
+    sessionId: string,
+    audience: ViewerStreamAudience,
+    access: ViewerAccess,
+    opts: { sinceSeq?: string; maxPayload?: number },
+  ): Observable<MessageEvent> {
     const projection: ViewerAudience = audience.kind === 'GUEST' ? { kind: 'GUEST' } : audience;
     const key = `${audience.kind}:${sessionId}`;
     const readHead = (): Promise<Head> => this.readHead(sessionId, audience);
@@ -115,9 +137,67 @@ export class ViewerStreamService {
       distinctUntilChanged((a, b) => a.json === b.json),
       map(({ head }) => ({ data: { seq: 0, type: HEAD_FRAME, payload: head } }) as MessageEvent),
     );
-    // The keepalive. S1r's ping-time access recheck belongs here.
-    const pings$ = interval(KEEPALIVE_MS).pipe(map(() => ({ data: { type: 'ping' } }) as MessageEvent));
-    return merge(heads$, events$, renamed$, pings$).pipe(untilStopping());
+    const access$ = this.accessChecks(sessionId, access).pipe(share());
+    const pings$ = access$.pipe(
+      filter((said) => said === 'ping'),
+      map(() => ({ data: { type: 'ping' } }) as MessageEvent),
+    );
+    const gone$ = access$.pipe(filter((said) => said === 'gone'));
+    return merge(heads$, events$, renamed$, pings$).pipe(
+      takeUntil(gone$),
+      endWith({ data: { type: GONE_FRAME } } as MessageEvent),
+      untilStopping(),
+    );
+  }
+
+  /**
+   * The keepalive and the access recheck (§5), one read at a time: as the stream opens (what was revoked between the
+   * route's guard and here), on each revocation signal naming the stream, at every ping (a signal that was lost), and
+   * when the access lapses on its own within the next ping's time (a link's expiry). Says `ping` at each keepalive the
+   * access still holds at, and `gone` once, when it no longer does. A read that fails keeps the stream: the next
+   * check reads again.
+   */
+  private accessChecks(sessionId: string, access: ViewerAccess): Observable<'ping' | 'gone'> {
+    return new Observable<'ping' | 'gone'>((subscriber) => {
+      let ended = false;
+      let lapse: NodeJS.Timeout | undefined;
+      let checks = Promise.resolve();
+      const recheck = (why: 'open' | 'signal' | 'ping' | 'lapse') => {
+        checks = checks.then(async () => {
+          if (ended) return;
+          let verdict: { until: Date | null } | null;
+          try {
+            verdict = await access.check();
+          } catch (err) {
+            this.log.warn(`viewer access ${sessionId} (${why}): ${(err as Error).message}`);
+            if (why === 'ping' && !ended) subscriber.next('ping');
+            return;
+          }
+          if (ended) return;
+          if (!verdict) {
+            ended = true;
+            subscriber.next('gone');
+            subscriber.complete();
+            return;
+          }
+          clearTimeout(lapse);
+          lapse = undefined;
+          // Armed only when it comes due before the next ping, whose own check re-arms it: no timer outlives that.
+          const left = verdict.until ? verdict.until.getTime() - Date.now() : Infinity;
+          if (left <= KEEPALIVE_MS) lapse = setTimeout(() => recheck('lapse'), Math.max(0, left));
+          if (why === 'ping') subscriber.next('ping');
+        });
+      };
+      const signals = this.realtime.viewerRevocations().pipe(filter(access.named)).subscribe(() => recheck('signal'));
+      const pings = setInterval(() => recheck('ping'), KEEPALIVE_MS);
+      recheck('open');
+      return () => {
+        ended = true;
+        signals.unsubscribe();
+        clearInterval(pings);
+        clearTimeout(lapse);
+      };
+    });
   }
 
   /** The head as the `events?after=` answer states it: SessionsService.sharedHead, and a guest's `waitingOnOwner`. */
@@ -156,7 +236,7 @@ export class ViewerStreamService {
     if (!entry || entry.timer) return;
     entry.timer = setTimeout(() => {
       entry.timer = null;
-      // A head that cannot be read (the session went to the Trash) sends nothing; ending the stream then is S1r's.
+      // A head that cannot be read (the session went to the Trash) sends nothing; the access recheck ends the stream.
       entry.read().then(
         (head) => entry.ticks.next(head),
         (err) => this.log.debug(`viewer head ${key}: ${(err as Error).message}`),
