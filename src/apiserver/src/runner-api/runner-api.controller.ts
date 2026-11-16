@@ -2546,6 +2546,9 @@ export class RunnerApiController {
                 ...(storableBranchSha(s.branchSha) ? { branchSha: s.branchSha } : {}),
               },
             });
+            if (s.branchMerged === true) {
+              await this.clearLandedMergeFailure(s.sessionId, runner.id, heartbeatLeaseOwner ?? undefined);
+            }
           }),
         );
       } catch {
@@ -10703,6 +10706,9 @@ export class RunnerApiController {
         ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
       },
     });
+    if (updated.count > 0 && dto.branchMerged === true) {
+      await this.clearLandedMergeFailure(sessionId, runner.id);
+    }
     // Only persist the patches once we've confirmed the session is still live (count > 0);
     // a no-op update means it finalized, so its committed diff must stay authoritative.
     if (updated.count > 0 && dto.changedDiff !== undefined) {
@@ -11302,6 +11308,24 @@ export class RunnerApiController {
       throw new ForbiddenException('session does not belong to this runner');
     }
     return session;
+  }
+
+  /** A merge that failed (conflict or error) and then landed anyway — the branch rebased and merged by hand, or pushed
+   * from the command line — kept its failure on the row, so every client went on drawing "Merge conflict" for a
+   * branch already in its target. Once the runner reports the branch merged, that failure is history: clear it, and
+   * the bar reads "✓ In main". A failure with a merge recovery open is left to the recovery panel. */
+  private async clearLandedMergeFailure(sessionId: string, runnerId: string, leaseOwner?: string): Promise<void> {
+    await this.prisma.session.updateMany({
+      where: {
+        id: sessionId,
+        assignedRunnerId: runnerId,
+        status: { in: OPEN },
+        mergeStatus: { in: ['conflict', 'error'] },
+        mergeRecovery: { equals: Prisma.AnyNull },
+        ...(leaseOwner !== undefined ? { inboxLeaseOwner: leaseOwner } : {}),
+      },
+      data: { mergeStatus: null, mergeError: null },
+    });
   }
 
   /** Reconcile the runner's heuristic merged verdict with the exact source tip captured by a
