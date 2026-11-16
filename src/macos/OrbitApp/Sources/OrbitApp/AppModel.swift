@@ -3496,6 +3496,19 @@ final class AppModel {
             answered: projectSessionsReadAt != nil)
     }
 
+    /// Whether the project sessions button shows something running, as the page it opens does: a
+    /// member or a landing session with the spinner, or a landing or merge job in flight. False
+    /// until the page's read holds this project.
+    func projectRunning(_ projectID: String) -> Bool {
+        guard let address = projectSessionsAddress,
+              PublicID.storageKey(address.projectID) == PublicID.storageKey(projectID) else { return false }
+        if projectSessionsLandingRunning { return true }
+        if projectSessionsMerge?.projectID == address.projectID, projectSessionsMergeRunning { return true }
+        return projectSessions.contains { session in
+            SessionStatusGlyph.make(for: session, watching: watches?.summary(for: session.id)).shape == .spinner
+        }
+    }
+
     #if os(iOS)
     /// A member picked in the project sessions sheet over a phone's conversation (board 5): its
     /// conversation takes the place of the one the sheet was opened over (`NavState.switchConsole`).
