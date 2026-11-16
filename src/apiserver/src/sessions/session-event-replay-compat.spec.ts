@@ -253,7 +253,8 @@ test('a guest following a session after a seq gets one group of events, read onc
     },
     approval: { findMany: async () => [] },
   });
-  const guests = new SessionGuestsService(prisma as never, sessions);
+  // The third argument is the attachments service (d726bde7bf); a guest's events read never opens an attachment.
+  const guests = new SessionGuestsService(prisma as never, sessions, {} as never);
 
   const answer = await guests.events('guest', SESSION, { after: '7', maxPayload: '2048' });
 
