@@ -11835,7 +11835,9 @@ export function SessionComposer({
     setText,
     taRef,
     shellMode,
-    disabled: !!composerDisabled || !!replyTo,
+    // A reply armed by a card's "Chat about this" is still a draft the owner writes, so ✦ stays (as on
+    // macOS/iOS and Android): what Use puts in the box goes to the card's door like any typed reply.
+    disabled: !!composerDisabled,
     resetKey: selectedId,
   });
   // The `+` menu "Shell" entry: prefix the draft with `!` so onSend routes it as a raw
