@@ -423,7 +423,11 @@ test('a failed promotion gives the coordinator only usable named doors, and inte
       assert.doesNotMatch(message, /promotion_recheck/);
       assert.doesNotMatch(message, /supersedesTaskId/);
       assert.match(message, /promotionId/);
-      assert.match(message, /go test.*10-minute/);
+      // The rerun is advised once, beside the reason it needs (62e302136a), and no longer through an example written for
+      // one toolchain (the go test default limit it used to name).
+      assert.match(message,
+        /rerun this candidate’s check once with integration_retry \(projectId: \S+, promotionId: \S+, reason: why this time will be different\)/);
+      assert.doesNotMatch(message, /go test.*10-minute/);
 
       const retried = await stack.openItems.retryPromotionCheck(
         w.ownerId,
