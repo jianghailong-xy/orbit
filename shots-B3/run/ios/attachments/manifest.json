@@ -1,0 +1,43 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "5277349A-B219-4ED4-853A-8AE666B9F5B1",
+        "deviceName" : "iPhone 17 Pro Max",
+        "exportedFileName" : "16C8884E-62BC-4D3B-A0CC-D42CC2C57083.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "DrawerBadgeShotTeststestIPhoneDrawerToggleOnTheSessionList-notes_0_37C72265-7FFB-4DE3-A6E2-63510B35D52A.txt",
+        "timestamp" : 1794826877.602
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "5277349A-B219-4ED4-853A-8AE666B9F5B1",
+        "deviceName" : "iPhone 17 Pro Max",
+        "exportedFileName" : "175FB0CE-44AE-492A-880F-77975124708C.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "ios-list-light_0_85138142-ABBD-4DF9-B020-02DF3B2598B5.png",
+        "timestamp" : 1794826876.543
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "5277349A-B219-4ED4-853A-8AE666B9F5B1",
+        "deviceName" : "iPhone 17 Pro Max",
+        "exportedFileName" : "D9593BA3-1BFE-4663-8B5B-EA019EA4589E.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "navbar-tree_0_4D65859F-A859-4337-B443-97F5F7CB24F2.txt",
+        "timestamp" : 1794826876.087
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "5277349A-B219-4ED4-853A-8AE666B9F5B1",
+        "deviceName" : "iPhone 17 Pro Max",
+        "exportedFileName" : "CCF3CA5E-274E-490A-A48A-6D055E374757.txt",
+        "isAssociatedWithFailure" : true,
+        "suggestedHumanReadableName" : "Complete Issue Description.txt"
+      }
+    ],
+    "testIdentifier" : "DrawerBadgeShotTests/testIPhoneDrawerToggleOnTheSessionList()",
+    "testIdentifierURL" : "test://com.apple.xcode/DrawerBadgeProbe/DrawerBadgeProbeUITests/DrawerBadgeShotTests/testIPhoneDrawerToggleOnTheSessionList"
+  }
+]

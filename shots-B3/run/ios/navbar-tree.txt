@@ -1,0 +1,39 @@
+Attributes: NavigationBar, 0x1140ffac0, {{0.0, 62.0}, {440.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+Element subtree:
+ →NavigationBar, 0x1140ffac0, {{0.0, 62.0}, {440.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+    Other, 0x1140ffc00, {{24.0, 62.0}, {36.0, 44.0}}, identifier: 'line.3.horizontal', label: 'Open navigation', value: 2 waiting on you
+      Other, 0x1140ffd40, {{24.0, 62.0}, {36.0, 44.0}}
+        Button, 0x1140ffe80, {{20.0, 62.0}, {44.0, 44.0}}, label: 'Open navigation', value: 2 waiting on you
+          Image, 0x114100000, {{20.0, 62.0}, {44.0, 44.0}}, identifier: 'line.3.horizontal', label: 'Drag'
+          StaticText, 0x114100140, {{52.0, 58.0}, {16.0, 16.0}}, label: '2'
+    Other, 0x114100280, {{80.0, 73.7}, {95.7, 20.7}}, label: 'Workspace: orbit-macos'
+      Other, 0x1141003c0, {{80.0, 73.7}, {95.7, 20.7}}
+        StaticText, 0x114100500, {{80.0, 74.0}, {95.7, 20.3}}, label: 'Workspace: orbit-macos'
+    Other, 0x114100640, {{317.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+      Other, 0x114100780, {{317.7, 66.0}, {41.7, 36.0}}
+        Button, 0x1141008c0, {{317.7, 66.0}, {41.7, 36.0}}, label: 'Session scope, Open'
+          Button, 0x114100a00, {{317.7, 66.0}, {41.7, 36.0}}
+            Image, 0x114100b40, {{327.3, 77.7}, {22.0, 13.0}}, identifier: 'line.3.horizontal.decrease', label: 'Filter'
+    Button, 0x114100c80, {{375.3, 66.0}, {40.7, 36.0}}, label: 'Start a new session with orbit-macos'
+Path to element:
+ →Application, 0x1140bca00, pid: 44075, label: 'DrawerBadgeProbe'
+  ↳Window (Main), 0x1140bcb40, {{0.0, 0.0}, {440.0, 956.0}}
+   ↳Other, 0x1140bcc80, {{0.0, 0.0}, {440.0, 956.0}}
+    ↳Other, 0x1140bcf00, {{0.0, 0.0}, {440.0, 956.0}}
+     ↳Other, 0x1140bdcc0, {{0.0, 0.0}, {440.0, 956.0}}
+      ↳Other, 0x1140bde00, {{0.0, 0.0}, {440.0, 956.0}}
+       ↳Other, 0x1140ff980, {{0.0, 0.0}, {440.0, 956.0}}
+        ↳NavigationBar, 0x1140ffac0, {{0.0, 62.0}, {440.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+Query chain:
+ →Find: Target Application 'io.orbitd.drawerbadgeprobe'
+  Output: {
+    Application, 0x11425b340, pid: 44075, label: 'DrawerBadgeProbe'
+  }
+  ↪︎Find: Descendants matching type NavigationBar
+    Output: {
+      NavigationBar, 0x11423d040, {{0.0, 62.0}, {440.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+    }
+    ↪︎Find: First Match
+      Output: {
+        NavigationBar, 0x114200000, {{0.0, 62.0}, {440.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+      }

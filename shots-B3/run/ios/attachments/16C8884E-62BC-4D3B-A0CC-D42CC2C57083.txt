@@ -1,0 +1,4 @@
+variant=B3
+toggle frame=(20.0, 62.00000000000001, 44.0, 43.99999999999999) value=`2 waiting on you` hittable=true
+navbar frame=(0.0, 62.0, 440.0, 54.0)
+orbit-macos: type=48 frame=(58.0, 317.66666666666663, 93.0, 20.333333333333314)

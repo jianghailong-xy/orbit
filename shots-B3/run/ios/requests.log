@@ -1,0 +1,53 @@
+10:51:14 "GET /api/users/me HTTP/1.1" 200 -
+11:00:45 "POST /__reset HTTP/1.1" 200 -
+11:01:03 "GET /api/users/me HTTP/1.1" 200 -
+11:01:03 "GET /api/agents HTTP/1.1" 200 -
+11:01:03 "GET /api/projects HTTP/1.1" 200 -
+11:01:03 "GET /api/projects/sidebar HTTP/1.1" 200 -
+11:01:03 "GET /api/wiki/spaces HTTP/1.1" 200 -
+11:01:03 "GET /api/task-lists HTTP/1.1" 200 -
+11:01:03 NOT SERVED /api/guest-sessions
+11:01:03 NOT SERVED /api/schedules
+11:01:03 "GET /api/guest-sessions HTTP/1.1" 404 -
+11:01:03 "GET /api/schedules HTTP/1.1" 404 -
+11:01:05 "GET /api/events?hints=list_changed HTTP/1.1" 200 -
+11:01:05 "GET /api/users/me HTTP/1.1" 200 -
+11:01:05 NOT SERVED /api/wiki/trash
+11:01:05 "GET /api/wiki/trash HTTP/1.1" 404 -
+11:01:05 "GET /api/runners HTTP/1.1" 200 -
+11:01:05 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -
+11:01:05 "GET /api/agents HTTP/1.1" 200 -
+11:01:05 "GET /api/providers HTTP/1.1" 200 -
+11:01:05 "GET /api/sessions?view=open&since= HTTP/1.1" 200 -
+11:01:05 "GET /api/watches?state=ACTIVE HTTP/1.1" 200 -
+11:01:05 "GET /api/runners HTTP/1.1" 200 -
+11:01:05 "GET /api/providers/pools HTTP/1.1" 200 -
+11:01:05 "GET /api/watches?state=PAUSED HTTP/1.1" 200 -
+11:01:05 "GET /api/providers HTTP/1.1" 200 -
+11:01:05 "GET /api/session-folders HTTP/1.1" 200 -
+11:01:05 "GET /api/wiki/spaces HTTP/1.1" 200 -
+11:01:05 NOT SERVED /api/wiki/trash
+11:01:05 "GET /api/wiki/trash HTTP/1.1" 404 -
+11:01:05 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+11:01:05 "GET /api/watches HTTP/1.1" 200 -
+11:01:05 "GET /api/providers/pools HTTP/1.1" 200 -
+11:01:05 "GET /api/agents HTTP/1.1" 200 -
+11:01:05 "GET /api/watches?needsAttention=true HTTP/1.1" 200 -
+11:01:06 "GET /api/session-tags HTTP/1.1" 200 -
+11:01:07 NOT SERVED /api/owner-requests?state=open
+11:01:07 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+11:01:07 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+11:01:07 "GET /api/sessions?view=open HTTP/1.1" 200 -
+11:01:07 "GET /api/runners HTTP/1.1" 200 -
+11:01:07 "GET /api/session-folders HTTP/1.1" 200 -
+11:01:07 "GET /api/projects HTTP/1.1" 200 -
+11:01:07 "GET /api/projects/sidebar HTTP/1.1" 200 -
+11:01:07 "GET /api/providers HTTP/1.1" 200 -
+11:01:07 "GET /api/projects HTTP/1.1" 200 -
+11:01:07 "GET /api/projects/sidebar HTTP/1.1" 200 -
+11:01:07 NOT SERVED /api/auth/capabilities
+11:01:07 "GET /api/providers/pools HTTP/1.1" 200 -
+11:01:07 "GET /api/auth/capabilities HTTP/1.1" 404 -
+11:01:07 "GET /api/providers/shared-pools HTTP/1.1" 200 -
+11:01:07 "GET /api/task-lists HTTP/1.1" 200 -
+11:01:07 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 200 -

@@ -1,0 +1,23 @@
+==> iPhone 5277349A-B219-4ED4-853A-8AE666B9F5B1
+    iPhone 17 Pro Max (5277349A-B219-4ED4-853A-8AE666B9F5B1) (Shutdown) 
+==> stub ready on 127.0.0.1:8765 (pid 20636, after 2s)
+==> ios
+Test Case '-[DrawerBadgeProbeUITests.DrawerBadgeShotTests testIPhoneDrawerToggleOnTheSessionList]' started.
+Test Case '-[DrawerBadgeProbeUITests.DrawerBadgeShotTests testIPhoneDrawerToggleOnTheSessionList]' passed (38.634 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 38.634 (38.639) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 38.634 (38.641) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 38.634 (38.644) seconds
+** TEST SUCCEEDED **
+.dbv-probe/run.sh: line 81: 20636 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+total 1816
+drwxr-xr-x  11 runner  staff     352 Nov 16 11:02 .
+drwxr-xr-x   3 runner  staff      96 Nov 16 10:47 ..
+drwxr-xr-x   7 runner  staff     224 Nov 16 11:02 attachments
+-rw-r--r--@  1 runner  staff     231 Nov 16 11:01 DrawerBadgeShotTeststestIPhoneDrawerToggleOnTheSessionList-notes.txt
+-rw-r--r--   1 runner  staff  182982 Nov 16 11:01 ios-list-light.png
+-rw-r--r--@  1 runner  staff    2554 Nov 16 11:01 navbar-tree.txt
+-rw-r--r--   1 runner  staff     235 Nov 16 11:02 not-served.txt
+-rw-r--r--   1 runner  staff    2637 Nov 16 11:01 requests.log
+-rw-r--r--   1 runner  staff       0 Nov 16 10:51 requests.log.out
+-rw-r--r--   1 runner  staff      40 Nov 16 11:02 writes.txt
+-rw-r--r--   1 runner  staff  722465 Nov 16 11:02 xcodebuild-ios.log

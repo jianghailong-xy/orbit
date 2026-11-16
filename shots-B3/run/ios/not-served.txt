@@ -1,0 +1,5 @@
+   2 "GET /api/wiki/trash HTTP/1.1" 404 -
+   1 "GET /api/schedules HTTP/1.1" 404 -
+   1 "GET /api/owner-requests?state=open HTTP/1.1" 404 -
+   1 "GET /api/guest-sessions HTTP/1.1" 404 -
+   1 "GET /api/auth/capabilities HTTP/1.1" 404 -
