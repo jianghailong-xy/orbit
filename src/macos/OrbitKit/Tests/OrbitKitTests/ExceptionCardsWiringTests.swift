@@ -516,7 +516,9 @@ final class ExceptionCardsWiringTests: XCTestCase {
                       "the status is read only for a card whose coordinator cannot be asked")
         XCTAssertTrue(body.contains("ExceptionCards.whoFixesHeading(reading.cause)"))
         XCTAssertTrue(body.contains("ExceptionCards.coordinatorRowPresses(reading)"))
-        XCTAssertTrue(body.contains("ExceptionCards.coordinatorRowNote(row, reading)"))
+        XCTAssertTrue(body.contains("ExceptionCards.coordinatorRowNote(row, reading,")
+                      && body.contains("escalationSeconds: console.projectEscalationSeconds"),
+                      "Ask again's note names the project's own escalation window")
         XCTAssertTrue(body.contains("if ExceptionCards.youLead(reading) && hasYou {"), "D4: the hand-over's order")
         XCTAssertTrue(body.contains("ExceptionCards.fixItMyselfLeads(reading) ? .primary : .secondary"))
         XCTAssertTrue(body.contains("if row.chat?.refusal == nil {"),
