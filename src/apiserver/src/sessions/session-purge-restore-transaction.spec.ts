@@ -50,6 +50,7 @@ function makeHarness() {
     },
   } as never;
   const realtime = {
+    publishViewerRevoked: () => undefined,
     publishSessionCreated: () => {
       restoreEvents++;
     },
