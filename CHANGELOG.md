@@ -101,8 +101,9 @@ notes' lists of migrations and security fixes.
 - A turn that carries only Orbit's blocks is drawn as a From Orbit line, not as the owner's bubble.
 - Create and start leads the single-task create card, except for a task filed to be held.
 - The recap card has one ×, and Refresh recap is gone.
-- iOS: the session list's section titles scroll away with their rows, and Settings is grouped as the web's
-  navigation is (Personal, Machines, Providers). On iOS 26 the drawer's waiting count is the toolbar item's badge.
+- iOS: the session list's section titles scroll away with their rows. On iOS 26 the drawer's waiting count is the
+  toolbar item's badge.
+- iOS and Android Settings are grouped as the web's navigation is (Personal, Machines, Providers).
 - New wiki… leaves the drawers and the Mac sidebar; the wiki head is a menu.
 - macOS and iOS label a shared pool "Shared", as the web does.
 - Both release skills (`.claude` and `.agents`) state the exact tag and its full commit SHA, and get explicit
