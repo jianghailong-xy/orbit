@@ -544,7 +544,7 @@ describe('the suggestion card (frame 4)', () => {
     await waitForUi(() => expect(box().value).toBe(DRAFT));
   });
 
-  it('stays on a reply to a question card, and what Use puts in the box answers the card', async () => {
+  it('stays on a reply to a question card, tells the optimizer the question, and what Use puts in the box answers the card', async () => {
     approvals = [{
       id: encodeId('0195c0de-0000-7000-8000-000000000081'),
       sessionId: SESSION_PUBLIC,
@@ -567,6 +567,10 @@ describe('the suggestion card (frame 4)', () => {
     await typeDraft(DRAFT);
     await waitForUi(() => expect(optimizeButton()?.disabled).toBe(false));
     await openCard();
+    expect(optimizeMock.mock.calls[0]![0]).toMatchObject({
+      draft: DRAFT,
+      replyingTo: 'Runner full: Which way?\n- Yes: Go ahead\n- No: Leave it',
+    });
     await act(async () => cardButton('Use').click());
     expect(box().value).toBe(GLOSS);
     const button = mounted().querySelector<HTMLButtonElement>('.composer-send')!;

@@ -73,6 +73,17 @@ struct QuestionReply: Equatable, Sendable {
     let banner: String
     /// What the empty composer asks for while this is armed.
     let placeholder: String
+    /// What ✦ Optimize is told the draft answers; absent, the banner and the context carried.
+    var about: String? = nil
+
+    /// `replyingTo` of a press of ✦ Optimize while this is armed (web: the same rule).
+    var optimizerContext: String {
+        if let about, !about.isEmpty { return about }
+        switch target {
+        case .planChange(let context), .ownerItem(let context): return banner + "\n\n" + context
+        case .approval, .ownerConfirmation, .evidenceDecision: return banner
+        }
+    }
 }
 
 // `LocalStatusCard` lives in OrbitKit (Transcript/TranscriptRows.swift) — the transcript's row
@@ -2066,7 +2077,8 @@ final class ConsoleModel {
         promptOptimizer.start(draft: draft)
         let request = PromptOptimizationRequest(draft: String(trimmed.prefix(ComposerLogic.maxPromptChars)),
                                                 sessionId: isDraft ? nil : sessionID,
-                                                workspaceId: isDraft ? draftAgent?.id : nil)
+                                                workspaceId: isDraft ? draftAgent?.id : nil,
+                                                replyingTo: replyContext?.optimizerContext)
         let api = self.api
         optimizeTask?.cancel()
         optimizeTask = Task { [weak self] in
@@ -4224,12 +4236,13 @@ final class ConsoleModel {
 
     /// Begin a "Chat about this" reply to a pending question: the next composer send resolves it
     /// as a deny+message instead of a fresh turn (see send()). The card stays until then.
-    func startChatReply(approvalID: String, question: String) {
+    func startChatReply(approvalID: String, question: String, about: String? = nil) {
         replyContext = QuestionReply(
             target: .approval(id: approvalID),
             banner: question.isEmpty ? "Replying to Claude’s question"
                                      : "Replying to Claude’s question: \(question)",
-            placeholder: "Type your reply to Claude…")
+            placeholder: "Type your reply to Claude…",
+            about: about)
     }
 
     /// Decline one of Orbit's own asks — a batch, a create, a restructure — with the reason beside

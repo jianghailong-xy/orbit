@@ -696,7 +696,7 @@ export function ApprovalPanel({
   active?: boolean;
   /** Whether an answer to this card can still reach anybody — see UNANSWERABLE_NOTE. */
   answerable?: boolean;
-  onChatAbout?: (id: string, question: string) => void;
+  onChatAbout?: (id: string, question: string, about: string) => void;
   /** Arm the composer to decline one of Orbit's own asks with the reason beside it; absent, the
    *  press falls back to denying where it stands. See `decliningPrefix`. */
   onDecline?: (id: string, toolName: string, subject: string) => void;
@@ -1447,6 +1447,20 @@ function questionsOf(input: unknown): QItem[] {
   return [];
 }
 
+/** What a chat reply to a question card answers, for ✦ Optimize (`replyingTo`): each question as the
+ *  card shows it, with its options. */
+export function questionReplyContext(questions: QItem[]): string {
+  return questions
+    .map((q) => {
+      const title = [q.header, q.question].filter(Boolean).join(': ');
+      const options = (q.options ?? [])
+        .filter((o) => o.label)
+        .map((o) => `- ${o.label}${o.description ? `: ${o.description}` : ''}`);
+      return [title + (q.multiSelect ? ' (pick any)' : ''), ...options].join('\n');
+    })
+    .join('\n\n');
+}
+
 /** AskUserQuestion: pick option(s) per question and submit, like Claude's TUI. The picks
  *  ride back to claude as `answers` (question text → labels) on an `allow`. */
 function QuestionForm({
@@ -1459,7 +1473,7 @@ function QuestionForm({
   approval: ApprovalInfo;
   onDecide: OnDecide;
   answerable: boolean;
-  onChatAbout?: (id: string, question: string) => void;
+  onChatAbout?: (id: string, question: string, about: string) => void;
   untranslated?: HeldDecision;
 }): JSX.Element {
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -1577,7 +1591,7 @@ function QuestionForm({
         <CardActionButton
           tone="outline"
           disabled={!answerable}
-          onClick={() => { setReviewOpen(false); onChatAbout?.(approval.id, chatLabel); }}
+          onClick={() => { setReviewOpen(false); onChatAbout?.(approval.id, chatLabel, questionReplyContext(questions)); }}
         >
           💬 Chat about this
         </CardActionButton>
