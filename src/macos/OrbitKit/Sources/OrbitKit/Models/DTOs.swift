@@ -1293,6 +1293,11 @@ public struct TurnAccepted: Codable, Sendable {
     /// turn instead of queued behind it (`SteerDelivery`). Nil from a server that predates the
     /// kind, which is the pre-steer behaviour: queued.
     public let kind: String?
+    /// Where the server put this turn, decided under the Session row lock: `accepted` (the
+    /// executable head, delivered now), `queued` (waiting behind a turn in flight) or `steer`.
+    /// Authoritative over the send's own guess (`ComposerLogic.willQueue`), which reads a status
+    /// that can be stale — web parity: `turnPlacementOf`. Nil from a server that predates it.
+    public let placement: String?
     /// Where the message actually landed, when that is not the session it was sent to.
     ///
     /// A task has one run at a time, and the platform re-dispatches a failed one within seconds —

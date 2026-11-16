@@ -50,9 +50,14 @@ struct UserBubbleView: View {
     @Environment(\.sessionImagePreview) private var sessionPreview
     /// Set while the session is held by its runner's update, naming the bubble whose foot row says so.
     @Environment(\.runnerUpdatingFoot) private var runnerUpdatingFoot
-    /// This bubble's `Queued · runner updating`, where it is the one the update holds.
+    /// This bubble's `Queued · runner updating` (or `· runner full`), where it is the one held. That
+    /// includes a message the server has accepted but no runner has taken yet: it is not on its way
+    /// anywhere while the runner is full, so it says so in place of "Sending…" (web parity: the
+    /// accepted placeholder carries the tag). A message on the queue or written into a turn has its
+    /// own line for that.
     private var heldFoot: RunnerUpdatingFoot? {
-        guard let foot = runnerUpdatingFoot, foot.bubbleID == bubble.id, !bubble.pending else { return nil }
+        guard let foot = runnerUpdatingFoot, foot.bubbleID == bubble.id,
+              !bubble.pending || (!bubble.queued && !bubble.steer && !bubble.undelivered) else { return nil }
         return foot
     }
 
@@ -309,6 +314,9 @@ struct UserBubbleView: View {
                     }
                 } else if bubble.pending, bubble.translation?.held == true {
                     // Held for its translation: the line under the meta says where it is (1A / 4A).
+                    EmptyView()
+                } else if bubble.pending, heldFoot != nil {
+                    // Accepted, and held by a full runner or its update: the tag below says so.
                     EmptyView()
                 } else if bubble.pending {
                     if bubble.queued { QueuedWord() } else { Text("Sending…").font(.orbitMeta).foregroundStyle(.secondary) }

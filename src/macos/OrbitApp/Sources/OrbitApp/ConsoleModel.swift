@@ -3199,7 +3199,8 @@ final class ConsoleModel {
                 // has to stop saying "Queued" and trade the queue's Cancel for a steer's Withdraw.
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
                                             steer: SteerDelivery.isSteerKind(accepted.kind),
-                                            translation: accepted.turnTranslation)
+                                            translation: accepted.turnTranslation,
+                                            placement: accepted.placement)
                 publishStateNow()
             }
         } catch {
