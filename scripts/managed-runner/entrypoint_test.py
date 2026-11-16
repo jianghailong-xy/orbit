@@ -372,6 +372,77 @@ class EntrypointTest(EntrypointFixture):
 
 
 
+class LegacyWorkDirTest(EntrypointFixture):
+    """An earlier image made an empty `orbit-repos/default` for the managed default workspace and named it as the
+    runner's work directory; this one names the repos folder and makes no project folder of its own."""
+
+    def legacy_volume(self, project=None):
+        """A volume an earlier image ran on: config and identity marker name `orbit-repos/default`."""
+        self.runner.prepare()
+        legacy = self.runner.legacy_workdir()
+        legacy.mkdir(mode=0o700)
+        if project:
+            (legacy / project).write_text("somebody's work")
+        self.write_config(workDir=str(legacy))
+        (self.orbit / "container-identity.json").write_text(json.dumps(
+            {"layoutVersion": 1, "runnerId": "fixture-runner-id", "serverUrl": "https://control.example.test",
+             "workDir": str(legacy)}, sort_keys=True))
+        (self.orbit / "container-identity.json").chmod(0o600)
+        os.environ.pop("ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE")
+        return legacy
+
+    def test_a_fresh_volume_has_no_project_folder_and_names_the_repos_folder(self):
+        self.start()
+        repos = self.runner.paths()[0] / "orbit-repos"
+        self.assertEqual(self.runner.paths()[2], repos)
+        self.assertTrue(repos.is_dir())
+        self.assertEqual(list(repos.iterdir()), [])
+        self.assertEqual(json.loads(self.config.read_text())["workDir"], str(repos))
+        argv = self.popen.call_args.args[0]
+        self.assertEqual(argv[argv.index("--workdir") + 1], str(repos))
+
+    def test_an_earlier_volume_moves_to_the_repos_folder_and_loses_the_empty_default(self):
+        legacy = self.legacy_volume()
+        self.start()
+        self.popen.assert_not_called()
+        repos = str(self.runner.paths()[2])
+        self.assertEqual(json.loads(self.config.read_text())["workDir"], repos)
+        self.assertEqual(json.loads((self.orbit / "container-identity.json").read_text())["workDir"], repos)
+        self.assertFalse(legacy.exists())
+        # The next start reads the moved volume as its own.
+        self.start()
+        self.popen.assert_not_called()
+
+    def test_a_default_folder_with_anything_in_it_stays(self):
+        legacy = self.legacy_volume(project="notes.txt")
+        self.start()
+        self.assertEqual((legacy / "notes.txt").read_text(), "somebody's work")
+        self.assertEqual(json.loads(self.config.read_text())["workDir"], str(self.runner.paths()[2]))
+
+    def test_check_reads_an_earlier_volume_without_changing_it(self):
+        legacy = self.legacy_volume()
+        before = self.config.read_bytes()
+        with redirect_stdout(io.StringIO()) as out:
+            self.runner.main(["check"])
+        self.assertEqual(json.loads(out.getvalue())["workDir"], str(self.runner.paths()[2]))
+        self.assertEqual(self.config.read_bytes(), before)
+        self.assertTrue(legacy.is_dir())
+
+    def test_a_first_start_takes_the_earlier_image_s_empty_default_for_nothing(self):
+        self.runner.prepare()
+        self.runner.legacy_workdir().mkdir(mode=0o700)
+        self.start()
+        self.popen.assert_called_once()
+        self.assertFalse(self.runner.legacy_workdir().exists())
+
+    def test_another_retained_marker_is_still_refused(self):
+        self.legacy_volume()
+        (self.orbit / "container-identity.json").write_text(json.dumps(
+            {"layoutVersion": 1, "runnerId": "another-runner", "serverUrl": "https://control.example.test",
+             "workDir": str(self.runner.legacy_workdir())}, sort_keys=True))
+        self.assert_refused()
+
+
 RUNNER_ID = "0b6f5f6e-6f0a-4c5e-9b9e-2a3c4d5e6f70"
 POD_UID = "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"
 

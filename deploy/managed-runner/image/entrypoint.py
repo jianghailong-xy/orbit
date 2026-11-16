@@ -28,15 +28,27 @@ INSTANCE_FILE_ENV = "ORBIT_MANAGED_RUNNER_INSTANCE_FILE"
 
 
 def paths():
+    """Home, the runner's state, and the runner's own work directory: the repos folder, never a project in it.
+    A managed runner has no default workspace (docs/managed-runner-no-default-workspace.md): each workspace's
+    folder is made in here, or in home, by the runner when its first session is claimed."""
     home = ROOT
     orbit = home / ".orbit"
-    return home, orbit, home / "orbit-repos" / "default"
+    return home, orbit, home / "orbit-repos"
+
+
+def legacy_workdir():
+    """The work directory an earlier image created, empty, for the managed default workspace."""
+    return paths()[0] / "orbit-repos" / "default"
+
+
+def same_workdir(value):
+    """A retained config or marker names this volume's work directory: today's, or the earlier image's."""
+    return value in (str(paths()[2]), str(legacy_workdir()))
 
 
 def directories():
     home, orbit, workspace = paths()
-    return [home, orbit, home / ".codex", home / ".claude",
-            home / "orbit-repos", workspace,
+    return [home, orbit, home / ".codex", home / ".claude", workspace,
             *[orbit / name for name in ("runs", "worktrees", "uploads", "codex-state")]]
 
 
@@ -166,7 +178,7 @@ def load_identity():
     config = read_json(orbit / "config.json")
     if (any(not isinstance(config.get(key), str) or not config[key].strip()
             for key in ("runnerId", "runnerToken", "serverUrl"))
-            or config["serverUrl"] != server_url() or config.get("workDir") != str(workspace)
+            or config["serverUrl"] != server_url() or not same_workdir(config.get("workDir"))
             or config.get("autoInstallEngines", False) is not False):
         raise ValueError("retained config does not match the fixed runner contract")
     expected = os.environ.get("ORBIT_RUNNER_EXPECTED_ID")
@@ -178,8 +190,11 @@ def load_identity():
     identity = {"layoutVersion": 1, "runnerId": config["runnerId"],
                 "serverUrl": config["serverUrl"], "workDir": str(workspace)}
     marker = orbit / "container-identity.json"
-    if marker.exists() and read_json(marker) != identity:
-        raise ValueError("retained volume identity mismatch")
+    if marker.exists():
+        retained = read_json(marker)
+        if not isinstance(retained, dict) or {**retained, "workDir": str(workspace)} != identity \
+                or not same_workdir(retained.get("workDir")):
+            raise ValueError("retained volume identity mismatch")
     return identity
 
 
@@ -192,7 +207,6 @@ def register():
     if (any(any((orbit / name).iterdir()) for name in state_dirs)
             or any(path.name not in (*state_dirs, "container.lock") for path in orbit.iterdir())
             or any(any((home / name).iterdir()) for name in (".codex", ".claude"))
-            or any(path != workspace for path in (home / "orbit-repos").iterdir())
             or any(workspace.iterdir())
             # lost+found: an ext4 volume's own, at its root, which is home.
             or any(path.name not in (".orbit", ".codex", ".claude", "orbit-repos", "lost+found")
@@ -311,7 +325,7 @@ def adopt_managed_credential(instance, credential):
     if config_path.exists():
         config = read_json(config_path)
         if (config.get("runnerId") != instance["runnerId"] or config.get("serverUrl") != server
-                or config.get("workDir") != str(workspace) or config.get("autoInstallEngines", False) is not False):
+                or not same_workdir(config.get("workDir")) or config.get("autoInstallEngines", False) is not False):
             raise ValueError("retained config does not match this managed runner")
     else:
         name = os.environ.get("ORBIT_RUNNER_NAME", "").strip()
@@ -326,10 +340,34 @@ def adopt_managed_credential(instance, credential):
     durable_json(marker, instance)
 
 
+def retire_legacy_workdir():
+    """Move a volume an earlier image ran on to today's work directory, under the volume lock: its config and
+    identity marker name the repos folder instead of `orbit-repos/default`, and that folder goes if it is still the
+    empty one the image made. One with anything in it is somebody's project and stays. Each step is durable and
+    can run again: a start stopped half-way finishes the move on the next one."""
+    _, orbit, workspace = paths()
+    legacy = str(legacy_workdir())
+    for name in ("config.json", "container-identity.json"):
+        path = orbit / name
+        if path.exists():
+            value = read_json(path)
+            if isinstance(value, dict) and value.get("workDir") == legacy:
+                durable_json(path, {**value, "workDir": str(workspace)})
+    old = legacy_workdir()
+    if old.is_dir() and not old.is_symlink() and not any(old.iterdir()):
+        old.rmdir()
+        directory_fd = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
+
 def run():
     prepare()
     lock_fd = lock_volume()
     try:
+        retire_legacy_workdir()
         config = paths()[1] / "config.json"
         instance = None
         if os.environ.get("ORBIT_RUNNER_CREDENTIAL_FILE"):

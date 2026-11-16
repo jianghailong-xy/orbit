@@ -57,6 +57,13 @@ the way every machine's is, from the setup card (`docs/first-workspace-contract.
 
 Points 8 and 9 change three clients' UI, so each needs a design board under `docs/mocks/` signed off first.
 
+### Image
+
+10. The image makes no `orbit-repos/default` (2026-11-17). The runner's work directory is the repos folder.
+    On a volume an earlier image ran on, the entrypoint moves the config and identity marker from
+    `orbit-repos/default` to `orbit-repos` and removes that folder while it is still empty
+    (`retire_legacy_workdir`); one with anything in it stays.
+
 ## Not changed
 
 The runner row, its data volume and the sleep/wake rules. Workspace deletion: an owner can delete a former

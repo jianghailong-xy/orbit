@@ -72,7 +72,7 @@ stay constant across rebuilds and nodes:
 | `/home/orbit/.orbit/codex-state` | Codex SQLite partitions, including database, WAL and SHM. |
 | `/home/orbit/.codex` | Default Codex auth/configuration, transcripts and sessions. |
 | `/home/orbit/.claude` | Claude Code configuration and session transcripts (`projects/<cwd>/<session>.jsonl`). |
-| `/home/orbit/orbit-repos/default` | Stable default workspace directory and original repository. |
+| `/home/orbit/orbit-repos` | The runner's work directory, empty at first: workspaces' folders are made here or in home when their first session is claimed. An image before 2026-11-17 also made an empty `orbit-repos/default`; the entrypoint removes it while it is still empty and moves the config and identity marker to `orbit-repos`. |
 
 The entrypoint fixes `HOME`, `ORBIT_HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR` to these paths. Codex
 partitions hash the absolute engine home; Git worktree metadata also embeds absolute paths. Moving

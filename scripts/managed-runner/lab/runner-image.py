@@ -17,7 +17,7 @@ lab's Secrets and in the test server's provider store.
                                    to run and for the test server to see the runner online
   stop NAME [--grace S]            delete the Pod (SIGTERM), time its exit, keep the logs
   snapshot NAME                    hashes of the persistent state, read inside the runner container
-  workspace NAME                   the default workspace on the runner (git worktrees on)
+  workspace NAME                   the lab's workspace on the runner, its folder made first (git worktrees on)
   provider NAME --closed | --fake | --key-file F
                                    a DeepSeek-preset provider: a closed endpoint (no model call),
                                    fake-model.py (canned answers, no key), or the owner's key read
@@ -451,6 +451,8 @@ def cmd_snapshot(args):
 def cmd_workspace(args):
     lab = state(args.name)
     if not lab.get('workspaceId'):
+        # The image makes no project folder of its own (docs/managed-runner-no-default-workspace.md): the lab's is made here.
+        kubectl('exec', f'{args.name}-runner', '-c', 'runner', '--', 'mkdir', '-p', '-m', '700', WORKSPACE_DIR)
         answer = api('POST', '/workspaces', {'name': f'{args.name} default', 'runnerId': lab['runnerId'],
                                             'workDir': WORKSPACE_DIR, 'enableWorktree': True, 'autoInitGit': True})
         lab['workspaceId'] = answer['id']

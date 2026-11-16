@@ -17,7 +17,8 @@ import uuid
 
 HOME = Path('/home/orbit')
 ORBIT = HOME / '.orbit'
-WORKSPACE = HOME / 'orbit-repos/default'
+WORKDIR = HOME / 'orbit-repos'  # the runner's own work directory: the repos folder
+WORKSPACE = WORKDIR / 'smoke-project'  # the fixture's checkout, made by the fixture
 SESSION = 'artificial-smoke-session'
 RUNNER = 'artificial-smoke-runner'
 TOKEN = 'artificial-smoke-runner-token'
@@ -40,7 +41,7 @@ def fixture_server():
             if route == ('POST', '/api/runner/register'):
                 valid = (body.get('enrollmentToken') == 'artificial-smoke-enrollment'
                          and body.get('name') == RUNNER and body.get('maxConcurrent') == 1
-                         and body.get('workDir') == str(WORKSPACE) and bool(body.get('version')))
+                         and body.get('workDir') == str(WORKDIR) and bool(body.get('version')))
                 result = {'runnerId': RUNNER, 'runnerToken': TOKEN, 'name': RUNNER}
             elif route == ('POST', '/api/runner/heartbeat'):
                 valid = valid and body.get('runsAsRoot') is False and 'idleCapacity' in body
@@ -83,6 +84,7 @@ def fixture_seed():
     os.umask(0o077)
     def git(*args):
         subprocess.run(['git', '-C', str(WORKSPACE), *args], check=True, capture_output=True)
+    WORKSPACE.mkdir(mode=0o700, exist_ok=True)
     (WORKSPACE / 'sentinel.txt').write_text('ARTIFICIAL primary checkout\n')
     git('init', '-b', 'main')
     git('add', 'sentinel.txt')

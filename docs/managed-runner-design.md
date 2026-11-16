@@ -177,7 +177,7 @@ the following fixed absolute locations on every node and image rebuild:
 | `$ORBIT_HOME/codex-state/<partition>` | Runner-wide Codex SQLite database partitions, together with WAL and SHM files. |
 | `CODEX_HOME=/home/orbit/.codex` | Default Codex configuration, authentication when used, history, and engine sessions. Additional account homes keep their persisted paths. |
 | `CLAUDE_CONFIG_DIR=/home/orbit/.claude` | Claude state when this supplied runtime is enabled. Other supported runtimes keep state below the same persistent home. |
-| `/home/orbit/orbit-repos` | Checkout root reported by existing `reposRoot()`; default workspace `workDir` is `/home/orbit/orbit-repos/default`. |
+| `/home/orbit/orbit-repos` | Checkout root reported by existing `reposRoot()`, and the runner's own work directory; no default workspace folder since 2026-11-17 (`docs/managed-runner-no-default-workspace.md`). |
 
 Persist the whole home/machine directories, not just the named examples. The image and executable
 tools are reproducible, `/tmp` and container runtime sockets are ephemeral, and the authoritative
