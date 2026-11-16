@@ -23839,6 +23839,11 @@ div.landing-jobs-open {
   justify-content: flex-start;
   row-gap: 2px;
 }
+/* A turn carrying only Orbit's blocks no other line knows (OrbitEventLine): the same line, its mark
+   neutral — it is neither a success nor a failure, only Orbit's. */
+.orbitwake .bgwake-mark {
+  color: var(--text-3);
+}
 /* A SubAgent's end (SubagentFinishedCard): the same line, marked with the SubAgent card's own purple ✦
    so it reads back to the card that started it, and what it handed back kept under the line. */
 .sawake .bgwake-mark {

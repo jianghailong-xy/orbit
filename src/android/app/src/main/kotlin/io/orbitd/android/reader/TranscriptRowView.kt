@@ -37,6 +37,9 @@ import io.orbitd.android.core.cards.SessionMessageNote
 import io.orbitd.android.core.cards.SubagentFinished
 import io.orbitd.android.core.cards.withoutWakeBlocks
 import io.orbitd.android.core.cards.BackgroundWakeCard
+import io.orbitd.android.core.cards.OrbitEvent
+import io.orbitd.android.cards.OrbitEventLine
+import io.orbitd.android.cards.LocalSteerDeliveries
 import io.orbitd.android.cards.TranscriptCardView
 import io.orbitd.android.cards.isOrbitTurnCard
 import io.orbitd.android.cards.DetailFold
@@ -65,6 +68,9 @@ internal fun interface FullEvents { suspend fun full(seq: Long): RunEvent }
 /** The heading of a `user` row that names no other sender: the reader's own words, `You` — and in the guest view, where the
  * conversation is the owner's, the owner's name (GuestSessionPage); the guest's own are attributed to the reader there. */
 internal val LocalOwnerHeading = staticCompositionLocalOf { ExternalSender.you }
+
+/** The cards that are lines in the agent's stream, each the whole of a turn Orbit opened for its own news. */
+private val WAKE_LINE_KEYS = listOf(":subagent", ":wake", ":watch")
 
 @Composable
 internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Transcript?, open: (String) -> Unit, highlighted: Boolean = false,
@@ -99,17 +105,32 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
     val result = fullResult ?: row.result
     val tool = event.type in setOf("tool_use", "tool_result")
     val cards = remember(shown) { transcriptCards(shown) }
-    // A SubAgent's end is a line in the agent's stream (docs/mocks/subagent-finished-line; owner 2026-11-16: it must not look like
-    // something the reader sent): no "Orbit" heading, no row tint, no Copy message — its line and its result are the whole row, as on the
-    // web and iOS. Whatever else its note carried stays an attached entry under it.
-    if (event.type == "user" && cards.any { it.key.endsWith(":subagent") } && shown.personWords().isBlank()) {
-        val rest = SubagentFinished.parse(shown.fields.string("controlPlaneNote"))?.rest
-            ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
-        Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            cards.forEach { TranscriptCardView(it, open, shown) }
-            rest?.let { AttachedNoteEntry(it.trim()) }
+    // The turns Orbit opens for its own news — a SubAgent's end, a background job's news or a wakeup coming due, a watch's wake — are lines
+    // in the agent's stream (owner 2026-11-16: they must not look like something the reader sent): no "Orbit" heading, no row tint, no Copy
+    // message — the lines are the whole row, as on the web and iOS. Whatever else the note carried stays an attached entry under them.
+    // A turn carrying only Orbit's blocks that no line knows is the generic From Orbit line, never the reader's row (OrbitEvent).
+    if (event.type == "user") {
+        val note = shown.fields.string("controlPlaneNote")
+        val words = shown.personWords()
+        val wakeLines = cards.isNotEmpty() && cards.all { card -> WAKE_LINE_KEYS.any { card.key.endsWith(it) } } &&
+            (words.isBlank() || cards.any { it.key.endsWith(":watch") })
+        val orbitOnly = cards.isEmpty() && OrbitEvent.draws(words, note, (shown.fields["attachments"] as? JsonArray).orEmpty().isNotEmpty())
+        if (wakeLines || orbitOnly) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).testTag(row.key), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (orbitOnly) {
+                    val delivery = event.turnId?.let { LocalSteerDeliveries.current[it] } ?: shown.fields.string("delivery")
+                    val undelivered = delivery == "failed"
+                    OrbitEventLine(note!!.trim(), event.ts, BackgroundWakeCard.steerReceipt(
+                        BackgroundWakeCard.steerState(shown.fields["steer"] == JsonPrimitive(true), delivery, undelivered)), undelivered)
+                } else {
+                    val rest = note?.let { SubagentFinished.parse(it)?.rest ?: it }
+                        ?.let { if (cards.any { card -> card.key.endsWith(":wake") }) withoutWakeBlocks(it) else it }?.takeIf { it.isNotBlank() }
+                    cards.forEach { TranscriptCardView(it, open, shown) }
+                    rest?.let { AttachedNoteEntry(it.trim()) }
+                }
+            }
+            return
         }
-        return
     }
     // A turn nobody typed, carrying only a block this reader cannot read yet (a quiet job's wake was one, before it had its line): the
     // note alone — no heading, no tint, no Copy message — never an empty row in the reader's name (OrbitKit `drawsNoteAlone`).

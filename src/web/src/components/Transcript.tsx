@@ -97,6 +97,7 @@ import type { TaskRunConflict } from '../lib/taskRunHandoff';
 import { WatchWakeCard, WatchWakeNamesCtx, watchWakeTitle } from './WatchWakeCard';
 import { BackgroundWakeCard, backgroundWakeName, backgroundWakeTitle } from './BackgroundWakeCard';
 import { SubagentFinishedCard, subagentFinishedTitle } from './SubagentFinishedCard';
+import { OrbitEventLine } from './OrbitEventLine';
 import { OrbitExchangeGroup, OrbitExchangeSolo } from './OrbitExchangeFold';
 import { foldsAtLength, parseRunNotice, replyGist, type OrbitExchangeSummary } from '../lib/orbitExchangeFold';
 import { BackgroundJobsNote } from './BackgroundJobsNote';
@@ -1008,7 +1009,16 @@ const readersOwnWords = (node: TextNode): boolean =>
   && !resolutionTurnLabel(node.text)
   && !isRunnerUpdateResume(node.text)
   && !parseBackgroundWake(node.note)
-  && !parseSubagentFinished(node.note);
+  && !parseSubagentFinished(node.note)
+  && !orbitOnlyTurn(node);
+
+// A turn whose typed text is empty and whose recorded note holds Orbit's blocks, with nothing the
+// person attached: Orbit opened it, so it never draws as the person's bubble (OrbitEventLine).
+const orbitOnlyTurn = (node: TextNode): boolean =>
+  node.text.trim() === ''
+  && !!node.note?.trim()
+  && !node.images?.length
+  && !node.attachmentRefs?.length;
 
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   return buildTranscript(events, turnImages).nodes;
@@ -2680,11 +2690,21 @@ function NodeView({ node, live, queued }: { node: Node; live?: boolean; queued?:
           </>
         );
       }
-      // A turn with no words and no files that still carries a note is one the control plane opened
-      // for a block this client cannot read yet (a background job's stall was one, before it had its
-      // line). Drawn as a bubble it was an empty bubble in the reader's name; the note stands alone.
-      if (!queued && node.note && node.text.trim() === '' && !node.images?.length && !node.attachmentRefs?.length) {
-        return <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
+      // Nothing typed and only Orbit's blocks in the note: no dedicated line above knew the block, and
+      // it is still nobody's message (owner rule 2026-11-16). One generic line in the agent's stream,
+      // so the next new block cannot land on the reader's side as an empty bubble.
+      if (orbitOnlyTurn(node)) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        return (
+          <OrbitEventLine
+            note={node.note!}
+            seq={seq}
+            ts={node.ts}
+            undelivered={undelivered}
+            steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
+            queued={queued}
+          />
+        );
       }
       return <UserBubble node={node} queued={queued} />;
     }

@@ -282,11 +282,14 @@ describe('a SubAgent’s finished wake in the transcript', () => {
     expect(shown()).not.toContain('Orbit attached');
   });
 
-  it('draws today’s entry for a block in a wording it does not know', async () => {
+  // A wording it does not know is still Orbit's alone: the generic From Orbit line, never the reader's bubble
+  // (owner rule 2026-11-16, OrbitEventLine).
+  it('draws the From Orbit line for a block in a wording it does not know', async () => {
     const unknown = SUBAGENT_DONE.replace('finished: DONE', 'finished: CANCELLED');
     await mount([wakeEvent(unknown)]);
     expect(container.querySelector('.sawake')).toBeNull();
-    expect(container.textContent).toContain('Orbit attached');
+    expect(container.querySelector('.chat-user')).toBeNull();
+    expect(container.querySelector('.orbitwake .bgwake-title')?.textContent).toBe('From Orbit');
   });
 
   it('keeps the line, the whole result and a fold the browser can open in an exported transcript', () => {
