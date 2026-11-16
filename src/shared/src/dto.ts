@@ -1990,6 +1990,9 @@ export interface AccountRemoveResult {
   message?: string;
   /** The `attempt` of the request this reports on. */
   attempt?: string;
+  /** With `failed` because the account is in use: the sessions running in it, which the control
+   *  plane names by title in the message the page shows. */
+  sessionIds?: string[];
 }
 
 /** @deprecated The same result on the codex-named route; read AccountRemoveResult. */

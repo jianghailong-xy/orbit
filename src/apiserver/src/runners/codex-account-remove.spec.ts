@@ -41,7 +41,7 @@ function matches(row: Row, where: Row): boolean {
   });
 }
 
-function harness(row: Row = {}) {
+function harness(row: Row = {}, sessions: Row[] = []) {
   const runner: Row = {
     id: RUNNER_ID,
     ownerId: OWNER,
@@ -72,6 +72,10 @@ function harness(row: Row = {}) {
   const prisma = {
     runnerPresence: { upsert: async () => ({}) },
     runner: runnerModel,
+    session: {
+      findMany: async ({ where }: { where: { id: { in: string[] }; assignedRunnerId: string } }) =>
+        sessions.filter((s) => where.id.in.includes(s.id as string) && s.assignedRunnerId === where.assignedRunnerId),
+    },
     workspace: { findMany: async () => [] },
     codexRateLimitResetOperation: { findMany: async () => [] },
     $executeRaw: async (_sql: TemplateStringsArray, ...values: unknown[]) => {
@@ -171,6 +175,30 @@ test('a removal the machine refused is reported back with the machine’s own wo
     { ok: true, applied: true },
   );
   assert.deepEqual(h.state(), { engine: 'codex', account: SLOT, status: 'done', message: null });
+});
+
+test('a removal refused over a session in the account names that session by title', async () => {
+  const mine = '019fc086-c7c7-7c92-8215-778ad8a6280a';
+  const elsewhere = '019fc086-c7c7-7c92-8215-778ad8a6280b';
+  const h = harness({}, [
+    { id: mine, title: 'Fix login redirect', assignedRunnerId: RUNNER_ID },
+    { id: elsewhere, title: 'Another runner’s session', assignedRunnerId: '22222222-2222-4222-8222-222222222222' },
+  ]);
+  await h.remove(SLOT);
+  await h.beat();
+
+  const generic = 'codex account 1a2b3c4d is in use by a session running on this machine — end that session, then remove it';
+  await h.report({ engine: 'codex', account: SLOT, status: 'failed', message: generic, attempt: attemptOf(h.runner), sessionIds: [mine, elsewhere, 'not-a-uuid'] });
+  assert.equal(
+    h.state().message,
+    'codex account 1a2b3c4d is in use by the session “Fix login redirect” — end that session, then remove it',
+    'only a session this runner is running is named',
+  );
+
+  // A report naming nothing this runner runs keeps the runner's own words.
+  await h.remove(SLOT);
+  await h.report({ engine: 'codex', account: SLOT, status: 'failed', message: generic, attempt: attemptOf(h.runner), sessionIds: [elsewhere] });
+  assert.equal(h.state().message, generic);
 });
 
 test('a runner that cannot remove accounts is refused, in the words the page shows', async () => {

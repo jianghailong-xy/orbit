@@ -160,7 +160,7 @@ func TestCodexAccountSlotRemoveRefusesASlotALiveSessionIsIn(t *testing.T) {
 	const sessionID = "019fc086-c7c7-7c92-8215-778ad8a6280a"
 	writeSessionInCodexHome(t, orbitHome, sessionID, work.Dir)
 	liveHomes := codexSessionAccountHomes([]string{sessionID})
-	if !liveHomes[work.Dir] {
+	if len(liveHomes[work.Dir]) == 0 {
 		t.Fatalf("the live session's CODEX_HOME is not %q: %+v", work.Dir, liveHomes)
 	}
 
