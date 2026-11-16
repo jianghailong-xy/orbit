@@ -475,7 +475,7 @@ func TestCursorMacAccountRemoval(t *testing.T) {
 	writeSessionMeta(runDir(onWork), &ClaimedSession{SessionID: onWork, SessionUUID: onWork, Provider: providerCursor,
 		Agent: AgentExecConfig{Provider: providerCursor, Env: map[string]string{cursorAccountDirVar: work.Dir}}}, t.TempDir())
 	live := cursorAccountKind.liveDirs([]string{onWork})
-	if !reflect.DeepEqual(live, map[string]bool{work.Dir: true}) {
+	if !reflect.DeepEqual(live, accountDirSessions{work.Dir: {onWork}}) {
 		t.Fatalf("accounts in use = %v, want Work", live)
 	}
 	if err := removeAccount(cursorAccountKind, nil, nil, nil, nil, work.ID, live); err == nil || !strings.Contains(err.Error(), "in use") {

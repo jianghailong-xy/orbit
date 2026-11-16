@@ -332,9 +332,9 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   personalAccessTokens PersonalAccessToken[] // the user's own API tokens (hashed at rest, 0383)
   patDeviceLogins  PatDeviceLogin[] // the `orbit login` requests this user approved or denied (0388)
-  helpAskAdminRequests     HelpAskAdminRequest[] @relation("HelpAskAdminRequestOwner") // Asks this user sent to an admin (0870)
-  helpAskAdminRequestsToMe HelpAskAdminRequest[] @relation("HelpAskAdminRequestAdmin") // Asks sent to this admin (0870)
-  helpFeedback             HelpFeedback[] // this user's Did this help? / Did this answer it? votes (0880)
+  helpAskAdminRequests     HelpAskAdminRequest[] @relation("HelpAskAdminRequestOwner") // Asks this user sent to an admin (0890)
+  helpAskAdminRequestsToMe HelpAskAdminRequest[] @relation("HelpAskAdminRequestAdmin") // Asks sent to this admin (0890)
+  helpFeedback             HelpFeedback[] // this user's Did this help? / Did this answer it? votes (0900)
   terminalLogins   TerminalLogin[] // terminal sign-ins asked for on this user's runners (0660)
   terminalCredentials TerminalCredential[] // the terminals this user approved (0660)
   identities       UserIdentity[] // the Google account this user signs in with (0391)
@@ -1584,6 +1584,10 @@ model ManagedRunner {
   /// while the drain stands and no demand has come since it began; from then on the drain cannot be
   /// called off, and the instance exits on its own.
   stopAcknowledgedAt  DateTime?                   @map("stop_acknowledged_at") @db.Timestamptz(3)
+  /// DRAINING for an image roll: the image the profile names, which the instance's Pod was not made from. The drain
+  /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next
+  /// generation, made from that image. Null for a drain to sleep, and once the roll ends or is called off.
+  imageRollTo         String?                     @map("image_roll_to")
   initialProvider    String?                      @map("initial_provider")
   resourceProfileId  String?                      @map("resource_profile_id")
   /// The one resource operation in flight: which (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`,
@@ -2190,7 +2194,7 @@ model Session {
   /// trigger refuses the UPDATE). An Ask belongs to no workspace, is in no session list, starts read-only on its
   /// runner, and may call only the runner doors of help/help-ask-reads.ts.
   helpAsk                  Json?     @map("help_ask")
-  /// Still stuck → Ask your admin (migration 0870): this Ask sent to an admin, at most once.
+  /// Still stuck → Ask your admin (migration 0890): this Ask sent to an admin, at most once.
   helpAskAdminRequest      HelpAskAdminRequest?
   // ── Per-session git worktree isolation ──────────────────────────────────────
   // When the agent's workDir is a git repo, the runner runs this session in its own
@@ -6231,7 +6235,7 @@ model Task {
   /// The tenancy fence `[K2]`'s two ledger tables hang off: a child row names BOTH the task and
   /// the owner, so it cannot disagree with its parent about whose it is. The same device migration
   /// 0120 used for (decision, project).
-  /// The Ask this task carries to an admin (Still stuck → Ask your admin, migration 0870), when it is one.
+  /// The Ask this task carries to an admin (Still stuck → Ask your admin, migration 0890), when it is one.
   helpAskAdminRequests HelpAskAdminRequest[]
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
@@ -10007,7 +10011,7 @@ model ScheduleChangeRequest {
   @@map("schedule_change_request")
 }
 
-/// Still stuck → Ask your admin (migration 0870; docs/mocks/help-center board 02 ② right frame, side note 5): an Ask
+/// Still stuck → Ask your admin (migration 0890; docs/mocks/help-center board 02 ② right frame, side note 5): an Ask
 /// its person sent to an admin, keyed by the Ask so it is sent at most once, and the ordinary task in the admin's own
 /// task list that carries it. /help → Your questions reads it to say "With your admin". Written only by
 /// help/help-ask.ts#askAdmin. Its own table because 0850's trigger keeps `session.help_ask` as its INSERT wrote it.
@@ -10030,7 +10034,7 @@ model HelpAskAdminRequest {
   @@map("help_ask_admin_request")
 }
 
-/// Did this help? / Did this answer it? (migration 0880; docs/mocks/help-center board 03, decision 3): one person's
+/// Did this help? / Did this answer it? (migration 0900; docs/mocks/help-center board 03, decision 3): one person's
 /// Yes / No on one article (`kind` article, `itemId` its slug) or one Ask answer (`kind` answer, `itemId`
 /// `<Ask session id>:<seq>`). One vote per person per item, the last one standing. No text column, by decision:
 /// Admin → Help feedback shows counts only. Written only by help/help-feedback.ts#record.

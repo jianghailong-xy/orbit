@@ -1992,6 +1992,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			probes := agentDirs.snapshot()
 			resources := machineResources(probes, machineReposRoot)
+			storage.diskResources(&resources)
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,
@@ -2553,7 +2554,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				} else {
 					res := AccountRemoveResultRequest{Engine: rr.Engine, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
 					if err := removeAccount(kind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, kind.liveDirs(pool.sessionIDs())); err != nil {
-						res.Status, res.Message = "failed", firstLine(err.Error())
+						res.Status, res.Message, res.SessionIDs = "failed", firstLine(err.Error()), accountInUseSessions(err)
 					} else {
 						// Re-probe this engine and beat at once, so the account leaves the page's list
 						// now rather than a heartbeat — or five minutes — later.
@@ -2569,7 +2570,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			} else if rr := resp.CodexAccountRemoveRequest; rr != nil {
 				res := AccountRemoveResultRequest{Engine: providerCodex, Account: rr.Account, Attempt: rr.Attempt, Status: "done"}
 				if err := removeAccount(codexAccountKind, claudeUsage, codexUsage, kimiUsage, cursorUsage, rr.Account, codexSessionAccountHomes(pool.sessionIDs())); err != nil {
-					res.Status, res.Message = "failed", firstLine(err.Error())
+					res.Status, res.Message, res.SessionIDs = "failed", firstLine(err.Error()), accountInUseSessions(err)
 				} else {
 					go func() {
 						engineHealth.refreshEngine(providerCodex)
@@ -2871,6 +2872,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		gcWorktrees(t, liveSet, pressure)
 		worktreeGC.sweepResumable(t, pool, pressure, false)
 		gcUploads(liveSet)
+		gcSubagentRuns(t, liveSet)
 	}
 
 	// A managed instance claims nothing before its first heartbeat (managedStartupBeat): the manager's
@@ -2969,6 +2971,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			pressure := measureWorktreePressure(diskFloorMb.Load(), &storage)
 			gcWorktrees(t, pool.ids(), pressure)
 			worktreeGC.sweepResumable(t, pool, pressure, false)
+			gcSubagentRuns(t, pool.ids())
 		}
 		// Saturation, counted against everything this machine is doing rather than
 		// against turn permits alone: a parked session whose runner-hosted build is

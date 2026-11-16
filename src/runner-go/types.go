@@ -1025,6 +1025,9 @@ type AccountRemoveResultRequest struct {
 	Status  string `json:"status"` // "done" | "failed"
 	Message string `json:"message,omitempty"`
 	Attempt string `json:"attempt,omitempty"`
+	// With a removal refused because the account is in use: the sessions using it, so the control
+	// plane can name them in Message.
+	SessionIDs []string `json:"sessionIds,omitempty"`
 }
 
 // LoginResultRequest is the runner's progress report for a sign-in, POSTed back so the web card

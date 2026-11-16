@@ -1840,6 +1840,10 @@ public enum ExceptionCards {
         row.escalatedAt ?? row.waitingSince
     }
 
+    /// An escalated item's heading while its coordinator cannot be reached — the browser's
+    /// `ESCALATED_UNREACHABLE_HEADING` and the push's title, verbatim.
+    public static let escalatedUnreachableHeading = "Now yours — the coordinator can’t take messages"
+
     /// §7.5's heading for an item that BECAME the owner's, one per way it happened — the browser's
     /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is
     /// every other kind this card draws and says so in its own title.
@@ -1856,6 +1860,9 @@ public enum ExceptionCards {
         }
         switch row.assigneeReason {
         case .escalated:
+            // The clock moved it, but with no coordinator to ask or message — the server's reading,
+            // which the doors below already show — "no one acted" would point at somebody who cannot.
+            if row.coordinatorUnreachable { return escalatedUnreachableHeading }
             return "Now yours — no one acted on this for \(waitedBeforeEscalation(row))"
         case .coordinatorEnded:
             return "Now yours — the coordinator conversation ended"

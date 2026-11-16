@@ -96,7 +96,7 @@ export const PERSONAL_SETTINGS = {
     'notifySessionFinished',
     '/settings/notifications',
     'When a session finishes',
-    'Alert your devices when a run finishes on its own or fails for good.',
+    'Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings.',
   ),
   notifyAgentMessage: setting(
     'notifyAgentMessage',

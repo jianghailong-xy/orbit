@@ -84,8 +84,14 @@ describe('a message from outside Orbit', () => {
     expect(html).toContain('<div class="chat-user-from">You</div>');
   });
 
-  it('names the runner’s block as a sender note', () => {
-    expect(describeNote(block)).toBe('sender note');
+  // The block only repeats the "From <name>" head above the bubble, so no "Orbit attached" line names it.
+  it('draws no Orbit attached line for the runner’s block alone', () => {
+    expect(describeNote(block)).toBe('');
+    const html = renderToStaticMarkup(<Transcript events={[{
+      seq: 1, type: 'user', turnId: 't1',
+      payload: { text: `A${block}`, controlPlaneNote: block, externalSender: { source: 'FEISHU', name: 'Lin Mei' } },
+    }]} />);
+    expect(html).not.toContain('Orbit attached');
   });
 
   it('says the same words the native clients copy', () => {

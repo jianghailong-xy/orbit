@@ -35,6 +35,7 @@ import {
   type SubagentPoolMember,
   type SubagentProvider,
   type SubagentRoutingDecision,
+  type SubagentRoutingInput,
 } from '../tasks/model-routing';
 import { engineState, fullestWindow, taskRouteReads } from '../tasks/task-route-decision';
 
@@ -94,17 +95,31 @@ function catalogPrices(preset: ProviderPreset | undefined, catalog: RunnerModelC
  */
 export async function planSubagentRoute(
   db: Prisma.TransactionClient,
-  args: {
-    ownerId: string;
-    workspaceId: string | null;
-    runnerId: string | null;
-    dto: SubagentRunCreateRequest;
-    parent: { engine: string; provider: string; model: string; effort: string | null };
-    /** Pool members' quota, as dispatch reads it (QueueService.accountPool); absent, every member reads unknown. */
-    planUsage?: SubagentPlanUsageReader | null;
-    now?: Date;
-  },
+  args: SubagentRouteArgs,
 ): Promise<SubagentRoutingDecision> {
+  return routeSubagent(await subagentRouteInput(db, args));
+}
+
+export interface SubagentRouteArgs {
+  ownerId: string;
+  /** The workspace and runner the SubAgent runs on: the parent's, or a remote SubAgent's target (§10.3). */
+  workspaceId: string | null;
+  runnerId: string | null;
+  dto: SubagentRunCreateRequest;
+  parent: { engine: string; provider: string; model: string; effort: string | null };
+  /** Pool members' quota, as dispatch reads it (QueueService.accountPool); absent, every member reads unknown. */
+  planUsage?: SubagentPlanUsageReader | null;
+  now?: Date;
+  /** routeSubagent's `runnerLabel` and `strictNamedModel`, which a remote SubAgent sets. */
+  runnerLabel?: string;
+  strictNamedModel?: boolean;
+}
+
+/** What planSubagentRoute hands routeSubagent, read the same way: for a remote SubAgent's own checks (§10.3). */
+export async function subagentRouteInput(
+  db: Prisma.TransactionClient,
+  args: SubagentRouteArgs,
+): Promise<SubagentRoutingInput> {
   const { ownerId, dto } = args;
   const reads = taskRouteReads(db as unknown as PrismaService, ownerId, args.now ?? new Date());
   const owner = await reads.owner();
@@ -144,7 +159,7 @@ export async function planSubagentRoute(
   const mode = agent?.modelRoutingOptimizeFor;
   const optimizeFor: ModelRoutingOptimizeFor = mode === 'balance' || mode === 'intelligence' ? mode : 'cost';
   const level = (value: unknown) => (['S', 'M', 'L', 'XL'] as const).find((entry) => entry === value) ?? null;
-  return routeSubagent({
+  return {
     type: dto.type,
     definitionName: dto.definitionSource === 'builtin' ? dto.type : basename(dto.definitionSource),
     caller: { model: dto.model ?? null, size: level(dto.size), sizeReason: dto.sizeReason ?? null },
@@ -156,7 +171,9 @@ export async function planSubagentRoute(
     engines,
     modelCatalog: catalog,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
-  });
+    ...(args.runnerLabel ? { runnerLabel: args.runnerLabel } : {}),
+    ...(args.strictNamedModel ? { strictNamedModel: true } : {}),
+  };
 }
 
 /** A configured provider (a key or an account pool) as routing reads it, with what the Tier column shows of it. */

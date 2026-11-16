@@ -939,7 +939,7 @@ struct RunnerDetailContent: View {
                         HStack {
                             Text(RunnerPageCopy.RUNNER_MAX_CONCURRENT)
                             Spacer(minLength: 8)
-                            Text(verbatim: "\(maxDraft)")
+                            Text(verbatim: "\(maxDraft) \(RunnerPageCopy.RUNNER_MAX_CONCURRENT_UNIT)")
                                 .foregroundStyle(Color.secondary)
                                 .monospacedDigit()
                         }

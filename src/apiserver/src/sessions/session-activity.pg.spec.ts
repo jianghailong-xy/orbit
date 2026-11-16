@@ -5,6 +5,7 @@ import test from 'node:test';
 import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
 import type { SessionActivity } from '@orbit/shared';
 
+import type { AttachmentsService } from '../attachments/attachments.service';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -52,7 +53,7 @@ function connect(): Stack {
     { notifySessionQueued: () => undefined } as unknown as QueueService,
     publishes,
   );
-  return { db, sessions, guests: new SessionGuestsService(prisma, sessions) };
+  return { db, sessions, guests: new SessionGuestsService(prisma, sessions, {} as AttachmentsService) };
 }
 
 interface World {

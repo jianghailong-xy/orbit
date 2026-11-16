@@ -158,7 +158,9 @@ type cursorScopeProbe struct {
 	fake   *cursorReplay
 	scope  fakeCursorScope      // what the fake started (scope.json)
 	seen   []cursorScopeProcess // the session's processes then, the keeper's and the CLI's among them
-	err    error
+	// missing says, for each process scope.json names that was not among seen, what /proc had for it then.
+	missing map[int]string
+	err     error
 }
 
 func newCursorScopeProbe(t *testing.T) *cursorScopeProbe {
@@ -192,6 +194,36 @@ func (p *cursorScopeProbe) look() {
 		err = json.Unmarshal(data, &p.scope)
 	}
 	p.err, p.seen = err, cursorScopeMarked(p.marker)
+	p.missing = map[int]string{}
+	for _, pid := range []int{p.scope.CLI, p.scope.Helper, p.scope.Command, p.scope.CommandChild, p.scope.Escaped, p.scope.Daemon} {
+		found := false
+		for _, proc := range p.seen {
+			found = found || proc.pid == pid
+		}
+		if !found {
+			p.missing[pid] = cursorScopeWhyUnseen(pid, p.marker)
+		}
+	}
+}
+
+// cursorScopeWhyUnseen says why cursorScopeMarked did not count pid: gone, dead but unreaped, an environment that
+// could not be read, or one without the marker.
+func cursorScopeWhyUnseen(pid int, marker string) string {
+	proc, ok := cursorScopeStat(pid)
+	if !ok {
+		return "no /proc entry: it had exited and been reaped"
+	}
+	if proc.state == "Z" || proc.state == "X" {
+		return fmt.Sprintf("dead but not reaped: %v", proc)
+	}
+	environ, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "environ"))
+	if err != nil {
+		return fmt.Sprintf("running (%v), environment unreadable: %v", proc, err)
+	}
+	if !bytes.Contains(environ, []byte(cursorScopeMarkerVar+"="+marker)) {
+		return fmt.Sprintf("running (%v), its environment (%d bytes) without the marker", proc, len(environ))
+	}
+	return fmt.Sprintf("running (%v) and marked: it started or was read after the scan", proc)
 }
 
 // fire holds once: the first time when does, after the probe has looked.
@@ -232,7 +264,7 @@ func (p *cursorScopeProbe) started() fakeCursorScope {
 func (p *cursorScopeProbe) assertReclaimed(t *testing.T) {
 	t.Helper()
 	p.mu.Lock()
-	scope, seen, err := p.scope, p.seen, p.err
+	scope, seen, missing, err := p.scope, p.seen, p.missing, p.err
 	p.mu.Unlock()
 	if seen == nil || err != nil {
 		t.Fatalf("the session's processes were never seen running (scope.json: %v)", err)
@@ -249,7 +281,7 @@ func (p *cursorScopeProbe) assertReclaimed(t *testing.T) {
 	for name, pid := range map[string]int{"helper": scope.Helper, "command": scope.Command, "command's child": scope.CommandChild,
 		"escaped process": scope.Escaped, "daemon": scope.Daemon} {
 		if _, ok := running[pid]; !ok {
-			t.Fatalf("the %s (%d) was not running when the session's end was set off: %v", name, pid, seen)
+			t.Fatalf("the %s (%d) was not running when the session's end was set off (%s): %v", name, pid, missing[pid], seen)
 		}
 	}
 	if running[scope.Helper].pgid != keeper.pid || running[scope.Command].sid != scope.Command ||

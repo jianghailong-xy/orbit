@@ -36,6 +36,8 @@ import io.orbitd.android.core.guests.word
 import io.orbitd.android.directory.LoadingMessage
 import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.text.LocalReaderResources
+import io.orbitd.android.text.ReaderResources
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.PageBar
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -67,7 +69,10 @@ fun GuestSessionPage(app: OrbitApplication, handle: SessionHandle, route: OrbitR
             StatusMessage(GuestCopy.COULD_NOT_LOAD, view.error!!) { model.retryLoad(); retry++ }
         }
         !view.loaded -> Box(Modifier.fillMaxSize().padding(16.dp).testTag("guest-loading")) { LoadingMessage(GuestCopy.LOADING) }
-        else -> GuestConversationView(model)
+        // A turn's images are read through the guest door: the owner's `attachments/:id` answers a guest 404.
+        else -> CompositionLocalProvider(LocalReaderResources provides remember(handle, id) { ReaderResources(app.session, handle, guestSessionId = id) }) {
+            GuestConversationView(model)
+        }
     }
 }
 

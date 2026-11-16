@@ -200,12 +200,13 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 				"description": "How hard the work is: S mechanical, M a well-specified change, L cross-module or unknown cause, XL design-level.",
 			},
 			"sizeReason": str("One sentence on why that size."),
-			"model":      str("A model id to run on, skipping Orbit's choice."),
+			"model": str("A model id to run on, skipping Orbit's choice. With workspace or needs it runs on that workspace's" +
+				" runner, or the call is refused at once with what that workspace can run; it is never swapped for another model."),
 			"background": map[string]interface{}{
 				"type":        "boolean",
 				"description": "Return at once and be woken with the result when the SubAgent ends (default false, or the type's is_background).",
 			},
-			"resume":    str("The runId of a finished SubAgent of this session to continue: it keeps its own conversation and gets prompt as its next message."),
+			"resume":    str("The runId of a finished SubAgent of this session that ran on this machine, to continue: it keeps its own conversation and gets prompt as its next message. A remote one (workspace or needs) cannot be resumed."),
 			"workspace": str("Run on another workspace of this repository, by name (e.g. one on a Mac). Runs on that workspace's own HEAD and returns text only."),
 			"needs": map[string]interface{}{
 				"type": "array", "items": map[string]interface{}{"type": "string"},
@@ -619,10 +620,49 @@ type subagentRecord struct {
 	// StateDir is the directory whose engine state holds the conversation: the scratch dir of the run that opened
 	// it, which every resume of it runs its engine state from again ("" for an engine that keeps none there).
 	StateDir string `json:"stateDir,omitempty"`
+	// Workspace is the workspace a remote run ran on: its tree is discarded when it ends, so it cannot be resumed.
+	Workspace string `json:"workspace,omitempty"`
 }
 
 func subagentDir(sessionID, runID string) string {
 	return filepath.Join(runDir(sessionID), "subagents", runID)
+}
+
+// gcSubagentRuns removes the SubAgent records (run.json and each attempt's engine state) of sessions the control
+// plane says are over: Completed, deleted, missing or moved off this runner, the same answer that frees their
+// checkouts. Nothing resumes a SubAgent of such a session. A live one, and any session the query cannot answer
+// for, keeps them. The rest of the session's run dir (meta.json, which `orbit resume` reads) stays.
+func gcSubagentRuns(t *Transport, live map[string]bool) {
+	entries, err := os.ReadDir(runsDir())
+	if err != nil {
+		return
+	}
+	var ids []string
+	for _, e := range entries {
+		if !e.IsDir() || live[e.Name()] {
+			continue
+		}
+		if info, err := os.Stat(filepath.Join(runsDir(), e.Name(), "subagents")); err == nil && info.IsDir() {
+			ids = append(ids, e.Name())
+		}
+	}
+	// The control plane answers for at most 1000 ids a call.
+	for len(ids) > 0 {
+		batch := ids[:min(len(ids), 1000)]
+		ids = ids[len(batch):]
+		removable, err := t.worktreesRemovable(batch)
+		if err != nil {
+			logln("gc: worktrees-removable query failed, keeping all SubAgent records:", err)
+			return
+		}
+		for _, id := range removable {
+			if err := os.RemoveAll(filepath.Join(runsDir(), id, "subagents")); err != nil {
+				logln("gc: removing SubAgent records of", id, "failed:", err)
+				continue
+			}
+			logln("gc: removed SubAgent records of ended session", id)
+		}
+	}
 }
 
 func (s *bgJobService) handleSubagent(op string, args map[string]interface{}) bgSocketResponse {
@@ -752,6 +792,10 @@ func (s *bgJobService) startSubagent(args map[string]interface{}) (subagentRepor
 		}
 		s.subagents.add(run)
 		s.bg.subagentsLive.Add(1)
+		// So a resume after this process restarts is refused for what it is, not as a run that left nothing.
+		dir := subagentDir(s.sessionID, run.id)
+		_ = os.MkdirAll(dir, 0o700)
+		_ = writeJSONFile(filepath.Join(dir, "run.json"), subagentRecord{RunID: run.id, Type: run.kind, Workspace: run.workspace})
 		go s.followRemoteSubagent(ctx, run)
 		s.subagents.mu.Lock()
 		defer s.subagents.mu.Unlock()
@@ -797,14 +841,14 @@ func (s *bgJobService) subagentRecord(runID string) (*subagentRecord, error) {
 		if status == subagentStatusRunning {
 			return nil, fmt.Errorf("SubAgent %s is still running; resume it once it has ended", runID)
 		}
-		return &subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession, Type: run.kind, StateDir: run.stateDir}, nil
+		return &subagentRecord{RunID: run.id, Engine: run.engine, EngineSession: run.engineSession, Type: run.kind, StateDir: run.stateDir, Workspace: run.workspace}, nil
 	}
 	raw, err := os.ReadFile(filepath.Join(subagentDir(s.sessionID, runID), "run.json"))
 	if err != nil {
 		return nil, fmt.Errorf("no finished SubAgent run %s in this session to resume", runID)
 	}
 	var rec subagentRecord
-	if err := json.Unmarshal(raw, &rec); err != nil || rec.EngineSession == "" {
+	if err := json.Unmarshal(raw, &rec); err != nil || (rec.EngineSession == "" && rec.Workspace == "") {
 		return nil, fmt.Errorf("SubAgent run %s left no conversation to resume", runID)
 	}
 	return &rec, nil
@@ -840,7 +884,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 	}
 	var res ExecResult
 	var err error
-	// A child that fails on a usage limit or capacity is started again, with the same prompt, on the next
+	// A child that fails on a usage limit, capacity or a failed login is started again, with the same prompt, on the next
 	// candidate the server names (§4.3), at most subagentMaxMoves times; any other end is the run's result.
 	limit, limitNote := "", ""
 	scratch := dir
@@ -861,7 +905,7 @@ func (s *bgJobService) runSubagent(ctx context.Context, run *subagentRun, target
 			break
 		}
 		if attempt > subagentMaxMoves {
-			limitNote = fmt.Sprintf("It hit a usage limit or capacity on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
+			limitNote = fmt.Sprintf("It hit a usage limit, capacity or a failed login on %d candidates in a row and was moved %d times, the most one delegate call is.", attempt, subagentMaxMoves)
 			break
 		}
 		next, ferr := s.nextSubagentCandidate(run.id, limit, def)
@@ -1389,6 +1433,9 @@ var subagentResumeless = map[string]string{}
 
 // subagentResumeRefusal refuses a resume the run's engine cannot do, before any run is opened for it.
 func subagentResumeRefusal(rec *subagentRecord) error {
+	if rec.Workspace != "" {
+		return fmt.Errorf("SubAgent %s ran on workspace %s, whose tree is discarded when it ends, so it cannot be resumed. Start a new SubAgent with the full brief instead", rec.RunID, rec.Workspace)
+	}
 	if why, ok := subagentResumeless[rec.Engine]; ok {
 		return fmt.Errorf("SubAgent %s ran on %s, which cannot resume a SubAgent's conversation (%s). Start a new SubAgent with the full brief instead", rec.RunID, rec.Engine, why)
 	}

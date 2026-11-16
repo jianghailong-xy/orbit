@@ -85,6 +85,24 @@ kubectl -n ceph-csi-rbd get pods -l app=ceph-csi-rbd-nodeplugin \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.status.containerStatuses[*].imageID}{"\n"}{end}'
 ```
 
+## Deployment record: .3 (2026-11-16)
+
+The production managed-runner environment on 10.66.0.3 runs this patch. The operator built and pinned it as follows:
+
+- Ceph-CSI **v3.18.2** (chart **3.18.2**), patched; image `quay.io/cephcsi/cephcsi:xfs-reflink-v3.18.2`; Docker image
+  ID `sha256:7a58e795…`, containerd manifest `sha256:97acea1c…`. The nodeplugin and provisioner containers both run
+  the patched image.
+- Helm release **revision 5**: `nodeplugin.plugin.image.tag=xfs-reflink-v3.18.2`, `imagePullPolicy: IfNotPresent`.
+  A first upgrade from the git chart tree changed the chart label to `3-canary`; the operator re-packaged the same
+  chart with `--version 3.18.2` and restored it. A future chart upgrade must apply this patch and set the values again.
+- The image is **local to .3's containerd**, not in a registry. A node rebuild or an image GC needs it re-imported, or
+  the archive pushed to a registry. Keep the image archive with the deployment records.
+- The class is [runner-data-xfs](#storageclass). A scratch claim's `xfs_info` showed `reflink=1`, `rmapbt=1`,
+  `crc=1`, `finobt=1`, `sparse=1`, `bigtime=1`, `inobtcount=1`, `nrext64=1`; a 64 MiB `cp --reflink=always` returned 0
+  with no `statfs` growth; the mount carried `noatime,discard`.
+- The first 100 GiB managed-runner PVC and the real-repository 32-checkout benchmark that proved the reflink saving are
+  in [the deployment record](../../../docs/managed-runner-k3s-xfs-deployment.md).
+
 ## StorageClass
 
 Only the managed runner's class opts in:

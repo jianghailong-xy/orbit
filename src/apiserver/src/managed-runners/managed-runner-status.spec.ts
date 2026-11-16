@@ -40,6 +40,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     drainDemandRevision: null,
     stopRequestedAt: null,
     stopAcknowledgedAt: null,
+    imageRollTo: null,
     initialProvider: null,
     resourceProfileId: 'p',
     resourceOperationId: null,

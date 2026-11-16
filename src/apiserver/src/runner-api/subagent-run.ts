@@ -1,4 +1,5 @@
 import {
+  isAuthErrorText,
   isUsageLimitErrorText,
   PermissionMode,
   SUBAGENT_RUN_STATUSES,
@@ -157,7 +158,7 @@ export class SubagentFallbackDto implements SubagentFallbackRequest {
   permissionMode?: string;
 }
 
-/** How many times one delegate call may move to another candidate after a usage limit or capacity (§4.3). */
+/** How many times one delegate call may move to another candidate after a usage limit, capacity or failed login (§4.3). */
 export const SUBAGENT_MAX_MOVES = 2;
 
 /** How much of a failed attempt's error `subagent_run.attempts` keeps. */
@@ -170,6 +171,25 @@ export const SUBAGENT_ATTEMPT_ERROR_MAX = 500;
 export function limitFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY'> | null {
   if (isUsageLimitErrorText(error)) return 'USAGE_LIMIT';
   return error.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER) ? 'AT_CAPACITY' : null;
+}
+
+/** How a sign-in failure may open when the engine does not wrap it in `Failed to authenticate` (Codex, OAuth). */
+const LOGIN_FAILURE_OPENINGS = ['not logged in', 'oauth session expired'];
+
+/**
+ * Whether a child failed on its engine's login: the runtime's `Failed to authenticate` (isAuthErrorText, which
+ * leaves out a dropped connection), or a text that opens as `Not logged in` / `OAuth session expired`. Kept in sync
+ * with isSubagentLoginFailure in runner-go/subagent_fallback.go.
+ */
+export function isLoginFailureText(error: string): boolean {
+  if (isAuthErrorText(error)) return true;
+  const opening = error.trimStart().toLowerCase();
+  return LOGIN_FAILURE_OPENINGS.some((marker) => opening.startsWith(marker));
+}
+
+/** A child's failure as §4.3 moves it: a limit or capacity (limitFailure), else a failed login; null otherwise. */
+export function movableFailure(error: string): Extract<SubagentAttemptOutcome, 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED'> | null {
+  return limitFailure(error) ?? (isLoginFailureText(error) ? 'AUTH_FAILED' : null);
 }
 
 /** The first entry of a run's attempts: where it was opened to run. */
@@ -197,7 +217,8 @@ export function fallbackCandidates(
 
 /**
  * NO_SUBAGENT_PROVIDER's message: no candidate left to move to, with each provider's reason — the ones whose
- * account hit its limit on an attempt, the ones the router removed, and the ones that could not be started.
+ * account hit its limit or whose login failed on an attempt, the ones the router removed, and the ones that could
+ * not be started.
  */
 export function noProviderMessage(
   decision: Pick<SubagentDecision, 'level' | 'candidates'>,
@@ -206,8 +227,9 @@ export function noProviderMessage(
 ): string {
   const tier = decision.level ? ` in tier ${decision.level}` : '';
   const lines = [
-    ...attempts.filter((a) => a.outcome === 'USAGE_LIMIT' || a.outcome === 'AT_CAPACITY').map((a) =>
-      `${a.provider} (${a.engine}), ${a.model}: ${a.outcome === 'AT_CAPACITY' ? 'the model was at capacity' : 'the account hit its limit'}`),
+    ...attempts.filter((a) => a.outcome === 'USAGE_LIMIT' || a.outcome === 'AT_CAPACITY' || a.outcome === 'AUTH_FAILED').map((a) =>
+      `${a.provider} (${a.engine}), ${a.model}: ${a.outcome === 'AT_CAPACITY' ? 'the model was at capacity'
+        : a.outcome === 'AUTH_FAILED' ? 'its login failed' : 'the account hit its limit'}`),
     ...(decision.candidates ?? []).map((c) =>
       `${c.provider}${c.engine ? ` (${c.engine})` : ''}${c.model ? `, ${c.model}${c.effort ? ` · ${c.effort}` : ''}` : ''}: ${c.reason}`),
     ...skipped,

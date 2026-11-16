@@ -20,6 +20,29 @@ Database migrations are **not** a separate step — the apiserver container runs
 recreating it applies any new migrations against the persisted `orbit_pg`
 volume.
 
+## Who runs it
+
+An upgrade is mostly waiting on builds and reading their output, which needs no expensive model. If the
+session runs on one, such as an Opus or Fable model, hand the run to DeepSeek V4.1 Flash with Orbit's
+`delegate` (`model: "deepseek-v4.1-flash"`, `background: true`) instead of running it yourself. Claude Code's
+Agent tool cannot pick a model outside Claude's, so use `delegate`. On an inexpensive model, run it yourself as
+below.
+
+- Settle every choice before you hand it off, since the agent cannot ask the owner: which checkout to run
+  from (see [Where to run it](#where-to-run-it)), the exact command and flags the owner asked for, and for a
+  two-stage release the commit and the `ORBIT_REGISTRY`/`ORBIT_DEPLOY_HOST` values.
+- The brief tells the agent to read this file, run exactly that command, stop and report at the first
+  failure without retrying, working around a guard (such as adding `--allow-dirty`) or rolling back, and hand back the
+  script's last 30 lines and `docker compose ps` (for a two-stage release, the plan table and the deploy's last lines).
+- The brief names the script by absolute path, `<checkout>/.claude/skills/upgrade/upgrade.sh`: the SubAgent
+  starts in this session's working directory, which need not be the checkout the deployment runs from.
+- A build takes 10 to 15 minutes, so end the turn after delegating: Orbit wakes this session with the result.
+  Report it to the owner, and do not run the upgrade yourself as well.
+
+This covers running `upgrade.sh` from this session. From another workspace, production deploys through
+`delegate` SubAgents instead (see [Production from another workspace](#production-from-another-workspace)).
+Those SubAgents run on their workspaces' own engines, and this session only briefs and waits for them.
+
 ## How to use
 
 Run the script of the checkout the deployment runs from (see [Where to run it](#where-to-run-it)). Your
@@ -210,7 +233,11 @@ runs: this host's own containers, `.env` and runner link are left as they are.
 **Build stage, on this host.** A release is named by the commit it was built from:
 `<registry>/orbit-apiserver:<commit>`, which `wiki-worker` runs too, `<registry>/orbit-web:<commit>`, and
 `<registry>/orbit-link-gateway:<commit>`, where that commit is the last one under `src/link-gateway`, its
-whole build context, so that a release which does not change the gateway recreates nothing. A tag names one
+whole build context, so that a release which does not change the gateway recreates nothing, and
+`<registry>/orbit-managed-runner:<commit>`, the hosted runners' image, where that commit is the last one that
+changed what `deploy/managed-runner/image` builds it from (the runner's Go sources but its tests, its module
+files, DeepSeek Harness's lockfile, and the image's directory), so that a release which does not change the
+runner builds none and moves no hosted runner. A commit without `deploy/managed-runner/image` has none. A tag names one
 build: one that is in the registry already is kept and never pushed again (to rebuild it, delete it from the
 registry first). For each image that is not there yet:
 
@@ -221,7 +248,10 @@ registry first). For each image that is not there yet:
    passed as `PREVIOUS_RELEASE_IMAGE`. Before the target serves any, this host's own `orbit-web` is.
 2. `scripts/image-boot-check.sh` boots the apiserver and web images, as CI does, before either is pushed.
 3. The link gateway: `docker build --provenance=false`, as a single host builds it.
-4. `docker push` of each.
+4. The hosted runners' image: `docker build --provenance=false -f deploy/managed-runner/image/Dockerfile`, with
+   `ORBIT_SOURCE_SHA` its tag, so its runner reports `managed-<tag>`. It is about 4.4 GiB, and takes several
+   minutes the first time.
+5. `docker push` of each.
 
 **Deploy stage, on the target, driven from here over ssh.** The deploy stage needs no checkout and no runner on the
 target, and reads neither: `10.66.0.4` has both, for orbit-prod (see
@@ -236,7 +266,7 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
 1. takes the target's upgrade lock, `/tmp/orbit-upgrade.lock`, as a single host's upgrade takes its own: one
    upgrade at a time, a second refused at once, a lock whose holder is gone taken over;
 2. stops, having changed nothing, where the target has no `.env`, where its `.env` switches on managed
-   runners (their images are built where they run), or where a `postgres` of the name this release renders
+   runners on Docker (the `managed-runners-docker` profile: their images are built where they run), or where a `postgres` of the name this release renders
    keeps its `/archive` in another directory;
 3. puts the release's files in place, each whole by a rename, keeping the ones they replace until the
    release's images are all there: a deploy that stops before then puts them back, and takes away the files
@@ -247,12 +277,21 @@ the two Compose files a target lists beside `docker-compose.yml`, `deploy/postgr
    `scripts/pg-backup.sh`), which a running container keeps from its start whatever Compose sees, so one that
    runs another than the release's is `recreate` too, and says which file. Under the table it says how the
    apiserver and web are replaced: `Replacing the apiserver and web: without a gap`, or `stop, then start` with
-   the reason ([Without a gap](#without-a-gap), below);
+   the reason ([Without a gap](#without-a-gap), below). Where the target runs managed runners on Kubernetes (its
+   `.env` sets `ORBIT_MANAGED_RUNNERS_ENABLED=true`, and `profile.json` in `ORBIT_MANAGED_RUNNERS_DIR` says
+   `"backend": "kubernetes"`), it also prints the hosted runners' image: `unchanged`, or the profile's
+   `runner.image` and the release's image by digest, `<registry>/orbit-managed-runner@sha256:<64 hex>`;
 5. stops, having changed nothing, if an image the release runs does not come from the registry: `postgres` and
    `pgbackup` have theirs only from `deploy/postgres-pinned.yml`, so a target whose `COMPOSE_FILE` does not
    list it is refused. `--plan` stops here in any case, with every file put back;
 6. pulls every image the release runs, and stops if one is missing;
-7. writes the release's names into `.env` (below);
+7. writes the release's names into `.env` (below), and, where the plan printed a new hosted runners' image, sets
+   the profile's `runner.image` to it, by a rename, keeping the profile it replaces beside it as
+   `profile.json.bak-<time>-before-<commit>`. The apiserver reads the profile only as it starts, so one the release
+   does not otherwise replace is replaced for it. Once it runs, its manager moves each hosted runner onto the new
+   image as soon as that runner is idle: drained like a sleep, and woken at once as the next generation, on the same
+   volume (`rollPreviousImage` in `src/apiserver/src/managed-runners/managed-runner-manager.ts`). A busy runner moves
+   later, and nothing in flight is cut short;
 8. brings each service up on its own, `docker compose up -d --wait --no-deps --no-build <service>`, in the
    order `depends_on` gives: `postgres` only when it is new or not running (a running one whose configuration
    the release changes is left running, and the run says so, unless `--pull-base`), `db-proxy` where the
@@ -299,14 +338,18 @@ to be copied to the registry, as `base-images.env` says, before a release names 
 
 **Rollback.** Deploy an earlier release: `upgrade.sh --deploy <its commit>`, with the same
 `ORBIT_REGISTRY` and `ORBIT_DEPLOY_HOST`; `--plan <its commit>` first shows what it changes. Its images are in
-the registry, its files come from its commit, nothing is built, and `up` recreates what differs from it. The
+the registry, its files come from its commit, nothing is built, and `up` recreates what differs from it. Its hosted
+runners' image is its own too: the profile names it again, and the runners move back onto it once idle. The
 target's `.upgrade/history` lists the releases it ran, newest last. The database keeps the migrations a later
 release applied: roll back past a migration only to code that runs on the database as that migration left it.
 
 **Requirements.** Both hosts' Docker trust the registry. One served over plain HTTP, as `10.66.0.1:5000` is,
 is listed in each host's `/etc/docker/daemon.json` under `insecure-registries`, which
 `systemctl reload docker` applies without stopping a container; the build stage checks this host's before it
-builds. This host reaches the target as root over `ssh` with a key, and has `git`, `curl` and
+builds. Where the target runs managed runners on Kubernetes, the node pulls the hosted runners' image from the
+registry too: k3s on `10.66.0.3` lists `10.66.0.1:5000` as a plain-HTTP mirror in
+`/etc/rancher/k3s/registries.yaml` (docs/managed-runner-k3s-xfs-deployment.md, "Runner image"). Without it a woken
+runner's Pod ends in `ImagePullBackOff`. This host reaches the target as root over `ssh` with a key, and has `git`, `curl` and
 `docker manifest`; the target has Docker with Compose v2, and GNU `tar` and `tee`. `--no-cache` applies to
 the build, `--prune` to both hosts, and `--pull-base` and `--stop-then-start` to the deploy, as above. To
 confirm that the target built nothing, `docker buildx du` there reports no build cache, and `docker image ls`
@@ -454,8 +497,8 @@ never on wikova. Never edit 10.66.0.4's .env. Never print a value from any .env.
 5. Plan: `cd "$W" && ORBIT_REGISTRY=10.66.0.1:5000 ORBIT_DEPLOY_HOST=root@10.66.0.4
    .claude/skills/upgrade/upgrade.sh --plan <commit>`. Stop without deploying if the plan would create, start or
    recreate postgres, db-proxy, pgbackup, nats or link-gateway, or if it renders docker-channel or
-   managed-runner-firewall. Recreating apiserver, web and wiki-worker is expected. Note the "Replacing the apiserver
-   and web" line.
+   managed-runner-firewall. Recreating apiserver, web and wiki-worker is expected, and so is a new hosted runners'
+   image under "The hosted runners' image". Note the "Replacing the apiserver and web" line, and that image line.
 6. Deploy, the same way as step 4, as unit orbit-deploy-<c9> running
    `"$W/.claude/skills/upgrade/upgrade.sh" --deploy <commit>` with the same env. It takes 1 to 2 minutes. Its
    output must end with `✓ Release <commit> runs on root@10.66.0.4`.

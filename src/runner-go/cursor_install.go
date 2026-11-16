@@ -89,7 +89,7 @@ var cursorDownloadBase = "https://downloads.cursor.com/lab"
 var cursorVersionPattern = regexp.MustCompile(`^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{7,40}$`)
 
 func cursorRoot() string        { return filepath.Join(machineHome(), "cursor") }
-func cursorVersionsDir() string { return filepath.Join(cursorRoot(), "versions") }
+func cursorVersionsDir() string { return filepath.Join(engineStore(), "cursor", "versions") }
 func cursorVersionDir() string  { return filepath.Join(cursorVersionsDir(), cursorSupportedVersion) }
 
 func cursorTarballURL(a cursorArtifact) string {

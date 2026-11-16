@@ -1,8 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { streamable } from '../files/files.service';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { type GuestTurnBody, SessionGuestsService } from './session-guests.service';
 
@@ -86,6 +88,17 @@ export class GuestSessionsController {
   @Get(':id/events/:seq')
   event(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Param('seq') seq: string) {
     return this.guests.event(user.userId, id, seq);
+  }
+
+  /** An image or file the transcript carries, as the public page's `/shared/:token/attachments/:id` serves it. */
+  @Get(':id/attachments/:attachmentId')
+  async attachment(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('attachmentId', PublicIdPipe) attachmentId: string,
+    @Res({ passthrough: true }) res?: Response,
+  ): Promise<StreamableFile> {
+    return streamable(await this.guests.attachment(user.userId, id, attachmentId), res);
   }
 
   @Post(':id/turns')

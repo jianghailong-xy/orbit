@@ -205,7 +205,8 @@ func TestTaintedCommitIsRefusedAfterTheGrantEnds(t *testing.T) {
 		return recordSecretTaint(repo, "refs/heads/orbit/leak", r, main)
 	}
 	defer func() { secretBeforeForget = old }()
-	store.remove("g")
+	store.remove("g", true)
+	store.waitScans()
 
 	raw, _ := os.ReadFile(secretTaintPath())
 	if strings.Contains(string(raw), testSecretValue) || !strings.Contains(string(raw), "config.env") {
@@ -542,7 +543,8 @@ func TestRemovalRecordsUncommittedFilesHoldingTheValue(t *testing.T) {
 	store := newSecretStore(newFakeSecretAPI(), filepath.Join(home, "ledger.json"))
 	store.held["g"] = &heldSecret{id: "g", exposure: secretExposureEnv, name: "K_KEY", value: secretValue(testSecretValue), revoked: make(chan struct{})}
 	store.rebuildScrubLocked()
-	store.remove("g")
+	store.remove("g", true)
+	store.waitScans()
 	if path, ok := taintObjectIDs(dir)[want]; !ok || path != "draft.env" {
 		t.Fatalf("recorded = %v", taintObjectIDs(dir))
 	}
@@ -787,5 +789,64 @@ func TestUploadRefusesAFilteredHeldBackFileAfterTheGrantEnds(t *testing.T) {
 	defer f.Close()
 	if err := refuseFileHoldingSecret(f, path); !errors.Is(err, errFileHoldsOwnerSecret) {
 		t.Fatalf("the CRLF held-back file was uploadable after its grant ended: %v", err)
+	}
+}
+
+// A removal reads only the files `git add -A` could stage with content other than HEAD's: a clean tracked file is
+// HEAD's blob, already covered by the history scan (or the base, which the taint design leaves out). Everything else
+// a value could be in is still read, the files git is told not to look at included.
+func TestRemovalScanCandidatesSkipOnlyFilesEqualToHead(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	for name, content := range map[string]string{".gitignore": "ignored.env\n", "clean.txt": "clean\n", "edited.txt": "before\n", "staged.txt": "before\n", "hidden.txt": "before\n"} {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustGit(t, repo, "add", "-A")
+	mustGit(t, repo, "commit", "-q", "-m", "files")
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("edited.txt", "KEY="+testSecretValue+"\n")
+	write("staged.txt", "KEY="+testSecretValue+"\n")
+	mustGit(t, repo, "add", "staged.txt")
+	mustGit(t, repo, "update-index", "--assume-unchanged", "hidden.txt")
+	write("hidden.txt", "KEY="+testSecretValue+"\n")
+	write("new.env", "KEY="+testSecretValue+"\n")
+	write("ignored.env", "KEY="+testSecretValue+"\n")
+
+	names, err := secretScanCandidates(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, name := range names {
+		got[name] = true
+	}
+	for _, want := range []string{"edited.txt", "staged.txt", "hidden.txt", "new.env"} {
+		if !got[want] {
+			t.Errorf("%s was not read (candidates %v)", want, names)
+		}
+	}
+	for _, skip := range []string{"clean.txt", ".gitignore", "ignored.env"} {
+		if got[skip] {
+			t.Errorf("%s was read though git could not stage anything new from it (candidates %v)", skip, names)
+		}
+	}
+	hits, err := uncommittedObjectsHolding(repo, newSecretRedactor([]string{testSecretValue}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, hit := range hits {
+		found[hit.Path] = true
+	}
+	for _, want := range []string{"edited.txt", "staged.txt", "hidden.txt", "new.env"} {
+		if !found[want] {
+			t.Errorf("%s holds the value and was not recorded (hits %v)", want, hits)
+		}
 	}
 }

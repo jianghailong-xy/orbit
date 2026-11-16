@@ -79,7 +79,7 @@ class PushNotifications(private val context: Context) {
             .setContentText(message.payload.body).setStyle(Notification.BigTextStyle().bigText(message.payload.body))
             .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setCategory(if (message.payload.isReminder || message.payload.isOwnerRequest) Notification.CATEGORY_REMINDER else Notification.CATEGORY_STATUS)
+            .setCategory(if (message.payload.isReminder || message.payload.isOwnerRequest || message.payload.isOwnerDecision) Notification.CATEGORY_REMINDER else Notification.CATEGORY_STATUS)
             .addExtras(extras)
             .apply { ownerRequestActions(message, data, tag).forEach(::addAction) }
             .apply { if (silent) setGroup(SILENT_GROUP).setGroupAlertBehavior(Notification.GROUP_ALERT_SUMMARY) }
@@ -114,7 +114,7 @@ class PushNotifications(private val context: Context) {
     }
     fun channel(message: PushMessage) = when {
         message.payload.isReminder || message.payload.kind == "confirmation-problems" || message.payload.isOwnerRequest ||
-            message.payload.isTerminalLogin -> needsYou
+            message.payload.isTerminalLogin || message.payload.isOwnerDecision -> needsYou
         message.payload.sessionId != null -> SESSIONS
         else -> UPDATES
     }

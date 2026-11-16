@@ -3064,10 +3064,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // workspace_permission_rule.from_schedule_run (NOT NULL with a constant default, no row marked); neither table is
       // one of the preserved relations, and no trigger, function or DONE fence changes.
       '0860_schedule_check_only_asks',
-      // 0870 creates `help_ask_admin_request` only; no existing table, trigger or DONE fence is touched.
-      '0870_help_ask_admin_request',
-      // 0880 creates `help_feedback` only; no existing table, trigger or DONE fence is touched.
-      '0880_help_feedback'],
+      // 0870 adds a nullable managed_runner.image_roll_to (catalog-only); `managed_runner` is none of the preserved
+      // relations, no trigger, function or DONE fence changes, and no row is written.
+      '0870_managed_runner_image_roll',
+      // 0890 creates `help_ask_admin_request` only; no existing table, trigger or DONE fence is touched.
+      '0890_help_ask_admin_request',
+      // 0900 creates `help_feedback` only; no existing table, trigger or DONE fence is touched.
+      '0900_help_feedback'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

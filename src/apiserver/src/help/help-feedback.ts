@@ -13,7 +13,7 @@ const ANSWER_ID = /^[A-Za-z0-9_-]{1,64}:\d{1,12}$/u;
 
 /**
  * POST /api/help/feedback's body. These three fields are all a vote is: the global ValidationPipe's whitelist drops
- * anything else a client sends, and the table has no column it could go in (migration 0880).
+ * anything else a client sends, and the table has no column it could go in (migration 0900).
  */
 export class HelpFeedbackDto {
   @IsIn(HELP_FEEDBACK_KINDS)

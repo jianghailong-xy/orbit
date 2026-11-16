@@ -1136,7 +1136,9 @@ export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
 /** One reading of a machine (RunnerHeartbeatRequest.resources; the runner's MachineResources). A figure the
  *  platform has no answer for is absent — the page shows a dash, never a zero. Bytes are whole numbers. */
 export interface RunnerResources {
-  /** The whole machine's CPU in use since the runner's previous reading, 0–100. */
+  /** The whole machine's CPU in use since the runner's previous reading, 0–100. A runner in a container reports
+   *  the container's: the share of its CPU limit, its limit as cpuCores (rounded up), its memory limit and what is
+   *  left of it, and no load1 (the kernel keeps one only for the machine). */
   cpuPercent?: number;
   cpuCores?: number;
   /** The one-minute load average. */
@@ -1144,7 +1146,8 @@ export interface RunnerResources {
   memTotalBytes?: number;
   /** What the system can hand out without swapping; dropped page cache counts as available. */
   memAvailableBytes?: number;
-  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. */
+  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. A managed
+   *  runner on Docker reports its volume instead: the volume's limit, and what is left of it. */
   diskTotalBytes?: number;
   diskFreeBytes?: number;
 }
@@ -1987,6 +1990,9 @@ export interface AccountRemoveResult {
   message?: string;
   /** The `attempt` of the request this reports on. */
   attempt?: string;
+  /** With `failed` because the account is in use: the sessions running in it, which the control
+   *  plane names by title in the message the page shows. */
+  sessionIds?: string[];
 }
 
 /** @deprecated The same result on the codex-named route; read AccountRemoveResult. */
@@ -2487,8 +2493,10 @@ export interface SubagentCandidateTarget {
   note?: string;
 }
 
-/** How one attempt of a SubAgent run ended: still running, a usage-limit or capacity failure it moved on from, or the run's end. */
-export type SubagentAttemptOutcome = 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | Exclude<SubagentRunStatus, 'RUNNING'>;
+/** How one attempt of a SubAgent run ended: still running, a usage-limit, capacity or login failure it moved on from,
+ *  or the run's end. */
+export type SubagentAttemptOutcome =
+  'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | Exclude<SubagentRunStatus, 'RUNNING'>;
 
 /** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
 export interface SubagentAttempt extends SubagentCandidateTarget {
@@ -2509,7 +2517,7 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
 
 /** The runner's ask for the next candidate after a child failed on a usage limit or capacity (§4.3). */
 export interface SubagentFallbackRequest {
-  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit or capacity error. */
+  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit, capacity or login error. */
   error: string;
   /** The definition's read-only flag and permission mode, as the start sent them. */
   readonly?: boolean;

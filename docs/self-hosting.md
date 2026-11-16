@@ -1263,6 +1263,11 @@ its checkouts, sessions and engine sign-ins. After an hour with nothing to do it
 the volume stays. A new message, a task that can run or a scheduled wakeup starts it again, on the same volume.
 Runners that people register themselves keep working beside it.
 
+> The production deployment on 10.66.0.3 runs managed runners on **Kubernetes**, not the Docker backend described
+> below. See the [Kubernetes runbook](managed-runner-kubernetes-operations.md) and
+> [the .3 deployment record](managed-runner-k3s-xfs-deployment.md). The rest of this section describes the default
+> Docker backend.
+
 ### What the install sets up
 
 `scripts/install-server.sh` prepares managed runners, then writes three lines into `.env`:

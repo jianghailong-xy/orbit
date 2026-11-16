@@ -193,7 +193,7 @@ struct SessionSettingsSheet: View {
     @ViewBuilder private var notificationsSection: some View {
         if let settings = model.settings {
             Section {
-                notifyPicker(SessionSettingsPanel.whenTurnFinishes, settings.notifyTurnFinished) { value in
+                notifyPicker(SessionSettingsPanel.whenSessionFinishes, settings.notifyTurnFinished) { value in
                     Task { await model.setNotifyTurnFinished(value) }
                 }
                 notifyPicker(SessionSettingsPanel.whenItNeedsYou, settings.notifyNeedsYou) { value in

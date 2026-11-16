@@ -69,9 +69,20 @@ final class AttachmentImageStore {
     private static let entryLimit = 512
     private static let markerCost = 1
 
-    init(baseURL: URL, tokenStore: TokenStore) {
+    /// Set on the store a guest view makes for a session shared with this account: its files are read
+    /// through the guest door, since the owner's `attachments/:id` answers a guest 404.
+    private let guestSessionID: String?
+
+    init(baseURL: URL, tokenStore: TokenStore, guestSessionID: String? = nil) {
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.cache = PinnedCache(totalCostLimit: Self.byteLimit, countLimit: Self.entryLimit)
+        self.guestSessionID = guestSessionID
+    }
+
+    /// `id`'s bytes, through the guest door when this store is a guest view's.
+    private func download(_ id: String) async throws -> Data {
+        if let guestSessionID { return try await api.guestAttachment(guestSessionID, id: id) }
+        return try await api.downloadAttachment(id)
     }
 
     /// Decoded image for `id`, if still cached. Non-mutating — safe in a view `body`. May answer nil
@@ -112,7 +123,7 @@ final class AttachmentImageStore {
     /// above is the wrong shape for it and a one-off fetch is cheaper than holding another copy.
     func data(for id: String) async -> Data? {
         do {
-            return try await api.downloadAttachment(id)
+            return try await download(id)
         } catch {
             if let expired = ExpiredAttachment(error) { remember(id, nil, expired: expired) }
             return nil
@@ -154,7 +165,7 @@ final class AttachmentImageStore {
         defer { loading.remove(id) }
         let data: Data
         do {
-            data = try await api.downloadAttachment(id)
+            data = try await download(id)
         } catch let error where ExpiredAttachment(error) != nil {
             remember(id, nil, expired: ExpiredAttachment(error))     // its bytes have gone, and it can say so
             return

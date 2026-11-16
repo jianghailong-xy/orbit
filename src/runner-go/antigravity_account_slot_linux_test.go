@@ -181,7 +181,7 @@ func TestAntigravityAccountRemovalWaitsForItsSessions(t *testing.T) {
 	}
 	writeSessionMeta(runDir(job.SessionID), job, t.TempDir())
 	live := antigravityAccountKind.liveDirs([]string{job.SessionID})
-	if !live[work.Dir] {
+	if len(live[work.Dir]) == 0 {
 		t.Fatalf("a session on Work is not counted: %v", live)
 	}
 	if err := antigravityAccountKind.remove(work.ID, live); err == nil {

@@ -156,14 +156,15 @@ func cursorSessionAccountDirToRecord(job *ClaimedSession) string {
 // cursorSessionAccountDirs is every added account a session this runner is running borrows its login
 // from — read from each session's own record, written when its run starts and before its CLI does. A
 // session on Default contributes nothing: Default is not a slot, and no removal touches it.
-func cursorSessionAccountDirs(sessionIDs []string) map[string]bool {
-	out := map[string]bool{}
+func cursorSessionAccountDirs(sessionIDs []string) accountDirSessions {
+	out := accountDirSessions{}
 	for _, id := range sessionIDs {
 		meta := readSessionMeta(filepath.Join(runDir(id), "meta.json"))
 		if meta == nil || meta.CursorAccountDir == "" {
 			continue
 		}
-		out[filepath.Clean(meta.CursorAccountDir)] = true
+		dir := filepath.Clean(meta.CursorAccountDir)
+		out[dir] = append(out[dir], id)
 	}
 	return out
 }

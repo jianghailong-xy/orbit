@@ -21,8 +21,12 @@ vi.mock('../api', async (importOriginal) => ({
   getGuestEventsAfter: vi.fn(),
   getGuestEventFull: vi.fn(),
   sendGuestTurn: vi.fn(),
+  fetchAttachmentObjectUrl: vi.fn(),
+  fetchGuestAttachmentObjectUrl: vi.fn(),
 }));
-const { api, ApiError, getGuestSession, getGuestEventsAfter, sendGuestTurn } = await import('../api');
+const {
+  api, ApiError, fetchAttachmentObjectUrl, fetchGuestAttachmentObjectUrl, getGuestSession, getGuestEventsAfter, sendGuestTurn,
+} = await import('../api');
 const { GuestLinkRedirect, GuestSessionView } = await import('./GuestSessionPage');
 const { encodeId } = await import('../lib/idCodec');
 
@@ -148,6 +152,21 @@ describe('the guest page', { timeout: 30_000 }, () => {
     expect(form.querySelector('input')).toBeNull();
     expect(hint()).toBe('Runs on Lin Wei’s machine');
     expect(q('.guest-waiting')).toBeNull();
+  });
+
+  it('draws a turn’s image through the guest door, never the owner’s /attachments/:id', async () => {
+    vi.mocked(fetchAttachmentObjectUrl).mockReset();
+    vi.mocked(fetchGuestAttachmentObjectUrl).mockReset();
+    vi.mocked(fetchGuestAttachmentObjectUrl).mockResolvedValue('blob:guest-image');
+    const shot: SharedEvent = {
+      seq: 5, type: 'user', turnId: 't5', ts,
+      payload: { text: 'This does not list the sessions', attachments: [{ id: 'att-1', mime: 'image/png', name: 'shot.png' }] },
+    };
+    vi.mocked(getGuestSession).mockResolvedValue(head('RUNNING', { events: [...EVENTS, shot] }));
+    await visit();
+    expect(vi.mocked(fetchGuestAttachmentObjectUrl)).toHaveBeenCalledWith(encodeId(SESSION), 'att-1');
+    expect(vi.mocked(fetchAttachmentObjectUrl)).not.toHaveBeenCalled();
+    expect(q<HTMLImageElement>('img[src="blob:guest-image"]')).not.toBeNull();
   });
 
   it('sends text as it is — a leading ! is no shell — and follows the echo and the reply', async () => {

@@ -1333,11 +1333,16 @@ button.toast--pill:focus-visible {
 .tp-account-current-theme {
   margin-left: auto;
 }
-/* A machine's state in the account menu's Machines level: green online, grey otherwise. */
-.tp-account-machine-dot {
+/* A machine's state in the account menu's Machines level: green online, grey otherwise. A circle, not the 14px
+   icon slot's width (Floating.css widens every icon to it): centred in the slot, over Add a machine's +. */
+.orbit-menu-icon > .tp-account-machine-dot {
   display: inline-block;
+  align-self: center;
+  flex: none;
   width: 8px;
+  min-width: 8px;
   height: 8px;
+  margin: 0 3px;
   border-radius: 50%;
   background: var(--text-4);
 }
@@ -8084,20 +8089,20 @@ button.chat-jump-start:hover {
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-/* A delivered message's Show original / Show translation (docs/mocks/translation-user-hover): shown on
-   hover with copy and time, flipped or not; always on a touch screen. */
-.chat-user-meta > .chat-translate-foot.is-flip {
+/* A delivered message's Show original / Show translation, and bilingual's "Sent to the agent in English"
+   (docs/mocks/translation-user-hover): shown on hover with copy and time; always on a touch screen. */
+.chat-user-meta > .chat-translate-foot.is-hover {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-flip,
-.chat-user-meta > .chat-translate-foot.is-flip:focus-within {
+.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-hover,
+.chat-user-meta > .chat-translate-foot.is-hover:focus-within {
   opacity: 1;
   pointer-events: auto;
 }
 @media (hover: none) {
-  .chat-user-meta > .chat-translate-foot.is-flip {
+  .chat-user-meta > .chat-translate-foot.is-hover {
     opacity: 1;
     pointer-events: auto;
   }
@@ -25935,7 +25940,6 @@ button.project-open-item-action:disabled {
   .wk-trash-acts { grid-column: 2; }
   .wk-trash-row .wk-trash-error { grid-column: 2; }
 }
-.tp-group-wiki .tp-wiki-new { color: var(--text-3); }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }

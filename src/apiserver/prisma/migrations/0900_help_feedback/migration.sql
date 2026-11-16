@@ -1,4 +1,4 @@
--- 0880 — Did this help? / Did this answer it? (docs/mocks/help-center board 03, decision 3: Yes / No counts for
+-- 0900 — Did this help? / Did this answer it? (docs/mocks/help-center board 03, decision 3: Yes / No counts for
 -- admins, counts only, no text; task "Help center: Yes/No feedback and the Admin → Help feedback page").
 --
 -- WHAT IT ADDS
@@ -13,7 +13,7 @@
 --
 -- LOCKS
 -- =====
--- The foreign key takes SHARE ROW EXCLUSIVE on `user` for a moment, so the lock is taken in short tries, as 0870
+-- The foreign key takes SHARE ROW EXCLUSIVE on `user` for a moment, so the lock is taken in short tries, as 0890
 -- takes its own: 2 s each, 1 s apart, at most 45, then a clear error. The table is new and empty: nothing is
 -- scanned. Every statement is safe to run twice.
 --
@@ -45,7 +45,7 @@ BEGIN
     EXCEPTION WHEN lock_not_available OR deadlock_detected THEN
       tries := tries + 1;
       IF tries >= 45 THEN
-        RAISE EXCEPTION '0880: "user" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 0880_help_feedback) and deploy again: it is safe to run twice.'
+        RAISE EXCEPTION '0900: "user" was not free in 45 tries of 2 s each. Once what holds it has ended, mark the migration rolled back (prisma migrate resolve --rolled-back 0900_help_feedback) and deploy again: it is safe to run twice.'
           USING ERRCODE = 'lock_not_available';
       END IF;
       PERFORM pg_sleep(1);
