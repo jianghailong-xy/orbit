@@ -999,6 +999,9 @@ model Runner {
   codexAccountRemoveAccount String?   @map("codex_account_remove_account")
   codexAccountRemoveStatus  String?   @map("codex_account_remove_status")
   codexAccountRemoveMessage String?   @map("codex_account_remove_message")
+  // With a removal refused because the account is in use: the sessions the runner named as running in
+  // it, which the page lists by title (migration 0870). Empty otherwise.
+  codexAccountRemoveSessions String[] @default([]) @map("codex_account_remove_sessions") @db.Uuid
   // When the current removal was asked for: the identity every report names, and the deadline an
   // abandoned one is swept by.
   codexAccountRemoveAt      DateTime? @map("codex_account_remove_at")
@@ -1581,6 +1584,10 @@ model ManagedRunner {
   /// while the drain stands and no demand has come since it began; from then on the drain cannot be
   /// called off, and the instance exits on its own.
   stopAcknowledgedAt  DateTime?                   @map("stop_acknowledged_at") @db.Timestamptz(3)
+  /// DRAINING for an image roll: the image the profile names, which the instance's Pod was not made from. The drain
+  /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next
+  /// generation, made from that image. Null for a drain to sleep, and once the roll ends or is called off.
+  imageRollTo         String?                     @map("image_roll_to")
   initialProvider    String?                      @map("initial_provider")
   resourceProfileId  String?                      @map("resource_profile_id")
   /// The one resource operation in flight: which (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`,

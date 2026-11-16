@@ -1333,6 +1333,22 @@ button.toast--pill:focus-visible {
 .tp-account-current-theme {
   margin-left: auto;
 }
+/* A machine's state in the account menu's Machines level: green online, grey otherwise. A circle, not the 14px
+   icon slot's width (Floating.css widens every icon to it): centred in the slot, over Add a machine's +. */
+.orbit-menu-icon > .tp-account-machine-dot {
+  display: inline-block;
+  align-self: center;
+  flex: none;
+  width: 8px;
+  min-width: 8px;
+  height: 8px;
+  margin: 0 3px;
+  border-radius: 50%;
+  background: var(--text-4);
+}
+.tp-account-machine-dot[data-online='true'] {
+  background: var(--success-solid);
+}
 /* Log out: the label in the menu's own danger colour, its icon in --error, as the replaced menu drew them (the
    page rule reached only the icon there). */
 .tp-account-menu .orbit-menu-item[data-danger] .orbit-menu-icon {
@@ -8073,20 +8089,20 @@ button.chat-jump-start:hover {
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-/* A delivered message's Show original / Show translation (docs/mocks/translation-user-hover): shown on
-   hover with copy and time, flipped or not; always on a touch screen. */
-.chat-user-meta > .chat-translate-foot.is-flip {
+/* A delivered message's Show original / Show translation, and bilingual's "Sent to the agent in English"
+   (docs/mocks/translation-user-hover): shown on hover with copy and time; always on a touch screen. */
+.chat-user-meta > .chat-translate-foot.is-hover {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-flip,
-.chat-user-meta > .chat-translate-foot.is-flip:focus-within {
+.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-hover,
+.chat-user-meta > .chat-translate-foot.is-hover:focus-within {
   opacity: 1;
   pointer-events: auto;
 }
 @media (hover: none) {
-  .chat-user-meta > .chat-translate-foot.is-flip {
+  .chat-user-meta > .chat-translate-foot.is-hover {
     opacity: 1;
     pointer-events: auto;
   }
@@ -8398,6 +8414,11 @@ button.chat-jump-start:hover {
   border-radius: 999px;
   color: var(--text-2);
   line-height: 20px;
+}
+.composer-optimized-agent-note {
+  padding: 0 16px 10px;
+  color: var(--text-2);
+  font-size: 12px;
 }
 .composer-optimized-actions {
   display: flex;
@@ -18178,6 +18199,64 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   color: var(--text-3);
 }
+/* The sessions an account removal was refused over, each a way to that session. */
+.re-blocking {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid var(--error-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+.re-blocking li + li {
+  border-top: 1px solid var(--error-border);
+}
+.re-blocking-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  color: var(--text-3);
+  text-decoration: none;
+}
+.re-blocking-row:hover {
+  background: var(--error-bg);
+}
+.re-blocking-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.re-blocking-dot.running {
+  background: var(--success-solid);
+}
+.re-blocking-dot.waiting {
+  background: var(--warning);
+}
+.re-blocking-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--brand);
+  font-weight: 500;
+}
+.re-blocking-row:hover .re-blocking-title {
+  text-decoration: underline;
+}
+.re-blocking-state {
+  flex: none;
+}
+.re-blocking-open {
+  flex: none;
+  margin-left: auto;
+  color: var(--brand);
+  font-size: 11.5px;
+}
 .re-cmd {
   display: inline-block;
   margin-top: 4px;
@@ -23628,6 +23707,10 @@ div.landing-jobs-open {
   color: var(--text-2);
   font-size: 12px;
 }
+/* A quiet job's last output, inside the fold under its row (it stays out of the fold only on a failure). */
+.bgwake-job > .bgwake-output {
+  margin-top: 6px;
+}
 .bgwake-output > summary {
   list-style: none;
   cursor: pointer;
@@ -25920,7 +26003,6 @@ button.project-open-item-action:disabled {
   .wk-trash-acts { grid-column: 2; }
   .wk-trash-row .wk-trash-error { grid-column: 2; }
 }
-.tp-group-wiki .tp-wiki-new { color: var(--text-3); }
 .wk-maint-off { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; }
 .wk-maint-t { font-size: 14px; color: var(--text-1); }
 .wk-maint-d { margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--text-3); }

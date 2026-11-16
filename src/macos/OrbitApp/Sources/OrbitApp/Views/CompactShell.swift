@@ -784,9 +784,6 @@ struct NavigationDrawer: View {
                 ForEach(DrawerWorkLogic.rows(
                     AppSection.workSections,
                     wiki: model.wiki?.shown == true,
-                    // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
-                    // that the Wiki's own page is the Set up your first wiki card.
-                    newWiki: model.wiki?.spaces.isEmpty == false,
                     // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
                     // the server predates scheduled tasks.
                     scheduled: model.scheduled.map { !$0.unsupported } ?? false,
@@ -794,7 +791,6 @@ struct NavigationDrawer: View {
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
-                    case .newWiki:        newWikiRow
                     case .scheduled:      scheduledRow
                     case .section(let section): sectionRow(section)
                     case .waitingOnYou:   waitingOnYouRow(model.ownerRequests)
@@ -1169,27 +1165,6 @@ struct NavigationDrawer: View {
         .accessibilityIdentifier("drawer-scheduled")
     }
 
-    /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
-    /// the shell and leaves the drawer where it is.
-    private var newWikiRow: some View {
-        Button {
-            model.wiki?.creating = true
-        } label: {
-            pill(selected: false) {
-                HStack(spacing: 12) {
-                    Image(systemName: "plus")
-                        .frame(width: 24)
-                    Text(WikiStartCopy.newWiki)
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(.secondary)
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-        .accessibilityIdentifier("drawer-new-wiki")
-    }
-
     /// The rule and the group label that set the Workspaces apart from the work above them.
     private var workspacesHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1439,7 +1414,14 @@ private extension View {
     /// shows only in the root nav bar (pushed pages keep the system back button).
     func drawerToggle(open: @escaping () -> Void) -> some View {
         toolbar {
-            ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+            // iOS 26 draws a shared platter's content with the glass's vibrancy, which washed the
+            // orange count out to a pale, see-through amber; the button draws its own glass instead.
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarLeading) { DrawerToggleButton(open: open) }
+            }
         }
     }
 }
@@ -1453,22 +1435,35 @@ private struct DrawerToggleButton: View {
     var body: some View {
         let waiting = model.needsYouSessions.count
         Button(action: open) {
-            Image(systemName: "line.3.horizontal")
-                .overlay(alignment: .topTrailing) {
-                    if waiting > 0 {
-                        Text("\(waiting)")
-                            .font(.caption2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 4)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .background(Color.orange, in: Capsule())
-                            .offset(x: 10, y: -10)
-                            .accessibilityHidden(true)
-                    }
-                }
+            if #available(iOS 26.0, *) {
+                // The circle the shared platter drew, with the count outside the glass so it stays solid.
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Circle())
+                    .glassEffect(.regular.interactive(), in: Circle())
+                    .overlay(alignment: .topTrailing) { count(waiting).offset(x: 4, y: -4) }
+            } else {
+                Image(systemName: "line.3.horizontal")
+                    .overlay(alignment: .topTrailing) { count(waiting).offset(x: 10, y: -10) }
+            }
         }
         .accessibilityLabel("Open navigation")
         .accessibilityValue(waiting > 0 ? "\(waiting) waiting on you" : "")
+    }
+
+    @ViewBuilder
+    private func count(_ waiting: Int) -> some View {
+        if waiting > 0 {
+            Text("\(waiting)")
+                .font(.caption2.weight(.bold).monospacedDigit())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .frame(minWidth: 16, minHeight: 16)
+                .background(Color.orange, in: Capsule())
+                .accessibilityHidden(true)
+        }
     }
 }
 

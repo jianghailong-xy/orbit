@@ -6,6 +6,7 @@ import {
   type TurnTranslation,
   type TurnTranslationState,
 } from '@orbit/shared';
+import { BadRequestException } from '@nestjs/common';
 import { AsyncWorkQueue } from '../common/async-work-queue';
 import { translationAvailable } from './translation';
 
@@ -25,6 +26,15 @@ import { translationAvailable } from './translation';
 
 /** The status of a turn that must not be delivered: being translated, or its translation failed. */
 export const HELD_TURN_STATUS = 'HELD';
+
+/**
+ * What a drain that answers every turn of an ending session leaves alone: the answered turns, and a turn HELD for its
+ * translation. A held turn is never leased, so "nothing can be leased after the session ends" holds without it, and
+ * conversation_turn_translation_chk refuses ANSWERED beside TRANSLATING or FAILED: answering it failed the whole
+ * transaction, and the runner re-posted it every 2 s (production, 2026-11-15 from 22:57Z, a message whose translation
+ * had failed). Left HELD, it keeps Retry, Send as written and withdraw.
+ */
+export const DRAIN_SKIPS_HELD: string[] = ['ANSWERED', HELD_TURN_STATUS];
 
 type PreferencesDb = {
   user: { findUnique(args: { where: { id: string }; select: { preferences: true } }): PromiseLike<{ preferences: unknown } | null> };
@@ -70,6 +80,24 @@ export async function translationLanguages(db: PreferencesDb, ownerId: string): 
  *  when its translation runs (a held turn records only the language it was written in). */
 export async function accountAgentLanguage(db: PreferencesDb, ownerId: string): Promise<TranslationLanguage> {
   return agentLanguageOf(await preferencesOf(db, ownerId));
+}
+
+/** The longest `optimizedTranslation` a send may carry. */
+export const OPTIMIZED_TRANSLATION_MAX_CHARS = 64_000;
+
+/**
+ * A send's `optimizedTranslation` (prompt optimizer D2, @orbit/shared prompt-optimizer.ts): the optimizer's prompt
+ * in the agent language, sent beside the owner-language text Use put in the box. The message is held as any
+ * translated message is, and released with this text instead of a translator call. Null when absent or blank;
+ * anything but a string, or a longer one than OPTIMIZED_TRANSLATION_MAX_CHARS, is a 400.
+ */
+export function readOptimizedTranslation(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new BadRequestException('optimizedTranslation must be a string');
+  if (value.length > OPTIMIZED_TRANSLATION_MAX_CHARS) {
+    throw new BadRequestException(`optimizedTranslation must be at most ${OPTIMIZED_TRANSLATION_MAX_CHARS} characters`);
+  }
+  return value.trim() ? value : null;
 }
 
 /** The columns a held message is written with. */

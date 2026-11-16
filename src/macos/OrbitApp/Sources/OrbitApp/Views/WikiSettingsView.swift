@@ -636,7 +636,7 @@ struct WikiCreateSheet: View {
     }
 }
 
-/// New wiki…'s form over whichever shell is showing, raised by the drawer's row and the head picker's item.
+/// New wiki…'s form over whichever shell is showing, raised by the head picker's item.
 struct WikiCreateHost: ViewModifier {
     let model: AppModel
     func body(content: Content) -> some View {

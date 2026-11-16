@@ -2,14 +2,13 @@ import type { ManagedRunner, RunnerStatus } from '@prisma/client';
 import {
   MANAGED_RUNNER_CONTRACT_VERSION,
   MANAGED_RUNNER_UNAVAILABLE,
-  type LoginEngine,
   type ManagedRunnerReason,
   type ManagedRunnerStatus,
 } from '@orbit/shared';
 
 import { managedRunnerAccountDisabledReason, managedRunnerNotEligibleReason } from './managed-runner-eligibility';
 import { managedRunnerDisabledReason } from './managed-runner-gate';
-import { managedFirstSessionProvider, type ManagedSupplyRunner } from './managed-runner-supply';
+import { managedFirstSessionProvider, type ManagedEngine, type ManagedSupplyRunner } from './managed-runner-supply';
 import { runnerLastBeatAt, type RunnerBeats } from '../runners/runner-presence';
 
 /** How fresh a heartbeat must be to count, when no profile says otherwise: the reaper's threshold. */
@@ -30,7 +29,7 @@ export interface ManagedRunnerStatusInput {
   runner: ({ status: RunnerStatus } & RunnerBeats & Partial<ManagedSupplyRunner>) | null;
   /** The owner's first own model key this managed runner can run (managedFirstSessionKeyOf), asked only
    *  before the runner has been READY. Absent: none. */
-  firstSessionKey?: { slug: string; engine: LoginEngine } | null;
+  firstSessionKey?: { slug: string; engine: ManagedEngine } | null;
   now: Date;
   heartbeatFreshMs: number;
 }

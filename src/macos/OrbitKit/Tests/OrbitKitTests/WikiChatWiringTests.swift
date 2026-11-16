@@ -264,7 +264,7 @@ final class WikiChatWiringTests: XCTestCase {
                     "the create")
         let post = try slice(console, from: "private func postTurn(", to: "private func retryingTransientFailures<T>(")
         XCTAssertTrue(post.contains("stopSessionId: confirmedStopSessionID,\n"))
-        XCTAssertTrue(post.contains("wikiContext: wikiContext,\n                                          skipTranslation: skipTranslation ? true : nil)\n        let turnRequest = ComposerLogic.makeTurn("))
+        XCTAssertTrue(post.contains("wikiContext: wikiContext,\n                                          skipTranslation: skipTranslation ? true : nil,\n                                          optimizedTranslation: optimizedTranslation)\n        let turnRequest = ComposerLogic.makeTurn("))
         XCTAssertTrue(post.contains("queueForNextTurn: queueForNextTurn, wikiContext: wikiContext,"))
     }
 

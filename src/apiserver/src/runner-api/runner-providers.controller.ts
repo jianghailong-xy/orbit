@@ -1,9 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { CreateModelProviderDto, UpdateModelProviderDto } from '../providers/dto';
+import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { ProvidersService } from '../providers/providers.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { workspaceProviderView } from './workspace-providers';
 
 /**
  * The provider slugs an agent may pass as `provider`, read by `orbit provider list` and the
@@ -19,15 +22,24 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * They are keyed by the slug the list shows, and answer with the row as that page reads it — the key
  * only ever as `hasApiKey`. Asking the owner first is the runner's part: from inside a session each
  * of them puts a confirmation card in front of the owner before it gets here (askBeforeCreate).
+ *
+ * `?workspace=` (a workspace of the runner owner's, by name or id) answers instead which provider × engine
+ * that workspace's runner can run, judged as SubAgent routing judges it (workspaceProviderView): what an
+ * agent reads before delegating to that workspace or opening a session on it.
  */
 @UseGuards(RunnerAuthGuard)
 @Controller('runner')
 export class RunnerProvidersController {
-  constructor(private readonly providers: ProvidersService) {}
+  constructor(
+    private readonly providers: ProvidersService,
+    private readonly prisma?: PrismaService,
+    private readonly planUsage?: ProviderPlanUsageService,
+  ) {}
 
   @Get('providers')
-  list(@CurrentRunner() runner: Runner) {
-    return this.providers.listUsable(runner.ownerId);
+  list(@CurrentRunner() runner: Runner, @Query('workspace') workspace?: string) {
+    if (workspace === undefined) return this.providers.listUsable(runner.ownerId);
+    return workspaceProviderView(this.prisma!, { ownerId: runner.ownerId, workspace, planUsage: this.planUsage ?? null });
   }
 
   @Post('providers')

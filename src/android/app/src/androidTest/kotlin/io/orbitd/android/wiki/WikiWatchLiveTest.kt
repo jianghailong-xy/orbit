@@ -557,7 +557,7 @@ class WikiWatchLiveTest {
             compose.waitUntil(20_000) { compose.onAllNodes(hasTestTag("wiki-home-line") and hasText(line)).fetchSemanticsNodes().isNotEmpty() }
             ok("the home's line is the server's: \"$line\"", true)
             compose.onNodeWithTag("wiki-space-picker").assertTextContains(WikiSpaceLogic.name(row, spaces))
-            ok("the space is called \"${WikiSpaceLogic.name(row, spaces)}\" (one space: a label, no menu)", spaces.size > 1 || !shows(hasTestTag("wiki-space-picker") and hasClickAction()))
+            ok("the space is called \"${WikiSpaceLogic.name(row, spaces)}\", a menu however many there are", shows(hasTestTag("wiki-space-picker") and hasClickAction()))
             WikiLogic.principles(principles.map { Wire.json.decodeFromJsonElement(WikiEntry.serializer(), it) }).take(WikiLogic.PRINCIPLES_SHOWN).forEach { principle ->
                 pressIn("wiki-home-list", tagFor("wiki-home-principle:", principle.id), pressIt = false)
                 ok("the principle \"${principle.displayTitle}\" is on the home", reads(tagFor("wiki-home-principle:", principle.id) and hasText(principle.displayTitle, substring = true)))

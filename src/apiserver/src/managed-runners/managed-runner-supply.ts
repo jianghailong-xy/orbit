@@ -16,19 +16,26 @@ import { bringsOwnEnvCredential } from '../sessions/engine-signin-preflight';
  * report ready is one a session cannot start on there.
  *
  * Only the CLI's own `auth: yes` counts as a sign-in: `unknown` is a probe that could not answer, not
- * a sign-in. OpenCode (which is never signed in) and DeepSeek Harness (whose readiness is reported
- * apart) are not counted as supply in this version.
+ * a sign-in. OpenCode and DeepSeek Harness have no sign-in of their own: they count only for a session
+ * that brings its own credential, such as one of the owner's model keys (MANAGED_KEY_RUNTIMES).
  */
 
-/** The runtimes that count, in the order a first session takes them: Orbit's own default first. */
-export const MANAGED_SUPPLY_RUNTIMES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
+/** The runtimes whose own sign-in counts, in the order a first session takes them: Orbit's own default first. */
+export const MANAGED_SUPPLY_RUNTIMES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
+
+/** An engine of the managed image: one with a sign-in of its own, or OpenCode and DeepSeek Harness, which have none. */
+export type ManagedEngine = LoginEngine | 'opencode' | 'dsh';
+
+/** The runtimes a session bringing its own credential (an owner's model key) can run on: every image engine. */
+export const MANAGED_KEY_RUNTIMES: readonly ManagedEngine[] = [...MANAGED_SUPPLY_RUNTIMES, 'opencode', 'dsh'];
 
 /**
  * The engines the managed runner image installs (deploy/managed-runner/image/Dockerfile, pins.json):
  * what a runner that has not reported its engines yet will have. A key whose engine is not among them
- * is one no managed runner can run until its heartbeat says otherwise.
+ * is one no managed runner can run until its heartbeat says otherwise. Cursor CLI and DeepSeek Harness
+ * are in the linux/amd64 image only, which is what channel hosts run.
  */
-export const MANAGED_IMAGE_ENGINES: readonly LoginEngine[] = ['claude', 'codex'];
+export const MANAGED_IMAGE_ENGINES: readonly ManagedEngine[] = MANAGED_KEY_RUNTIMES;
 
 /** The runner fields this reads — a subset of the Prisma row. */
 export interface ManagedSupplyRunner {
@@ -42,12 +49,9 @@ export interface ManagedSupplyRunner {
   capabilities?: readonly string[] | null;
 }
 
-const ENGINE_LABELS: Record<LoginEngine, string> = {
-  claude: 'Claude Code',
-  codex: 'Codex',
-  kimi: 'Kimi Code',
-  antigravity: 'Antigravity',
-  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
+const ENGINE_LABELS: Record<string, string> = {
+  ...ENGINE_CLI_NAMES,
+  [AgentProvider.ANTIGRAVITY]: 'Antigravity',
 };
 
 /**
@@ -60,7 +64,8 @@ export function managedRuntimeReady(
   runtime: string,
   options: { bringsOwnCredentials?: boolean } = {},
 ): boolean {
-  if (!(MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(runtime)) return false;
+  const counted = options.bringsOwnCredentials ? MANAGED_KEY_RUNTIMES : MANAGED_SUPPLY_RUNTIMES;
+  if (!(counted as readonly string[]).includes(runtime)) return false;
   const health = usedRunnerEngines({ engines: runner.engines, accountNames: null, defaultRemoved: runner.defaultRemoved })
     ?.find((engine) => engine.engine === runtime);
   if (!health?.installed || health.installationError) return false;
@@ -113,7 +118,7 @@ export async function managedKeySupply(
  * (`managedKeyRunnable`), or null: never a key on an engine the runner does not have, whichever key
  * the owner put first.
  */
-export function managedFirstSessionKeyOf<K extends { slug: string; engine: LoginEngine }>(
+export function managedFirstSessionKeyOf<K extends { slug: string; engine: ManagedEngine }>(
   keys: readonly K[],
   runner: ManagedSupplyRunner | null,
 ): K | null {
@@ -154,7 +159,7 @@ export async function managedFirstSessionKey(
  */
 export function managedFirstSessionProvider(
   initialProvider: string | null,
-  firstKey: { slug: string; engine: LoginEngine } | null,
+  firstKey: { slug: string; engine: ManagedEngine } | null,
   runner: ManagedSupplyRunner | null,
 ): string | null {
   if (initialProvider) return initialProvider;
@@ -162,17 +167,17 @@ export function managedFirstSessionProvider(
 }
 
 /** The owner's own enabled keys, in the owner's order, that run on a runtime counted as supply, with that runtime. */
-export async function ownerManagedKeys(prisma: Pick<PrismaService, 'modelProvider'>, ownerId: string): Promise<Array<{ slug: string; engine: LoginEngine }>> {
+export async function ownerManagedKeys(prisma: Pick<PrismaService, 'modelProvider'>, ownerId: string): Promise<Array<{ slug: string; engine: ManagedEngine }>> {
   const keys = await prisma.modelProvider.findMany({
     where: { ownerId, enabled: true },
     orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }],
     select: { slug: true, runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
   });
-  const usable: Array<{ slug: string; engine: LoginEngine }> = [];
+  const usable: Array<{ slug: string; engine: ManagedEngine }> = [];
   for (const key of keys) {
     if (isBuiltinProvider(key.slug)) continue;
     const engine = defaultEngineOf(keyCredential(key));
-    if (engine && (MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(engine)) usable.push({ slug: key.slug, engine: engine as LoginEngine });
+    if (engine && (MANAGED_KEY_RUNTIMES as readonly string[]).includes(engine)) usable.push({ slug: key.slug, engine: engine as ManagedEngine });
   }
   return usable;
 }
@@ -223,7 +228,7 @@ export async function assertManagedFirstSessionRuntime(
   });
   if (ran) return;
   const ready = managedRuntimeSupply(args.runner).map((runtime) => ENGINE_LABELS[runtime]);
-  const asked = ENGINE_LABELS[args.runtime as LoginEngine] ?? args.runtime;
+  const asked = ENGINE_LABELS[args.runtime] ?? args.runtime;
   throw new ConflictException({
     code: MODEL_UNAVAILABLE,
     message: ready.length

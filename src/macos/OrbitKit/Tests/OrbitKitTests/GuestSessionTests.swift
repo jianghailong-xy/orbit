@@ -176,6 +176,18 @@ final class GuestSessionTests: XCTestCase {
         XCTAssertEqual(body, ["clientTurnId": "k1", "content": "Please run the tests"])
     }
 
+    func testAnImageIsReadThroughTheDoorNotTheOwnersAttachments() async throws {
+        let recorder = GuestDoorRecorder()
+        GuestDoorURLProtocol.handler = { request in
+            recorder.append(request)
+            return (200, Data("png".utf8))
+        }
+        let bytes = try await client().guestAttachment("34A", id: "att1")
+        XCTAssertEqual(bytes, Data("png".utf8))
+        XCTAssertEqual(recorder.sent, [.init(method: "GET", path: "/api/guest-sessions/34A/attachments/att1",
+                                             query: nil, body: "")])
+    }
+
     func testNotSharedIsTheDoorsOne404() async {
         _ = answer(#"{"statusCode":404,"code":"GUEST_SESSION_NOT_SHARED"}"#, status: 404)
         do {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Navigate, useParams } from 'react-router-dom';
 import {
   ApiError,
+  fetchGuestAttachmentObjectUrl,
   getGuestEventFull,
   getGuestEventPage,
   getGuestEventsAfter,
@@ -12,7 +13,7 @@ import {
   type GuestSessionNow,
   type SharedEvent,
 } from '../api';
-import { EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript } from '../components/Transcript';
+import { AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript } from '../components/Transcript';
 import { memoizeEventFull } from '../lib/eventFull';
 import { meQuery } from '../lib/queries';
 import { newRunRequestToken } from '../lib/runRequestToken';
@@ -86,6 +87,8 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   const { data, isLoading, error } = useQuery(guestSessionQuery(sessionId));
   const me = useQuery(meQuery());
   const fetchFull = useMemo(() => memoizeEventFull((seq: number) => getGuestEventFull(sessionId, seq)), [sessionId]);
+  // A turn's images are read through the guest door: the owner's `/attachments/:id` answers a guest 404.
+  const resolveAttachment = useMemo(() => (id: string) => fetchGuestAttachmentObjectUrl(sessionId, id), [sessionId]);
 
   const [older, setOlder] = useState<SharedEvent[]>([]);
   const [newer, setNewer] = useState<SharedEvent[]>([]);
@@ -347,9 +350,11 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
       >
         <div className="share-inner">
           <PublicLinkResolverCtx.Provider value={NOTHING_ELSE_SHARED}>
-            <EventFullCtx.Provider value={fetchFull}>
-              <Transcript events={events} />
-            </EventFullCtx.Provider>
+            <AttachmentResolverContext.Provider value={resolveAttachment}>
+              <EventFullCtx.Provider value={fetchFull}>
+                <Transcript events={events} />
+              </EventFullCtx.Provider>
+            </AttachmentResolverContext.Provider>
           </PublicLinkResolverCtx.Provider>
         </div>
       </main>

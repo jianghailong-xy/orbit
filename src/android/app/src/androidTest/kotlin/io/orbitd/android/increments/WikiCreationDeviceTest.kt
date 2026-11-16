@@ -10,7 +10,7 @@ import org.junit.runner.RunWith
  * The ways to another wiki and the WIKI_CREATE card (docs/wiki-explicit-creation-design.md §3.4, §3.6; board 46 parts 3-5) on a device,
  * over the test's own fixture: an account with three wikis, four workspaces on three repositories — one of which (github.com/sample/orbit)
  * has a wiki — one runner offline, and an agent's open WIKI_CREATE request for lfs-builder. Each journey leaves the screenshot set beside
- * the board: the drawer's New wiki… row (4 ②), the head picker's New wiki… item (4 ③), the Create wiki form with the repository that has
+ * the board: the drawer with no New wiki… row (board 47), the head picker's New wiki… item (4 ③), the Create wiki form with the repository that has
  * a wiki greyed under Has a wiki (5), and the card with Create wiki, Change settings… and Not for this repository (3).
  */
 @RunWith(AndroidJUnit4::class)
@@ -96,16 +96,11 @@ class WikiCreationDeviceTest : IncrementDeviceTest() {
             .fetchSemanticsNode().config.contains(androidx.compose.ui.semantics.SemanticsProperties.Disabled))
     }
 
-    /** Board 46 part 4 ②, then part 5: the drawer's New wiki… row under Wiki opens the Create wiki form. */
-    @Test fun theDrawersNewWikiRowOpensTheForm() = journey {
+    /** Board 47: the drawer has no New wiki… row; the head picker is the way to the form. */
+    @Test fun theDrawerHasNoNewWikiRow() = journey {
         signIn()
         openDrawer()
-        await("New wiki… under Wiki") { exists(hasTestTag("drawer:wiki-new")) }
-        verify("it says New wiki…", says("drawer:wiki-new", "New wiki…"))
-        capture("1-drawer-new-wiki")
-        compose.onNodeWithTag("drawer:wiki-new").performClick()
-        verifyTheFormGreysTheRepositoryWithAWiki()
-        capture("3-form-has-a-wiki")
+        verify("no New wiki… in the drawer", !exists(hasText("New wiki…")))
     }
 
     /** Board 46 part 4 ③: the head picker's last item is New wiki…, which opens the same form. */

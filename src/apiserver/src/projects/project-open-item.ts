@@ -422,7 +422,14 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   // other. Only the owner's cell can ask the coordinator, so the coordinator's own next door is the fix.
   const taskBranch = taskBranchSourceOf(row.payload);
   const subject = taskBranch ? 'This task’s branch' : 'The project branch';
-  const orFix = taskBranch && row.assignee !== 'OWNER' ? 'file a fix task' : 'ask the coordinator to fix it';
+  // The owner's sentence names the coordinator only while this row's own projection holds the press
+  // that asks it (`ASK_COORDINATOR_AGAIN`): with no conversation to ask, the card draws no such door,
+  // and a sentence offering it would promise a way out the card does not have. The same projection
+  // the doors are drawn from, so the two cannot disagree.
+  const ownerCannotAsk = row.assignee === 'OWNER'
+    && !openItemActionsFromDoors(input).includes('ASK_COORDINATOR_AGAIN');
+  const orAsk = (clause: string): string => (ownerCannotAsk ? '' : ` or ${clause}`);
+  const orFix = taskBranch && row.assignee !== 'OWNER' ? ' or file a fix task' : orAsk('ask the coordinator to fix it');
 
   // This is the copy approved in the project effect and is intentionally byte-for-byte stable:
   // the three clients render this field, they do not translate it. Its main is the project's main
@@ -430,7 +437,7 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   if (row.assignee === 'OWNER' && row.kind === 'INTEGRATION_CHECK_FAILED'
       && (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION')
       && failureClass !== 'CONFLICT') {
-    return `Nothing on ${taskBranch ? 'this task’s branch' : 'the project branch'} reaches ${main} until this check passes — re-run it or ask the coordinator to fix it.`;
+    return `Nothing on ${taskBranch ? 'this task’s branch' : 'the project branch'} reaches ${main} until this check passes — re-run it${orAsk('ask the coordinator to fix it')}.`;
   }
 
   if (row.kind === 'COORDINATOR_QUESTION') {
@@ -479,25 +486,25 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
     if (failureClass === 'CONFLICT') {
       if (taskBranch) {
         return `This task’s branch cannot reach ${main} until this conflict is repaired — file a task that puts its work on ${main}`
-          + `${row.assignee === 'OWNER' ? ', or ask the coordinator to do it' : ''}.`;
+          + `${row.assignee === 'OWNER' && !ownerCannotAsk ? ', or ask the coordinator to do it' : ''}.`;
       }
-      return `The project branch cannot reach ${main} until this promotion conflict is repaired — create a sync task or ask the coordinator to fix it.`;
+      return `The project branch cannot reach ${main} until this promotion conflict is repaired — create a sync task${orAsk('ask the coordinator to fix it')}.`;
     }
     if (failureClass === 'CHECK_TIMED_OUT') {
-      return `${subject} cannot reach ${main} until this check finishes — re-run it with a reason or ${orFix}.`;
+      return `${subject} cannot reach ${main} until this check finishes — re-run it with a reason${orFix}.`;
     }
     const outdatedRunner = outdatedRunnerOf(row.payload);
     if (outdatedRunner) return `Update runner ${outdatedRunner}, then run this check again.`;
-    return `${subject} cannot reach ${main} until this integration is repaired — re-run it or ${orFix}.`;
+    return `${subject} cannot reach ${main} until this integration is repaired — re-run it${orFix}.`;
   }
   if (failureClass === 'CONFLICT') {
-    return 'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.';
+    return `This task cannot reach the project branch until its merge conflict is repaired — fix the task branch${orAsk('ask the coordinator to do it')}.`;
   }
   if (failureClass === 'CHECK_FAILED' || failureClass === 'CHECK_TIMED_OUT') {
-    return 'This task cannot reach the project branch until its landing check passes — re-run it or ask the coordinator to fix it.';
+    return `This task cannot reach the project branch until its landing check passes — re-run it${orAsk('ask the coordinator to fix it')}.`;
   }
   if (failureClass === 'ERROR') {
-    return 'This task cannot reach the project branch until the integration error is repaired — retry it or ask the coordinator to fix it.';
+    return `This task cannot reach the project branch until the integration error is repaired — retry it${orAsk('ask the coordinator to fix it')}.`;
   }
   return `${actor} must use the available door to move this exception forward.`;
 }
@@ -780,6 +787,50 @@ export function sessionHasEnded(session: SessionEnding): boolean {
   return run === SessionRunState.ENDED
     || run === SessionRunState.SUCCEEDED
     || run === SessionRunState.FAILED;
+}
+
+/**
+ * Whether a project's coordinator conversation can be reached about an item right now, read once
+ * for both of the card's doors so they cannot come to two answers about one conversation:
+ *
+ *  - `coordinator.receiving` — "Chat about this" is live: a message can be delivered there, alive or
+ *    ended in a way a message revives (`receiveBlockedReasonFor`, i.e. `canSend` minus a retired run);
+ *  - `askable` — ASK_COORDINATOR_AGAIN is drawn, and `returnToCoordinator` refuses on exactly this:
+ *    a message can reach it AND the conversation is not over (`conversationIsOver`). A run that is
+ *    only down — FAILED by the reaper while its runner was away, nobody closed it — is askable as
+ *    soon as its runner is back, because the press revives it as the chat would (2026-11-15: the
+ *    chat was live while Ask-again was hidden). One the owner closed (Completed) still takes a chat
+ *    message, which is the owner choosing to reopen THAT conversation, but is not where the platform
+ *    puts an item back on its own say.
+ *
+ * So `askable` implies `receiving`, and "nothing works" is `!receiving` (`coordinatorUnreachable`).
+ * The project page and the owner's push both read it here.
+ */
+export async function readCoordinatorReach(
+  sessions: { receiveBlockedReasonFor(ownerId: string, sessionId: string): Promise<string | null> },
+  ownerId: string,
+  project: { coordinatorSessionId: string | null; coordinatorSession: SessionEnding | null },
+): Promise<{ askable: boolean; coordinator: { sessionId: string; receiving: boolean } | null }> {
+  const blocked = project.coordinatorSessionId
+    ? await sessions.receiveBlockedReasonFor(ownerId, project.coordinatorSessionId)
+    : null;
+  const coordinator = project.coordinatorSessionId && blocked !== 'SESSION_GONE'
+    ? { sessionId: project.coordinatorSessionId, receiving: blocked == null }
+    : null;
+  const askable = coordinator?.receiving === true
+    && project.coordinatorSession != null
+    && !conversationIsOver(project.coordinatorSession);
+  return { askable, coordinator };
+}
+
+/**
+ * Whether the owner's item has no coordinator to turn to right now: no conversation a message can
+ * reach, so neither "Chat about this" nor ASK_COORDINATOR_AGAIN works (`askable` implies
+ * `receiving`, `readCoordinatorReach`). An escalated item's heading says this instead of "no one
+ * acted on this", because the doors under it say it already — and never while the chat is live.
+ */
+export function coordinatorUnreachable(reach: { coordinator: { receiving: boolean } | null }): boolean {
+  return !reach.coordinator?.receiving;
 }
 
 /**

@@ -326,6 +326,8 @@ describe('Show both languages', () => {
     expect(bubble.textContent!.indexOf(ORIGINAL)).toBeLessThan(bubble.textContent!.indexOf(ENGLISH));
     expect(container.querySelector('.chat-translate-foot')?.textContent).toBe('Sent to the agent in English');
     expect(container.querySelector('.chat-translate-action')).toBeNull();
+    // Shown on hover with copy and time, it ends the row, flush with the bubble.
+    expect(container.querySelector('.chat-user-meta')!.lastElementChild?.className).toBe('chat-translate-foot is-hover');
     // Copy still copies their language.
     await act(async () => container.querySelector<HTMLButtonElement>('.chat-user-meta .chat-copy')!.click());
     expect(copied.at(-1)).toBe(ORIGINAL);

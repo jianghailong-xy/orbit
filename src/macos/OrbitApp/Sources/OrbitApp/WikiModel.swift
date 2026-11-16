@@ -14,7 +14,7 @@ import OrbitKit
 final class WikiModel {
     /// Every space, by slug, each with the proposals waiting in it.
     private(set) var spaces: [WikiSpace] = []
-    /// New wiki… (docs/wiki-explicit-creation-design.md §3.4): the drawer's row and the head picker's item raise the
+    /// New wiki… (docs/wiki-explicit-creation-design.md §3.4): the head picker's item raises the
     /// Create wiki form over whichever shell is showing (`WikiCreateHost`).
     var creating = false
     private(set) var spacesState = ListLoadState()

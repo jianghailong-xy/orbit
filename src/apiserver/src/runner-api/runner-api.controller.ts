@@ -1,6 +1,6 @@
 import { CoordinatorHandoffService } from '../projects/coordinator-handoff.service';
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
-import { translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
+import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
@@ -613,6 +613,14 @@ export const LOGIN_LINK_REFUSED = "This runner reported a sign-in link that isn'
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
+/** A session id, as an account removal's report names the sessions in the account. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The session ids a removal report names, kept only when they are ids, and a bounded number of them. */
+function accountInUseSessionIds(body: AccountRemoveResult): string[] {
+  if (!Array.isArray(body.sessionIds)) return [];
+  return [...new Set(body.sessionIds.filter((id) => typeof id === 'string' && UUID_PATTERN.test(id)))].slice(0, 50);
+}
 // The checkout repair is seconds of local git, so this window only has to cover a runner that
 // went away between the click and picking the request up.
 const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
@@ -3783,6 +3791,9 @@ export class RunnerApiController {
         codexAccountRemoveStatus: status,
         // Only a failure carries one; a success clears whatever the last one said.
         codexAccountRemoveMessage: status === 'failed' ? (body.message ?? null) : null,
+        // The sessions a refusal names, which the page lists (accountRemoveSessionsOf reads only those
+        // this runner runs for the viewer); a success, or any other refusal, names none.
+        codexAccountRemoveSessions: status === 'failed' ? accountInUseSessionIds(body) : [],
       },
     });
     // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing
@@ -7856,9 +7867,10 @@ export class RunnerApiController {
         // answers unrun: held for the retry armed above or dropped, and taken out of its loop's runs
         // (wake-turn-withdraw.ts).
         droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        // Drain queued turns so nothing can be leased after the session ends.
+        // Drain queued turns so nothing can be leased after the session ends. A turn HELD for its
+        // translation is never leased and stays as it is (DRAIN_SKIPS_HELD).
         await tx.conversationTurn.updateMany({
-          where: { sessionId, status: { not: 'ANSWERED' } },
+          where: { sessionId, status: { notIn: DRAIN_SKIPS_HELD } },
           data: { status: 'ANSWERED', answeredAt: new Date() },
         });
       }
@@ -9741,9 +9753,10 @@ export class RunnerApiController {
       // And a wakeup filed onto a `bg-wake:` turn still queued, which the drain below answers unrun: held
       // for an armed retry or dropped, and taken out of its loop's runs (wake-turn-withdraw.ts).
       const droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-      // Drain any queued turns so nothing can be leased after the session ends.
+      // Drain any queued turns so nothing can be leased after the session ends. A turn HELD for its
+      // translation is never leased and stays as it is (DRAIN_SKIPS_HELD).
       await tx.conversationTurn.updateMany({
-        where: { sessionId, status: { not: 'ANSWERED' } },
+        where: { sessionId, status: { notIn: DRAIN_SKIPS_HELD } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       // Every turn of this session has just ended, so every tool call still waiting on one is now

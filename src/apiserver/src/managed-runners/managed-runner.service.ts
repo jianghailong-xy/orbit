@@ -39,6 +39,7 @@ import { MANAGED_RUNNER_NAME, MANAGED_WORKSPACE_DIR, MANAGED_WORKSPACE_NAME } fr
 import { placeNewMapping } from './managed-runner-placement';
 import { MANAGED_RUNNER_RUNTIME, type ManagedRunnerRuntime } from './managed-runner-runtime';
 import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
+import { SIGNED_IN_PAGE, SIGNED_IN_PASS_SECONDS, SignedInPassTimer, signedInWithoutMapping } from './managed-runner-signed-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
 import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason } from './managed-runner-status';
 import { managedFirstSessionKeyOf, ownerManagedKeys } from './managed-runner-supply';
@@ -70,11 +71,11 @@ type AvailableRuntime = Extract<ManagedRunnerRuntime, { available: true }>;
  *
  * With the feature off this is the inert status facade the design allows: `status` reads, the
  * writes are refused by ManagedRunnerEnabledGuard before they get here (and again here, should
- * anything call them), `signedIn` returns before reading anything, and no runtime, client or timer
- * exists.
+ * anything call them), `signedIn` and `provisionSignedIn` return before reading anything, and no
+ * runtime, client or timer exists.
  *
- * Whether an account is given a mapping at all is ManagedRunnerEligibility's decision, asked by both
- * ways one is created: a sign-in and an explicit ensure.
+ * Whether an account is given a mapping at all is ManagedRunnerEligibility's decision, asked by every
+ * way one is created: a sign-in, the signed-in pass and an explicit ensure.
  *
  * An account an administrator disabled (`User.disabledAt`) is refused every write here, 403
  * ACCOUNT_DISABLED, after the switch and before anything is read of its mapping or written: no
@@ -85,6 +86,8 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   private readonly log = new Logger('ManagedRunners');
   /** The rule provided under the token, or EVERY_ACCOUNT, asked only about an account that is not disabled. */
   private readonly eligibility: ManagedRunnerEligibility;
+  /** The signed-in pass's timer, while the switch is on and the environment available. */
+  private signedInPass?: SignedInPassTimer;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -96,10 +99,14 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
   }
 
   onModuleInit(): void {
-    if (this.gate.enabled && this.runtime?.available) this.runtime.worker.start();
+    if (!this.gate.enabled || !this.runtime?.available) return;
+    this.runtime.worker.start();
+    this.signedInPass = new SignedInPassTimer(() => this.provisionSignedIn(), SIGNED_IN_PASS_SECONDS * 1000, this.log);
+    this.signedInPass.start();
   }
 
   async onModuleDestroy(): Promise<void> {
+    await this.signedInPass?.stop();
     if (this.runtime?.available) await this.runtime.worker.stop();
   }
 
@@ -154,6 +161,40 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
       runtime.worker.kick();
     } catch (error) {
       this.log.warn(`managed runner intent not recorded at sign-in for owner ${user.id}; an explicit ensure records it: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * The signed-in pass (managed-runner-signed-in.ts): every account with a live login session, not
+   * disabled and with no mapping in any state, that the eligibility rule gives one, gets its mapping
+   * as a sign-in would make it, and the manager is woken once for them all. Every page is read, so an
+   * account the rule refuses never keeps the ones after it waiting. An account whose mapping cannot be
+   * written is logged and left to the next pass; with no host to place one on, the pass stops there.
+   * Off, or unavailable, it reads nothing. Answers how many mappings it made.
+   */
+  async provisionSignedIn(now = new Date()): Promise<number> {
+    if (!this.gate.enabled) return 0;
+    const runtime = this.runtime;
+    if (!runtime?.available) return 0;
+    let created = 0;
+    try {
+      for (let after: string | null = null; ;) {
+        const owners = await signedInWithoutMapping(this.prisma, now, after);
+        for (const ownerId of owners) {
+          if (!(await this.eligibility.eligible(ownerId))) continue;
+          try {
+            await this.createMapping(ownerId, `signed-in:${randomUUID()}`, runtime);
+            created += 1;
+          } catch (error) {
+            if (error instanceof ServiceUnavailableException) return created;
+            this.log.warn(`managed runner intent not recorded for signed-in owner ${ownerId}; the next pass tries again: ${(error as Error).message}`);
+          }
+        }
+        if (owners.length < SIGNED_IN_PAGE) return created;
+        after = owners[owners.length - 1];
+      }
+    } finally {
+      if (created > 0) runtime.worker.kick();
     }
   }
 

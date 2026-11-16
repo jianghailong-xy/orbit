@@ -4,6 +4,7 @@ import {
   CheckOutlined,
   CodeOutlined,
   DeleteOutlined,
+  DesktopOutlined,
   DisconnectOutlined,
   FolderAddOutlined,
   FolderOutlined,
@@ -102,8 +103,6 @@ import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
-import { WikiCreateDialog } from './WikiSetUpDialog';
-import { WIKI_NEW } from '../lib/wikiStart';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -390,7 +389,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
   const [wikiOpen, setWikiOpen] = useState(true);
   // New wiki… (docs/wiki-explicit-creation-design.md §3.4): the Create wiki form, opened from the group's last row.
-  const [creatingWiki, setCreatingWiki] = useState(false);
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -611,6 +609,10 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     for (const r of runners.data ?? []) m.set(r.id, r.displayName || r.name);
     return m;
   }, [runners.data]);
+
+  // The account menu's Machines row: every machine, and how many of them are online.
+  const machineList = runners.data ?? [];
+  const onlineMachines = machineList.filter((runner) => runner.online).length;
 
   // The "Workspaces" list is the user's workspace definitions (model + tools).
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
@@ -1168,23 +1170,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     menu={wikiMenu(space)}
                   />
                 ))}
-              {wikiOpen && (
-                <div
-                  className="tp-item tp-wiki-new"
-                  onClick={() => setCreatingWiki(true)}
-                  onKeyDown={(event) => handleNavActivation(event, () => setCreatingWiki(true))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <span className="tp-ico">
-                    <PlusOutlined aria-hidden="true" />
-                  </span>
-                  <span className="tp-label">{WIKI_NEW}</span>
-                </div>
-              )}
             </div>
           )}
-          {creatingWiki && <WikiCreateDialog onClose={() => setCreatingWiki(false)} />}
 
           {(hasWorkspaceRows || hasWikis) && hasProjects && <div className="tp-divider" />}
 
@@ -1284,6 +1271,67 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 },
               })),
             },
+            // Every machine, a level down with its state, as Settings lists them: there is no one Machines page to
+            // open, so the row picks one. With none yet it is the way to add the first.
+            machineList.length > 0
+              ? {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">
+                        {onlineMachines === machineList.length
+                          ? 'All online'
+                          : `${onlineMachines} of ${machineList.length} online`}
+                      </span>
+                    </span>
+                  ),
+                  children: [
+                    ...machineList.map((runner) => {
+                      // The managed runner's own state stands for Online/Offline; Ready says no more than its green dot.
+                      const managedRow = managedRowOf(accountManaged, runner.id);
+                      const ready = managedRow ? managedRow.tone === 'ready' : runner.online;
+                      return {
+                        key: `machine-${runner.id}`,
+                        textValue: runner.displayName || runner.name,
+                        icon: (
+                          <span
+                            className="tp-account-machine-dot"
+                            data-online={ready}
+                          />
+                        ),
+                        label: (
+                          <span className="tp-account-appearance-label">
+                            <span>{runner.displayName || runner.name}</span>
+                            {!ready && (
+                              <span className="tp-account-current-theme">{managedRow?.label ?? 'Offline'}</span>
+                            )}
+                          </span>
+                        ),
+                        onSelect: () => navigate(`/settings/machines/${encodeId(runner.id)}`),
+                      };
+                    }),
+                    { type: 'separator' as const, key: 'machines-add-separator' },
+                    {
+                      key: 'machines-add',
+                      icon: <PlusOutlined />,
+                      label: 'Add a machine',
+                      onSelect: () => navigate('/settings/machines/new'),
+                    },
+                  ],
+                }
+              : {
+                  key: 'machines',
+                  icon: <DesktopOutlined />,
+                  label: (
+                    <span className="tp-account-appearance-label">
+                      <span>Machines</span>
+                      <span className="tp-account-current-theme">None</span>
+                    </span>
+                  ),
+                  onSelect: () => navigate('/settings/machines/new'),
+                },
             {
               key: 'settings',
               icon: <SettingOutlined />,

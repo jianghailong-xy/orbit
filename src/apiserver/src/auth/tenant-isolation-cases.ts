@@ -919,6 +919,8 @@ export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
   // Session guests (docs/session-guests-design.md §7).
   'GET /guest-sessions/:id':
     "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
+  'GET /guest-sessions/:id/attachments/:attachmentId':
+    "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's; the file is then opened by (id, that session) only (session-guests/session-guests.service.ts attachment)",
   'GET /guest-sessions/:id/events':
     "every guest route reads the caller's live session_guest row on that session first (session-guests/session-guests.service.ts:236) and answers the one 404 without it, so a session B was never invited to — A's included — is refused before anything is read or written; A, its owner, is no guest of it either, so neither account's request can be stood up from the census fixture. session-guests.pg.spec.ts (1) sends the invited guest's and a stranger's",
   'GET /guest-sessions/:id/events/:seq':
