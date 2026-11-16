@@ -12,7 +12,7 @@ import {
   type PodContainerStatus,
   type Secret,
 } from './kube-client';
-import { MANAGED_ADMISSION_DENIAL_MARKER } from './managed-runner-admission';
+import { MANAGED_ADMISSION_DENIAL_MARKER, podImages } from './managed-runner-admission';
 import {
   ManagedRunnerConflict,
   type ManagedCredential,
@@ -141,8 +141,10 @@ function madeForAnother(pv: PersistentVolume, pvc: PersistentVolumeClaim): strin
   return `PV ${pv.metadata.name} was created at ${pv.metadata.creationTimestamp}, before PVC ${pvc.metadata.name} (${pvc.metadata.creationTimestamp}): it was made for another claim first`;
 }
 
-function instanceOf(pod: Pod): KubeInstance {
+/** `pod` as an instance, `image` being the one the profile names now. */
+function instanceOf(pod: Pod, image: string): KubeInstance {
   const terminated = podTerminated(pod);
+  const previous = podImages(pod).find((made) => made !== image);
   return {
     name: pod.metadata.name,
     uid: pod.metadata.uid!,
@@ -155,6 +157,7 @@ function instanceOf(pod: Pod): KubeInstance {
     // itself: it waits for the manager, which records its stop and then removes it (`removeInstance`).
     removing: !!pod.metadata.deletionTimestamp && !(terminated && podHeldForStopReport(pod)),
     exit: exitOf(pod),
+    ...(previous ? { previousImage: previous } : {}),
     pod,
   };
 }
@@ -163,12 +166,14 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   readonly name = 'kubernetes';
   readonly terms = TERMS;
   readonly location: { readonly clusterKey: string; readonly namespace: string };
+  readonly rollImage: string;
 
   constructor(
     private readonly kube: ManagedKubeClient,
     private readonly profile: ManagedRunnerProfile,
   ) {
     this.location = { clusterKey: profile.clusterKey, namespace: profile.kubernetes.namespace };
+    this.rollImage = profile.runner.image;
   }
 
   names(runnerId: string) {
@@ -281,7 +286,7 @@ export class KubernetesBackend implements ManagedRunnerBackend {
 
   async readInstance(mapping: ManagedRunner): Promise<KubeInstance | null> {
     const pod = await this.kube.pods.get(managedPodName(mapping.runnerId));
-    return pod ? instanceOf(pod) : null;
+    return pod ? instanceOf(pod, this.profile.runner.image) : null;
   }
 
   /**
@@ -303,7 +308,7 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   }
 
   async createInstance(mapping: ManagedRunner): Promise<KubeInstance> {
-    return instanceOf(await this.createOrReadBack(this.kube.pods, buildManagedPod(this.identity(mapping), mapping.pvcUid!, this.profile)));
+    return instanceOf(await this.createOrReadBack(this.kube.pods, buildManagedPod(this.identity(mapping), mapping.pvcUid!, this.profile)), this.profile.runner.image);
   }
 
   /** A Pod under the fixed name that is not this generation's template. (One that replaced the

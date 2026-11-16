@@ -11,6 +11,8 @@ import org.junit.Test
  */
 class CursorComposerTest {
     private fun obj(json: String) = Json.parseToJsonElement(json).jsonObject
+    /** A workspace whose person-opened session last ran Cursor CLI on its own sign-in with [model]. */
+    private fun cursorLast(model: String) = obj("""{"lastEngine":"cursor","lastProvider":"cursor","lastModel":"$model"}""")
     private val opus = """{"value":"claude-opus-5-5","label":"Claude Opus 5.5","reasoningLevels":["low","medium","high","xhigh","max"],
         "defaultReasoningLevel":"medium","parameters":[
           {"id":"context","label":"Context","category":"model_config","default":"300k","values":[{"value":"300k","label":"300K"},{"value":"1m","label":"1M"}]},
@@ -88,10 +90,10 @@ class CursorComposerTest {
         // A runner that names its own default model starts a session there.
         val named = ComposerCatalog(runner(extra = ",$catalogue,\"runtimeDefaultModels\":{\"cursor\":\"claude-opus-5-5\"}"), listOf(glm))
         assertEquals("claude-opus-5-5", named.defaultModel("cursor", "cursor"))
-        // A model picked last for the pair is the next session's while the runner still offers it, its parameters with it.
+        // The workspace's lastModel on the pair is the next session's while the runner still offers it, its parameters with it.
         assertEquals("claude-opus-5-5[context=1m]",
-            catalog.newSessionModel("cursor", "cursor", mapOf("cursor:cursor" to "claude-opus-5-5[context=1m]")))
-        assertEquals("default", catalog.newSessionModel("cursor", "cursor", mapOf("cursor:cursor" to "retired-model")))
+            catalog.newSessionModel("cursor", "cursor", cursorLast("claude-opus-5-5[context=1m]")))
+        assertEquals("default", catalog.newSessionModel("cursor", "cursor", cursorLast("retired-model")))
     }
 
     /** A model's context and speed travel in the model value by shared cursorModels.ts's rules (iOS 8629bebf3; the shared spec's own
@@ -153,9 +155,9 @@ class CursorComposerTest {
         assertEquals("GPT-5.5", catalog.modelLabel("cursor", "cursor", "gpt-5.5[context=272k]"))
         assertNull(catalog.modelRow("cursor", "cursor", "gemini-3.1-pro[fast=true]"))
         assertNull(catalog.modelRow("claude", "claude", "claude-opus-5-5[context=1m]"))
-        // A variant remembered for the next session is live while its model is.
-        assertEquals("gpt-5.5[context=272k]", catalog.newSessionModel("cursor", "cursor", mapOf("cursor:cursor" to "gpt-5.5[context=272k]")))
-        assertEquals("default", catalog.newSessionModel("cursor", "cursor", mapOf("cursor:cursor" to "grok-9[fast=true]")))
+        // A variant as the workspace's lastModel is live while its model is.
+        assertEquals("gpt-5.5[context=272k]", catalog.newSessionModel("cursor", "cursor", cursorLast("gpt-5.5[context=272k]")))
+        assertEquals("default", catalog.newSessionModel("cursor", "cursor", cursorLast("grok-9[fast=true]")))
     }
 
     /** iOS 6 ①: every mode but Default, which the server refuses on Cursor CLI (D6); Bypass goes on a root runner, as on every engine. */

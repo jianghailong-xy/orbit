@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Background job went quiet — the stall wake as a line</title>
+<!-- The shipped stylesheet: every frame below is drawn with the transcript's own classes. -->
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<script src="icons.js"></script>
+<style>
+  /* Board chrome, all b-prefixed (index.css has bare short class names). */
+  html, body { margin: 0; background: #f4f4f6; }
+  .b-part { position: relative; box-sizing: border-box; width: 2340px; padding: 40px 44px 44px;
+    font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1d1d1f; background: #f4f4f6; }
+  .b-part h1 { margin: 0 0 10px; font-size: 32px; line-height: 1.25; letter-spacing: -0.01em; }
+  .b-part h2 { margin: 0 0 8px; font-size: 24px; line-height: 1.3; }
+  .b-lede { margin: 0 0 8px; max-width: 2100px; color: #4a4a4f; font-size: 16px; }
+  .b-lede code, .b-notes code, .b-table code { padding: 0 4px; border-radius: 4px; background: #e6e6ea;
+    font: 13px "JetBrains Mono", monospace; }
+  .b-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 26px; align-items: start; }
+  .b-cols.b-two { grid-template-columns: repeat(2, 1fr); }
+  .b-tag { display: inline-block; margin-bottom: 12px; padding: 2px 10px; border-radius: 6px;
+    font-size: 13px; font-weight: 600; }
+  .b-tag.b-now { background: #fde2e1; color: #c0322b; }
+  .b-tag.b-new { background: #e1e9fd; color: #2a55c8; }
+  /* The transcript pane: the web app's light theme, at a laptop column width. */
+  .b-frame { position: relative; box-sizing: border-box; padding: 14px 6px 16px; border: 1px solid #dcdce0;
+    border-radius: 14px; background: var(--bg, #fff); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+    font-family: Inter, "Noto Sans SC", sans-serif; }
+  .b-frame .chat-msg { white-space: normal; }
+  .b-frame .chat-assistant p { margin: 0; }
+  .b-frame .anticon { display: inline-flex; align-items: center; line-height: 0; }
+  .b-caption { margin: 18px 0 6px; font-size: 17px; font-weight: 700; }
+  .b-notes { margin: 0; padding: 0; list-style: none; font-size: 14.5px; color: #333; }
+  .b-notes li { position: relative; margin: 0 0 8px; padding-left: 32px; }
+  .b-notes li > .b-n { position: absolute; left: 0; top: 1px; }
+  .b-n { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+    border-radius: 50%; background: #f08a24; color: #fff; font: 700 13px/1 Inter, sans-serif; }
+  /* Marks drawn after layout (drawMarks): a dashed ring, its number on the ring's top-right corner. */
+  .b-ring { position: absolute; border: 2px dashed #e5484d; border-radius: 8px; pointer-events: none; }
+  .b-ring > .b-n { position: absolute; right: -11px; top: -11px; }
+  .b-ring.b-left > .b-n { right: auto; left: -30px; top: 50%; margin-top: -11px; }
+  .b-ring.b-below > .b-n { top: auto; bottom: -24px; right: auto; left: 50%; margin-left: -11px; }
+  .b-pick { margin-top: 26px; padding: 22px 26px; border-radius: 14px; background: #fff; border: 1px solid #dcdce0; }
+  .b-pick h3 { margin: 0 0 6px; font-size: 19px; }
+  .b-rec { display: inline-block; margin-left: 8px; padding: 0 8px; border-radius: 5px; background: #dff3e4;
+    color: #1d7a3a; font-size: 13px; font-weight: 600; vertical-align: 2px; }
+  .b-table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  .b-table th, .b-table td { padding: 8px 10px; border-top: 1px solid #e6e6ea; text-align: left; vertical-align: top; }
+  .b-table th { color: #6b6b70; font-weight: 600; font-size: 13px; }
+  .b-optB .bgwake-mark.is-pending { color: var(--warning, #d48806); }
+  .b-optB .bgwake-title { color: var(--warning, #b06d00); }
+</style>
+</head>
+<body>
+
+<!-- ─────────────────────────────── Part 1 ─────────────────────────────── -->
+<section class="b-part" id="part-1">
+  <h1>后台任务「安静了」也画成一行：和 Background job finished 同一个写法</h1>
+  <p class="b-lede">
+    <code>bg_run wakeOnStall</code> 在 11-15 上线（721ae19fc）：任务还在跑、但很久没输出时，控制面开一轮把 agent 叫醒。服务端特意把它放进单独的
+    <code>&lt;background-job-stall&gt;</code> 块，好让旧客户端「当成普通附注」——可三端都没有跟进，所以今天它就是你截图里那样：
+    一个空的蓝色气泡、一行「Orbit attached: context」，点开是给 agent 读的原文。
+  </p>
+  <p class="b-lede">
+    左边按截图用现有样式复刻（示例数据），中间是建议：和 9-29 改过的 Background 唤醒一样，<b>agent 回答里的一行</b>；右边是点开这一行。
+    <b>摆法、组件、字号全部沿用</b> <code>BackgroundWakeCard</code>，新增的只有几个词。
+  </p>
+
+  <div class="b-cols">
+    <!-- Today -->
+    <div>
+      <span class="b-tag b-now">现状 · 11-15 截图复刻</span>
+      <div class="b-frame">
+        <div class="chat-msg chat-assistant"><p>迁移已经在后台跑了，6 个 worker。我先去看别的，等它有动静再回来。</p></div>
+        <div class="chat-user-wrap" data-mark="t-wrap">
+          <div class="chat-msg chat-user" data-mark="t-bubble"></div>
+          <div class="chat-user-meta">
+            <button type="button" class="chat-injected-head" data-mark="t-line"
+              style="outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px;"><span class="chat-injected-mark">⊖</span> Orbit attached: context</button>
+          </div>
+          <div class="chat-injected-panel">
+            <pre class="chat-injected-body" data-mark="t-body">&lt;background-job-stall&gt;
+  A background job you started with bg_run is still running and has written nothing for as long as you asked to be told about; the control plane opened this turn for it:
+    bgj_28a9b17fe75c｜job｜./scripts/rebuild-index.sh --workers 6｜Nightly index rebuild (6 workers)
+      gone quiet｜still running｜running for 15m 2s when this was sent
+      no new output for 15m 0s｜last output at 2026-11-15T17:34:10Z
+      output /root/.orbit/runs/…/bgj_28a9b17fe75c.output｜this covers bytes 0–21
+      output tail:
+        entries=32 workers=6
+  The control plane recorded this for you; the user did not say it. The job has not ended: read its output with mcp__orbit__bg_output by id (pass sinceOffset to read only what is new), stop it with mcp__orbit__bg_kill, or leave it running.
+  One silence wakes you once: you are woken again only if the job writes something and then goes quiet as long again.
+&lt;/background-job-stall&gt;</pre>
+          </div>
+        </div>
+        <div class="chat-msg chat-assistant"><p>它 15 分钟没输出了，我读一下输出看是卡住还是在算。</p></div>
+      </div>
+      <div class="b-caption">你的那一侧多了一条「消息」，可没人说过话</div>
+      <ol class="b-notes">
+        <li><span class="b-n">1</span>空气泡：唤醒这一轮的正文本来就是空的，<code>BackgroundWakeCard</code> 认不出 stall 块，于是落回用户气泡，只剩 padding。</li>
+        <li><span class="b-n">2</span>「context」是 <code>describeNote</code> 对不认识的标签的兜底名，说不出发生了什么；行还贴着右边缘被裁掉一截。</li>
+        <li><span class="b-n">3</span>点开是 agent 读的原文：标签、<code>mcp__orbit__bg_kill</code>、「the user did not say it」——都是写给模型的，两层灰底占满整列。</li>
+      </ol>
+    </div>
+
+    <!-- Proposed, folded -->
+    <div>
+      <span class="b-tag b-new">建议 · 同一屏，变成一行</span>
+      <div class="b-frame">
+        <div class="chat-msg chat-assistant"><p>迁移已经在后台跑了，6 个 worker。我先去看别的，等它有动静再回来。</p></div>
+        <div class="bgwake is-ok" data-mark="p-line">
+          <details class="bgwake-fold">
+            <summary class="bgwake-row">
+              <span class="bgwake-mark is-pending"><script>document.write(icon('ClockCircleOutlined'))</script></span>
+              <span class="bgwake-title" data-mark="p-title">Background job went quiet</span>
+              <span class="bgwake-name">Nightly index rebuild (6 workers)</span>
+              <span class="bgwake-status" data-mark="p-status">quiet 15m</span>
+              <span class="bgwake-time">just now</span>
+              <span class="bgwake-details-label">Job details<script>document.write(icon('RightOutlined', 'bgwake-caret'))</script></span>
+            </summary>
+          </details>
+        </div>
+        <div class="chat-msg chat-assistant"><p>它 15 分钟没输出了，我读一下输出看是卡住还是在算。</p></div>
+      </div>
+      <div class="b-caption">在 agent 的流里，和别的唤醒一个样子</div>
+      <ol class="b-notes">
+        <li><span class="b-n">1</span>没有气泡、没有「Orbit attached」：这一轮是控制面开的，画在 agent 回答里，和 <code>Background job finished</code> / <code>has new output</code> 同一行。</li>
+        <li><span class="b-n">2</span>标题直接说发生了什么：<code>Background job went quiet</code>，后面是任务名（description，没有就用命令）。</li>
+        <li><span class="b-n">3</span>收尾的小灰块写 <code>quiet 15m</code>——它没失败，所以用和 new output 一样的灰色时钟，不变红。</li>
+      </ol>
+    </div>
+
+    <!-- Proposed, opened -->
+    <div>
+      <span class="b-tag b-new">建议 · 点开这一行</span>
+      <div class="b-frame">
+        <div class="chat-msg chat-assistant"><p>迁移已经在后台跑了，6 个 worker。我先去看别的，等它有动静再回来。</p></div>
+        <div class="bgwake is-ok">
+          <details class="bgwake-fold" open>
+            <summary class="bgwake-row">
+              <span class="bgwake-mark is-pending"><script>document.write(icon('ClockCircleOutlined'))</script></span>
+              <span class="bgwake-title">Background job went quiet</span>
+              <span class="bgwake-name">Nightly index rebuild (6 workers)</span>
+              <span class="bgwake-status">quiet 15m</span>
+              <span class="bgwake-time">just now</span>
+              <span class="bgwake-details-label">Job details<script>document.write(icon('RightOutlined', 'bgwake-caret'))</script></span>
+            </summary>
+            <div class="bgwake-body">
+              <ul class="bgwake-jobs">
+                <li class="bgwake-job">
+                  <div class="bgwake-job-head"><span class="bgwake-job-name">Nightly index rebuild (6 workers)</span></div>
+                  <div class="bgwake-job-cmd">./scripts/rebuild-index.sh --workers 6</div>
+                  <div class="bgwake-job-meta">bgj_28a9b17fe75c · 21 B of output</div>
+                  <div class="bgwake-job-meta" data-mark="o-stall">Still running · 15m 2s in · last wrote 15m ago</div>
+                </li>
+              </ul>
+              <details class="bgwake-output" data-mark="o-tail" style="margin: 0 0 8px;">
+                <summary aria-label="Output tail">
+                  <span class="bgwake-output-label">Output tail</span>
+                  <span class="chat-pre bgwake-output-preview">entries=32 workers=6</span>
+                </summary>
+              </details>
+              <div class="bgwake-meta" data-mark="o-meta">Queued by a background job, not typed by you</div>
+              <details class="bgwake-raw"><summary>What the agent received</summary></details>
+            </div>
+          </details>
+        </div>
+        <div class="chat-msg chat-assistant"><p>它 15 分钟没输出了，我读一下输出看是卡住还是在算。</p></div>
+      </div>
+      <div class="b-caption">原文还在，折在下面</div>
+      <ol class="b-notes">
+        <li><span class="b-n">1</span>多出的只有一行：<code>Still running · 15m 2s in · last wrote 15m ago</code>，来自块里的 running for / no new output for / last output at。</li>
+        <li><span class="b-n">2</span>输出末尾放在折叠里（失败时才放在外面）：安静不是坏消息，用不着一直摊开。</li>
+        <li><span class="b-n">3</span>同一句 <code>Queued by a background job, not typed by you</code>，和 <code>What the agent received</code> 里的原文——给 agent 的话只在这里。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────── Part 2 ─────────────────────────────── -->
+<section class="b-part" id="part-2">
+  <h2>其他情况：一行的规则不变</h2>
+  <div class="b-cols">
+    <div>
+      <span class="b-tag b-new">从开始就没写过东西</span>
+      <div class="b-frame">
+        <div class="bgwake is-ok">
+          <details class="bgwake-fold" open>
+            <summary class="bgwake-row">
+              <span class="bgwake-mark is-pending"><script>document.write(icon('ClockCircleOutlined'))</script></span>
+              <span class="bgwake-title">Background job went quiet</span>
+              <span class="bgwake-name is-command" data-mark="c1-name">pg_dump orbit &gt; /backup/orbit.sql</span>
+              <span class="bgwake-status">quiet 30m</span>
+              <span class="bgwake-time">2m ago</span>
+              <span class="bgwake-details-label">Job details<script>document.write(icon('RightOutlined', 'bgwake-caret'))</script></span>
+            </summary>
+            <div class="bgwake-body">
+              <ul class="bgwake-jobs">
+                <li class="bgwake-job">
+                  <div class="bgwake-job-cmd">pg_dump orbit &gt; /backup/orbit.sql</div>
+                  <div class="bgwake-job-meta">bgj_5c03e1aa90d2 · no output</div>
+                  <div class="bgwake-job-meta" data-mark="c1-stall">Still running · 30m in · has written nothing yet</div>
+                </li>
+              </ul>
+              <div class="bgwake-meta">Queued by a background job, not typed by you</div>
+              <details class="bgwake-raw"><summary>What the agent received</summary></details>
+            </div>
+          </details>
+        </div>
+      </div>
+      <ol class="b-notes" style="margin-top:14px">
+        <li><span class="b-n">1</span>没有 description 就用命令当名字，等宽字体——和现有一样。</li>
+        <li><span class="b-n">2</span>块里写的是 <code>no output at all</code>：折叠里换成 <code>has written nothing yet</code>，没有 Output tail。</li>
+      </ol>
+    </div>
+
+    <div>
+      <span class="b-tag b-new">一轮里两个任务都安静了</span>
+      <div class="b-frame">
+        <div class="bgwake is-ok">
+          <details class="bgwake-fold" open>
+            <summary class="bgwake-row">
+              <span class="bgwake-mark is-pending"><script>document.write(icon('ClockCircleOutlined'))</script></span>
+              <span class="bgwake-title" data-mark="c2-title">2 background jobs went quiet</span>
+              <span class="bgwake-time">just now</span>
+              <span class="bgwake-details-label">Job details<script>document.write(icon('RightOutlined', 'bgwake-caret'))</script></span>
+            </summary>
+            <div class="bgwake-body">
+              <ul class="bgwake-jobs">
+                <li class="bgwake-job">
+                  <div class="bgwake-job-head">
+                    <span class="bgwake-job-mark is-running"><script>document.write(icon('ClockCircleOutlined'))</script></span>
+                    <span class="bgwake-job-name">Nightly index rebuild (6 workers)</span>
+                    <span class="bgwake-job-exit" data-mark="c2-chip">quiet 15m</span>
+                  </div>
+                  <div class="bgwake-job-cmd">./scripts/rebuild-index.sh --workers 6</div>
+                  <div class="bgwake-job-meta">bgj_28a9b17fe75c · 21 B of output</div>
+                </li>
+                <li class="bgwake-job">
+                  <div class="bgwake-job-head">
+                    <span class="bgwake-job-mark is-running"><script>document.write(icon('ClockCircleOutlined'))</script></span>
+                    <span class="bgwake-job-name">E2E suite against staging</span>
+                    <span class="bgwake-job-exit">quiet 10m</span>
+                  </div>
+                  <div class="bgwake-job-cmd">npm run e2e -- --project=staging</div>
+                  <div class="bgwake-job-meta">bgj_91b7c2e0d4f1 · 3.4 KB of output</div>
+                </li>
+              </ul>
+              <div class="bgwake-meta">Queued by a background job, not typed by you</div>
+              <details class="bgwake-raw"><summary>What the agent received</summary></details>
+            </div>
+          </details>
+        </div>
+      </div>
+      <ol class="b-notes" style="margin-top:14px">
+        <li><span class="b-n">1</span>和 <code>2 background jobs finished</code> 一样：标题数个数，行上不写名字。</li>
+        <li><span class="b-n">2</span>每个任务的小灰块写自己的 <code>quiet 15m</code>，用的是已有的 exit 小块。</li>
+      </ol>
+    </div>
+
+    <div>
+      <span class="b-tag b-new">还在排队（当前这一轮没结束）</span>
+      <div class="b-frame">
+        <div class="chat-msg chat-assistant"><p>我在改 parser 的测试……</p></div>
+        <div class="bgwake is-ok is-queued" data-mark="c3-line">
+          <details class="bgwake-fold">
+            <summary class="bgwake-row">
+              <span class="bgwake-mark is-pending"><script>document.write(icon('ClockCircleOutlined'))</script></span>
+              <span class="bgwake-title">Background job went quiet</span>
+              <span class="bgwake-name">Nightly index rebuild (6 workers)</span>
+              <span class="bgwake-status">quiet 15m</span>
+              <span class="bgwake-details-label">Job details<script>document.write(icon('RightOutlined', 'bgwake-caret'))</script></span>
+            </summary>
+          </details>
+          <div class="bgwake-queued"><span class="chat-queued-meta">Queued for next turn</span></div>
+        </div>
+      </div>
+      <ol class="b-notes" style="margin-top:14px">
+        <li><span class="b-n">1</span>stall 从不插进正在跑的一轮（服务端规定），所以只会排在队尾：和其它唤醒一样画成同一行、带队列状态，被 runner 取走后形状不变。</li>
+        <li style="padding-left:0">同一个任务后来退出了，安静的那条会被服务端撤掉，换成 <code>Background job finished</code>；客户端不用管。</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────────── Part 3 ─────────────────────────────── -->
+<section class="b-part" id="part-3">
+  <h2>待定 · 要你拍板</h2>
+  <div class="b-cols b-two">
+    <div class="b-pick">
+      <h3>A · 灰色时钟，和 new output 一样 <span class="b-rec">建议</span></h3>
+      <div class="b-frame" style="margin: 10px 0 12px;">
+        <div class="bgwake is-ok"><details class="bgwake-fold"><summary class="bgwake-row">
+          <span class="bgwake-mark is-pending"><script>document.write(icon('ClockCircleOutlined'))</script></span>
+          <span class="bgwake-title">Background job went quiet</span>
+          <span class="bgwake-name">Nightly index rebuild (6 workers)</span>
+          <span class="bgwake-status">quiet 15m</span><span class="bgwake-time">just now</span>
+          <span class="bgwake-details-label">Job details<script>document.write(icon('RightOutlined', 'bgwake-caret'))</script></span>
+        </summary></details></div>
+      </div>
+      安静≠出错，后面紧跟着就是 agent 自己的判断（卡住了就 kill，在算就继续等）。只有失败才变色，这条规则不破。
+    </div>
+    <div class="b-pick">
+      <h3>B · 琥珀色沙漏，提醒「可能卡住」</h3>
+      <div class="b-frame b-optB" style="margin: 10px 0 12px;">
+        <div class="bgwake is-ok"><details class="bgwake-fold"><summary class="bgwake-row">
+          <span class="bgwake-mark is-pending"><script>document.write(icon('HourglassOutlined'))</script></span>
+          <span class="bgwake-title">Background job went quiet</span>
+          <span class="bgwake-name">Nightly index rebuild (6 workers)</span>
+          <span class="bgwake-status">quiet 15m</span><span class="bgwake-time">just now</span>
+          <span class="bgwake-details-label">Job details<script>document.write(icon('RightOutlined', 'bgwake-caret'))</script></span>
+        </summary></details></div>
+      </div>
+      扫一眼就能从一串唤醒里认出它；代价是第三种颜色，而大多数安静只是任务在算。
+    </div>
+  </div>
+
+  <div class="b-pick">
+    <h3>落地（按代价排）</h3>
+    <table class="b-table">
+      <tr><th style="width:44px">#</th><th style="width:300px">做什么</th><th>在哪</th></tr>
+      <tr><td>1</td><td>web 认 <code>&lt;background-job-stall&gt;</code></td>
+        <td><code>lib/backgroundWake.ts</code>：stall 块的行解析进同一个 <code>BackgroundWakeJob</code>（加 <code>stalled</code>、<code>runningForMs</code>、<code>quietForMs</code>、<code>lastOutputAt</code>）；<code>BackgroundWakeCard</code> 加标题 / 小灰块 / 折叠里那一行；<code>describeNote</code> 把这个标签列为不命名。fixtures 加三种块（有输出、没输出、两个任务）。</td></tr>
+      <tr><td>2</td><td>兜底：唤醒轮永远不画气泡</td>
+        <td>认不出的块也不该落回用户气泡：唤醒轮（<code>bg-wake:</code> 开头的 client turn id）里剩下的东西放进折叠，和 <code>attached</code> 现在的做法一样。以后服务端再加新块，不会再出现空气泡。</td></tr>
+      <tr><td>3</td><td>iOS / macOS（OrbitKit）</td>
+        <td>同一份解析和文字，<code>BackgroundJobsCopyParityTests</code> 钉住三端的字。</td></tr>
+      <tr><td>4</td><td>Android</td><td>照 iOS 做，同一组字。</td></tr>
+    </table>
+    <p style="margin:12px 0 0;color:#555;font: 15px/1.6 Inter, 'Noto Sans SC', sans-serif">新增的字只有：<code>Background job went quiet</code>、<code>N background jobs went quiet</code>、<code>quiet 15m</code>、<code>Still running · 15m 2s in · last wrote 15m ago</code>、<code>has written nothing yet</code>。服务端不用改。</p>
+  </div>
+</section>
+
+<script>
+// Rings drawn after layout, one per data-mark, numbered in the order its part's notes give.
+const BELOW = new Set(['p-title', 'p-status']);
+const LEFT = new Set(['t-bubble']);
+const MARKS = { 't-bubble': 1, 't-line': 2, 't-body': 3, 'p-line': 1, 'p-title': 2, 'p-status': 3,
+  'o-stall': 1, 'o-tail': 2, 'o-meta': 3, 'c1-name': 1, 'c1-stall': 2, 'c2-title': 1, 'c2-chip': 2, 'c3-line': 1 };
+window.drawMarks = () => {
+  document.querySelectorAll('.b-ring').forEach((r) => r.remove());
+  for (const el of document.querySelectorAll('[data-mark]')) {
+    const n = MARKS[el.dataset.mark];
+    if (!n) continue;
+    const frame = el.closest('.b-frame');
+    const fr = frame.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const pad = BELOW.has(el.dataset.mark) ? 2 : 4;
+    const left = Math.max(r.left - fr.left - pad, 2);
+    const right = Math.min(r.right - fr.left + pad, fr.width - 14);
+    const ring = document.createElement('div');
+    ring.className = BELOW.has(el.dataset.mark) ? 'b-ring b-below' : LEFT.has(el.dataset.mark) ? 'b-ring b-left' : 'b-ring';
+    Object.assign(ring.style, { left: `${left}px`, top: `${r.top - fr.top - pad}px`,
+      width: `${Math.max(right - left, 18)}px`, height: `${r.height + pad * 2}px` });
+    ring.innerHTML = `<span class="b-n">${n}</span>`;
+    frame.appendChild(ring);
+  }
+};
+</script>
+</body>
+</html>

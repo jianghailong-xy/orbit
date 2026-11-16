@@ -120,7 +120,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       maxConcurrent: true,
       version: true,
       lastHeartbeatAt: true,
-      presence: { select: { lastBeatAt: true } },
+      presence: { select: { lastBeatAt: true, backgroundJobSessionIds: true } },
       enrolledAt: true,
       position: true,
       runsAsRoot: true,
@@ -157,6 +157,7 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       codexAccountRemoveAccount: true,
       codexAccountRemoveStatus: true,
       codexAccountRemoveMessage: true,
+      codexAccountRemoveSessions: true,
       // Where its Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6).
       region: true,
     },

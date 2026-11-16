@@ -13,10 +13,10 @@ package main
 // path — the stop, the session's end, a crash, a lost lease, the runner going away — the keeper kills
 // every descendant left and reaps it, and only then exits, the way the process did. The keeper is the
 // runner's child, in the runner's own cgroup, so the service manager's view of the runner is what it was:
-// a runner restart under systemd (KillMode=mixed) still ends whatever is left, and an OOM kill in it still
-// counts against the runner's unit (OOMPolicy=stop). Elsewhere (session_scope_other.go) the process is
-// started as every engine's is: the leader of its own process group, torn down by
-// terminateSessionProcessTree.
+// a runner restart under systemd (KillMode=mixed) still ends whatever is left, and an OOM kill in it is
+// still the runner's unit's, which keeps the runner up (OOMPolicy=continue). Elsewhere
+// (session_scope_other.go) the process is started as every engine's is: the leader of its own process
+// group, torn down by terminateSessionProcessTree.
 //
 // Only Cursor CLI sessions run in a scope (startCursorACP); every other engine starts its process with
 // startSessionProcess, as before.

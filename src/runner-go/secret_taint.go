@@ -369,23 +369,20 @@ func taintAllCheckouts(r *integrationOutputRedactor) error {
 	return failed
 }
 
-// uncommittedObjectsHolding is every file of dir's index and working tree that a `git add -A` could stage (tracked,
-// and untracked but not ignored) and whose content holds one of r's values, with the blob id `git hash-object` gives
-// its content: the id a `git add` of it makes. Staged blobs that differ from the file are taken too.
+// uncommittedObjectsHolding is every file of dir's index and working tree that a `git add -A` could stage with content
+// other than HEAD's (secretScanCandidates) and whose content holds one of r's values, with the blob id
+// `git hash-object` gives its content: the id a `git add` of it makes. Staged blobs that differ from HEAD are taken too.
 func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) ([]secretTaintObject, error) {
 	if r == nil {
 		return nil, nil
 	}
 	var hits []secretTaintObject
 	hits = append(hits, stagedFilesHoldingSecrets(dir, nil, r, nil)...)
-	out, err := git(dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	names, err := secretScanCandidates(dir)
 	if err != nil {
 		return hits, err
 	}
-	for _, name := range strings.Split(out, "\x00") {
-		if name == "" {
-			continue
-		}
+	for _, name := range names {
 		path := filepath.Join(dir, name)
 		info, err := os.Lstat(path)
 		if err != nil || !info.Mode().IsRegular() || info.Size() > secretScanFileMax {
@@ -419,6 +416,51 @@ func uncommittedObjectsHolding(dir string, r *integrationOutputRedactor) ([]secr
 		}
 	}
 	return hits, nil
+}
+
+// secretScanCandidates is every path of dir whose working-tree file may differ from HEAD's blob at that path: what
+// `git status` reports (changed against the index or HEAD, untracked and not ignored), and every entry flagged
+// assume-unchanged or skip-worktree, which status does not look at.
+//
+// A path left out has, as git's own stat check (racily clean entries included) finds, the same content as its blob in
+// HEAD. That blob is either in the checkout's base, which the taint design leaves out on purpose (recordSecretTaint
+// scans the tip's history excluding the base), or in a commit of the checkout's own, which the history scan just before
+// this one reads. So reading the file again cannot find anything the record does not already get, and the 300 checkouts
+// of a busy runner are no longer read file by file, docs and screenshots included, at every removal.
+//
+// The flags that could make status trust a stale answer are off: no fsmonitor, no untracked cache, and no optional
+// lock, so a session working in the checkout is not disturbed.
+func secretScanCandidates(dir string) ([]string, error) {
+	out, err := gitNulOutput(dir, "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false",
+		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames", "--ignore-submodules=all")
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var names []string
+	add := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	for _, entry := range strings.Split(string(out), "\x00") {
+		// "XY path"; --no-renames leaves no second path to follow an entry.
+		if len(entry) > 3 && entry[2] == ' ' {
+			add(entry[3:])
+		}
+	}
+	flagged, err := gitNulOutput(dir, "ls-files", "-z", "-v")
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range strings.Split(string(flagged), "\x00") {
+		// "T path": a lower-case tag is assume-unchanged, S is skip-worktree.
+		if len(entry) > 2 && entry[1] == ' ' && (entry[0] == 'S' || (entry[0] >= 'a' && entry[0] <= 'z')) {
+			add(entry[2:])
+		}
+	}
+	return names, nil
 }
 
 // rawBlobIDs is the git blob id, SHA-1 and SHA-256, of path's bytes as they are, with no filter applied.
@@ -526,47 +568,87 @@ func taintObjectsChecked(repo string) (map[string]string, bool) {
 // secretBeforeForget runs just before a grant's value is forgotten. A variable for the store's tests.
 var secretBeforeForget = taintAllCheckouts
 
-// secretTaintPending holds, in memory only, a matcher for each value whose removal scan or record write failed (a full
-// disk, git failing): forgetting the value then would forget too what it was in. Nothing hands it to a command; it is
-// kept only to record with, and while any is kept every reader of the record fails closed (readSecretTaintChecked).
-// It is retried every minute and at every turn end, and is lost with the process, as an ENV value is.
+// secretTaintPending holds, in memory only, a matcher for each value whose removal scan has not recorded yet: one still
+// running (a removal's scan runs off the delivery path, secretStore.scanThenOwe) or one that failed (a full disk, git
+// failing). Forgetting the value then would forget too what it was in. Nothing hands it to a command; it is kept only to
+// record with, and while any is kept every reader of the record fails closed (readSecretTaintChecked). A failed one is
+// retried every minute and at every turn end; one still running is left to the scan running it. It is lost with the
+// process, as an ENV value is.
 var secretTaintPending struct {
 	sync.Mutex
-	list []*integrationOutputRedactor
+	list    []*integrationOutputRedactor
+	running map[*integrationOutputRedactor]bool
 }
 
-// recordBeforeForget runs secretBeforeForget, and keeps r pending when it could not finish.
-func recordBeforeForget(r *integrationOutputRedactor) {
+// holdPendingTaint keeps r pending, marked as being recorded, and reports whether there is a scan to run for it. It is
+// called while the value is still held, so no reader sees a moment in which the value is known to neither.
+func holdPendingTaint(r *integrationOutputRedactor) bool {
 	if r == nil || secretBeforeForget == nil {
+		return false
+	}
+	secretTaintPending.Lock()
+	defer secretTaintPending.Unlock()
+	secretTaintPending.list = append(secretTaintPending.list, r)
+	if secretTaintPending.running == nil {
+		secretTaintPending.running = map[*integrationOutputRedactor]bool{}
+	}
+	secretTaintPending.running[r] = true
+	return true
+}
+
+// recordPendingTaint runs secretBeforeForget for a matcher holdPendingTaint (or retryPendingTaint) marked as being
+// recorded. It leaves the pending list only once its record is written; a failure leaves it there for the retries.
+func recordPendingTaint(r *integrationOutputRedactor) error {
+	err := secretBeforeForget(r)
+	secretTaintPending.Lock()
+	defer secretTaintPending.Unlock()
+	delete(secretTaintPending.running, r)
+	if err != nil {
+		return err
+	}
+	for i, kept := range secretTaintPending.list {
+		if kept == r {
+			secretTaintPending.list = append(secretTaintPending.list[:i], secretTaintPending.list[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+// recordBeforeForget runs secretBeforeForget, and keeps r pending while it runs and when it could not finish.
+func recordBeforeForget(r *integrationOutputRedactor) {
+	if !holdPendingTaint(r) {
 		return
 	}
-	if err := secretBeforeForget(r); err != nil {
+	logPendingTaintFailure(recordPendingTaint(r))
+}
+
+func logPendingTaintFailure(err error) {
+	if err != nil {
 		logln("secret grants: what a removed secret was in could not be recorded yet; Orbit publishes nothing from this runner until it is:", firstLine(err.Error()))
-		secretTaintPending.Lock()
-		secretTaintPending.list = append(secretTaintPending.list, r)
-		secretTaintPending.Unlock()
 	}
 }
 
-// retryPendingTaint records again what could not be recorded, and keeps what still cannot be.
+// retryPendingTaint records again what could not be recorded, and keeps what still cannot be. A matcher whose scan is
+// running already is not scanned a second time beside it.
 func retryPendingTaint() {
 	// The matchers stay pending while they are tried: a reader that looked in the meantime would otherwise see neither
 	// the pending state nor the entry still being written. Each leaves the list only once its record is written.
 	secretTaintPending.Lock()
-	pending := append([]*integrationOutputRedactor(nil), secretTaintPending.list...)
-	secretTaintPending.Unlock()
-	for _, r := range pending {
-		if err := secretBeforeForget(r); err != nil {
+	var pending []*integrationOutputRedactor
+	for _, r := range secretTaintPending.list {
+		if secretTaintPending.running[r] {
 			continue
 		}
-		secretTaintPending.Lock()
-		for i, kept := range secretTaintPending.list {
-			if kept == r {
-				secretTaintPending.list = append(secretTaintPending.list[:i], secretTaintPending.list[i+1:]...)
-				break
-			}
+		if secretTaintPending.running == nil {
+			secretTaintPending.running = map[*integrationOutputRedactor]bool{}
 		}
-		secretTaintPending.Unlock()
+		secretTaintPending.running[r] = true
+		pending = append(pending, r)
+	}
+	secretTaintPending.Unlock()
+	for _, r := range pending {
+		_ = recordPendingTaint(r)
 	}
 }
 

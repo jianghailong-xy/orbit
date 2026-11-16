@@ -27,42 +27,6 @@ final class MachineSetupTests: XCTestCase {
         ProviderChoice(slug: slug, label: label, kind: kind, brandKey: nil, modelLabel: "")
     }
 
-    // MARK: rule 2: the folder orbit register ran in is a suggestion
-
-    func testARegisterDirIsNotAskedAboutWhenThePathAloneIsTheAnswer() {
-        for dir in [nil, "", "   ", "~", "/", "~/", "//", " ~ "] {
-            XCTAssertNil(MachineSetup.registerDirToProbe(dir), String(describing: dir))
-        }
-    }
-
-    func testARegisterDirIsAskedAboutAsItWasReportedTidied() {
-        XCTAssertEqual(MachineSetup.registerDirToProbe("/home/orbit/code/app"), "/home/orbit/code/app")
-        XCTAssertEqual(MachineSetup.registerDirToProbe(" ~/code/app/ "), "~/code/app")
-        XCTAssertEqual(MachineSetup.registerDirToProbe("relative/dir"), "relative/dir")
-    }
-
-    func testAFolderIsOfferedOnlyWhenItIsThereAndNeitherHomeNorTheRoot() {
-        XCTAssertTrue(MachineSetup.isOfferedFolder(probe()))
-        XCTAssertTrue(MachineSetup.isOfferedFolder(probe(isGit: false, branch: nil)))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(exists: false, isDir: false)))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(isDir: false)))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(isHome: true)))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(path: "/")))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(probe(error: "permission denied")))
-        XCTAssertFalse(MachineSetup.isOfferedFolder(nil))
-    }
-
-    func testTheSuggestionIsTheDefaultOnlyWhenItIsAGitRepository() {
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: probe(), offersNewFolder: true), .suggested)
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: probe(isGit: false), offersNewFolder: true), .new)
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: nil, offersNewFolder: true), .new)
-    }
-
-    func testOnAMachineThatCantMakeAFolderWhatIsLeftIsTheDefault() {
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: probe(isGit: false), offersNewFolder: false), .suggested)
-        XCTAssertEqual(MachineSetup.defaultFolderChoice(suggested: nil, offersNewFolder: false), .other)
-    }
-
     // MARK: what a machine declares
 
     func testAMachineIsAskedAboutAPathOnlyIfItSaysItAnswers() throws {
@@ -79,6 +43,29 @@ final class MachineSetupTests: XCTestCase {
             #"{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"  "}"#)))
         XCTAssertFalse(MachineSetup.makesNewFolders(try runner(
             #"{"id":"r","name":"m","capabilities":[],"reposRoot":"/home/orbit/orbit-repos"}"#)))
+    }
+
+    func testANewFolderGoesInTheReposFolderOnARunnerThatOnlyMakesThemThere() {
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/root/orbit-repos", capabilities: ["create-workdir/v1"]),
+                       "/root/orbit-repos")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/root/orbit-repos/", capabilities: nil), "/root/orbit-repos")
+    }
+
+    func testANewFolderGoesInHomeTheDirectoryTheReposFolderSitsInOnARunnerThatDeclaresV2() {
+        let v2 = ["create-workdir/v1", "create-workdir/v2"]
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/root/orbit-repos", capabilities: v2), "/root")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/Users/austin/orbit-repos/", capabilities: v2), "/Users/austin")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "C:\\Users\\orbit\\orbit-repos", capabilities: v2),
+                       "C:\\Users\\orbit")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "/orbit-repos", capabilities: v2), "/")
+        XCTAssertEqual(MachineSetup.newFolderRoot(reposRoot: "C:\\orbit-repos", capabilities: v2), "C:\\")
+    }
+
+    func testAMachinesNewFolderRootIsReadFromWhatItReports() throws {
+        XCTAssertEqual(MachineSetup.newFolderRoot(try runner(
+            #"{"id":"r","name":"m","capabilities":["create-workdir/v1","create-workdir/v2"],"reposRoot":"/root/orbit-repos"}"#)), "/root")
+        XCTAssertEqual(MachineSetup.newFolderRoot(try runner(
+            #"{"id":"r","name":"m","capabilities":["create-workdir/v1"],"reposRoot":"/root/orbit-repos"}"#)), "/root/orbit-repos")
     }
 
     func testAMachineTooOldToAnswerGetsThereByItselfUnlessItsUpdaterSaysItCant() throws {
@@ -126,13 +113,13 @@ final class MachineSetupTests: XCTestCase {
     }
 
     func testANewFolderLandsUnderTheMachinesReposFolderHoweverThatWasReported() {
-        XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "/home/orbit/orbit-repos", name: "app"),
+        XCTAssertEqual(MachineSetup.newFolderPath(root: "/home/orbit/orbit-repos", name: "app"),
                        "/home/orbit/orbit-repos/app")
-        XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "/home/orbit/orbit-repos/", name: "app"),
+        XCTAssertEqual(MachineSetup.newFolderPath(root: "/home/orbit/orbit-repos/", name: "app"),
                        "/home/orbit/orbit-repos/app")
-        XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "C:\\Users\\orbit\\orbit-repos", name: "app"),
+        XCTAssertEqual(MachineSetup.newFolderPath(root: "C:\\Users\\orbit\\orbit-repos", name: "app"),
                        "C:\\Users\\orbit\\orbit-repos\\app")
-        XCTAssertEqual(MachineSetup.newFolderPath(reposRoot: "/home/orbit/orbit-repos", name: ""),
+        XCTAssertEqual(MachineSetup.newFolderPath(root: "/home/orbit/orbit-repos", name: ""),
                        "/home/orbit/orbit-repos/")
     }
 
@@ -141,24 +128,29 @@ final class MachineSetupTests: XCTestCase {
         probe(path: "/home/orbit/orbit-repos/app", exists: exists, isDir: isDir, isGit: isGit, branch: branch, error: error)
     }
 
-    func testANewFolderWithNothingThereStartsEmptyAsTheBoardSays() {
+    func testANameWithNothingThereIsANewFolderMadeAsTheSessionStarts() {
         XCTAssertEqual(MachineSetup.newFolderVerdict(inReposFolder(), machine: "orbit@austin"),
-                       FolderVerdict(tone: .ok, text: "Starts empty. Ask for a clone or a new project in your first message.",
+                       FolderVerdict(tone: .ok, text: "New folder · created as the session starts.",
                                      short: "new folder · created as the session starts", usable: true))
-        XCTAssertEqual(MachineSetup.newFolderPick(inReposFolder(), name: "app", reposRoot: "/home/orbit/orbit-repos",
+        XCTAssertEqual(MachineSetup.newFolderPick(inReposFolder(), name: "app", root: "/home/orbit/orbit-repos",
                                                   machine: "orbit@austin"),
                        .new(name: "app", path: "/home/orbit/orbit-repos/app"))
     }
 
-    func testANewFolderThatIsThereAlreadyIsUsedWithWhatIsInItAsThatFolder() {
+    func testANameThatIsAFolderAlreadyReadsAsAnyFolderAndIsUsedAsThatFolder() {
         let there = inReposFolder(exists: true, isDir: true, isGit: true, branch: "main")
         XCTAssertEqual(MachineSetup.newFolderVerdict(there, machine: "orbit@austin"),
-                       FolderVerdict(tone: .warn, text: "This folder already exists on orbit@austin. Sessions will use what’s in it.",
+                       FolderVerdict(tone: .ok, text: "Found · git repository · main",
                                      short: "git repository · main", usable: true))
-        XCTAssertEqual(MachineSetup.newFolderPick(there, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"),
+        XCTAssertEqual(MachineSetup.newFolderVerdict(there, machine: "orbit@austin"),
+                       MachineSetup.folderVerdict(there, machine: "orbit@austin"))
+        XCTAssertEqual(MachineSetup.newFolderPick(there, name: "app", root: "/home/orbit/orbit-repos", machine: "orbit@austin"),
                        .existing(path: "/home/orbit/orbit-repos/app", note: "git repository · main"))
-        XCTAssertEqual(MachineSetup.newFolderVerdict(inReposFolder(exists: true, isDir: true), machine: "orbit@austin").short,
-                       "not a git repository — sessions will share it instead of isolating.")
+        XCTAssertEqual(MachineSetup.newFolderVerdict(inReposFolder(exists: true, isDir: true), machine: "orbit@austin"),
+                       FolderVerdict(tone: .warn,
+                                     text: "Found · not a git repository — sessions will share it instead of isolating.",
+                                     short: "not a git repository — sessions will share it instead of isolating.",
+                                     usable: true))
     }
 
     func testANewFolderOverAFileCantBeAndSaysWhy() {
@@ -166,14 +158,14 @@ final class MachineSetupTests: XCTestCase {
         let text = "There’s already a file with this name on orbit@austin. Pick another name."
         XCTAssertEqual(MachineSetup.newFolderVerdict(file, machine: "orbit@austin"),
                        FolderVerdict(tone: .bad, text: text, short: text, usable: false))
-        XCTAssertNil(MachineSetup.newFolderPick(file, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"))
+        XCTAssertNil(MachineSetup.newFolderPick(file, name: "app", root: "/home/orbit/orbit-repos", machine: "orbit@austin"))
     }
 
     func testANewFolderTheRunnerCouldNotLookAtHasNothingToPick() {
         let failed = inReposFolder(error: "permission denied")
         XCTAssertEqual(MachineSetup.newFolderVerdict(failed, machine: "orbit@austin").text,
                        "Couldn’t check on orbit@austin: permission denied")
-        XCTAssertNil(MachineSetup.newFolderPick(failed, name: "app", reposRoot: "/home/orbit/orbit-repos", machine: "orbit@austin"))
+        XCTAssertNil(MachineSetup.newFolderPick(failed, name: "app", root: "/home/orbit/orbit-repos", machine: "orbit@austin"))
     }
 
     // MARK: rule 4: how a checked path reads
@@ -504,17 +496,6 @@ final class MachineSetupTests: XCTestCase {
         let script = Script([DirProbeAnswer(path: "p", status: "pending"), DirProbeAnswer(path: "p", status: "idle")])
         let outcome = try await run(script)
         XCTAssertEqual(outcome, .replaced)
-    }
-
-    /// One question at a time per machine: the register directory's, replaced by a path asked before it was answered,
-    /// is asked again once nothing else waits, and only while the machine can be asked.
-    func testAReplacedRegisterQuestionIsAskedAgainOnceNothingElseWaits() {
-        XCTAssertTrue(DirProbeRelay.asksAgain(.replaced, online: true, otherWaiting: false))
-        XCTAssertFalse(DirProbeRelay.asksAgain(.replaced, online: true, otherWaiting: true))
-        XCTAssertFalse(DirProbeRelay.asksAgain(.replaced, online: false, otherWaiting: false), "offline, what is stored is all")
-        XCTAssertFalse(DirProbeRelay.asksAgain(nil, online: true, otherWaiting: false), "still asking")
-        XCTAssertFalse(DirProbeRelay.asksAgain(.unanswered, online: true, otherWaiting: false))
-        XCTAssertFalse(DirProbeRelay.asksAgain(.answered(probe()), online: true, otherWaiting: false))
     }
 
     func testAMachineThatNeverAnswersIsSaidToHaveNot() async throws {

@@ -1,5 +1,9 @@
 package io.orbitd.android.reader
 
+import android.content.ClipboardManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -22,10 +27,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.attachments.AttachmentActions
+import io.orbitd.android.attachments.importGuestImage
 import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.guests.GuestConversation
 import io.orbitd.android.core.guests.GuestCopy
+import io.orbitd.android.core.guests.GuestImage
 import io.orbitd.android.core.guests.GuestSession
 import io.orbitd.android.core.guests.GuestTone
 import io.orbitd.android.core.guests.SharedWithMe
@@ -36,6 +44,8 @@ import io.orbitd.android.core.guests.word
 import io.orbitd.android.directory.LoadingMessage
 import io.orbitd.android.directory.StatusMessage
 import io.orbitd.android.navigation.OrbitRoute
+import io.orbitd.android.text.LocalReaderResources
+import io.orbitd.android.text.ReaderResources
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.PageBar
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -44,9 +54,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * The guest view (docs/session-guests-design.md §4; boards docs/mocks/share-links/10-session-guests-3 and 11-guest-one-link-2; web
  * `GuestSessionView`): a session someone invited this account to reply in. Its head — the title and `Shared by <owner>` in the bar, the
  * status and a Guest badge under it — over the transcript the guest door projects, drawn by the reader's own rows, read only: no
- * approval, no session menu. A composer that only takes text: no mode, model or effort, no `!` shell, no attachments. A message is a
- * turn of the owner's session, on the owner's machine; one to an ended session restarts it there. The guest's own messages are headed
- * `You` and the owner's with the owner's name. A 404 at any point is the not-shared state.
+ * approval, no session menu. A composer that takes words and images (PNG, JPEG, WebP or GIF up to 5 MB, picked or pasted): no mode,
+ * model or effort, no `!` shell, no other files. A message is a turn of the owner's session, on the owner's machine; one to an ended
+ * session restarts it there. The guest's own messages are headed `You` and the owner's with the owner's name. A 404 at any point is
+ * the not-shared state.
  */
 @Composable
 fun GuestSessionPage(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, id: String, initial: GuestSession? = null) {
@@ -67,7 +78,10 @@ fun GuestSessionPage(app: OrbitApplication, handle: SessionHandle, route: OrbitR
             StatusMessage(GuestCopy.COULD_NOT_LOAD, view.error!!) { model.retryLoad(); retry++ }
         }
         !view.loaded -> Box(Modifier.fillMaxSize().padding(16.dp).testTag("guest-loading")) { LoadingMessage(GuestCopy.LOADING) }
-        else -> GuestConversationView(model)
+        // A turn's images are read through the guest door: the owner's `attachments/:id` answers a guest 404.
+        else -> CompositionLocalProvider(LocalReaderResources provides remember(handle, id) { ReaderResources(app.session, handle, guestSessionId = id) }) {
+            GuestConversationView(model)
+        }
     }
 }
 
@@ -142,26 +156,74 @@ private fun GuestHead(word: String, tone: GuestTone) {
     HorizontalDivider()
 }
 
-/** Text only: the box, Send, and the line under it — where a message runs, that it waits its turn, or that it restarts the session. */
+/** The staged images, the box with its + (Image, Paste image) and Send, and the line under it — where a message runs, that it waits
+ * its turn, or that it restarts the session. The owner's composer's picker, paste and staged rows, uploaded through the guest door. */
 @Composable
 private fun GuestComposer(model: GuestConversation, owner: String) {
     val view by model.state.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var menu by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<GuestImage?>(null) }
+    var selectionNotice by remember { mutableStateOf<String?>(null) }
+    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(5)) { uris ->
+        // The older OpenDocument fallback does not enforce Photo Picker's selection count.
+        selectionNotice = if (uris.size > 5) "Only the first five selected photos were added." else null
+        uris.take(5).forEach { importGuestImage(context, scope, model, it, "photo") }
+    }
+    val clipboard = context.getSystemService(ClipboardManager::class.java)
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (view.state.waiting) Row(Modifier.testTag("guest-waiting").semantics { liveRegion = LiveRegionMode.Polite },
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(7.dp).background(LocalOrbitColors.current.needsYou, CircleShape))
             Text(GuestCopy.waiting(owner), style = MaterialTheme.typography.bodySmall, color = LocalOrbitColors.current.needsYou)
         }
+        selectionNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        view.images.forEach { image ->
+            Column(Modifier.testTag("guest-image")) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { preview = image }, modifier = Modifier.weight(1f)) {
+                        Text("${image.name} · ${image.size / 1024} KB", maxLines = 2)
+                    }
+                    TextButton(onClick = { model.removeImage(image.id) }, enabled = !view.sending,
+                        modifier = Modifier.testTag("guest-image-remove")) { Text("Remove") }
+                }
+                if (image.uploading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                image.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Box {
+                TextButton(enabled = !view.sending, onClick = { menu = true }, modifier = Modifier.testTag("guest-attach")) { Text("+") }
+                DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Image") }, onClick = {
+                        menu = false; photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    })
+                    val clip = clipboard.primaryClip
+                    if (clip != null && clip.itemCount > 0 && clip.description.hasMimeType("image/*")) {
+                        DropdownMenuItem(text = { Text("Paste image") }, onClick = {
+                            menu = false; clip.getItemAt(0).uri?.let { importGuestImage(context, scope, model, it, "paste") }
+                        })
+                    }
+                }
+            }
             OutlinedTextField(view.draft, model::edit, Modifier.weight(1f).testTag("guest-composer-input"), enabled = !view.sending,
                 placeholder = { Text(GuestCopy.placeholder(owner), maxLines = 1) }, minLines = 1, maxLines = 4)
             Spacer(Modifier.width(8.dp))
-            Button(onClick = model::send, enabled = view.draft.isNotBlank() && !view.sending, modifier = Modifier.testTag("guest-send")) {
-                Text(if (view.sending) "Sending…" else "Send")
+            // With images alone it sends too; pressed while one is still uploading, it waits for it.
+            Button(onClick = model::send, enabled = view.canSend, modifier = Modifier.testTag("guest-send")) {
+                Text(if (view.sending && view.uploading) "Uploading…" else if (view.sending) "Sending…" else "Send")
             }
         }
         val error = view.sendError
         Text(error ?: view.state.hint(owner), Modifier.testTag("guest-hint"), style = MaterialTheme.typography.bodySmall,
             color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    preview?.let { image ->
+        val index = view.images.indexOfFirst { it.id == image.id }
+        AttachmentActions(image.name, image.mime, { model.imageBytes(image.id) ?: error("This image is no longer attached.") },
+            contentKey = image.id,
+            previous = if (index > 0) ({ preview = view.images[index - 1] }) else null,
+            next = if (index >= 0 && index < view.images.lastIndex) ({ preview = view.images[index + 1] }) else null) { preview = null }
     }
 }

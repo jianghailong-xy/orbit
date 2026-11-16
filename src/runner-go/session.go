@@ -446,6 +446,27 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 	return ""
 }
 
+// moveIdleSessionToItsAccount is what a reload does for a session it finds idle, besides leaving it
+// cold: an account switch carries its conversation now, as its next spawn would, so the account it
+// left can be removed while it waits for its next message (2026-11-16). Each engine moves the way its
+// own spawn does, and records the new account only once the conversation is there. A reload that did
+// not switch accounts finds nothing to carry. Antigravity keeps no conversation in an account and
+// records its new one as it retires agy (runAntigravitySessionProcess).
+func moveIdleSessionToItsAccount(job *ClaimedSession, execDir, scratch string) {
+	switch runtimeProvider(job) {
+	case providerClaude:
+		moveIdleClaudeConversation(job, execDir, scratch)
+	case providerCodex:
+		if moved, err := moveCodexThreadToClaimedAccount(job, scratch, execDir); err != nil {
+			logln("codex session", job.SessionID, "stays on its account: moving its thread failed:", err)
+		} else if moved {
+			logln("codex session", job.SessionID, "moved to the account it was switched to")
+		}
+	case providerKimi:
+		moveIdleKimiConversation(job, execDir, scratch)
+	}
+}
+
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false, "")
 }
@@ -1157,16 +1178,6 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// starts to stop rather than after this supervisor's turn drain, so what it kills is
 	// reported inside the grace the final event flush is given (eventCtx above).
 	bg.drainOnRunnerShutdown(shutdownCtx)
-	// A runner-hosted job outlives the engine that asked for it, so it can also finish long after
-	// the last engine was recycled — with the whole point being that nobody has to sit and watch.
-	// Lend the tailer the pool's own notion of residency and the account's existing push channel,
-	// so a job that lands on a cold session says so on somebody's phone instead of waiting to be
-	// discovered. The alert is the same one `orbit notify` sends, rate limit and all, on the daemon's
-	// own route (sessionNotify).
-	bg.notifyWhenCold(
-		func() bool { return pool.engineResident(live) },
-		func(message string) error { return t.sessionNotify(job.SessionID, message) },
-	)
 	// A job that asked to wake this session does it through the control plane, which files the wake
 	// as a turn: delivered to the resident engine, or resumed into a new one when the engine that
 	// started the wait is gone. The receipt says which, for this runner's log.
@@ -1738,8 +1749,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			// --resume + the new flags (already applied to job.Agent). Not a crash, so
 			// it doesn't consume the respawn budget. If the session is idle, leave it
 			// cold rather than spawning a process that owns no active permit; its next
-			// claim resumes directly with these updated flags.
+			// claim resumes directly with these updated flags. An account switch is the one
+			// change that cannot wait for that claim: the conversation is carried now, so the
+			// account the session left can be removed while it is idle.
 			if !pool.isActive(live) {
+				moveIdleSessionToItsAccount(job, execDir, scratch)
 				continue
 			}
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
@@ -1962,7 +1976,7 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 func sessionContextEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
 	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth,
-		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID:
+		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID, envScheduleRun:
 		return true
 	default:
 		return false

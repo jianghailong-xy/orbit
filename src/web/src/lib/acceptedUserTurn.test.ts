@@ -309,6 +309,14 @@ describe('accepted active-snapshot reconciliation', () => {
     ).toEqual([listed]);
   });
 
+  it('an opening held for its translation is listed as queued, and the tab’s copy gives way to it', () => {
+    const local = accepted({ key: 'initial:session-a', turnId: undefined, text: 'start the session' });
+
+    expect(
+      reconcileAcceptedUserTurnSnapshot([], [local], 'session-a', new Set([local.key]), true),
+    ).toEqual([]);
+  });
+
   it('a listed row that is not the opening leaves the tab’s opening where it is', () => {
     const local = accepted({ key: 'initial:session-a', turnId: undefined, text: 'start the session' });
     const next = recovered({ key: 'turn-next', turnId: 'turn-next', text: 'and then deploy' });

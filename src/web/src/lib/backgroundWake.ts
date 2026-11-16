@@ -33,6 +33,20 @@ export interface BackgroundWakeJob {
   outputTo: number | null;
   /** The tail of the output the agent was shown; empty where the block said there was none. */
   outputTail: string;
+  /** Set for a job that is still running but has gone quiet (`<background-job-stall>`), null otherwise. */
+  stall: BackgroundJobStall | null;
+}
+
+/** How a quiet job stood when its stall wake was sent, as the stall block spells it out. */
+export interface BackgroundJobStall {
+  /** How long it had been running; null where the block did not say. */
+  runningForMs: number | null;
+  /** How long it had written nothing — all of its run when it never wrote anything. */
+  quietForMs: number | null;
+  /** When it last wrote something; null when it never did, or the block did not say. */
+  lastOutputAt: string | null;
+  /** It has written nothing at all since it started. */
+  wroteNothing: boolean;
 }
 
 /** One wakeup that came due on this turn. */
@@ -58,14 +72,27 @@ export interface BackgroundWake {
   rest: string;
 }
 
-/** A whole block, tag to matching tag. */
-const BLOCK = /<(background-job-wake|scheduled-wakeup)>\n([\s\S]*?)\n<\/\1>/g;
+/**
+ * A whole block, tag to matching tag. A quiet job's wake comes in a block of its own
+ * (`<background-job-stall>`, runner-api/background-job-wake.ts `buildBackgroundStallBlock`), whose job
+ * lines are written as a wake's are; only what brought it differs.
+ */
+const BLOCK = /<(background-job-wake|background-job-stall|scheduled-wakeup)>\n([\s\S]*?)\n<\/\1>/g;
 
 /** The line a job's fields open on, at the indent the block puts it at. */
 const JOB_HEAD = /^ {4}bgj_[^｜\s]*｜/;
 
 /** `ended｜…` / `已结束｜…`, and the same for a wake new output opened. */
 const TRIGGER = /^ {6}(ended|已结束|new output|有新输出)(?:｜(.*))?$/;
+
+/** `gone quiet｜still running｜running for 15m 2s when this was sent` — a stall block's trigger. Only
+ *  ever written in English: the stall wake postdates the Chinese wording. */
+const STALL_TRIGGER = /^ {6}gone quiet｜(.*)$/;
+const RUNNING_FOR = /running for (.+?) when this was sent/;
+/** `no new output for 15m 0s｜last output at 2026-11-15T17:34:10Z` */
+const QUIET_FOR = /^ {6}no new output for (.+?)(?:｜last output at (\S+))?$/;
+/** `no output at all｜it has written nothing in the 15m 2s since it started` */
+const WROTE_NOTHING = /^ {6}no output at all｜/;
 
 const EXIT_CODE = /^(?:exit code|退出码)\s*(-?\d+)$/;
 const KILL_REASON = /^(?:reason|原因)\s*(.+)$/;
@@ -101,8 +128,8 @@ export function parseBackgroundWake(note: string | null | undefined): Background
     rest += note.slice(end, m.index);
     end = m.index + m[0].length;
     blocks.push(m[0]);
-    if (m[1] === 'background-job-wake') jobs.push(...parseJobs(m[2]));
-    else wakeups.push(...parseWakeups(m[2]));
+    if (m[1] === 'scheduled-wakeup') wakeups.push(...parseWakeups(m[2]));
+    else jobs.push(...parseJobs(m[2]));
   }
   // A block whose every field is unreadable is not a card: better the note as it always read.
   if (jobs.length === 0 && wakeups.length === 0) return null;
@@ -124,12 +151,13 @@ function parseJobs(body: string): BackgroundWakeJob[] {
 function parseJob(lines: string[]): BackgroundWakeJob {
   // The command can run to several lines of its own (a `while` loop, a heredoc), so the fields end
   // where the trigger line starts rather than at the first newline.
-  const at = lines.findIndex((line, i) => i > 0 && TRIGGER.test(line));
+  const at = lines.findIndex((line, i) => i > 0 && (TRIGGER.test(line) || STALL_TRIGGER.test(line)));
   const head = lines.slice(0, at < 0 ? lines.length : at).join('\n').replace(/^ {4}/, '');
   // id｜kind｜command[｜description]. A `｜` inside the command would be indistinguishable from a
   // field break to the writer too, so the ends are trusted and the middle is the command.
   const fields = head.split('｜');
-  const trigger = at < 0 ? null : TRIGGER.exec(lines[at]);
+  const stalled = at < 0 ? null : STALL_TRIGGER.exec(lines[at]);
+  const trigger = at < 0 || stalled ? null : TRIGGER.exec(lines[at]);
   const facts = (trigger?.[2] ?? '').split('｜');
   const kill = KILL_REASON.exec(facts[1] ?? '');
   const output = find(lines, OUTPUT_LINE);
@@ -138,7 +166,7 @@ function parseJob(lines: string[]): BackgroundWakeJob {
     kind: fields[1] ?? '',
     command: fields.length > 3 ? fields.slice(2, -1).join('｜') : (fields[2] ?? ''),
     description: fields.length > 3 ? fields[fields.length - 1] : null,
-    status: trigger ? (facts[0] ?? '') : '',
+    status: trigger ? (facts[0] ?? '') : stalled ? 'running' : '',
     ended: trigger ? trigger[1] === 'ended' || trigger[1] === '已结束' : false,
     exitCode: numberOr(EXIT_CODE.exec(facts[1] ?? '')?.[1]),
     killReason: kill ? kill[1].replace(REASON_GLOSS, '') : null,
@@ -146,7 +174,29 @@ function parseJob(lines: string[]): BackgroundWakeJob {
     outputFrom: numberOr(output?.[2]),
     outputTo: numberOr(output?.[3]),
     outputTail: parseTail(lines),
+    stall: stalled ? parseStall(stalled[1], lines) : null,
   };
+}
+
+function parseStall(facts: string, lines: string[]): BackgroundJobStall {
+  const runningForMs = durationMs(RUNNING_FOR.exec(facts)?.[1]);
+  const wroteNothing = lines.some((line) => WROTE_NOTHING.test(line));
+  const quiet = find(lines, QUIET_FOR);
+  return {
+    runningForMs,
+    quietForMs: wroteNothing ? runningForMs : durationMs(quiet?.[1]),
+    lastOutputAt: quiet?.[2] ?? null,
+    wroteNothing,
+  };
+}
+
+/** `2h 5m 0s` / `15m 2s` / `45s` (the block's `readableDuration`) in milliseconds; null for anything else. */
+function durationMs(text: string | undefined): number | null {
+  if (!text || !/^(?:\d+[hms] ?)+$/.test(text)) return null;
+  const unit: Record<string, number> = { h: 3_600_000, m: 60_000, s: 1000 };
+  let ms = 0;
+  for (const [, n, u] of text.matchAll(/(\d+)([hms])/g)) ms += Number(n) * unit[u];
+  return ms;
 }
 
 /** The output tail as the agent read it, back at column zero. */

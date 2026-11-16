@@ -537,10 +537,10 @@ describe('sessionLine names the gate holding a queued session', () => {
     });
   });
 
-  it('keeps slot wording when a slot really is what is missing', () => {
+  it('says the runner is full when a slot really is what is missing', () => {
     expect(
       sessionLine({ status: 'PENDING', queuedReason: 'runner_at_capacity' }, true),
-    ).toEqual({ text: 'Waiting for slot', tone: 'queued' });
+    ).toEqual({ text: 'Runner full', tone: 'queued' });
   });
 });
 
@@ -598,7 +598,12 @@ describe('sessionLine over a session parked on a watch', () => {
   });
 
   it("keeps a background process out of the watch's line", () => {
+    // A process it left up never takes the reply's place (the owner, 2026-11-16): the glyph says it.
     expect(sessionLine({ ...parked, runningBgCount: 1 }, true)).toEqual({
+      text: 'Nothing for you to do until it lands.',
+      tone: 'preview',
+    });
+    expect(sessionLine({ ...parked, lastAssistantText: null, runningBgCount: 1 }, true)).toEqual({
       text: 'Background process running…',
       tone: 'background',
     });
@@ -662,6 +667,12 @@ describe('sessionLine over a session with a recap', () => {
     expect(sessionLine({ ...parked, recapAt: null }, true)).toEqual({ text: recapText, tone: 'preview' });
   });
 
+  // A background process the session left up is no news about it (the owner, 2026-11-16): the recap
+  // keeps the line, and the row's glyph is what says a process is up.
+  it('keeps the recap over a background process it left up', () => {
+    expect(sessionLine({ ...parked, runningBgCount: 2 }, true)).toEqual({ text: recapText, tone: 'preview' });
+  });
+
   it('falls back to the reply when there is no recap', () => {
     expect(sessionLine({ ...parked, recapText: null }, true)).toEqual({
       text: 'Committed the row change.',
@@ -697,15 +708,11 @@ describe('sessionLine over a session with a recap', () => {
       ),
     ).toEqual({ text: 'Running Bash…', tone: 'running' });
 
-    // Waiting on you, a background process the session left up, a watch that will resume it, and
-    // the message you sent that has no answer yet — each is newer than the recap.
+    // Waiting on you, a watch that will resume it, and the message you sent that has no answer yet
+    // — each is newer than the recap.
     expect(sessionLine({ ...parked, pendingApprovals: 1 }, true)).toEqual({
       text: 'Waiting for approval',
       tone: 'approval',
-    });
-    expect(sessionLine({ ...parked, runningBgCount: 1 }, true)).toEqual({
-      text: 'Background process running…',
-      tone: 'background',
     });
     expect(
       sessionLine(parked, true, { word: 'Watching 1 target', line: 'Watching Fix the login redirect' }),

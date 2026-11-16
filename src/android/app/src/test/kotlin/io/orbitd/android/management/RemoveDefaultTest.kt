@@ -97,9 +97,8 @@ class RemoveDefaultTest {
         assertEquals(RunnerAccountCopy.removeDetailLast("wikova", "Default"),
             question(removed(work(), personal(), accountRemove = leaving(PERSONAL, "pending")), 0).second)
         for (said in listOf(automatic, last)) assertFalse(said.second, said.second.contains("run on Default"))
-        // While Default is in use, an added account's question is the page's own, as it was.
-        assertEquals("Remove “Work” from wikova?" to "~/.orbit/codex-accounts/$WORK goes from this machine, and sessions stop running on it. " +
-            "Default is untouched.", question(withDefault(work()), 1))
+        // While Default is in use, an added account's workspaces switch to Default.
+        assertEquals("Remove Work?" to "Workspaces using it switch to Default.", question(withDefault(work()), 1))
     }
 
     @Test fun theRemovedStateListsTheAccountsThatRemainEachWithItsOwnStateThenDefaultsLine() {

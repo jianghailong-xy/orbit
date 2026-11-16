@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url(/var/tmp/landing-mock-render/fonts/Inter.ttf)}
+:root{--bg-raised:#fff;--border:#dee0e3;--border-subtle:#eceef1;--text:#1f2329;--text-2:#646a73;--text-3:#8f959e;--brand:#3370ff;--warn-bg:#fff5e8;--warn:#d46b08}
+*{box-sizing:border-box}body{margin:0;padding:28px 28px 8px;font-family:Inter,sans-serif;background:#f5f6f7;color:var(--text);width:1460px}
+h1{font-size:20px;margin:0 0 4px}.sub{color:var(--text-2);font-size:13px;margin-bottom:22px}
+.cols{display:flex;gap:28px}.col{flex:1}.col h2{font-size:15px;margin:0 0 10px}.col h2 span{font-weight:400;color:var(--text-2);font-size:13px}
+.card{background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;position:relative}
+.re-row{display:grid;grid-template-columns:minmax(137px,1fr) 108px minmax(128px,190px) 172px;align-items:center;gap:14px;padding:11px 14px}
+.re-block+.re-block{border-top:1px solid var(--border-subtle)}
+.name{display:flex;gap:12px;align-items:center}.ic{width:26px;height:26px;border-radius:6px;flex:none}
+.name b{font-size:13.5px;font-weight:600;display:block}.name small{font-size:11.5px;color:var(--text-3)}
+.pill{justify-self:start;font-size:12px;padding:2px 8px;border-radius:6px;background:var(--warn-bg);color:var(--warn)}
+.q{font-size:11.5px;color:var(--text-3)}
+.re-act{display:flex;justify-content:flex-end;padding-right:36px}
+.btn{height:30px;padding:0 10px;border-radius:6px;font-size:12px;font-weight:500;line-height:30px;background:var(--brand);color:#fff;white-space:nowrap}
+.re-dup{padding:0 14px 11px 52px;margin-top:-4px;font-size:11.5px;color:var(--text-3)}
+.terms{padding:0 14px 11px 14px;font-size:12px;color:var(--text-3)}.terms.fixed{padding-left:52px;font-size:11.5px}
+a{color:var(--brand);text-decoration:none}
+.mark{position:absolute;border:2px solid #f5222d;border-radius:8px;pointer-events:none}
+.tag{position:absolute;background:#f5222d;color:#fff;font-size:11px;font-weight:700;width:18px;height:18px;border-radius:9px;text-align:center;line-height:18px}
+.good .mark{border-color:#00b42a}.good .tag{background:#00b42a}
+.notes{margin-top:14px;font-size:12.5px;line-height:1.6;color:var(--text-2)}.notes b{color:var(--text)}
+</style></head><body>
+<h1>Antigravity CLI row: its sign-in should look like its neighbours'</h1>
+<div class="sub">Drawn from the Machines page's real grid (<code>.re-row</code> 137/108/190/172, <code>.re-dup</code> 38px indent) and its light tokens. Left is main today, as in your screenshot; right is the proposal.</div>
+<div class="cols">
+<div class="col"><h2>Now <span>· main</span></h2><div class="card" id="now"></div>
+<div class="notes"><b>①</b> The only row whose button is labelled with a provider: it is wider than the others, so its left edge leaves the column of Sign in buttons.<br>
+<b>②</b> The Google terms line starts at the card's edge, 38px left of the note above it, at 12px instead of 11.5px.<br>
+<b>③</b> On macOS and Android, a signed-out Antigravity row already says <b>Sign in</b>. They show <b>Sign in with Google</b> only when the CLI runs on an API key. Only the web says it every time.</div></div>
+<div class="col good"><h2>Proposed</h2><div class="card" id="new"></div>
+<div class="notes"><b>①</b> A signed-out row says <b>Sign in</b>, like every other engine and like macOS and Android. The sign-in panel it opens already says Google and shows the terms.<br>
+<b>②</b> The terms line moves in under the note and matches its size, so it reads as part of the row.<br>
+<b>③</b> Unchanged: <b>Sign in with Google</b> stays on the row of a CLI that runs on a Gemini API key. There, it tells the two ways of signing in apart, as it does on the native apps.</div></div>
+</div>
+<script>
+const rows=[["Claude Code","2.1.300","#d97757"],["Codex","0.158.0","#2b2d31"],["Antigravity CLI","1.5.9","#1aa3b5"],["Kimi Code","2.6.2","#111"]];
+function card(el,fixed){el.innerHTML=rows.map(([n,v,c])=>{const ag=n.startsWith("Anti");const label=ag&&!fixed?"Sign in with Google":"Sign in";
+return `<div class="re-block"><div class="re-row"><div class="name"><span class="ic" style="background:${c}"></span><span><b>${n}</b><small>${v}</small></span></div><span class="pill">Signed out</span><span class="q">Sign in to see quota</span><div class="re-act"><span class="btn" ${ag?'id="b-'+el.id+'"':''}>${label}</span></div></div>
+<div class="re-dup" ${ag?'id="d-'+el.id+'"':''}>Sessions on this runner can’t use ${n} until you sign in again.</div>
+${ag?`<div class="terms ${fixed?'fixed':''}" id="t-${el.id}"><a>Google terms</a> restrict personal account sign-in through third-party tools; your account may be suspended.</div>`:''}</div>`}).join("");}
+card(document.getElementById("now"),false);card(document.getElementById("new"),true);
+function mark(card,id,n,pad=4){const c=document.getElementById(card).getBoundingClientRect(),r=document.getElementById(id).getBoundingClientRect();
+const m=document.createElement("div");m.className="mark";Object.assign(m.style,{left:r.left-c.left-pad+"px",top:r.top-c.top-pad+"px",width:r.width+2*pad+"px",height:r.height+2*pad+"px"});
+const t=document.createElement("div");t.className="tag";t.textContent=n;Object.assign(t.style,{left:r.left-c.left-pad-9+"px",top:r.top-c.top-pad-9+"px"});document.getElementById(card).append(m,t);}
+// show the Sign-in column edge
+document.fonts.ready.then(()=>{for(const id of["now","new"]){mark(id,"b-"+id,"①");mark(id,"t-"+id,"②",2);}});
+</script></body></html>

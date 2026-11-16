@@ -55,6 +55,9 @@ export class CreateWorkspaceDto {
   // the project directory it runs in. Both are otherwise minted by `orbit register`.
   @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
+  /** In place of workDir: a new folder of this name under the runner's reposRoot, made by the runner before
+   *  this workspace's first session starts (the claim's createWorkDir). Needs runnerId. */
+  @IsOptional() @IsString() newFolder?: string;
   // Explicit repository address; when empty, the runner's directory probe can backfill it from
   // origin. Used for project integration, never to clone or change the checkout.
   @IsOptional() @IsString() repoUrl?: string;

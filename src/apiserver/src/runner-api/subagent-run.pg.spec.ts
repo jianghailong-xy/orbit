@@ -16,6 +16,12 @@
  *      the member is recorded on the run's attempt, and the parent session's pool fields are unchanged.
  *   5. With nothing in the tier's pool the POST is refused NO_SUBAGENT_PROVIDER, listing each provider's
  *      reason, and no run is opened — it never falls back onto the parent's model.
+ *   6. A Codex account pool of the owner's own is the pick: the child runs codex on a gateway token minted for it
+ *      alone, which names the pool's ChatGPT account chosen for it (the one with room, not the nearly spent one) and
+ *      which the gateway sends on in place of the session's own; the account is recorded on the run's attempt; the
+ *      parent session's pool fields are unchanged and it holds no pool token of its own. Another account's Codex
+ *      pools — one of its own, and one it shared without adding this owner — are never candidates, and naming one
+ *      is refused.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-run.pg.spec.ts
  *
@@ -37,9 +43,11 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { PoolLoginGatewayService } from '../providers/pool-login-gateway.service';
 import { RunnerApiController } from './runner-api.controller';
+import { subagentPoolMember } from './session-provider-exec';
 import { RunnerSubagentsController } from './runner-subagents.controller';
-import { SubagentRunCreateDto, SubagentRunUpdateDto } from './subagent-run';
+import { SubagentRunCreateDto, SubagentRunUpdateDto, subagentRunView } from './subagent-run';
 
 const URL = process.env.COORDINATOR_PG_URL;
 process.env.PROVIDER_SECRET_KEY ??= 'subagent-run-spec';
@@ -176,6 +184,29 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.equal(repeated.applied, false, 'a repeated report changes nothing');
     assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: sessionId } })).costUsd, after,
       'and adds no cost again');
+  });
+
+  await t.test("a read-only run keeps its flag, and the client's view names its engine, flag, files and description", async () => {
+    const sessionId = await parentSession();
+    const reader = await subagents.createSubagentRun(runner, sessionId, create({
+      toolUseId: 'toolu_01ReadOnly', type: 'explore', readonly: true, description: 'Find every caller',
+    }));
+    assert.equal(reader.decision.readonly, true, 'the decision keeps the definition\'s read-only flag');
+    const writer = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Writer', type: 'general' }));
+    assert.equal(writer.decision.readonly, undefined, 'and a writer has none');
+    await subagents.updateSubagentRun(runner, sessionId, writer.runId, update({
+      status: 'DONE', changedFiles: ['src/quota/poller.ts'], costUsd: 0.01,
+    }));
+    const rows = await prisma.subagentRun.findMany({
+      where: { sessionId }, orderBy: { createdAt: 'asc' }, include: { workspace: { select: { name: true } } },
+    });
+    const [readView, writeView] = rows.map((row) => subagentRunView(row));
+    assert.equal(readView.readonly, true);
+    assert.equal(readView.engine, 'claude', 'the engine its attempt runs on');
+    assert.equal(readView.description, 'Find every caller');
+    assert.deepEqual(readView.changedFiles, []);
+    assert.equal(writeView.readonly, false);
+    assert.deepEqual(writeView.changedFiles, ['src/quota/poller.ts']);
   });
 
   await t.test('the fifth concurrent POST is refused once four are RUNNING, and a disabled agent is refused', async () => {
@@ -439,5 +470,101 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
     assert.ok(refusal!.message!.includes('- claude (claude): No models with a tier on claude'), 'the parent\'s own engine, with its reason');
     assert.ok(refusal!.message!.includes("- codex (codex): codex is not installed on the parent's runner"), 'and every other provider');
     assert.equal(await prisma.subagentRun.count({ where: { sessionId } }), 0, 'no run was opened on the parent\'s model');
+  });
+  await t.test("a Codex pool is the pick: the child runs on its account's token, recorded on the run; another account's pool never", async () => {
+    // A machine with Claude signed in at 70% used, and codex installed but signed out: a Codex pool runs through the
+    // pool gateway on its own accounts, not the runner's sign-in.
+    const machineId = randomUUID();
+    const inAnHour = new Date(Date.now() + 3_600_000);
+    const machine = (await prisma.runner.create({
+      data: {
+        id: machineId, name: 'the machine a Codex pool runs on', ownerId, tokenHash: sha256(`subagent-codex-${machineId}`),
+        planUsage: { claude: { fiveHour: { utilization: 70, resetsAt: inAnHour.toISOString() } } },
+        engines: [{ engine: 'claude', installed: true, auth: 'yes' }, { engine: 'codex', installed: true, auth: 'no' }],
+        modelCatalog: {
+          claude: [{ value: 'claude-opus-5-5', label: 'Opus 5.5', priority: 0 }],
+          codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
+        },
+      },
+    })) as Runner;
+    const tag = machineId.slice(-8);
+    const login = (poolId: string, userId: string, accountId: string, email: string, utilization: number, createdAt: Date) =>
+      prisma.poolCodexLogin.create({
+        data: {
+          poolId, userId, accountId, email, createdAt,
+          accessTokenEnc: encryptSecret('access'), refreshTokenEnc: encryptSecret('refresh'), expiresAt: inAnHour,
+          usage: { fiveHour: { utilization, resetsAt: inAnHour.toISOString() } },
+        },
+      });
+    // The owner's own Codex pool: Erin, the older account, nearly spent; Frank with 80% of his window left.
+    const own = await prisma.providerPool.create({ data: { slug: `codex-own-${tag}`, label: 'Codex own', ownerId, engine: 'codex' } });
+    await prisma.providerPoolPerson.create({ data: { poolId: own.id, userId: ownerId, role: 'ADMIN' } });
+    await login(own.id, ownerId, `acct-erin-${tag}`, 'erin@own.invalid', 85, new Date(Date.now() - 60_000));
+    await login(own.id, ownerId, `acct-frank-${tag}`, 'frank@own.invalid', 20, new Date());
+    // Another account: a Codex pool of its own with a fresh account, and a shared one this owner was never added to.
+    const strangerId = randomUUID();
+    await prisma.user.create({
+      data: { id: strangerId, email: `subagent-stranger-${strangerId}@runner-door.invalid`, name: 'Another account', passwordHash: 'x' },
+    });
+    const theirs = await prisma.providerPool.create({
+      data: { slug: `codex-theirs-${tag}`, label: 'Codex theirs', ownerId: strangerId, engine: 'codex' },
+    });
+    await prisma.providerPoolPerson.create({ data: { poolId: theirs.id, userId: strangerId, role: 'ADMIN' } });
+    await login(theirs.id, strangerId, `acct-stranger-${tag}`, 'stranger@theirs.invalid', 0, new Date());
+    const theirsShared = await prisma.providerPool.create({
+      data: { slug: `codex-shared-${tag}`, label: 'Codex shared', ownerId: strangerId, engine: 'codex', shared: true },
+    });
+    await prisma.providerPoolPerson.create({ data: { poolId: theirsShared.id, userId: strangerId, role: 'ADMIN' } });
+    t.after(async () => {
+      await prisma.providerPool.deleteMany({ where: { id: { in: [own.id, theirs.id, theirsShared.id] } } });
+    });
+    const routed = new RunnerSubagentsController(prisma as never, silent(), silent());
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: {} } });
+
+    const sessionId = await parentSession({ runnerId: machineId, model: 'claude-opus-5-5', effort: 'high', optimizeFor: 'cost' });
+    const poolFields = { poolMemberProviderId: true, poolKeyId: true, poolCodexAccountId: true, poolSwitchNotice: true, provider: true } as const;
+    const parentBefore = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
+    const opened = await routed.createSubagentRun(machine, sessionId, create({
+      toolUseId: 'toolu_01CodexPoolPick', type: 'general', definitionSource: 'builtin', size: 'M',
+    }));
+    t.diagnostic(`decision ${JSON.stringify({ provider: opened.decision.provider, note: opened.decision.note, fallbacks: opened.decision.fallbacks })}`);
+    assert.equal(opened.decision.provider, own.slug, "Cost: the pool's best account with 80% left, before the sign-in's 30%");
+    assert.equal(opened.exec.provider, 'codex', "the pool's engine");
+    assert.equal(opened.exec.model, 'gpt-5.6-sol');
+    t.diagnostic(`exec.env names ${JSON.stringify(Object.keys(opened.exec.env ?? {}))}`);
+    const token = Object.values(opened.exec.env ?? {}).find((value) => value.startsWith('orbit-gwl-'));
+    assert.ok(token, 'the child runs on a login-pool gateway token');
+    assert.ok(Object.values(opened.exec.env ?? {}).some((value) => value.endsWith('/api/gw/codex')), 'through the pool gateway');
+    const row = await prisma.poolLoginToken.findUniqueOrThrow({ where: { tokenHash: sha256(token!) } });
+    t.diagnostic(`pool_login_token ${JSON.stringify({ poolId: row.poolId, accountId: row.accountId, keyId: row.keyId })}`);
+    assert.deepEqual([row.poolId, row.userId, row.sessionId, row.accountId, row.keyId],
+      [own.id, ownerId, sessionId, `acct-frank-${tag}`, null], "the token names Frank's account, chosen for the SubAgent");
+    // The gateway sends the child's requests on Frank's account — the token's, not the session's (which names none).
+    const gateway = new PoolLoginGatewayService(prisma as never, silent(), silent(), silent(), 'http://upstream.invalid',
+      'http://token.invalid', silent());
+    const caller = await gateway.caller(token!);
+    assert.ok(caller && typeof caller === 'object', 'the gateway takes the token');
+    assert.deepEqual([caller.accountId, caller.keyId, caller.sessionId, caller.subagent], [`acct-frank-${tag}`, null, sessionId, true]);
+    assert.equal(await gateway.caller(token!, 'claude' as never), null, 'and only on the codex gateway');
+    const attempts = (await prisma.subagentRun.findUniqueOrThrow({ where: { id: opened.runId } })).attempts as unknown as Array<Record<string, unknown>>;
+    t.diagnostic(`subagent_run.attempts ${JSON.stringify(attempts)}`);
+    assert.deepEqual(attempts[0].poolMember, { accountId: `acct-frank-${tag}`, label: 'frank@own.invalid' }, 'the account is recorded on the run');
+    assert.equal(attempts[0].provider, own.slug);
+    const parentAfter = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
+    t.diagnostic(`parent pool fields before ${JSON.stringify(parentBefore)} after ${JSON.stringify(parentAfter)}`);
+    assert.deepEqual(parentAfter, parentBefore, "the parent session's pool fields are unchanged");
+    assert.equal(await prisma.poolLoginToken.count({ where: { sessionId, accountId: null, keyId: null } }), 0,
+      'the parent holds no pool token of its own');
+
+    // Another account's pools are never candidates: not picked, not a fallback, not even listed as removed.
+    const named = [opened.decision.provider, ...(opened.decision.fallbacks ?? []).map((f) => f.provider),
+      ...opened.decision.candidates.map((c) => c.provider)];
+    assert.ok(!named.includes(theirs.slug) && !named.includes(theirsShared.slug), `named: ${JSON.stringify(named)}`);
+    // And naming one is refused, before any token is minted.
+    const refusals = await prisma.$transaction(async (tx) => Promise.all([theirs.slug, theirsShared.slug].map(
+      (slug) => subagentPoolMember(tx, ownerId, slug, null, 'codex'))));
+    t.diagnostic(`another account's pools: ${JSON.stringify(refusals)}`);
+    assert.deepEqual(refusals, [theirs.slug, theirsShared.slug].map((slug) => ({ refusal: `${slug} names no provider or account pool this account has` })));
+    assert.equal(await prisma.poolLoginToken.count({ where: { poolId: { in: [theirs.id, theirsShared.id] } } }), 0);
   });
 });

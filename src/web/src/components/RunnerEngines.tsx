@@ -12,6 +12,7 @@ import {
   type LoginEngine,
   type PlanUsage,
   type PlanUsageSnapshot,
+  type RunnerAccountRemoveSession,
   type RunnerAccountRemoveState,
   type RunnerEngineAccount,
   type ReportedEngine,
@@ -79,8 +80,15 @@ import {
   runnerEngineNext,
 } from '../lib/runnerCopy';
 import {
+  RUNNER_ACCOUNT_IN_USE_OPEN,
+  RUNNER_ACCOUNT_IN_USE_RUNNING,
+  RUNNER_ACCOUNT_IN_USE_UNTITLED,
+  RUNNER_ACCOUNT_IN_USE_WAITING,
   RUNNER_DEFAULT_USE_AGAIN,
+  runnerAccountInUseMany,
+  runnerAccountInUseOne,
   runnerAccountRemoveDetailAutomatic,
+  RUNNER_ACCOUNT_REMOVE_DETAIL,
   runnerAccountRemoveDetailLast,
   runnerAccountRemoveTitle,
   runnerDefaultRemoveDetail,
@@ -753,7 +761,9 @@ function EngineRow({
       // Signed in (on the key or on Google), or a check that got no answer: nothing to sign in to
       // on the row. An unanswered check keeps its action in More, like every engine's.
       if ((kind === 'in' && !envKey) || kind === 'unknown') return null;
-      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>Sign in with Google</Button>;
+      // Signed out, it reads Sign in like every engine's row (the panel it opens names Google); on the
+      // machine's Gemini key, naming Google is what tells this sign-in from the key.
+      return <Button size="small" variant="primary" className="re-action" disabled={offline} onClick={() => onSignIn(signIn === engine ? null : engine)}>{envKey ? 'Sign in with Google' : 'Sign in'}</Button>;
     }
     if (offline) {
       // Nothing on an offline machine can be pressed. An engine with a sign-in still shows where
@@ -1012,7 +1022,7 @@ function EngineRow({
       {loginHint && <div className="re-panel-hint re-login-note">{loginHint}</div>}
       {cursorHint && <div className="re-panel-hint re-login-note">{cursorHint}</div>}
       {openCodeHint && <div className="re-panel-hint re-login-note">{openCodeHint}</div>}
-      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note"><GoogleSignInTerms /></div>}
+      {googleLogin === 'available' && signIn !== engine && <div className="re-login-note re-google-terms"><GoogleSignInTerms /></div>}
 
       {/* The relay panels. Each one is the row's own news, so it opens under the row it belongs
           to rather than as a page-level banner. */}
@@ -1284,6 +1294,8 @@ function AccountRow({
   const mine = removal?.engine === engine && removal.account === account.id ? removal : null;
   const removing = beingRemoved(runner, engine, account.id);
   const refused = mine?.status === 'failed' ? mine.message : null;
+  // The sessions the machine named as running in it, when that is why it refused.
+  const blocking = mine?.status === 'failed' ? (mine.sessions ?? []) : [];
   const remove = useMutation({
     mutationFn: () =>
       api<RunnerAccountRemoveState>(
@@ -1318,8 +1330,7 @@ function AccountRow({
     description: isDefault
       ? runnerDefaultRemoveDetail(runnerName, engineNameOf(engine))
       : !defaultRemoved
-        ? `Its sign-in is deleted from ${runnerName}. ` +
-          `Workspaces set to this account run on ${defaultName}.`
+        ? RUNNER_ACCOUNT_REMOVE_DETAIL
         : others > 0
           ? runnerAccountRemoveDetailAutomatic(runnerName)
           : runnerAccountRemoveDetailLast(runnerName, defaultName),
@@ -1447,9 +1458,16 @@ function AccountRow({
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a
           session is running on that account, or the runner is too old to remove one at all. */}
-      {refused && (
+      {(refused || blocking.length > 0) && (
         <div className="re-panel bad">
-          <div className="re-panel-row">{refused}</div>
+          <div className="re-panel-row">
+            {blocking.length === 0
+              ? refused
+              : blocking.length === 1
+                ? runnerAccountInUseOne(engineNameOf(engine))
+                : runnerAccountInUseMany(engineNameOf(engine), blocking.length)}
+          </div>
+          {blocking.length > 0 && <BlockingSessions sessions={blocking} />}
           <div className="re-panel-hint">
             {tildePath(accountDir(account))} on {runner.displayName || runner.name} is untouched.
           </div>
@@ -1461,6 +1479,28 @@ function AccountRow({
         </div>
       )}
     </div>
+  );
+}
+
+/** The sessions keeping an account from being removed, each opening its session: end them there. */
+function BlockingSessions({ sessions }: { sessions: RunnerAccountRemoveSession[] }) {
+  return (
+    <ul className="re-blocking">
+      {sessions.map((s) => {
+        const tone = s.status === 'RUNNING' || s.status === 'PENDING' ? 'running' : s.status === 'AWAITING_INPUT' ? 'waiting' : 'other';
+        const label = tone === 'running' ? RUNNER_ACCOUNT_IN_USE_RUNNING : tone === 'waiting' ? RUNNER_ACCOUNT_IN_USE_WAITING : null;
+        return (
+          <li key={s.id}>
+            <Link className="re-blocking-row" to={`/sessions/${encodeId(s.id)}`}>
+              <span className={`re-blocking-dot ${tone}`} aria-hidden />
+              <span className="re-blocking-title">{s.title.trim() || RUNNER_ACCOUNT_IN_USE_UNTITLED}</span>
+              {label && <span className="re-blocking-state">{label}</span>}
+              <span className="re-blocking-open">{RUNNER_ACCOUNT_IN_USE_OPEN} →</span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

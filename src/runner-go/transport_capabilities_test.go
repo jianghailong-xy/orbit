@@ -63,7 +63,8 @@ func TestTransportAdvertisesSupportedProviders(t *testing.T) {
 // The directory probe and Orbit-made folders are declared as the shared contract spells them
 // (@orbit/shared DIR_PROBE_CAPABILITY, CREATE_WORKDIR_CAPABILITY): on every HTTPS call, and in the
 // runner link's Hello, which lists the same header. A client asks only a runner that declares
-// dir-probe/v1, and POST /sessions makes a new folder only on one that declares create-workdir/v1.
+// dir-probe/v1, and POST /sessions makes a new folder only on one that declares create-workdir/v1, in home on one
+// that declares create-workdir/v2 (CREATE_WORKDIR_HOME_CAPABILITY).
 func TestTransportDeclaresDirProbeAndCreateWorkDir(t *testing.T) {
 	dto, err := os.ReadFile("../shared/src/dto.ts")
 	if err != nil {
@@ -72,6 +73,7 @@ func TestTransportDeclaresDirProbeAndCreateWorkDir(t *testing.T) {
 	for _, c := range []struct{ name, token string }{
 		{"DIR_PROBE_CAPABILITY", dirProbeCapabilityV1},
 		{"CREATE_WORKDIR_CAPABILITY", createWorkDirCapabilityV1},
+		{"CREATE_WORKDIR_HOME_CAPABILITY", createWorkDirCapabilityV2},
 	} {
 		if want := "export const " + c.name + " = '" + c.token + "';"; !strings.Contains(string(dto), want) {
 			t.Errorf("@orbit/shared does not say %s", want)
@@ -88,7 +90,7 @@ func TestTransportDeclaresDirProbeAndCreateWorkDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	hello := strings.Join(linkHello("process-a").GetCapabilities(), ",")
-	for _, token := range []string{dirProbeCapabilityV1, createWorkDirCapabilityV1} {
+	for _, token := range []string{dirProbeCapabilityV1, createWorkDirCapabilityV1, createWorkDirCapabilityV2} {
 		if !strings.Contains(","+header+",", ","+token+",") {
 			t.Errorf("the capability header %q omits %s", header, token)
 		}

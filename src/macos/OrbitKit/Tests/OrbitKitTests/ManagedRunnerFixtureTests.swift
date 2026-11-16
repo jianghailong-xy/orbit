@@ -148,4 +148,63 @@ final class ManagedRunnerFixtureTests: XCTestCase {
             "registerOwn": ManagedRunnerCopy.registerOwn,
         ])
     }
+
+    /// The machine list's managed runner row (D4): the shared short label in place of Online/Offline,
+    /// the fixture's tone, and the asleep line — held to the same file the web renders from.
+    func testEveryStateReadsAsTheMachineRowTheFixtureSays() throws {
+        let short = try XCTUnwrap(Self.fixture()["short"] as? [String: String])
+        let tone = try XCTUnwrap(Self.fixture()["rowTone"] as? [String: String])
+        let asleepRow = try XCTUnwrap((Self.fixture()["asleep"] as? [String: String])?["row"])
+        let ids = try XCTUnwrap(Self.fixture()["ids"] as? [String: String])
+        for entry in try Self.cases("states") {
+            let name = entry["name"] as? String ?? "?"
+            let status = try Self.status(entry["status"])
+            let display = ManagedRunnerLogic.display(status)
+            // The row of the runner this status names; without one there is no machine row to show.
+            let row = ManagedRunnerLogic.row(runnerID: status.runnerId, status: status)
+            guard let display, display.kind != .notOffered, status.runnerId != nil else {
+                XCTAssertNil(row, name)
+                continue
+            }
+            let shown = try XCTUnwrap(row, name)
+            let kind = display.kind.rawValue
+            XCTAssertEqual(shown.kind, display.kind, name)
+            XCTAssertEqual(shown.label, short[kind], name)
+            let expectedTone = try XCTUnwrap(tone[kind], name)
+            XCTAssertEqual(shown.tone.rawValue, expectedTone == "progress" && !display.moving ? "idle" : expectedTone, name)
+            XCTAssertEqual(shown.detail, display.kind == .sleeping && display.acceptsWork ? asleepRow : nil, name)
+            XCTAssertEqual(shown.acceptsWork, display.acceptsWork, name)
+            XCTAssertEqual(shown.asleep,
+                           (display.kind == .sleeping || display.kind == .stopping) && display.acceptsWork, name)
+        }
+        // Only the account's managed runner has a row, and only where there is a managed UI.
+        let sleeping = try Self.state("sleeping")
+        XCTAssertNotNil(ManagedRunnerLogic.row(runnerID: sleeping.runnerId, status: sleeping))
+        XCTAssertNil(ManagedRunnerLogic.row(runnerID: ids["workspace"], status: sleeping))
+        XCTAssertNil(ManagedRunnerLogic.row(runnerID: sleeping.runnerId, status: nil))
+        XCTAssertNil(ManagedRunnerLogic.row(runnerID: nil, status: sleeping))
+    }
+
+    func testTheEntryConfirmationAndAsleepWordsAreTheFixturesAndTheWebs() throws {
+        let entry = try XCTUnwrap(Self.fixture()["entry"] as? [String: String])
+        XCTAssertEqual(entry, [
+            "title": ManagedRunnerCopy.Entry.title,
+            "action": ManagedRunnerCopy.Entry.action,
+            "subtitle": ManagedRunnerCopy.Entry.subtitle,
+            "page": ManagedRunnerCopy.Entry.page,
+            "register": ManagedRunnerCopy.Entry.register,
+        ])
+        let confirm = try XCTUnwrap(Self.fixture()["confirm"] as? [String: String])
+        XCTAssertEqual(confirm, [
+            "title": ManagedRunnerCopy.Confirm.title,
+            "body": ManagedRunnerCopy.Confirm.body,
+            "cancel": ManagedRunnerCopy.Confirm.cancel,
+            "confirm": ManagedRunnerCopy.Confirm.action,
+        ])
+        let asleep = try XCTUnwrap(Self.fixture()["asleep"] as? [String: String])
+        XCTAssertEqual(asleep, [
+            "row": ManagedRunnerCopy.Asleep.row,
+            "composer": ManagedRunnerCopy.Asleep.composer,
+        ])
+    }
 }

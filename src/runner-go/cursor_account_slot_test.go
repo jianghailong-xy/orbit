@@ -606,7 +606,7 @@ func TestCursorAccountRemovalRefusedWhileASessionUsesIt(t *testing.T) {
 		}
 	}
 	live := cursorAccountKind.liveDirs([]string{onWork, onDefault, onKey})
-	if !reflect.DeepEqual(live, map[string]bool{work.Dir: true}) {
+	if !reflect.DeepEqual(live, accountDirSessions{work.Dir: {onWork}}) {
 		t.Fatalf("accounts in use = %v, want only Work", live)
 	}
 

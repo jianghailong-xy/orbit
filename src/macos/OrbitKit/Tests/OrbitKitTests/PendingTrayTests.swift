@@ -116,6 +116,25 @@ final class PendingTrayTests: XCTestCase {
         XCTAssertEqual(r.state.unreadSteers.map(\.id), [id], "the same row, from Sending… to Waiting to be read")
     }
 
+    func testAQueuedSendsRowKeepsWhatTheOwnerWroteOnceTheEngineReadsIt() {
+        // Settings › Translation: the echo carries the English the engine got and the owner's own words.
+        // The row the queued send drew used to be rebuilt without them, so the read message showed the
+        // English with no "Translated · Show original" (production session 34xwWVmkT8h7oUrqaatqD, seq 27).
+        var r = running()
+        r.addOptimisticUser(clientTurnId: "c1", text: "然后推到 main", queued: true)
+        r.setOptimisticTurnId(clientTurnId: "c1", turnId: "t1", steer: true)
+        let translation: JSONValue = .object(["state": .string("DONE"), "from": .string("zh-Hans"),
+                                              "original": .string("然后推到 main")])
+        r.apply(steer(2, turn: "t1", extra: ["translation": translation]))
+        XCTAssertEqual(r.state.unreadSteers.first?.translation?.original, "然后推到 main")
+
+        r.apply(delivery(3, turn: "t1", "acknowledged"))
+        let read = r.state.items.compactMap(\.asUser).first { $0.turnId == "t1" }
+        XCTAssertEqual(read?.text, "then push it to main")
+        XCTAssertEqual(read?.translation?.state, .done)
+        XCTAssertEqual(read?.translation?.original, "然后推到 main")
+    }
+
     func testTheServersReceiptSettlesOneNoRunnerWillSpeakFor() {
         var r = running()
         r.apply(steer(2, turn: "t1"))
@@ -126,6 +145,29 @@ final class PendingTrayTests: XCTestCase {
 
         XCTAssertTrue(r.state.unreadSteers.isEmpty)
         XCTAssertEqual(r.state.items.last?.asUser?.delivery, "unconfirmed")
+        XCTAssertTrue(r.state.queued.isEmpty)
+    }
+
+    func testTheQueuedHandoffNoteTurnIsNoRowOfTheTailTheTrayOrTheHead() {
+        // Start a new coordinator confirmed while a turn runs: the platform's note turn waits behind
+        // it (board 02 ②). The listing carries no clientTurnId, only its words.
+        let note = "From Orbit · handoff note\n\nThe owner is handing this project over to a new coordinator conversation."
+        var r = running()
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "q-owner", kind: "prompt", content: "also check the retries", placement: "queued"),
+            QueuedTurnInfo(turnId: "q-note", kind: "prompt", content: note, authoredByOrbit: true, placement: "queued"),
+            QueuedTurnInfo(turnId: "q-wake", kind: "prompt", content: "Orbit wake: a job finished", authoredByOrbit: true,
+                           placement: "queued"),
+        ], knownBefore: [])
+
+        XCTAssertEqual(r.state.queued.map(\.turnId), ["q-owner", "q-wake"])
+        XCTAssertEqual(PendingTray.rows(state: r.state, withdrawing: [], steering: [], steerOffered: true).map(\.bubble.turnId),
+                       ["q-owner"], "the tray keeps the owner's own")
+
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "q-note", kind: "prompt", content: note, authoredByOrbit: true, placement: "accepted"),
+        ], knownBefore: r.state.listedTurnIDs)
+        XCTAssertTrue(r.state.accepted.isEmpty, "nor the accepted head once a runner takes it")
         XCTAssertTrue(r.state.queued.isEmpty)
     }
 

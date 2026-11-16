@@ -28,6 +28,7 @@ import {
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
+import type { ApprovalTranslation } from './translation';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 import type { ExternalMessageFrom } from './session-message';
 
@@ -222,6 +223,10 @@ export interface AgentExecConfig {
    *  plane on claim and reclaim; absent means off, so an older control plane never turns it on.
    *  Like fastMode it is read once, at spawn. */
   promptSuggestions?: boolean;
+  /** The session serves a scheduled CHECK_ONLY run (docs/scheduled-tasks-design.md §6.2): in Plan, Codex then runs
+   *  in its own read-only sandbox with no approvals, so it reads the checkout and the OS refuses writes. Absent on
+   *  every other session, which keeps Codex's ordinary Plan (every command declined); an older runner ignores it. */
+  scheduledCheckOnly?: boolean;
   maxTurns?: number;
   maxBudgetUsd?: number;
   /** MCP server config passed through to the SDK (`mcpServers`). */
@@ -807,6 +812,12 @@ export interface RunnerHeartbeatRequest {
   /** Every session currently registered in this process's local supervisor pool,
    *  including cold sessions that do not poll an inbox. */
   supervisedSessionIds?: string[];
+  /** The sessions that hold a slot of this runner's admission count only through runner-hosted
+   *  background jobs of their own (bg_run, kind job; a watch takes none): no turn runs, yet the
+   *  runner takes no work in their place. Kept on the runner's presence row with each beat; the
+   *  runners list counts them as running beside the sessions in a turn. Absent when there are
+   *  none, and on older runners, which are counted by turns alone. */
+  backgroundJobSessionIds?: string[];
   /** Commits this runner reported as failed that no longer fail for the reason they gave: the
    *  index lock they met is gone, or the branch has moved since. The control plane drops each
    *  settled error it still holds for that exact operation, so the worktree bar offers Commit
@@ -1118,6 +1129,22 @@ export const DIR_PROBE_CAPABILITY = 'dir-probe/v1';
  *  workspace in a new folder only on a runner that declares it. */
 export const CREATE_WORKDIR_CAPABILITY = 'create-workdir/v1';
 
+/** What a runner declares when it makes a new folder in its home directory, the directory its reported reposRoot
+ *  sits in (`<home>/orbit-repos`): POST /sessions `newFolder` is then `<home>/<name>` (newFolderRoot) rather than
+ *  `<reposRoot>/<name>`. */
+export const CREATE_WORKDIR_HOME_CAPABILITY = 'create-workdir/v2';
+
+/** The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
+ *  CREATE_WORKDIR_HOME_CAPABILITY, else reposRoot itself. The separator is the one the root is written with. */
+export function newFolderRoot(reposRoot: string, capabilities: readonly string[] | null | undefined): string {
+  const root = reposRoot.trim().replace(/(?<=.)[\\/]+$/, '');
+  if (!capabilities?.includes(CREATE_WORKDIR_HOME_CAPABILITY)) return root;
+  const cut = Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\'));
+  if (cut < 0) return root;
+  // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
+  return cut === 0 || root[cut - 1] === ':' ? root.slice(0, cut + 1) : root.slice(0, cut);
+}
+
 /** A runner that reports its machine's CPU, memory and disk on every heartbeat (RunnerHeartbeatRequest.resources).
  *  The machine page tells "update the runner" (not declared) from "no reading yet" (declared, nothing kept) by it. */
 export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
@@ -1125,7 +1152,9 @@ export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
 /** One reading of a machine (RunnerHeartbeatRequest.resources; the runner's MachineResources). A figure the
  *  platform has no answer for is absent — the page shows a dash, never a zero. Bytes are whole numbers. */
 export interface RunnerResources {
-  /** The whole machine's CPU in use since the runner's previous reading, 0–100. */
+  /** The whole machine's CPU in use since the runner's previous reading, 0–100. A runner in a container reports
+   *  the container's: the share of its CPU limit, its limit as cpuCores (rounded up), its memory limit and what is
+   *  left of it, and no load1 (the kernel keeps one only for the machine). */
   cpuPercent?: number;
   cpuCores?: number;
   /** The one-minute load average. */
@@ -1133,7 +1162,8 @@ export interface RunnerResources {
   memTotalBytes?: number;
   /** What the system can hand out without swapping; dropped page cache counts as available. */
   memAvailableBytes?: number;
-  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. */
+  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. A managed
+   *  runner on Docker reports its volume instead: the volume's limit, and what is left of it. */
   diskTotalBytes?: number;
   diskFreeBytes?: number;
 }
@@ -1217,7 +1247,7 @@ export interface DirProbeAnswer {
 export interface NewWorkspaceRequest {
   /** A folder on that machine, already confirmed there through the directory probe relay. */
   workDir?: string;
-  /** A new folder under the runner's reposRoot: one path segment of 1–64 characters from
+  /** A new folder in the runner's newFolderRoot (home, or reposRoot on an older runner): one path segment of 1–64 characters from
    *  [A-Za-z0-9._-], not `.` or `..`. The runner makes it before the session's engine starts. */
   newFolder?: string;
 }
@@ -1976,6 +2006,9 @@ export interface AccountRemoveResult {
   message?: string;
   /** The `attempt` of the request this reports on. */
   attempt?: string;
+  /** With `failed` because the account is in use: the sessions running in it, which the control
+   *  plane names by title in the message the page shows. */
+  sessionIds?: string[];
 }
 
 /** @deprecated The same result on the codex-named route; read AccountRemoveResult. */
@@ -2148,9 +2181,10 @@ export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
  * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
- * (the runner can't update itself, or its updates are turned off) is the runner's own.
+ * (the runner can't update itself, or its updates are turned off) is the runner's own, and so is
+ * `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines they name).
  */
-export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed';
+export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed' | 'engineUpdateFailed';
 
 /** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
  *  most recently used workspace runs on is signed out there. */
@@ -2159,7 +2193,7 @@ export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSigne
 /** An agent already at work on one warning: the session a press started, while it is open. */
 export interface RunnerAgentFixing {
   kind: RunnerAttentionFixKind;
-  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate`. */
+  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate` and `engineUpdateFailed`. */
   engine: ReportedEngine | null;
   sessionId: string;
   workspaceId: string;
@@ -2342,6 +2376,17 @@ export interface RunnerAccountRemoveState {
   /** The machine's own words when it failed: the account is in use by a session, the runner is too
    *  old to remove accounts at all, or the directory would not go away. */
   message: string | null;
+  /** With `failed` because the account is in use: the sessions the machine named as running in it,
+   *  as far as the viewer can see them, oldest first. Absent otherwise (and from an older server),
+   *  and then `message` alone says what happened. */
+  sessions?: RunnerAccountRemoveSession[];
+}
+
+/** A session that keeps an account from being removed: what the runner's page lists and opens. */
+export interface RunnerAccountRemoveSession {
+  id: string;
+  title: string;
+  status: RunStatus;
 }
 
 /** @deprecated Codex's name for the same state; read RunnerAccountRemoveState, whose `engine` says
@@ -2453,6 +2498,8 @@ export interface SubagentDecision {
   moves?: string[];
   /** The workspace a remote SubAgent runs on (§10.1) and why it was chosen. Absent for one on the parent's machine. */
   workspace?: SubagentWorkspaceChoice;
+  /** The definition's read-only flag, as the start sent it, which the block marks `Read-only`. Absent on older rows. */
+  readonly?: boolean;
 }
 
 /** Where a remote SubAgent runs (docs/subagent-design.md §10.1): another workspace of the parent's repository. */
@@ -2474,8 +2521,10 @@ export interface SubagentCandidateTarget {
   note?: string;
 }
 
-/** How one attempt of a SubAgent run ended: still running, a usage-limit or capacity failure it moved on from, or the run's end. */
-export type SubagentAttemptOutcome = 'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | Exclude<SubagentRunStatus, 'RUNNING'>;
+/** How one attempt of a SubAgent run ended: still running, a usage-limit, capacity or login failure it moved on from,
+ *  or the run's end. */
+export type SubagentAttemptOutcome =
+  'RUNNING' | 'USAGE_LIMIT' | 'AT_CAPACITY' | 'AUTH_FAILED' | Exclude<SubagentRunStatus, 'RUNNING'>;
 
 /** One entry of `subagent_run.attempts`: a child process the run started, in order (§4.3). */
 export interface SubagentAttempt extends SubagentCandidateTarget {
@@ -2484,15 +2533,19 @@ export interface SubagentAttempt extends SubagentCandidateTarget {
   /** The engine's own words, for an attempt that hit a limit; truncated. */
   error?: string;
   /** The account of an account pool it ran on, chosen for this SubAgent alone: never written onto the parent
-   *  session, whose own pool member stays as it was. */
-  poolMember?: { providerId: string; label: string };
+   *  session, whose own pool member stays as it was. A Claude pool's member provider, or a Codex pool's ChatGPT
+   *  account or API key. */
+  poolMember?:
+    | { providerId: string; label: string }
+    | { accountId: string; label: string }
+    | { keyId: string; label: string };
   startedAt: string;
   endedAt?: string;
 }
 
 /** The runner's ask for the next candidate after a child failed on a usage limit or capacity (§4.3). */
 export interface SubagentFallbackRequest {
-  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit or capacity error. */
+  /** The child's failure, in the engine's own words. Refused unless it reads as a usage-limit, capacity or login error. */
   error: string;
   /** The definition's read-only flag and permission mode, as the start sent them. */
   readonly?: boolean;
@@ -2536,6 +2589,15 @@ export interface SubagentRunView {
   resultSummary: string | null;
   /** The workspace a remote SubAgent ran on, which the block names as `on <workspace>`; null on the parent's machine. */
   workspaceName: string | null;
+  /** The `delegate` call's description, which the session's list of Agents names each run by. Null on older rows. */
+  description: string | null;
+  /** The engine it runs on now (`claude`, `codex`, …): its last attempt's, else the pick's. Null on a shadow row,
+   *  which runs on the parent's engine, and when no candidate was left. */
+  engine: string | null;
+  /** The definition is read-only: the child could read the repository but not write it. */
+  readonly: boolean;
+  /** Paths the child's edit tools wrote, as the runner collected them; empty while it runs and for a read-only run. */
+  changedFiles: string[];
   createdAt: string;
   endedAt: string | null;
 }
@@ -2782,6 +2844,9 @@ export interface ClaimedSession {
    *  ORBIT_WIKI, wiki/wiki-rollout.ts). Injected as ORBIT_WIKI=off so `orbit mcp` and the CLI leave out the wiki
    *  tools. Absent means on. */
   wikiDisabled?: boolean;
+  /** Present, and true, only for the session of a scheduled task's run (`Session.scheduleRunId`, docs/scheduled-
+   *  tasks-design.md §7.1). Injected as ORBIT_SCHEDULE_RUN=1 so `orbit mcp` lists schedule_run_report. */
+  scheduleRun?: boolean;
   /** How many spawn links sit above this session (a root is 0), injected as
    *  ORBIT_SPAWN_DEPTH. `orbit mcp` halves its session_create(wait) budget per level so a
    *  nested wait always finishes inside the wait that is waiting on it. */
@@ -2853,6 +2918,11 @@ export interface ApprovalInfo {
   message?: string;
   createdAt: string;
   decidedAt?: string;
+  /** Settings › Translation (3A, @orbit/shared translation.ts): what the card shows, in the owner's
+   *  language — an AskUserQuestion's questions and options, a tool card's description and plan.
+   *  Draw these instead of the same fields of `input`, which stays the English the engine sent.
+   *  Absent while the card is being translated and whenever translation is off. */
+  translation?: ApprovalTranslation;
 }
 
 /** Runner (orbit MCP permission tool) → control plane: register a pending tool
@@ -2913,8 +2983,15 @@ export interface WorkspacePermissionRuleInfo {
  *  remembers both `cd` and `git add`, not just the leading `cd`. */
 export interface ApprovalDecisionRequest {
   behavior: 'allow' | 'deny';
+  /** With Settings › Translation on, translated into English before the engine reads it (3A). */
   message?: string;
+  /** With Settings › Translation on, keyed by the question as shown and holding the labels as shown,
+   *  original or translated (ApprovalInfo.translation): the server maps them back to the original
+   *  English, and translates any other answer into English like a message (3A). */
   answers?: QuestionAnswers;
+  /** Send the owner's own words (`message`, typed answers) untranslated: the "Send as written" of a
+   *  decision refused 422 TRANSLATION_FAILED. Options are still mapped back to their originals. */
+  sendAsWritten?: boolean;
   rememberRules?: PermissionRule[];
   /** The single-task create card's "Create and start": the owner's yes also starts the new task's
    *  run, so they are not asked again to start it. Accepted only on an `allow` of an
@@ -3243,6 +3320,8 @@ export interface ReclaimSession {
   watchesDisabled?: boolean;
   /** The wiki not switched on for the owner, cf. ClaimedSession.wikiDisabled. */
   wikiDisabled?: boolean;
+  /** A scheduled task's run, cf. ClaimedSession.scheduleRun. */
+  scheduleRun?: boolean;
   /** Fresh runner/session-bound proof for the runner's private credential store. */
   orchestrationToken?: string;
   /** The SOURCE snapshot, cf. ClaimedSession.source. On reclaim it is read, never re-derived

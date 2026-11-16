@@ -177,3 +177,14 @@ export function approvalAction(toolName: string, input: unknown): string {
   if (path) return `${toolName} ${path.split('/').pop()}`;
   return toolName;
 }
+
+/** The run a `delegate` call's result names — its launch receipt's or its end's — or null before it has one. */
+export function delegateRunId(content: unknown): string | null {
+  try {
+    const parsed: unknown = JSON.parse(toolResultText(content).trim());
+    const runId = parsed && typeof parsed === 'object' ? (parsed as { runId?: unknown }).runId : undefined;
+    return typeof runId === 'string' && runId !== '' ? runId : null;
+  } catch {
+    return null;
+  }
+}

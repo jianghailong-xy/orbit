@@ -26,19 +26,14 @@ public enum MachineSetupCopy {
     public static func setupFolderHelp(machine: String) -> String {
         "Where on \(machine) should sessions work? They can read and change everything in it."
     }
-    public static let SETUP_REGISTER_DIR = "Where you ran orbit register"
-    public static let SETUP_NEW_FOLDER = "A new folder"
     public static let SETUP_NEW_FOLDER_NAME = "name"
-    public static let SETUP_NEW_FOLDER_META = "Starts empty. Ask for a clone or a new project in your first message."
+    public static let SETUP_FOLDER_HINT = "Uses this folder if it exists, otherwise creates it."
+    public static let SETUP_NEW_FOLDER_META = "New folder · created as the session starts."
     public static let SETUP_NEW_FOLDER_DONE = "new folder · created as the session starts"
     public static let SETUP_NEW_FOLDER_INVALID = "Use letters, digits, dots, dashes and underscores, up to 64 characters."
-    public static func setupNewFolderExists(machine: String) -> String {
-        "This folder already exists on \(machine). Sessions will use what’s in it."
-    }
     public static func setupNewFolderIsFile(machine: String) -> String {
         "There’s already a file with this name on \(machine). Pick another name."
     }
-    public static func setupOtherFolder(machine: String) -> String { "Another folder on \(machine)" }
     /// Board 03 draws it in the platform's title case; the words are the web's.
     public static let SETUP_USE_FOLDER = "Use This Folder"
     public static let SETUP_CHANGE = "Change"

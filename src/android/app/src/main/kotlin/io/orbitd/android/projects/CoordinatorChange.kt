@@ -1,5 +1,7 @@
 package io.orbitd.android.projects
 
+import io.orbitd.android.composer.LocalManagedRunnerStatus
+import io.orbitd.android.composer.ManagedRunner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -43,7 +45,9 @@ object CoordinatorChange {
 
     /** One workspace in the list. [detail] is `<Provider> · <runner>` (the current one's too, tagged
      * [current] beside it), or why nothing can open there ([reason]). */
-    data class Row(val workspaceId: String, val name: String, val detail: String, val reason: String?, val current: Boolean, val runnerOffline: Boolean) {
+    data class Row(val workspaceId: String, val name: String, val detail: String, val reason: String?, val current: Boolean, val runnerOffline: Boolean,
+                   /** Its runner is the account's managed runner, away: its state (Asleep, Waking up…) in place of [runnerOffline]'s words. */
+                   val runnerState: String? = null) {
         /** Only another workspace that can take a new conversation is a press. */
         val pickable get() = !current && reason == null
         /** The row's second line: what a press does, after where (board 04 part 3, Android). */
@@ -55,7 +59,8 @@ object CoordinatorChange {
 
     /** The rows from `GET /workspaces`: the current workspace first, then the rest in the list's own order. [onlineRunnerIds] null is
      * liveness not read yet: no note rather than a wrong one. */
-    fun rows(workspaces: List<JsonObject>, currentWorkspaceId: String?, onlineRunnerIds: Set<String>?): List<Row> = workspaces.mapNotNull { w ->
+    fun rows(workspaces: List<JsonObject>, currentWorkspaceId: String?, onlineRunnerIds: Set<String>?,
+             managed: ManagedRunner.Status? = null): List<Row> = workspaces.mapNotNull { w ->
         val id = w.text("id") ?: return@mapNotNull null
         val name = w.text("name") ?: id
         val provider = w.text("lastProvider")?.takeIf { it.isNotEmpty() } ?: ProviderEngines.CLAUDE
@@ -68,8 +73,10 @@ object CoordinatorChange {
             runnerId == null -> noRunner
             else -> null
         }
-        Row(id, name, reason ?: usual, reason, current = false,
-            runnerOffline = reason == null && onlineRunnerIds != null && runnerId !in onlineRunnerIds)
+        val away = reason == null && onlineRunnerIds != null && runnerId !in onlineRunnerIds
+        // The managed runner asleep is not offline: the shared state, and a press still opens there (a message wakes it).
+        Row(id, name, reason ?: usual, reason, current = false, runnerOffline = away,
+            runnerState = if (away) ManagedRunner.row(runnerId, managed)?.label else null)
     }.sortedByDescending { it.current }
 
     /** From `GET /projects/:id/coordinator/status`: none when there is no conversation (or it is in the bin), completed when it has
@@ -106,13 +113,14 @@ object CoordinatorChange {
 @Composable
 internal fun CoordinatorChangeSheet(api: ProjectApi, currentWorkspaceId: String?, close: () -> Unit, pick: (CoordinatorChange.Row) -> Unit) {
     var rows by remember { mutableStateOf<List<CoordinatorChange.Row>?>(null) }
+    val managed = LocalManagedRunnerStatus.current
     var failed by remember { mutableStateOf(false) }
-    LaunchedEffect(api, currentWorkspaceId) {
+    LaunchedEffect(api, currentWorkspaceId, managed) {
         try {
             val workspaces = api.workspaces()
             val online = try { api.runners().filter { it.flag("online") }.mapNotNull { it.text("id") }.toSet() }
                 catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
-            rows = CoordinatorChange.rows(workspaces, currentWorkspaceId, online)
+            rows = CoordinatorChange.rows(workspaces, currentWorkspaceId, online, managed)
         } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { failed = true }
     }
     ModalBottomSheet(onDismissRequest = close, modifier = Modifier.testTag("coordinator-change-sheet")) {
@@ -139,7 +147,7 @@ internal fun CoordinatorChangeList(rows: List<CoordinatorChange.Row>?, failed: B
                             Text(row.name)
                             Text(row.line, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        if (row.runnerOffline) Text(CoordinatorChange.runnerOffline, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (row.runnerOffline) Text(row.runnerState ?: CoordinatorChange.runnerOffline, Modifier.testTag("coordinator-change-runner:${row.workspaceId}"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (row.current) Text(CoordinatorChange.current, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }

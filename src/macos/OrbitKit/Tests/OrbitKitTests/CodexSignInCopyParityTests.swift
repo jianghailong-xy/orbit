@@ -12,6 +12,7 @@ import XCTest
 ///
 /// Deliberately not compared: "New pool" — a pool is made on the web (it opens straight to signing in),
 /// as a shared pool's is; the words only a phone has to say (the swipe's own label is `Sign out`, the
+/// screen-reader name it gives the account — `signOutLabel`, pinned to this client's value below — the
 /// web mark's name); and the page the accounts are drawn on, whose words — its head, its way out, who can
 /// use it — are `PoolAccessCopyParityTests`'.
 final class CodexSignInCopyParityTests: XCTestCase {

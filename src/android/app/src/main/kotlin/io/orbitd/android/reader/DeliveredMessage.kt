@@ -24,11 +24,11 @@ internal fun RunEvent.personWords(): String =
 private val injectedTagLabels = mapOf(
     "list-conditions" to "list conditions",
     "orbit-session-message" to "session message",
-    "orbit-external-sender" to "sender note",
     "orbit-session-reply" to "session reply",
 )
 
-private val unnamedTags = setOf("orbit_project_coordinator_context", "referenced-task", "referenced-list", "background-jobs")
+/** The external sender's note only repeats the bubble's "From <name>" head (web parity). */
+private val unnamedTags = setOf("orbit_project_coordinator_context", "orbit-external-sender", "referenced-task", "referenced-list", "background-jobs")
 
 private fun openingTag(text: String): String? {
     if (!text.startsWith("<")) return null

@@ -57,7 +57,7 @@ configuration is an invalid test setup. A disabled worker must not consume exist
 | --- | --- | --- |
 | Dependency construction and module initialization | Construct only the inert configuration/status facade. Do not construct a Kubernetes client, read kubeconfig, try in-cluster discovery, validate Ceph secrets, register watches, or start a reconcile timer. | Validate the explicitly selected environment, RBAC, storage profile, image, admission protection, resource budget, and model supply before reconciliation starts. Missing prerequisites make the managed service unavailable while ordinary login remains usable. |
 | Successful login and first-user bootstrap | No managed intent, runner, workspace, credential, or PVC write. | Idempotently record owner-scoped provisioning intent after authentication; login does not wait for Pod readiness or contact Kubernetes. Provisioning failure must not invalidate the issued login session. |
-| Refresh, logout, password change, and capability reads | Preserve existing authentication behavior; reads have no provisioning side effects. | Still no implicit allocation. Login/bootstrap and explicit ensure are the allocation entry points. |
+| Refresh, logout, password change, and capability reads | Preserve existing authentication behavior; reads have no provisioning side effects. | Still no allocation from these: a refresh writes nothing managed and no read does. Login/bootstrap and explicit ensure are allocation entry points, and so, since 2026-11-16, is the signed-in pass, which gives every account with a live login session its mapping ([managed-runner-signed-in-accounts-design.md](managed-runner-signed-in-accounts-design.md)). |
 | Ensure, retry, wake, sleep, or delete APIs | Authenticate first, then return `404 MANAGED_RUNNER_DISABLED` before any managed DB write or infrastructure call. | Record a valid desired-state transition; the manager performs resource operations. Retry never creates a second mapping or bypasses fencing. |
 | Messages, executable tasks, scheduled work, watch wakes, and auto retry | Continue existing self-managed queue behavior. No managed allocation, wake, sleep, or cleanup hook runs. | Only demand addressed to this owner's managed mapping requests wake; hooks run before an offline runner gate can prevent demand from being recorded. |
 | Three client applications | Missing capability or `enabled: false` preserves existing onboarding, navigation, workspace selection, and self-managed runner controls. Hide managed provisioning and retry flows. | Render the common server state contract; clients do not infer enabled status from runner names or offline heartbeats. |
@@ -249,7 +249,9 @@ crash/recovery correctness of the selected stack still requires the tests below.
 
 ## Single Pod and single writer protection
 
-The first version selects **RWO, Filesystem, ext4, and the kernel RBD mounter** on a verified stack.
+The first version selects **RWO, Filesystem, ext4, and the kernel RBD mounter** on a verified stack. The .3 deployment
+(2026-11-16) deviates — XFS with the local Ceph-CSI reflink patch and `rbd-nbd`, on one node — and
+[the deployment record](managed-runner-k3s-xfs-deployment.md) is its authoritative record.
 Kubernetes RWO permits multiple Pods on the same node. Kubernetes RWOP is stable from v1.29, but the
 Ceph-CSI v3.18.0 matrix still marks both RBD RWOP modes Alpha and advises against Alpha production
 use. RBD `exclusive-lock` can transfer cooperatively between clients and does not make two mounted
@@ -347,6 +349,32 @@ The required proof has two parts: no second Pod is admitted against the original
 predecessor can successfully write after takeover. Database locks, heartbeat leases, RWO, and
 exclusive-lock each cover only part of that proof. The concrete multi-node test plan below must
 establish both before claiming storage acceptance.
+
+## Implementation record: the .3 deployment (2026-11-16)
+
+The production managed-runner environment on 10.66.0.3 (`workstation`) runs the Kubernetes backend with these
+owner-approved deviations from the baseline above. [The deployment record](managed-runner-k3s-xfs-deployment.md) has the
+full values, verification and risks.
+
+- **Filesystem:** XFS with `reflink=1`, not ext4, through the local Ceph-CSI 3.18.2 patch
+  ([csi-xfs-reflink](../deploy/managed-runner/csi-xfs-reflink/README.md)). The StorageClass is `runner-data-xfs`
+  (ReadWriteOnce, Filesystem, `reflink: enabled`, `noatime,discard`, `Retain`, 100 GiB, expansion disabled).
+- **Mounter:** `rbd-nbd`, not kernel RBD. The node's 6.1 kernel cannot map this Ceph release's default `aes256k`
+  CephX keys, and `rbd-nbd` is the node's existing, working mounter. This is outside the first version's kernel-RBD
+  baseline and must be re-reviewed if the node kernel is upgraded.
+- **Topology:** one k3s v1.37.2 node, Debian 12 kernel 6.1, Ceph Tentacle 20.2.5 with two HDD OSDs on the same host and
+  a pool of `size 2 / min_size 1` — not the two-node verified topology. There is no cross-node failover.
+- **Runner size and budget:** 2 CPU / 4 GiB and a 100 GiB volume per account; 6 CPU / 48 GiB / 8 GiB ephemeral, 4 Pods,
+  4 attachments, 3 active users, 10 Ti usable and 1 Ti headroom.
+- **Eligibility:** every enabled account, as the design says; a disabled account is refused. Open sign-up accounts and
+  test accounts are not excluded by the rule.
+- **Runner image:** built from `orbit/runner-3-k3s-fastpath` at `0c03c6a5…`, which carries the checkout index fast
+  path, and pinned by digest in the profile; the patched CSI image is local and pinned by `nodeplugin.plugin.image.tag`
+  with `IfNotPresent`.
+- **Not done:** the XFS durability and power-cut drills required by D4 of the checkout storage design. The ext4
+  evidence does not transfer to XFS.
+- **Retired backend:** the Docker channel on the same host was stopped after the cutover. Its profile, a backup of its
+  one mapping row and its data volume are preserved for rollback.
 
 ## Ceph integration and compatibility
 
@@ -551,9 +579,11 @@ actions { canEnsure, canWake, canSleep, canRetry, canDelete }
 ```
 
 `firstSessionProvider` (since 2026-10-18, task T07) is what a first session in the default workspace, sent with
-nothing named, starts on now: `initialProvider` once the runner has been READY, before that the owner's own model key
-such a session is queued on while the runner has not reported its engines or reported that key's engine installed, and
-null when the session would be refused `MODEL_UNAVAILABLE`. A client offers that session exactly when it is set; a
+nothing named, starts on now: `initialProvider` once the runner has been READY, before that the first of the owner's
+own model keys whose engine the runner reported installed, or, before it has reported any, whose engine the managed
+image installs (all seven engines since 2026-11-16, `MANAGED_IMAGE_ENGINES`), and null when there is no such key, as
+the create would refuse the session `MODEL_UNAVAILABLE`. A key no engine on the runner runs (a Kimi key on a runner
+that reported no Kimi Code) is never named, whatever the owner's order; since 2026-11-14. A client offers that session exactly when it is set; a
 server that predates the field is read by `initialProvider`.
 
 IDs use the existing wire codec; timestamps are ISO 8601. Nullable IDs describe stages before the
@@ -699,9 +729,10 @@ cluster, a real runner heartbeat or a real model session.
 | Hook | `AuthService.completeLogin`, the exit of password login, first-user bootstrap and the Google ticket exchange, calls `ManagedRunnerService.signedIn` after the tokens are issued. It is injected as `MANAGED_RUNNER_SIGN_IN`, the one export of `ManagedRunnerModule`, which is global for it. Nothing else calls it: refresh, logout, a password change, an administrator opening an account and the capability and status reads record nothing. A unit spec holds the call site to that one method. |
 | Off | `signedIn` returns before reading anything. Login and bootstrap make exactly the database calls they made before. |
 | On | An eligible owner without a mapping gets one (mapping, runner row and default workspace in the manager-core transaction), and the reconcile worker is kicked. The sign-in waits for no instance and makes no Kubernetes call. An existing mapping is left as it is in every state: a sign-in does not retry FAILED, recreate a removed workspace or a tombstone, or wake anything. Every failure is logged and swallowed, so the issued session stands; an explicit `ensure`, or the next sign-in, records the intent. |
-| Eligibility | `ManagedRunnerEligibility` (`managed-runner-eligibility.ts`) is the one decision of who is given a managed runner. Sign-in, explicit `ensure` (403 `MANAGED_RUNNER_NOT_ELIGIBLE`) and the status read (`canEnsure` false, with that reason) ask it. With the switch on it answers yes for every account; narrowing it to invited testers changes that implementation and nothing else. No configuration was added. |
+| Signed-in pass | Added 2026-11-16 ([managed-runner-signed-in-accounts-design.md](managed-runner-signed-in-accounts-design.md), D1–D4 A). A session that began before the switch went on is only ever refreshed, so the sign-in hook never reaches it. With the switch on and the environment available, `ManagedRunnerService.provisionSignedIn` runs at start and every 300 s: every account not disabled, with an unrevoked and unexpired refresh token and no mapping in any state, that the eligibility rule gives one, gets its mapping as a sign-in makes it. Refresh and the reads still record nothing. Off, no timer exists. |
+| Eligibility | `ManagedRunnerEligibility` (`managed-runner-eligibility.ts`) is the one decision of who is given a managed runner. Sign-in, the signed-in pass, explicit `ensure` (403 `MANAGED_RUNNER_NOT_ELIGIBLE`) and the status read (`canEnsure` false, with that reason) ask it. With the switch on it answers yes for every account; narrowing it to invited testers changes that implementation and nothing else. No configuration was added. |
 | Default workspace | Created once with the mapping, bound by `runnerId` and `targetRunnerId`, with `position` NULL, so it sorts after every workspace the owner already has. Existing order, the first workspace a client lands on, selections and deep links are unchanged. Nothing is matched by name. An owner who removes it does not get it, or another, back at the next sign-in. |
-| Model supply | READY also needs the fresh heartbeat after STARTING to report a runtime installed and signed in: `auth: yes`, no installation error, and advertised where the claim requires it. Claude Code, Codex, Kimi Code and Antigravity count, preferred in that order, and the first is stored as `initialProvider`. With none signed in, one of the owner's own enabled model keys counts (since 2026-10-18, task T05: an account whose only model is an API key, such as a DeepSeek key, never became READY before). The key counts when the runner reported the engine that key runs on installed, without an installation error and advertised where the claim requires it. That engine needs no sign-in, because a session on a key brings its own credential. The first such key in the owner's order (`position`, unset last, then age) is stored as `initialProvider`, by its slug. Another account's key, a shared key (an administrator's), a disabled key and a key whose slug is a built-in runtime's name do not count. Without either the mapping stays STARTING with reason `MODEL_UNAVAILABLE`; a runtime signed in or a key added meanwhile makes the next pass READY. At the startup deadline it turns FAILED with that reason, retryable, and a retry waits on the same Pod. OpenCode, DeepSeek Harness and Cursor CLI are not counted as supply in this version, and neither is a key whose engine is one of them (`MANAGED_SUPPLY_RUNTIMES` and `ownerManagedKeys` in `src/apiserver/src/managed-runners/managed-runner-supply.ts`). |
+| Model supply | READY also needs the fresh heartbeat after STARTING to report a runtime installed and signed in: `auth: yes`, no installation error, and advertised where the claim requires it. Claude Code, Codex, Kimi Code, Antigravity and Cursor CLI count, preferred in that order, and the first is stored as `initialProvider`. With none signed in, one of the owner's own enabled model keys counts (since 2026-10-18, task T05: an account whose only model is an API key, such as a DeepSeek key, never became READY before). The key counts when the runner reported the engine that key runs on installed, without an installation error and advertised where the claim requires it. That engine needs no sign-in, because a session on a key brings its own credential. The first such key in the owner's order (`position`, unset last, then age) is stored as `initialProvider`, by its slug. Another account's key, a shared key (an administrator's), a disabled key and a key whose slug is a built-in runtime's name do not count. Without either the mapping stays STARTING with reason `MODEL_UNAVAILABLE`; a runtime signed in or a key added meanwhile makes the next pass READY. At the startup deadline it turns FAILED with that reason, retryable, and a retry waits on the same Pod. OpenCode and DeepSeek Harness have no sign-in of their own: they count only for a key whose engine is one of them (`MANAGED_SUPPLY_RUNTIMES`, `MANAGED_KEY_RUNTIMES` and `ownerManagedKeys` in `src/apiserver/src/managed-runners/managed-runner-supply.ts`; Cursor CLI and both of these since 2026-11-16, when the image began to ship every engine). |
 | First session | The derived provider seed (`lastProviderByWorkspace`) answers a managed default workspace with no interactive history with its `initialProvider`: a runtime's name as that built-in provider, or a key's slug as that configured provider on the engine its row names. Its `lastProvider` in workspace payloads, and a session created there without a provider, start on it; every other workspace keeps the Claude floor. `SessionsService.create` refuses a first session there with 409 `MODEL_UNAVAILABLE`, before anything is created, on a runtime the managed runner did not report installed and signed in, whether the provider was named or derived. A session bringing its own credential needs only the CLI installed. After the first interactive session the workspace's history decides, as for every workspace. The deprecated workspace `provider` alias is neither read nor written. |
 
 Left for the authorized test environment: a real sign-in provisioning a real PVC and Pod; the managed

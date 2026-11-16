@@ -1,5 +1,5 @@
 import { AgentFixButton, AgentFixLine } from '../AgentFix';
-import { agentFixView, attentionFixTarget } from '../../lib/agentFix';
+import { ENGINE_UPDATE_FIX_TARGET, agentFixView, attentionFixTarget } from '../../lib/agentFix';
 import {
   BranchesOutlined,
   CloudDownloadOutlined,
@@ -19,12 +19,14 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type LoginEngine } from '@orbit/shared';
+import { engineUpdateFailedLines, engineUpdateLineFailed, type LoginEngine } from '@orbit/shared';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, cleanUpWorkspaceRepo } from '../../api';
 import { encodeId, routeId } from '../../lib/idCodec';
 import { machineDraftPath } from '../../lib/machineSetup';
+import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
+import { ManagedRunnerNotice } from '../ManagedRunnerNotice';
 import { machineEmpty, START_A_SESSION } from '../../lib/machineSetupCopy';
 import { publishedRunnerVersionQuery, workspaceSessionCountsQuery } from '../../lib/queries';
 import { AbandonedCheckouts } from '../AbandonedCheckouts';
@@ -74,12 +76,17 @@ import {
   RUNNER_CAPACITY_FOOTER,
   RUNNER_COPY_COMMAND,
   RUNNER_ENGINES,
+  RUNNER_RESOURCES,
+  MANAGED_RUNNER_NOT_REPORTED,
   RUNNER_ENGINES_FOOTER,
   RUNNER_ENGINES_OFFLINE_FOOTER,
   RUNNER_KEEP_FREE,
   RUNNER_LINE_SEPARATOR,
   RUNNER_MAX_CONCURRENT,
   RUNNER_MAX_CONCURRENT_HINT,
+  RUNNER_MAX_CONCURRENT_UNIT,
+  RUNNER_MAX_CONCURRENT_DECREASE,
+  RUNNER_MAX_CONCURRENT_INCREASE,
   RUNNER_EDIT,
   RUNNER_NEEDS_ATTENTION,
   RUNNER_OFFLINE,
@@ -105,6 +112,8 @@ import {
   attentionQuotaResets,
   runnerOfflineLastSeen,
   runnerRunningOf,
+  runnerRunningNow,
+  runnerMaxBelowRunning,
   runnerUpdatedFromTo,
   runnerVersionUpdatingTo,
   runnerVersionTag,
@@ -215,12 +224,6 @@ export function machinePagePollMs(runners: Runner[] | undefined, runnerId: strin
   return inFlight ? 4_000 : 15_000;
 }
 
-/** Whether one line of an engine-update report is a failure: the runner's own rule for failing the
- *  whole run (`updateRunFailed`, src/runner-go/engineinstall.go), read per line. */
-function engineUpdateLineFailed(line: string): boolean {
-  return line.includes('update failed') || line.includes('timed out') || line.includes('does not run');
-}
-
 /** The lines of an update run that need the person reading it: the failures, and an install Orbit
  *  is not allowed to replace (only its owner can update it). Everything else — current, updated,
  *  pinned, waiting for sessions to finish, retried on the next pass — sorts itself out, and listing
@@ -232,6 +235,9 @@ function engineUpdateReportLines(message: string | null | undefined): string[] {
     .filter((line) => engineUpdateLineFailed(line) || line.includes('owned by another user'));
   return lines.length > 0 ? lines : ['Nothing here needs your attention.'];
 }
+
+/** A managed runner's row tone as the pill's colour; a moving state carries a spinner on the neutral pill. */
+const MANAGED_PILL = { ready: 'online', progress: 'offline', idle: 'offline', attention: 'attention' } as const;
 
 export function MachineSettingsPage() {
   const runnerId = routeId(useParams().id);
@@ -246,6 +252,10 @@ export function MachineSettingsPage() {
     refetchInterval: (q) => machinePagePollMs(q.state.data, runnerId),
   });
   const runner = (runners.data ?? []).find((r) => r.id === runnerId) ?? null;
+  // When this machine is the account's managed runner: its state in the shared words, and its notice on top.
+  const { managed: accountManaged } = useManagedRunner();
+  const managed =
+    accountManaged?.status.runnerId && routeId(accountManaged.status.runnerId) === runnerId ? accountManaged : null;
 
   const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<MachineWorkspace[]>('/workspaces') });
   const workspaces = (workspacesQ.data ?? []).filter((a) => a.runnerId === runnerId);
@@ -392,7 +402,11 @@ export function MachineSettingsPage() {
 
   const shownName = runner.displayName || runner.name;
   const nowMs = Date.now();
-  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion });
+  // The managed runner's state is its shared label and notice: its heartbeat's "offline" card is not repeated.
+  const managedRow = managedRowOf(managed, runnerId);
+  const attention = runnerAttention({ runner, workspaces, nowMs, latestVersion }).filter(
+    (item) => !(managedRow && item.kind === 'offline'),
+  );
 
   // The tightest disk its workspaces sit on (Resources' Disk, for a runner that reads none itself), and the floor
   // it keeps free.
@@ -427,10 +441,19 @@ export function MachineSettingsPage() {
     setMaxOpen(false);
     if (next !== null && next !== runner.maxConcurrent) capacityMut.mutate({ maxConcurrent: next });
   };
+  const stepMaxConcurrent = (by: number) => {
+    const next = Math.max(1, (maxTyped.current ?? runner.maxConcurrent ?? 1) + by);
+    maxTyped.current = next;
+    setMaxDraft(next);
+  };
+  const maxUnchanged = maxDraft === null || maxDraft === runner.maxConcurrent;
 
   // About's version line: current, catching up by itself, or stuck until someone upgrades it. A
   // runner that reports where its updates stand says which; an older one is judged by runsAsRoot.
   const version = runner.version?.trim() || null;
+  // The account's managed runner before it first reports (preparing, waiting for capacity, failed to
+  // start): no version, no readings, no engines. Once it reports, the page is the ordinary one.
+  const managedWaiting = !!managedRow && managedRow.kind !== 'available' && !version;
   const versionNote = (() => {
     if (!version || !latestVersion) return null;
     const stuck = attention.find((item) => item.kind === 'cannotSelfUpdate');
@@ -476,6 +499,10 @@ export function MachineSettingsPage() {
   const relay = runner.install;
   const updating = relay?.mode === 'update';
   const relayInFlight = relay?.status === 'pending' || relay?.status === 'installing';
+  // A finished run with a failed line can be handed to an agent; the server reads the same lines.
+  const updateFixView = updating && engineUpdateFailedLines(relay?.message).length > 0
+    ? agentFixView(runner.agentFix, ENGINE_UPDATE_FIX_TARGET, 'report')
+    : null;
 
   const openRename = () => {
     setRenameVal(shownName);
@@ -669,8 +696,13 @@ export function MachineSettingsPage() {
 
   // The status pill: online and how many of its sessions are running, amber when something needs a
   // person (the nav's dot says the same), grey and when it was last seen while offline.
-  const pillTone = !runner.online ? 'offline' : attention.length > 0 ? 'attention' : 'online';
-  const pillText = runner.online
+  // The managed runner's pill is its shared short label instead (asleep is Asleep, never Offline).
+  const pillTone = managedRow
+    ? MANAGED_PILL[managedRow.tone]
+    : !runner.online ? 'offline' : attention.length > 0 ? 'attention' : 'online';
+  const pillText = managedRow
+    ? managedRow.label
+    : runner.online
     ? [RUNNER_ONLINE, typeof runner.maxConcurrent === 'number' ? runnerRunningOf(runner.activeSessions ?? 0, runner.maxConcurrent) : null]
         .filter(Boolean)
         .join(RUNNER_LINE_SEPARATOR)
@@ -695,7 +727,11 @@ export function MachineSettingsPage() {
         <div className="machine-title-row">
           <h1 className="machine-title">{shownName}</h1>
           <span className={`machine-pill machine-pill--${pillTone}`} data-testid="machine-status">
-            <span className={`settings-dot settings-dot--${pillTone}`} aria-hidden />
+            {managedRow?.tone === 'progress' ? (
+              <Spinner size="small" aria-hidden />
+            ) : (
+              <span className={`settings-dot settings-dot--${pillTone}`} aria-hidden />
+            )}
             {pillText}
           </span>
           <div style={{ flex: 1 }} />
@@ -709,6 +745,11 @@ export function MachineSettingsPage() {
         </div>
         {metaline.length > 0 && <div className="machine-metaline">{metaline.join(RUNNER_LINE_SEPARATOR)}</div>}
       </header>
+
+      {/* The managed runner's own state, Retry and the way to a model included; none while it is ready. */}
+      {managed && managed.display.kind !== 'available' && (
+        <ManagedRunnerNotice managed={managed} className="machine-managed-notice" />
+      )}
 
       {/* The Update card (board 4): a release this runner is behind, in the phase it reports. */}
       {updateCard && (
@@ -798,10 +839,24 @@ export function MachineSettingsPage() {
         </section>
       )}
 
+      {/* A managed runner that has not reported yet has no readings and no engines to show: one quiet
+          line each, not "Update runner" badges and Install rows for a machine still being started. */}
+      {managedWaiting ? (
+        <>
+          <SettingsSection title={RUNNER_RESOURCES} className="machine-section-resources">
+            <p className="machine-managed-waiting" data-testid="managed-waiting-resources">{MANAGED_RUNNER_NOT_REPORTED}</p>
+          </SettingsSection>
+          <SettingsSection title={RUNNER_ENGINES} className="machine-section-engines">
+            <p className="machine-managed-waiting" data-testid="managed-waiting-engines">{MANAGED_RUNNER_NOT_REPORTED}</p>
+          </SettingsSection>
+        </>
+      ) : (
+      <>
       {/* The machine's CPU, memory and disk, and their last hour (MachineResources.tsx). */}
       <MachineResources
         runnerId={runner.id}
         online={!!runner.online}
+        offlineLabel={managedRow?.label}
         capabilities={runner.capabilities}
         workspaceDisk={disk}
         reserveMb={reserveMb}
@@ -840,11 +895,19 @@ export function MachineSettingsPage() {
               </div>
             )}
             {(relay.status === 'done' || relay.status === 'failed') && (
-              <div className="rd-engine-relay-hint">
+              <div className="rd-engine-relay-hint agent-fix-row">
+                {/* Fix with an agent, before Dismiss, while the report has a failed line (lib/agentFix.ts). */}
+                {updateFixView && updateFixView.state !== 'fixing' && (
+                  <AgentFixButton view={updateFixView} target={ENGINE_UPDATE_FIX_TARGET} runnerId={runner.id} />
+                )}
+                {updateFixView?.state === 'fixing' && <AgentFixLine view={updateFixView} />}
                 <button className="re-link" type="button" onClick={() => dismissEngineUpdate.mutate()}>
                   Dismiss
                 </button>
               </div>
+            )}
+            {(relay.status === 'done' || relay.status === 'failed') && updateFixView?.state !== 'fixing' && (
+              <AgentFixLine view={updateFixView} />
             )}
           </div>
         )}
@@ -864,6 +927,8 @@ export function MachineSettingsPage() {
           <div className="rd-hint">{runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}</div>
         )}
       </SettingsSection>
+      </>
+      )}
 
       <div ref={capacityRef} className="machine-capacity">
         <SettingsSection title={RUNNER_CAPACITY} className="machine-section-capacity">
@@ -1041,31 +1106,53 @@ export function MachineSettingsPage() {
       <Dialog
         className="runner-dialog"
         title={RUNNER_MAX_CONCURRENT}
+        width={400}
         open={maxOpen}
         onClose={() => setMaxOpen(false)}
         returnFocus={maxButton}
         footer={
           <>
             <Button onClick={() => setMaxOpen(false)}>Cancel</Button>
-            <Button variant="primary" onClick={saveMaxConcurrent}>
+            <Button variant="primary" disabled={maxUnchanged} onClick={saveMaxConcurrent}>
               Save
             </Button>
           </>
         }
       >
-        <div className="rd-hint machine-max-concurrent-hint">{RUNNER_MAX_CONCURRENT_HINT}</div>
-        <NumberInput
-          className="rd-max-concurrent"
-          aria-label={RUNNER_MAX_CONCURRENT}
-          min={1}
-          precision={0}
-          value={maxDraft}
-          onValueChange={(v) => {
-            maxTyped.current = v;
-            setMaxDraft(v);
-          }}
-          onPressEnter={saveMaxConcurrent}
-        />
+        {/* − 8 + sessions at once ········ 3 running */}
+        <div className="machine-max-concurrent-line">
+          <div className="machine-max-stepper">
+            <Button
+              aria-label={RUNNER_MAX_CONCURRENT_DECREASE}
+              disabled={(maxDraft ?? 1) <= 1}
+              onClick={() => stepMaxConcurrent(-1)}
+            >
+              −
+            </Button>
+            <NumberInput
+              className="rd-max-concurrent"
+              aria-label={RUNNER_MAX_CONCURRENT}
+              min={1}
+              precision={0}
+              value={maxDraft}
+              onValueChange={(v) => {
+                maxTyped.current = v;
+                setMaxDraft(v);
+              }}
+              onPressEnter={saveMaxConcurrent}
+            />
+            <Button aria-label={RUNNER_MAX_CONCURRENT_INCREASE} onClick={() => stepMaxConcurrent(1)}>
+              +
+            </Button>
+          </div>
+          <span className="machine-max-concurrent-unit">{RUNNER_MAX_CONCURRENT_UNIT}</span>
+          {running && <span className="machine-max-concurrent-now">{runnerRunningNow(running.active)}</span>}
+        </div>
+        {running && maxDraft !== null && maxDraft < running.active ? (
+          <div className="rd-hint machine-max-concurrent-hint warn">{runnerMaxBelowRunning(running.active, maxDraft)}</div>
+        ) : (
+          <div className="rd-hint machine-max-concurrent-hint">{RUNNER_MAX_CONCURRENT_HINT}</div>
+        )}
       </Dialog>
       <Dialog
         className="runner-dialog"

@@ -1,4 +1,4 @@
-import type { SessionTurnPlacement } from '@orbit/shared';
+import type { SessionTurnPlacement, TurnTranslation } from '@orbit/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -50,6 +50,7 @@ import { useToast } from './toast';
 import { RECORD_NOT_FOUND } from './transcriptDeepLink';
 import { firstPaintSlice } from './transcriptPaint';
 import { loadTranscript, saveTranscript } from './transcriptStore';
+import { foldTranslationEvent } from './translation';
 import { turnPlacementOf } from './turnPlacement';
 
 export interface RunEvent {
@@ -86,6 +87,8 @@ export interface QueuedTurn extends TurnCards {
   createdAt?: string;
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
+  /** Settings › Translation: the owner's message as typed and how far its translation got. */
+  translation?: TurnTranslation;
 }
 
 /** Map one authoritative active-snapshot receipt into the pending-tail renderer. `accepted` is
@@ -586,6 +589,8 @@ export function useSessionStream({
               // Every card the snapshot carried, so the placeholder this row paints is the card the
               // runner's echo will replace it with.
               ...turnCardsOf(row),
+              // And a translated message's original, so the placeholder shows what the owner wrote.
+              ...(row.translation ? { translation: row.translation } : {}),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -596,6 +601,7 @@ export function useSessionStream({
               current,
               selectedId,
               knownAcceptedBefore,
+              rows.some((row) => row.opening && turnPlacementOf(row) !== 'accepted'),
             ),
           );
           const serverQueued = rows.flatMap((row) => {
@@ -628,6 +634,11 @@ export function useSessionStream({
     // so a cursor the client can't get past is a loop, not a retry — see reseed().
     let seqAtConnect = -1;
     let stalled = 0;
+    // Set when the window is about to be filled by a cursor-less replay rather than a page: a tail
+    // page that failed (seedTail, reseed). No page said where the window's older edge is, so the
+    // first event the replay brings decides it (push). Left unset, the edge read "nothing older", and
+    // a session whose replay began mid-conversation could never be scrolled back past that point.
+    let olderEdgeUnknown = false;
     const writeCache = (): void => {
       // A window opened at a record ends at a gap, not at the tail: a reopen must not resume from it.
       if (newerCursorRef.current !== null) return;
@@ -660,6 +671,11 @@ export function useSessionStream({
       seedAbort.abort();
     };
     const push = (ev: RunEvent): void => {
+      if (olderEdgeUnknown && isSeq(ev.seq)) {
+        olderEdgeUnknown = false;
+        oldestSeqRef.current = ev.seq;
+        hasMoreOlderRef.current = ev.seq > 1; // seqs start at 1; a page before it answers the rest
+      }
       accRef.current = [...accRef.current, ev];
       writeCache();
       setEvents(accRef.current);
@@ -723,6 +739,7 @@ export function useSessionStream({
       } catch {
         // Leave lastSeq at 0 and let the reconnect below carry it: a cursor-less connect is
         // server-capped, so the fallback for a failed re-seed is still a bounded replay.
+        olderEdgeUnknown = true;
       }
       if (closed) return;
       // `fails` is deliberately NOT reset: re-seeding is a different way to spend the same retry
@@ -849,15 +866,30 @@ export function useSessionStream({
         // keyed on seq and would drop the second one. They drive `approvals`, not the
         // transcript reducer.
         if (ev.type === 'approval_request') {
-          const p = ev.payload as { id: string; toolName: string; input: unknown; toolUseId?: string };
+          const p = ev.payload as { id: string; toolName: string; input: unknown; toolUseId?: string; translation?: ApprovalInfo['translation'] };
+          // A card the server has translated is published again with the same id, carrying
+          // `translation` (Settings › Translation, 3A): it replaces the card's display text, nothing else.
           setApprovals((prev) =>
             prev.some((x) => x.id === p.id)
-              ? prev
+              ? p.translation
+                ? prev.map((x) => (x.id === p.id ? { ...x, translation: p.translation } : x))
+                : prev
               : [
                   ...prev,
                   { ...p, sessionId: selectedId, status: 'PENDING', createdAt: new Date().toISOString() } as ApprovalInfo,
                 ],
           );
+          return;
+        }
+        // An agent reply translated, or its translation failed (Settings › Translation, 2A): live-only
+        // at seq 0, so before the dedup. Folded into the event it translates, as a replay carries it.
+        if (ev.type === 'translation') {
+          const folded = foldTranslationEvent(accRef.current, ev.payload);
+          if (folded) {
+            accRef.current = folded;
+            writeCache();
+            setEvents(accRef.current);
+          }
           return;
         }
         if (ev.type === 'approval_resolved') {
@@ -1136,6 +1168,7 @@ export function useSessionStream({
       }
       // Every attempt failed. Clear the skeleton anyway rather than spin forever — the SSE
       // replay below is the remaining path to content.
+      olderEdgeUnknown = true;
       if (!closed) setSeeding(false);
     };
     // A link to one record: the page around it — or, for a record that is not this session's, the

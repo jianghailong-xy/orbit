@@ -1,8 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body, Controller, Delete, Get, Param, Post, Query, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
+import { FileUploadCleanupInterceptor } from '../files/file-upload-cleanup.interceptor';
+import { FILE_UPLOAD_STORAGE, type FileUpload } from '../files/file-upload-storage';
+import { streamable } from '../files/files.service';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { type GuestTurnBody, SessionGuestsService } from './session-guests.service';
 
@@ -13,7 +21,7 @@ interface InviteGuestBody {
 
 /**
  * The owner's People who can reply (docs/session-guests-design.md §3, §7). Inviting lets someone else drive an agent
- * on the owner's machine with the owner's accounts, so all three are the owner channel: no access token reaches them
+ * on the owner's machine with the owner's accounts, so all four are the owner channel: no access token reaches them
  * (auth/pat-owner-channel-routes.ts).
  */
 @UseGuards(JwtAuthGuard)
@@ -25,6 +33,12 @@ export class SessionGuestsController {
   @Get()
   list(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.guests.list(user.userId, id);
+  }
+
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Get('suggestions')
+  suggestions(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.guests.suggestions(user.userId, id);
   }
 
   @PatForbidden('OWNER_INTERACTIVE')
@@ -47,7 +61,7 @@ export class SessionGuestsController {
 /**
  * The guest's door (§4, §5, §7): signed in as the guest, with a live invitation to the session, or the one 404
  * (`GUEST_SESSION_NOT_SHARED`) on every route. What it reads is the /shared projection with tool output on; what it
- * writes is a text turn of the owner's session. Closed to access tokens for now: no scope covers acting in someone
+ * writes is a turn of the owner's session — words, and images the guest uploaded here. Closed to access tokens for now: no scope covers acting in someone
  * else's session.
  */
 @UseGuards(JwtAuthGuard)
@@ -88,8 +102,41 @@ export class GuestSessionsController {
     return this.guests.event(user.userId, id, seq);
   }
 
+  /** An image or file the transcript carries, as the public page's `/shared/:token/attachments/:id` serves it. */
+  @Get(':id/attachments/:attachmentId')
+  async attachment(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('attachmentId', PublicIdPipe) attachmentId: string,
+    @Res({ passthrough: true }) res?: Response,
+  ): Promise<StreamableFile> {
+    return streamable(await this.guests.attachment(user.userId, id, attachmentId), res);
+  }
+
+  /**
+   * An image for the guest's next message (`file`, multipart, as `POST /attachments` takes one): a PNG, JPEG, WebP or GIF
+   * of at most 5 MB, the owner composer's images (SessionGuestsService.uploadImage). The upload streams to a temporary
+   * file bounded by the server's one upload cap, so a larger image is answered with the guest door's own sentence.
+   */
+  @Post(':id/attachments')
+  @UseInterceptors(
+    FileUploadCleanupInterceptor,
+    FileInterceptor('file', { storage: FILE_UPLOAD_STORAGE, limits: { fileSize: MAX_UPLOAD_BYTES } }),
+  )
+  uploadImage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @UploadedFile() file: FileUpload | undefined,
+  ): Promise<{ id: string }> {
+    return this.guests.uploadImage(user.userId, id, file);
+  }
+
   @Post(':id/turns')
-  turn(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() body: GuestTurnBody) {
+  turn(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body(PublicIdPipe.forFields('attachmentIds')) body: GuestTurnBody,
+  ) {
     // A guest names a turn key here, so the server's own reserved prefixes are refused here too.
     assertClientTurnIdNotReserved(typeof body?.clientTurnId === 'string' ? body.clientTurnId : undefined);
     return this.guests.turn(user.userId, id, body);

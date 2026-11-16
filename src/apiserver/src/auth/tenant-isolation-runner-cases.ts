@@ -724,6 +724,23 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
 
 /** Runner-gate routes the census cannot stand up, each with why and the reading that proves it. */
 export const RUNNER_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  // ── scheduled tasks: a session's schedule_* tools (runner-api/runner-schedules.controller.ts) ─────────
+  'GET /runner/schedules/:id':
+    "read by (id, the runner's owner) and nothing else, 404 for another account's id (schedules/schedule-reads.service.ts:98)",
+  'PATCH /runner/schedules/:id':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /runner/schedules/:id/pause':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /runner/schedules/:id/resume':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /runner/schedules/:id/end':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'DELETE /runner/schedules/:id':
+    "the schedule is read FOR UPDATE by (id, the runner's owner) and nothing else, so another account's id answers 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedules.service.ts:889)",
+  'POST /runner/schedules/:id/run':
+    "the schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:888)",
+  'POST /runner/schedule-runs/:id/stop':
+    "the run's schedule is locked only when its owner is the runner's owner, else 404 SCHEDULE_RUN_NOT_FOUND before anything is written (schedules/schedule-runs.service.ts:717, :888)",
   'POST /runner/main-checkout/:id/snapshot':
     'the read is found by (id, the calling runner) only, so another machine\'s id answers 404 and nothing is stored (workspaces/main-checkout.service.ts:330); main-checkout.pg.spec.ts "the read goes through the runner" sends it from another runner',
   'POST /runner/main-checkout/:id/result':
@@ -944,6 +961,24 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/link/welcome body sessionIds[]': {
     as: RUNNER,
     request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessionIds: [of.runner.activateSessionId] } }),
+  },
+  // A refused account removal of B's own runner, naming A's session as one using the account. Only sessions assigned to
+  // the reporting runner are kept on its row (runner-api.controller.ts applyAccountRemoveResult), and the page reads
+  // back only the viewer's on that runner (runners.service.ts accountRemoveSessionsOf): A's is answered and stored as
+  // an id that names nothing.
+  'POST /runner/account-remove-result body sessionIds[]': {
+    as: RUNNER,
+    request: (of) => ({
+      params: {},
+      body: { engine: 'codex', status: 'failed', message: 'in use', sessionIds: [of.runner.machineSessionId] },
+    }),
+  },
+  'POST /runner/codex-account-remove-result body sessionIds[]': {
+    as: RUNNER,
+    request: (of) => ({
+      params: {},
+      body: { engine: 'codex', status: 'failed', message: 'in use', sessionIds: [of.runner.machineSessionId] },
+    }),
   },
   // B's own claim of an operation of its own, but A's operation named.
   'POST /runner/codex-rate-limit-reset-result body operationId': {
@@ -1403,6 +1438,27 @@ const planUsageReadings = Object.fromEntries(
 
 /** Ids a runner-gate request carries that name nothing of an account's to reach, with why and where. */
 export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> = {
+  // ── scheduled tasks ──────────────────────────────────────────────────────────────────────────────
+  'POST /runner/schedules header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'PATCH /runner/schedules/:id header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedules/:id/pause header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedules/:id/resume header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedules/:id/run header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedules/:id/end header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'DELETE /runner/schedules/:id header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedule-runs/:id/stop header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'POST /runner/schedule-runs/report header x-orbit-session-id':
+    "must be a session of the runner's owner that this runner hosts, else 403 before anything is read (runner-api/runner-schedules.controller.ts:174)",
+  'PATCH /runner/schedules/:id body workspaceId':
+    "read by (id, the runner's owner, not deleted) before anything is written; another account's workspace answers 404 WORKSPACE_NOT_FOUND (schedules/schedules.service.ts:899)",
   'POST /runner/main-checkout/:id/result body requestId':
     'never looked up: compared with the requestId of the row the calling runner\'s own id named, and refused 400 when it differs (workspaces/main-checkout.service.ts:745)',
   'POST /runner/main-checkout/:id/result body targetSessionId':
@@ -1456,6 +1512,8 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
     + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
     + 'found, and nothing of it is read or written (integration-job-relay.ts:1646)',
+  'POST /runner/heartbeat body backgroundJobSessionIds[]':
+    'only the ids of sessions assigned to the calling runner are kept on its own presence row, over HTTPS (runners/runner-background-holders.ts:35) and over the link (runner-api/link-heartbeat.ts:447); another account\'s session is dropped like an id that names nothing, and nothing of it is read back or answered; link-heartbeat.pg.spec.ts 14 sends another account\'s',
   'POST /runner/heartbeat body expiredCommitErrors[].operationId':
     'the commit attempt token the server minted for one of the machine\'s own sessions: compared only in the update '
     + 'scoped to that session on this runner (runner-api.controller.ts:1255)',

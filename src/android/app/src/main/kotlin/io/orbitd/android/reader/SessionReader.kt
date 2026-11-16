@@ -1,5 +1,12 @@
 package io.orbitd.android.reader
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import android.content.Context
 import androidx.compose.foundation.*
 import androidx.compose.ui.platform.LocalContext
@@ -40,15 +47,22 @@ import io.orbitd.android.OrbitApplication
 import io.orbitd.android.perf.OrbitPerf
 import io.orbitd.android.realtime.restoredFields
 import io.orbitd.android.R
+import io.orbitd.android.composer.CoordinatorHandoff
+import io.orbitd.android.composer.CoordinatorHandoffApi
 import io.orbitd.android.composer.CreatedWorkspaceLine
+import io.orbitd.android.composer.HandedOverBanner
+import io.orbitd.android.composer.HandoffNoteCard
+import io.orbitd.android.composer.HandoffStatus
 import io.orbitd.android.composer.CreatedWorkspaceLineView
 import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.MachineSetupCopy
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
+import io.orbitd.android.composer.ManagedRunnerAsleepLine
 import io.orbitd.android.composer.SessionPendingTray
 import io.orbitd.android.cards.AnsweredQuestions
 import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.cards.LocalCardViewport
 import io.orbitd.android.cards.CardReceiptSheet
 import io.orbitd.android.cards.CardReviewSheet
 import io.orbitd.android.cards.EvidenceFilesSheet
@@ -61,8 +75,10 @@ import io.orbitd.android.cards.rememberSessionCards
 import io.orbitd.android.core.cards.CardPreviews
 import io.orbitd.android.cards.ReaderSide
 import io.orbitd.android.cards.SessionCards
-import io.orbitd.android.cards.SessionNeedsYouBar
 import io.orbitd.android.cards.SessionRunStartCard
+import io.orbitd.android.schedule.ScheduleConversationInsert
+import io.orbitd.android.schedule.ScheduleInsert
+import io.orbitd.android.schedule.ScheduledStore
 import io.orbitd.android.cards.SessionTasksCard
 import io.orbitd.android.cards.LocalWatchTargetNames
 import io.orbitd.android.cards.watchTargetName
@@ -90,6 +106,10 @@ import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
 import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.management.LocalTranslation
+import io.orbitd.android.translation.LocalShownOriginals
+import io.orbitd.android.translation.ReplyTranslationFoot
+import io.orbitd.android.translation.ShownOriginals
 import io.orbitd.android.management.RunnerUpdateLater
 import io.orbitd.android.management.RunnerUpdateLaterButton
 import io.orbitd.android.management.RunnerPage
@@ -132,7 +152,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // receipt in the queue's listing settles one no runner will speak for. Only a window at the live tail can see how they came out.
     val listedTurns = state.session?.snapshot?.queuedTurns.orEmpty()
     val atTail = state.window.newerAfter == null
-    val rows = remember(state.window.events, listedTurns, atTail) { Steps.group(transcriptRows(state.window.events, listedTurns, holdsSteers = atTail)) }
+    // The platform's turn asking a coordinator for its handoff note is Orbit's, not the owner's: the conversation shows only its progress
+    // row and the note (board 02 ②).
+    val rows = remember(state.window.events, listedTurns, atTail) { Steps.group(transcriptRows(state.window.events.filterNot {
+        it.type == "user" && CoordinatorHandoff.isNotePrompt(it.fields.string("text")) }, listedTurns, holdsSteers = atTail)) }
     // What the list draws: the same rows with the turns Orbit opened folded into a line each, runs of them together (ExchangeFold).
     // Every other reading of the conversation keeps [rows], which hold each event. A watch's line names its target as the wake's own
     // line does, once the names below are known.
@@ -180,7 +203,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
     } }
     val list = rememberLazyListState()
-    var follow by rememberSaveable { mutableStateOf(route.recordId == null) }
+    // Opened from a project row onto the card a member waits on you with (owner 2026-11-14): placed at the cards, not the tail.
+    val ontoWaitingCard = remember(route.id) { CardFocus.pending(route.id!!) == CardFocus.WAITING }
+    DisposableEffect(route.id) { onDispose { if (CardFocus.pending(route.id!!) == CardFocus.WAITING) CardFocus.spend(route.id!!) } }
+    var follow by rememberSaveable { mutableStateOf(route.recordId == null && !ontoWaitingCard) }
     var placed by remember(model) { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
     var positioning by remember { mutableStateOf(false) }
@@ -193,8 +219,11 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // Held by its runner's self-update (board 2 and 5 of docs/mocks/runner-update-drain): only the list row carries the server's queued
     // reason, so the page reads this session's row as the list has it.
     val listRow = remember(data.sessions, route.id) { data.sessions.values.asSequence().flatten().firstOrNull { ObjectId.same(it.id, route.id) } }
+    // A full runner, run or batch is said in the same places by the same rules (docs/mocks/queued-card-runner-full), its foot drawing
+    // QueuedCapacity's words; only the queued page and Later… are the update's alone.
     val runnerUpdatingGate = listRow?.takeIf {
-        it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld && RunnerUpdating.isRunnerUpdating(it.queuedGate)
+        it.effectiveLifecycleState != "TRASH" && it.effectiveRunState == RunState.QUEUED && !it.regionHeld &&
+            (RunnerUpdating.isRunnerUpdating(it.queuedGate) || QueuedCapacity.isCapacityHeld(it.queuedGate))
     }?.queuedGate
     val runnerUpdatingMachine = listRow?.let { data.machineName(it.workspace) }
     // Later… for the runner the update holds this session on (its workspace's runner), and Update Now… when that runner takes it: the
@@ -239,7 +268,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     LaunchedEffect(state.ready, state.window.seeded, state.targetTick) {
         if (!state.ready || !state.window.seeded || state.denied) return@LaunchedEffect
         positioning = true
-        if (!placed) follow = model.following
+        if (!placed) follow = model.following && !ontoWaitingCard
         withFrameNanos { }
         val target = state.targetSeq?.let { anchorRow(currentRows, it) }
         if (target != null) {
@@ -302,11 +331,31 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     // A review open here is this conversation's: leaving it closes it.
     DisposableEffect(crossingStore) { onDispose { crossingStore.close() } }
     val crossingBatches = remember(crossingState.rows, coordinated) { coordinated?.let { crossingState.batches(it) }.orEmpty() }
+    // The scheduled tasks' cards this conversation asked and the changes it made, each where it happened; a run's own session gets
+    // its strip at its head and its report after its end (docs/scheduled-tasks-design.md §8.1, §4, §7.4). Read behind each of the
+    // session's snapshot reads, as the owner requests are.
+    val scheduled = remember(handle) { ScheduledStore.of(app.session, handle, app.processScope) }
+    val scheduledState by scheduled.state.collectAsState()
+    val scheduleRunId = snapshotDetail?.text("scheduleRunId")
+    LaunchedEffect(scheduled, route.id, scheduleRunId, state.session?.snapshotReads) { scheduled.loadSession(route.id!!, scheduleRunId) }
+    val scheduleInserts = remember(scheduledState.sessions, scheduledState.runs, route.id) { ScheduleInsert.of(scheduledState, route.id!!) }
+    val scheduleSessionState = when (snapshotDetail?.text("lifecycleState")) { "COMPLETED" -> "Completed"; "TRASH" -> "Trash"; else -> "Open" }
+    val drawSchedule: @Composable (ScheduleInsert) -> Unit = { insert ->
+        key(insert.key) {
+            ScheduleConversationInsert(insert, scheduled, route.id!!, scheduleSessionState, snapshotDetail?.text("engine")) { id ->
+                open(OrbitRoute(Destination.SCHEDULED, ObjectId.canonical(id) ?: id, origin = Origin.LINK))
+            }
+        }
+    }
     // What the needs-you bar counts in this conversation (iOS `ConsoleModel.openBelowRows`), and which way it lies from
     // the reader: the cards are drawn in the rail before the tail, so they are above only once the reader is past it. A question
     // answered here stops counting with the press, not with the read after it (A08-13).
     val belowRows = remember(state.session?.snapshot, cards.answered) {
         state.session?.snapshot?.let { NeedsYouLogic.belowRows(state.session!!.id, it, cards.answered) }.orEmpty()
+    }
+    // …and its own approvals still asking, at the tail: the header's capsule counts them too (07-console-one-capsule).
+    val approvalRows = remember(state.session?.snapshot, cards.answered) {
+        state.session?.snapshot?.let { NeedsYouLogic.approvalRows(state.session!!.id, it, cards.answered) }.orEmpty()
     }
     // A08-4: the queue's turns drawn at the transcript's end, the ones the window has not seen delivered yet — but the reader's own
     // messages still on their way, which the tray above the composer holds; what Orbit queued keeps its card here. After them, the
@@ -317,12 +366,27 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             (ObjectId.canonical(it.turnId!!) ?: it.turnId) in composerState.withdrawing + composerState.withdrawn
         }
     }
+    // Whether the tray holds a message of the reader's still waiting for its own turn: then its row says what holds it.
+    val trayHeld = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
+        queuedTail(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events).any { it.inTray && it.heldByUpdate }
+    }
     // A07-14: the turn the runner has taken, until its echo or its end — drawn where the echo will land, as the echo will be.
     val accepted = remember(state.session?.snapshot?.queuedTurns, state.window.events) {
         acceptedHeads(state.session?.snapshot?.queuedTurns.orEmpty(), state.window.events)
     }
     val liveTail = transcript != null && state.window.newerAfter == null
     val queuedShown = if (liveTail) queued.size else 0
+    // Opened onto a waiting card: once placed, at the rail — the item before the queue and the tail — whose card then brings its
+    // own top into view. Once per open; a jump the open itself asked for (a record) wins.
+    var placedAtCards by remember(model) { mutableStateOf(false) }
+    var listHeight by remember { mutableIntStateOf(0) }
+    LaunchedEffect(placed) {
+        if (!placed || !ontoWaitingCard || placedAtCards || route.recordId != null) return@LaunchedEffect
+        placedAtCards = true
+        positioning = true
+        list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+        positioning = false
+    }
     // The questions whose answers the turns on screen hand to the coordinator — the window's, and at the live tail the accepted head and
     // the queue — are drawn by those turns, from the rail's records, and not again in the rail (`AnsweredQuestions`).
     val answeredQuestions = remember(state.session?.snapshot, state.session?.fresh, cards.answered, cards.previous, rows, accepted, queued, liveTail) {
@@ -337,6 +401,18 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
     } }
     val scope = rememberCoroutineScope()
+    // A press on what waits in this conversation: unpin the reader and show the waiting card, which the card rail brings into
+    // view; a card answered in a review opens it, over the card it scrolled to (A08-3, iOS 419fa780b).
+    val showWaiting: (String) -> Unit = { row ->
+        follow = false
+        scope.launch {
+            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
+            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
+            CardFocus.request(route.id!!, row)
+            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
+                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
+        }
+    }
     // The conversation's last row while it is at rest (RecapCard). It steps aside for the rest of this visit once the conversation
     // starts a new turn — the reader is in it now, and a card arriving under each answer would push the answer up — and is back the
     // next time the session is opened (the owner, 2026-10-22).
@@ -358,22 +434,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             val key = RecapCard.hideKey(listed?.recapAt, text)
             recapPreferences.edit { putString(RecapCard.hiddenPreferenceKey(id), key) }
             hiddenRecap = key
-        }
-    }
-    var recapRefreshing by remember(handle, route.id) { mutableStateOf(false) }
-    val refreshRecap: () -> Unit = {
-        if (!recapRefreshing) {
-            recapRefreshing = true
-            scope.launch {
-                val notice = try {
-                    val outcome = api.refreshRecap(route.id!!)
-                    if (outcome.written) null else RecapCard.notice(outcome.reason ?: "error")
-                } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { RecapCard.notice("error") }
-                // A pass that wrote is read back by the session and the lists, which the card and the row draw from.
-                if (notice == null) { app.realtime.refreshSession(); app.realtime.refreshDirectory() }
-                else OrbitToasts.show(notice.text, tone = if (notice.failed) ToastTone.ERROR else ToastTone.INFO)
-                recapRefreshing = false
-            }
         }
     }
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
@@ -477,13 +537,20 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
     }
     LaunchedEffect(targetNames) { wakeNames = targetNames }
     val exchangeTree = rememberExchangeTree(app, handle, state.session?.snapshot?.detail)
+    // Settings › Translation: which messages this visit flipped to their original — never persisted (board frame 5).
+    val shownOriginals = remember(handle, route.id) { ShownOriginals() }
     // The main checkout's result lines, which a card above them reads to know it was handled.
     val mainCheckoutResults = remember(state.window.events) {
         state.window.events.filter { it.type == "system" }.mapNotNull { e -> MainCheckout.resultNotice(e.fields)?.let { e.seq to it } }
     }
-    CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
+    // A SubAgent's finished line points back at the delegate card its run was started from, when that card is drawn.
+    val delegateCalls = remember(state.window.events) { delegateCallsByRun(state.window.events) }
+    val subagentJump: (String) -> (() -> Unit)? = { runId ->
+        delegateCalls[runId]?.takeIf { seq -> currentRows.any { it.contains(seq) } }?.let { seq -> { model.show(seq) } }
+    }
+    CompositionLocalProvider(LocalMainCheckoutResults provides mainCheckoutResults, LocalReaderResources provides resources, LocalShownOriginals provides shownOriginals, LocalTaskActivity provides taskActivity, LocalSteerDeliveries provides steerDeliveries,
         LocalSessionConsole provides console, LocalMainCheckout provides mainCheckout, LocalWatchTargetNames provides targetNames, LocalAnsweredQuestions provides answeredQuestions,
-        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns) {
+        LocalExchangeTree provides exchangeTree, LocalSubagentRuns provides subagentRuns, LocalSubagentCardJump provides subagentJump) {
         SessionCardsReads(cards)
         BoxWithConstraints(Modifier.fillMaxSize()) {
         val view = LocalView.current
@@ -509,8 +576,24 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val question = rememberStuckQuestion(shownRows, list)
         val offTail by rememberUpdatedState(!state.denied && (!follow || state.window.newerAfter != null))
         // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8), bound while this page shows.
+        // One capsule there (the owner, 2026-11-15, `docs/mocks/needs-you-capsule/07-console-one-capsule`, B): what waits on the
+        // reader in THIS conversation takes it while its card is out of sight — above them, or anywhere once they are off the tail
+        // (at the tail the card is the tail); otherwise the question. What waits elsewhere is not said here; the lists say it.
+        val here = NeedsYouLogic.here(belowRows, approvalRows, readerSide)
+        // A coordinator handing itself over takes the capsule over both, at the tail and off it, while the note is written and the
+        // replacement runs (the owner, 2026-11-15, coordinator-context-actions board 04, A; iOS `handingOverCapsule`).
+        // A state the capsule reads, like `offTail`: the bar keeps the content it is first handed.
+        val handingOver by rememberUpdatedState(CoordinatorHandoff.outgoing(snapshotDetail)?.locksComposer == true)
         PageBar.Bind(route, title = null, folds = foldsChrome, center = {
-            if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+            // One capsule changing between them (08-motion ⑤): the old words leave upward, the new come in from below.
+            val saysWaiting = !handingOver && here != null && (here.side == ReaderSide.ABOVE || offTail)
+            AnimatedContent(handingOver to saysWaiting, transitionSpec = {
+                (slideInVertically { it / 2 } + fadeIn()) togetherWith (slideOutVertically { -it / 2 } + fadeOut()) using SizeTransform(clip = false)
+            }, label = "header-capsule") { (handing, waitingNow) ->
+                if (handing) HandingOverCapsule()
+                else if (waitingNow && here != null) WaitingCapsule(here) { showWaiting(here.rowId) }
+                else if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+            }
         }, actions = {
             if (projectId != null) ProjectSessionsButton(sheetCount ?: readCount) { projectSheet = true }
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
@@ -536,27 +619,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
-                // The needs-you bar, under the header and over the transcript (iOS `NeedsYouBannerView` in the console's top
-                // inset). Its press here unpins the reader and shows the waiting card, which the card rail brings into view.
-                SessionNeedsYouBar(app, handle, route.id!!, list, hidden = foldsChrome,
-                    below = NeedsYouLogic.below(belowRows, readerSide), open = open, onBelow = { row ->
-                        follow = false
-                        scope.launch {
-                            // The rail is the item before the queue and the tail; a card in it is brought into view once it is drawn.
-                            list.scrollToItem((list.layoutInfo.totalItemsCount - 2 - queuedShown).coerceAtLeast(0))
-                            CardFocus.request(route.id!!, row)
-                            // A08-3: a card answered in a review opens it, over the card it scrolled to (iOS 419fa780b). Evidence and
-                            // exceptions are answered in place, so the press only shows them.
-                            state.session?.let { live -> cards.shown(live).firstOrNull { it.key == row } }
-                                ?.takeIf { CardPreviews.preview(it) != null }?.let { cards.open(it.key) }
-                        }
-                    })
                 // Capture all lazy intervals in this composition, preserving A05's measurement fix.
                 val displayedRows = shownRows
                 val displayedWindow = state.window
                 // Inside the row it follows, so no list index moves: the reader's jumps count rows.
                 val ownerPlaced = remember(displayedRows, ownerRequests) { OwnerRequests.place(displayedRows.map { it.event.ts }, ownerRequests) }
                 val crossingPlaced = remember(displayedRows, crossingBatches) { CrossingCards.place(displayedRows.map { it.event.ts }, crossingBatches) }
+                val schedulePlaced = remember(displayedRows, scheduleInserts) { ScheduleInsert.place(displayedRows.map { it.event.ts }, scheduleInserts) }
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 // A turn running now, read at the live tail: only there is the window's newest head the turn in hand. Not a run that is
                 // merely live: a turn stopped without a `turn_end` would count up for as long as the session waits (iOS reads `.running` too).
@@ -565,11 +634,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // The message a runner update holds: the last one the reader sent, whose foot row says why (board 2 ⑤). None while the
                 // session is not held by an update, and none off the live tail.
                 // A turn on the queued tail the update holds says so on its own line instead (docs/mocks/queued-card-runner-updating ②).
-                val tailHeld = runnerUpdatingGate != null && live != null && queued.any { it.heldByUpdate }
+                // So does the reader's own waiting message in the tray, whose row says it (docs/mocks/queued-card-runner-full ②).
+                val tailHeld = runnerUpdatingGate != null && live != null && (queued.any { it.heldByUpdate } || trayHeld)
                 val heldSeq = if (runnerUpdatingGate == null || live == null || tailHeld) null
                     else displayedRows.lastOrNull { it.event.type == "user" && it.steps.isEmpty() && it.exchanges.isEmpty() }?.event?.seq
                 val targetSeq = state.targetSeq
-                LazyColumn(Modifier.weight(1f).fillMaxWidth().fadesIntoComposerBand().onSizeChanged {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                LazyColumn(Modifier.fillMaxSize().fadesIntoComposerBand().onSizeChanged {
+                    listHeight = it.height
                     if (viewport.resized(it.height, placed && follow && state.window.newerAfter == null)) repin++
                 }.nestedScroll(nested).pointerInput(model) {
                     // Do not consume the gesture: native selection/links still receive it.
@@ -581,10 +653,16 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     if (!displayedWindow.seeded) item(key = "loading") { LoadingMessage("Loading messages…") }
                     item(key = "older") {
                         if (displayedWindow.hasOlder) TextButton(enabled = !displayedLoading, onClick = { follow = false; model.older() }) { Text(if (displayedLoading) "Loading messages…" else "Load earlier messages") }
-                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        else if (ownerPlaced[-1] != null || crossingPlaced[-1] != null || schedulePlaced[-1] != null) Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            schedulePlaced[-1]?.forEach { drawSchedule(it) }
                             ownerPlaced[-1]?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossingPlaced[-1]?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
+                    }
+                    // Board 02 ③: a successor opens with the note its predecessor wrote, and the waits that moved here.
+                    val receivedHandoff = CoordinatorHandoff.received(detail)
+                    if (receivedHandoff != null && displayedWindow.seeded && !displayedWindow.hasOlder) item(key = "handoff-note") {
+                        HandoffNoteCard(receivedHandoff) { open(OrbitRoute(Destination.SESSION, it)) }
                     }
                     if (createdWorkspaceLine != null && !displayedWindow.hasOlder) {
                         item(key = "created-workspace") {
@@ -619,6 +697,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     itemsIndexed(displayedRows, key = { _, it -> it.key }, contentType = { _, it -> if (it.steps.isNotEmpty()) "steps" else it.event.type }) { index, row ->
                         val asked = ownerPlaced[index]
                         val crossings = crossingPlaced[index]
+                        val scheduleThings = schedulePlaced[index]
                         // The turn's head row sits in its message's item, like the owner's requests, so no list index moves.
                         val head = turnHeads[row.event.seq]?.takeIf { row.event.type == "user" && row.steps.isEmpty() }
                         val held = runnerUpdatingGate?.takeIf { heldSeq != null && row.event.seq == heldSeq }
@@ -630,16 +709,17 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                                 head?.let { TurnHeadLine(it, ticking = sessionLive && row.event.seq == newestHead) }
                             }
                         }
-                        if (asked == null && crossings == null) drawRow()
+                        if (asked == null && crossings == null && scheduleThings == null) drawRow()
                         else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             drawRow()
+                            scheduleThings?.forEach { drawSchedule(it) }
                             asked?.forEach { key(it.id) { OwnerRequestInConversation(it, ownerStore, ownerRunner, openLink, discussCard) } }
                             crossings?.forEach { key(it.id) { CrossingCardView(it, crossingState) { crossingStore.open(it.id) } } }
                         }
                     }
                     // Held by its runner's update with no message of the reader's to put the foot row under: the queued page's
                     // explanation, centred on an empty conversation (web `RunnerUpdatingQueued`).
-                    val runnerUpdatingPage = runnerUpdatingGate?.takeIf { displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty() }
+                    val runnerUpdatingPage = runnerUpdatingGate?.takeIf { RunnerUpdating.isRunnerUpdating(it) && displayedWindow.seeded && live != null && heldSeq == null && !tailHeld && accepted.isEmpty() }
                     if (runnerUpdatingPage != null) item(key = "runner-updating") {
                         val openTurn: (String) -> Unit = { open(OrbitRoute(Destination.SESSION, it)) }
                         if (displayedRows.isEmpty()) Box(Modifier.fillParentMaxHeight(0.8f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -662,12 +742,13 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // At the live tail, under everything the conversation said and above the cards that ask the owner something.
                     if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->
-                        item(key = "recap") { RecapCardView(card, recapRefreshing, refreshRecap, hideRecap) }
+                        item(key = "recap") { RecapCardView(card, hideRecap) }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {
                         Box(Modifier.onSizeChanged { if (rail.grew(it.height) && placed && follow && state.window.newerAfter == null) repin++ }) {
-                            SessionCards(cards, openLink, discuss = discussCard)
+                            // The list's height below the floating needs-you bar: a card brought in by its top lands under the bar, not behind it.
+                            CompositionLocalProvider(LocalCardViewport provides listHeight.coerceAtLeast(0)) { SessionCards(cards, openLink, discuss = discussCard) }
                         }
                     }
                     // A08-4: what is still waiting in the queue, as the turns it will be — after the decisions, before the tail.
@@ -686,6 +767,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }
                     // A06-12: the room the fade lies over, so a list at its tail has nothing in it — and the 1 dp anchor it always was.
                     item(key = "tail") { Spacer(Modifier.height(COMPOSER_BAND_FADE + 1.dp).testTag("transcript-tail")) }
+                }
                 }
                 // Android's jump stays a row under the list (iOS floats a disc 6 pt above the fade): below the list, so never in its fade.
                 if (!follow || state.window.newerAfter != null) Row(Modifier.fillMaxWidth().testTag("transcript-jump"), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -709,7 +791,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // conversation and above the parking strip (docs/mocks/pending-tray-above-parking, decided 2026-10-28). Not folded while
                 // a phone types, as it is about the messages being typed into; out of the way with the composer while a card's form
                 // holds the keyboard.
-                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionPendingTray(composer, state.session, unreadSteers) }
+                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) {
+                    SessionPendingTray(composer, state.session, unreadSteers,
+                        held = runnerUpdatingGate?.let { gate -> { RunnerUpdatingFoot(gate, runnerUpdatingMachine, later = runnerUpdatingLater) } })
+                }
                 // A08-5: a run that never started says why, first of the band's cards under the tray — and stays while a phone types.
                 SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true, console,
                     chat = {
@@ -745,12 +830,43 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // The landing this conversation's work fed, at the session's own bottom (owner 2026-10-19, board v4 06 e).
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SourceLandingChip(queuedDetail ?: detail) {
                     open(OrbitRoute(Destination.SESSION, it)) } }
+                // Board 02 ② and ⑤: the coordinator's handoff while it is written, and when it failed, right above the composer.
+                val handoff = CoordinatorHandoff.outgoing(detail)
+                // Its next state comes after the note turn has ended, when nothing else reads a session that is not live: read it
+                // again while the handoff is in hand, so FAILED, the banner and the way to the successor arrive without a press.
+                val latestDetail by rememberUpdatedState(detail)
+                val following = CoordinatorHandoff.keepsReading(detail)
+                LaunchedEffect(route.id, following) {
+                    if (following) CoordinatorHandoff.follow({ latestDetail }) { app.realtime.refreshSession() }
+                }
+                val handoffProject = detail?.let(CoordinatorHandoff::projectId)
+                val handoffApi = remember(handle) { CoordinatorHandoffApi(app.session, handle) }
+                var handoffBusy by remember(handle, route.id) { mutableStateOf(false) }
+                HandoffStatus(handoff, busy = handoffBusy, act = { action ->
+                    if (handoffProject != null) scope.launch {
+                        handoffBusy = true
+                        try { handoffApi.post(handoffProject, action) }
+                        catch (cancel: CancellationException) { throw cancel }
+                        catch (e: Exception) { OrbitToasts.show(CoordinatorHandoff.refusal(e), tone = ToastTone.ERROR) }
+                        finally { handoffBusy = false; app.realtime.refreshSession() }
+                    }
+                })
+                // Board 02 ④: a coordinator that handed over says so where its composer was, with the way to its successor.
+                if (handoff?.state == "COMPLETED") HandedOverBanner(handoff.handedOverTo) { open(OrbitRoute(Destination.SESSION, it)) }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
-                Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
+                else {
+                    // The session's runner is the account's managed runner, asleep: the shared composer line, and sending stays open — a
+                    // message wakes it (coordinator comment 34xSUx9zU5vQtCEYNoqwu). Not while a handoff locks the composer: sending
+                    // does not work then, and the line would say it does.
+                    ManagedRunnerAsleepLine(data.workspaces.firstOrNull { ObjectId.same(it.id, workspaceOfSession) }?.runnerId,
+                        composerLocked = handoff?.locksComposer == true)
+                    Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
                     focusRequest = composeFocus, inputFocusChanged = { composerFocused = it }, foldsChrome = foldsChrome,
                     openTask = { open(OrbitRoute(Destination.TASK, it)) },
-                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) }) }
+                    openRunner = { runner, engine -> open(OrbitRoute(Destination.RUNNER, runner, recordId = "engine:$engine")) },
+                    openTranslationSettings = { open(OrbitRoute(Destination.SETTINGS, "sessions")) }) }
+                }
             }
         }
         }
@@ -772,8 +888,14 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
 private fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
     // A06-11: reasoning still being written is open and held to a few self-scrolling lines (iOS 471b2afbb).
     if (label == "Thinking") return LiveThinking(parent, text, open)
+    // Settings › Translation (2A): the agent's own reply, streaming with translation on, is the English greyed with its chip until
+    // its block completes and the translation arrives; a sub-agent's report is never translated.
+    val translating = parent.isEmpty() && LocalTranslation.current.on
     Column { Text(if (parent.isEmpty()) "$label · Live" else "Subagent · $label · Live", style = MaterialTheme.typography.labelMedium)
-        StreamingText(text, open)
+        if (translating) {
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) { StreamingText(text, open) }
+            ReplyTranslationFoot(null, pending = true, flipped = false, onFlip = {}, retry = null)
+        } else StreamingText(text, open)
     }
 }
 

@@ -29,7 +29,7 @@ import io.orbitd.android.text.CodeText
 import io.orbitd.android.ui.LocalOrbitColors
 
 /** The agent tone iOS draws the SubAgent's rail and ✦ in (`ToolTone.agent`). */
-private val AgentTone = Color(0xFFAF52DE)
+internal val AgentTone = Color(0xFFAF52DE)
 
 /**
  * Orbit's own SubAgent — a `mcp__orbit__delegate` call — as one folded block (board docs/mocks/subagent/03.png, iOS `ToolCardView`'s
@@ -70,7 +70,7 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
                 Text("›", Modifier.rotate(if (open) 90f else 0f).clearAndSetSemantics { }, color = MaterialTheme.colorScheme.outline,
                     style = MaterialTheme.typography.titleMedium)
                 Text("✦", Modifier.clearAndSetSemantics { }, color = AgentTone, style = MaterialTheme.typography.labelLarge)
-                Text("SubAgent", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+                Text("Agent", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                 description?.let { Text(it, Modifier.weight(1f, fill = false), color = grey, fontWeight = FontWeight.Normal,
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1, overflow = TextOverflow.Ellipsis) }
@@ -91,9 +91,21 @@ internal fun SubagentBlockView(row: TranscriptRow, highlighted: Boolean, child: 
             }
             if (open) {
                 // The router's reasons first, then the steps, then the result (board 03).
+                // The server's one-line Why in at most two lines; every reason and removed candidate behind Details (web `SubagentWhy`).
                 block.why?.let { why ->
                     Text(buildAnnotatedString { withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append("Why") }; append(" · $why") },
-                        Modifier.testTag("subagent-why"), color = grey, style = MaterialTheme.typography.bodyMedium)
+                        Modifier.testTag("subagent-why"), color = grey, style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (block.details.isNotEmpty()) {
+                        var details by rememberSaveable(row.key, "why") { mutableStateOf(false) }
+                        Text(if (details) "Hide" else "Details", Modifier.testTag("subagent-why-more")
+                            .clickable(role = Role.Button) { details = !details }
+                            .semantics { stateDescription = if (details) "Expanded" else "Collapsed" },
+                            color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+                        if (details) Column(Modifier.testTag("subagent-why-list"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            block.details.forEach { Text(it, color = grey, style = MaterialTheme.typography.bodySmall) }
+                        }
+                    }
                 }
                 if (nested.isNotEmpty()) Column(Modifier.drawBehind { drawRect(grey.copy(alpha = 0.3f), size = size.copy(width = 1.dp.toPx())) }
                     .padding(start = 6.dp)) {

@@ -23,9 +23,9 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let notifications = "src/web/src/pages/settings/NotificationsPage.tsx"
     private static let appearance = "src/web/src/pages/settings/AppearancePage.tsx"
     private static let profile = "src/web/src/pages/ProfilePage.tsx"
-    /// Profile → Sign-in methods → Password → Change opens this dialog: since d5869b161 the password form
-    /// is the dialog's, no longer a card on the Profile page.
-    private static let changePasswordDialog = "src/web/src/components/ChangePasswordDialog.tsx"
+    /// Since the profile-change-password-dialog landing, the form is its own dialog, opened from the
+    /// Password row of Profile's Sign-in methods.
+    private static let passwordDialog = "src/web/src/components/ChangePasswordDialog.tsx"
     private static let sharedLinks = "src/web/src/pages/SharedLinksPage.tsx"
     private static let accessTokens = "src/web/src/pages/AccessTokensPage.tsx"
     private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
@@ -88,11 +88,11 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.settingsIndex)
         assertSays(index, "{ path: '/settings/access-tokens', label: '\(SettingsHome.title(.accessTokens))' },",
                    in: Self.settingsIndex)
-        // Change password is the name of the dialog the Password row's Change opens.
-        let dialog = try web(Self.changePasswordDialog)
+        // The Change password row opens a dialog whose title is the row's name.
+        let dialog = try web(Self.passwordDialog)
         assertSays(dialog, "export const CHANGE_PASSWORD = '\(SettingsHome.title(.changePassword))';",
-                   in: Self.changePasswordDialog)
-        assertSays(dialog, "title={CHANGE_PASSWORD}", in: Self.changePasswordDialog)
+                   in: Self.passwordDialog)
+        assertSays(dialog, "title={CHANGE_PASSWORD}", in: Self.passwordDialog)
     }
 
     /// The account's two alert switches, with the web Notifications page's titles and its
@@ -166,20 +166,22 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "export const NAME_CAPTION = '\(SettingsCopy.nameCaption)';", in: Self.profile)
     }
 
-    /// Change password: the form in the web's Change password dialog, which the Profile page's
-    /// Password row opens.
+    /// Change password: the web's dialog, opened from Profile → Sign-in methods → Password.
     func testThePasswordFormSaysWhatTheProfilePageSays() throws {
-        let page = try web(Self.changePasswordDialog)
+        let dialog = try web(Self.passwordDialog)
         for label in [SettingsCopy.currentPassword, SettingsCopy.newPassword, SettingsCopy.confirmPassword] {
-            assertSays(page, "label=\"\(label)\"", in: Self.changePasswordDialog)
+            assertSays(dialog, "label=\"\(label)\"", in: Self.passwordDialog)
         }
-        // The rule is one constant: the new password's hint, and its error once it is broken.
-        assertSays(page, "export const NEW_PASSWORD_RULE = '\(SettingsCopy.passwordRule)';", in: Self.changePasswordDialog)
-        assertSays(page, "? null : NEW_PASSWORD_RULE)", in: Self.changePasswordDialog)
-        assertSays(page, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.changePasswordDialog)
-        assertSays(page, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.changePasswordDialog)
-        assertSays(page, "export const CHANGE_PASSWORD = '\(SettingsCopy.changePassword)';", in: Self.changePasswordDialog)
-        assertSays(page, "> {CHANGE_PASSWORD} </Button>", in: Self.changePasswordDialog)
+        // The rule is the dialog's own constant, drawn as the field's hint while it has no error, and as
+        // its error once it is broken.
+        assertSays(dialog, "export const NEW_PASSWORD_RULE = '\(SettingsCopy.passwordRule)';", in: Self.passwordDialog)
+        assertSays(dialog, "extra={form.errors.newPassword?.length ? undefined : NEW_PASSWORD_RULE}",
+                   in: Self.passwordDialog)
+        assertSays(dialog, "? null : NEW_PASSWORD_RULE)", in: Self.passwordDialog)
+        assertSays(dialog, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.passwordDialog)
+        assertSays(dialog, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.passwordDialog)
+        assertSays(dialog, "export const CHANGE_PASSWORD = '\(SettingsCopy.changePassword)';", in: Self.passwordDialog)
+        assertSays(dialog, "> {CHANGE_PASSWORD} </Button>", in: Self.passwordDialog)
     }
 
     /// Shared links: the web page's tabs, lines and words.

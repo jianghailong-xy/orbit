@@ -111,6 +111,10 @@ final class RunnerUpdatingTests: XCTestCase {
         }
         XCTAssertEqual(users.count, 2)
         XCTAssertEqual(RunnerUpdating.footBubbleID(reducer.state.items), users.last)
+        // A message the server accepted but no runner has taken yet is drawn after the transcript:
+        // it is the one held (a full runner), so it says so rather than "Sending…".
+        let head = UserBubble(id: "head", text: "next", ts: nil, turnId: "t-2", pending: true)
+        XCTAssertEqual(RunnerUpdating.footBubbleID(reducer.state.items, accepted: [head]), "head")
     }
 
     // docs/mocks/queued-card-runner-updating ②⑤: a turn on the queued tail — a card Orbit queued — is what
@@ -133,8 +137,8 @@ final class RunnerUpdatingTests: XCTestCase {
 
         XCTAssertTrue(RunnerUpdating.tailHolds([card]))
         XCTAssertTrue(RunnerUpdating.tailHolds([mine, steer, card]))
-        // The reader's own message waits in the tray, not the tail: the last message keeps the tag.
-        XCTAssertFalse(RunnerUpdating.tailHolds([mine]))
+        // The reader's own message waits in the tray, whose row says it: the last message does not.
+        XCTAssertTrue(RunnerUpdating.tailHolds([mine]))
         XCTAssertFalse(RunnerUpdating.tailHolds([steer, failed, undelivered]))
         XCTAssertFalse(RunnerUpdating.tailHolds([]))
     }

@@ -274,7 +274,7 @@ class CursorDeviceTest {
         click(hasText("Cancel") and hasClickAction())
         click(hasContentDescription("More for Team"))
         click(hasText("Remove…") and hasClickAction(), scroll = false)
-        await("Remove “Team” from hpc?")
+        await("Remove Team?")
         capture("ios3-remove-confirm-$pass")
         click(hasText("Remove") and hasAnyAncestor(isDialog()), scroll = false)
         await("Team is in use: 2 sessions on hpc are running on it.")

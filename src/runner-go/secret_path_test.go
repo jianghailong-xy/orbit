@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // secretTestHome points HOME and ORBIT_HOME at a fresh directory, as a runner user's home would be.
@@ -22,7 +23,27 @@ func secretTestHome(t *testing.T) string {
 	if err := os.MkdirAll(filepath.Join(home, ".orbit"), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { waitRemovalScans(t) })
 	return home
+}
+
+// waitRemovalScans waits for every removal scan a test's stores started (they run in the background, scanThenOwe),
+// so none outlives the test's ORBIT_HOME or leaves a pending matcher for the next test.
+func waitRemovalScans(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		secretTaintPending.Lock()
+		running := len(secretTaintPending.running)
+		secretTaintPending.Unlock()
+		if running == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d removal scans still running", running)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func secretPathCode(err error) string {

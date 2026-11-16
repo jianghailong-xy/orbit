@@ -364,17 +364,17 @@ struct SessionFolderPage: View {
                 }
             }
         } else if section.title == "Pinned" {
-            Section {
+            TitledListSection {
                 if !pinnedCollapsed {
                     ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
                 }
-            } header: {
+            } title: {
                 pinnedSectionHeader(section.title)
             }
         } else {
-            Section {
+            TitledListSection {
                 ForEach(section.sessions) { listRow($0, projects: projects, marks: marks) }
-            } header: {
+            } title: {
                 Text(section.title).textCase(nil)
             }
         }
@@ -427,9 +427,11 @@ struct SessionFolderPage: View {
         }
         // A phone opens the coordinator's conversation, not the project's sessions page, which is
         // the button in that conversation's navigation bar (owner 2026-11-11, board 5). The iPad's
-        // column keeps the page.
+        // column keeps the page. A row whose line says a member is waiting on you opens that member
+        // instead, at its card, on both (owner 2026-11-14).
         let onTap = {
-            switch rowNavigation == .push ? SessionProjectSheet.rowTap(row) : .sessions {
+            switch SessionProjectSheet.rowTap(row, held: app.sessions + (app.agents?.allSessions ?? []), push: rowNavigation == .push) {
+            case .waitingMember(let member): app.openWaitingMember(member, project: projectAddress, push: rowNavigation == .push)
             case .coordinator(let coordinator): app.openProjectMember(coordinator, push: true)
             case .sessions: app.openProjectSessions(projectAddress)
             }
@@ -463,14 +465,14 @@ struct SessionFolderPage: View {
     /// Search hits, standing in for the sections while the field has text — the workspace list's
     /// own rows and words, since the field is the app's search wherever it is typed.
     @ViewBuilder private var searchResults: some View {
-        Section {
+        TitledListSection {
             ForEach(hits) { hit in
                 Button { app.route(to: .session(hit.id)) } label: {
                     SessionSearchRow(hit: hit, query: hitsQuery)
                 }
                 .buttonStyle(.plain)
             }
-        } header: {
+        } title: {
             Text(contentSearched
                  ? "All sessions"
                  : "Matching names only — type more to search message text.")

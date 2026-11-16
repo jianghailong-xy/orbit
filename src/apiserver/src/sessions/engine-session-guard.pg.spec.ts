@@ -148,7 +148,7 @@ async function connect(): Promise<Stack> {
     sessions,
     tags: new SessionTagsService(prisma, realtime),
     shares: new ShareLinksService(prisma),
-    guests: new SessionGuestsService(prisma, sessions),
+    guests: new SessionGuestsService(prisma, sessions, {} as AttachmentsService),
     attachments: new AttachmentsService(prisma),
     watches: new WatchesService(prisma, {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },
@@ -285,6 +285,12 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
     s.sessions.cancelQueuedTurn(w.ownerId, id, randomUUID()),
   'POST /sessions/:id/turns/:turnId/steer': (s, w, id) =>
     s.sessions.steerQueuedTurn(w.ownerId, id, randomUUID()),
+  'POST /sessions/:id/turns/:turnId/translation/retry': (s, w, id) =>
+    s.sessions.retryTurnTranslation(w.ownerId, id, randomUUID()),
+  'POST /sessions/:id/turns/:turnId/translation/send-as-written': (s, w, id) =>
+    s.sessions.sendTurnAsWritten(w.ownerId, id, randomUUID()),
+  'POST /sessions/:id/events/:seq/translation/retry': (s, w, id) =>
+    s.sessions.retryReplyTranslation(w.ownerId, id, 1),
   'POST /sessions/:id/resume': (s, w, id) =>
     s.sessions.resume(w.ownerId, id, { clientTurnId: randomUUID(), content: 'hi' }),
   'PATCH /sessions/:id/config': (s, w, id) => s.sessions.updateConfig(w.ownerId, id, { effort: 'low' }),

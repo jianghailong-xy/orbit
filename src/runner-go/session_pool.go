@@ -300,16 +300,15 @@ func (p *sessionPool) worktreeOpLocked(id string) *worktreeOperationState {
 // manual operation that has already linearized. It says who is there, not who may
 // proceed — the fence and `running` decide that (beginHeartbeatWorktreeOperation).
 //
-// The turn's engine and a running operation are what refuse a merge or commit, and
-// the refusal names them (worktreeOperationRefusal). A background job refuses
-// nothing: a merge replays committed work in a scratch worktree and a commit writes
-// only the index and refs, so both run beside a live job and name it in their
-// receipt (beginManualWorktreeOperation). The worktree GC, which deletes the
-// directory, is the one thing a live job holds off (ids).
+// The turn's engine, a running operation and a live background job are what refuse a
+// commit, and the refusal names them (worktreeOperationRefusal,
+// beginManualWorktreeOperation): a commit takes the checkout as it stands. None of them
+// holds a merge, which replays committed work in a scratch worktree (heartbeatMerge).
+// The worktree GC, which deletes the directory, is held off by a live job too (ids).
 //
 // A parked engine is no holder at all, whatever it left running: between turns
 // neither it nor its MCP servers — Orbit's own, or any the agent configured — are
-// waited on or stopped for a merge or commit.
+// waited on or stopped for a commit.
 func (p *sessionPool) worktreeHoldersLocked(id string) []worktreeHolder {
 	names := make([]string, 0, len(p.bgJobs[id]))
 	for _, hold := range p.bgJobs[id] {
@@ -373,15 +372,20 @@ func (p *sessionPool) backgroundJobCountsLocked() map[string]int {
 // and not per job — several jobs of one session share one checkout, and a session is
 // the unit that new work displaces. A watch is not among those jobs: it only waits.
 func (p *sessionPool) admissionIdleCapacity() int {
+	idle, _ := p.admissionOccupancy()
+	return idle
+}
+
+// admissionOccupancy is the one count admission and the heartbeat both read: the idle
+// capacity admissionIdleCapacity reports, and the sessions that occupy a slot only
+// through background jobs of their own — no turn permit, no reclaim under way — which
+// the heartbeat reports as backgroundJobSessionIds, so the control plane can show them
+// as running (sorted). A draining runner offers no capacity, and its job holders still
+// hold their slots.
+func (p *sessionPool) admissionOccupancy() (int, []string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.drainingForUpdate {
-		return 0
-	}
 	occupied := make(map[string]bool, len(p.sessions))
-	for sessionID := range p.backgroundJobCountsLocked() {
-		occupied[sessionID] = true
-	}
 	for id, s := range p.sessions {
 		if s.active {
 			occupied[id] = true
@@ -393,11 +397,22 @@ func (p *sessionPool) admissionIdleCapacity() int {
 			occupied[id] = true
 		}
 	}
+	var backgroundOnly []string
+	for sessionID := range p.backgroundJobCountsLocked() {
+		if !occupied[sessionID] {
+			occupied[sessionID] = true
+			backgroundOnly = append(backgroundOnly, sessionID)
+		}
+	}
+	sort.Strings(backgroundOnly)
+	if p.drainingForUpdate {
+		return 0, backgroundOnly
+	}
 	idle := p.max - len(occupied)
 	if idle < 0 {
 		idle = 0
 	}
-	return idle
+	return idle, backgroundOnly
 }
 
 // holdWorktreeForBackgroundJob records one background shell as a live writer of
@@ -616,8 +631,8 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 		p.mu.Unlock()
 		return nil, false
 	}
-	// A live background job is deliberately not asked about: a merge or commit runs
-	// beside it (beginManualWorktreeOperation).
+	// A live background job is not asked about here: a commit's own admission refuses
+	// it (beginManualWorktreeOperation).
 	state := p.worktreeOpLocked(id)
 	state.running = true
 	state.done = make(chan struct{})
@@ -640,15 +655,14 @@ func (p *sessionPool) beginHeartbeatWorktreeOperation(
 	}, true
 }
 
-// beginManualWorktreeOperation is how merge and commit enter a checkout. It admits the
-// operation exactly as beginHeartbeatWorktreeOperation does, and nothing else running in
-// the checkout comes into that: a merge replays the branch's commits in a scratch worktree
-// and never touches the checkout, and a commit writes only the index and refs. So a live
-// background job holds neither up, and a parked engine is not stopped for either, whatever
-// MCP servers it runs.
+// beginManualWorktreeOperation is how a commit (or a discard) enters a checkout. It admits the
+// operation exactly as beginHeartbeatWorktreeOperation does — no turn in the checkout, the epoch
+// the heartbeat advertised — and refuses one more thing: a live background job. A commit takes
+// the checkout as it stands, so it must not be taken while anything is still changing it; a job
+// writing a file would have that file committed half-written. A parked engine is not stopped for
+// it, whatever MCP servers it runs. A merge does not come through here at all (heartbeatMerge).
 //
-// Admitted, it returns the release func and the operation's receipt note, which names the
-// live background jobs it runs beside ("" when there are none). Refused, it returns a nil
+// Admitted, it returns the release func and an empty receipt note. Refused, it returns a nil
 // release and the refusal itself.
 func (p *sessionPool) beginManualWorktreeOperation(
 	id string,
@@ -673,14 +687,9 @@ func (p *sessionPool) beginManualWorktreeOperation(
 	if len(jobs) == 0 {
 		return release, "", true
 	}
-	beside := "this " + operation + " ran while background jobs were still running in the checkout (" +
-		strings.Join(jobs, ", ") + ")"
-	if operation == "commit" {
-		// A commit reads the checkout as it stands, so whoever reads this receipt has to be
-		// able to tell that a file those jobs were writing may have gone in half-written.
-		return release, beside + ": a file one of them was still writing is committed as it stood at that moment", true
-	}
-	return release, beside + ": a merge takes only what the branch had already committed", true
+	release()
+	return nil, operation + " was refused: background jobs are still changing this checkout (" +
+		strings.Join(jobs, ", ") + ") — wait for them to finish or stop them, then " + operation + " again", false
 }
 
 // appendWorktreeReceipt puts an operation's receipt note after the operation's own message,

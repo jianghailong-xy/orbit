@@ -9,10 +9,16 @@
  *   2. A second limit moves it once more; a third is refused SUBAGENT_FALLBACK_SPENT after 2 moves, and the
  *      run's end closes it FAILED.
  *   3. A plain failure is not moved (SUBAGENT_NOT_A_LIMIT_FAILURE): one attempt, closed with the run's end.
+ *   3a. A failed login (`Failed to authenticate: OAuth session expired …`, `Not logged in`) moves like a limit: the
+ *      attempt closes AUTH_FAILED, the Why gains "Moved to <model> after <model>'s login failed", at most 2 moves.
+ *   3b. A failed login on a model the caller named is not moved (SUBAGENT_NAMED_MODEL_NOT_MOVED).
  *   4. No candidate left is NO_SUBAGENT_PROVIDER, listing each provider's reason.
  *   5. Another account's runner is answered as for an id that names nothing.
  *   6. An account pool is a fallback target: the run moves onto the pool's member with room, on that member's
  *      own credential, recorded on the attempt — and the parent session's pool fields are unchanged.
+ *   7. So is a Codex account pool of the owner's own: after a usage limit the run moves onto the pool's account
+ *      that can run (not the spent one), on a gateway token minted for the child that names that account, recorded
+ *      on the attempt — and the parent session's pool fields are unchanged.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-fallback.pg.spec.ts
  *
@@ -34,6 +40,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { PoolLoginGatewayService } from '../providers/pool-login-gateway.service';
 import { RunnerSubagentsController } from './runner-subagents.controller';
 import { SubagentFallbackDto, SubagentRunCreateDto, SubagentRunUpdateDto } from './subagent-run';
 
@@ -52,6 +59,8 @@ const update = (fields: Partial<SubagentRunUpdateDto>): SubagentRunUpdateDto => 
 const SESSION_LIMIT = "You've hit your session limit · resets 6:20pm (Europe/Berlin)";
 const USAGE_LIMIT = "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits";
 const WEEKLY_LIMIT = "You've hit your weekly limit · resets 1pm (Europe/Berlin)";
+const OAUTH_EXPIRED = 'Failed to authenticate: OAuth session expired and could not be refreshed';
+const NOT_LOGGED_IN = 'Not logged in · Please run /login';
 
 /** The refusal a call was answered with: its code and message. */
 async function refused(call: Promise<unknown>): Promise<{ code: string; message: string }> {
@@ -204,6 +213,46 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     assert.equal(row.decision.reasons.some((r) => r.startsWith('Moved to')), false);
   });
 
+  await t.test("a failed login moves the run like a limit: the next candidate, AUTH_FAILED, the reason and the bound", async () => {
+    const sessionId = await parentSession();
+    const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_login_failed', size: 'M' }));
+    assert.equal(opened.decision.provider, 'claude');
+    const moved = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(OAUTH_EXPIRED));
+    t.diagnostic(`moved after a failed login: attempt ${moved.attempt}, reason "${moved.reason}"`);
+    assert.equal(moved.attempt, 2);
+    assert.equal(moved.reason, `Moved to a-coder on ${first} after claude-sonnet-5-5's login failed`);
+    assert.equal(moved.exec.model, 'a-coder');
+    const again = await subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(NOT_LOGGED_IN));
+    assert.equal(again.reason, `Moved to b-coder on ${second} after a-coder's login failed`);
+    const spent = await refused(subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(OAUTH_EXPIRED)));
+    t.diagnostic(`third failed login: ${spent.code}: ${spent.message}`);
+    assert.equal(spent.code, 'SUBAGENT_FALLBACK_SPENT', 'at most 2 switches');
+    const row = await rowOf(opened.runId);
+    t.diagnostic(`subagent_run.attempts ${JSON.stringify(row.attempts.map(brief))}`);
+    assert.deepEqual(row.attempts.map(brief), [
+      [1, 'claude', 'claude', 'claude-sonnet-5-5', 'AUTH_FAILED'],
+      [2, first, 'claude', 'a-coder', 'AUTH_FAILED'],
+      [3, second, 'claude', 'b-coder', 'AUTH_FAILED'],
+    ]);
+    assert.equal(row.attempts[0].error, OAUTH_EXPIRED, "each attempt keeps the engine's words");
+    assert.deepEqual(row.decision.moves, [moved.reason, again.reason], 'the Why line carries both moves');
+  });
+
+  await t.test('a failed login on a model the caller named is not moved: the failure goes back to the parent', async () => {
+    const sessionId = await parentSession();
+    const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_named_login', model: 'claude-opus-5-5' }));
+    assert.equal(opened.decision.tierSource, 'named-model');
+    assert.equal(opened.decision.model, 'claude-opus-5-5');
+    const kept = await refused(subagents.nextSubagentCandidate(runner, sessionId, opened.runId, fallback(OAUTH_EXPIRED)));
+    t.diagnostic(`named model, failed login: ${kept.code}: ${kept.message}`);
+    assert.equal(kept.code, 'SUBAGENT_NAMED_MODEL_NOT_MOVED');
+    assert.match(kept.message, /login failed on claude-opus-5-5, which the delegate call named/);
+    const row = await rowOf(opened.runId);
+    assert.deepEqual(row.attempts.map(brief), [[1, 'claude', 'claude', 'claude-opus-5-5', 'AUTH_FAILED']],
+      'one attempt, closed with the failed login; nothing moved');
+    assert.equal(row.decision.reasons.some((r) => r.startsWith('Moved to')), false);
+  });
+
   await t.test('another account\'s runner is answered as for an id that names nothing', async () => {
     const sessionId = await parentSession();
     const opened = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_foreign', size: 'M' }));
@@ -267,5 +316,83 @@ test('SubAgent quota fallback: moves, attempts, the reason, the bound and the re
     assert.deepEqual((row.attempts[1] as SubagentAttempt).poolMember, { providerId: member.id, label: 'Dana' });
     assert.deepEqual(await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields }), before,
       "the parent session's pool fields are unchanged");
+  });
+  await t.test("a Codex pool is a fallback target: its account's token, recorded on the attempt, never on the parent", async () => {
+    await prisma.user.update({ where: { id: ownerId }, data: { preferences: { subagentBlockedProviders: [first, second] } } });
+    // A machine with Claude signed in at 10% used, and codex installed but signed out.
+    const machineId = randomUUID();
+    const inAnHour = new Date(Date.now() + 3_600_000);
+    const machine = (await prisma.runner.create({
+      data: {
+        id: machineId, name: 'a machine with codex', ownerId, tokenHash: sha256(`fallback-codex-${machineId}`),
+        planUsage: { claude: { fiveHour: { utilization: 10, resetsAt: inAnHour.toISOString() } } },
+        engines: [{ engine: 'claude', installed: true, auth: 'yes' }, { engine: 'codex', installed: true, auth: 'no' }],
+        modelCatalog: {
+          claude: [{ value: 'claude-sonnet-5-5', label: 'Sonnet 5.5', priority: 2 }],
+          codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
+        },
+      },
+    })) as Runner;
+    const ctag = machineId.slice(-8);
+    // The owner's Codex pool: Gina's account spent until an hour from now, Hal's at half his window.
+    const pool = await prisma.providerPool.create({ data: { slug: `codex-crew-${ctag}`, label: 'Codex crew', ownerId, engine: 'codex' } });
+    await prisma.providerPoolPerson.create({ data: { poolId: pool.id, userId: ownerId, role: 'ADMIN' } });
+    for (const [name, spent, createdAt] of [['gina', true, new Date(Date.now() - 60_000)], ['hal', false, new Date()]] as const) {
+      await prisma.poolCodexLogin.create({
+        data: {
+          poolId: pool.id, userId: ownerId, accountId: `acct-${name}-${ctag}`, email: `${name}@crew.invalid`, createdAt,
+          accessTokenEnc: encryptSecret('access'), refreshTokenEnc: encryptSecret('refresh'), expiresAt: inAnHour,
+          ...(spent ? { spentUntil: inAnHour } : {}),
+          usage: { fiveHour: { utilization: spent ? 100 : 50, resetsAt: inAnHour.toISOString() } },
+        },
+      });
+    }
+    t.after(async () => {
+      await prisma.providerPool.deleteMany({ where: { id: pool.id } });
+    });
+    const workspaceId = randomUUID();
+    await prisma.workspace.create({
+      data: { id: workspaceId, ownerId, runnerId: machineId, name: `orbit-worker-${workspaceId.slice(-8)}`, enabled: true, modelRoutingOptimizeFor: 'cost' },
+    });
+    const sessionId = randomUUID();
+    await prisma.session.create({
+      data: {
+        id: sessionId, ownerId, creatorId: ownerId, workspaceId, assignedRunnerId: machineId,
+        title: 'fix the flaky test', prompt: 'fix the flaky test', provider: 'claude', engine: 'claude',
+        model: 'claude-sonnet-5-5', effort: 'medium', status: RunStatus.AWAITING_INPUT, numTurns: 1,
+        dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false,
+      },
+    });
+    const poolFields = { poolMemberProviderId: true, poolKeyId: true, poolCodexAccountId: true, poolSwitchNotice: true, provider: true } as const;
+    const before = await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields });
+    const opened = await subagents.createSubagentRun(machine, sessionId, create({ toolUseId: 'toolu_to_codex_pool', size: 'M' }));
+    t.diagnostic(`opened on ${opened.decision.provider}; fallbacks ${JSON.stringify(opened.decision.fallbacks?.map((f) => f.provider))}`);
+    assert.equal(opened.decision.provider, 'claude', 'the sign-in first, with more room');
+    assert.deepEqual(opened.decision.fallbacks?.map((f) => f.provider), [pool.slug], 'then the Codex pool');
+    const moved = await subagents.nextSubagentCandidate(machine, sessionId, opened.runId, fallback(SESSION_LIMIT));
+    t.diagnostic(`moved to the Codex pool: ${moved.reason}; env names ${JSON.stringify(Object.keys(moved.exec.env ?? {}))}`);
+    assert.equal(moved.attempt, 2);
+    assert.equal(moved.exec.provider, 'codex');
+    assert.equal(moved.exec.model, 'gpt-5.6-sol');
+    const token = Object.values(moved.exec.env ?? {}).find((value) => value.startsWith('orbit-gwl-'));
+    assert.ok(token, 'the child runs on a login-pool gateway token');
+    const tokenRow = await prisma.poolLoginToken.findUniqueOrThrow({ where: { tokenHash: sha256(token!) } });
+    assert.deepEqual([tokenRow.poolId, tokenRow.sessionId, tokenRow.accountId, tokenRow.keyId],
+      [pool.id, sessionId, `acct-hal-${ctag}`, null], "Hal's account, not Gina's spent one");
+    const gateway = new PoolLoginGatewayService(prisma as never, silent(), silent(), silent(), 'http://upstream.invalid',
+      'http://token.invalid', silent());
+    const caller = await gateway.caller(token!);
+    assert.ok(caller && typeof caller === 'object');
+    assert.deepEqual([caller.accountId, caller.subagent], [`acct-hal-${ctag}`, true], 'the gateway sends on the token\'s account');
+    const row = await rowOf(opened.runId);
+    assert.deepEqual(row.attempts.map(brief), [
+      [1, 'claude', 'claude', 'claude-sonnet-5-5', 'USAGE_LIMIT'],
+      [2, pool.slug, 'codex', 'gpt-5.6-sol', 'RUNNING'],
+    ]);
+    assert.deepEqual((row.attempts[1] as SubagentAttempt).poolMember, { accountId: `acct-hal-${ctag}`, label: 'hal@crew.invalid' });
+    assert.deepEqual(await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: poolFields }), before,
+      "the parent session's pool fields are unchanged");
+    assert.equal(await prisma.poolLoginToken.count({ where: { sessionId, accountId: null, keyId: null } }), 0,
+      'the parent holds no pool token of its own');
   });
 });

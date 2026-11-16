@@ -162,10 +162,20 @@ internal object ProjectShell {
     @Volatile var tasks: String? = null
     /** The coordinator's transcript (`sessions/COORD/events/page`), as a JSON array of events; null answers with none, as before. */
     @Volatile var coordEvents: String? = null
+    /** Whether Quota retry (WAITING) waits on the owner, which Launch's row line then says; false leaves it parked with nothing asked. */
+    @Volatile var memberWaiting = true
+    /** Whether the coordinator itself waits on the owner (a pending approval), which the row's line then says first. */
+    @Volatile var coordinatorWaiting = false
+    /** WAITING's transcript (`sessions/WAITING/events/page`) and its pending approvals, as JSON arrays; null answers with none. */
+    @Volatile var waitingEvents: String? = null
+    @Volatile var waitingApprovals: String? = null
+    /** Whether Plain notes, in no project, waits on the owner too, so a conversation opened elsewhere shows the needs-you capsule. */
+    @Volatile var plainWaiting = false
     /** A crossing decision's answer by its door id and body, when a test answers each row itself; null answers as [decide] does. */
     @Volatile var onDecision: ((String, String) -> ApiResponse)? = null
 
     fun reset() {
+        now = Instant.now()
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true; completedMembers = emptySet()
         promotion = null; merged = "[]"; mergeCheck = false; mergeJobKind = "CHECK_PROMOTION"; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
@@ -180,7 +190,7 @@ internal object ProjectShell {
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
         configRevision = null; automatic = true; maxConcurrentTasks = 2; crossings = null; tasks = null; coordEvents = null; onDecision = null
-        lineIdle = false
+        lineIdle = false; memberWaiting = true; coordinatorWaiting = false; waitingEvents = null; waitingApprovals = null; plainWaiting = false
         while (accountEvents.tryReceive().isSuccess) Unit
     }
 
@@ -191,7 +201,10 @@ internal object ProjectShell {
     /** One account event of [type] on the account stream, as the server sends it. */
     fun event(type: String, sessionId: String = "") { accountEvents.trySend("""{"type":"$type","sessionId":"$sessionId","data":{}}""") }
 
-    private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
+    /** One "now" per test: a row read twice says the same instants, as the server's do — a waiting session's last turn does not move
+     * while it waits, and the needs-you notice keys a wait by it (`NeedsYouLogic.waitKey`). */
+    @Volatile private var now: Instant = Instant.now()
+    private fun ago(minutes: Long) = now.minusSeconds(minutes * 60).toString()
     private val workspaces = """[
         {"id":"$ALPHA","name":"Alpha","runnerId":"r1","enabled":true,"position":0,"createdAt":"2026-10-01T01:00:00.000Z"},
         {"id":"$BETA","name":"Beta","runnerId":"r1","enabled":true,"position":1,"createdAt":"2026-10-01T02:00:00.000Z"}]"""
@@ -209,11 +222,13 @@ internal object ProjectShell {
         COORD -> row(COORD, "Coordinate launch", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Planning the release","projectId":"$LAUNCH",${member("COORDINATOR")}${
             if (mergeWaiting) ""","projectTitle":"Launch","waitingKind":"OWNER_ITEM","ownerItems":[{"itemId":"i-merge","kind":"PROMOTION_APPROVAL",
                 "title":"Merge 4 tasks into main?","since":"${ago(130)}"}]""" else ""}${if (coordinatorWorking) ""","engineTurnActive":true""" else ""}""",
-            lastTurnAt = ago(30))
+            lastTurnAt = ago(30), approvals = if (coordinatorWaiting) 1 else 0)
         WORKER -> row(WORKER, "Wire tests", ALPHA, "RUNNING", ""","lastToolUse":"Bash",${member("TASK")}${
             sourceLanding?.let { ""","sourceLanding":$it""" }.orEmpty()}""", lastTurnAt = ago(2))
-        WAITING -> row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
-        PLAIN -> row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
+        WAITING -> if (memberWaiting) row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION",${member("TASK")}""", lastTurnAt = ago(10), approvals = 1)
+            else row(WAITING, "Quota retry", BETA, "AWAITING_INPUT", ""","lastAssistantText":"Retried the quota read",${member("TASK")}""", lastTurnAt = ago(10))
+        PLAIN -> if (plainWaiting) row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","waitingKind":"OWNER_CONFIRMATION"""", approvals = 1)
+            else row(PLAIN, "Plain notes", ALPHA, "AWAITING_INPUT", ""","lastAssistantText":"Notes kept"""")
         else -> row(DONE, "Shipped docs", ALPHA, "SUCCEEDED", ""","completedAt":"${ago(2 * 24 * 60)}",${member("TASK")}""", "COMPLETED", ago(2 * 24 * 60))
     }
     private fun list(vararg sessions: String) = sessions.filter { it !in trashed }.joinToString(",", "[", "]") { session(it) }
@@ -357,6 +372,8 @@ internal object ProjectShell {
                 ok("{}")
             }
             path == "sessions/$COORD/events/page" && coordEvents != null -> ok("""{"events":$coordEvents,"hasMore":false}""")
+            path == "sessions/$WAITING/events/page" && waitingEvents != null -> ok("""{"events":$waitingEvents,"hasMore":false}""")
+            path == "sessions/$WAITING/approvals" && waitingApprovals != null -> ok(waitingApprovals!!)
             path.startsWith("sessions/") && path.endsWith("/page") -> ok("""{"events":[],"hasMore":false,"lastSeq":0,"latestSeq":0}""")
             path == "projects/$LAUNCH/sessions/complete" && method == "POST" ->
                 if (!done) ApiResponse(409, """{"code":"PROJECT_STILL_OPEN","message":"The project is still open."}""".encodeToByteArray())

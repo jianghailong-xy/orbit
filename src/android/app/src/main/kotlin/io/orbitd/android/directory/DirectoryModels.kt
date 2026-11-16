@@ -30,9 +30,6 @@ data class Tag(val id: String, val name: String, val color: String? = null,
     val isSystem: Boolean = false, val position: Int = 0)
 @Serializable
 data class WorkspaceRef(val id: String, val name: String = "")
-/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why it wrote none ([RecapCard.notice]). */
-@Serializable
-data class RecapOutcome(val written: Boolean, val recapText: String? = null, val reason: String? = null)
 @Serializable
 data class DirectorySession(
     val id: String, val title: String? = null, val status: String = "UNKNOWN",
@@ -84,6 +81,8 @@ data class DirectorySession(
     /** Which gate the server found holding a queued row (web `QueuedGate`): `runner_updating` is the one this build words for itself
      *  ([RunnerUpdating]). [queuedActive] is the turns in flight that gate judged on. All absent from an older server. */
     val queuedReason: String? = null, val queuedActive: Int? = null, val queuedLimit: Int? = null,
+    /** Of [queuedActive], the slots background jobs hold; beside `runner_at_capacity` only ([QueuedCapacity]). */
+    val queuedHeldByJobs: Int? = null,
     /** Beside queuedReason `runner_updating` only, kept as the JSON it came as and read by [QueuedRunnerUpdate.of]. */
     val queuedRunnerUpdate: JsonElement? = null,
 ) {

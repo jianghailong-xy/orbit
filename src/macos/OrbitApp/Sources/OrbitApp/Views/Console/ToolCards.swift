@@ -174,6 +174,8 @@ struct ToolCardView: View {
     /// pair (`manualOpen ?? defaultOpen`) for the same reason.
     @State private var manualOpen: Bool?
     @State private var scriptExpanded = false
+    /// A SubAgent's Why opened to every reason and every removed candidate (web's `Details`).
+    @State private var whyExpanded = false
     // Filled once, off the render path, when the untrimmed call/result lands. `fullDisplay` is
     // recomputed there rather than per-render because `describe` runs an LCS diff for Edit cards.
     @State private var fullDisplay: ToolDisplay?
@@ -232,7 +234,9 @@ struct ToolCardView: View {
     private var subagentRun: SubagentRunView? { isDelegate ? taskActivity?.subagentRun(card.id) : nil }
     private var subagent: SubagentBlock? {
         guard isDelegate else { return nil }
-        return SubagentBlock.describe(input: card.input, run: subagentRun, status: card.status)
+        return SubagentBlock.describe(input: card.input, run: subagentRun, status: card.status,
+                                      parentEngine: taskActivity?.parentEngine,
+                                      result: SubagentResult.text(callResult: result, run: subagentRun))
     }
     private var taskProgress: TaskProgress? { isBackgroundTask ? taskActivity?.progress(card.id) : nil }
     /// The call returned the moment its work started, so its own ✓ would sit on work just begun.
@@ -419,14 +423,13 @@ struct ToolCardView: View {
         // border + surface so its detail body stays visually grouped (mirrors web `.is-open`).
         VStack(alignment: .leading, spacing: 6) {
             row
-            if let line = subagent?.detailLine {
-                // The narrow-screen line from board 03: type (or Background), tier, model, duration.
-                Text(line)
-                    .font(.orbitListSubtitle).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.tail)
+            if let subagent {
+                // An Agent's second and third lines (board docs/mocks/subagent-ios-highlight ①): who did
+                // the work and where, then what came of it — or, while it runs, what it is on.
+                AgentBlockLines(block: subagent, live: liveActivity,
+                                steps: SubagentBlock.steps(taskActivity?.subagentItems(card.id) ?? []))
                     .padding(.leading, 42)
-            }
-            if let liveActivity {
+            } else if let liveActivity {
                 // Indented to the row's label; folded BackgroundTaskViews draw this same line.
                 Text(liveActivity)
                     .font(.orbitMonoFine).italic().foregroundStyle(.secondary)
@@ -547,11 +550,24 @@ struct ToolCardView: View {
         let previews = previewImages
         return VStack(alignment: .leading, spacing: 8) {
             // A SubAgent opens on its router's reasons, then its steps, then the result (board 03).
+            // The server's one-line Why, at most two lines; the full reasons sit behind Details.
             if let why = subagent?.why {
                 (Text("Why").fontWeight(.semibold) + Text(" · \(why)"))
                     .font(.orbitLabel).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2).truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if let details = subagent?.details, !details.isEmpty {
+                    DisclosureGroup("Details", isExpanded: $whyExpanded) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(details.enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                }
             }
             // A workflow opens to its progress; a sub-agent's totals close its transcript instead.
             if card.name == "Workflow", let taskProgress {
@@ -571,6 +587,7 @@ struct ToolCardView: View {
                 ToolBodyView(kind: d.body)
             }
             if !nestedItems.isEmpty { SubagentTranscriptView(items: nestedItems, fullPayload: fullPayload) }
+            if let files = subagent?.changedFiles, !files.isEmpty { AgentChangedFiles(paths: files) }
             if card.name != "Workflow", let taskProgress { TaskProgressView(progress: taskProgress) }
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
             // mirroring web's `ToolResult`, which renders images before the monospace panel.

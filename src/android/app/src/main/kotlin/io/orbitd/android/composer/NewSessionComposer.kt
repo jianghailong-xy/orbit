@@ -14,7 +14,6 @@ import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.directoryError
-import io.orbitd.android.management.LocalDefaultModels
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.AddRunnerDialog
 import io.orbitd.android.management.RunnerPage
@@ -106,6 +105,8 @@ fun NewSessionComposer(
             val current = detail
             val fresh = current != null && current.flag("enabled") != false
             val session = current?.let { SessionState(target.key, snapshot = SessionSnapshot(it, emptyList(), emptyList(), emptyList(), emptyMap()), fresh = fresh) }
+            // The managed runner asleep is no fault: sending wakes it, and the composer says so (the shared composer line).
+            if (managedDraft && !welcomeUp) ManagedRunnerAsleepLine(managed?.status?.runnerId, managed?.status)
             Box(Modifier.heightIn(max = composerHeight)) {
                 SessionComposer(app, handle, target.key, session, target, focusRequest = focusRequest, openRunner = openRunner,
                     placeholder = if (welcomeUp) WelcomeCopy.WELCOME_PLACEHOLDER else null)
@@ -265,10 +266,8 @@ private fun MachineDraftComposer(
     }.orEmpty()
     val keyToUse = MachineSetup.firstKey(engines, preferring = engine)
 
-    val remembered = LocalDefaultModels.current
-    val seed = if (state.draft.resumeConfig["model"] != null) null else state.catalog?.let { catalog ->
-        catalog.liveRememberedModel(engine, providerSlug, remembered)
-    }
+    // A machine's first workspace has no session a person opened yet, so no lastModel: the runner or key default.
+    val seed = if (state.draft.resumeConfig["model"] != null) null else state.catalog?.liveLastModel(engine, providerSlug, draftWorkspace)
 
     SideEffect {
         model.machineSend = { heldMessage ->

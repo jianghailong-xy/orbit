@@ -1172,6 +1172,35 @@ describe('the task page led by the run', () => {
     expect(html).not.toContain('class="tdp-field-label">Engine');
   });
 
+  it('says in Runs with what the server says the next run starts on, not the assignee’s last conversation', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false, retryOnMount: false } } });
+    // The assignee's newest person-opened conversation was on Codex; the project's coordinator is on Claude Code.
+    qc.setQueryData(['workspaces'], [{ id: 'w-codex', name: 'Builder', lastEngine: 'codex', lastProvider: 'codex' }]);
+    const coordinator = {
+      engine: 'claude', provider: 'claude', providerBuiltin: true,
+      source: 'PROJECT_COORDINATOR', anchorSessionId: 'c1', refusal: null,
+    };
+    const html = renderPanel(task({ runsWith: coordinator }), false, qc);
+    expect(html).toContain('tdp-envelope-chip-label">Engine</span>Claude Code');
+    expect(html).not.toContain('tdp-envelope-chip-label">Engine</span>Codex');
+
+    // On a key: the chip names that credential rather than the engine's own sign-in.
+    const keyed = renderPanel(task({
+      runsWith: { ...coordinator, provider: 'anthropic-work', providerBuiltin: false },
+    }), false, qc);
+    expect(keyed).toContain('tdp-envelope-chip-label">Provider</span>anthropic-work');
+
+    // An older server sends none: the assignee's lastEngine, as before.
+    expect(renderPanel(task(), false, qc)).toContain('tdp-envelope-chip-label">Engine</span>Codex');
+
+    // A pinned task keeps showing its pins.
+    const pinned = renderPanel(task({
+      engine: 'codex', provider: 'codex',
+      runsWith: { ...coordinator, engine: 'codex', provider: 'codex', source: 'TASK_PIN', anchorSessionId: null },
+    }), false, qc);
+    expect(pinned).toContain('tdp-envelope-chip-label">Engine</span>Codex');
+  });
+
   it('writes to the run while one is going, and comments otherwise', () => {
     expect(renderPanel(running())).toContain('placeholder="Message Builder while it works');
     expect(renderPanel(running())).toContain('>To the run<');

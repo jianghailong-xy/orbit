@@ -55,6 +55,7 @@ import {
   QuestionNotAskable,
   SESSION_ENDING_SELECT,
   TASK_FAILURE_CHAIN_LIMIT,
+  conversationIsDown,
   conversationIsOver,
   coordinatorQuestion,
   deliveryReviewDetailLine,
@@ -62,8 +63,10 @@ import {
   leaseFactsOf,
   markOpenItemsHandling,
   openItemActions,
+  coordinatorUnreachable,
   openItemChat,
   openItemRequiredAction,
+  readCoordinatorReach,
   outdatedRunnerOf,
   primaryAction,
   openItemFacts,
@@ -361,6 +364,11 @@ export interface OpenItemRow {
   outcome: OpenItemOutcome<Date> | null;
   /** "Chat about this": where its handling stands, and where a message about it goes (§4.8). */
   chat: OpenItemChat;
+  /** Whether the project's coordinator can be neither asked again nor messaged right now
+   *  (`coordinatorUnreachable`), read when the list is. An escalated item's heading says so instead
+   *  of "no one acted on this". False on a settled row: nothing is asked of one. Optional for
+   *  rolling-version readers, which read its absence as false. */
+  coordinatorUnreachable?: boolean;
 }
 
 /** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
@@ -735,8 +743,16 @@ export class ProjectOpenItemService {
     }
     const clientTurnId = openItemTurnId(item.id, item.assignedAt);
     const fixed = await this.landedFixesOf(item.id, item.integrationJobId);
+    // The owner's press onto a conversation that is only down (`conversationIsDown`) revives it, as
+    // a message in "Chat about this" would: the press was drawn because a message can reach it
+    // (`readCoordinatorReach`), and the owner is not the platform G6 keeps from reviving one. Every
+    // other delivery writes a turn on a live conversation and nothing else.
+    const revives = askedBy === 'OWNER' && await this.isDown(sessionId);
     try {
-      const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
+      const send = revives
+        ? this.sessions.resume.bind(this.sessions)
+        : this.sessions.createTurn.bind(this.sessions);
+      const turn = await send(item.ownerId, sessionId, {
         clientTurnId,
         content: openItemMessage({
           id: item.id,
@@ -757,7 +773,7 @@ export class ProjectOpenItemService {
           assignedAt: item.assignedAt,
           sessionId,
           clientTurnId,
-        }),
+        }, revives),
       });
       // The turn the delivery row names. Written after the commit because the row is written inside
       // it, before the turn exists; a process that dies here leaves a delivery whose turn is found
@@ -792,6 +808,12 @@ export class ProjectOpenItemService {
       }
       throw error;
     }
+  }
+
+  /** Whether this conversation is only down (`conversationIsDown`): FAILED, and nobody closed it. */
+  private async isDown(sessionId: string): Promise<boolean> {
+    const session = await this.prisma.session.findUnique({ where: { id: sessionId }, select: SESSION_ENDING_SELECT });
+    return session != null && conversationIsDown(session);
   }
 
   /**
@@ -1555,14 +1577,17 @@ export class ProjectOpenItemService {
     // put it in front of (`deliver`, which this ends by calling with `OWNER`). What the switch does
     // keep is every automatic hand-over: an item opened for a switched-off coordinator is the
     // owner's from the start, and this refusal is what it was always about — a project with NO
-    // conversation at all.
-    const session = item.project.coordinatorSession;
-    if (item.project.coordinatorSessionId == null || session == null || sessionHasEnded(session)) {
+    // conversation at all, one that is over, or one no message can reach — the reading the card drew
+    // the press from (`readCoordinatorReach`), so a drawn press is never refused here and a hidden
+    // one would never have worked. A run that FAILED while its runner was away is only down: once
+    // the runner is back the delivery below revives it, as a message in "Chat about this" would.
+    const reach = await readCoordinatorReach(this.sessions, ownerId, item.project);
+    if (!reach.askable) {
       throw new ConflictException({
         code: OPEN_ITEM_NO_COORDINATOR,
         message:
-          'this project has no coordinator conversation to ask again — the item is yours because '
-          + 'there was nobody to hand it to.',
+          'this project has no coordinator conversation that can be asked again right now — it has '
+          + 'none, it has ended, or its runner is offline — so the item stays yours.',
       });
     }
     const now = new Date();
@@ -3146,24 +3171,18 @@ export class ProjectOpenItemService {
     await this.guarded('supersedeStaleDoneRequest', async () => {
       await supersedeStaleDoneRequest(this.prisma, ownerId, projectId, this.sessions);
     });
-    // Whether there is a conversation to ask again — the SAME predicate `returnToCoordinator`
-    // refuses on, minus the switch, which is not part of it: the press is the owner's own, so a
-    // switched-off coordinator still has somewhere to put the item (`deliver`). Drawn the other way
-    // round, the card would hide a press that works, which is the same failure as drawing one that
-    // cannot (§4.7).
-    const askable = project.coordinatorSessionId != null
-      && project.coordinatorSession != null
-      && !sessionHasEnded(project.coordinatorSession);
-    // Where "Chat about this" goes, for every row (`openItemChat`): the conversation coordinating the
-    // project, and whether it can be handed a message now — asked of the authority the delivering
-    // door asks (`receiveBlockedReasonFor`), once for the whole list. A pointer to a row that is not
-    // there any more is no conversation at all.
-    const coordinatorBlocked = project.coordinatorSessionId
-      ? await this.sessions.receiveBlockedReasonFor(ownerId, project.coordinatorSessionId)
-      : null;
-    const coordinator = project.coordinatorSessionId && coordinatorBlocked !== 'SESSION_GONE'
-      ? { sessionId: project.coordinatorSessionId, receiving: coordinatorBlocked == null }
-      : null;
+    // Where "Chat about this" goes for every row (`openItemChat`) and whether it can be handed a
+    // message now (`receiveBlockedReasonFor`, asked once for the whole list), and whether there is a
+    // conversation to ask again — that same reading, of a conversation that is not over, which is
+    // exactly what `returnToCoordinator` refuses on. Minus the switch, which is not part of it: the
+    // press is the owner's own, so a switched-off coordinator still has somewhere to put the item
+    // (`deliver`). Drawn the other way round, the card would hide a press that works, which is the
+    // same failure as drawing one that cannot (§4.7). A pointer to a row that is not there any more
+    // is no conversation at all. Both in `readCoordinatorReach`, which the owner's push reads too.
+    const reach = await readCoordinatorReach(this.sessions, ownerId, project);
+    const { askable, coordinator } = reach;
+    // What an escalated item's heading says about its coordinator (`coordinatorUnreachable`).
+    const unreachable = coordinatorUnreachable(reach);
     const open = await this.prisma.projectOpenItem.findMany({
       where: { projectId, state: 'OPEN' },
       orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
@@ -3413,6 +3432,7 @@ export class ProjectOpenItemService {
           resolution: null,
           coordinator,
         }),
+        coordinatorUnreachable: unreachable,
       };
     });
     const settledView = closed.map((row): OpenItemRow => {
@@ -3579,12 +3599,15 @@ export class ProjectOpenItemService {
       sessionId: string;
       clientTurnId: string;
     },
+    revives = false,
   ): Promise<void> {
     const session = await tx.session.findUniqueOrThrow({
       where: { id: delivery.sessionId },
       select: SESSION_ENDING_SELECT,
     });
-    if (sessionHasEnded(session)) {
+    // Read before the revive writes the row, so a conversation the owner's press revives is still
+    // FAILED here; what it may not be is over.
+    if (revives ? conversationIsOver(session) : sessionHasEnded(session)) {
       throw new SessionNotSendable('the coordinator conversation has ended');
     }
     const [owed] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`

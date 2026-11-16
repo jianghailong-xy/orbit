@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
 import type { WikiSpaceRow } from '../lib/wiki';
 import { WIKI_FROM_WORKSPACE_KEY, WIKI_LAST_SPACE_KEY } from '../lib/wikiSpace';
+import start from '../../../shared/src/wiki-start.fixture.json';
 import { TasksSidePanel } from './TasksSidePanel';
 
 /**
@@ -121,6 +122,7 @@ async function leave(): Promise<void> {
 }
 
 const group = () => container!.querySelector('.tp-group-wiki');
+/** The wikis' rows. */
 const rows = () => [...container!.querySelectorAll<HTMLElement>('.tp-group-wiki .tp-item')];
 const row = (name: string) => rows().find((item) => item.querySelector('.tp-label')?.textContent === name)!;
 const names = () => rows().map((item) => item.querySelector('.tp-label')?.textContent);
@@ -361,5 +363,13 @@ describe('the collapsed rail, which has no group', () => {
     expect(railIcon().classList.contains('active')).toBe(false);
     await press(railIcon());
     expect(pathname).toBe('/wiki');
+  });
+});
+
+describe('New wiki… (board 47)', () => {
+  it('has no row in the Wiki group: the wiki head’s menu is the way to it', async () => {
+    await visit('/projects');
+    expect(group()!.textContent).not.toContain(start.hasWiki.newWiki);
+    expect(rows().length).toBe(WIKIS.length);
   });
 });

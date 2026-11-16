@@ -57,6 +57,8 @@ export const RUNNER_ABOUT = 'About This Runner';
 // MARK: Resources
 
 export const RUNNER_RESOURCES = 'Resources';
+/** A managed runner that has not reported yet (preparing, waiting): its Resources and Engines say only this. */
+export const MANAGED_RUNNER_NOT_REPORTED = 'Available once the runner is ready.';
 export const RUNNER_RESOURCES_CPU = 'CPU';
 export const RUNNER_RESOURCES_MEMORY = 'Memory';
 export const RUNNER_RESOURCES_LIVE = 'Live · every 30 s · last hour';
@@ -94,9 +96,22 @@ export function runnerDiskFree(free: string): string {
 // MARK: Capacity
 
 export const RUNNER_MAX_CONCURRENT = 'Max Concurrent';
-/** Max Concurrent's dialog, opened from its `3/16`: what the number is, and when it takes effect. */
-export const RUNNER_MAX_CONCURRENT_HINT =
-  'How many sessions this machine runs at once. A change applies to the next session it picks up — no restart.';
+/** Max Concurrent's dialog, opened from its `3/16`: when a change takes effect. The unit after the field says
+ *  what the number is. */
+export const RUNNER_MAX_CONCURRENT_HINT = 'Applies to the next session it picks up — no restart.';
+/** After the dialog's field: what the number counts. */
+export const RUNNER_MAX_CONCURRENT_UNIT = 'sessions at once';
+/** The dialog's − and + beside its field. */
+export const RUNNER_MAX_CONCURRENT_DECREASE = 'Decrease Max Concurrent';
+export const RUNNER_MAX_CONCURRENT_INCREASE = 'Increase Max Concurrent';
+/** At the dialog's end of the field's line, while the machine is online: its sessions running now. */
+export function runnerRunningNow(active: number): string {
+  return `${active} running`;
+}
+/** Under the field when the new limit is below what runs now: a lower limit stops nothing (session_pool.go setMax). */
+export function runnerMaxBelowRunning(active: number, max: number): string {
+  return `The ${active} running now carry on; new ones wait until fewer than ${max} are running.`;
+}
 /** Beside Max Concurrent's reading: opens its dialog. */
 export const RUNNER_EDIT = 'Edit';
 export const RUNNER_DISK = 'Disk';
@@ -535,6 +550,10 @@ export function agentFixStartsIn(workspace: string, engine: string): string {
 /** After a signed-out reason on an Install failed panel, whose engine rows (and their Sign in) are above it. */
 export function agentFixSignInAbove(engine: string): string {
   return ` Sign in to ${engine} above to use this.`;
+}
+/** The same, after a signed-out reason on the Update engines report, which sits above the engine rows. */
+export function agentFixSignInBelow(engine: string): string {
+  return ` Sign in to ${engine} below to use this.`;
 }
 export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
 

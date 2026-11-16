@@ -16,7 +16,8 @@ export const MANAGED_RUNNER_PASS_BATCH = 50;
  * location's mappings, and a pass visits each in turn: a host whose channel cannot be reached (or
  * whose pool cannot be read) fails its own share of the pass, and the others still run. A host whose
  * backend is marked unreachable is first asked one cheap question (`recheckReachability`), at most
- * once per poll interval, so it is noticed when it returns even with no mapping to call on it.
+ * once per poll interval, so it is noticed when it returns even with no mapping to call on it; its
+ * mappings are driven again in the pass whose recheck it answers, and wait until then.
  */
 export class ManagedRunnerWorker {
   private running = false;
@@ -73,8 +74,11 @@ export class ManagedRunnerWorker {
     for (const manager of this.managers) {
       try {
         // A host marked unreachable is asked once more, so that one no mapping calls on is
-        // placed on again once it is back (managed-runner-placement.ts).
+        // placed on again once it is back (managed-runner-placement.ts). While it stays marked its
+        // mappings wait: each would only spend a failed call on it, and calls to a host whose address
+        // drops packets take until their connect timeout, which the other hosts' share would wait out.
         await manager.backend.recheckReachability?.();
+        if (manager.backend.unreachable) continue;
         await this.drainOne(manager);
       } catch (error) {
         const { clusterKey, namespace } = manager.backend.location;

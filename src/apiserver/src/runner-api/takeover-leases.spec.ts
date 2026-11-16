@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { SESSION_MERGE_BESIDE_TURN_V1 } from '@orbit/shared';
 import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
 import { RunnerApiController } from './runner-api.controller';
 
@@ -23,6 +24,8 @@ function harness(
   operationState: Record<string, unknown> = {},
   /** Cards this session has open when the takeover lands — what the collection returns. */
   pendingApprovals: string[] = [],
+  /** What the runner declared: by default nothing, a runner whose merge still holds turns back. */
+  runnerCapabilities: string[] = [],
 ) {
   const executeCalls: unknown[][] = [];
   // Every statement in order, the transaction-local declarations included; `executeCalls` holds the
@@ -34,6 +37,7 @@ function harness(
   const subagentInterrupts: string[] = [];
   let notified: string | undefined;
   const tx = {
+    runner: { findUnique: async () => ({ capabilities: runnerCapabilities }) },
     // Answered by statement: this boundary runs two, and a fake that hands the session row back
     // to both would have the approval collection reading a session as a list of cards.
     $queryRaw: async (...args: unknown[]) => {
@@ -266,6 +270,29 @@ for (const tc of [
     assert.equal(h.notified(), undefined);
   });
 }
+
+test('takeover rotates past a claimed merge on a runner that merges beside a turn', async () => {
+  const h = harness(
+    OLD_OWNER,
+    GENERATION,
+    true,
+    RunStatus.AWAITING_INPUT,
+    {
+      mergeStatus: 'pending',
+      mergeOperationId: '66666666-6666-4666-8666-666666666666',
+      mergeOperationOwner: '66666666-6666-4666-8666-666666666666',
+    },
+    [],
+    [SESSION_MERGE_BESIDE_TURN_V1],
+  );
+
+  await h.controller.takeoverLeases({ id: RUNNER_ID }, SESSION_ID, {
+    leaseOwner: NEW_OWNER,
+    expectedLeaseOwner: OLD_OWNER,
+  });
+
+  assert.ok(h.executeCalls.length > 0, 'the owner was rotated');
+});
 
 for (const tc of [
   {

@@ -76,7 +76,8 @@ final class DeepSeekBalanceCopyParityTests: XCTestCase {
         // Machines & models' API keys: each engine by its CLI's name, a dot between (web's `KeyEngines`).
         let keys = try web(Self.keys)
         assertSays(keys, "{row.engines.map((engine, index) => (", in: Self.keys)
-        // The dot rides with the engine after it, so a wrapped line never ends on one.
+        // Each engine is one span since the settings-buttons landing, the separator riding with it so a
+        // wrapped line never ends on one.
         assertSays(keys, "{index > 0 && <>{' '}<span className=\"prov-engine-sep\">·</span>{' '}</>}", in: Self.keys)
         assertSays(keys, "<EngineTile engine={engine} size={12} /> {ENGINE_CLI_NAMES[engine]}", in: Self.keys)
         XCTAssertEqual(ProvidersOverview.keyLine(ConfiguredProvider(slug: "h", label: "H", runtime: "dsh",

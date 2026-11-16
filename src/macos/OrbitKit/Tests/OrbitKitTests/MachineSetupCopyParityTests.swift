@@ -14,13 +14,10 @@ final class MachineSetupCopyParityTests: XCTestCase {
     private static let webCopy = "src/web/src/lib/machineSetupCopy.ts"
     private static let swiftCopy = "src/macos/OrbitKit/Sources/OrbitKit/App/MachineSetupCopy.swift"
 
-    /// Sentences of pages these clients don't have: the web's approval page, and its guide registering a
-    /// machine inside Settings' right-hand column, with Machines in the nav on its left. These clients
-    /// register one in `AddRunnerSheet`, from the welcome card or the Machines & models page, and the
-    /// machine then shows on that page, so their guide ends on `REGISTER_NEXT`, which names it.
-    private static let webOnly: Set<String> = [
-        "ENROLL_NEXT_TITLE", "ENROLL_NEXT_BODY", "ENROLL_OPEN_MACHINE", "machineEmpty", "REGISTER_NEXT_IN_SETTINGS",
-    ]
+    /// Sentences of pages these clients don't have: the web's approval page, and its register guide's
+    /// Settings variant (these clients register from the machine's own card, which says `REGISTER_NEXT`).
+    private static let webOnly: Set<String> = ["ENROLL_NEXT_TITLE", "ENROLL_NEXT_BODY", "ENROLL_OPEN_MACHINE",
+                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty"]
 
     /// Sentences these clients say and the web doesn't, each checked on its own terms below.
     private static let thisClientsOwn: Set<String> = [
@@ -77,9 +74,8 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("SETUP_LEAD", MachineSetupCopy.SETUP_LEAD),
         ("SETUP_OPEN_MACHINE", MachineSetupCopy.SETUP_OPEN_MACHINE),
         ("SETUP_FOLDER", MachineSetupCopy.SETUP_FOLDER),
-        ("SETUP_REGISTER_DIR", MachineSetupCopy.SETUP_REGISTER_DIR),
-        ("SETUP_NEW_FOLDER", MachineSetupCopy.SETUP_NEW_FOLDER),
         ("SETUP_NEW_FOLDER_NAME", MachineSetupCopy.SETUP_NEW_FOLDER_NAME),
+        ("SETUP_FOLDER_HINT", MachineSetupCopy.SETUP_FOLDER_HINT),
         ("SETUP_NEW_FOLDER_META", MachineSetupCopy.SETUP_NEW_FOLDER_META),
         ("SETUP_NEW_FOLDER_DONE", MachineSetupCopy.SETUP_NEW_FOLDER_DONE),
         ("SETUP_NEW_FOLDER_INVALID", MachineSetupCopy.SETUP_NEW_FOLDER_INVALID),
@@ -115,9 +111,7 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("setupUpdating", MachineSetupCopy.setupUpdating(machine: "${machine}")),
         ("setupNeedsUpdate", MachineSetupCopy.setupNeedsUpdate(machine: "${machine}")),
         ("setupFolderHelp", MachineSetupCopy.setupFolderHelp(machine: "${machine}")),
-        ("setupNewFolderExists", MachineSetupCopy.setupNewFolderExists(machine: "${machine}")),
         ("setupNewFolderIsFile", MachineSetupCopy.setupNewFolderIsFile(machine: "${machine}")),
-        ("setupOtherFolder", MachineSetupCopy.setupOtherFolder(machine: "${machine}")),
         ("setupChecking", MachineSetupCopy.setupChecking(machine: "${machine}")),
         ("setupNoSuchDirectory", MachineSetupCopy.setupNoSuchDirectory(machine: "${machine}")),
         ("setupNotADirectory", MachineSetupCopy.setupNotADirectory(machine: "${machine}")),

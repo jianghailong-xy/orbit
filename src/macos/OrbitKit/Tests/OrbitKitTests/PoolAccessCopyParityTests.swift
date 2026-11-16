@@ -445,9 +445,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
                    in: Self.accountPools)
         assertSays(card, "{people && <span className=\"re-chip pool-shared-chip\">\(CodexPoolPage.sharedChip)</span>}",
                    in: Self.accountPools)
-        // The web card's head draws the gauge for anybody but a member — and, opened over a pool of one
-        // account that can run, leaves it to that account's row right under it. This client's row is the
-        // folded head and nothing under it (`codexPoolValue`), so only the member rule applies here.
+        // The gauge is left to the row for an open pool of one account that can run (settings-buttons, board 02).
         assertSays(card, "{!member && (collapsed || pool.members.length !== 1 || poolHeadline(pool).kind !== 'next') && <PoolGauge pool={pool} />}",
                    in: Self.accountPools)
 
