@@ -562,10 +562,11 @@ struct ConsoleView: View {
         // The project's sessions page read as the conversation opens, so the button's count is the
         // one the sheet will show before the sheet is ever opened (`projectSessionCount`). Its
         // members, landing line and merge are then polled as the page polls them, so the button's
-        // running dot (`projectRunning`) follows them with the sheet closed.
-        .task(id: projectSheetAddress) {
-            if let address = projectSheetAddress { await appModel.loadProjectSessions(address) }
-            guard let address = projectSheetAddress else { return }
+        // spinner (`projectActive`) follows them with the sheet closed. While the sheet is open the
+        // page polls them itself, so these stop, and read again when it closes.
+        .task(id: projectButtonReadAddress) {
+            if let address = projectButtonReadAddress { await appModel.loadProjectSessions(address) }
+            guard let address = projectButtonReadAddress else { return }
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { @MainActor in
                     await ViewPoll.run(appModel, every: 4, inFlight: { 4 }) {
@@ -694,32 +695,40 @@ struct ConsoleView: View {
         return SessionProjectSheet.projectID(of: session).map { appModel.projectSheetAddress($0, session: session) }
     }
 
+    /// What the conversation reads for its project sessions button: the sheet's address, while the
+    /// sheet is closed. Open, the page in it reads the same things.
+    private var projectButtonReadAddress: SessionProjectAddress? {
+        projectSheet == nil ? projectSheetAddress : nil
+    }
+
     /// The project sessions sheet's subject, as `.sheet(item:)` needs it.
     private struct ProjectSheetTarget: Identifiable {
         let address: SessionProjectAddress
         var id: SessionProjectAddress { address }
     }
 
-    /// The project glyph and the project's session count ("⊞ 11"), led by a blue dot while a member
-    /// session, a landing or a merge runs (the folded band's own running dot); a press puts the
+    /// The project glyph and the project's session count ("⊞ 11"); while anything the sheet shows is
+    /// active the glyph gives its place to the session rows' spinner, in the accent (owner
+    /// 2026-11-17, docs/mocks/project-sessions-button-running, option C). A press puts the
     /// project's sessions page up as a sheet, opening at medium height.
     private func projectSessionsButton(_ projectID: String) -> some View {
         let count = appModel.projectSessionCount(projectID)
-        let running = appModel.projectRunning(projectID)
+        let active = appModel.projectActive(projectID)
         return Button {
             projectSheet = ProjectSheetTarget(
                 address: appModel.projectSheetAddress(projectID, session: appModel.session(id: sessionID)))
         } label: {
             HStack(spacing: 4) {
-                if running {
-                    Circle().fill(Color.accentColor).frame(width: 7, height: 7)
+                if active {
+                    SpinnerGlyph(color: .accentColor).frame(width: 20, height: 20)
+                } else {
+                    Image(systemName: SessionProjectSheet.glyph)
                 }
-                Image(systemName: SessionProjectSheet.glyph)
                 if let count { Text("\(count)").monospacedDigit() }
             }
         }
         .accessibilityLabel(SessionProjectSheet.buttonLabel)
-        .accessibilityValue([count.map { "\($0) sessions" }, running ? "Running" : nil]
+        .accessibilityValue([count.map { "\($0) sessions" }, active ? "Active" : nil]
             .compactMap { $0 }.joined(separator: ", "))
         .accessibilityIdentifier("project-sessions-button")
     }
