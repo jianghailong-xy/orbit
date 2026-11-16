@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>Setup card · step 2 lists the keys that run here</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css" />
+<link rel="stylesheet" href="../../../src/web/src/components/MachineSetupCard.css" />
+<style>
+  body { margin: 0; background: #eef0f4; }
+  .b-part { font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1f2329; padding: 36px 44px; width: 1460px; box-sizing: border-box; }
+  .b-part h1 { font-size: 26px; margin: 0 0 6px; }
+  .b-part h2 { font-size: 19px; margin: 0 0 12px; }
+  .b-lead { color: #4e5969; margin: 0 0 24px; }
+  .b-row { display: flex; gap: 32px; align-items: flex-start; }
+  .b-col { flex: 1; min-width: 0; }
+  .b-cap { font-weight: 600; margin: 0 0 10px; }
+  .b-cap small { font-weight: 400; color: #86909c; margin-left: 8px; }
+  .b-frame { background: var(--bg, #f7f8fa); border-radius: 14px; padding: 20px; position: relative; }
+  .b-frame .msc { margin: 0; max-width: none; }
+  .b-pin { position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #f53f3f; color: #fff;
+           font: 600 13px/24px Inter, sans-serif; text-align: center; box-shadow: 0 0 0 3px #fff; z-index: 3; }
+  .b-ring { position: absolute; border: 2px dashed #f53f3f; border-radius: 10px; z-index: 2; pointer-events: none; }
+  .b-notes { margin: 18px 0 0; padding: 0; list-style: none; }
+  .b-notes li { display: flex; gap: 10px; margin: 0 0 8px; }
+  .b-notes b.n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: #f53f3f; color: #fff;
+                 font: 600 12px/22px Inter, sans-serif; text-align: center; margin-top: 2px; }
+  .b-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .b-table th, .b-table td { border: 1px solid #dde1e8; padding: 8px 12px; text-align: left; vertical-align: top; background: #fff; }
+  .b-table th { background: #f2f3f5; }
+  .b-rec { color: #00b42a; font-weight: 600; }
+  code { font: 13px "JetBrains Mono", monospace; background: #f2f3f5; padding: 1px 5px; border-radius: 4px; }
+  /* Proposal only: the key tiles reuse Kimi's site tiles (.rsi-site), with the model as the sub line. */
+  .b-or { margin-top: 12px; color: var(--text-2); font-size: 13px; }
+  .b-frame .rsi-site { width: 230px; }
+  .b-frame .rsi-site-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+</style>
+</head>
+<body>
+
+<section class="b-part" id="part-1">
+  <h1>Set up jdcloud · 第 2 步列出现在就能用的选项</h1>
+  <p class="b-lead">
+    jdcloud 只装了 Claude Code，且没登录 —— 卡片今天只给一个「Sign in」和一个不说去哪的「Use an API key instead」。
+    但账号里已有 3 个能在 Claude Code 上跑的 key（DeepSeek、两个 Claude key），按一下就能用，卡片却一个都没写出来。
+  </p>
+  <div class="b-row">
+    <div class="b-col">
+      <p class="b-cap">① 今天<small>main @ f46e0179e</small></p>
+      <div class="b-frame" id="today">
+        <div class="msc">
+          <div class="msc-step" data-step="engine">
+            <span class="msc-num">2</span>
+            <div>
+              <div class="msc-step-title">Sign in Claude Code on jdcloud</div>
+              <div class="msc-step-help">Sessions run on the coding CLIs signed in on that machine, and spend its subscription.</div>
+              <div class="rsi">
+                <div class="rsi-actions">
+                  <button class="rsi-btn" type="button">Sign in to Claude Code</button>
+                  <button class="rsi-btn-alt" type="button" id="t-key">Use an API key instead</button>
+                </div>
+                <div class="rsi-hint">Signing in fixes this runner. A key is account-wide — switch to its model to use it.</div>
+              </div>
+            </div>
+          </div>
+          <div class="msc-foot">Nothing is created until you send. You can rename the workspace or change these later.</div>
+        </div>
+      </div>
+      <ul class="b-notes">
+        <li><b class="n">1</b><span>按下去<b>悄悄选第一个 key</b>（<code>pickApiKey</code> 的 <code>keyed[0]</code>），用的是哪个、什么模型，按之前看不到；按之后卡片才变成「DeepSeek · API key」。</span></li>
+        <li><b class="n">2</b><span>没有别的 CLI 装着，所以「Use … instead」那行整行不出现 —— 页面上看不出「此刻有什么可用」。</span></li>
+      </ul>
+    </div>
+
+    <div class="b-col">
+      <p class="b-cap">② 建议<small>key 直接列出来，一按即选</small></p>
+      <div class="b-frame" id="after">
+        <div class="msc">
+          <div class="msc-step" data-step="engine">
+            <span class="msc-num">2</span>
+            <div>
+              <div class="msc-step-title">Sign in Claude Code on jdcloud</div>
+              <div class="msc-step-help">Sessions run on the coding CLIs signed in on that machine, and spend its subscription.</div>
+              <div class="rsi">
+                <div class="rsi-actions">
+                  <button class="rsi-btn" type="button">Sign in to Claude Code</button>
+                </div>
+                <div class="b-or" id="a-or">Or run on a key you’ve connected — nothing to sign in here:</div>
+                <div class="rsi-sites" id="a-keys">
+                  <button class="rsi-site" type="button"><span class="rsi-site-name">DeepSeek</span><span class="rsi-site-sub">DeepSeek V4.1 Flash · API key</span></button>
+                  <button class="rsi-site" type="button"><span class="rsi-site-name">work@Claude</span><span class="rsi-site-sub">Claude Opus 5 · API key</span></button>
+                  <button class="rsi-site" type="button"><span class="rsi-site-name">team@Claude</span><span class="rsi-site-sub">Claude Opus 5 · API key</span></button>
+                  <button class="rsi-link" type="button" id="a-more">Manage keys</button>
+                </div>
+                <div class="rsi-hint">Signing in fixes this runner. A key is account-wide.</div>
+              </div>
+            </div>
+          </div>
+          <div class="msc-foot">Nothing is created until you send. You can rename the workspace or change these later.</div>
+        </div>
+      </div>
+      <ul class="b-notes">
+        <li><b class="n">3</b><span>列出<b>此刻就能在这台机器上跑</b>的 key / pool：和 <code>pickApiKey</code> 同一个来源（<code>draftEngines</code> 里 kind 为 key/pool、非 unavailable），本引擎的排前面。样式复用 Kimi 选站点的 <code>.rsi-site</code> 卡片，不新造外观。</span></li>
+        <li><b class="n">4</b><span>一个都没有时，退回今天的「Use an API key instead」（去 Machines &amp; models 连一个）；「Manage keys」同样去那里。按任一卡片 = 今天 <code>pickDraft(engine, slug)</code>，第 2 步变成「DeepSeek · API key」✓。</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="b-part" id="part-2">
+  <h2>待定 · 要你拍板</h2>
+  <table class="b-table">
+    <tr><th style="width:16%">方案</th><th>长相</th><th style="width:30%">代价</th></tr>
+    <tr><td><b>A · 卡片列出</b> <span class="b-rec">推荐</span></td>
+        <td>如上图 ②：最多 3 张 key 卡片 + 「Manage keys」；多于 3 个时第 3 张换成「+N more」展开。</td>
+        <td>web <code>RunnerSignIn</code> 加一个 <code>keys</code> 参数；iOS / Android 同步同一份文案和规则。</td></tr>
+    <tr><td><b>B · 按钮说出名字</b></td>
+        <td>保留今天的两个按钮，只把第二个改成「Use DeepSeek key instead」—— 至少按之前知道选的是哪个。</td>
+        <td>最小：一个文案函数。但仍只露出一个选项。</td></tr>
+  </table>
+  <p style="margin-top:16px"><b>另外：</b>Local vLLM / Ollama HPC 两个 key 也声明能跑 Claude Code，但地址在 HPC 内网，jdcloud 多半连不上；今天的 <code>unavailable</code> 不判断网络可达，所以它们会出现在列表末尾 —— 是否按 runner 过滤另算一件事。</p>
+  <p><b>落地（按代价排）：</b>web 文案 + <code>MachineSetupCard</code> / <code>WelcomeCard</code> → Android <code>MachineSetupCard.kt</code> → iOS 同一步。</p>
+</section>
+
+<script>
+  window.drawMarks = () => {
+    const mark = (frameId, targetId, n, dx = -14, dy = -14) => {
+      const frame = document.getElementById(frameId), t = document.getElementById(targetId);
+      const f = frame.getBoundingClientRect(), r = t.getBoundingClientRect();
+      const ring = document.createElement('div');
+      ring.className = 'b-ring';
+      Object.assign(ring.style, { left: r.left - f.left - 5 + 'px', top: r.top - f.top - 5 + 'px', width: r.width + 10 + 'px', height: r.height + 10 + 'px' });
+      const pin = document.createElement('div');
+      pin.className = 'b-pin'; pin.textContent = n;
+      Object.assign(pin.style, { left: r.right - f.left + dx + 'px', top: r.top - f.top + dy + 'px' });
+      frame.append(ring, pin);
+    };
+    mark('today', 't-key', 1);
+    mark('after', 'a-keys', 3, -4, -18);
+    mark('after', 'a-more', 4, 10, -12);
+  };
+</script>
+</body>
+</html>
