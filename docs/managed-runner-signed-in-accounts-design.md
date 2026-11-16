@@ -1,6 +1,7 @@
 # Every signed-in account gets its managed runner (design, 2026-11-16)
 
 Status: proposed, waiting for the owner's decisions D1–D4. Design only: no product code is changed.
+Board: [docs/mocks/managed-runner-signed-in-accounts/board.html](mocks/managed-runner-signed-in-accounts/board.html) (rendered as `board-1.png` … `board-5.png` beside it).
 It amends [managed-runner-design.md](managed-runner-design.md) ("Default disabled gate" and the sign-in hook record)
 and [managed-runner-existing-account-entry-design.md](managed-runner-existing-account-entry-design.md) (D3).
 
