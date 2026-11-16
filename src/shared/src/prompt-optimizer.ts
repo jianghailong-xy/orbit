@@ -9,7 +9,8 @@ import type { TranslationLanguage } from './translation';
  * WHAT A CLIENT READS AND WRITES
  * ==============================
  *  - `GET /users/me` → `preferences.promptOptimizer` (PromptOptimizerPreferences) and
- *    `promptOptimizerAvailable` (MePromptOptimizer). Absent `promptOptimizer` is OFF.
+ *    `promptOptimizerAvailable` (MePromptOptimizer). Absent `promptOptimizer` is ON;
+ *    only an explicit `false` turns it off (owner's decision of 2026-11-16).
  *    `promptOptimizerAvailable: false` is board frame 1b: the switch is drawn disabled with the
  *    DEEPSEEK_API_KEY notice, and the composer shows no ✦ Optimize button.
  *  - `PATCH /users/me/preferences` with `{ promptOptimizer? }`. The answer is the same shape as

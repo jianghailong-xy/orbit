@@ -169,9 +169,9 @@ object PromptOptimizer {
     /** The longest draft the server takes (PROMPT_OPTIMIZER_MAX_DRAFT_CHARS); a longer one goes cut, as iOS cuts it. */
     const val MAX_DRAFT_CHARS = 8_000
 
-    /** `preferences.promptOptimizer`: on only for an explicit true. Absent means off. */
+    /** `preferences.promptOptimizer`: absent means on, and only an explicit false turns it off (owner's decision of 2026-11-16). */
     fun enabled(preferences: JsonObject?): Boolean =
-        (preferences?.get("promptOptimizer") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
+        (preferences?.get("promptOptimizer") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull != false
 
     /** `GET /users/me`'s `promptOptimizerAvailable`, or null where the payload does not say (a login's user). */
     fun available(user: JsonObject?): Boolean? = (user?.get("promptOptimizerAvailable") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull

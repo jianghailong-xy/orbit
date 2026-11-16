@@ -93,11 +93,14 @@ final class PromptOptimizerTests: XCTestCase {
         return try decode(User.self, "{\"id\":\"u\",\"email\":\"a@b.c\",\"preferences\":\(prefs)\(avail)}")
     }
 
-    func testTheSwitchIsOffUnlessExactlyTrueAndTheServerCan() throws {
-        XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{}", available: true)), "absent is off")
+    func testTheSwitchIsOnUnlessExactlyFalseAndTheServerCan() throws {
+        XCTAssertTrue(PromptOptimizer.isOn(try user(prefs: "{}", available: true)), "absent is on")
+        XCTAssertTrue(PromptOptimizer.isOn(try user(prefs: "null", available: true)), "no preferences at all is on")
         XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":false}", available: true)))
-        XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":\"yes\"}", available: true)),
-                       "a stray value reads as absent rather than failing me")
+        XCTAssertTrue(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":\"yes\"}", available: true)),
+                      "a stray value reads as absent rather than failing me")
+        XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{}", available: false)), "no server key")
+        XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{}", available: nil)), "a login payload says nothing")
         XCTAssertTrue(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":true}", available: true)))
         XCTAssertFalse(PromptOptimizer.isOn(try user(prefs: "{\"promptOptimizer\":true}", available: false)))
         XCTAssertFalse(PromptOptimizer.isOn(nil))
@@ -111,6 +114,8 @@ final class PromptOptimizerTests: XCTestCase {
 
     func testThePreferenceIsWrittenOnlyWhenSet() throws {
         XCTAssertEqual(try encoded(UpdatePreferencesRequest(promptOptimizer: true))["promptOptimizer"] as? Bool, true)
+        XCTAssertEqual(try encoded(UpdatePreferencesRequest(promptOptimizer: false))["promptOptimizer"] as? Bool, false,
+                       "turning it off writes false")
         XCTAssertNil(try encoded(UpdatePreferencesRequest(recaps: true))["promptOptimizer"])
     }
 
@@ -314,6 +319,12 @@ final class PromptOptimizerWiringTests: XCTestCase {
         let sheet = try source(app + "Views/SettingsSheet.swift")
         XCTAssertTrue(sheet.contains("case .promptOptimizer:\n                    promptOptimizerSection"))
         XCTAssertTrue(sheet.contains("UpdatePreferencesRequest(promptOptimizer: value)"))
+        // On by default (owner, 2026-11-16): both pages seed absent as on and start the toggle on.
+        for page in [sheet, try source(app + "Views/SettingsAdminView.swift")] {
+            XCTAssertTrue(page.contains("@State private var promptOptimizer = true"))
+            XCTAssertTrue(page.contains("promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)"))
+            XCTAssertTrue(page.contains("guard !PromptOptimizer.unavailable(model.user),\n"))
+        }
         let mac = try source(app + "Views/SettingsAdminView.swift")
         XCTAssertTrue(mac.contains("Toggle(PromptOptimizerCopy.title, isOn: $promptOptimizer)"))
         XCTAssertTrue(mac.contains(".disabled(PromptOptimizer.unavailable(model.user))"))

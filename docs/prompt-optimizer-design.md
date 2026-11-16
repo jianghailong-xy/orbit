@@ -10,7 +10,9 @@ recommendation on 2026-11-15 ("As suggested").
   (board frame 2). The result is a card above the composer (frame 4). The input box changes only when
   the owner presses **Use** or **Edit, then use**. Nothing is sent until they press Send. Send never
   waits for the optimizer.
-- **Off by default.** The switch is `User.preferences.promptOptimizer`; absent means off. It lives in
+- **On by default** (the owner's decision of 2026-11-16; it shipped off by default). The switch is
+  `User.preferences.promptOptimizer`: absent means on, and turning it off writes `false`, the only
+  value that reads off — the same reading as Suggested replies. It lives in
   Settings › General › Composer, under Suggested replies. Without the server's `DEEPSEEK_API_KEY` it is
   drawn disabled with the notice from frame 1b.
 - **D1 A: context is what the server already holds.** One DeepSeek call per press, with no runner

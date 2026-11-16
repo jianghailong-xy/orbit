@@ -174,9 +174,14 @@ extension TranslationLanguage {
 // MARK: - Rules
 
 public enum PromptOptimizer {
+    /// The account's switch: absent means on, and only an explicit `false` turns it off.
+    public static func switchedOn(_ preferences: UserPreferences?) -> Bool {
+        preferences?.promptOptimizer != false
+    }
+
     /// Whether the account offers ✦ Optimize: switched on, and the server able to.
     public static func isOn(_ user: User?) -> Bool {
-        user?.preferences?.promptOptimizer == true && user?.promptOptimizerAvailable == true
+        switchedOn(user?.preferences) && user?.promptOptimizerAvailable == true
     }
 
     /// Whether Settings draws the switch disabled with frame 1b's notice. Only a `me` that says so:
