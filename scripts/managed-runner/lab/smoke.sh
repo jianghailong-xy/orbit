@@ -24,7 +24,7 @@ payload() {  # payload <pod> <operation> [args]: run the probe payload inside a 
   k exec "$pod" -- python3 /probe/ceph-rbd-payload.py "$@" --run-id "$run_id"
 }
 random_sha() {
-  k exec "$1" -- sha256sum "/var/lib/orbit/storage-verification/$run_id/random.bin" | cut -d' ' -f1
+  k exec "$1" -- sha256sum "/home/orbit/storage-verification/$run_id/random.bin" | cut -d' ' -f1
 }
 wait_ready() { k wait --for=condition=Ready "pod/$1" --timeout="${2:-600}s" >/dev/null; }
 record() {  # record <jq filter> [jq args]: update the report
@@ -63,13 +63,13 @@ if [ "$mode" = run ]; then
   python3 -B "$LAB_SCRIPTS/render.py" probe-pod --name "$pod" --pvc "$pvc" --run-id "$run_id" | k apply -f -
   wait_ready "$pod"
   deadline=$(( SECONDS + 300 ))
-  until [ "$(k exec "$pod" -- cat "/var/lib/orbit/storage-verification/$run_id/acknowledged.json" 2>/dev/null \
+  until [ "$(k exec "$pod" -- cat "/home/orbit/storage-verification/$run_id/acknowledged.json" 2>/dev/null \
             | jq -r '.committedRows // 0')" -ge 100 ] 2>/dev/null; do
     [ "$SECONDS" -lt "$deadline" ] || die "the writer did not commit 100 rows in 300 s"
     sleep 2
   done
   k exec "$pod" -- python3 -c "import os, sys
-path = '/var/lib/orbit/storage-verification/$run_id/random.bin'
+path = '/home/orbit/storage-verification/$run_id/random.bin'
 with open(path, 'wb') as stream:
     stream.write(os.urandom(32 * 1024 * 1024))
     stream.flush()
@@ -106,12 +106,12 @@ with open(path, 'wb') as stream:
   dup=$run_id-dup
   python3 -B "$LAB_SCRIPTS/render.py" probe-pod --name "$dup" --pvc "$pvc" --run-id "$run_id" --sleep | k apply -f -
   if wait_ready "$dup" 120 2>/dev/null; then
-    dup_write=$(k exec "$dup" -- sh -c "echo second-pod > /var/lib/orbit/storage-verification/$run_id/second-pod.txt && echo written")
-    seen_by_first=$(k exec "$pod" -- cat "/var/lib/orbit/storage-verification/$run_id/second-pod.txt")
-    k exec "$dup" -- rm -f "/var/lib/orbit/storage-verification/$run_id/second-pod.txt"
+    dup_write=$(k exec "$dup" -- sh -c "echo second-pod > /home/orbit/storage-verification/$run_id/second-pod.txt && echo written")
+    seen_by_first=$(k exec "$pod" -- cat "/home/orbit/storage-verification/$run_id/second-pod.txt")
+    k exec "$dup" -- rm -f "/home/orbit/storage-verification/$run_id/second-pod.txt"
     record '.secondPodSameNode = {admitted: true, phase: "Running", write: $w, seenByFirstPod: $s,
              mountInfo: $m}' --arg w "$dup_write" --arg s "$seen_by_first" \
-      --arg m "$(k exec "$dup" -- grep ' /var/lib/orbit ' /proc/self/mountinfo)"
+      --arg m "$(k exec "$dup" -- grep ' /home/orbit ' /proc/self/mountinfo)"
     say "second Pod on the same node: Running, could write a file the first Pod sees"
   else
     record '.secondPodSameNode = {admitted: false, phase: $p, events: $e}' \

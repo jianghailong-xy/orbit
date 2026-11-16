@@ -313,6 +313,19 @@ public struct SubagentSessionSummary: Equatable, Sendable {
     /// The runs, the running ones first, then the rest newest first.
     public let rows: [SubagentRunView]
 
+    /// The composer band's words after "Agents". While one runs it says what that one is doing, by
+    /// its `delegate` description ("Deploy dacad7403 to production"); several running lead with how
+    /// many ("2 running · Deploy …"), naming the newest. A running run with no description keeps the
+    /// counts ("2 · 1 running"), and with none running it is the count alone. The session list's
+    /// row says the same thing in its own words (`SessionLine.subagentRunningLine`).
+    public var band: String {
+        guard running > 0 else { return "\(count)" }
+        let newest = rows.first(where: \.isRunning)?.description?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if newest.isEmpty { return "\(count) · \(running) running" }
+        return running > 1 ? "\(running) running · \(newest)" : newest
+    }
+
     /// Nil when the session started no Agent: the capsule then has no place for one.
     public static func make(_ runs: [SubagentRunView]) -> SubagentSessionSummary? {
         guard !runs.isEmpty else { return nil }

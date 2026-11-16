@@ -498,15 +498,15 @@ const managedIn = (name: string): ManagedRunner => {
 describe('the managed runner before it is up', () => {
   for (const [name, root] of [
     // Never reported: the image's fixed repos folder.
-    ['preparing: starting', '/var/lib/orbit/home/orbit-repos/'],
+    ['preparing: starting', '/home/orbit/orbit-repos/'],
     // Asleep after it had reported its home.
-    ['sleeping', '/var/lib/orbit/home/'],
+    ['sleeping', '/home/orbit/'],
   ] as const) {
     it(`${name}: says why, takes an unchecked new folder, and makes the workspace`, async () => {
       const managed = managedIn(name);
       const state = managedSetupState(RUNNER_ID, managed.status)!;
       const runner = name === 'sleeping'
-        ? machine({ online: false, status: 'OFFLINE', reposRoot: '/var/lib/orbit/home/orbit-repos' })
+        ? machine({ online: false, status: 'OFFLINE', reposRoot: '/home/orbit/orbit-repos' })
         : machine({ online: false, status: 'OFFLINE', reposRoot: null, capabilities: [], engines: null, lastHeartbeatAt: null });
       const page = await open(runner, { managed });
       expect(said(page.querySelector('.msc-notice'))).toBe(MANAGED_RUNNER_COPY.setup.notice[state]);

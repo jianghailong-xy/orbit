@@ -45,13 +45,13 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
             "status":"${if (online) "ONLINE" else "OFFLINE"}","activeSessions":0,"lastHeartbeatAt":${if (online) "\"${ago(0)}\"" else "null"},
             "runsAsRoot":false,"capabilities":["dir-probe/v1","create-workdir/v1"],"labels":[],
             "registerDir":${if (fleet == Fleet.MACHINE) "\"/Users/mia\"" else "null"},"maxConcurrent":4,"enrolledAt":"${ago(2)}",
-            "reposRoot":"/var/lib/orbit/home/orbit-repos","selfUpdate":{"state":"enabled","installDir":"/usr/local/bin"},
+            "reposRoot":"/home/orbit/orbit-repos","selfUpdate":{"state":"enabled","installDir":"/usr/local/bin"},
             "commands":[],"skills":[],"engines":$engines}"""
     }
 
     private fun workspaceRow() = """{"id":"$wid","name":"default","runnerId":"$rid","runner":{"id":"$rid","name":"managed-mia"},
         "createdAt":"${ago(2)}","position":null,"lastProvider":${if (fleet == Fleet.MANAGED_READY) "\"claude\"" else "null"},"provider":null,
-        "model":null,"workDir":"/var/lib/orbit/home/orbit-repos/default","enableWorktree":true,"enabled":true,"workDirExists":true,"workDirIsGit":true}"""
+        "model":null,"workDir":"/home/orbit/orbit-repos/default","enableWorktree":true,"enabled":true,"workDirExists":true,"workDirIsGit":true}"""
 
     /** The fixture's `preparing: starting`, `model unavailable: started without a signed-in runtime` and `available` bodies. */
     private fun managedStatus(): String = when (fleet) {

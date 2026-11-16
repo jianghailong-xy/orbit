@@ -202,8 +202,7 @@ class SingleWriterLabTest(unittest.TestCase):
 
     def test_payload_writes_under_the_runner_home(self):
         source = single_writer.payload_source()
-        self.assertIn("Path('/var/lib/orbit/home/storage-verification')", source)
-        self.assertNotIn('Path("/var/lib/orbit/storage-verification")', source)
+        self.assertIn('Path("/home/orbit/storage-verification")', source)
 
 
 class SwitchLabTest(unittest.TestCase):
@@ -290,7 +289,7 @@ class CrossNodeLabTest(unittest.TestCase):
         # takeover-lab.py's own names (T02's accounts, probe, writer, context) are this task's in the helpers it shares.
         self.assertEqual((self.cross.wl.EMAIL, self.cross.ml.EMAIL), ("t08x-{}@lab.invalid", "t08x-{}@lab.invalid"))
         self.assertEqual(self.cross.wl.name_of("t08x-bob@lab.invalid"), "bob")
-        self.assertEqual((self.cross.wl.PROBE_ROOT, self.cross.tl.WRITER_RUN), ("/var/lib/orbit/home/t08x-probe", "t08x-writer"))
+        self.assertEqual((self.cross.wl.PROBE_ROOT, self.cross.tl.WRITER_RUN), ("/home/orbit/t08x-probe", "t08x-writer"))
         self.assertEqual(self.cross.al.CONTEXT.name, "t08x-context.json")
         self.assertIn("test-server-t08x", self.cross.al.OWN_SERVER_DIRS)
 
@@ -375,16 +374,16 @@ class DurabilityLabTest(unittest.TestCase):
         env = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x",
                "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x", "PATH": "/usr/bin:/bin"}
         git = lambda d, *a: subprocess.run(["git", "-C", str(d), *a], check=True, capture_output=True, text=True, env=env).stdout.strip()
-        workspace = root / "home/orbit-repos/default"
+        workspace = root / "orbit-repos/default"
         workspace.mkdir(parents=True)
         git(workspace, "init", "-q", "-b", "master")
         git(workspace, "commit", "-q", "--allow-empty", "-m", "orbit: baseline")
-        worktree = root / "home/.orbit/worktrees/s1"
+        worktree = root / ".orbit/worktrees/s1"
         git(workspace, "worktree", "add", "-q", "-b", "orbit/s1", str(worktree))
         (worktree / "t08-annlast.txt").write_text("T08 annlast\n")
         git(worktree, "add", "t08-annlast.txt")
         git(worktree, "commit", "-q", "-m", "T08 annlast")
-        transcript = root / "home/.claude/projects/p/11111111-2222-4333-8444-555555555555.jsonl"
+        transcript = root / ".claude/projects/p/11111111-2222-4333-8444-555555555555.jsonl"
         transcript.parent.mkdir(parents=True)
         transcript.write_text('{"user": "T02C-ANN-S1 first"}\n{"user": "T02C-ANN-LAST last T03-SECRET annlast"}\n'
                               '{"assistant": "FAKE MODEL reply #3: tool result received: T08-WROTE-ANNLAST abc"}\n')
@@ -421,7 +420,7 @@ class DurabilityLabTest(unittest.TestCase):
             obj = workspace / ".git/objects" / commit[:2] / commit[2:]
             obj.chmod(0o644)
             obj.write_bytes(b"")
-            transcript = Path(folder) / "home/.claude/projects/p/11111111-2222-4333-8444-555555555555.jsonl"
+            transcript = Path(folder) / ".claude/projects/p/11111111-2222-4333-8444-555555555555.jsonl"
             transcript.write_text("\n".join(transcript.read_text().splitlines()[:2]) + "\n")
             view = self.read(folder, commit)
         before, after = self.durability.Step(), self.durability.Step()

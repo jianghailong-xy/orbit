@@ -1209,8 +1209,8 @@ func subagentBackground(args map[string]interface{}, def subagentDefinition) (bo
 }
 
 // claudeChildSession is the session a Claude SubAgent is spawned as, and its argv: the parent's, in child mode,
-// with the definition applied — the preamble and the definition's body as its appended system prompt, plan mode
-// and no edit tools when it is read-only, and its tools (--tools) and disallowedTools.
+// with the definition applied — the preamble and the definition's body as its appended system prompt, no edit
+// tools when it is read-only, and its tools (--tools) and disallowedTools.
 func claudeChildSession(parent *ClaimedSession, target AgentExecConfig, def subagentDefinition, runID, engineSession string,
 	resume bool, scratch string) (*ClaimedSession, []string) {
 	child := subagentChildJob(parent, target, def, runID, providerClaude, "")
@@ -1465,7 +1465,7 @@ func subagentEngine(exec AgentExecConfig, parent *ClaimedSession) string {
 
 // subagentChildJob is the claim a child engine is launched from: the parent's, in child mode, on the server's
 // execution target, with the definition applied — the preamble and the definition's body as its appended system
-// prompt, no delegate, plan mode and no edit tools when it is read-only. engineSession is the conversation a
+// prompt, no delegate, and when it is read-only no edit tools on Claude, plan mode elsewhere. engineSession is the conversation a
 // resume continues (RuntimeSessionID, which every engine's open-or-resume reads), "" for a new one.
 func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagentDefinition, runID, provider, engineSession string) *ClaimedSession {
 	child := *parent
@@ -1490,11 +1490,15 @@ func subagentChildJob(parent *ClaimedSession, exec AgentExecConfig, def subagent
 		child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, delegateEngineToolName)
 	}
 	if def.Readonly {
-		// The server already narrows a read-only run to plan mode (§5.3); kept here so the child never reads wider.
-		child.Agent.PermissionMode = "plan"
 		child.readonlySubagent = true
 		if provider == providerClaude {
+			// A Claude child keeps the server's mode, the parent's: without its edit tools it cannot write through
+			// them, and plan mode would ask about every Bash call, however the parent runs (§5.3).
 			child.Agent.DisallowedTools = appendUnique(child.Agent.DisallowedTools, subagentReadonlyDisallowed...)
+		} else {
+			// The server already narrows a read-only run on any other engine to plan mode (§5.3); kept here so the
+			// child never reads wider.
+			child.Agent.PermissionMode = "plan"
 		}
 	}
 	child.RuntimeSessionID = engineSession

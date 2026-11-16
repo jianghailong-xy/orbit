@@ -101,6 +101,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
   /** A live parent session of that runner, under an agent with SubAgents on or off. */
   async function parentSession(opts: {
     subagentsEnabled?: boolean; costUsd?: number; runnerId?: string; model?: string; effort?: string; optimizeFor?: string;
+    permissionMode?: string;
   } = {}) {
     const workspaceId = randomUUID();
     const onRunner = opts.runnerId ?? runnerId;
@@ -118,6 +119,7 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
         title: 'split the parser work', prompt: 'split the parser work', provider: 'claude', engine: 'claude',
         model: opts.model ?? 'claude-opus-5-5', effort: opts.effort ?? 'high', status: RunStatus.AWAITING_INPUT, numTurns: 1,
         dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: false, costUsd: opts.costUsd ?? 0,
+        ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
       },
     });
     return sessionId;
@@ -187,11 +189,13 @@ test('SubAgent runs: the row, the cost roll-up, the refusals and runningSubagent
   });
 
   await t.test("a read-only run keeps its flag, and the client's view names its engine, flag, files and description", async () => {
-    const sessionId = await parentSession();
+    const sessionId = await parentSession({ permissionMode: 'acceptEdits' });
     const reader = await subagents.createSubagentRun(runner, sessionId, create({
       toolUseId: 'toolu_01ReadOnly', type: 'explore', readonly: true, description: 'Find every caller',
     }));
     assert.equal(reader.decision.readonly, true, 'the decision keeps the definition\'s read-only flag');
+    assert.equal(reader.exec.permissionMode, 'acceptEdits',
+      "a read-only Claude child runs in the parent's mode, not plan: the runner withholds its edit tools");
     const writer = await subagents.createSubagentRun(runner, sessionId, create({ toolUseId: 'toolu_01Writer', type: 'general' }));
     assert.equal(writer.decision.readonly, undefined, 'and a writer has none');
     await subagents.updateSubagentRun(runner, sessionId, writer.runId, update({
