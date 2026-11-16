@@ -23,6 +23,8 @@ final class GuestConversationModel {
 
     let sessionID: String
     @ObservationIgnored private let api: APIClient
+    /// The guest door's stream: how the view follows the conversation while it can be open.
+    @ObservationIgnored private let stream: GuestStreaming
     @ObservationIgnored private let myName: () -> String?
     /// The view's guest-door image store: a finished upload seeds it, so the sent bubble needs no fetch.
     @ObservationIgnored private let attachments: AttachmentImageStore
@@ -44,8 +46,10 @@ final class GuestConversationModel {
     private(set) var sendError: String?
     private(set) var loadingOlder = false
 
-    /// The newest seq held: what the follow read asks after.
-    @ObservationIgnored private var after = 0
+    /// Stream or poll, and the newest seq held: what the next connection or poll asks after.
+    @ObservationIgnored private var streamFollow = GuestStreamFollow()
+    /// Whether the app is in the foreground (the scene's phase): in the background the stream is closed.
+    @ObservationIgnored private var foreground = true
     /// A message was just sent; until its run is seen the conversation is asked as if it worked.
     @ObservationIgnored private var expecting = false
     /// Set by a send: the follow loop asks at once instead of finishing its wait.
@@ -53,10 +57,11 @@ final class GuestConversationModel {
     /// What this view sent, drawn below the transcript until the runner's echo of each turn is read.
     private(set) var sent = GuestSentTurns()
 
-    init(sessionID: String, api: APIClient, attachments: AttachmentImageStore,
+    init(sessionID: String, api: APIClient, stream: GuestStreaming, attachments: AttachmentImageStore,
          myName: @escaping () -> String?) {
         self.sessionID = sessionID
         self.api = api
+        self.stream = stream
         self.attachments = attachments
         self.myName = myName
     }
@@ -77,27 +82,128 @@ final class GuestConversationModel {
     func load() async {
         do {
             let session = try await api.guestSession(sessionID, limit: GuestFollow.tailPage)
-            title = session.title
             owner = session.ownerName
-            state = session.state
-            var fresh = TranscriptReducer()
-            fresh.applyTailPage(EventPage(events: own(session.events), hasMore: session.hasMore))
-            reducer = fresh
-            after = session.events.last?.seq ?? 0
+            seed(session)
             phase = .ready
-            tailRevision &+= 1
         } catch {
             phase = .notShared
         }
     }
 
-    /// Follow the conversation for as long as the view is up: every few seconds while it works, every
-    /// half minute while it waits, and not at all once it is over — until a send asks again.
+    /// The window from a tail read: the first one, or again when the stream says it is too far behind.
+    private func seed(_ session: GuestSession) {
+        title = session.title
+        state = session.state
+        var fresh = TranscriptReducer()
+        fresh.applyTailPage(EventPage(events: own(session.events), hasMore: session.hasMore))
+        reducer = fresh
+        sent.read(session.events)
+        streamFollow.reseeded(after: session.events.last?.seq ?? 0)
+        tailRevision &+= 1
+    }
+
+    /// The app came to the foreground or left it (the scene's phase): in the background the stream is
+    /// closed, and back in the foreground it is opened again from the newest seq held.
+    func setForeground(_ isForeground: Bool) {
+        guard isForeground != foreground else { return }
+        foreground = isForeground
+        if isForeground { streamFollow.foreground() }
+    }
+
+    /// Whether the app can be seen: in the foreground, and on macOS not hidden or minimized.
+    private var visible: Bool { foreground && VisibilityGate.app.isVisible }
+
+    /// Follow the conversation for as long as the view is up: over the guest stream as it is written,
+    /// or — when the stream cannot open — by polling, every few seconds while it works, every half
+    /// minute while it waits, and not at all once it is over, until a send asks again.
     func follow() async {
         while !Task.isCancelled, phase == .ready {
-            await pause(sent.delay(GuestFollow.delay(state, moved: false, expecting: expecting)))
+            await untilVisible()
             guard !Task.isCancelled, phase == .ready else { return }
-            await readNewer()
+            switch streamFollow.mode {
+            case .stream:
+                let end = await streamOnce()
+                guard !Task.isCancelled, phase == .ready else { return }
+                if end == .resync { await reseed() }
+                switch streamFollow.next(after: end) {
+                case .stop: return
+                case .reconnect(let ms): await pause(TimeInterval(ReconnectPolicy.jittered(ms, unit: .random(in: 0..<1))) / 1000)
+                case .poll:
+                    // Fallen back: catch up at once, then the polling cadence.
+                    await readNewer()
+                case .waitForeground: break
+                }
+            case .polling:
+                await pause(sent.delay(GuestFollow.delay(state, moved: false, expecting: expecting)))
+                guard !Task.isCancelled, phase == .ready else { return }
+                await readNewer()
+                _ = streamFollow.retryStream()
+            }
+        }
+    }
+
+    /// One connection of the guest stream, read until it ends, the view goes, or the app leaves the foreground.
+    private func streamOnce() async -> GuestStreamFollow.End {
+        await withTaskGroup(of: GuestStreamFollow.End.self) { group in
+            group.addTask { @MainActor [self] in
+                do {
+                    for try await frame in stream.guestFrames(sessionID: sessionID, sinceSeq: streamFollow.cursor) {
+                        switch streamFollow.read(frame) {
+                        case .apply(let event): draw(event)
+                        case .head(let head):
+                            if let newTitle = head.title, !newTitle.isEmpty { title = newTitle }
+                            state = head.state
+                            if head.state.live { expecting = false }
+                        case .gone:
+                            phase = .notShared
+                            return .cancelled
+                        case .reseed: return .resync
+                        case .skip: break
+                        }
+                    }
+                    return .ended
+                } catch {
+                    return GuestStreamFollow.end(of: error)
+                }
+            }
+            // Closed in the background: wins the race, so the read above is cancelled.
+            group.addTask { @MainActor [self] in
+                while !Task.isCancelled {
+                    if !visible { return .background }
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                }
+                return .cancelled
+            }
+            let first = await group.next() ?? .cancelled
+            group.cancelAll()
+            return Task.isCancelled ? .cancelled : first
+        }
+    }
+
+    /// One stream event drawn as the owner's console draws it: a delta grows the reply being written, a
+    /// stored event folds in and replaces a drawn message it echoes.
+    private func draw(_ event: RunEvent) {
+        sent.read([event])
+        for shown in own([event]) { reducer.apply(shown) }
+        tailRevision &+= 1
+    }
+
+    /// The stream said this window is too far behind to replay: read the tail page again.
+    private func reseed() async {
+        do {
+            seed(try await api.guestSession(sessionID, limit: GuestFollow.tailPage))
+        } catch APIError.http(let status, _) where status == 404 {
+            phase = .notShared
+        } catch {
+            // Transient: the reconnect asks from the cursor held.
+        }
+    }
+
+    /// Returns once the app can be seen, or the view goes.
+    private func untilVisible() async {
+        while !Task.isCancelled, !visible {
+            await VisibilityGate.app.waitUntilVisible()
+            if !foreground { try? await Task.sleep(nanoseconds: 250_000_000) }
         }
     }
 
@@ -108,7 +214,7 @@ final class GuestConversationModel {
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
         kicked = false
-        await VisibilityGate.app.waitUntilVisible()
+        await untilVisible()
     }
 
     /// Ask what the conversation added since the newest event held, until it is caught up.
@@ -116,12 +222,13 @@ final class GuestConversationModel {
         do {
             var more = true
             while more {
+                let after = streamFollow.cursor
                 let now = try await api.guestEventsAfter(sessionID, after: after, limit: GuestFollow.pageSize)
                 let added = now.events.filter { $0.seq > after }
                 sent.read(added)
                 if !added.isEmpty {
                     reducer.appendNewer(EventPage(events: own(added), hasMore: false))
-                    after = added.last?.seq ?? after
+                    streamFollow.held(added.last?.seq ?? after)
                     tailRevision &+= 1
                 }
                 if let newTitle = now.title, !newTitle.isEmpty { title = newTitle }
@@ -270,6 +377,7 @@ final class GuestConversationModel {
 /// `!` shell, no other files.
 struct GuestSessionView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.scenePhase) private var scenePhase
     let sessionID: String
     @State private var conversation: GuestConversationModel?
     /// The console's rows read attachment images through the store in the environment; a guest's is
@@ -290,12 +398,21 @@ struct GuestSessionView: View {
             let store = registry.guestAttachments(sessionID)
             attachments = store
             let account = app
-            let model = GuestConversationModel(sessionID: sessionID, api: api, attachments: store) { [weak account] in
+            let tokens = app.tokenStore
+            let baseURL = api.baseURL
+            let stream = URLSessionEventStream(baseURL: baseURL, token: { tokens.token(for: baseURL) })
+            let model = GuestConversationModel(sessionID: sessionID, api: api, stream: stream,
+                                               attachments: store) { [weak account] in
                 account?.user?.name
             }
+            model.setForeground(scenePhase != .background)
             conversation = model
             await model.load()
             await model.follow()
+        }
+        // In the background the guest stream is closed; back in the foreground it is opened again.
+        .onChange(of: scenePhase) { _, phase in
+            conversation?.setForeground(phase != .background)
         }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
