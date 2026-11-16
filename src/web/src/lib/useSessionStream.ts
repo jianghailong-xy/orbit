@@ -601,6 +601,7 @@ export function useSessionStream({
               current,
               selectedId,
               knownAcceptedBefore,
+              rows.some((row) => row.opening && turnPlacementOf(row) !== 'accepted'),
             ),
           );
           const serverQueued = rows.flatMap((row) => {
