@@ -301,6 +301,8 @@ P1 不路由，所以可以先把最难的部分（同 cwd 子进程、事件内
   `Discarded changes: <n> files (<paths…>)`，让父 Agent 知道它改过什么但没有带回。
 - 看不到父会话未提交的改动：工具描述里写明「remote SubAgents run on that workspace's own HEAD and return text only」，
   父 Agent 需要它看到新代码时，自己先提交并推送（或者在 prompt 里写清楚）。
+- **不能续跑**：worktree 随结束删掉，没有可续的对话。`resume` 一个远程 runId 时 runner 直说它在哪个 workspace 跑过、
+  该带完整 brief 新开一个（`subagentResumeRefusal`）；父 runner 为远程运行也写 `run.json`（带 `workspace`），重启后照样这么答。
 
 ### 10.3 路由、显示、生命周期
 
