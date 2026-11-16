@@ -219,7 +219,10 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
         // The main branch of the project this conversation coordinates, which an exception's rerun or observation names.
         // The project's name, which an owner exception card's subline names, and the project page's coordinator reads and writes,
         // which its coordinator row repairs the coordinator with (board owner-exception-who-fixes).
-        val coordinatedTitle = (session.snapshot?.standing?.get("project") as? JsonObject)?.text("title")
+        val coordinatedProject = session.snapshot?.standing?.get("project") as? JsonObject
+        val coordinatedTitle = coordinatedProject?.text("title")
+        // The project's escalation window, which Ask again's note names ("with a fresh 2h clock").
+        val escalationSeconds = (coordinatedProject?.get("exceptionEscalationSeconds") as? JsonPrimitive)?.longOrNull
         val coordinatorDoors = remember(cards.handle) {
             ProjectCoordinatorDoors(ProjectApi(app.session, cards.handle) { app.canWrite(cards.handle) }) { app.realtime.refreshSession() }
         }
@@ -254,7 +257,7 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
                         review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain,
-                        projectName = coordinatedTitle, coordinator = coordinatorDoors, submit = submit)
+                        projectName = coordinatedTitle, escalationSeconds = escalationSeconds, coordinator = coordinatorDoors, submit = submit)
                     else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(card, fresh, result, open, discuss, submit) }
                 }
             }
