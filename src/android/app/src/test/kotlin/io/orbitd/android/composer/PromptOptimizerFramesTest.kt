@@ -64,9 +64,10 @@ class PromptOptimizerFramesTest : ComposerShellTest() {
         gate.complete(Unit)
         await { has(hasTestTag("composer-optimization-card")) }
         PromptOptimizerFrames.shot(compose, "4-suggestion", sheet = true)
+        // The card opens on the gloss (D2); the toggle shows the prompt in the agent's language.
         compose.onNodeWithTag("composer-optimization-gloss").performClick()
-        await { has(hasText(PromptOptimizerFixture.GLOSS)) }
-        PromptOptimizerFrames.shot(compose, "4b-gloss", sheet = true)
+        await { has(hasTestTag("composer-optimization-text") and hasText("After signing in", substring = true)) }
+        PromptOptimizerFrames.shot(compose, "4b-prompt", sheet = true)
         compose.onNodeWithTag("composer-optimization-use").performClick()
         await { has(hasTestTag("composer-optimization-undo-toast")) }
         PromptOptimizerFrames.shot(compose, "5-after-use")
