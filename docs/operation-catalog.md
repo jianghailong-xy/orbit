@@ -1,7 +1,7 @@
 # Orbit operation catalogue v1.6.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `2407f8d3f094fdbb36e97f2183e95a9f2b84d3857e407c33c5749a72461f46b2`.
+> Content hash: `1f8766f8b39afb51573007ac3ae4dbc80d7fe5f95967ef654ded67ecf5474114`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -48,6 +48,7 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `project_merge_evidence` | merge_receipt | medium | yes | none | no | none | refused | always | always — `orbit project merge-evidence` | Record what a target branch was observed to contain, as a project's merge evidence. |
 | `project_request_done` | project | high | yes | owner | no | none | refused | always | session — `orbit project request-done` | Ask the account owner to settle a project as done. |
 | `project_request_start` | project | high | yes | owner | no | none | refused | always | session — `orbit project request-start` | Ask the account owner to start a project. |
+| `project_ruling_record` | project | medium | yes | none | no | none | runs | always | absent | Record an owner ruling given in this conversation as a project record. |
 | `project_send` | project | medium | yes | none | no | caller_key | refused | orchestration | orchestration — `orbit project send` | Send one message to a project's coordinator. |
 | `project_update` | project | high | yes | card (`orbit_project_update_integration`) | no | none | refused | always | always — `orbit project update` | Change a project's goal, criteria, instructions or integration. |
 | `provider_create` | provider | high | yes | card (`orbit_provider_create`) | no | none | refused | always | always — `orbit provider create` | Add a credential provider. |
@@ -137,6 +138,7 @@ Plan reads, waits and asks the owner, and refuses every other write. These are t
 | `ask_owner` | runs | puts a question to the owner; a question is not work |
 | `bg_run` | own_gate | the background-job gate (background_gate.go) decides in every mode: Plan refuses the job, with what to do instead |
 | `notify` | runs | puts a line in front of the owner; a message is not work |
+| `project_ruling_record` | runs | records what the owner already said; a record of a ruling is not work |
 | `request_owner_action` | runs | asks the owner for an action that is theirs to take; a question is not work |
 | `schedule_create` | runs | puts a create card in front of the owner; nothing is scheduled until they press Create |
 | `schedule_end` | runs | ends a schedule whose goal is reached; it changes no code, and the owner can undo it |
@@ -171,6 +173,7 @@ An operation missing from one surface is a declared decision, not drift: the cat
 | `open_item_hand_over` | CLI | hands an item to the account owner as the project's coordinator session: a terminal outside one is refused by the server |
 | `open_item_resolve` | CLI | closes an item as the project's coordinator session: a terminal outside one is refused by the server |
 | `permission_prompt` | CLI | runtime approval bridge, called by the engine mid-turn |
+| `project_ruling_record` | CLI | records as the project's coordinator session, from one of its turns: a terminal outside one is refused by the server |
 | `request_owner_action` | CLI | files as the calling session and answers it with a turn: a terminal outside one is refused by the server |
 | `schedule_create` | CLI | proposes a schedule in the calling session's workspace, on its engine: a terminal outside a session has neither |
 | `schedule_delete` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |

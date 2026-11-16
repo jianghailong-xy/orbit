@@ -3621,6 +3621,7 @@ model Project {
   @@index([coordinatorWorkspaceId])
   @@map("project")
   coordinatorHandoffs CoordinatorHandoff[]
+  rulings             ProjectRuling[]
 }
 
 /// A Project's explicit binding to ONE line of code (`docs/project-source-contract.md` §3.1,
@@ -7616,6 +7617,30 @@ model CoordinatorHandoff {
   @@index([toSessionId])
   @@index([projectId])
   @@map("coordinator_handoff")
+}
+
+/// An owner ruling kept on its project (docs/coordinator-handoff-v2-design.md §2, migration 0970):
+/// the ruling in one sentence, the owner's own words, and where they were said — an answered
+/// coordinator question (ASK_OWNER, written by the answer) or a coordinator turn (TURN, recorded by
+/// `project_ruling_record`). A later ruling supersedes an earlier one; the old row is kept.
+model ProjectRuling {
+  id                  String   @id @default(uuid(7)) @db.Uuid
+  ownerId             String   @map("owner_id") @db.Uuid
+  projectId           String   @map("project_id") @db.Uuid
+  project             Project  @relation(fields: [projectId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "project_ruling_project_fkey")
+  ruling              String
+  quote               String
+  /// ASK_OWNER | TURN (a CHECK).
+  sourceKind          String   @map("source_kind")
+  /// The answered open item (ASK_OWNER) or the conversation turn (TURN). No foreign key.
+  sourceId            String   @map("source_id") @db.Uuid
+  /// The coordinator that recorded it; null for an automatic ruling. No foreign key.
+  recordedBySessionId String?  @map("recorded_by_session_id") @db.Uuid
+  supersededById      String?  @map("superseded_by_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("project_ruling")
 }
 
 model KeyGatewayToken {

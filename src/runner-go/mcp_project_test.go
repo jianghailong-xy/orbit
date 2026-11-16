@@ -211,6 +211,10 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 			// the owner's press on the "Is this project done?" card does — and the server checks the
 			// acting session against the project's own coordinator pointer.
 			"project_request_done",
+			// Recording what the owner ruled (coordinator handoff v2 §2), ungated like the question:
+			// it records a fact and starts nothing, and the server checks the acting session against
+			// the project's own coordinator pointer and the quote against the turn's owner text.
+			"project_ruling_record",
 		}
 		if tc.orchestration {
 			want = append(want, "project_ensure_coordinator", "project_send")

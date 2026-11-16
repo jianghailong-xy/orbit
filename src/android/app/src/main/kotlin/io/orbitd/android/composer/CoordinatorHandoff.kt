@@ -120,7 +120,7 @@ internal data class HandoffNote(val preamble: List<String>, val sections: List<N
 
 /** The rules the context dialog and the conversation read (boards 02, 03). Pure, so the unit tests pin them. */
 internal object CoordinatorHandoff {
-    val SECTIONS = listOf("Where things stand", "Agreed with the owner", "Waiting on", "Next")
+    val SECTIONS = listOf("Where things stand", "Rulings not yet recorded", "Waiting on", "Next")
 
     /** Compact is offered where the engine advertises `compact` among its slash commands (the composer's Command list). */
     fun compactOffered(slashItems: List<JsonObject>) = slashItems.any { it.text("type") == "command" && it.text("name") == "compact" }

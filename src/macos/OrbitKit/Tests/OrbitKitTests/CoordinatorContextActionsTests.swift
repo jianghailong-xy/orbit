@@ -220,7 +220,7 @@ final class CoordinatorContextActionsTests: XCTestCase {
             ## Where things stand
             - 4 of 6 tasks done; Fix login redirect in review.
 
-            **Agreed with the owner**
+            **Rulings not yet recorded**
             - Don't merge Payment retries before Friday's release.
             Waiting on
             * Evidence for Fix login redirect.

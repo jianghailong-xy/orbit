@@ -91,6 +91,7 @@ import {
 import { type PendingAddresseeRead, readPendingAddressees } from './pending-addressees';
 import { planCriterionMove, readCriterionMoveFacts, writeCriterionMove } from './criterion-move';
 import { readCriterionMoveRecord } from './criterion-move-record';
+import { readLiveRulings } from './project-ruling';
 import { settleTaskSegmentAfterMove } from './landing-session';
 import { lockOwnerTaskGraph, orderedIds } from '../common/lock-order';
 import {
@@ -2820,6 +2821,7 @@ export class ProjectsService {
       standardSetConfirmation,
       mainBranchMemory,
       moveRecord,
+      rulings,
     ] = await Promise.all([
       // One lookup by primary key, not a tally of this project's tasks.
       //
@@ -2882,6 +2884,8 @@ export class ProjectsService {
       // follow-up, and where each of its own came from. One statement over the move activity rows,
       // found by 0555's partial indexes and bounded by the moves, not by anything else the project holds.
       readCriterionMoveRecord(this.prisma, ownerId, id, criterionKeyOf),
+      // And the owner rulings still live (coordinator handoff v2 §2): one statement, oldest first.
+      readLiveRulings(this.prisma, ownerId, id),
     ]);
     const landingAnswers = criterionLandingWithReasons(
       landingFacts,
@@ -2934,6 +2938,8 @@ export class ProjectsService {
       })),
       // The criteria this project moved out to a follow-up, in the order they stood here.
       criteriaMovedOut: moveRecord.movedOut,
+      // The owner rulings still live, oldest first; a superseded one is kept but not listed.
+      rulings,
       blockers,
       integration: {
         ...projectIntegrationView(codebase, project.exceptionEscalationSeconds),

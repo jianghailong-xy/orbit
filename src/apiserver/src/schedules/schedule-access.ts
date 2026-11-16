@@ -127,6 +127,7 @@ export const CHECK_ONLY_CLAUDE_DENIED_ORBIT_TOOLS: readonly string[] = [
   'mcp__orbit__project_create', 'mcp__orbit__project_crossings', 'mcp__orbit__project_delete',
   'mcp__orbit__project_ensure_coordinator', 'mcp__orbit__project_integration_get',
   'mcp__orbit__project_merge_evidence', 'mcp__orbit__project_request_done', 'mcp__orbit__project_request_start',
+  'mcp__orbit__project_ruling_record',
   'mcp__orbit__project_send', 'mcp__orbit__project_update', 'mcp__orbit__provider_create',
   'mcp__orbit__provider_delete', 'mcp__orbit__provider_list', 'mcp__orbit__provider_update',
   'mcp__orbit__request_owner_action', 'mcp__orbit__runner_delete', 'mcp__orbit__runner_engine_install',

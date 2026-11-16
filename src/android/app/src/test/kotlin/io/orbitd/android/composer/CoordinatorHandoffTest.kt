@@ -156,7 +156,7 @@ class CoordinatorHandoffTest {
     }
 
     @Test fun theNoteReadsAsItsFourSections() {
-        val note = "Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\n\nAgreed with the owner\nDon't merge Payment retries before Friday's release.\n" +
+        val note = "Where things stand\n- 4 of 6 tasks done; Fix login redirect in review.\n\nRulings not yet recorded\nDon't merge Payment retries before Friday's release.\n" +
             "## Waiting on\n- Evidence for Fix login redirect.\n**Next:**\n- Ask for the merge once that evidence is in."
         val parsed = CoordinatorHandoff.sections(note)!!
         val sections = parsed.sections

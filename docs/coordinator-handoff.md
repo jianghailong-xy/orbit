@@ -11,8 +11,9 @@
    current coordinator. Its key is `coordinator-handoff:v1:<handoffId>:<attempt>` and it is sent as
    `NEXT_TURN`, so it runs after any turn already running. The turn is the platform's
    (`isOrbitAuthoredTurn`), not a message from the owner, so clients do not draw it as one. It asks
-   for a note in exactly four sections: **Where things stand / Agreed with the owner / Waiting on /
-   Next**. State: `WRITING`.
+   the coordinator first to record every owner ruling not yet recorded (`project_ruling_record`,
+   docs/coordinator-handoff-v2-design.md §2), then for a note in exactly four sections: **Where
+   things stand / Rulings not yet recorded / Waiting on / Next**. State: `WRITING`.
 2. **The turn succeeds.** Its last top-level assistant text becomes the note, and the state moves to
    `HANDING_OVER`. Then the existing replacement runs (`ProjectsService.coordinator(…, 'replace')`,
    the same code behind `POST /projects/:id/coordinator/replace`):
