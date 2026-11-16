@@ -80,8 +80,8 @@ notes' lists of migrations and security fixes.
 - The needs-you card on iOS and Android floats over the page at a notification's size, and a swipe up
   dismisses it. On iOS an approval that arrives with the app open shows in it. A conversation's navigation bar
   shows only its own needs-you, and something newly waiting is announced once, as a toast.
-- A new machine's setup card asks for one folder name in the machine's home (`create-workdir/v2`), and on the
-  web the card creates the workspace (`POST /workspaces` takes `newFolder`).
+- A machine with no workspace shows one card that makes it, on every client: a folder name in the machine's home
+  (`create-workdir/v2`) and the workspace's name (`POST /workspaces` takes `newFolder`).
 - A merge runs beside the session's turn instead of waiting for it, and a commit waits for changes to stop.
 - A queued message says what holds it (`Queued · runner full`, `run full`, `batch full`, `runner updating`), on
   the queued turn itself. macOS and iOS move a send the server queued to the tray as "Queued for next turn".
