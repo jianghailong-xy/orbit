@@ -143,7 +143,7 @@ describe('Settings → Notifications', () => {
     expect(container!.querySelector('h1')?.textContent).toBe('Notifications');
     expect(switchNamed('When a session finishes').getAttribute('aria-checked')).toBe('true');
     expect(switchNamed('When an agent asks for you').getAttribute('aria-checked')).toBe('true');
-    expect(container!.textContent).toContain('Alert your devices when a run finishes on its own or fails for good.');
+    expect(container!.textContent).toContain('Alert your devices when a session you started finishes on its own or fails for good. Task, coordinator and agent-started sessions stay quiet; Project done still rings.');
     expect(container!.textContent).toContain('At most one per session per minute.');
     await act(async () => root!.unmount());
     root = null;

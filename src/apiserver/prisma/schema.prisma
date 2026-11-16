@@ -1581,6 +1581,10 @@ model ManagedRunner {
   /// while the drain stands and no demand has come since it began; from then on the drain cannot be
   /// called off, and the instance exits on its own.
   stopAcknowledgedAt  DateTime?                   @map("stop_acknowledged_at") @db.Timestamptz(3)
+  /// DRAINING for an image roll: the image the profile names, which the instance's Pod was not made from. The drain
+  /// keeps the runner wanted (desiredState RUNNING), and once it has stopped the runner wakes at once as the next
+  /// generation, made from that image. Null for a drain to sleep, and once the roll ends or is called off.
+  imageRollTo         String?                     @map("image_roll_to")
   initialProvider    String?                      @map("initial_provider")
   resourceProfileId  String?                      @map("resource_profile_id")
   /// The one resource operation in flight: which (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`,

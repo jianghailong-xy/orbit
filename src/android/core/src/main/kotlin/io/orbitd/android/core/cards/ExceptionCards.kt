@@ -295,6 +295,9 @@ object ExceptionCards {
 
     // MARK: the heading and the footer
 
+    /** An escalated item's heading while its coordinator cannot be reached — web's `ESCALATED_UNREACHABLE_HEADING`, verbatim. */
+    const val escalatedUnreachableHeading = "Now yours — the coordinator can’t take messages"
+
     /** How the item became the owner's, one sentence per way; null for an item that was the owner's from the start. */
     fun heading(row: JsonObject, now: Instant = Instant.now()): String? {
         // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation` would only ever say "1s". Its heading
@@ -308,7 +311,10 @@ object ExceptionCards {
     }
 
     private fun headingByReason(row: JsonObject, now: Instant): String? = when (row.text("assigneeReason")) {
-        "ESCALATED" -> "Now yours — no one acted on this for ${waitedBeforeEscalation(row)}"
+        // The clock moved it, but with no coordinator to ask or message (the server's reading, which the doors already show), "no one
+        // acted" would point at somebody who cannot.
+        "ESCALATED" -> if (row.flag("coordinatorUnreachable")) escalatedUnreachableHeading
+        else "Now yours — no one acted on this for ${waitedBeforeEscalation(row)}"
         "COORDINATOR_ENDED" -> "Now yours — the coordinator conversation ended"
         "CHAIN_LIMIT" -> "Now yours — the 3rd failure in this chain"
         "HANDED_OVER" -> "Now yours — the coordinator handed it over"

@@ -4,6 +4,10 @@ Status: decided and implemented, 2026-11-07. Decisions D1–D6 (§8) were settle
 read how it works in `docs/managed-runner-docker-operations.md`, `docs/managed-runner-kubernetes-operations.md`,
 `docs/self-hosting.md` and `docs/runner-troubleshooting.md` (sections D to F).
 
+Revision 2026-11-16: the production managed-runner deployment on 10.66.0.3 uses **D4 = B (XFS)** with the local
+Ceph-CSI reflink patch; see [the deployment record](managed-runner-k3s-xfs-deployment.md). The XFS durability and
+power-cut drills that D4 requires have **not** been run yet. D1–D3, D5 and D6 stand.
+
 Every isolated session gets its own `git worktree` under `$ORBIT_HOME/worktrees/<session>`. Git shares the object
 database between worktrees, but every working tree is a full copy of the checked-out files plus whatever the session
 builds or installs there. This design makes three changes, all of which work without privileges:
@@ -82,8 +86,10 @@ with driver options are left out of `/system/df` sizes altogether.
   FUSE, no loop devices and no kernel modules inside the container. Nothing in this design may relax that.
 - **Docker volume accounting is logical.** The 20 GiB limit is measured with Docker's sizes. Clones save host disk but do
   not lower the measured size.
-- **Kubernetes backend.** The PVC is an ext4 RBD filesystem of a fixed size (`docs/managed-runner-design.md`), so
-  `statfs` inside the pod already reports the budget. ext4 cannot clone.
+- **Kubernetes backend.** The original baseline is an ext4 RBD filesystem of a fixed size
+  (`docs/managed-runner-design.md`), so `statfs` inside the pod already reports the budget; ext4 cannot clone. The .3
+  deployment (2026-11-16) instead uses XFS with reflink through the local Ceph-CSI patch (D4 B; see the deployment
+  record). Other environments remain on the ext4 baseline.
 - **Self-registered runners** run on linux and darwin, amd64 and arm64 (`scripts/build-binaries.sh`), on whatever
   filesystem the user has, as the user's own account.
 - **Existing reclamation stays the mechanism.** `gcWorktrees` reclaims checkouts of ended sessions;
@@ -313,7 +319,7 @@ Shelling out to `/bin/cp -c` is the fallback design if a new dependency is not w
 | D1 | Where a Docker managed runner gets its budget | The apiserver relays the channel's measurement in the heartbeat; the runner compensates for removals since then | The channel passes the limit in the container environment and the runner walks its own volume | **A**: one measurement, the same one that enforces the limit, and no second walk of the volume |
 | D2 | Where sparse paths are declared | `.orbit/checkout-exclude` in the repository | A workspace setting (API, database column, UI on every client) | **A**: versioned with the code, works on every runner, no client work. B can be added later as an override |
 | D3 | Should the Docker limit count clones once | No: keep logical accounting; clones save host disk only | Yes: the channel measures physical extents (FIEMAP), at a higher cost per measurement | **A** for this project; revisit if hosts adopt XFS |
-| D4 | Kubernetes PVC filesystem | Keep ext4 | Switch the StorageClass to `xfs` so that pods can clone | **A** for now: switching requires re-running the durability and power-cut drills |
+| D4 | Kubernetes PVC filesystem | Keep ext4 | Switch the StorageClass to `xfs` so that pods can clone | **A** for the original project; **B adopted on .3, 2026-11-16**, with the local Ceph-CSI reflink patch. The XFS durability and power-cut drills remain outstanding |
 | D5 | Default floor for managed runners | 25% of the budget | A fixed size (for example 4 GiB) | **A**: it scales with the budget |
 | D6 | The Orbit repository's exclusion list | Start with `docs/mocks/` and the evidence directories that no test reads | Exclude all of `docs/evidence/` and fix tests to fetch fixtures | **A**, settled by the merge check in a sparse checkout |
 
@@ -331,7 +337,7 @@ P1 does not depend on P2 or P3. P3 benefits from P2 (smaller rehash) but does no
 
 - Clone ignored dependency directories (`node_modules` and the like) from a retained checkout with the same lockfile
   hash. The 32 retained checkouts are kept for these directories already.
-- Physical accounting in the channel (D3 B), and `xfs` PVCs (D4 B).
+- Physical accounting in the channel (D3 B). The `xfs` PVC (D4 B) is deployed on .3; the XFS power-cut drills remain.
 - Default floors for self-registered runners.
 - Show in the apps how a session's checkout was made: cloned, or plain and why. The runner keeps this
   (`ClaimedSession.CheckoutCreation`) but reports only `worktree`, which the control plane compares exactly, so showing

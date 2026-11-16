@@ -1992,6 +1992,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			}
 			probes := agentDirs.snapshot()
 			resources := machineResources(probes, machineReposRoot)
+			storage.diskResources(&resources)
 			resp, supervisors, err := sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{
 				Status: "ONLINE", Version: version,
 				LeaseOwner: t.leaseOwner, Draining: draining,

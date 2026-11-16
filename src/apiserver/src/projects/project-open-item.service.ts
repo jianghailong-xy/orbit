@@ -62,8 +62,10 @@ import {
   leaseFactsOf,
   markOpenItemsHandling,
   openItemActions,
+  coordinatorUnreachable,
   openItemChat,
   openItemRequiredAction,
+  readCoordinatorReach,
   outdatedRunnerOf,
   primaryAction,
   openItemFacts,
@@ -361,6 +363,11 @@ export interface OpenItemRow {
   outcome: OpenItemOutcome<Date> | null;
   /** "Chat about this": where its handling stands, and where a message about it goes (§4.8). */
   chat: OpenItemChat;
+  /** Whether the project's coordinator can be neither asked again nor messaged right now
+   *  (`coordinatorUnreachable`), read when the list is. An escalated item's heading says so instead
+   *  of "no one acted on this". False on a settled row: nothing is asked of one. Optional for
+   *  rolling-version readers, which read its absence as false. */
+  coordinatorUnreachable?: boolean;
 }
 
 /** A question filed, as `ask_owner` answers its caller (§5.2 R7). */
@@ -3150,20 +3157,15 @@ export class ProjectOpenItemService {
     // refuses on, minus the switch, which is not part of it: the press is the owner's own, so a
     // switched-off coordinator still has somewhere to put the item (`deliver`). Drawn the other way
     // round, the card would hide a press that works, which is the same failure as drawing one that
-    // cannot (§4.7).
-    const askable = project.coordinatorSessionId != null
-      && project.coordinatorSession != null
-      && !sessionHasEnded(project.coordinatorSession);
-    // Where "Chat about this" goes, for every row (`openItemChat`): the conversation coordinating the
-    // project, and whether it can be handed a message now — asked of the authority the delivering
-    // door asks (`receiveBlockedReasonFor`), once for the whole list. A pointer to a row that is not
-    // there any more is no conversation at all.
-    const coordinatorBlocked = project.coordinatorSessionId
-      ? await this.sessions.receiveBlockedReasonFor(ownerId, project.coordinatorSessionId)
-      : null;
-    const coordinator = project.coordinatorSessionId && coordinatorBlocked !== 'SESSION_GONE'
-      ? { sessionId: project.coordinatorSessionId, receiving: coordinatorBlocked == null }
-      : null;
+    // cannot (§4.7). And where "Chat about this" goes, for every row (`openItemChat`): the
+    // conversation coordinating the project, and whether it can be handed a message now — asked of
+    // the authority the delivering door asks (`receiveBlockedReasonFor`), once for the whole list. A
+    // pointer to a row that is not there any more is no conversation at all. Both in
+    // `readCoordinatorReach`, which the owner's push reads too.
+    const reach = await readCoordinatorReach(this.sessions, ownerId, project);
+    const { askable, coordinator } = reach;
+    // What an escalated item's heading says about its coordinator (`coordinatorUnreachable`).
+    const unreachable = coordinatorUnreachable(reach);
     const open = await this.prisma.projectOpenItem.findMany({
       where: { projectId, state: 'OPEN' },
       orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
@@ -3413,6 +3415,7 @@ export class ProjectOpenItemService {
           resolution: null,
           coordinator,
         }),
+        coordinatorUnreachable: unreachable,
       };
     });
     const settledView = closed.map((row): OpenItemRow => {

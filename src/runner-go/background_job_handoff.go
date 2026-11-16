@@ -236,7 +236,6 @@ func (b *bgTailer) endHandedOffJob(job *bgJob, reason string) {
 		if err := b.reportStopped(job.endPayload(status, exit, reason)); err != nil {
 			logln("could not report the end of background job", job.id+":", err)
 		}
-		b.alertIfNobodyIsWatching(job, status, exit)
 		if wake, ok := b.wakeFor(job, reason); ok {
 			b.deliverWake(wake, false)
 		}

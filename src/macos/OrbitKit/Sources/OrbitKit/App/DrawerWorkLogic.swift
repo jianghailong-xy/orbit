@@ -7,8 +7,6 @@ import Foundation
 public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
     case projects
     case wiki
-    /// New wiki…, right under the Wiki row once there is a wiki.
-    case newWiki
     /// Scheduled, with the number of schedules that need the owner (failing or held), right under Tasks.
     case scheduled
     case section(AppSection)
@@ -21,7 +19,6 @@ public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
         switch self {
         case .projects: "projects"
         case .wiki: "wiki"
-        case .newWiki: "new-wiki"
         case .scheduled: "scheduled"
         case .section(let section): "section:\(section.rawValue)"
         case .workspacesHeader: "workspaces-header"
@@ -34,17 +31,18 @@ public enum DrawerWorkRow: Equatable, Sendable, Identifiable {
 
 public enum DrawerWorkLogic {
     /// The rail's rows: the work sections `sections` names — the Wiki dropped here when the server
-    /// has it off (`wiki`), as data, and New wiki… under it once there is a wiki (`newWiki`) — then
-    /// the Workspaces header and the rows under it. There is no Waiting on you row: a request is
-    /// drawn in the session that asked, a scheduled task's item on Scheduled and in its run's session.
+    /// has it off (`wiki`), as data — then the Workspaces header and the rows under it. There is no
+    /// Waiting on you row: a request is drawn in the session that asked, a scheduled task's item on
+    /// Scheduled and in its run's session. New wiki… has no row here: the drawer has no Wiki group to
+    /// put it in, so it lives in the Wiki's head picker.
     ///
     /// Scheduled (`scheduled`) goes right under Tasks: the phone's drawer is where it lives (board 01 ①).
-    public static func rows(_ sections: [AppSection], wiki: Bool, newWiki: Bool = false, scheduled: Bool = false) -> [DrawerWorkRow] {
+    public static func rows(_ sections: [AppSection], wiki: Bool, scheduled: Bool = false) -> [DrawerWorkRow] {
         let work: [DrawerWorkRow] = sections.filter { $0 != .wiki || wiki }.flatMap { section -> [DrawerWorkRow] in
             switch section {
             case .projects: [.projects]
             case .tasks: scheduled ? [.section(.tasks), .scheduled] : [.section(.tasks)]
-            case .wiki: newWiki ? [.wiki, .newWiki] : [.wiki]
+            case .wiki: [.wiki]
             default: [.section(section)]
             }
         }

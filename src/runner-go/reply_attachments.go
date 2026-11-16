@@ -35,7 +35,8 @@ const replyAttachmentBudget = 20 * time.Second
 // (localFileScope). A path that fails that, and an upload that fails, leave the text exactly as
 // written — a chip the user can ask about beats a silently dropped line. A path refused only for
 // being outside those directories also gets one line at the end of the reply that says so
-// (outsideReplyFilesNote); a failed upload of a file inside them does not, as before.
+// (outsideReplyFilesNote), and a link to a local file that is not there gets one too (missingReplyFilesNote); a failed
+// upload of a file inside them does not, as before.
 func attachLocalReplyFiles(ctx context.Context, t *Transport, sessionID string, events []RunEvent, roots []string, memo *replyAttachmentIDs) {
 	if t == nil || memo == nil || len(events) == 0 || len(roots) == 0 {
 		return
@@ -52,9 +53,9 @@ func attachLocalReplyFiles(ctx context.Context, t *Transport, sessionID string, 
 		if !strings.Contains(text, "](") {
 			continue
 		}
-		rewritten, outside := rewriteLocalMarkdownLinks(ctx, text, roots, upload)
+		rewritten, outside, missing := rewriteLocalMarkdownLinks(ctx, text, roots, upload)
 		// A failed flush restores the batch it already rewrote, so a retry sees the note it added.
-		if note := outsideReplyFilesNote(outside); note != "" && !strings.HasSuffix(rewritten, note) {
+		if note := outsideReplyFilesNote(outside) + missingReplyFilesNote(missing); note != "" && !strings.HasSuffix(rewritten, note) {
 			rewritten += note
 		}
 		events[i].Payload["text"] = rewritten
@@ -76,6 +77,23 @@ func outsideReplyFilesNote(paths []string) string {
 		return "\n\n_Not attached: " + names[0] + " is outside this session's working directory and uploads directory, so you cannot open it._"
 	}
 	return "\n\n_Not attached: " + strings.Join(names, ", ") + " are outside this session's working directory and uploads directory, so you cannot open them._"
+}
+
+// missingReplyFilesNote is the line a reply gets when it links local files that do not exist where the runner looked:
+// the link would render as a dead image or chip, and the agent that wrote it would never learn the file is not there.
+// "" when there are none.
+func missingReplyFilesNote(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	names := make([]string, len(paths))
+	for i, path := range paths {
+		names[i] = "`" + path + "`"
+	}
+	if len(paths) == 1 {
+		return "\n\n_Not attached: " + names[0] + " does not exist in this session's working directory or uploads directory._"
+	}
+	return "\n\n_Not attached: " + strings.Join(names, ", ") + " do not exist in this session's working directory or uploads directory._"
 }
 
 // replyAttachmentIDs remembers what a path uploaded to, for the life of one session run. A flush

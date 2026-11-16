@@ -269,6 +269,7 @@ import { enqueueRecap, type RecapOutcome } from './recap';
 import { translate, TranslationFailed } from './translation';
 import { agentDecision, retranslateEvent, translatableText, type TranslationDeps } from './reply-translation';
 import {
+  DRAIN_SKIPS_HELD,
   HELD_TURN_STATUS,
   accountAgentLanguage,
   heldTurnColumns,
@@ -9542,8 +9543,9 @@ export class SessionsService {
       // A wakeup filed onto a `bg-wake:` turn still queued goes with the drain below, unrun: dropped with
       // the session it was to wake, and taken out of its loop's runs (runner-api/wake-turn-withdraw.ts).
       await settleUnrunWakeTurns(tx, sessionId, { drained: true });
+      // A turn HELD for its translation is never leased and stays as it is (DRAIN_SKIPS_HELD).
       await tx.conversationTurn.updateMany({
-        where: { sessionId, status: { not: 'ANSWERED' } },
+        where: { sessionId, status: { notIn: DRAIN_SKIPS_HELD } },
         data: { status: 'ANSWERED', answeredAt: now },
       });
     } else {

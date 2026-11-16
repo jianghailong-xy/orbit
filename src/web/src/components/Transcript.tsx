@@ -3409,7 +3409,9 @@ function UserBubble({ node, queued }: { node: TextNode; queued?: ReactNode }) {
     translation && translation.state !== 'SENT_AS_WRITTEN' ? (
       <UserTranslationFoot translation={translation} turnId={node.turnId} flipped={flipped} onFlip={flip} />
     ) : null;
-  const flipFoot = translation?.state === 'DONE';
+  // Only the Show original / Show translation link opens the row; bilingual's always-shown
+  // "Sent to the agent in English" ends it, flush with the bubble (02-bilingual.png).
+  const flipFoot = translation?.state === 'DONE' && !bilingual;
   // A note that names nothing — a wiki chat's first message sent with neither page nor selection, which
   // carries only the chat's words to its agent — draws no line: nothing was attached by the person.
   const noteKind = node.note ? describeNote(node.note) : '';

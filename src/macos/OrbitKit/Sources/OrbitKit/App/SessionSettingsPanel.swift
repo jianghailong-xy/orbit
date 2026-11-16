@@ -35,7 +35,7 @@ public enum SessionSettingsPanel {
     public static let notificationsGroup = "Notifications"
     /// There is no web browser push: the overrides reach the phone apps' pushes only.
     public static let notificationsNote = "iOS and Android"
-    public static let whenTurnFinishes = "When a turn finishes"
+    public static let whenSessionFinishes = "When the session finishes"
     public static let whenItNeedsYou = "When it needs you"
     public static let mute = "Mute this session"
     public static let muteNote = "No notifications at all, until you turn this off"

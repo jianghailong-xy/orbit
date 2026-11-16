@@ -784,16 +784,12 @@ struct NavigationDrawer: View {
                 ForEach(DrawerWorkLogic.rows(
                     AppSection.workSections,
                     wiki: model.wiki?.shown == true,
-                    // New wiki… (docs/wiki-explicit-creation-design.md §3.4): once there is a wiki; before
-                    // that the Wiki's own page is the Set up your first wiki card.
-                    newWiki: model.wiki?.spaces.isEmpty == false,
                     // Scheduled (board 01 ①): account-wide, here and nowhere in a workspace's list; away while
                     // the server predates scheduled tasks.
                     scheduled: model.scheduled.map { !$0.unsupported } ?? false)) { row in
                     switch row {
                     case .projects:       projectsRow
                     case .wiki:           wikiRow
-                    case .newWiki:        newWikiRow
                     case .scheduled:      scheduledRow
                     case .section(let section): sectionRow(section)
                     case .workspacesHeader: workspacesHeader
@@ -1133,27 +1129,6 @@ struct NavigationDrawer: View {
         .buttonStyle(.plain)
         .drawerRow()
         .accessibilityIdentifier("drawer-scheduled")
-    }
-
-    /// New wiki…, under the Wiki row (board 46 part 4 ②): grey, a plus, no count. It raises the Create wiki form over
-    /// the shell and leaves the drawer where it is.
-    private var newWikiRow: some View {
-        Button {
-            model.wiki?.creating = true
-        } label: {
-            pill(selected: false) {
-                HStack(spacing: 12) {
-                    Image(systemName: "plus")
-                        .frame(width: 24)
-                    Text(WikiStartCopy.newWiki)
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(.secondary)
-            }
-        }
-        .buttonStyle(.plain)
-        .drawerRow()
-        .accessibilityIdentifier("drawer-new-wiki")
     }
 
     /// The rule and the group label that set the Workspaces apart from the work above them.

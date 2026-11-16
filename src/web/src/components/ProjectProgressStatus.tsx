@@ -149,6 +149,10 @@ function itemHeading(row: ProjectOpenItemRow): string {
   return ITEM_HEADING[row.kind] ?? row.title;
 }
 
+/** An escalated item's heading while its coordinator cannot be reached (`owner-item-alert.ts` sends
+ *  the same words). */
+export const ESCALATED_UNREACHABLE_HEADING = 'Now yours — the coordinator can’t take messages';
+
 /** The two words each group's rows use for who has the item. */
 const WHO = { OWNER: 'You', COORDINATOR: 'Coordinator' } as const;
 
@@ -172,7 +176,11 @@ function escalationHeading(row: ProjectOpenItemRow, now: number): string | null 
   }
   switch (row.assigneeReason) {
     case 'ESCALATED':
-      return `Now yours — no one acted on this for ${waitedBeforeEscalation(row)}`;
+      // The clock moved it, but with no coordinator to ask or message (the doors below already say
+      // so) "no one acted" would point the owner at somebody who cannot act. The server's reading.
+      return row.coordinatorUnreachable
+        ? ESCALATED_UNREACHABLE_HEADING
+        : `Now yours — no one acted on this for ${waitedBeforeEscalation(row)}`;
     case 'COORDINATOR_ENDED':
       return 'Now yours — the coordinator conversation ended';
     case 'CHAIN_LIMIT':

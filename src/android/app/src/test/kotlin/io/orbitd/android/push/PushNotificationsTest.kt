@@ -91,6 +91,32 @@ class PushNotificationsTest {
         assertTrue(route.recordId!!.startsWith("terminal:"))
     }
 
+    /** The two decisions only the owner makes that are no owner item (a crossing request, a coordinator's confirmation raise) ring on
+     * the needs-you channel; a schedule alert follows the session rule: the sessions channel with its run, updates without one. */
+    @Test fun ownerDecisionsRingAsNeedsYouAndScheduleAlertsFollowTheSessionRule() {
+        val session = "019a0000-0000-7000-8000-000000000002"
+        val project = "019a0000-0000-7000-8000-000000000003"
+        val ids = "\"taskID\":\"019a0000-0000-7000-8000-000000000005\",\"recordID\":\"019a0000-0000-7000-8000-000000000006\""
+        val schedule = "\"scheduleID\":\"019a0000-0000-7000-8000-00000000000d\",\"scheduleKind\":\"failure\""
+        listOf(
+            """"kind":"crossing-request","projectID":"$project","handoffID":"019a0000-0000-7000-8000-00000000000c"""" to PushNotifications.NEEDS_YOU,
+            """"kind":"crossing-request","sessionID":"$session","projectID":"$project","handoffID":"019a0000-0000-7000-8000-00000000000c"""" to PushNotifications.NEEDS_YOU,
+            """"kind":"confirmation-raised","sessionID":"$session",$ids""" to PushNotifications.NEEDS_YOU,
+            """"kind":"schedule","sessionID":"$session",$schedule""" to PushNotifications.SESSIONS,
+            """"kind":"schedule",$schedule""" to PushNotifications.UPDATES,
+        ).forEachIndexed { index, (fields, channel) ->
+            notifications.clear()
+            val data = data() + ("notificationKey" to "decision-$index") +
+                ("payload" to """{"title":"Fixture","body":"Read current state",$fields}""")
+            val message = PushMessage.parse(data) ?: throw AssertionError("dropped: $fields")
+            assertEquals(fields, channel, notifications.channel(message))
+            assertTrue(fields, notifications.show(message, data))
+            val notification = manager.activeNotifications.single().notification
+            assertEquals(fields, channel, notification.channelId)
+            if (channel == PushNotifications.NEEDS_YOU) assertEquals(fields, Notification.CATEGORY_REMINDER, notification.category)
+        }
+    }
+
     @Test fun replacementDedupSurvivesProcessRecreationButNewApprovalEdgeCanAlertAfterClear() {
         val firstData = data()
         val first = PushMessage.parse(firstData)!!

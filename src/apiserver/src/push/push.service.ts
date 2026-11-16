@@ -15,12 +15,19 @@ import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, uuidToBase62, 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds, readOwnerRequestSessionIds } from '../projects/owner-decision-signal';
-import { conversationIsOver, openItemsNoLongerOwed } from '../projects/project-open-item';
+import {
+  SESSION_ENDING_SELECT,
+  conversationIsOver,
+  coordinatorUnreachable,
+  openItemsNoLongerOwed,
+  readCoordinatorReach,
+  type SessionEnding,
+} from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
 import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
-import { settleAlert } from './settle-alert';
+import { ownerStarted, settleAlert } from './settle-alert';
 import { crossingRequestAlert } from './crossing-request-alert';
 import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
 import { FcmTransport } from './fcm-transport';
@@ -498,6 +505,9 @@ export class PushService {
           notifyTurnFinished: true,
           owner: { select: { preferences: true } },
           runSource: true,
+          parentSessionId: true,
+          coordinatorForProject: { select: { id: true } },
+          task: { select: { project: { select: { coordinatorEnabled: true } } } },
         },
       });
       if (!session) return;
@@ -508,6 +518,10 @@ export class PushService {
       if (!alert) return;
       // Muted silences the session; its own 'on' or 'off' wins over the account's switch; inherit (null) reads that.
       if (session.notificationsMuted || session.notifyTurnFinished === 'off') return;
+      // Only a session its owner started rings by default: one an agent or a coordinator started is read by
+      // whoever started it, and a project's end is told by its own push (notifyProjectDone). The session's
+      // own 'on' is the owner asking for this one anyway.
+      if (session.notifyTurnFinished !== 'on' && !ownerStarted(session)) return;
       const prefs = (session.owner?.preferences ?? {}) as { notifySessionFinished?: boolean };
       if (session.notifyTurnFinished !== 'on' && prefs.notifySessionFinished === false) return;
       const { tokens, feishu } = await this.channels(session.ownerId);
@@ -782,6 +796,24 @@ export class PushService {
   }
 
   /**
+   * Whether the owner item's project has no coordinator to turn to as the push is sent — the same
+   * reading the project page draws the card from (`readCoordinatorReach`), so the banner and the
+   * card it opens name the same cause. Without the sessions service (a test module that never
+   * wired one) it answers false, and the banner says what it always said.
+   */
+  private async coordinatorUnreachableFor(
+    ownerId: string,
+    project: { coordinatorSessionId: string | null; coordinatorSession: SessionEnding | null } | null,
+  ): Promise<boolean> {
+    if (!project) return false;
+    if (!this.moduleRef) return false;
+    // Loaded where it is used, as the run-notify turn above does: the sessions module imports this one.
+    const { SessionsService } = await import('../sessions/sessions.service.js');
+    const sessions = this.moduleRef.get(SessionsService, { strict: false });
+    return coordinatorUnreachable(await readCoordinatorReach(sessions, ownerId, project));
+  }
+
+  /**
    * Tell the account owner that one of the four things only they can answer is waiting
    * (`docs/project-integration-line-contract.md` §7.6 V12).
    *
@@ -820,7 +852,13 @@ export class PushService {
           ownerId: true,
           projectId: true,
           promotionId: true,
-          project: { select: { title: true, coordinatorSessionId: true } },
+          project: {
+            select: {
+              title: true,
+              coordinatorSessionId: true,
+              coordinatorSession: { select: SESSION_ENDING_SELECT },
+            },
+          },
         },
       });
       // A resolved item is not waiting on anybody: the owner answered it in another window, or the
@@ -832,6 +870,7 @@ export class PushService {
         ...item,
         projectTitle: item.project?.title ?? null,
         promotion: await this.promotionFor(item.promotionId),
+        coordinatorUnreachable: await this.coordinatorUnreachableFor(item.ownerId, item.project),
       });
       if (!alert) return;
       const { tokens, feishu } = await this.channels(item.ownerId);
@@ -1198,8 +1237,10 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const { missed } = input;
       const because = WAKEUP_MISSED_REASONS[input.reason];
       const alert = {
@@ -1209,19 +1250,9 @@ export class PushService {
           : `Scheduled wakeup dropped: ${because}.`,
       };
       const collapseId = 'loopId' in missed ? `loop-${missed.loopId}-${missed.alertedAt.getTime()}` : `wakeup-${missed.wakeupId}`;
-      const body = JSON.stringify({
-        aps: {
-          alert,
-          sound: 'default',
-          'thread-id': input.sessionId,
-        },
-        sessionID: input.sessionId, // OrbitKit Notifications.keySession — routes the tap to this session
-        kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped',
-      });
       this.background(this.feishuOther(feishu, {
           kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped', ...alert, collapseId, sessionId: input.sessionId,
         }));
-      await this.deliver(tokens, body, 'alert', '10', collapseId);
     } catch (err) {
       this.log.warn(`wakeup missed notify failed: ${(err as Error).message}`);
     }
@@ -1245,8 +1276,10 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -1261,7 +1294,6 @@ export class PushService {
         kind: 'wiki-review-mode-manual',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki review-mode notify failed: ${(err as Error).message}`);
     }
@@ -1285,8 +1317,10 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -1301,7 +1335,6 @@ export class PushService {
         kind: 'wiki-review-mode-tiered',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki verification notify failed: ${(err as Error).message}`);
     }
@@ -1322,8 +1355,10 @@ export class PushService {
   async notifyWikiMemoryWritesQuiet(input: { ownerId: string; spaceId: string; title: string; runs: number }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -1337,7 +1372,6 @@ export class PushService {
         kind: 'wiki-maintenance-failing',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki memory writes notify failed: ${(err as Error).message}`);
     }
@@ -1351,8 +1385,10 @@ export class PushService {
   async notifyWikiRepositoryAttention(input: { ownerId: string; spaceId: string; title: string; runs: number; detail: string }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const detail = input.detail.split('\n', 1)[0]!.trim();
       const body = JSON.stringify({
         aps: {
@@ -1367,7 +1403,6 @@ export class PushService {
         kind: 'wiki-maintenance-failing',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki repository notify failed: ${(err as Error).message}`);
     }
@@ -1382,8 +1417,10 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const said = (input.lastError ?? '').split('\n', 1)[0]!.trim();
       const body = JSON.stringify({
         aps: {
@@ -1399,7 +1436,6 @@ export class PushService {
         kind: 'wiki-maintenance-failing',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki maintenance notify failed: ${(err as Error).message}`);
     }

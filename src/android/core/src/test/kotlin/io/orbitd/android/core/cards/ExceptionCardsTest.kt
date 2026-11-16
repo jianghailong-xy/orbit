@@ -25,7 +25,8 @@ class ExceptionCardsTest {
         waitingSince: String = "2026-09-19T19:01:41.497Z", escalatedAt: String? = "2026-09-19T21:02:23.903Z",
         detailLine: String = "the run ended with exit code 1", delivery: String? = null, facts: JsonElement = JsonNull,
         fuseEpisodeId: String? = null, title: String = "Task failed: P5.1 Route Handlers",
-        landingSessionId: String? = null, integrationJobId: String? = null, lease: JsonElement = JsonNull) = buildJsonObject {
+        landingSessionId: String? = null, integrationJobId: String? = null, lease: JsonElement = JsonNull,
+        coordinatorUnreachable: Boolean? = null) = buildJsonObject {
         put("itemId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"); put("kind", kind); put("title", title); put("detailLine", detailLine)
         put("assignee", assignee); put("assigneeReason", reason); put("waitingSince", waitingSince); put("escalatedAt", escalatedAt)
         put("taskId", taskId); put("sessionId", sessionId); put("promotionId", promotionId); put("fuseEpisodeId", fuseEpisodeId)
@@ -36,6 +37,7 @@ class ExceptionCardsTest {
         primaryAction?.let { put("primaryAction", it) }
         handledBy?.let { titles -> putJsonArray("handledBy") { titles.forEachIndexed { i, t -> addJsonObject { put("taskId", "t$i"); put("title", t); put("state", "OPEN") } } } }
         put("question", JsonNull); put("facts", facts); put("lease", lease)
+        coordinatorUnreachable?.let { put("coordinatorUnreachable", it) }
     }
 
     /** The coordinator conversation's cards for these items, as the catalogue grants them. */
@@ -227,6 +229,21 @@ class ExceptionCardsTest {
         assertNull(ExceptionCards.handledByLine(row(handledBy = emptyList())))
         assertEquals("The coordinator is fixing this in Fix the branch. · The coordinator is fixing this in Re-check later.",
             ExceptionCards.handledByLine(row(handledBy = listOf("Fix the branch", "Re-check later"))))
+    }
+
+    /** 2026-11-15: an escalated card said "no one acted on this" over doors and a chat that could not reach the coordinator. With the
+     * server reading it unreachable the heading says so, in web's and Apple's words; reachable, or from an older server, it is unchanged. */
+    @Test fun anEscalatedItemWhoseCoordinatorCannotBeReachedSaysSo() {
+        val unreachable = row(coordinatorUnreachable = true, actions = listOf("OPEN_TASK_SESSION", "CANCEL_TASK"))
+        assertEquals("Now yours — the coordinator can’t take messages", ExceptionCards.headingLine(unreachable, now))
+        assertEquals("Now yours — no one acted on this for 2h", ExceptionCards.headingLine(row(coordinatorUnreachable = false), now))
+        assertEquals("Now yours — no one acted on this for 2h", ExceptionCards.headingLine(row(), now))
+        val web = File(root(), "src/web/src/components/ProjectProgressStatus.tsx").readText()
+        assertTrue(web.contains("'${ExceptionCards.escalatedUnreachableHeading}'"))
+        val swift = File(root(), "src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift").readText()
+        assertTrue(swift.contains("\"${ExceptionCards.escalatedUnreachableHeading}\""))
+        val push = File(root(), "src/apiserver/src/push/owner-item-alert.ts").readText()
+        assertTrue(push.contains("'${ExceptionCards.escalatedUnreachableHeading}'"))
     }
 
     @Test fun theHeadingAndTheFooterSayHowItBecameTheOwnersAndForHowLong() {
@@ -516,6 +533,7 @@ class ExceptionCardsTest {
         ).forEach { assertTrue("OwnerItemCards.swift no longer says \"$it\"", swift.contains("\"$it\"")) }
         listOf("Now yours — no one acted on this for \\(", "Now yours — the coordinator conversation ended", "Now yours — the 3rd failure in this chain",
             "Now yours — the coordinator handed it over", "Now yours — this project has no coordinator (waiting \\(",
+            "Now yours — the coordinator can’t take messages",
             "The coordinator is fixing this in \\(\$0.title).", "attempt \\(attempt) of \\(limit) in this chain", "Show \\(hidden) more lines",
         ).forEach { assertTrue("OwnerItemCards.swift no longer says $it", swift.contains(it)) }
         assertTrue(swift.contains("public static let foldedLines = ${ExceptionCards.CheckTail.foldedLines}"))

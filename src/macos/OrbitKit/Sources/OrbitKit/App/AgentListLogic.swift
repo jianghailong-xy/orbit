@@ -36,16 +36,12 @@ public struct SidebarSectionRow: Equatable, Sendable, Identifiable {
     public let section: AppSection
     /// What waits on the reader there — the drawer's amber count.
     public let waiting: Int
-    /// New wiki… under the Wiki row (docs/wiki-explicit-creation-design.md §3.4): it raises the Create wiki form and
-    /// selects nothing. `section` is then `.wiki`, the section it belongs to.
-    public let newWiki: Bool
 
-    public var id: String { newWiki ? "new-wiki" : "section:\(section.rawValue)" }
+    public var id: String { "section:\(section.rawValue)" }
 
-    public init(_ section: AppSection, waiting: Int = 0, newWiki: Bool = false) {
+    public init(_ section: AppSection, waiting: Int = 0) {
         self.section = section
         self.waiting = waiting
-        self.newWiki = newWiki
     }
 }
 
@@ -132,15 +128,12 @@ public enum AgentListLogic {
     /// The work rows the Mac source list opens with, in `sections`' order. `wiki` is the server's
     /// answer (`WikiLogic.shown`): a false one drops the Wiki row here, as data, so the List body
     /// holds no branch. The waiting counts are the drawer's amber numbers, 0 when nothing waits.
-    /// `newWiki` (there is a wiki already) adds the New wiki… row right under the Wiki row.
-    ///
     /// `scheduled` (the server serves scheduled tasks) adds Scheduled right under Tasks, as the drawer does
     /// (`DrawerWorkLogic.rows(scheduled:)`, board docs/mocks/scheduled-tasks/web/01-board.png ①), its count the
     /// schedules failing or held (`scheduledNeedsYou`). Account-wide: it is never a row of a workspace's list.
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
                                        projectsWaiting: Int, wikiWaiting: Int,
-                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0,
-                                       newWiki: Bool = false) -> [SidebarSectionRow] {
+                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0) -> [SidebarSectionRow] {
         sections.filter { $0 != .wiki || wiki }.flatMap { section -> [SidebarSectionRow] in
             let waiting: Int
             switch section {
@@ -150,7 +143,7 @@ public enum AgentListLogic {
             }
             let row = SidebarSectionRow(section, waiting: waiting)
             if section == .tasks && scheduled { return [row, SidebarSectionRow(.scheduled, waiting: scheduledNeedsYou)] }
-            return section == .wiki && newWiki ? [row, SidebarSectionRow(.wiki, newWiki: true)] : [row]
+            return [row]
         }
     }
 

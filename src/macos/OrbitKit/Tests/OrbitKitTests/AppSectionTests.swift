@@ -46,12 +46,6 @@ final class AppSectionTests: XCTestCase {
         XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: false),
                        [.projects, .section(.tasks), .workspacesHeader, .agents, .openProjects,
                         .sharedWithMe])
-        // New wiki… is a row of its own under the Wiki row once there is a wiki, and never without the Wiki row.
-        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: true, newWiki: true),
-                       [.projects, .section(.tasks), .wiki, .newWiki, .workspacesHeader, .agents, .openProjects,
-                        .sharedWithMe])
-        XCTAssertEqual(DrawerWorkLogic.rows(AppSection.workSections, wiki: false, newWiki: true),
-                       [.projects, .section(.tasks), .workspacesHeader, .agents, .openProjects, .sharedWithMe])
     }
 
     /// Routing/notifications must land in the right section so the shell follows a deep link. There's

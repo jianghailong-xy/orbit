@@ -36,6 +36,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
 | Back up, restore or recover managed runners on Docker | [Managed runners on Docker: operations](managed-runner-docker-operations.md) |
 | Deploy, back up, restore, roll back or fail over managed runners on Kubernetes (test environments) | [Managed runners on Kubernetes: operations](managed-runner-kubernetes-operations.md) |
+| Run and operate the .3 managed-runner environment (k3s, Ceph RBD, XFS reflink) | [Managed runners on .3: k3s, Ceph RBD and XFS reflink](managed-runner-k3s-xfs-deployment.md) |
 | Diagnose database conflicts, or deploy and roll back the code that handles them | [PostgreSQL conflict runbook](postgres-conflict-runbook.md) |
 | Understand project direction | [Project maturity and brand roadmap](project-maturity.md) |
 
@@ -75,6 +76,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   — an authorized test environment's deployment order, finding an account's runner, when the stop-report finalizer may
   and may not be removed, an independent RBD backup checked off the cluster and restored to a new PVC, switching off and
   rolling back, and fencing a node that stops reporting.
+- [Managed runners on .3: k3s, Ceph RBD and XFS reflink](managed-runner-k3s-xfs-deployment.md) — the production
+  deployment record: who is eligible and the capacity budget, the patched Ceph-CSI XFS class with `rbd-nbd`, the runner
+  image and checkout index fast path, the admission guard, the Docker cutover, and the outstanding XFS drills.
 - [Verifiable release supply chain](supply-chain.md) — the checksums, CycloneDX SBOM, SLSA provenance and
   signing identities every release publishes, the commands that verify them, and the rollback path when a
   check fails.
