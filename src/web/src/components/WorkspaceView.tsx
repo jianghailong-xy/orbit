@@ -323,6 +323,7 @@ import {
   type SessionFolder,
   type SessionListItem,
   sendTurn,
+  type OptimizedSend,
   type TaskRunRoute,
   unpinSession,
   updateSessionConfig,
@@ -634,7 +635,13 @@ import { SessionConversation } from './SessionConversation';
 import { useWikiChatSessionCards } from './WikiDraftCard';
 import { currentPromptSuggestion, offeredPromptSuggestion } from '../lib/promptSuggestion';
 import { useOpenTaskOverPage } from '../lib/taskInPlace';
-import { OPTIMIZE_SHORTCUT, usePromptOptimizer, type PromptOptimizerTarget } from './PromptOptimizer';
+import {
+  OPTIMIZE_SHORTCUT,
+  optimizedSendOf,
+  usePromptOptimizer,
+  type OptimizedInsert,
+  type PromptOptimizerTarget,
+} from './PromptOptimizer';
 
 // The queue's types live with the stream that keeps the queue (lib/useSessionStream); the modules
 // and tests that import them from here still can.
@@ -694,8 +701,8 @@ interface ComposerSendVars {
    *  that a refusal about who holds the task is answered where the press was — on the card, whose
    *  offer to re-send is what stopped being true — instead of twice, in two places at once. */
   source?: 'autoRetry';
-  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English. */
-  skipTranslation?: boolean;
+  /** Prompt optimizer (D2): the text is still exactly what Use put in the box. */
+  optimized?: OptimizedSend;
   /** A machine's first session: which machine, and the folder of the workspace it makes, sent instead
    *  of a workspace. */
   firstWorkspace?: { runnerId: string; folder: NewWorkspaceRequest };
@@ -2482,9 +2489,9 @@ export function WorkspaceView({
   const canHover = useMediaQuery('(hover: hover)');
   const hoverTipOpen = canHover ? undefined : false;
   const [text, setText] = useState('');
-  // The prompt optimizer's text, while it is what Use put in the box (D2): a send of exactly it is
-  // already English and skips Translation. Any other text is translated as usual.
-  const [optimizedInsert, setOptimizedInsert] = useState<string | null>(null);
+  // The prompt optimizer's text, while it is what Use put in the box (D2): a send of exactly it goes with
+  // the optimizer's own translation, or as written. Any other text is translated as usual.
+  const [optimizedInsert, setOptimizedInsert] = useState<OptimizedInsert | null>(null);
   // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
   // draft rather than in the URL or the server, because it only has to survive as long as the
   // text it annotates — a token the user edits stops matching and simply travels as prose.
@@ -5815,7 +5822,7 @@ export function WorkspaceView({
           shell ? 'shell' : undefined,
           intent,
           operation.clientTurnId,
-          vars.skipTranslation,
+          vars.optimized,
         );
         // The server decides this under the same Session row lock as enqueue/claim. Missing
         // placement is a protocol error; local idle state is never used to infer delivery.
@@ -5870,7 +5877,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             intent,
             operation.clientTurnId,
-            vars.skipTranslation,
+            vars.optimized,
           );
           const placement = turnPlacementOf(res);
           const queuedItem =
@@ -5922,7 +5929,7 @@ export function WorkspaceView({
             shell ? 'shell' : undefined,
             operation.clientTurnId,
             vars.stopSessionId,
-            vars.skipTranslation,
+            vars.optimized,
           );
           // The task moved on to another run and the server delivered this there. Nothing was
           // placed on THIS row, so there is no placement to honour and no bubble to paint here —
@@ -6017,7 +6024,7 @@ export function WorkspaceView({
         shell,
         // Composed on a folder's page: the session starts in that folder.
         ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
-        ...(vars.skipTranslation ? { skipTranslation: true } : {}),
+        ...vars.optimized,
       });
       // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
@@ -7323,14 +7330,14 @@ export function WorkspaceView({
       else setText('');
       return;
     }
-    // D2: still exactly what the optimizer put in the box, so it is English already.
-    const skipTranslation = optimizedInsert !== null && c === optimizedInsert.trim();
+    // D2: still exactly what the optimizer put in the box, so it needs no translator.
+    const optimized = optimizedInsert !== null && c === optimizedInsert.text.trim() ? optimizedSendOf(optimizedInsert) : undefined;
     setOptimizedInsert(null);
     sendFromComposer({
       content: materializeReferences(c, composerRefs),
       images: readyImages,
       intent,
-      ...(skipTranslation ? { skipTranslation: true } : {}),
+      ...(optimized ? { optimized } : {}),
     });
   };
   // Open the new-session draft for this workspace. A /sessions/<id> URL carries no

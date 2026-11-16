@@ -48,8 +48,11 @@ internal object PromptOptimizerFixture {
         }
     }.toString()
 
-    /** What the box holds after Use: the answer's `text`. */
-    val inserted: String get() = Json.parseToJsonElement(answer()).jsonObject["text"]!!.jsonPrimitive.content
+    /** The answer's `text`: the agent-language prompt. */
+    val prompt: String get() = Json.parseToJsonElement(answer()).jsonObject["text"]!!.jsonPrimitive.content
+
+    /** What the box holds after Use with Translation on (D2): the owner-language gloss. */
+    val inserted: String get() = GLOSS
 
     fun install(on: Boolean = true, available: Boolean = true, respond: () -> ApiResponse = { ApiResponse(200, answer().encodeToByteArray()) }) {
         ComposerShell.answers["GET users/me"] = { ApiResponse(200, me(on, available).encodeToByteArray()) }
@@ -62,7 +65,7 @@ internal object PromptOptimizerFixture {
 /**
  * Android's prompt optimizer in the composer over the controlled server, as iOS draws it on a phone (docs/prompt-optimizer-design.md,
  * board frames 2–6; OrbitKit PromptOptimizerTests): ✦ Optimize's visibility, the busy press that cancels, the suggestion sheet that
- * leaves the box alone until Use, Undo, × and the failure line, and `skipTranslation` only on a send of the unedited optimized text.
+ * leaves the box alone until Use, Undo, × and the failure line, and `optimizedTranslation` only on a send of the unedited gloss.
  */
 class PromptOptimizerShellTest : ComposerShellTest() {
     private val button = hasTestTag("composer-optimize")
@@ -134,7 +137,9 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         suggestion()
         // Frame 4: the card's words, its chips (an unknown kind drawn as nothing) and the gloss's toggle; the box untouched.
         await { shows(PromptOptimizerCopy.CARD_TITLE) }
-        assertTrue(has(hasTestTag("composer-optimization-text") and hasText("After signing in", substring = true)))
+        // D2: it opens in the owner's language, and says what the agent gets.
+        assertTrue(has(hasTestTag("composer-optimization-text") and hasText(PromptOptimizerFixture.GLOSS)))
+        compose.onNodeWithTag("composer-optimization-agent-note").assertTextEquals("The agent receives the English version.")
         assertEquals(listOf("this session's last 6 turns", "session recap", "project \"Auth cleanup\" goal", "2 wiki entries"),
             compose.onAllNodesWithTag("composer-optimization-chip").fetchSemanticsNodes().map {
                 it.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString("") { t -> t.text } })
@@ -143,12 +148,13 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         for (tag in listOf("composer-optimization-gloss", "composer-optimization-use", "composer-optimization-edit", "composer-optimization-retry"))
             compose.onNodeWithTag(tag).assertIsDisplayed()
         assertEquals(PromptOptimizerFixture.DRAFT, boxText())
-        // The gloss, then back to the prompt's own language — named, not assumed.
+        // The prompt in its own language — named, not assumed — then back to the gloss.
+        compose.onNodeWithTag("composer-optimization-gloss").assertTextEquals("Show in English").performClick()
+        await { has(hasTestTag("composer-optimization-text") and hasText("After signing in", substring = true)) }
         compose.onNodeWithTag("composer-optimization-gloss").assertTextEquals("Show in Chinese").performClick()
         await { has(hasTestTag("composer-optimization-text") and hasText(PromptOptimizerFixture.GLOSS)) }
-        compose.onNodeWithTag("composer-optimization-gloss").assertTextEquals("Show in English")
         assertEquals(PromptOptimizerFixture.DRAFT, boxText())
-        // Use: the box takes the prompt, the sheet goes, and Undo is offered (frame 5).
+        // Use: the box takes the gloss, the sheet goes, and Undo is offered (frame 5).
         compose.onNodeWithTag("composer-optimization-use").performClick()
         await { !has(hasTestTag("composer-optimization-card")) }
         assertEquals(PromptOptimizerFixture.inserted, boxText())
@@ -220,7 +226,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         assertEquals(PromptOptimizerFixture.DRAFT, boxText())
     }
 
-    @Test fun aTurnOfTheUneditedOptimizedTextSkipsTranslation() {
+    @Test fun aTurnOfTheUneditedGlossCarriesTheOptimizedPrompt() {
         PromptOptimizerFixture.install()
         signIn(); openSession()
         suggestion()
@@ -228,14 +234,15 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         await { boxText() == PromptOptimizerFixture.inserted }
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body(turns) != null }
-        assertEquals(JsonPrimitive(true), ComposerShell.body(turns)!!["skipTranslation"])
+        assertEquals(JsonPrimitive(PromptOptimizerFixture.prompt), ComposerShell.body(turns)!!["optimizedTranslation"])
+        assertNull(ComposerShell.body(turns)!!["skipTranslation"])
         assertEquals(PromptOptimizerFixture.inserted.trim(), ComposerShell.body(turns)!!["content"]!!.jsonPrimitive.content)
         // Spent: the same words typed again are the owner's, and translated.
         await { boxText().isEmpty() }
         type(PromptOptimizerFixture.inserted)
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.bodies.count { it.first == turns } == 2 }
-        assertNull(ComposerShell.body(turns)!!["skipTranslation"])
+        assertNull(ComposerShell.body(turns)!!["optimizedTranslation"])
     }
 
     @Test fun anEditedOptimizedTextIsTranslatedAsUsual() {
@@ -247,7 +254,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         input.performTextInput(" Also check iOS.")
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body(turns) != null }
-        assertNull(ComposerShell.body(turns)!!["skipTranslation"])
+        assertNull(ComposerShell.body(turns)!!["optimizedTranslation"])
     }
 
     @Test fun aPromptInTheDraftsOwnLanguageIsNeverSkipped() {
@@ -255,10 +262,12 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         signIn(); openSession()
         suggestion()
         assertFalse("no gloss, no toggle", has(hasTestTag("composer-optimization-gloss")))
+        assertFalse("no gloss, no note", has(hasTestTag("composer-optimization-agent-note")))
         compose.onNodeWithTag("composer-optimization-use").performClick()
-        await { boxText() == PromptOptimizerFixture.inserted }
+        await { boxText() == PromptOptimizerFixture.prompt }
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body(turns) != null }
+        assertNull(ComposerShell.body(turns)!!["optimizedTranslation"])
         assertNull(ComposerShell.body(turns)!!["skipTranslation"])
     }
 
@@ -272,7 +281,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         compose.onNodeWithTag("composer-send").performClick()
         val resume = "POST sessions/${ComposerShell.SESSION}/resume"
         await { ComposerShell.body(resume) != null }
-        assertEquals(JsonPrimitive(true), ComposerShell.body(resume)!!["skipTranslation"])
+        assertEquals(JsonPrimitive(PromptOptimizerFixture.prompt), ComposerShell.body(resume)!!["optimizedTranslation"])
     }
 
     @Test fun aNewSessionNamesItsWorkspaceAndItsOpeningMessageCarriesTheFlag() {
@@ -286,7 +295,7 @@ class PromptOptimizerShellTest : ComposerShellTest() {
         await { boxText() == PromptOptimizerFixture.inserted }
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body("POST sessions") != null }
-        assertEquals(JsonPrimitive(true), ComposerShell.body("POST sessions")!!["skipTranslation"])
+        assertEquals(JsonPrimitive(PromptOptimizerFixture.prompt), ComposerShell.body("POST sessions")!!["optimizedTranslation"])
         assertEquals(PromptOptimizerFixture.inserted.trim(), ComposerShell.body("POST sessions")!!["prompt"]!!.jsonPrimitive.content)
     }
 }

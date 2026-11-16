@@ -18,7 +18,7 @@ import kotlinx.serialization.json.put
 // Prompt optimizer (design docs/prompt-optimizer-design.md, board docs/mocks/prompt-optimizer/01-board.png), as OrbitKit's
 // PromptOptimizer.swift has it. The server owns the feature — it calls DeepSeek with its own key — so this file only reads and writes
 // the fields of @orbit/shared prompt-optimizer.ts, says them in the board's words, and holds the composer's rules: when ✦ Optimize
-// shows, what Use and Undo do to the box, and when a send carries `skipTranslation`. The composer draws what this decides.
+// shows, what Use and Undo do to the box, and when a send carries `optimizedTranslation`. The composer draws what this decides.
 
 // Wire
 
@@ -91,9 +91,12 @@ data class PromptOptimization(
     /** The prompt's language, or null for a code this client does not know. */
     val promptLanguage: String? get() = language.takeIf(Translation::isLanguage)
 
-    /** Whether the prompt was written in the agent language for a translating account (D2): the server writes a gloss exactly then,
-     * and it is the only case a send may skip translation. */
+    /** Whether the prompt was written in the agent language for a translating account (D2): the server writes a gloss exactly then.
+     * The card then opens on the gloss, Use inserts it, and an unedited send carries [text] as its `optimizedTranslation`. */
     val isInAgentLanguage: Boolean get() = gloss != null
+
+    /** What Use puts in the box (D2): the owner-language gloss when there is one, the prompt otherwise. */
+    val insertText: String get() = gloss ?: text
 
     /** The "Used: …" chips, in the server's order. */
     val chips: List<String> get() = contextUsed.mapNotNull { it.chip }
@@ -148,6 +151,11 @@ object PromptOptimizerCopy {
     const val DISMISS = "Dismiss"
     const val SHOW_ORIGINAL = "Show original"
 
+    /** Under the gloss (D2): which language the agent gets, "The agent receives the English version." */
+    fun agentReceives(language: String?): String =
+        language?.takeIf(Translation::isLanguage)?.let { "The agent receives the ${Translation.shortName(it)} version." }
+            ?: "The agent receives the original prompt."
+
     /** Back from the gloss: the prompt's own language ("Show in English", "Show in Japanese"), or "Show original" for a code this
      * client does not know. Never a hard-coded English. */
     fun showPrompt(language: String?): String = language?.takeIf(Translation::isLanguage)?.let(::showIn) ?: SHOW_ORIGINAL
@@ -193,9 +201,9 @@ object PromptOptimizer {
         return true
     }
 
-    /** A send body, with `skipTranslation: true` added when [skip]; otherwise exactly as it was, so the key is only ever true or absent. */
-    fun withSkipTranslation(body: JsonObject, skip: Boolean): JsonObject =
-        if (skip) JsonObject(body + ("skipTranslation" to JsonPrimitive(true))) else body
+    /** A send body, with `optimizedTranslation` added when [translation] is set (D2); otherwise exactly as it was. */
+    fun withOptimizedTranslation(body: JsonObject, translation: String?): JsonObject =
+        if (translation != null) JsonObject(body + ("optimizedTranslation" to JsonPrimitive(translation))) else body
 
     /** One drawn run of the card's text: what it says, whether context added it (tinted), and whether it was a `code` span
      * (monospaced, the backticks dropped). */
@@ -218,14 +226,14 @@ object PromptOptimizer {
  */
 data class PromptOptimizerState(
     val phase: Phase = Phase.Idle,
-    /** Frame 4's "Show in <language>": the card shows the gloss instead of the prompt. */
+    /** Frame 4's "Show in <language>": the card shows the gloss instead of the prompt. A suggestion with a gloss opens on it (D2). */
     val showingGloss: Boolean = false,
     /** After Use: the owner's own draft (Undo puts it back). */
     val undoDraft: String? = null,
     /** After Use: the text Use put in the box. */
     val inserted: String? = null,
-    /** Whether [inserted] is in the agent language, the one case a send may skip translation. */
-    private val insertedInAgentLanguage: Boolean = false,
+    /** After Use of a suggestion with a gloss: the agent-language prompt an unedited send carries as its translation (D2). */
+    private val insertedTranslation: String? = null,
 ) {
     sealed interface Phase {
         data object Idle : Phase
@@ -249,7 +257,7 @@ data class PromptOptimizerState(
     /** The answer, kept only for the press still out: one that comes after a cancel is dropped. */
     fun succeeded(result: PromptOptimization): PromptOptimizerState {
         val out = phase as? Phase.Optimizing ?: return this
-        return copy(phase = Phase.Suggestion(result, out.draft), showingGloss = false)
+        return copy(phase = Phase.Suggestion(result, out.draft), showingGloss = result.gloss != null)
     }
 
     fun failedNow(): PromptOptimizerState {
@@ -266,11 +274,11 @@ data class PromptOptimizerState(
     fun toggleGloss() = copy(showingGloss = !showingGloss)
 
     /** Use (and Edit, then use): the state after, with [current] — what the box holds now, the owner's draft — kept for Undo. The text
-     * the box takes is [suggestion]'s; with no suggestion nothing changes. */
+     * the box takes is [suggestion]'s [PromptOptimization.insertText]; with no suggestion nothing changes. */
     fun use(current: String): PromptOptimizerState {
         val s = suggestion ?: return this
-        return copy(phase = Phase.Idle, showingGloss = false, undoDraft = current, inserted = s.text,
-            insertedInAgentLanguage = s.isInAgentLanguage)
+        return copy(phase = Phase.Idle, showingGloss = false, undoDraft = current, inserted = s.insertText,
+            insertedTranslation = s.text.takeIf { s.isInAgentLanguage })
     }
 
     /** Whether frame 5's Undo is offered: Use happened and the box still holds what it put there. */
@@ -278,21 +286,21 @@ data class PromptOptimizerState(
 
     /** Undo: the state after; the box takes back [undoDraft], read before this. Nothing changes when there is nothing to undo. */
     fun undo(current: String): PromptOptimizerState =
-        if (!offersUndo(current)) this else copy(undoDraft = null, inserted = null, insertedInAgentLanguage = false)
+        if (!offersUndo(current)) this else copy(undoDraft = null, inserted = null, insertedTranslation = null)
 
-    /** The toast went (timed out, or the box changed): Undo is no longer offered, but a send of the unedited text still skips
+    /** The toast went (timed out, or the box changed): Undo is no longer offered, but a send of the unedited text still carries its
      * translation. */
     fun forgetUndo() = copy(undoDraft = null)
 
-    /** D2: a send carries `skipTranslation` only when its text is still exactly the optimized agent-language text Use put in the box.
-     * Edited by one character, it is translated as usual. */
-    fun skipTranslation(sending: String): Boolean {
-        val inserted = inserted ?: return false
-        return insertedInAgentLanguage && sending.trim() == inserted.trim()
+    /** D2: the `optimizedTranslation` a send carries — the agent-language prompt — only when its text is still exactly the gloss Use
+     * put in the box. Edited by one character, it is translated as usual (null). */
+    fun optimizedTranslation(sending: String): String? {
+        val inserted = inserted ?: return null
+        return insertedTranslation?.takeIf { sending.trim() == inserted.trim() }
     }
 
     /** After a send: the optimized text is spent. */
-    fun sent() = copy(undoDraft = null, inserted = null, insertedInAgentLanguage = false)
+    fun sent() = copy(undoDraft = null, inserted = null, insertedTranslation = null)
 }
 
 private fun JsonObject.string(key: String): String? = (get(key) as? JsonPrimitive)?.takeIf { it.isString }?.content

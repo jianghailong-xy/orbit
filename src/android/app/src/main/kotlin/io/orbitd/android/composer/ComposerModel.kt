@@ -116,7 +116,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
 
     /** Use, or Edit, then use: the suggestion replaces the draft's words (attachments stay), the caret at its end. */
     fun useOptimization() {
-        val text = state.value.optimizer.suggestion?.text ?: return
+        val text = state.value.optimizer.suggestion?.insertText ?: return
         val current = state.value.draft.text
         optimizer { it.use(current) }
         edit(text, text.length, text.length)
@@ -262,11 +262,11 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     }
                 }
                 val id = UUID.randomUUID().toString()
-                // D2: unedited optimized agent-language text goes untranslated — on a turn, a revive and a new session's opening
-                // message alike. Send never waits for the optimizer: a press still out, or a sheet still open, goes.
-                val skipTranslation = state.value.optimizer.skipTranslation(draft.text)
+                // D2: the unedited gloss goes with the optimizer's agent-language prompt as its translation — on a turn, a revive and
+                // a new session's opening message alike. Send never waits for the optimizer: a press still out, or a sheet still open, goes.
+                val optimizedTranslation = state.value.optimizer.optimizedTranslation(draft.text)
                 cancelOptimize(); dismissOptimization()
-                val body = PromptOptimizer.withSkipTranslation(if (target != null) {
+                val body = PromptOptimizer.withOptimizedTranslation(if (target != null) {
                     buildCreateBody(detail, content, shell, draft.attachments, seedModel, newWorkspace)
                 } else buildJsonObject {
                     if (endpoint == "resume") {
@@ -276,7 +276,7 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
                     put("clientTurnId", id); put("content", content); put("kind", if (shell) "shell" else "message")
                     if (queueForNextTurn && endpoint == "turns") put("intent", "NEXT_TURN")
                     putJsonArray("attachmentIds") { draft.attachments.forEach { add(it.remoteId!!) } }
-                }, skipTranslation)
+                }, optimizedTranslation)
                 val pending = PendingSend(id, endpoint, body, draft.text, draft.attachments)
                 mutable.update { it.copy(draft = it.draft.copy(text = "", selectionStart = 0, selectionEnd = 0, attachments = emptyList(), pending = pending)) }
                 try { persist() } catch (e: Exception) {

@@ -21,10 +21,13 @@ What that gives each account, and what the environment admits together:
 | | Per runner | Environment budget |
 | --- | --- | --- |
 | Data volume | 100 GiB, thin XFS PVC | 10 TiB usable, 1 TiB headroom |
-| Waking compute | 2 CPU / 4 GiB requests and limits; 1 GiB `/tmp` | 6 CPU / 48 GiB / 8 GiB ephemeral, 4 Pods, 4 attachments |
-| Users awake at once | 1 | `maxActiveUsers` 3 |
+| Waking compute | requests 250m CPU / 1 GiB, limits 2 CPU / 4 GiB; 1 GiB `/tmp` | 8 CPU / 32 GiB / 32 GiB ephemeral, 32 Pods, 32 attachments |
+| Users awake at once | 1 | `maxActiveUsers` 32 |
 
-After the switch the only mapping was asleep or awake depending on demand; a fourth wake waits for capacity. Storage
+Raised on 2026-11-16 by the owner from 3 awake runners (2 CPU / 4 GiB requests = limits) to 32, by overcommitting:
+each runner reserves 250m CPU / 1 GiB and may burst to its 2 CPU / 4 GiB limits. The node has 8 CPU / 62 GiB and
+also runs Ceph and other services, so many busy runners at once contend for CPU and can be OOM-killed; the previous
+profile is `profile.json.bak-20261116T031245Z-max3` beside the live one. A 33rd wake waits for capacity. Storage
 is reserved for the life of the volume, not only while the runner is awake.
 
 ## Stack
@@ -122,10 +125,10 @@ The profile values that matter (full JSON in the deployed file; the webhook hash
 | `kubernetes.context` / `apiServer` | `orbit-ws03-manager` / `https://10.66.0.3:6443` |
 | `storage.className` / `capacity` | `runner-data-xfs` / `100Gi` |
 | `runner.serverUrl` / `maxConcurrent` / `tmpSizeLimit` | `https://orbitd.io` / 2 / `1Gi` |
-| `runner.resources.runner` | requests = limits: 2 CPU, 4 GiB |
+| `runner.resources.runner` | requests 250m CPU, 1 GiB; limits 2 CPU, 4 GiB (2026-11-16; before: requests = limits) |
 | `runner.resources.init` | requests 100m / 256Mi; limits 500m / 1Gi |
 | `admission.managerUsername` | `system:serviceaccount:orbit-managed:orbit-mr-manager` |
-| `capacity.compute` | 6 CPU, 48 GiB, 8 GiB ephemeral, 4 Pods, 4 attachments |
+| `capacity.compute` | 8 CPU, 32 GiB, 32 GiB ephemeral, 32 Pods, 32 attachments; `maxActiveUsers` 32 (2026-11-16) |
 | `capacity.storage` | 10 Ti usable, 1 Ti headroom |
 | `capacity.maxActiveUsers` | 3 |
 | `lifecycle` | attempts 5, backoff 10–300 s, startup 1800 s, request 60 s, lease 60 s, poll 5 s, heartbeat 120 s, idle 86400 s, capacity retry 60 s, drain 600 s |

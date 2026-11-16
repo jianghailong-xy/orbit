@@ -4,7 +4,7 @@ import Foundation
 // The server owns the feature — it calls DeepSeek with its own key — so this file only reads and
 // writes the fields of @orbit/shared prompt-optimizer.ts, says them in the board's words, and holds
 // the composer's rules: when ✦ Optimize shows, what Use and Undo do to the box, and when a send
-// carries `skipTranslation`. The views (ComposerView, Settings) draw what this decides.
+// carries `skipTranslation` or `optimizedTranslation`. The views (ComposerView, Settings) draw what this decides.
 
 // MARK: - Wire
 
@@ -117,8 +117,11 @@ public struct PromptOptimization: Decodable, Equatable, Sendable {
     public var promptLanguage: TranslationLanguage? { TranslationLanguage(rawValue: language) }
 
     /// Whether the prompt was written in the agent language for a translating account (D2): the
-    /// server writes a gloss exactly then, and it is the only case a send may skip translation.
+    /// server writes a gloss exactly then. The card then opens on the gloss, and Use inserts it.
     public var isInAgentLanguage: Bool { gloss != nil }
+
+    /// What Use puts in the box (D2): the owner-language reading copy when there is one, else the prompt.
+    public var insertText: String { gloss ?? text }
 
     /// The "Used: …" chips, in the server's order.
     public var chips: [String] { contextUsed.compactMap(\.chip) }
@@ -151,12 +154,16 @@ public enum PromptOptimizerCopy {
     public static let tryAgain = "Try again"
     public static let dismiss = "Dismiss"
     public static let escDismisses = "Esc dismisses · your draft is kept"
-    /// Back from the gloss: the prompt's own language ("Show in English"), or "Show original" for a
-    /// code this client does not know.
+    /// From the gloss the card opens on to the prompt the agent receives: the prompt's own language
+    /// ("Show in English"), or "Show original" for a code this client does not know.
     public static func showPrompt(_ language: TranslationLanguage?) -> String {
         language.map(showIn) ?? TranslationCopy.showOriginal
     }
     public static func showIn(_ language: TranslationLanguage) -> String { "Show in \(language.bareName)" }
+    /// Under a gloss (D2): which language the agent gets, so the reader knows what they are not reading.
+    public static func agentReceives(_ language: TranslationLanguage?) -> String {
+        "The agent receives the \(language?.bareName ?? "translated") version."
+    }
 
     // After Use (frame 5) and failure (frame 6)
     public static let replaced = "Draft replaced with the optimized prompt"
@@ -242,13 +249,15 @@ public struct PromptOptimizerState: Equatable, Sendable {
     }
 
     public private(set) var phase: Phase = .idle
-    /// Frame 4's "Show in <language>": the card shows the gloss instead of the prompt.
-    public var showingGloss = false
+    /// Frame 4's "Show in <language>": flipped, the card shows the agent-language prompt instead of the
+    /// gloss it opens on (D2). Without a gloss there is nothing to flip.
+    public var showingPrompt = false
     /// After Use: the owner's own draft (Undo puts it back) and the text Use put in the box.
     public private(set) var undoDraft: String?
     public private(set) var inserted: String?
-    /// Whether `inserted` is in the agent language, the one case a send may skip translation.
-    private var insertedInAgentLanguage = false
+    /// D2: with a gloss inserted, the optimizer's agent-language prompt an unedited send carries as its
+    /// translation; nil when Use inserted the prompt itself.
+    private var insertedTranslation: String?
 
     public init() {}
 
@@ -261,7 +270,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
     /// The press: the draft goes out. Pressing while busy cancels instead (`cancel`).
     public mutating func start(draft: String) {
         phase = .optimizing(draft: draft)
-        showingGloss = false
+        showingPrompt = false
     }
 
     public mutating func cancel() {
@@ -271,7 +280,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
     public mutating func succeeded(_ result: PromptOptimization) {
         guard case .optimizing(let draft) = phase else { return }
         phase = .suggestion(result, draft: draft)
-        showingGloss = false
+        showingPrompt = false
     }
 
     public mutating func failedNow() {
@@ -291,7 +300,7 @@ public struct PromptOptimizerState: Equatable, Sendable {
         case .suggestion, .failed: phase = .idle
         default: break
         }
-        showingGloss = false
+        showingPrompt = false
     }
 
     /// Use (and Edit, then use): the text the box now holds, or nil with no suggestion. `current` is
@@ -299,11 +308,11 @@ public struct PromptOptimizerState: Equatable, Sendable {
     public mutating func use(current: String) -> String? {
         guard let s = suggestion else { return nil }
         undoDraft = current
-        inserted = s.text
-        insertedInAgentLanguage = s.isInAgentLanguage
+        inserted = s.insertText
+        insertedTranslation = s.gloss != nil ? s.text : nil
         phase = .idle
-        showingGloss = false
-        return s.text
+        showingPrompt = false
+        return s.insertText
     }
 
     /// Whether frame 5's Undo is offered: Use happened and the box still holds what it put there.
@@ -316,26 +325,37 @@ public struct PromptOptimizerState: Equatable, Sendable {
         guard offersUndo(current: current), let draft = undoDraft else { return nil }
         undoDraft = nil
         inserted = nil
-        insertedInAgentLanguage = false
+        insertedTranslation = nil
         return draft
     }
 
     /// The toast went (timed out, or the box changed): Undo is no longer offered, but a send of the
-    /// unedited text still skips translation.
+    /// unedited text still needs no translator.
     public mutating func forgetUndo() { undoDraft = nil }
 
-    /// D2: a send carries `skipTranslation` only when its text is still exactly the optimized
-    /// agent-language text Use put in the box. Edited by one character, it is translated as usual.
-    public func skipTranslation(sending raw: String) -> Bool {
-        guard let inserted, insertedInAgentLanguage else { return false }
+    /// Whether `raw` is still exactly what Use put in the box. Edited by one character, it is not.
+    private func sendsInserted(_ raw: String) -> Bool {
+        guard let inserted else { return false }
         return raw.trimmingCharacters(in: .whitespacesAndNewlines)
             == inserted.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// D2: a send carries `skipTranslation` only when its text is still exactly the optimized prompt
+    /// Use put in the box with no gloss beside it. Edited, it is translated as usual.
+    public func skipTranslation(sending raw: String) -> Bool {
+        insertedTranslation == nil && sendsInserted(raw)
+    }
+
+    /// D2: the `optimizedTranslation` a send carries — the optimizer's agent-language prompt — when its
+    /// text is still exactly the gloss Use put in the box; nil otherwise, and once edited.
+    public func optimizedTranslation(sending raw: String) -> String? {
+        sendsInserted(raw) ? insertedTranslation : nil
     }
 
     /// After a send: the optimized text is spent.
     public mutating func sent() {
         undoDraft = nil
         inserted = nil
-        insertedInAgentLanguage = false
+        insertedTranslation = nil
     }
 }

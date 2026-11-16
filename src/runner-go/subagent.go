@@ -190,7 +190,8 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 			" name) or needs (runner capabilities such as \"os:darwin\"), it runs on that workspace's machine instead:" +
 			" remote SubAgents run on that workspace's own HEAD and return text only. They do not see your uncommitted" +
 			" changes (commit and push first if they must), and nothing they change comes back; the result names what" +
-			" they discarded. " + subagentTypesDescription(defs),
+			" they discarded. Before naming a workspace, provider_list with that workspace says which provider × engine" +
+			" its runner can run, with the reason for each it cannot. " + subagentTypesDescription(defs),
 		"inputSchema": obj(map[string]interface{}{
 			"description": str("3 to 8 words saying what the SubAgent does; shown on its block."),
 			"prompt":      str("The complete brief. The SubAgent has none of your context: say what to do, where, and what to hand back."),
@@ -207,7 +208,7 @@ func delegateToolDescriptor(obj func(map[string]interface{}, ...string) map[stri
 				"description": "Return at once and be woken with the result when the SubAgent ends (default false, or the type's is_background).",
 			},
 			"resume":    str("The runId of a finished SubAgent of this session that ran on this machine, to continue: it keeps its own conversation and gets prompt as its next message. A remote one (workspace or needs) cannot be resumed."),
-			"workspace": str("Run on another workspace of this repository, by name (e.g. one on a Mac). Runs on that workspace's own HEAD and returns text only."),
+			"workspace": str("Run on another workspace of this repository, by name (e.g. one on a Mac). Runs on that workspace's own HEAD and returns text only. Check it first with provider_list(workspace): it says which providers and models that workspace's runner can run, and why not."),
 			"needs": map[string]interface{}{
 				"type": "array", "items": map[string]interface{}{"type": "string"},
 				"description": "Runner capabilities the work needs, e.g. [\"os:darwin\"]: Orbit picks a workspace of this repository whose runner reports them. Runs on that workspace's own HEAD and returns text only.",
