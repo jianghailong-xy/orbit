@@ -384,14 +384,13 @@ struct ComposerView: View {
             || PromptOptimizer.showsButton(on: PromptOptimizer.isOn(app.user), text: console.composerText)
     }
 
-    /// Frame 4's card: above the composer on a Mac, the body of the sheet over it on a phone.
-    private func optimizationCard(_ optimization: PromptOptimization, sheet: Bool) -> some View {
+    /// Frame 4's card above the composer on a Mac.
+    private func optimizationCard(_ optimization: PromptOptimization) -> some View {
         PromptOptimizationCard(
             optimization: optimization,
             basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
             showingPrompt: $console.promptOptimizer.showingPrompt,
             glossLanguage: SessionTranslation.language(app.user?.preferences),
-            sheet: sheet,
             use: { console.useOptimization(edit: false) },
             editThenUse: editThenUseOptimization,
             tryAgain: { console.retryOptimizePrompt() },
@@ -513,7 +512,7 @@ struct ComposerView: View {
             // until Use. A phone shows the same card as a sheet (below).
             #if os(macOS)
             if let optimization = console.promptOptimizer.suggestion {
-                optimizationCard(optimization, sheet: false)
+                optimizationCard(optimization)
             }
             #endif
 
@@ -613,9 +612,14 @@ struct ComposerView: View {
         // Frame 4 on a phone: the suggestion is a sheet over the composer, with the same actions.
         .sheet(isPresented: optimizationSheetShown) {
             if let optimization = console.promptOptimizer.suggestion {
-                optimizationCard(optimization, sheet: true)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+                PromptOptimizationSheet(
+                    optimization: optimization,
+                    basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
+                    showingPrompt: $console.promptOptimizer.showingPrompt,
+                    use: { console.useOptimization(edit: false) },
+                    edit: editThenUseOptimization,
+                    tryAgain: { console.retryOptimizePrompt() },
+                    dismiss: { console.dismissOptimization() })
             }
         }
         #endif
