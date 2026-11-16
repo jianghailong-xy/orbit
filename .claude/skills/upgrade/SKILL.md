@@ -23,9 +23,10 @@ volume.
 ## Who runs it
 
 An upgrade is mostly waiting on builds and reading their output, which needs no expensive model. If the
-session runs on one, such as an Opus or Fable model, hand the run to a cheaper one with the Agent tool
-(`subagent_type: "general-purpose"`, `model: "sonnet"`) instead of running it yourself. On Sonnet, Haiku or
-another inexpensive model, run it yourself as below.
+session runs on one, such as an Opus or Fable model, hand the run to DeepSeek V4.1 Flash with Orbit's
+`delegate` (`model: "deepseek-v4.1-flash"`, `background: true`) instead of running it yourself. Claude Code's
+Agent tool cannot pick a model outside Claude's, so use `delegate`. On an inexpensive model, run it yourself as
+below.
 
 - Settle every choice before you hand it off, since the agent cannot ask the owner: which checkout to run
   from (see [Where to run it](#where-to-run-it)), the exact command and flags the owner asked for, and for a
@@ -33,8 +34,10 @@ another inexpensive model, run it yourself as below.
 - The brief tells the agent to read this file, run exactly that command, stop and report at the first
   failure without retrying, working around a guard (such as adding `--allow-dirty`) or rolling back, and hand back the
   script's last 30 lines and `docker compose ps` (for a two-stage release, the plan table and the deploy's last lines).
-- Run the agent in the background (a build takes 10 to 15 minutes) and report its result to the owner when
-  it arrives. Do not run the upgrade yourself as well.
+- The brief names the script by absolute path, `<checkout>/.claude/skills/upgrade/upgrade.sh`: the SubAgent
+  starts in this session's working directory, which need not be the checkout the deployment runs from.
+- A build takes 10 to 15 minutes, so end the turn after delegating: Orbit wakes this session with the result.
+  Report it to the owner, and do not run the upgrade yourself as well.
 
 This covers running `upgrade.sh` from this session. From another workspace, production deploys through
 `delegate` SubAgents instead (see [Production from another workspace](#production-from-another-workspace)).
