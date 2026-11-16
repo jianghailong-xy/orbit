@@ -1840,6 +1840,13 @@ export const getGuestEventPage = (id: string, opts: { before: number; limit: num
 export const getGuestEventsAfter = (id: string, opts: { after: number; limit: number }) =>
   api<GuestSessionNow>(`${guestPath(id)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`);
 export const getGuestEventFull = (id: string, seq: number) => api<SharedEvent>(`${guestPath(id)}/events/${seq}`);
+/** The guest page's stream (docs/session-viewer-stream-design.md §3): the sign-in rides `access_token`, as on the
+ *  owner's stream, since EventSource sends no header; `sinceSeq` replays only what came after it. */
+export const guestStreamUrl = (id: string, sinceSeq?: number): string => {
+  const tok = encodeURIComponent(getToken() ?? '');
+  const since = sinceSeq && sinceSeq > 0 ? `&sinceSeq=${sinceSeq}` : '';
+  return `/api${guestPath(id)}/stream?access_token=${tok}${since}&maxPayload=${MAX_EVENT_PAYLOAD}`;
+};
 /** Object URL for an inline image in the guest page's transcript, read through the guest door (the owner's
  *  `/attachments/:id` is theirs alone). Caller revokes it. */
 export const fetchGuestAttachmentObjectUrl = async (id: string, attachmentId: string): Promise<string> => {

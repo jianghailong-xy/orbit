@@ -9,17 +9,26 @@ import {
   getGuestEventPage,
   getGuestEventsAfter,
   getGuestSession,
+  guestStreamUrl,
   sendGuestTurn,
   uploadGuestAttachment,
   type GuestSessionNow,
   type SharedEvent,
 } from '../api';
-import { AttachmentResolverContext, EventFullCtx, PublicLinkResolverCtx, type PublicLinkResolver, Transcript } from '../components/Transcript';
+import {
+  AttachmentResolverContext,
+  EventFullCtx,
+  PublicLinkResolverCtx,
+  type PublicLinkResolver,
+  StreamingDraftsCtx,
+  Transcript,
+} from '../components/Transcript';
 import { Image } from '../components/ui/Image';
 import { ALLOWED_IMAGE_TYPES, type ComposerImage, useComposerImages } from '../components/WorkspaceView';
 import { memoizeEventFull } from '../lib/eventFull';
 import { meQuery } from '../lib/queries';
 import { newRunRequestToken } from '../lib/runRequestToken';
+import { supersedesLiveDrafts } from '../lib/steerDelivery';
 import {
   isSessionLive,
   sessionLifecycleStateOf,
@@ -40,6 +49,21 @@ const ECHO_POLL_MS = 500;
 /** How long it asks that often. A message behind a running turn is echoed only when its turn starts, which can be
  *  minutes; it stays drawn meanwhile, and the page falls back to the working clock. */
 const ECHO_POLL_FOR_MS = 10_000;
+/** A dropped stream is opened again from the newest seq on the page after 1 s, then 2, 4… up to 30 s, plus jitter
+ *  (docs/session-viewer-stream-design.md §6). */
+const STREAM_RETRY_MS = 1000;
+const STREAM_RETRY_MAX_MS = 30_000;
+/** Reopens in a row that never got an answer before the page goes back to polling: a refusal (429, a 404 from a
+ *  server without the route, the invitation gone) looks to EventSource like any failed open. */
+const STREAM_REOPEN_TRIES = 4;
+
+/** The half-written reply the stream's deltas draw (StreamingDraftsCtx). */
+interface Drafts {
+  text: string;
+  think: string;
+  thinkStartedAt?: number;
+}
+const NO_DRAFTS: Drafts = { text: '', think: '' };
 
 /** A message this page sent, drawn at once until the runner's own `user` event for its turn arrives. */
 interface SentTurn {
@@ -137,6 +161,11 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   const anchorRef = useRef<{ prevHeight: number; prevTop: number } | null>(null);
   const followRef = useRef(false);
   const landedRef = useRef(false);
+  // Followed over the guest stream; polled when there is no EventSource or the stream cannot be opened.
+  const [follow, setFollow] = useState<'stream' | 'poll'>(() => (typeof EventSource === 'undefined' ? 'poll' : 'stream'));
+  const [drafts, setDrafts] = useState<Drafts>(NO_DRAFTS);
+  // The seq the page was at when the drafts began, so a message read meanwhile lands below them (streamingAfterSeq).
+  const [draftsAfter, setDraftsAfter] = useState<number | null>(null);
 
   // The guest's own words read `You`, as the owner's read in their own app; anyone else's keep `From <name>`.
   const myName = me.data?.name?.trim() || null;
@@ -217,7 +246,7 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   // event on the page, every few seconds while it works and every half minute while it waits, and stop once it is
   // over. A send asks at once, and keeps asking while the run it started is under way.
   useEffect(() => {
-    if (!data || gone) return;
+    if (!data || gone || follow !== 'poll') return;
     let state: SessionStateSource = now ?? data;
     let delay = kick > 0 ? 0 : followDelay(state, false);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -276,7 +305,132 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
       document.removeEventListener('visibilitychange', onVisibility);
     };
     // `now` is read once as where the loop starts; following it would restart the loop on every answer.
-  }, [sessionId, data, gone, kick]);
+  }, [sessionId, data, gone, kick, follow]);
+
+  // Follow over the guest stream (docs/session-viewer-stream-design.md §3–§4, §7): events after the newest on the
+  // page, the reply as it is typed (deltas), and `head` frames for the status and the waiting-on-owner line. A send's
+  // echo arrives here too, so nothing is asked after it. A dropped stream is opened again from the newest seq; a
+  // hidden tab holds none and opens it again on return; a stream that cannot be opened hands over to polling.
+  useEffect(() => {
+    if (!data || gone || follow !== 'stream') return;
+    let es: EventSource | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    let everOpened = false;
+    let failed = 0;
+    const take = (e: SharedEvent) => {
+      if (!Number.isSafeInteger(e.seq) || e.seq <= afterRef.current) return;
+      afterRef.current = e.seq;
+      const el = scrollRef.current;
+      followRef.current = !el || sampleTail(el).bottomGap <= NEAR_BOTTOM;
+      setNewer((prev) => [...prev, e]);
+      if (supersedesLiveDrafts(e)) {
+        setDrafts(NO_DRAFTS);
+        setDraftsAfter(null);
+      } else if (e.type === 'thinking') {
+        setDrafts((d) => ({ text: d.text, think: '' }));
+      }
+    };
+    const close = () => {
+      es?.close();
+      es = null;
+      clearTimeout(retry);
+    };
+    // A gap longer than the server replays: read it page by page, then open the stream from its end.
+    const catchUp = async () => {
+      try {
+        for (;;) {
+          const answer = await getGuestEventsAfter(sessionId, { after: afterRef.current, limit: NEWER_PAGE });
+          if (stopped) return;
+          answer.events.forEach(take);
+          setNow(answer);
+          if (answer.after == null) break;
+        }
+        connect();
+      } catch (e) {
+        if (stopped) return;
+        if (isGone(e)) setGone(true);
+        else setFollow('poll');
+      }
+    };
+    const onFrame = (frame: SharedEvent & { type: string }) => {
+      switch (frame.type) {
+        case 'ping':
+          return;
+        case 'gone':
+          close();
+          setGone(true);
+          return;
+        case 'resync':
+          close();
+          void catchUp();
+          return;
+        case 'head':
+          setNow((prev) => ({ ...(prev ?? data), ...frame.payload, events: [], after: null }));
+          return;
+        case 'text_delta':
+        case 'thinking_delta': {
+          const chunk = frame.payload?.text;
+          if (typeof chunk !== 'string') return;
+          setDraftsAfter((at) => at ?? afterRef.current);
+          setDrafts((d) =>
+            frame.type === 'text_delta'
+              ? { ...d, text: d.text + chunk }
+              : { ...d, think: d.think + chunk, thinkStartedAt: d.thinkStartedAt ?? Date.now() },
+          );
+          return;
+        }
+        default:
+          take(frame);
+      }
+    };
+    const connect = () => {
+      if (stopped || document.hidden || es) return;
+      const source = new EventSource(guestStreamUrl(sessionId, afterRef.current));
+      es = source;
+      let opened = false;
+      source.onopen = () => {
+        opened = true;
+        everOpened = true;
+        failed = 0;
+      };
+      source.onmessage = (m) => {
+        let frame: SharedEvent;
+        try {
+          frame = JSON.parse(m.data);
+        } catch {
+          return;
+        }
+        onFrame(frame);
+      };
+      source.onerror = () => {
+        source.close();
+        if (es !== source) return;
+        es = null;
+        if (stopped) return;
+        // Never answered: the first open, or the last of a few reopens in a row, hands over to polling.
+        if (!opened && (!everOpened || failed >= STREAM_REOPEN_TRIES)) {
+          setFollow('poll');
+          return;
+        }
+        if (document.hidden) return;
+        const wait = Math.min(STREAM_RETRY_MS * 2 ** failed, STREAM_RETRY_MAX_MS);
+        failed += 1;
+        retry = setTimeout(connect, wait + Math.random() * 250);
+      };
+    };
+    const onVisibility = () => {
+      if (document.hidden) close();
+      else connect();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    connect();
+    return () => {
+      stopped = true;
+      close();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [sessionId, data, gone, follow]);
 
   useEffect(() => {
     if (!head?.title) return;
@@ -495,7 +649,9 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
           <PublicLinkResolverCtx.Provider value={NOTHING_ELSE_SHARED}>
             <AttachmentResolverContext.Provider value={resolveAttachment}>
               <EventFullCtx.Provider value={fetchFull}>
-                <Transcript events={events} />
+                <StreamingDraftsCtx.Provider value={drafts}>
+                  <Transcript events={events} streamingAfterSeq={draftsAfter} />
+                </StreamingDraftsCtx.Provider>
               </EventFullCtx.Provider>
             </AttachmentResolverContext.Provider>
           </PublicLinkResolverCtx.Provider>
