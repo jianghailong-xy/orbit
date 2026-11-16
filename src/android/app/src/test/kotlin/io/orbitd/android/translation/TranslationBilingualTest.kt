@@ -79,16 +79,24 @@ class TranslationBilingualTest : ComposerShellTest() {
     private fun text(t: String, substring: Boolean = true) = hasText(t, substring = substring)
     private fun english(seq: Int) = hasAnyAncestor(hasTestTag("translation-english")) and row(seq)
     private fun original(seq: Int) = hasTestTag("translation-original") and row(seq)
+    /** Brings a row into the list: with the long reply drawn block by block, the list opens on its last rows and an earlier one is
+     *  not composed until it is scrolled to. */
+    private fun scrollTo(seq: Int) {
+        await { (1..4).any { has(hasTestTag("event:$it"), unmerged = true) } }
+        compose.onNode(hasTestTag("transcript-list"), useUnmergedTree = true).performScrollToNode(hasTestTag("event:$seq"))
+    }
 
     @Test fun onBothLanguagesAreDrawnBlockByBlockAndAnUnpairedRepliesEnglishOpensInPlace() {
         conversation(bilingual = true)
         signIn(); openSession()
+        scrollTo(1)
         await { has(text(askedZh) and row(1), unmerged = true) }
         // The owner's message: what they wrote, the English the agent got under it, and the foot that says so (mark C).
         assertTrue(has(text("does nothing in Safari") and english(1), unmerged = true))
         assertTrue(has(text(TranslationCopy.sentToAgentLabel(), substring = false) and row(1), unmerged = true))
         assertFalse(has(hasTestTag("translation-action:${TranslationCopy.SHOW_ORIGINAL}"), unmerged = true))
         // A short reply: its original right under it, no divider, "Translated" alone (mark D).
+        scrollTo(2)
         assertTrue(has(text("我先看一下") and row(2), unmerged = true))
         assertTrue(has(hasTestTag("translation-interleaved") and row(2), unmerged = true))
         assertFalse(has(english(2), unmerged = true))
@@ -97,14 +105,14 @@ class TranslationBilingualTest : ComposerShellTest() {
         assertFalse(has(text("`signInWithPopup`") and original(2), unmerged = true))
         assertTrue(has(text(TranslationCopy.TRANSLATED, substring = false) and row(2), unmerged = true))
         // A long reply that pairs: each item with its original under it, never collapsed; its code block is drawn once, translated.
-        compose.onNode(hasTestTag("event:3"), useUnmergedTree = true).performScrollTo()
+        scrollTo(3)
         assertTrue(has(text("The script preloads on page load in a useEffect;") and original(3), unmerged = true))
         assertTrue(has(text("A new LoginPage.safari.test.tsx covers this case.") and original(3), unmerged = true))
         assertFalse(has(hasTestTag("translation-english-collapsed") and row(3), unmerged = true))
         assertFalse(has(hasTestTag("translation-action:${TranslationCopy.showEnglishLabel(10)}") and row(3), unmerged = true))
         shot("8-bilingual-on-interleaved")
         // A long reply that does not pair: drawn whole, collapsed to its preview with "Show English · 10 lines" (frame 3).
-        compose.onNode(hasTestTag("event:4"), useUnmergedTree = true).performScrollTo()
+        scrollTo(4)
         assertTrue(has(hasTestTag("translation-english-collapsed") and row(4), unmerged = true))
         assertFalse(has(original(4), unmerged = true))
         val more = hasTestTag("translation-action:${TranslationCopy.showEnglishLabel(10)}") and row(4)
@@ -121,9 +129,10 @@ class TranslationBilingualTest : ComposerShellTest() {
     @Test fun theBlockNamesTheLanguageAgentsWorkIn() {
         conversation(bilingual = true, agentLanguage = "ja")
         signIn(); openSession()
+        scrollTo(1)
         await { has(text(askedZh) and row(1), unmerged = true) }
         assertTrue(has(text("Sent to the agent in Japanese", substring = false) and row(1), unmerged = true))
-        compose.onNode(hasTestTag("event:4"), useUnmergedTree = true).performScrollTo()
+        scrollTo(4)
         assertTrue(has(hasTestTag("translation-action:Show Japanese · 10 lines") and row(4), unmerged = true))
         assertFalse(has(text("Show English"), unmerged = true))
     }
