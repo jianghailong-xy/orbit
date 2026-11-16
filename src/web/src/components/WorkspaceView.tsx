@@ -12598,23 +12598,22 @@ export function SessionComposer({
             {translationTag(translationLanguageOf(me.data), agentLanguageOf(me.data))}
           </button>
         )}
+        {/* A 32px icon like `+` and Send, there whenever the optimizer is on and only disabled with
+            nothing to optimize: a button that came and went with the draft moved every control to
+            its left. Busy, the spinner takes the same slot. */}
         {optimizer.buttonShown && (
           <button
             type="button"
-            className={optimizer.busy ? 'composer-optimize composer-optimize-busy' : 'composer-optimize'}
+            className="composer-optimize"
             onClick={optimizer.press}
+            disabled={!optimizer.buttonEnabled}
             aria-label={optimizer.busy ? 'Optimizing… press to cancel' : 'Optimize this draft'}
-            title={optimizer.busy ? 'Press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
+            title={optimizer.busy ? 'Optimizing… press to cancel' : `Optimize this draft · ${OPTIMIZE_SHORTCUT}`}
           >
             {optimizer.busy ? (
-              <>
-                <span className="composer-optimize-spin" aria-hidden="true" />
-                Optimizing…
-              </>
+              <span className="composer-optimize-spin" aria-hidden="true" />
             ) : (
-              <>
-                <span aria-hidden="true">✦</span> Optimize
-              </>
+              <span aria-hidden="true">✦</span>
             )}
           </button>
         )}

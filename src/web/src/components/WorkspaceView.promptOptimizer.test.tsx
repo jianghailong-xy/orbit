@@ -302,7 +302,7 @@ async function ready(draft = DRAFT): Promise<void> {
   await mount();
   await waitForUi(() => expect(box()).toBeTruthy());
   await typeDraft(draft);
-  await waitForUi(() => expect(optimizeButton()).toBeTruthy());
+  await waitForUi(() => expect(optimizeButton()?.disabled).toBe(false));
 }
 
 async function openCard(): Promise<void> {
@@ -318,21 +318,23 @@ async function send(): Promise<void> {
 }
 
 describe('✦ Optimize (frame 2)', () => {
-  it('sits just left of Send once there is a draft', async () => {
+  it('sits just left of Send once there is a draft, a ✦ icon named by its label', async () => {
     await ready();
     const button = optimizeButton()!;
-    expect(button.textContent).toContain('✦');
-    expect(button.textContent).toContain('Optimize');
+    expect(button.textContent).toBe('✦');
+    expect(button.getAttribute('aria-label')).toBe('Optimize this draft');
     const send = mounted().querySelector('.composer-send')!;
     expect(button.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('is hidden while the box is empty', async () => {
+  it('keeps its slot but is disabled while the box is empty, so the toolbar never shifts', async () => {
     await mount();
     await waitForUi(() => expect(box()).toBeTruthy());
-    expect(optimizeButton()).toBeNull();
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(true));
     await typeDraft('   ');
-    expect(optimizeButton()).toBeNull();
+    expect(optimizeButton()!.disabled).toBe(true);
+    await key(box(), { key: 'O', code: 'KeyO', metaKey: true, shiftKey: true });
+    expect(optimizeMock).not.toHaveBeenCalled();
   });
 
   it('is shown for an account that never set the switch (absent = on)', async () => {
@@ -358,14 +360,14 @@ describe('✦ Optimize (frame 2)', () => {
     expect(optimizeButton()).toBeNull();
   });
 
-  it('is hidden in shell mode and for a draft that is only a /command', async () => {
+  it('is disabled in shell mode and for a draft that is only a /command', async () => {
     await ready();
     await typeDraft('!ls -la');
-    await waitForUi(() => expect(optimizeButton()).toBeNull());
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(true));
     await typeDraft('/compact');
-    await waitForUi(() => expect(optimizeButton()).toBeNull());
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(true));
     await typeDraft('/review the login page');
-    await waitForUi(() => expect(optimizeButton()).toBeTruthy());
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(false));
   });
 });
 
@@ -379,12 +381,13 @@ describe('Optimizing… (frame 3)', () => {
     await ready();
     await act(async () => optimizeButton()!.click());
     expect(optimizeMock).toHaveBeenCalledWith({ draft: DRAFT, sessionId: SESSION_PUBLIC }, expect.anything());
-    expect(optimizeButton()!.textContent).toContain('Optimizing…');
+    expect(optimizeButton()!.getAttribute('aria-label')).toBe('Optimizing… press to cancel');
+    expect(optimizeButton()!.querySelector('.composer-optimize-spin')).toBeTruthy();
     // The draft stays editable while it works.
     expect(box().disabled).toBe(false);
     await act(async () => optimizeButton()!.click());
     expect(signal?.aborted).toBe(true);
-    expect(optimizeButton()!.textContent).not.toContain('Optimizing…');
+    expect(optimizeButton()!.getAttribute('aria-label')).toBe('Optimize this draft');
     expect(card()).toBeNull();
     expect(box().value).toBe(DRAFT);
   });
@@ -581,7 +584,7 @@ describe('the send of the optimized text (D2)', () => {
     expect(optimizedOf()).toBeUndefined();
     sendMock.mockClear();
     await typeDraft(DRAFT);
-    await waitForUi(() => expect(optimizeButton()).toBeTruthy());
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(false));
     await openCard();
     await act(async () => cardButton('Use').click());
     await key(box(), { key: 'z', metaKey: true });

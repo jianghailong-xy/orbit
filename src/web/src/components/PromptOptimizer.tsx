@@ -110,7 +110,10 @@ export function usePromptOptimizer({
 
   const trimmed = text.trim();
   const busy = state.kind === 'busy';
-  const buttonShown = on && !disabled && (busy || (trimmed !== '' && !shellMode && !onlyCommand(trimmed)));
+  // The button keeps its slot whenever the optimizer is on, so the toolbar never shifts as the
+  // draft fills or empties: it is only disabled when there is nothing it can do.
+  const buttonShown = on && !disabled;
+  const buttonEnabled = buttonShown && (busy || (trimmed !== '' && !shellMode && !onlyCommand(trimmed)));
 
   const start = useCallback(() => {
     const t = targetRef.current;
@@ -189,7 +192,7 @@ export function usePromptOptimizer({
     if (e.nativeEvent.isComposing) return false;
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.shiftKey && !e.altKey && (e.code === 'KeyO' || e.key.toLowerCase() === 'o')) {
-      if (!buttonShown) return false;
+      if (!buttonEnabled) return false;
       e.preventDefault();
       press();
       return true;
@@ -218,6 +221,7 @@ export function usePromptOptimizer({
     state,
     busy,
     buttonShown,
+    buttonEnabled,
     press,
     onKeyDown,
     card:
