@@ -1,6 +1,6 @@
 # 访客与只读观众的会话推送（SSE）设计
 
-状态：草案（2026-11-16），待所有者对 §9 的 D1–D6 拍板。效果图 `docs/mocks/viewer-stream/board.html`（每部分一张 PNG）。
+状态：设计已定（2026-11-16）：所有者对 §9 的 D1–D6 全部选 A（建议）。效果图 `docs/mocks/viewer-stream/board.html`（每部分一张 PNG）。
 接在 `docs/session-guests-design.md`（访客）和 `docs/share-links-design.md`（公开链接）之后：两扇门今天都靠 `events?after=` 轮询跟随会话，这里给它们各加一条 SSE 流，轮询留作退路。
 
 ## 1. 为什么改
