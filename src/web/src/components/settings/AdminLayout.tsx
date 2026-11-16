@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ApiOutlined, LeftOutlined, LoginOutlined, MailOutlined, TeamOutlined } from '@ant-design/icons';
+import { ApiOutlined, GithubOutlined, LeftOutlined, LoginOutlined, MailOutlined, TeamOutlined } from '@ant-design/icons';
 import { api } from '../../api';
 import { settingsReturnPath } from '../../lib/settingsReturn';
 import { useMediaQuery } from '../../lib/useMediaQuery';
 import { feishuAdminQuery } from '../../pages/AdminIntegrationsPage';
+import { githubAppOn, githubAppQuery } from '../../pages/AdminGithubPage';
 import { googleSignInSettingsQuery } from '../../pages/AdminSignInPage';
 import { emailSettingsQuery } from '../../pages/AdminEmailPage';
 import { ImpersonationBanner } from '../ImpersonationBanner';
@@ -81,6 +82,7 @@ function AdminNav() {
   const google = useQuery(googleSignInSettingsQuery());
   const email = useQuery(emailSettingsQuery());
   const feishu = useQuery(feishuAdminQuery());
+  const github = useQuery(githubAppQuery());
   const googleOn = google.data
     ? google.data.enabled && google.data.clientId !== '' && google.data.hasSecret && !google.data.secretUnreadable
     : undefined;
@@ -106,7 +108,20 @@ function AdminNav() {
           <NavRow to="/admin/email" icon={<MailOutlined />} label="Email" trailing={<OnDot on={email.data?.on} />} />
         </NavGroup>
         <NavGroup title="Integrations">
-          <NavRow to="/admin/integrations" icon={<ApiOutlined />} label="Feishu bots" trailing={<OnDot on={feishu.data?.allowed} />} />
+          <NavRow
+            to="/admin/integrations"
+            icon={<ApiOutlined />}
+            label="Feishu bots"
+            // Its own address only: the GitHub App's page sits under it.
+            active={/^\/admin\/integrations\/?$/.test(pathname)}
+            trailing={<OnDot on={feishu.data?.allowed} />}
+          />
+          <NavRow
+            to="/admin/integrations/github"
+            icon={<GithubOutlined />}
+            label="GitHub App"
+            trailing={<OnDot on={github.data ? githubAppOn(github.data) : undefined} />}
+          />
         </NavGroup>
       </div>
     </nav>

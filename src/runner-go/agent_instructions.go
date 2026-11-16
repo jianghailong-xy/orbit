@@ -254,6 +254,13 @@ func (s *ClaimedSession) appendSystemPrompt() string {
 		wt = s.Detached
 	}
 	note := checkoutInstructions(wt)
+	repo := s.WorkDir
+	if wt != nil && wt.RepoDir != "" {
+		repo = wt.RepoDir
+	}
+	if github := githubWorkspaceInstructions(repo); github != "" {
+		note = strings.TrimSpace(note + "\n\n" + github)
+	}
 	if note == "" {
 		return s.Agent.AppendSystemPrompt
 	}

@@ -1116,6 +1116,11 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// the conversation that made it reads (`CreatedWorkspaceLine`).
     public var workDir: String? = nil
     public var deletedAt: String? = nil
+    /// A workspace cloned from GitHub (docs/github-workspace-design.md §4): its repository, and where the clone
+    /// stands. All nil for one that is not.
+    public var repoUrl: String? = nil
+    public var cloneState: String? = nil
+    public var cloneError: String? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
