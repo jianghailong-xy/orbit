@@ -709,9 +709,15 @@ object ExceptionCards {
         }
     }
 
-    /** The line under the coordinator row's presses. */
-    fun coordinatorRowNote(row: JsonObject, reading: CoordinatorReading): String? = when (reading.cause) {
-        CoordinatorCause.ESCALATED, CoordinatorCause.HANDED_OVER -> actionConsequence(row, "ASK_COORDINATOR_AGAIN")
+    /** Ask again's note naming the project's escalation window (web `askAgainFreshClock`): "… with a fresh 2h clock." */
+    fun askAgainFreshClock(escalationSeconds: Long): String =
+        "It goes back to the coordinator with a fresh ${span(Duration.ofSeconds(escalationSeconds))} clock."
+
+    /** The line under the coordinator row's presses. [escalationSeconds] is the project's window (`exceptionEscalationSeconds` on the
+     * project document); without one, Ask again keeps its standing consequence. */
+    fun coordinatorRowNote(row: JsonObject, reading: CoordinatorReading, escalationSeconds: Long? = null): String? = when (reading.cause) {
+        CoordinatorCause.ESCALATED, CoordinatorCause.HANDED_OVER ->
+            if (escalationSeconds != null && escalationSeconds > 0) askAgainFreshClock(escalationSeconds) else actionConsequence(row, "ASK_COORDINATOR_AGAIN")
         CoordinatorCause.RUNNER_DOWN -> null
         else -> askAgainOnceBack
     }
