@@ -2257,11 +2257,22 @@ extension ExceptionCards {
         }
     }
 
+    /// Ask again's consequence with the project's own escalation window in it — the browser's
+    /// `askAgainFreshClock`: "It goes back to the coordinator with a fresh 2h clock."
+    public static func askAgainFreshClock(_ escalationSeconds: Int) -> String {
+        "It goes back to the coordinator with a fresh \(RelativeTime.span(TimeInterval(escalationSeconds))) clock."
+    }
+
     /// The line under the coordinator row's presses — the browser's `coordinatorRowNote`.
+    /// `escalationSeconds` is the project's window (`exceptionEscalationSeconds`); without one Ask
+    /// again keeps its plain consequence.
     public static func coordinatorRowNote(_ row: ProjectOpenItemRow,
-                                          _ reading: CoordinatorReading) -> String? {
+                                          _ reading: CoordinatorReading,
+                                          escalationSeconds: Int? = nil) -> String? {
         switch reading.cause {
-        case .escalated, .handedOver: return actionConsequence(row, .askCoordinatorAgain)
+        case .escalated, .handedOver:
+            if let escalationSeconds, escalationSeconds > 0 { return askAgainFreshClock(escalationSeconds) }
+            return actionConsequence(row, .askCoordinatorAgain)
         case .runnerDown: return nil
         default: return askAgainOnceBack
         }
