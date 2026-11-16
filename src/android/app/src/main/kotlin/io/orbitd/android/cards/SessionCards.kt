@@ -38,6 +38,8 @@ import io.orbitd.android.text.LocalReaderResources
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.projects.CoordinatorDoneCard
 import io.orbitd.android.projects.CoordinatorStartCard
+import io.orbitd.android.projects.ProjectApi
+import io.orbitd.android.taskprojects.canWrite
 import io.orbitd.android.projects.RunSettings
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.CancellationException
@@ -215,6 +217,12 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
         // The merge candidate whose line this conversation draws: an exception's Review goes to it, and is drawn only while it is here.
         val mergeCard = shown.firstOrNull { it.family == CardFamily.PROMOTION && it.status != CardPreviews.stale }?.objectId
         // The main branch of the project this conversation coordinates, which an exception's rerun or observation names.
+        // The project's name, which an owner exception card's subline names, and the project page's coordinator reads and writes,
+        // which its coordinator row repairs the coordinator with (board owner-exception-who-fixes).
+        val coordinatedTitle = (session.snapshot?.standing?.get("project") as? JsonObject)?.text("title")
+        val coordinatorDoors = remember(cards.handle) {
+            ProjectCoordinatorDoors(ProjectApi(app.session, cards.handle) { app.canWrite(cards.handle) }) { app.realtime.refreshSession() }
+        }
         val coordinatedMain = RunSettings.mainBranchName((session.snapshot?.standing?.get("project") as? JsonObject)?.obj("integration")?.text("upstreamRef"))
         shown.filterNot { it.family == CardFamily.PROMOTION && it.status == CardPreviews.stale && it.objectId in mergedIds }.forEach { card -> key(cards.handle, card.key, card.binding) {
             // A11 hook: the card a project page opened this conversation onto is brought into view once drawn.
@@ -245,7 +253,8 @@ fun SessionCards(cards: SessionCardsModel, open: (String) -> Unit, discuss: ((St
                     CoordinatorQueue.isSent(card) -> SentToCoordinatorLine(card)
                     // A08-17: an exception that became the owner's, or a pause, is its own card (iOS `OwnerItemCardView`).
                     card.family == CardFamily.EXCEPTION -> ExceptionCard(card, fresh, result, mergeCard, open, discuss,
-                        review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain, submit = submit)
+                        review = { promotion -> CardFocus.request(session.id, "promotion:$promotion") }, main = coordinatedMain,
+                        projectName = coordinatedTitle, coordinator = coordinatorDoors, submit = submit)
                     else -> CompositionLocalProvider(LocalEvidenceFiles provides cards.evidenceFiles) { BusinessCard(card, fresh, result, open, discuss, submit) }
                 }
             }

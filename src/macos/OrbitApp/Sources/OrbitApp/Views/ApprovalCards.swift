@@ -4602,25 +4602,63 @@ private struct OwnerItemCardView: View {
         return lastKind
     }
 
+    /// The item, when it is drawn as the "Who fixes it?" card (board owner-exception-who-fixes):
+    /// an exception that became the owner's by escalation, a hand-over, or an ended or missing
+    /// coordinator (`ExceptionCards.whoFixesIt`). Every other card keeps the layout below.
+    private func whoFixesRow(_ standing: OwnerItemStanding) -> ProjectOpenItemRow? {
+        guard !isPause, receipt == nil, case .open(let row) = standing,
+              ExceptionCards.whoFixesIt(row) else { return nil }
+        return row
+    }
+
     var body: some View {
         let standing = self.standing
+        let whoFixes = whoFixesRow(standing)
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            // Work that reached main without the owner's confirmation is no escalation: it wears its
-            // own kind word, the banner's, and the merge's mark (§10.7, as Android draws it).
-            ApprovalHeader(symbol: isPause ? "pause.circle.fill"
-                               : shownKind == .landedWithoutConfirmation ? "arrow.triangle.merge"
-                               : "exclamationmark.triangle.fill",
-                           title: ExceptionCards.title(shownKind, isPause: isPause),
-                           tone: .orange)
-            Text(ExceptionCards.provenance)
-                .font(.orbitLabel).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .help(ExceptionCards.provenanceTitle)
+            HStack(alignment: .center, spacing: 8) {
+                // Work that reached main without the owner's confirmation is no escalation: it wears
+                // its own kind word, the banner's, and the merge's mark (§10.7, as Android draws it).
+                ApprovalHeader(symbol: isPause ? "pause.circle.fill"
+                                   : shownKind == .landedWithoutConfirmation ? "arrow.triangle.merge"
+                                   : "exclamationmark.triangle.fill",
+                               title: ExceptionCards.title(shownKind, isPause: isPause),
+                               tone: .orange)
+                // D3 = A: the "Who fixes it?" card's one clock — the total wait, top right — in
+                // place of the footer.
+                if let whoFixes {
+                    Text(ExceptionCards.whoFixesClock(whoFixes))
+                        .font(.orbitLabel).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            if whoFixes == nil {
+                Text(ExceptionCards.provenance)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(ExceptionCards.provenanceTitle)
+            }
 
             if let receipt {
                 Text("✓ \(receipt)")
                     .font(.orbitProse)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let whoFixes {
+                WhoFixesItBody(console: console, row: whoFixes, sending: sending,
+                               askAgain: { press(whoFixes) },
+                               chat: { console.startOwnerItemReply(whoFixes, isPause: false) },
+                               markHandled: {
+                                   PlatformHaptics.tap()
+                                   askingToHandle = true
+                               },
+                               makePress: { makePress($0, row: whoFixes) })
+                if askingToHandle { markHandledPanel() }
+                if observing {
+                    ObserveAgainPanel(console: console, sending: $sending) { observing = false }
+                }
+                Text(ExceptionCards.provenance)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(ExceptionCards.provenanceTitle)
             } else if case .open(let row) = standing {
                 heading(row)
                 // What has to happen next, and the doors that do it — ahead of the facts, because

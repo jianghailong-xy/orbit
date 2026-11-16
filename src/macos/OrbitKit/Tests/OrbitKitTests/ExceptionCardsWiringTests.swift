@@ -480,4 +480,74 @@ final class ExceptionCardsWiringTests: XCTestCase {
         XCTAssertTrue(doors.contains("statusMessage = \"\\(ExceptionCards.notResumed)"),
                       "and so does a refused resume")
     }
+
+    // MARK: "Who fixes it?" (board docs/mocks/owner-exception-who-fixes, D1–D4 = A)
+
+    private static let whoFixesPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/WhoFixesItCard.swift"
+
+    /// The card draws the "Who fixes it?" body exactly where `ExceptionCards.whoFixesIt` says, with
+    /// the one clock in its header (D3) — and that branch draws neither the footer nor the bordered
+    /// Chat about this (D2): every other card keeps today's layout.
+    func testTheOwnersExceptionCardDrawsWhoFixesItWhereTheModelSays() throws {
+        let card = try card()
+        XCTAssertTrue(card.contains("ExceptionCards.whoFixesIt(row)"),
+                      "which card is drawn is the model's rule, the browser's `whoFixesIt`")
+        XCTAssertTrue(card.contains("Text(ExceptionCards.whoFixesClock(whoFixes))"),
+                      "D3: the one clock, top right, in the header")
+        let branch = try section(card, from: "} else if let whoFixes {",
+                                 to: "} else if case .open(let row) = standing {")
+        XCTAssertTrue(branch.contains("WhoFixesItBody(console: console, row: whoFixes"))
+        XCTAssertTrue(branch.contains("askAgain: { press(whoFixes) }"),
+                      "Ask again is the card's own press, through the console's door")
+        XCTAssertTrue(branch.contains("makePress: { makePress($0, row: whoFixes) }"),
+                      "the server's other doors are made exactly as the card makes them")
+        XCTAssertFalse(branch.contains("ownerLine"), "D3: no footer on this card")
+        XCTAssertFalse(branch.contains("Approvals.chatAction"),
+                       "D2: no bordered Chat about this — a plain link beside Ask again, or nothing")
+    }
+
+    /// The body reads the cause in OrbitKit, fetches the status only while the item is not
+    /// askable, and draws the model's presses in the model's weights.
+    func testTheWhoFixesItBodyIsTheModelsReading() throws {
+        let body = try source(Self.whoFixesPath)
+        XCTAssertTrue(body.contains("ExceptionCards.readCoordinatorCause(row, status: askable ? nil : status,"))
+        XCTAssertTrue(body.contains("guard !askable else { return }")
+                      && body.contains("await console.readCoordinatorStatus()"),
+                      "the status is read only for a card whose coordinator cannot be asked")
+        XCTAssertTrue(body.contains("ExceptionCards.whoFixesHeading(reading.cause)"))
+        XCTAssertTrue(body.contains("ExceptionCards.coordinatorRowPresses(reading)"))
+        XCTAssertTrue(body.contains("ExceptionCards.coordinatorRowNote(row, reading)"))
+        XCTAssertTrue(body.contains("if ExceptionCards.youLead(reading) && hasYou {"), "D4: the hand-over's order")
+        XCTAssertTrue(body.contains("ExceptionCards.fixItMyselfLeads(reading) ? .primary : .secondary"))
+        XCTAssertTrue(body.contains("if row.chat?.refusal == nil {"),
+                      "D2: the chat link only where a message can go")
+        XCTAssertTrue(body.contains("case .primary:\n            button().buttonStyle(.borderedProminent)")
+                      && body.contains("case .secondary:\n            button().buttonStyle(.bordered)"),
+                      "primary = borderedProminent, secondary = bordered, the rest plain")
+        XCTAssertTrue(body.contains("if ExceptionCards.closesByItself(row) {"))
+        XCTAssertTrue(body.contains("ExceptionCards.detailRows(row, projectName: projectName)")
+                      && body.contains("DisclosureGroup(isExpanded: $detailsOpen)"),
+                      "Details is folded")
+        XCTAssertTrue(body.contains("Text(ExceptionCards.alreadySettled)")
+                      && body.contains("doorRow(ExceptionCards.markHandledSettledConsequence)"))
+        XCTAssertFalse(body.contains(".cancelTask)") || body.contains("Cancel task"),
+                       "this client still draws no Cancel task")
+    }
+
+    /// D1 = A: the repairs repair the coordinator only, through what the project page does — the
+    /// replace, the Change workspace sheet and its move — and the card stays where it is.
+    func testTheRepairsAreTheProjectPagesOwn() throws {
+        let body = try source(Self.whoFixesPath)
+        XCTAssertTrue(body.contains("await console.replaceProjectCoordinator(inWorkspace: workspaceID)"))
+        XCTAssertTrue(body.contains("CoordinatorChangeSheet(projectTitle: console.projectTitle,"))
+        XCTAssertTrue(body.contains("await model.moveSession(sessionID, to: target, folder: nil,"))
+        XCTAssertTrue(body.contains("model.openProjectFromConversation(projectID, overConsole: overConsole)"),
+                      "Set up a coordinator… opens the project page")
+        let console = try source(Self.consolePath)
+        let replace = try section(console, from: "func replaceProjectCoordinator(inWorkspace",
+                                  to: "/// Mark an exception as handled by hand")
+        XCTAssertTrue(replace.contains("api.replaceProjectCoordinator(projectID, workspaceID: workspaceID)"))
+        XCTAssertTrue(replace.contains("await refreshRulerQuestions(force: true)"),
+                      "and the item list is read again, so the card turns reachable in place")
+    }
 }
