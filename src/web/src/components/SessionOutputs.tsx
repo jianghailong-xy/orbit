@@ -231,8 +231,10 @@ export function SessionOutputs({
   // A merge/commit failure has recovery info (reason + manual command) worth surfacing inline.
   const failed =
     detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error' || detail.commitStatus === 'error';
-  // The conflict panel carries its own inset and head/why/steps layout (.wt-merge-conflict).
-  const conflictShown = detail.mergeStatus === 'conflict' && detail.commitStatus !== 'error';
+  // A merge failure (conflict or precondition error) sits inset to the row's padding
+  // (.wt-merge-inset); a failed commit's card brings its own.
+  const mergeFailShown =
+    (detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error') && detail.commitStatus !== 'error';
 
   // Git-state-driven primary action. When the runner reports `worktreeDirty`, the bar shows
   // Commit while the worktree has uncommitted changes and Merge once it's clean. Older runners
@@ -350,7 +352,7 @@ export function SessionOutputs({
         waitingForTurn={!!turnActive}
         failed={detail.mergeStatus === 'error' || detail.mergeStatus === 'conflict'} />}
       {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
-        <div className={`wt-merge wt-bar-fail${conflictShown ? ' wt-merge-conflict' : ''}`}>
+        <div className={`wt-merge wt-bar-fail${mergeFailShown ? ' wt-merge-inset' : ''}`}>
           {detail.commitStatus === 'error' ? (
             <CommitFailure
               key={detail.commitError ?? ''}

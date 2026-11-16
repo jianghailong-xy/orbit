@@ -55,7 +55,7 @@ async function mount(detail: SessionDetail, onResolveInSession?: (target: string
 describe('a merge conflict on the worktree bar', () => {
   it('heads the inset panel with the target, then the by-hand recipe as two steps', async () => {
     const bar = await mount(conflicted(), () => undefined);
-    const panel = bar.querySelector('.wt-merge.wt-merge-conflict');
+    const panel = bar.querySelector('.wt-merge.wt-merge-inset');
     expect(panel).not.toBeNull();
     expect(panel!.querySelector('.wt-merge-head')?.textContent).toBe('Merge conflict with main');
     expect(panel!.querySelector('.wt-merge-why')?.textContent).toBe(
@@ -79,9 +79,17 @@ describe('a merge conflict on the worktree bar', () => {
     );
   });
 
-  it('leaves a precondition failure in the plain strip', async () => {
+  it('insets a precondition failure the same way, as its one line', async () => {
     const bar = await mount(conflicted({ mergeStatus: 'error', mergeError: 'main has uncommitted changes' }));
-    expect(bar.querySelector('.wt-merge-conflict')).toBeNull();
-    expect(bar.querySelector('.wt-merge-err')?.textContent).toBe('main has uncommitted changes');
+    const panel = bar.querySelector('.wt-merge.wt-merge-inset');
+    expect(panel).not.toBeNull();
+    expect(panel!.querySelector('.wt-merge-head')).toBeNull();
+    expect(panel!.querySelector('.wt-merge-err')?.textContent).toBe('main has uncommitted changes');
+  });
+
+  it('leaves a failed commit to its own card', async () => {
+    const bar = await mount(conflicted({ commitStatus: 'error', commitError: 'fatal: nope' }));
+    expect(bar.querySelector('.wt-merge-inset')).toBeNull();
+    expect(bar.querySelector('.wt-commit-fail')).not.toBeNull();
   });
 });

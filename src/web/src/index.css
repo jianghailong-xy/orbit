@@ -4329,9 +4329,10 @@ button.toast--pill:focus-visible {
   flex-direction: column;
   gap: 4px;
 }
-/* A merge conflict: inset to the row's own padding (.wt-row) rather than flush with the bar's
-   border, laid out like .wt-commit-fail — head, why, then the by-hand recipe as two steps. */
-.wt-merge.wt-merge-conflict {
+/* A failed merge, inset to the row's own padding (.wt-row) rather than flush with the bar's
+   border. A conflict is laid out like .wt-commit-fail — head, why, then the by-hand recipe as
+   two steps; a precondition error is its one .wt-merge-err line. */
+.wt-merge.wt-merge-inset {
   margin-top: 0;
   padding: 9px 10px 10px;
   border-top: 1px solid var(--border-subtle);
