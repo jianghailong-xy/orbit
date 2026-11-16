@@ -417,6 +417,38 @@ test('a platform delivery is never translated, even with the owner\'s switch on'
   assert.equal(bodies.length, 0);
 });
 
+test('optimizedTranslation (the prompt optimizer under Translation): held as usual, released with the optimizer\'s text, DeepSeek not asked', async () => {
+  const bodies = stubDeepSeek([ENGLISH]);
+  const h = harness();
+  const answer = await h.service.createTurn(
+    OWNER_ID, SESSION_ID,
+    { clientTurnId: 'optimized-2', content: ORIGINAL, intent: 'NEXT_TURN', optimizedTranslation: ENGLISH_RESTORED },
+    { translate: true },
+  );
+  assert.equal(answer.translation?.state, 'TRANSLATING');
+  await h.service.translationsSettled();
+  assert.equal(bodies.length, 0);
+  assert.equal(h.turns[0].status, 'PENDING');
+  assert.equal(h.turns[0].content, ENGLISH_RESTORED);
+  assert.equal(h.turns[0].displayPrompt, ORIGINAL);
+  assert.equal(h.turns[0].translationState, 'DONE');
+  assert.equal(h.turns[0].translationLang, 'zh-Hans');
+  assert.equal(h.session.status, RunStatus.PENDING);
+});
+
+test('optimizedTranslation that is not a string is a 400, and nothing is written', async () => {
+  const h = harness();
+  await assert.rejects(
+    h.service.createTurn(
+      OWNER_ID, SESSION_ID,
+      { clientTurnId: 'optimized-3', content: ORIGINAL, intent: 'NEXT_TURN', optimizedTranslation: 42 as never },
+      { translate: true },
+    ),
+    /optimizedTranslation must be a string/,
+  );
+  assert.equal(h.turns.length, 0);
+});
+
 test('skipTranslation (the prompt optimizer\'s English): the send is not held, carries no translation, and DeepSeek is not asked', async () => {
   const bodies = stubDeepSeek([ENGLISH]);
   const h = harness();

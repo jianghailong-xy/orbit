@@ -61,7 +61,7 @@ data class ComposerState(val draft: ComposerDraft = ComposerDraft(), val loaded:
      * way there, and one taken back, gone from the tray — or, put back, from the tail. */
     val steered: Set<String> = emptySet(), val withdrawn: Set<String> = emptySet(),
     /** The prompt optimizer (docs/prompt-optimizer-design.md): the press out, the suggestion, the failure line, and what Use put in the
-     * box, for Undo and `skipTranslation`. Not saved with the draft: after a restart the text is sent, and translated, as typed. */
+     * box, for Undo and `optimizedTranslation`. Not saved with the draft: after a restart the text is sent, and translated, as typed. */
     val optimizer: PromptOptimizerState = PromptOptimizerState())
 
 /** Where a credential comes from, as the Provider menu groups it (docs/provider-engine-contract.md §1.3): the engine's own

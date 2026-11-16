@@ -8415,6 +8415,11 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   line-height: 20px;
 }
+.composer-optimized-agent-note {
+  padding: 0 16px 10px;
+  color: var(--text-2);
+  font-size: 12px;
+}
 .composer-optimized-actions {
   display: flex;
   align-items: center;

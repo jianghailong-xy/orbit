@@ -22,11 +22,16 @@ recommendation on 2026-11-15 ("As suggested").
   writes the agent language (Settings › Translation's "Agents work in", `preferences.translationAgentLanguage`,
   English by default) and `language` is that code. It also returns a reading copy (`gloss`) in the owner's
   language, in the same call; when the two languages are the same nothing is translated, so there is no
-  gloss and the prompt is in the draft's own language, as with Translation off. The
-  card's "Show in <language>" flips to the gloss. A send whose text is still exactly the inserted
-  optimized text carries `skipTranslation: true`, so the server does not hold it for translation.
-  Once the owner edits the text, the flag is dropped and the send is translated as usual. A translation
-  keeps text that is already in the agent language unchanged.
+  gloss and the prompt is in the draft's own language, as with Translation off. With a gloss, the
+  owner reads and writes their own language throughout: the card opens on the gloss, with "The agent
+  receives the <language> version." under it, and its "Show in <language>" flips to the agent-language
+  prompt. Use puts the gloss in the box. A send whose text is still exactly the inserted gloss carries
+  `optimizedTranslation` (the agent-language prompt): it is held as any translated message is and
+  released with that text, with no translator call, so the transcript shows the owner's words and
+  "Show translation" shows what the agent got. With no gloss, Use inserts the prompt and an unedited
+  send carries `skipTranslation: true`, so it goes as written. Once the owner edits the text, neither
+  is sent and the send is translated as usual. A translation keeps text that is already in the agent
+  language unchanged.
 - **D3 A: the card above the composer.** Text added from context is tinted. Actions are Use, Edit then
   use, Try again, and × / Esc (dismiss, draft kept). After Use, an "Undo" toast (and ⌘Z in the box)
   restores the owner's draft. On the phone the card is a sheet over the composer with the same actions.
@@ -59,7 +64,10 @@ recommendation on 2026-11-15 ("As suggested").
     (20 s, as for a translation), `HTTP`, `NETWORK`, `EMPTY`, `TRUNCATED` or `MALFORMED`. Frame 6
     shows it as "Couldn't optimize this draft · Try again".
 - Sends (`POST /sessions/:id/turns`, a new session's opening message, and a revive) accept
-  `skipTranslation?: boolean` (D2). A turn sent with it is never held and carries no `translation`.
+  `skipTranslation?: boolean` and `optimizedTranslation?: string` (D2). A turn sent with
+  `skipTranslation` is never held and carries no `translation`. Under the owner's Translation, a turn sent
+  with `optimizedTranslation` is held as usual and released (DONE) with that text instead of a translator
+  call; a later Retry translates as usual. Anything but a string is a 400. Ignored with Translation off.
 - The model is asked for JSON (`deepSeekCall` with `json: true`). A reply that does not parse, or has
   no segments, is `MALFORMED`. Code spans and URLs in the draft are protected with
   `protectVerbatim` / `restoreVerbatim` (sessions/translation.ts), as a translation does. Concurrency

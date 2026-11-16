@@ -389,7 +389,7 @@ struct ComposerView: View {
         PromptOptimizationCard(
             optimization: optimization,
             basedOnEarlierDraft: console.promptOptimizer.basedOnEarlierDraft(current: console.composerText),
-            showingGloss: $console.promptOptimizer.showingGloss,
+            showingPrompt: $console.promptOptimizer.showingPrompt,
             glossLanguage: SessionTranslation.language(app.user?.preferences),
             sheet: sheet,
             use: { console.useOptimization(edit: false) },

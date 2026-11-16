@@ -43,13 +43,13 @@ struct PromptOptimizeButton: View {
     }
 }
 
-/// Frame 4: the suggestion. Its text with what context added tinted, "Show in <language>" when there
-/// is a gloss, the "Used:" chips, and Use / Edit, then use / Try again; × dismisses. The same card is
+/// Frame 4: the suggestion. Its text with what context added tinted — or, with a gloss (D2), the gloss
+/// first with "The agent receives the <language> version." — "Show in <language>" when there is a gloss, the "Used:" chips, and Use / Edit, then use / Try again; × dismisses. The same card is
 /// the body of the phone's sheet (`sheet: true`), where it fills the sheet instead of floating.
 struct PromptOptimizationCard: View {
     let optimization: PromptOptimization
     let basedOnEarlierDraft: Bool
-    @Binding var showingGloss: Bool
+    @Binding var showingPrompt: Bool
     let glossLanguage: TranslationLanguage
     var sheet = false
     let use: () -> Void
@@ -76,9 +76,11 @@ struct PromptOptimizationCard: View {
             if optimization.gloss != nil || !optimization.chips.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     if optimization.gloss != nil {
-                        Button(showingGloss ? PromptOptimizerCopy.showPrompt(optimization.promptLanguage)
-                                            : PromptOptimizerCopy.showIn(glossLanguage)) {
-                            showingGloss.toggle()
+                        Text(PromptOptimizerCopy.agentReceives(optimization.promptLanguage))
+                            .font(.orbitLabel).foregroundStyle(.secondary)
+                        Button(showingPrompt ? PromptOptimizerCopy.showIn(glossLanguage)
+                                             : PromptOptimizerCopy.showPrompt(optimization.promptLanguage)) {
+                            showingPrompt.toggle()
                         }
                         .buttonStyle(.plain)
                         .font(.orbitLabel.weight(.medium))
@@ -156,9 +158,10 @@ struct PromptOptimizationCard: View {
         .background(Color.accentColor.opacity(0.08))
     }
 
-    /// The prompt, its additions tinted and its `code` spans monospaced; or, flipped, the gloss.
+    /// The gloss the card opens on (D2); or, flipped — and always without a gloss — the prompt, its
+    /// additions tinted and its `code` spans monospaced.
     private var promptText: Text {
-        if showingGloss, let gloss = optimization.gloss { return Text(gloss) }
+        if !showingPrompt, let gloss = optimization.gloss { return Text(gloss) }
         var out = AttributedString()
         for run in PromptOptimizer.runs(optimization.segments) {
             var piece = AttributedString(run.text)
