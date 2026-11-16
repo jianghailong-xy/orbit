@@ -141,6 +141,25 @@ function madeForAnother(pv: PersistentVolume, pvc: PersistentVolumeClaim): strin
   return `PV ${pv.metadata.name} was created at ${pv.metadata.creationTimestamp}, before PVC ${pvc.metadata.name} (${pvc.metadata.creationTimestamp}): it was made for another claim first`;
 }
 
+/** The waiting reasons the kubelet gives a container it is still making: its image being pulled, the container created. */
+const PREPARING_REASONS: ReadonlySet<string> = new Set(['ContainerCreating', 'PodInitializing']);
+
+/**
+ * Pending on a node, with no container reporting anything but that it is still being made. An error the kubelet
+ * reports — ErrImagePull, ImagePullBackOff, CreateContainerConfigError, an init container's CrashLoopBackOff — or a
+ * Pod no node took is not preparing: the startup deadline still applies to it.
+ */
+function podPreparing(pod: Pod): boolean {
+  if (pod.status?.phase !== 'Pending' || !pod.spec.nodeName || pod.metadata.deletionTimestamp) return false;
+  const statuses = [...(pod.status.initContainerStatuses ?? []), ...(pod.status.containerStatuses ?? [])];
+  return statuses.every((status) => {
+    if (status.state?.running) return true;
+    if (status.state?.terminated) return status.state.terminated.exitCode === 0;
+    const reason = status.state?.waiting?.reason;
+    return !reason || PREPARING_REASONS.has(reason);
+  });
+}
+
 /** `pod` as an instance, `image` being the one the profile names now. */
 function instanceOf(pod: Pod, image: string): KubeInstance {
   const terminated = podTerminated(pod);
@@ -151,6 +170,7 @@ function instanceOf(pod: Pod, image: string): KubeInstance {
     node: pod.spec.nodeName ?? null,
     phase: pod.status?.phase,
     running: pod.status?.phase === 'Running',
+    preparing: podPreparing(pod),
     terminated,
     stopConfirmed: podStopConfirmed(pod),
     // A deleted Pod that has ended and that the stop-report finalizer still holds does not go by
