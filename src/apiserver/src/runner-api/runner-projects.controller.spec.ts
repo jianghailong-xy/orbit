@@ -1046,6 +1046,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     listProjectHandoffs: RequestMethod.GET,
     observeIntegration: RequestMethod.POST,
     recordMergeEvidence: RequestMethod.POST,
+    recordRuling: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
     requestDone: RequestMethod.POST,
     requestPromotion: RequestMethod.POST,

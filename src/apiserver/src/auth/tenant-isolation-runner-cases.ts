@@ -573,12 +573,14 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of, mine) => ({ params: { id: of.projectId }, headers: calling(mine.runner.coordinatorSessionId), body: { question: 'Which first?' } }),
   },
+  // A three-character quote: the door refuses it 400 only after it has found the project under the
+  // runner's owner and the header as its coordinator, so the caller's own request is answered by the route.
   'POST /runner/projects/:id/rulings': {
     as: RUNNER,
     request: (of, mine) => ({
       params: { id: of.projectId },
       headers: calling(mine.runner.coordinatorSessionId),
-      body: { ruling: 'Recorded by the census.', quote: 'the census', sourceTurnId: mine.projectId },
+      body: { ruling: 'Recorded by the census.', quote: 'abc', sourceTurnId: mine.projectId },
     }),
   },
   'POST /runner/projects/:id/start-requests': {
@@ -886,7 +888,7 @@ const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenan
   'POST /runner/projects/:id/owner-questions': (mine) => ({ params: { id: mine.projectId }, body: { question: 'Which first?' } }),
   'POST /runner/projects/:id/rulings': (mine) => ({
     params: { id: mine.projectId },
-    body: { ruling: 'Recorded by the census.', quote: 'the census', sourceTurnId: mine.projectId },
+    body: { ruling: 'Recorded by the census.', quote: 'abc', sourceTurnId: mine.projectId },
   }),
   'POST /runner/projects/:id/start-requests': (mine) => ({
     params: { id: mine.projectId },
