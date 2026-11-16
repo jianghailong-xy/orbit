@@ -690,7 +690,7 @@ export class TaskListsService {
         prompt: this.buildConsoleOpening(list.title, list.id),
       },
       // The opening is the platform's own words, not the owner's (0493, design §3.5).
-      { source: 'user', promptByOrbit: true },
+      { source: 'user', promptByOrbit: true, openedBy: 'TASK_LIST_CONSOLE' },
     );
     // Written after the session exists, so a failed create leaves no dangling pointer — and as a
     // compare-and-swap against the pointer this call read, not an unconditional write. Two people

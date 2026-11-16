@@ -43,6 +43,8 @@ type agentToolsReport struct {
 	PermissionMode string                  `json:"permissionMode,omitempty"`
 	Instructions   agentToolsInstructions  `json:"instructions"`
 	Skill          agentToolsSkill         `json:"skill"`
+	// scheduleRun is a scheduled run's session, the only one whose `orbit mcp` lists schedule_run_report.
+	scheduleRun bool
 }
 
 type agentToolsVersions struct {
@@ -135,6 +137,7 @@ func newAgentToolsReport(job *ClaimedSession, engine, carrier string) *agentTool
 	}
 	if job != nil {
 		r.Switches = agentToolsSwitches{Orchestration: job.AllowOrchestration, Watches: job.watchesOn(), Wiki: !job.WikiDisabled}
+		r.scheduleRun = job.ScheduleRun
 		r.PermissionMode = job.Agent.PermissionMode
 		workspace := strings.TrimSpace(job.Agent.AppendSystemPrompt)
 		r.Instructions = agentToolsInstructions{
@@ -178,6 +181,10 @@ func (r *agentToolsReport) countFamilies(listed map[string]bool) {
 	for _, op := range operationCatalog().Ops {
 		family := agentToolsFamilyOf(op)
 		if family == "" {
+			continue
+		}
+		// No session but a scheduled run's has schedule_run_report, whatever the switches (schedule_tools.go).
+		if op.Tool == scheduleRunReportTool && !r.scheduleRun {
 			continue
 		}
 		c := counts[family]

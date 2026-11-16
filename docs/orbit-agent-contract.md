@@ -1,6 +1,6 @@
 # Orbit Agent Contract v1
 
-> **Status:** frozen at v1.9.0, 2026-11-14 (v1.0.0 review record in §11; the 1.1.0 to 1.9.0 changes
+> **Status:** frozen at v1.10.0, 2026-11-16 (v1.0.0 review record in §11; the 1.1.0 to 1.10.0 changes
 > are in §10). v1.1.0 adds the operation catalogue and changes no routing rule; v1.2.0 closes the
 > card-free task-write door on the runner's machine credential; v1.3.0 makes tool input strict and every
 > write's answer a structured receipt (§5.3, §6.3); v1.4.0 gives the owner's "Chat about this" on a card
@@ -13,7 +13,9 @@
 > took, and says "runtime instructions" where "system prompt" was not true on every engine; v1.9.0 measures the
 > agent instead of the text (§12): the eight scenarios and the cases they leave out are a black-box eval on the
 > real engines with real models and a deterministic layer in CI, every turn that touches Orbit files counts-only
-> telemetry, and a release that changes what agents read passes a documented gate with rollback conditions. This
+> telemetry, and a release that changes what agents read passes a documented gate with rollback conditions;
+> v1.10.0 merges main's own catalogue and contract edits (capability availability, the schedule tools, `delegate`,
+> `provider_list --workspace`, the receipt's recovery report) with the project line's, and changes no rule. This
 > file is the authority for how an
 > in-session Claude or Codex agent uses Orbit: which object an intent belongs to, whether it travels
 > over MCP or the CLI, what a person must approve, how failures and retries are handled, and what
@@ -260,7 +262,10 @@ to call one operation.
   executes every advertised `argv` and `helpArgv` through the CLI's own router. Since v1.3.0 every
   `mcpInputSchema` is closed (`additionalProperties: false` on each object that names its properties,
   §5.3), an entry with exclusive arguments carries `mutuallyExclusive`, and the document carries
-  `receiptFlag` (`--receipt`, §6.3).
+  `receiptFlag` (`--receipt`, §6.3). Main's catalogue v1.6.0, merged with the project line's 1.7.0 into 1.8.0
+  (contract 1.10.0), adds, all additively (`schemaVersion` stays 2), what the document says about a command it
+  cannot run here and how to call the ones it can — see
+  [Capability availability](#capability-availability-catalogue-v160) below.
 - MCP: the tool list is still the catalogue's other surface. Read a tool's description before choosing
   it; descriptions state the defaults, the required declarations and the dangerous combinations. What
   spans several tools — which object a request belongs to, how a run's evidence is judged, how a plan's
@@ -272,13 +277,67 @@ to call one operation.
   `orbit capabilities --id <id> --json`, and the primer sends every agent to the guide when it is
   unsure which operation fits. The Claude Code allowlist pre-approves `capabilities *` and `guide *`.
 
+#### Capability availability (catalogue v1.6.0)
+
+Every entry, in `capabilities` and in `unavailableCapabilities`, declares:
+
+| Field | Meaning |
+| --- | --- |
+| `argv` | The command with its absolute executable path in argv[0]. Run it as given. |
+| `mcpInputSchema` | The input schema: the MCP tool's, or the command's own flags when no tool stands beside it. Never null. |
+| `availability` | `{mcp, cli}`: which gates each surface needs (`always`, `orchestration`, `session`, `headless`, `watch_switch`, `wiki_switch`, `absent`, joined with `+`). |
+| `retryPolicy` | `{onNoAnswer, onNoAnswerWithKey?}`: the `error.retry` the receipt gives when the call got no answer (a lost connection, a 408 or a 5xx), without and with its key. `resend` or `reread_first`. It comes from the same rule the receipt uses, so the two never disagree. Every other failure's retry follows from its status (§5.2). |
+| `idempotencyArg` | `{mcp, cli, repeat}` for a `caller_key` operation, `null` for every other: the argument that carries the key (`idempotencyKey` / `--idempotency-key`, `clientTurnId` / `--client-turn-id`, or `requestId` / `REQUEST_ID` for `session_reply`). `repeat` is `returns_first` (the same key answers with the first result) or `refused` (the call can land once, so a repeat is refused, never written twice). |
+| `interaction` | Who else takes part: `none`, `confirmation_card` (the owner answers a card), `owner_decision` (only the owner can answer), or `human_only` (a person's own terminal command). |
+| `unavailableCode` | Set only when `available` is false. A stable code, listed below. `unavailableReason` says the same thing in prose, for a person, and its wording may change. |
+
+`unavailableCapabilities` lists every catalogue command this process cannot run. That covers the
+ones the document leaves out of `capabilities` for this context and the ones it lists with
+`available: false`. It is `[]` when there are none. A consumer that never reads it sees `capabilities`
+unchanged. The codes:
+
+| Code | When |
+| --- | --- |
+| `ORCHESTRATION_DISABLED` | Inside a session whose account has Session orchestration off: the session, agent and runner commands, and the project deliveries that spend the grant. |
+| `SESSION_CONTEXT_MISSING` | The command acts for the session it runs in (`ORBIT_SESSION_ID`), and there is none. It also covers a session verb that no service-token scope can grant, and the agent and runner commands, which have no headless form. |
+| `SERVICE_TOKEN_SCOPE_MISSING` | `ORBIT_SERVICE_TOKEN` is valid but lacks the scope the session command needs. The reason names the scope. |
+| `TOKEN_INVALID` | The credential in effect does not decode: a truncated or foreign service token, or an unreadable saved login. Every command that sends with it is affected. |
+| `TOKEN_EXPIRED` | The service token is past its `exp`. |
+| `RUNNER_NOT_REGISTERED` | No runner credential on this machine. Every command except `login`/`logout`/`whoami` sends with it, and so does a service-token caller outside a session. |
+| `RUNNER_CREDENTIAL_UNUSABLE` | The runner credential exists, but its storage is not private, so it is not used. |
+| `NOT_AVAILABLE_AS_USER` | The CLI acts as the person, and the command has no form that does. |
+| `REQUIRES_USER_LOGIN` | `orbit api`: it acts only as the person, and this process does not. |
+| `HUMAN_ONLY` | A person's own terminal command (`login`, `logout`, `whoami`, `api`). A running agent is never offered one. |
+| `WATCHES_OFF` / `WIKI_OFF` | The session was spawned with that switch off. |
+
+A token's validity is read from the token itself (its shape and `exp`), without asking the server.
+A token the server has revoked still reads as valid here; `orbit whoami` asks the server. A recovery
+step (docs/recovery-contract.md) invokes only `available` entries. Under an invalid or expired service
+token, that takes the session readers out of every recovery that would otherwise name them.
+
+The Claude Code Bash allowlist (`orbitCLIAllowedTools`) is the same catalogue projected again. In
+every session shape (orchestration × watches × wiki), its rules are exactly `capabilities --json`
+plus what the session is offered, plus what it is withheld only because a switch is off. Nothing
+withheld for any other reason is pre-approved. Every other `orbit` command is excluded with a kind
+and a reason (`orbitCLIAllowlistExclusions`): `human_only` (register, unregister, token, terminal,
+resume, host, upgrade, and the catalogue's own login/logout/whoami/api), `headless_only` (run, hostd,
+mcp, hook), `runner_local` (engine-update, status, doctor, version) and `arbitrary_command`
+(`secret exec`). `capability_contract_test.go` holds both lists to the CLI's own router.
+
+Recovery examples and the failure-injection matrix are in the
+[recovery runbook](recovery-contract.md#12-cross-surface-recovery-runbook). After a read, decide
+against current state again; a capability snapshot is discovery, not a grant that survives revocation.
+An unknown write outcome keeps its original key. A committed child with a failed wait is read back,
+not created again. A declined card stops at the owner, and a CLI call cannot override that boundary.
+
 ### 2.6 The always-on primer
 
 §0 is also the first thing every agent Orbit runs reads, as one short text: the **agent primer**
-(`src/runner-go/agent_primer.go`; primer `1.3.0`, written from contract `1.9.0`: besides the contract version its
-first line names, as 1.2.0, from contract 1.8.0, and 1.0.1, from contract 1.6.0, changed, its orchestration paragraph
-sends work `task_list` shows recorded to `task_start` before recording anything, and its start paragraph no longer
-repeats the first's `autoRunWhenReady` default, both measured by the eval, §12). Its first line names both versions. It says the
+(`src/runner-go/agent_primer.go`; primer `1.4.0`, written from contract `1.10.0`, which changed only the contract
+version its first line names, as 1.2.0, from contract 1.8.0, and 1.0.1, from contract 1.6.0, did; 1.3.0, from contract
+1.9.0, also made its orchestration paragraph send work `task_list` shows recorded to `task_start` before recording
+anything, and stopped its start paragraph repeating the first's `autoRunWhenReady` default, both measured by the eval,
+§12). Its first line names both versions. It says the
 ten rules in eight paragraphs, names tools by their MCP names, and carries
 no engine's spelling of them and no path, so the same words are true in every client. Since primer
 `1.1.0` its objects paragraph ends by sending an agent unsure which operation fits, or how to call it,
@@ -326,8 +385,10 @@ What the text is held to (`src/runner-go/agent_primer_test.go`):
   (`autoRunWhenReady` defaults to true), and that only a returned id is a success. A client may show
   no more than that, and Codex shows less, so it opens with what Orbit is for.
 - **Budgets**: the primer at most 3,200 bytes; Orbit's own instructions to an engine (the primer and
-  the paragraphs after it, without the agent's own prompt) at most 6,656 bytes (6,400 until v1.9.0, which added the
-  paragraph on the engine's own sub-agents); no paragraph longer
+  the paragraphs after it, without the agent's own prompt) at most 7,424 bytes (6,400 until
+  2026-11-15, raised to 7,000 on main for the delegate paragraph a top-level session gets and to 6,656 on the
+  project line by v1.9.0 for the paragraph on the engine's own sub-agents; v1.10.0 carries both, 7,178 bytes in the
+  longest shape); no paragraph longer
   than one Codex context value (900 bytes, under Codex's 1,000-token cap whatever the tokenizer);
   ASCII.
 - **Versioned and snapshotted**: the exact text of the primer and of the four shapes of the engine
@@ -591,7 +652,11 @@ A DAG batch restructure has no person route today: a person's terminal edits edg
    A create without a key is sent exactly once: after a timeout or a dropped response its receipt
    says `outcome: unknown`, `retry: reread_first` — list the tasks it would have created (same
    title/project, this session) and only then decide. A second keyless create in a later turn does
-   **not** dedup.
+   **not** dedup. The same holds for every `caller_key` write: a call that carried its key
+   (`idempotencyArg`, §2.5) and got no answer says `retry: resend`, and one without its key says
+   `reread_first`. A send that carried `clientTurnId` is resent under it, because the server answers
+   the same turn. A `session_reply` is never resent, because a request takes one answer.
+   `retryPolicy` in `orbit capabilities --json` states this per operation.
 5. **Never retry by a different door**: MCP after CLI, `task_create` after a declined card, a
    `session_create` after orchestration refused. Different door, same answer, plus a lie in the log.
 6. **An error is never evidence of success.** Only a receipt is (§6).
@@ -737,6 +802,7 @@ whose outputSchema describes their answer, and `permission_prompt`, the engine's
 | `items` / `count` | a written batch | `[{index, ref?, id, status}]` in input order, and how many were written. |
 | `notes` / `text` | when there are any | Sentences that used to travel as prose beside the document; `text` is an answer that is not JSON, and a chat's reply. |
 | `entity` | when there is one | The server's document, exactly as it answered. |
+| `recovery` | on a failed call that has one | The recovery report (docs/recovery-contract.md): `error` in the shared recovery envelope and `next`, the one step to take. |
 
 The CLI is the same mapping: `orbit … --receipt` prints this document — built by the same code from
 the same facts: the requests the command made, the card it filed and its answer, the body it sent —
@@ -1112,6 +1178,7 @@ Code, 6.5 KB on Codex) and a `tools/list` of 253 KB for 80 or 81 tools; Codex re
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.10.0 | 2026-11-16 | Main merged into the project line (P2-01's landing round). Main's own edits to the catalogue and to this contract are kept beside the project line's 1.7.0–1.9.0: stable unavailable codes, retry, idempotency and interaction per command and allowlist parity (fe1e92886), the `schedule_*` tools (61f4da7b3), `delegate` (60187457e, a30e157f1), `provider_list --workspace` (95884b154), the receipt's recovery report (660180f3b), cross-surface recovery (3bcb2598c) and a merge beside a session's turn (d7352a3d4). Every operation and field of both sides is in the catalogue, now 1.8.0, because main's 1.6.0 and the project line's 1.7.0 each named content the other did not have. The primer moves to 1.4.0: its first line names this version, and the engine instructions carry main's `delegate` paragraph and 1.9.0's paragraph on an engine's own sub-agents within a budget of 7,424 bytes, raised from main's 7,000 to hold both (7,178 bytes in the longest shape, §2.6). P1-03's migration is `0940_session_agent_tools`. No rule changed. |
 | 1.9.0 | 2026-11-14 | P2-01: the agent is measured, not the text (new §12, [`agent-contract-eval.md`](./agent-contract-eval.md)). The eight scenarios, their variants and five added cases (MCP missing with the CLI taking over, a declined card, the owner's chat, a lost answer, a write in Plan) are clauses checked over a run's transcript and a control-plane ledger: a deterministic layer in CI (a scripted golden agent through the real `orbit mcp` and CLI, and an agent per forbidden move that fails its clause) and a black-box layer on the real Claude Code and Codex with real models, which writes a comparable report and a release-gate verdict. Every turn that touches Orbit files counts-only `agent_contract_telemetry` (`ORBIT_AGENT_CONTRACT_TELEMETRY=off` turns it off). What the first measurements changed: §0 rule 1 now says an engine's own sub-agents are as private as its plan, and the engine instructions say where work for another agent goes, looked up with `task_list` first (their budget is 6,656 bytes, from 6,400); without orchestration the primer sends recorded work to `task_start` before recording anything; the receipt of a create the owner answered with "Create and start" says the start is the owner's decision, not to be undone, and a start the server answered without making is not called started; the next message after a compaction or a resume carries a note to call `task_get` with no arguments, which reads the session's own task, on both engines (§2.6); S6/S7's words say whose the work is to be, and S7 is read with the routing (a task-family start passes); a progress report on the session's own task is not an S5 write. A release that changes what agents read passes the documented gate, with rollback conditions. The first accepted report ([`agent-eval/baseline.json`](./agent-eval/baseline.json), §8.3) passes it on Claude Code 2.1.325 (`claude-sonnet-5-5`, `claude-opus-5-5`) and Codex 0.169.0 and 0.167.2 (`gpt-6.1-sol`). G10 closed; G12–G14 opened for what it found. The primer moves to 1.3.0: its first line names this version, the orchestration paragraph says the above, and the start paragraph no longer repeats the first's `autoRunWhenReady` default; no rule changed. |
 | 1.8.0 | 2026-11-14 | P1-03: the person's side of the contract (new §2.7). The Agent Tools guide (`agent_tools_guide.go`, guide 1.0.0) is generated into `docs/agent-tools-guide.md`, the web console's and OrbitKit's copies and the playbooks skill, each held to it byte for byte; it says MCP first, the record versus the private plan, which object, create versus start, the CLI's place and the troubleshooting table, with four examples whose MCP calls pass their schemas and whose `orbit` lines pass their parsers. The playbooks skill is managed per session — Claude Code's `orbit:playbooks` through `--plugin-dir` (2.1.325 and later), Codex's `orbit-playbooks` through `skills/extraRoots/set` — and is never named by the primer or the engine instructions. Each session's engine reports its Orbit MCP connection in its own words (Claude `system/init`, Codex `mcpServer/startupStatus/updated`) as an `agent_tools` system event, kept as `session.agentTools` (migration 0940, first numbered 0770) and shown read-only in Agent tools on web and macOS. The order and role of what each engine reads were measured from its own request and are stated in §2.7; the clients, the CLI help, the catalogue's agent fields and the workspace-write cards say runtime instructions and base instructions instead of system prompt. The route guide moves to 1.1.0 (each topic carries `asks`), the catalogue to 1.7.0 (agent_create/agent_update describe `systemPrompt` and `appendSystemPrompt` as base and runtime instructions), the primer to 1.2.0 (its first line names this version; no rule changed). No routing rule changes. |
 | 1.7.0 | 2026-11-14 | P1-01: graded discovery (§2.5, G7 closed). A new catalogued operation, `guide` (MCP tool, always listed and `readOnlyHint`; `orbit guide [TOPIC] --json`), answers the objects, the intent routes R1.1–R1.14 with their topics and availability, and the routing rules, or one topic's shortest recipe: each step's MCP tool and absolute argv, availability on each surface with the reason, mutates/approval, a minimal example and the success evidence, then the rules that span the tools. `orbit capabilities` gains `--summary`, `--family NAME` and `--id ID`, which answer the same offer a view at a time with the same `context`; a command this process is not offered is explained (a switch, a credential, an MCP-only door) rather than missing. The examples and leaf parameters are generated from the catalogue and held to both surfaces by tests, and a budget test bounds every graded answer (16 KiB) and the task-create discovery (24 KiB). The engine instructions send the CLI to the guide and `--id` instead of the whole document, the primer (1.1.0) sends an agent to the guide when unsure, and the Claude allowlist pre-approves `capabilities *` and `guide *`. `task_create`'s and `task_create_batch`'s descriptions keep their own call's facts (the start defaults, the card, the criterion declaration, the pure gate, and asking the person what settles the work before the call) and send the cross-tool rules (which object, how evidence is judged, ordering and nesting) to the guide's `task-create` and `task-batch` topics; `task_batch_pin`'s loses its benchmark history. The catalogue moves to 1.6.0. `orbit capabilities --json` is unchanged (`schemaVersion` 2). No routing rule changes. |

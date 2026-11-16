@@ -28,10 +28,12 @@ public enum PendingTray {
     /// Whether a bubble on the queue waits in the tray rather than in the transcript's tail: the
     /// reader's own words still on their way — queued for the next turn, or a steer no runner has
     /// taken yet. What Orbit queued stays in the tail as its card, and a message whose delivery
-    /// settled undelivered stays in the conversation with that outcome. Web parity:
-    /// `WorkspaceView.tsx`'s `inPendingTray`.
+    /// settled undelivered stays in the conversation with that outcome, and so does one held for its
+    /// translation, with its chip or its failure (Settings › Translation, board frame 6): the tray only
+    /// waits for the engine. Web parity: `WorkspaceView.tsx`'s `inPendingTray`.
     public static func holds(_ bubble: UserBubble) -> Bool {
         !bubble.undelivered && !SteerDelivery.settles(bubble.delivery) && SteerDelivery.isReadersOwn(bubble)
+            && bubble.translation?.held != true
     }
 
     /// The tray's rows, in the order they were sent: the reader's steers nothing has read

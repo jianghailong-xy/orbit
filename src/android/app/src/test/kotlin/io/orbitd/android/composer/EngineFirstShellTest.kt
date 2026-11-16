@@ -12,9 +12,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * A07-19 (a) and (e) over the controlled server (iOS e6295abe7, 6f3083272, f93f3fe5e; OrbitKit TaskRunHandoffTests
- * `providerSwitchNote`, AppModel `rememberDefaultModel`, ConsoleModel `draftModelSeed`): a provider picked for a session says under
- * the composer what it will do and when, until the next message goes; and a model picked is remembered for its engine and
- * credential, which a new session then starts on.
+ * `providerSwitchNote`, ConsoleModel `draftModelSeed`): a provider picked for a session says under the composer what it will do and
+ * when, until the next message goes; a model picked applies to its session only; and a new session starts on its workspace's
+ * lastModel where it runs on that workspace's lastEngine and lastProvider (docs/workspace-default-model-design.md).
  */
 class EngineFirstShellTest : ComposerShellTest() {
     private val deepseek = """[{"slug":"deepseek","label":"DeepSeek","runtime":"claude","presetSlug":"deepseek","engines":["claude","opencode","dsh"],
@@ -37,29 +37,53 @@ class EngineFirstShellTest : ComposerShellTest() {
         await { !has(note) }
     }
 
-    @Test fun aModelPickedIsRememberedForItsEngineAndCredential() {
+    /** A model picked applies to its session only: the account-wide model memory is retired, so nothing PATCHes the preferences. */
+    @Test fun aModelPickedSendsNoPreferencesPatch() {
         signIn(); openSession(); openModelMenu()
         compose.onNode(hasText("Opus 5.5", substring = true) and hasClickAction() and hasAnyAncestor(isDialog())).performScrollTo().performClick()
-        await { ComposerShell.body("PATCH users/me/preferences") != null }
-        assertEquals(buildJsonObject { putJsonObject("defaultModels") { put("claude:claude", "claude-opus-5-5") } },
-            ComposerShell.body("PATCH users/me/preferences"))
+        await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config") != null }
+        compose.waitForIdle()
+        assertEquals(emptyList<String>(), ComposerShell.calls.filter { it.startsWith("PATCH users/me") })
+        assertTrue(ComposerShell.bodies.none { (_, body) -> "defaultModels" in body })
     }
 
-    /** The account remembers Sonnet for Claude Code on its own sign-in: a new session on it starts there — the chip says so and the
-     * session is made on it — while one the runtime no longer offers is not started on. */
-    @Test fun aNewSessionStartsOnTheModelLastPickedForItsEngineAndCredential() {
-        ComposerShell.runner = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"Fixture runner","online":true,"status":"ONLINE",
-            "engines":[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"}],
-            "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"},{"value":"claude-sonnet-5-5","label":"Sonnet 5.5"}],
-              "codex":[{"value":"gpt-6","label":"GPT-6"}]}}""")
-        ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
-            "preferences":{"defaultModels":{"claude:claude":"claude-sonnet-5-5","codex:codex":"gpt-4-retired"}}}""".encodeToByteArray()) }
+    /** The workspace's person-opened session last ran Sonnet on Claude Code's own sign-in: a new session there starts on Sonnet — the
+     * chip says so and the session is made on it — whatever an older client left in the account's preferences. */
+    @Test fun aNewSessionStartsOnTheWorkspacesLastModel() {
+        ComposerShell.runner = twoClaudeModels
+        ComposerShell.workspace = ComposerShell.fields("""{"lastEngine":"claude","lastProvider":"claude","lastModel":"claude-sonnet-5-5"}""")
+        oldClientPreferences()
         signIn(); openDraft()
         await { has(hasContentDescription("Model Sonnet 5.5, effort Default")) }
         compose.onNodeWithTag("composer-input").performTextInput("Start on Sonnet")
         compose.onNodeWithTag("composer-send").performClick()
         await { ComposerShell.body("POST sessions") != null }
         assertEquals("claude-sonnet-5-5", ComposerShell.body("POST sessions")!!["model"]?.jsonPrimitive?.content)
+    }
+
+    /** A lastModel the runtime no longer offers, or none at all, leaves the draft on the runner's default. */
+    @Test fun aNewSessionFallsBackToTheRunnerDefault() {
+        ComposerShell.runner = twoClaudeModels
+        ComposerShell.workspace = ComposerShell.fields("""{"lastEngine":"claude","lastProvider":"claude","lastModel":"claude-sonnet-4-retired"}""")
+        oldClientPreferences()
+        signIn(); openDraft()
+        await { has(hasContentDescription("Model Opus 5.5, effort Default")) }
+        compose.onNodeWithTag("composer-input").performTextInput("Start on the default")
+        compose.onNodeWithTag("composer-send").performClick()
+        await { ComposerShell.body("POST sessions") != null }
+        assertNotEquals("claude-sonnet-4-retired", ComposerShell.body("POST sessions")!!["model"]?.jsonPrimitive?.contentOrNull)
+        assertFalse(has(hasContentDescription("Model Sonnet 5.5, effort Default")))
+    }
+
+    private val twoClaudeModels = ComposerShell.obj("""{"id":"${ComposerShell.RUNNER}","name":"Fixture runner","online":true,"status":"ONLINE",
+        "engines":[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"}],
+        "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"},{"value":"claude-sonnet-5-5","label":"Sonnet 5.5"}],
+          "codex":[{"value":"gpt-6","label":"GPT-6"},{"value":"gpt-7","label":"GPT-7"}]}}""")
+
+    /** What an older client still writes: the retired account-wide memory, naming models the runner offers. Nothing reads it. */
+    private fun oldClientPreferences() {
+        ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
+            "preferences":{"defaultModels":{"claude:claude":"claude-sonnet-5-5","codex:codex":"gpt-7"}}}""".encodeToByteArray()) }
     }
 
     /** How [name] is laid out in its engine's row of the open Engine list: null where it is as wide as it is whole, else how wide it
@@ -101,14 +125,23 @@ class EngineFirstShellTest : ComposerShellTest() {
         assertEquals(emptyList<String>(), names.mapNotNull { (engine, name) -> misfit(engine, name) })
     }
 
-    @Test fun anEnginePickedLandsOnItsRememberedModelUnlessTheRuntimeRetiredIt() {
-        ComposerShell.answers["GET users/me"] = { ApiResponse(200, """{"id":"u1","email":"owner@a07c.test","name":"Owner",
-            "preferences":{"defaultModels":{"codex:codex":"gpt-4-retired"}}}""".encodeToByteArray()) }
+    /** An engine picked lands on the workspace's lastModel only where it is the workspace's lastEngine and lastProvider: Codex on
+     * its default, whatever the account's old memory says for it; Claude Code back on the lastModel. */
+    @Test fun anEnginePickedLandsOnTheWorkspacesLastModelOnlyOnItsOwnEngine() {
+        ComposerShell.runner = twoClaudeModels
+        ComposerShell.workspace = ComposerShell.fields("""{"lastEngine":"claude","lastProvider":"claude","lastModel":"claude-sonnet-5-5"}""")
+        oldClientPreferences()
         signIn(); openDraft()
+        await { has(hasContentDescription("Model Sonnet 5.5, effort Default")) }
         compose.onNodeWithTag("new-session-engine").performClick()
         await { has(hasTestTag("engine:codex") and hasClickAction()) }
         compose.onNodeWithTag("engine:codex").performClick()
         await { has(hasText("Codex ⌄")) }
         await { has(hasContentDescription("Model GPT-6, effort Default")) }
+        compose.onNodeWithTag("new-session-engine").performClick()
+        await { has(hasTestTag("engine:claude") and hasClickAction()) }
+        compose.onNodeWithTag("engine:claude").performClick()
+        await { has(hasText("Claude Code ⌄")) }
+        await { has(hasContentDescription("Model Sonnet 5.5, effort Default")) }
     }
 }

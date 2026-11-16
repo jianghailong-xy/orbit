@@ -7,6 +7,7 @@ import {
   Get,
   Header,
   Headers,
+  HttpCode,
   MessageEvent,
   Optional,
   Param,
@@ -25,7 +26,7 @@ import { ProjectsService } from '../projects/projects.service';
 import { PublicIdPipe } from '../common/public-id';
 import { Prisma, RunStatus } from '@prisma/client';
 import { concatMap, defer, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
-import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
+import { ApprovalDecisionRequest, RunEventType, SessionSettingsPatch } from '@orbit/shared';
 import { replayableEventSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -61,6 +62,7 @@ import { ifNoneMatchHits, isOpenListView, openListEtag } from './open-list-versi
 import { assertClientTurnIdNotReserved } from './watch-turn-key';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
+import { translationEventOf } from './reply-translation';
 
 /** ~20s data-plane keepalive (mirrors EventsController): a `ping` data frame — Nest's @Sse can't
  *  emit raw `:` comments — sent on the per-session transcript stream so an *idle* session (one
@@ -91,6 +93,21 @@ const SSE_REPLAY_CAP = 200;
  * it would have to hold in memory anyway.
  */
 const SSE_GAP_CAP = 1000;
+
+/**
+ * Settings › Translation (reply-translation.ts): how far back a cursor'd connect looks for replies
+ * translated at or before its cursor, and how many of their translations it sends again.
+ *
+ * A reply's translation reaches a client once, as a live-only `translation` event, and lands in the
+ * reply's stored payload some seconds after the reply itself. A client whose stream was down at that
+ * moment (an iPhone suspends its socket in the background) resumes after the reply's seq, so neither
+ * the replay nor the live hub ever told it, and the reply kept its "Translates when the reply is
+ * done" chip for good. So the connect sends the newest ones again; every client folds a repeat into
+ * the event it already holds. The window bounds the scan behind the cursor; a translation lands
+ * within seconds of its reply, so it is never far behind.
+ */
+const SSE_TRANSLATION_WINDOW = 500;
+const SSE_TRANSLATION_RESEND = 10;
 
 /**
  * Cap the live events held while the replay query is in flight (see `replayThenLive`). The window
@@ -307,7 +324,8 @@ export class SessionsController {
     return this.sessions.create(
       user.userId,
       { ...dto, workspaceId: dto.workspaceId ?? dto.agentId },
-      { credential: user.credential },
+      // The owner's own words: Settings › Translation applies (sessions/turn-translation.ts).
+      { credential: user.credential, translate: true },
     );
   }
 
@@ -617,6 +635,7 @@ export class SessionsController {
     assertClientTurnIdNotReserved(dto.clientTurnId);
     // Which client sent it, from the credential and the app's own headers (turn-sender-client.ts), never the body.
     return this.sessions.createTurn(user.userId, id, dto, {
+      translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
     });
   }
@@ -635,6 +654,7 @@ export class SessionsController {
     assertClientTurnIdNotReserved(dto.clientTurnId);
     // Which client sent it, from the credential and the app's own headers (turn-sender-client.ts), never the body.
     return this.sessions.createTurn(user.userId, id, dto, {
+      translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
     });
   }
@@ -662,6 +682,44 @@ export class SessionsController {
     @Param('turnId', PublicIdPipe) turnId: string,
   ) {
     return this.sessions.cancelQueuedTurn(user.userId, id, turnId);
+  }
+
+  // Settings › Translation (@orbit/shared translation.ts): translate a held message again — one whose
+  // translation failed or timed out, so it was not sent. The same raw turnId as the DELETE beside it.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/translation/retry')
+  retryTurnTranslation(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.retryTurnTranslation(user.userId, id, turnId);
+  }
+
+  // ...or deliver it as the owner wrote it, untranslated.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/turns/:turnId/translation/send-as-written')
+  sendTurnAsWritten(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('turnId', PublicIdPipe) turnId: string,
+  ) {
+    return this.sessions.sendTurnAsWritten(user.userId, id, turnId);
+  }
+
+  // Settings › Translation (@orbit/shared translation.ts, reply-translation.ts): translate an agent reply
+  // (or a suggestion) again, one whose translation failed. Answers at once; the result is a live
+  // `translation` event and the event's own payload.
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/events/:seq/translation/retry')
+  retryReplyTranslation(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('seq') seq: string,
+  ) {
+    const n = Number(seq);
+    if (!Number.isInteger(n) || n < 1) throw new BadRequestException('seq must be a positive integer');
+    return this.sessions.retryReplyTranslation(user.userId, id, n);
   }
 
   // Send a message queued for the next turn into the one running now (the tray's Steer). The same
@@ -692,6 +750,7 @@ export class SessionsController {
     return this.sessions.resume(user.userId, id, dto, {
       routeToCurrentRun: true,
       credential: user.credential,
+      translate: true,
       senderClient: senderClientOfRequest(user.credential, client, device),
     });
   }
@@ -706,6 +765,27 @@ export class SessionsController {
     @Body() dto: SessionConfigDto,
   ) {
     return this.sessions.updateConfig(user.userId, id, dto, user.credential);
+  }
+
+  /** The session's Settings panel: its own env vars and notification overrides — see
+   *  SessionsService.updateSettings. Validated there, field by field. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Patch(':id/settings')
+  updateSettings(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: SessionSettingsPatch,
+  ) {
+    return this.sessions.updateSettings(user.userId, id, body);
+  }
+
+  /** The Settings panel's Restart: reload the live engine with the session's env, after the turn
+   *  in flight if there is one — see SessionsService.restart. */
+  @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
+  @Post(':id/restart')
+  @HttpCode(202)
+  restart(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.restart(user.userId, id);
   }
 
   /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
@@ -743,7 +823,7 @@ export class SessionsController {
     @Body(PublicIdPipe.forFields('attachmentIds')) dto?: SessionInterruptDto,
   ) {
     assertClientTurnIdNotReserved(dto?.clientTurnId);
-    return this.sessions.interrupt(user.userId, id, dto);
+    return this.sessions.interrupt(user.userId, id, dto, { translate: true });
   }
 
   @PatScope('sessions:write', { workspaceConfinable: { params: { id: 'session' } } })
@@ -986,6 +1066,16 @@ export class SessionsController {
   }
 
   /**
+   * The session's SubAgent runs (docs/subagent-design.md §6.1, §6.4), oldest first, each keyed by its
+   * `delegate` call: what the transcript's SubAgent block shows beside the call — tier, model, Why, time, cost.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/subagents')
+  subagentRuns(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.listSubagentRuns(user.userId, id);
+  }
+
+  /**
    * The authoritative, complete list of background shells the session ever launched (every
    * Bash(run_in_background), with output recovered from the workspace's Read polls). Derived over ALL
    * persisted events, so the "Background processes" tray shows the same complete list on every
@@ -1084,6 +1174,25 @@ export class SessionsController {
     return this.sessions.getEventFull(user.userId, id, Math.trunc(n));
   }
 
+  /** The live `translation` events of the newest replies translated at or before `since`, oldest
+   *  first, sent again on a cursor'd connect (SSE_TRANSLATION_WINDOW). Best-effort: a failed read
+   *  sends none rather than failing the stream. */
+  private async translationsBehind(id: string, since: number): Promise<StreamedEvent[]> {
+    const rows = await this.prisma.$queryRaw<{ seq: number; translation: unknown; turnId: string | null }[]>`
+      SELECT seq, payload->'translation' AS translation, turn_id AS "turnId"
+      FROM run_event
+      WHERE session_id = ${id}::uuid
+        AND seq <= ${since} AND seq > ${since - SSE_TRANSLATION_WINDOW}
+        AND type IN (${RunEventType.ASSISTANT}, ${RunEventType.PROMPT_SUGGESTION})
+        AND payload->'translation' IS NOT NULL
+      ORDER BY seq DESC
+      LIMIT ${SSE_TRANSLATION_RESEND}
+    `.catch(() => []);
+    return rows
+      .flatMap((row) => translationEventOf({ seq: row.seq, payload: { translation: row.translation }, turnId: row.turnId }) ?? [])
+      .reverse();
+  }
+
   /** Replays a session's persisted events, then streams live ones over SSE. `maxPayload` trims
    *  bulky tool bodies on both halves alike (see truncate-payload), so a card looks the same
    *  whether it arrived by replay or live. */
@@ -1154,7 +1263,9 @@ export class SessionsController {
             // seq 0 like the other live-only control events, and lands before the dedup that would
             // otherwise swallow the second one.
             if (rows.length > SSE_GAP_CAP) return from([resyncEvent()]);
-            return from(rows);
+            return from(this.translationsBehind(id, seqFilter.gt)).pipe(
+              concatMap((resent) => from<StreamedEvent[]>([...rows, ...resent])),
+            );
           }),
         );
         // Only the live half can contain deltas — they are broadcast-only and never persisted, so

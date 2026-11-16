@@ -497,5 +497,37 @@ class RunnerPageTest {
         assertEquals(buildJsonObject { put("engine", "codex") }, RunnerPage.agentFixBody("installFailed", "codex", null))
         assertEquals(buildJsonObject { put("latest", "0.1.250") }, RunnerPage.agentFixBody("cannotSelfUpdate", null, "0.1.250"))
         assertEquals(buildJsonObject { }, RunnerPage.agentFixBody("cannotSelfUpdate", null, null))
+        assertEquals(buildJsonObject { }, RunnerPage.agentFixBody("engineUpdateFailed", null, "0.1.250"))
+    }
+
+    // Under the Update Engines Now report (docs/mocks/engine-update-fix-with-agent/03-mobile.png)
+
+    /** [fixRunner] after an Update Engines Now that ended [status], reporting [message]. */
+    private fun updated(blocked: String? = null, fixing: String = "", status: String = "failed",
+                        message: String = "Codex — updated 0.168.2 → 0.169.0\nOpenCode — update timed out after 5m0s"): JsonObject =
+        buildJsonObject {
+            fixRunner(blocked, fixing).forEach { (k, v) -> put(k, v) }
+            put("install", buildJsonObject {
+                put("status", status); put("engine", JsonNull); put("command", "orbit engine-update"); put("message", message); put("mode", "update")
+            })
+        }
+
+    @Test fun theUpdateReportOffersItOnlyWhileARunFailed() {
+        assertEquals(AgentFixView(null, true, "Starts a session in orbit-dev on this machine, with Claude Code."), RunnerPage.agentFixOnUpdate(updated()))
+        assertNull("nothing failed", RunnerPage.agentFixOnUpdate(updated(status = "done", message = "OpenCode — updated 1.0.98 → 1.0.112")))
+        assertNull("still running", RunnerPage.agentFixOnUpdate(updated(status = "installing")))
+        assertNull("no report", RunnerPage.agentFixOnUpdate(fixRunner()))
+        assertNull("an older server", RunnerPage.agentFixOnUpdate(buildJsonObject {
+            put("id", "r1"); put("install", updated()["install"]!!)
+        }))
+    }
+
+    @Test fun theUpdateReportIsBlockedOrFixingAsThePanelIs() {
+        assertEquals(AgentFixView(null, false, "Why: engineSignedOut. Sign in to Claude Code above to use this."),
+            RunnerPage.agentFixOnUpdate(updated("engineSignedOut")))
+        assertEquals(AgentFixing("engineUpdateFailed", null, "s1", "w1", "orbit-dev"),
+            RunnerPage.agentFixOnUpdate(updated(fixing = fixingEntry("engineUpdateFailed", null)))?.fixing)
+        assertEquals("another warning's agent is not this one's", AgentFixView(null, true, RunnerCopy.agentFixStarts("orbit-dev", "Claude Code")),
+            RunnerPage.agentFixOnUpdate(updated(fixing = fixingEntry("installFailed", "codex"))))
     }
 }

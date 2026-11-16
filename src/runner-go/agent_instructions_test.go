@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -8,12 +10,12 @@ import (
 
 func TestWithOrbitCLIInstructions(t *testing.T) {
 	exe := "/opt/orbit runner/bin/orbit"
-	orbit := orbitCLIInstructions(exe, false, true)
-	if got := withOrbitCLIInstructions("", exe, false, true); got != orbit {
+	orbit := orbitCLIInstructions(exe, false, true, true)
+	if got := withOrbitCLIInstructions("", exe, false, true, true); got != orbit {
 		t.Fatalf("empty configured instructions = %q", got)
 	}
 
-	got := withOrbitCLIInstructions("Owner instructions.\n", exe, false, true)
+	got := withOrbitCLIInstructions("Owner instructions.\n", exe, false, true, true)
 	want := "Owner instructions.\n\n" + orbit
 	if got != want {
 		t.Fatalf("merged instructions = %q, want %q", got, want)
@@ -68,7 +70,7 @@ func TestAppendClaudeAgentInstructionArgsAddsOnlyAbsolutePhase1Rules(t *testing.
 	want := []string{
 		"-p",
 		"--system-prompt", "Base agent instructions.",
-		"--append-system-prompt", "Owner append instructions.\n\n" + orbitCLIInstructions(exe, false, true),
+		"--append-system-prompt", "Owner append instructions.\n\n" + orbitCLIInstructions(exe, false, true, true),
 		"--allowedTools", strings.Join(wantAllowed, ","),
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -101,7 +103,7 @@ func TestAppendClaudeAgentInstructionArgsFailsClosedWithoutSafeExecutable(t *tes
 	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, agent, "", false, false, true); !reflect.DeepEqual(got, want) {
 		t.Fatalf("missing executable args = %#v, want %#v", got, want)
 	}
-	if got := withOrbitCLIInstructions("Owner instructions.", "", false, true); got != "Owner instructions." {
+	if got := withOrbitCLIInstructions("Owner instructions.", "", false, true, true); got != "Owner instructions." {
 		t.Fatalf("missing executable instructions = %q", got)
 	}
 	if got := appendClaudeAgentInstructionArgs([]string{"-p"}, AgentExecConfig{}, "", false, false, true); !reflect.DeepEqual(got, []string{"-p"}) {
@@ -118,7 +120,7 @@ func TestOrbitCLIAllowedToolsRejectsPolicyMetacharacters(t *testing.T) {
 	if got := orbitCLIAllowedTools("", false); len(got) != 0 {
 		t.Fatalf("empty executable rules = %#v", got)
 	}
-	if got := orbitCLIInstructions("/tmp/or`bit", false, true); got != "" {
+	if got := orbitCLIInstructions("/tmp/or`bit", false, true, true); got != "" {
 		t.Fatalf("Markdown-unsafe executable instructions = %q", got)
 	}
 	spaced := orbitCLIAllowedTools("/opt/orbit runner/bin/orbit", false)
@@ -167,8 +169,8 @@ func TestOrbitCLIAllowedToolsAddsSessionRulesOnlyForOrchestrators(t *testing.T) 
 // the work already has and says what agreeing costs.
 func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	open := orbitCLIInstructions(exe, false, true)
-	inside := orbitCLIInstructions(exe, true, true)
+	open := orbitCLIInstructions(exe, false, true, true)
+	inside := orbitCLIInstructions(exe, true, true, true)
 	if open == inside {
 		t.Fatal("a session inside recorded work receives the same project paragraph as a free conversation")
 	}
@@ -219,7 +221,7 @@ func TestOrbitProjectInstructionsDifferInsideRecordedWork(t *testing.T) {
 func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
-		got := orbitCLIInstructions(exe, form.inside, form.watches)
+		got := orbitCLIInstructions(exe, form.inside, form.watches, true)
 		for _, phrase := range []string{
 			"`[name](path)`",
 			"`![name](path)`",
@@ -247,7 +249,7 @@ func TestOrbitInstructionsSayWhichLinkedFilesReachTheUser(t *testing.T) {
 func TestOrbitInstructionsKeepEvidenceOutOfTheRepository(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
-		got := orbitCLIInstructions(exe, form.inside, form.watches)
+		got := orbitCLIInstructions(exe, form.inside, form.watches, true)
 		for _, phrase := range []string{
 			"cite a command's output by its tool call",
 			"rather than saving a log",
@@ -432,5 +434,66 @@ func TestClaudeInstructionArgsFollowTheSessionShape(t *testing.T) {
 	}
 	if got := appendPromptFor(&ClaimedSession{TaskID: "task-1"}); !strings.Contains(got, "file it as a task") {
 		t.Errorf("task session did not get the task form: %q", got)
+	}
+}
+
+// Every engine's instructions tell a top-level session when to use delegate, and a SubAgent's, which is neither
+// offered nor served it, nothing about it. Cursor, which never shows mcp__orbit__* names, gets the paragraph without
+// its Claude Code sentence.
+func TestOnlyATopLevelSessionIsToldWhenToDelegate(t *testing.T) {
+	exe := "/usr/local/bin/orbit"
+	parent := &ClaimedSession{TaskID: "t1", Provider: providerClaude, Agent: AgentExecConfig{Provider: providerClaude, AppendSystemPrompt: "Owner append."}}
+	child := subagentChildJob(parent, AgentExecConfig{}, subagentDefinition{}, "run-1", providerClaude, "")
+	builders := map[string]func(job *ClaimedSession) string{
+		"claude": func(job *ClaimedSession) string {
+			return strings.Join(appendClaudeAgentInstructionArgs(nil, job.instructionAgent(), exe, false, job.insideRecordedWork(), job.watchesOn()), "\n")
+		},
+		"codex context": func(job *ClaimedSession) string {
+			return codexAgentContext(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn())
+		},
+		"codex additionalContext": func(job *ClaimedSession) string {
+			var values []string
+			for _, v := range codexAgentAdditionalContext(job.instructionAgent(), exe, 1, job.insideRecordedWork(), job.watchesOn()) {
+				values = append(values, asString(mapValue(v)["value"]))
+			}
+			return strings.Join(values, "\n\n")
+		},
+		"kimi": func(job *ClaimedSession) string {
+			return kimiAgentInstructions(job.instructionAgent(), exe, job.insideRecordedWork(), job.watchesOn())
+		},
+		"cursor":      cursorAgentInstructions,
+		"dsh":         func(job *ClaimedSession) string { return dshSessionAgentOverlay(job).AppendSystemPrompt },
+		"antigravity": func(job *ClaimedSession) string { return antigravityInstructions(job, exe) },
+		"opencode": func(job *ClaimedSession) string {
+			dir := t.TempDir()
+			if _, err := openCodeConfigContent(job, dir, "orbit", nil); err != nil {
+				t.Fatal(err)
+			}
+			raw, err := os.ReadFile(filepath.Join(dir, "opencode-instructions.txt"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return string(raw)
+		},
+	}
+	whenToDelegate := strings.TrimSuffix(strings.TrimSuffix(orbitDelegateInstructions, "\n\n"), orbitDelegateClaudeCodeLoad)
+	for name, build := range builders {
+		top := build(parent)
+		if !strings.Contains(top, whenToDelegate) {
+			t.Errorf("%s: a top-level session is not told when to use delegate:\n%s", name, top)
+		}
+		if loads := strings.Contains(top, orbitDelegateClaudeCodeLoad); loads == (name == "cursor") {
+			t.Errorf("%s: says how to load delegate in Claude Code = %v", name, loads)
+		}
+		if sub := build(child); strings.Contains(sub, "Use delegate") || strings.Contains(sub, "select:mcp__orbit__delegate") ||
+			!strings.Contains(sub, "Orbit primer") {
+			t.Errorf("%s: a SubAgent is told to use delegate, or is not given Orbit's instructions:\n%s", name, sub)
+		}
+	}
+	for _, want := range []string{"cheaper or stronger model", "another machine", `needs: ["os:darwin"]`, "workspace",
+		"in the background", "built-in subagent or Agent tool", "record the cost", "ToolSearch select:mcp__orbit__delegate"} {
+		if !strings.Contains(orbitDelegateInstructions, want) {
+			t.Errorf("the delegate paragraph lacks %q", want)
+		}
 	}
 }

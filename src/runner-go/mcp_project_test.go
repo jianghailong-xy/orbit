@@ -271,9 +271,10 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	if _, exposed := createProps["acceptanceCriteria"]; exposed {
 		t.Fatal("project_create exposes legacy acceptanceCriteria as an agent authoring fallback")
 	}
-	// title, goal, instructions, acceptanceCriteriaItems, workspaceId — the fifth is where the
-	// coordinator opens, and it is counted here so a sixth cannot appear unremarked.
-	if len(createProps) != 5 {
+	// title, goal, instructions, acceptanceCriteriaItems, workspaceId, requestId — the fifth is where
+	// the coordinator opens, the sixth names a repeat of a create whose answer was lost
+	// (create_request.go), and they are counted here so a seventh cannot appear unremarked.
+	if len(createProps) != 6 {
 		t.Fatalf("project_create properties = %#v", createProps)
 	}
 	if got := mcpToolRequired(t, tools, "project_create"); len(got) != 1 || got[0] != "title" {
@@ -1110,10 +1111,15 @@ func TestMCPProjectCreateDescriptionProposesDurableCoordination(t *testing.T) {
 		{"puts a confirmation card in front of the user", "it asks rather than silently creating"},
 		{"nothing is created if they decline", "a no leaves nothing behind"},
 		{"do not ask twice", "one answer settles it for this body of work"},
-		// The second project a coordinator opens is not refused — it is handed to a coordinator of
-		// its own, in the same workspace. This sentence said "refused, and nothing is created" long
-		// after that stopped being true, which is how a coordinator came to read the call as closed.
-		{"the server opens the new project its own coordinator conversation", "the second project is created, not refused"},
+		// The second project from a coordinating session is refused, and the refusal is a chain to
+		// follow rather than a closed door: reconcile, ask the user, then one child session that
+		// records it, never chased by a session_send.
+		{"refused ALREADY_COORDINATING", "the second project is refused by name"},
+		{"Reconcile first", "a lost first answer is not a second project"},
+		{"ask whether to open a child session", "the user decides before a session is opened"},
+		{"session_create once with the refusal's childSessionPrompt", "one child, opened with the prompt the server wrote"},
+		{"do not follow it with session_send", "the prompt is already the child's first turn"},
+		{"by hand", "without session_create there is a manual fallback"},
 	} {
 		if !strings.Contains(description, want.phrase) {
 			t.Fatalf("project_create description does not mention %q (%s): %q", want.phrase, want.why, description)
@@ -1469,6 +1475,7 @@ func TestProjectSendToolPostsAsTheCallingSession(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &body); err != nil {
 		t.Fatalf("project_send body is not JSON: %v\n%s", err, raw)
 	}
+	key := takeDrawnKey(t, body)
 	if len(body) != 1 || body["message"] != "the shard is red" {
 		t.Fatalf("project_send body = %#v", body)
 	}
@@ -1481,14 +1488,15 @@ func TestProjectSendToolPostsAsTheCallingSession(t *testing.T) {
 		t.Fatalf("project_send result is not JSON: %v\n%s", err, text)
 	}
 	if got["created"] != true || got["replacedSessionId"] != "343dlzsYWKo5z8l2M8tsB" ||
-		got["replaceReason"] != "RUNNER_OFFLINE" {
+		got["replaceReason"] != "RUNNER_OFFLINE" || got["clientTurnId"] != key {
 		t.Fatalf("project_send result = %#v", got)
 	}
 }
 
-// clientTurnId is project_send's retry key, offered the way session_send offers it: optional, so a
-// call without one is the call it always was — the message alone, the server minting the key — and
-// passed through as given when there is one, so a retry gets back the turn it already filed.
+// clientTurnId is project_send's retry key, offered the way session_send offers it: optional, and
+// passed through as given when there is one, so a replay gets back the turn it already filed.
+// Without one the runner draws a key for the call (call_identity.go), so a lost answer can still
+// be replayed under it.
 func TestProjectSendToolTakesAnOptionalClientTurnId(t *testing.T) {
 	tools := toolDescriptors(false, true)
 	prop, _ := mcpToolProps(tools, "project_send")["clientTurnId"].(map[string]interface{})
@@ -1529,7 +1537,7 @@ func TestProjectSendToolTakesAnOptionalClientTurnId(t *testing.T) {
 	if len(bodies) != 2 {
 		t.Fatalf("project_send made %d requests, want 2", len(bodies))
 	}
-	if _, present := bodies[0]["clientTurnId"]; present || len(bodies[0]) != 1 {
+	if key := takeDrawnKey(t, bodies[0]); key == "" || len(bodies[0]) != 1 {
 		t.Fatalf("project_send without a key sent %#v", bodies[0])
 	}
 	if len(bodies[1]) != 2 || bodies[1]["clientTurnId"] != "shard-4:Retry/7f3a" {

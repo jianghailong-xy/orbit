@@ -461,6 +461,7 @@ var agentToolsFamilyDefs = []struct {
 	{"tasks", "Tasks", []string{"task"}},
 	{"projects", "Projects", []string{"project"}},
 	{"task-lists", "Task lists", []string{"task_list"}},
+	{"schedules", "Schedules", []string{"schedule"}},
 	{"waits", "Waits", []string{"watch"}},
 	{"files", "Files", []string{"file"}},
 	{"background", "Background jobs", []string{"background_job", "session"}},

@@ -1,4 +1,6 @@
+import { CoordinatorHandoffService } from '../projects/coordinator-handoff.service';
 import { appendRunQuestionContext, questionRecipient, RUN_QUESTION_PREFIX } from '../sessions/run-question';
+import { DRAIN_SKIPS_HELD, translationLanguages, turnTranslationOf } from '../sessions/turn-translation';
 import { isRunNotifyTurn, runNotifyContent } from '../sessions/run-notify';
 import { acceptedFinalizeBranch, codelessClaimFields } from '../sessions/codeless-checkout';
 import { readMergeRecovery, mergeRecoveryReady, RUNNER_RESTART_INTERRUPT_REASON, RUNNER_UPDATE_INTERRUPT_REASON, type MergeRecovery } from '@orbit/shared';
@@ -37,6 +39,7 @@ import { registerFeishuReply } from '../feishu/feishu-outbox-register';
 import { deriveSessionCapabilities, type SessionCapabilityFields } from '../sessions/session-state';
 import { readWorktreeArtifactRequest, worktreeFileAnswerKey } from '../sessions/worktree-artifact';
 import { importForkSessionId } from '../sessions/import-fork';
+import { reloadCarriesEnv } from '../sessions/session-settings';
 import { branchName } from '../projects/project-criterion-landing';
 import { TasksService } from '../tasks/tasks.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
@@ -102,6 +105,7 @@ import {
   parseQuotaResetAt,
   usageLimitResetsAt,
   workflowLaunchReceipt,
+  delegateLaunchReceipt,
   type PlanUsage,
   PermissionMode,
   QuestionAnswers,
@@ -183,6 +187,7 @@ import {
   type SessionMessageFrom,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
+import type { TaskRunsWith } from '../workspaces/start-anchor';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
@@ -221,6 +226,13 @@ import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
 import { recapAfterSettle } from '../sessions/recap';
 import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
+import {
+  cardHasText,
+  translatableText,
+  translateApprovalCard,
+  translateStoredEvents,
+  type TranslationDeps,
+} from '../sessions/reply-translation';
 import { normalizeStoredRememberRules, reachesPastOneMcpTool } from '../sessions/remember-rules';
 import {
   APPROVAL_ABANDONED_STATUS,
@@ -242,6 +254,8 @@ import {
   stopOvertookTarget,
   terminalizePendingCurrentWorkSteers,
 } from '../sessions/current-work-delivery';
+import { fileSubagentWake, interruptOrphanedSubagentRuns } from './subagent-wake';
+import { remoteSubagentHeartbeat } from './subagent-remote';
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
@@ -489,6 +503,7 @@ import {
   serverMatchedRuntime,
 } from '../common/permission-rules';
 import {
+  mergeFencesTurn,
   pendingWorktreeOperationMayBeExecuting,
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
@@ -512,6 +527,7 @@ import {
 } from '../projects/session-source';
 import { providerDispatchWhereOn } from '../providers/custom-provider';
 import { dispatchKeyRow } from '../providers/engine-provider';
+import { sessionProviderExec } from './session-provider-exec';
 import { gatewayBooksSpend, withKeyGatewayToken } from '../providers/key-gateway';
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
 import { CursorKeyCheckDto, CursorKeyCheckResultDto } from '../providers/dto';
@@ -544,6 +560,16 @@ import {
   runnerLastBeatAt,
 } from '../runners/runner-presence';
 import { recordRunnerResources, sanitizeRunnerResources } from '../runners/runner-resources';
+import { ownBackgroundJobSessionIds, sanitizeBackgroundJobSessionIds } from '../runners/runner-background-holders';
+import {
+  CHECK_ONLY_REFUSED_MESSAGE,
+  checkOnlyRefusesApproval,
+  runAccessLevel,
+  scheduleRunAgentFields,
+  scheduleRunPermissionMode,
+  scheduleRunAllowedTools,
+  scheduleRunDisallowedTools,
+} from '../schedules/schedule-access';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -589,6 +615,14 @@ export const LOGIN_LINK_REFUSED = "This runner reported a sign-in link that isn'
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
+/** A session id, as an account removal's report names the sessions in the account. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The session ids a removal report names, kept only when they are ids, and a bounded number of them. */
+function accountInUseSessionIds(body: AccountRemoveResult): string[] {
+  if (!Array.isArray(body.sessionIds)) return [];
+  return [...new Set(body.sessionIds.filter((id) => typeof id === 'string' && UUID_PATTERN.test(id)))].slice(0, 50);
+}
 // The checkout repair is seconds of local git, so this window only has to cover a runner that
 // went away between the click and picking the request up.
 const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
@@ -1014,8 +1048,9 @@ const APPROVAL_POLL_INTERVAL_MS = 1_500;
 // Spread over which quota retries are scattered past their reset. See retryPlanFor.
 const QUOTA_RETRY_JITTER_MS = 60_000;
 // The runtime tools whose call starts work that outlives it — see subStarted in the events ingest.
-// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them.
-const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow']);
+// Claude Code's own names: Agent (Task before 2.x) runs one sub-agent, Workflow a team of them; and
+// Orbit's own SubAgent (docs/subagent-design.md §6.2), whatever engine the parent runs.
+const RUNTIME_SUBAGENT_TOOLS = new Set(['Task', 'Agent', 'Workflow', 'mcp__orbit__delegate']);
 const LEASE_GENERATION_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // Session primary keys are UUIDv7, while older rows may still be UUIDv4. Keep
 // entity-ID validation separate from the stricter runner-generated lease UUID
@@ -1650,6 +1685,12 @@ export class RunnerApiController {
      * routes answer 503.
      */
     @Optional() private readonly mainCheckout?: MainCheckoutService,
+    /**
+     * A coordinator's handoff (projects/coordinator-handoff.service.ts): the end of its note turn is
+     * settled from turnComplete. `@Optional()` like the rest: without it a note turn's end is settled
+     * by the handoff sweep instead.
+     */
+    @Optional() private readonly coordinatorHandoffs?: CoordinatorHandoffService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1797,6 +1838,7 @@ export class RunnerApiController {
     @CurrentRunner()
     runner: {
       id: string;
+      ownerId: string;
       name: string;
       status: string;
       lastHeartbeatAt: Date | null;
@@ -1831,6 +1873,7 @@ export class RunnerApiController {
       workspaces,
       await lastProviderByWorkspace(this.prisma, workspaces.map((a) => a.id)),
     );
+    const runsWith = await this.workspaceRunsWith(runner.ownerId, workspaces.map((a) => a.id));
     return {
       id: runner.id,
       name: runner.name,
@@ -1846,8 +1889,54 @@ export class RunnerApiController {
         provider: a.provider,
         agentKey: a.agentKey ?? undefined,
         workDir: a.workDir ?? undefined,
+        ...runsWith.get(a.id),
       })),
     };
+  }
+
+  /**
+   * What `orbit status` says each workspace's unattended work starts on, by the resolution dispatch
+   * makes (SessionsService.taskRunsWith), so the two cannot disagree: `runsWith` for a task outside any
+   * project, and per open project with open work assigned here, what an unpinned task of it runs on —
+   * read off one such task with its pins set aside. Absent when it could not be read: a status line,
+   * never a reason to fail the call.
+   */
+  private async workspaceRunsWith(
+    ownerId: string,
+    workspaceIds: string[],
+  ): Promise<Map<string, { runsWith: TaskRunsWith; projects: Array<{ id: string; title: string; runsWith: TaskRunsWith }> }>> {
+    const out = new Map<string, { runsWith: TaskRunsWith; projects: Array<{ id: string; title: string; runsWith: TaskRunsWith }> }>();
+    const sessions = this.sessions;
+    if (!sessions || workspaceIds.length === 0) return out;
+    try {
+      const open = await this.prisma.task.findMany({
+        where: {
+          ownerId,
+          assigneeId: { in: workspaceIds },
+          status: { in: [TaskStatus.OPEN, TaskStatus.IN_PROGRESS] },
+          project: { status: 'OPEN' },
+        },
+        distinct: ['assigneeId', 'projectId'],
+        select: { id: true, assigneeId: true, project: { select: { id: true, title: true } } },
+        orderBy: [{ assigneeId: 'asc' }, { projectId: 'asc' }],
+        take: 200,
+      });
+      for (const workspaceId of workspaceIds) {
+        const projects = [];
+        for (const row of open) {
+          if (row.assigneeId !== workspaceId || !row.project) continue;
+          projects.push({
+            id: row.project.id,
+            title: row.project.title,
+            runsWith: await sessions.taskRunsWith(ownerId, { id: row.id, workspaceId }),
+          });
+        }
+        out.set(workspaceId, { runsWith: await sessions.taskRunsWith(ownerId, { workspaceId }), projects });
+      }
+    } catch (e) {
+      this.logger.warn(`runner status: runsWith not read: ${(e as Error)?.message ?? e}`);
+    }
+    return out;
   }
 
   /** `orbit unregister` — the runner deletes itself from the control plane. */
@@ -1964,6 +2053,7 @@ export class RunnerApiController {
         supervisedSessionIds: supervised,
         planUsageDigest: digests.facts.planUsage ?? null,
         resources: sanitizeRunnerResources(dto?.resources),
+        backgroundJobSessionIds: sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
       });
     } catch (error) {
       // Nothing recorded this beat: the reaper must not read the silence it leaves as the runner's.
@@ -2211,11 +2301,16 @@ export class RunnerApiController {
     // node holding the connection (X-Orbit-Link-Gateway-Id). A link beat the beat statement recorded is
     // not recorded twice.
     if (!linkBeat) {
+      // Advisory like the reading below: a read that fails keeps none, and the list counts turns alone until the next beat.
+      const backgroundJobSessionIds = await ownBackgroundJobSessionIds(
+        this.prisma, runner.id, sanitizeBackgroundJobSessionIds(dto?.backgroundJobSessionIds),
+      ).catch(() => []);
       await recordRunnerBeat(this.prisma, {
         runnerId: runner.id,
         processId: heartbeatLeaseOwner,
         gatewayId: link?.gatewayId ?? null,
         linkState: link ? 'LINK' : 'HTTP',
+        backgroundJobSessionIds,
         at: beatAt,
       }).catch(beatLost);
       // The machine's reading, on the row the beat just wrote. Advisory: a reading lost is the page's dash until the next.
@@ -2340,6 +2435,15 @@ export class RunnerApiController {
     } catch (error) {
       this.logger.warn(`runner ${runner.id}: repository operations skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
     }
+    // Remote SubAgent runs this runner is the target of (docs/subagent-design.md §10.2, §10.3): the ones to claim —
+    // none to a draining process, whose successor takes them — and the claimed ones whose parent stopped or ended.
+    // Reads only, on its own try: a failure costs this beat's lists, and the next beat lists them again.
+    let remoteSubagents: Awaited<ReturnType<typeof remoteSubagentHeartbeat>> = { remoteSubagentRuns: [], stopSubagentRunIds: [] };
+    try {
+      remoteSubagents = await remoteSubagentHeartbeat(this.prisma, runner.id);
+    } catch (error) {
+      this.logger.warn(`runner ${runner.id}: remote SubAgent runs skipped this heartbeat (${(error as { code?: string })?.code ?? (error as Error)?.name})`);
+    }
     // An engine that was signed in and now isn't: tell the owner while it is still news, rather
     // than letting them find out from the next session that refuses to start. Only the yes -> no
     // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,
@@ -2445,6 +2549,9 @@ export class RunnerApiController {
                 ...(storableBranchSha(s.branchSha) ? { branchSha: s.branchSha } : {}),
               },
             });
+            if (s.branchMerged === true) {
+              await this.clearLandedMergeFailure(s.sessionId, runner.id, heartbeatLeaseOwner ?? undefined);
+            }
           }),
         );
       } catch {
@@ -2682,6 +2789,9 @@ export class RunnerApiController {
       // Present only when this beat claimed something, for the same reason.
       ...(integrationJobs ? { integrationJobs } : {}),
       ...(wikiRepoOps ? { wikiRepoOps } : {}),
+      // Present only while this runner has remote SubAgent runs to claim or to stop.
+      ...(!draining && remoteSubagents.remoteSubagentRuns.length > 0 ? { remoteSubagentRuns: remoteSubagents.remoteSubagentRuns } : {}),
+      ...(remoteSubagents.stopSubagentRunIds.length > 0 ? { stopSubagentRunIds: remoteSubagents.stopSubagentRunIds } : {}),
       ...(mainCheckoutRequests ? { mainCheckoutRequests } : {}),
       // Only to the instance being drained to sleep: every other runner's response keeps its shape.
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
@@ -3670,6 +3780,13 @@ export class RunnerApiController {
     if (attempt && Number.isNaN(attempt.getTime())) {
       throw new BadRequestException('attempt must be the request this reports on');
     }
+    // Of the ids a refusal names, only sessions this runner runs are kept: a machine's report must not put
+    // another account's session ids on its row, even though the page reads only the viewer's back.
+    const named = status === 'failed' ? accountInUseSessionIds(body) : [];
+    const sessionIds = named.length === 0 ? [] : (await this.prisma.session.findMany({
+      where: { id: { in: named }, assignedRunnerId: runnerId },
+      select: { id: true },
+    })).map((row) => row.id).sort((x, y) => named.indexOf(x) - named.indexOf(y));
     const { count } = await this.prisma.runner.updateMany({
       where: {
         id: runnerId,
@@ -3687,6 +3804,9 @@ export class RunnerApiController {
         codexAccountRemoveStatus: status,
         // Only a failure carries one; a success clears whatever the last one said.
         codexAccountRemoveMessage: status === 'failed' ? (body.message ?? null) : null,
+        // The sessions a refusal names, which the page lists (accountRemoveSessionsOf reads only those
+        // this runner runs for the viewer); a success, or any other refusal, names none.
+        codexAccountRemoveSessions: sessionIds,
       },
     });
     // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing
@@ -3941,6 +4061,8 @@ export class RunnerApiController {
         // Same standing "always allow" grants the claim path sends: a reclaimed session must
         // not start re-asking about calls this workspace already approved permanently.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
+        // A scheduled task's run: its level decides the tools it may and may not call (§6.2, schedule-access.ts).
+        scheduleRun: { select: { accessLevel: true, schedule: { select: { accessLevel: true } } } },
         task: {
           select: {
             codeless: true,
@@ -4093,6 +4215,7 @@ export class RunnerApiController {
           workspaceModel: workspace?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
+          sessionEnv: s.env,
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
           claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
@@ -4156,16 +4279,29 @@ export class RunnerApiController {
         model: runnerModel,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
-        allowedTools: dispatchAllowedTools(
+        // A scheduled run is held to the level it started with (runAccessLevel, design §6.2).
+        allowedTools: scheduleRunAllowedTools(
+          dispatchAllowedTools(provider, ALWAYS_ALLOWED_TOOLS, workspace?.permissionRules ?? []),
+          runAccessLevel(s.scheduleRun),
           provider,
-          ALWAYS_ALLOWED_TOOLS,
           workspace?.permissionRules ?? [],
+          runner.capabilities,
         ),
-        disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
+        disallowedTools: scheduleRunDisallowedTools(
+          (workspace?.disallowedTools as string[] | null) ?? [],
+          runAccessLevel(s.scheduleRun),
+          provider,
+          runner.capabilities,
+        ),
+        // A CHECK_ONLY run's Plan runs Codex in its read-only sandbox (design §6.2); absent for every other session.
+        ...scheduleRunAgentFields(runAccessLevel(s.scheduleRun)),
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           runnerModel,
-          permissionMode,
+          // A CHECK_ONLY run on Claude Code asks only on a runner that closes the rest (schedule-access.ts).
+          scheduleRunPermissionMode(
+            permissionMode, runAccessLevel(s.scheduleRun), provider, runner.capabilities,
+          ),
           customRow?.enabled === true,
           runner.runsAsRoot,
           s.assignedRunner?.modelCatalog,
@@ -4255,6 +4391,8 @@ export class RunnerApiController {
         ...watchClaimFields(watchRollout, s.ownerId),
         // And the wiki, on the same rule (wiki/wiki-rollout.ts).
         ...wikiClaimFields(wikiRollout, s.ownerId),
+        // cf. the claim path: a scheduled run's session lists schedule_run_report.
+        ...(s.scheduleRunId ? { scheduleRun: true } : {}),
         // Read, never re-derived (SR29). A session already PINNED comes back on the SHA its first
         // claim froze, whatever the binding's configuration or the ref's tip have done since —
         // that is what makes a runner restart a continuation of the same run rather than a new one
@@ -4342,6 +4480,11 @@ export class RunnerApiController {
     return response;
   }
 
+  /** The capabilities this runner last declared, for mergeFencesTurn: a plain read of its row. */
+  private async runnerCapabilitiesIn(tx: Prisma.TransactionClient, runnerId: string): Promise<string[] | undefined> {
+    return (await tx.runner.findUnique({ where: { id: runnerId }, select: { capabilities: true } }))?.capabilities;
+  }
+
   /** Hand inbox activation authority from the owner observed in claim/reclaim to this process. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/takeover-leases')
@@ -4403,14 +4546,16 @@ export class RunnerApiController {
         throw new ConflictException('session is no longer open');
       }
       const currentOwner = owned[0].inboxLeaseOwner;
-      if (currentOwner === leaseOwner) return { status: owned[0].status, orphanedApprovals: [] };
+      if (currentOwner === leaseOwner) {
+        return { status: owned[0].status, orphanedApprovals: [], interruptedSubagents: [] as string[] };
+      }
       if (
-        pendingWorktreeOperationMayBeExecuting(
+        (pendingWorktreeOperationMayBeExecuting(
           owned[0].mergeStatus,
           owned[0].mergeOperationId,
           owned[0].mergeOperationOwner,
           owned[0].mergeRequestedAt,
-        ) ||
+        ) && mergeFencesTurn(await this.runnerCapabilitiesIn(tx, runner.id))) ||
         pendingWorktreeOperationMayBeExecuting(
           owned[0].commitStatus,
           owned[0].commitOperationId,
@@ -4486,8 +4631,23 @@ export class RunnerApiController {
       const orphanedApprovals = currentOwner
         ? await reapApprovalsOfReplacedSupervisor(tx, sessionId)
         : [];
-      return { status: owned[0].status, orphanedApprovals };
+      // The SubAgents the predecessor hosted went with it, as its background shells did, and none of them will
+      // report an end: each still RUNNING ends INTERRUPTED here, owing the parent a wake that says why
+      // (subagent-wake.ts), filed once this commits. A predecessor that stopped in good order reported them
+      // itself, and none is left RUNNING.
+      const interruptedSubagents = currentOwner ? await interruptOrphanedSubagentRuns(tx, sessionId) : [];
+      return { status: owned[0].status, orphanedApprovals, interruptedSubagents };
     }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
+    if (taken.interruptedSubagents.length > 0 && this.sessions) {
+      for (const runId of taken.interruptedSubagents) {
+        try {
+          await fileSubagentWake(this.prisma, this.sessions, runId);
+        } catch (error) {
+          // The wake sweep files it on its next pass.
+          this.logger.warn(`the wake for interrupted SubAgent run ${runId} was not filed yet: ${(error as Error).message}`);
+        }
+      }
+    }
     // After commit, and one frame per card: a client holds these from the `approval_request` it was
     // sent live, and nothing it can see changes at a takeover, so without this the card it is
     // drawing stays answerable-looking until the session is next opened from scratch.
@@ -4595,6 +4755,9 @@ export class RunnerApiController {
         FOR UPDATE
       `;
       const byId = new Map(locked.map((row) => [row.id, row]));
+      // Read only when some row's merge is pending: the common takeover reads no runner.
+      const mergeFences = locked.some((row) => row.mergeStatus === 'pending')
+        && mergeFencesTurn(await this.runnerCapabilitiesIn(tx, runner.id));
       const writes: Array<{ id: string; fence: string; predecessor: string | null; status: RunStatus; declared: string | null }> = [];
       for (const { sessionId, expectedLeaseOwner } of asked) {
         const refused = refusedBeforeLock.get(sessionId);
@@ -4625,7 +4788,7 @@ export class RunnerApiController {
           continue;
         }
         if (
-          pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt) ||
+          (mergeFences && pendingWorktreeOperationMayBeExecuting(row.mergeStatus, row.mergeOperationId, row.mergeOperationOwner, row.mergeRequestedAt)) ||
           pendingWorktreeOperationMayBeExecuting(row.commitStatus, row.commitOperationId, row.commitOperationOwner, row.commitRequestedAt)
         ) {
           conflict('wait for the pending worktree operation to finish');
@@ -5916,8 +6079,9 @@ export class RunnerApiController {
   }
 
   /**
-   * The environment a `reload` re-spawns with, for the one reload that needs it: a provider switch
-   * (see SessionsService.updateConfig). Every other reload — model, permission mode, effort — runs
+   * The environment a `reload` re-spawns with, for the reloads that need it (reloadCarriesEnv): a
+   * provider switch (see SessionsService.updateConfig), and a Settings restart, which re-spawns on the
+   * same provider with the session's env as it stands (SessionsService.restart). Every other reload — model, permission mode, effort — runs
    * on the environment the engine already has, and returns undefined so the runner leaves its
    * process alone beyond the flags.
    *
@@ -5942,114 +6106,38 @@ export class RunnerApiController {
     sessionId: string,
     content: string | null,
   ): Promise<{ env?: Record<string, string>; refusal?: string }> {
-    let declared: unknown;
-    try {
-      declared = (JSON.parse(content ?? '{}') as { provider?: unknown }).provider;
-    } catch {
-      return {};
-    }
-    if (typeof declared !== 'string' || !declared) return {};
-    const session = await tx.session.findUnique({
-      where: { id: sessionId },
-      select: {
-        id: true,
-        ownerId: true,
-        model: true,
-        provider: true,
-        providerBuiltin: true,
-        engine: true,
-        poolMemberProviderId: true,
-        poolKeyId: true,
-        poolCodexAccountId: true,
-        usesRuntimeDefaultModel: true,
-        codexAccount: true,
-        claudeAccount: true,
-        antigravityAccount: true,
-        kimiAccount: true,
-        cursorAccount: true,
-        workspace: {
-          select: {
-            model: true, env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true,
-            cursorAccount: true,
-          },
-        },
-        assignedRunner: {
-          select: {
-            runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
-            planUsage: true,
-          },
-        },
-      },
+    if (!reloadCarriesEnv(content)) return {};
+    const resolved = await sessionProviderExec(tx, this.queue, sessionId);
+    if (!resolved.exec) return resolved.refusal ? { refusal: resolved.refusal } : {};
+    // The engine this reload re-spawns runs on the session's env as read here, so the Settings panel
+    // owes no restart for it (sessionSettingsOf) — only while the env is still the one read, as on the
+    // claim (QueueService): a PATCH since then is not in this engine, and stays owed. Stamped as the
+    // reload is handed out, which is the runner's acknowledgement of a control turn (dequeueTurn).
+    await tx.session.updateMany({
+      where: { id: sessionId, envChangedAt: resolved.envChangedAt ?? null },
+      data: { envAppliedAt: new Date() },
     });
-    if (!session) return {};
-    // The claim's words for a credential nothing holds: a member's session on a shared provider is told
-    // only an admin can run it, any other to check the configuration — asked of the slug the credential
-    // names, which on OpenCode is the key its model names.
-    const unavailable = async (customRow: unknown): Promise<string> => {
-      const slug = !isBuiltinProvider(session.provider, session.providerBuiltin)
-        ? session.provider
-        : session.provider === AgentProvider.OPENCODE ? openCodeKeyOf(session.model)?.slug : undefined;
-      return !customRow && slug && (await adminOnlyProviderRefusal(tx, session.ownerId, slug))
-        ? ADMIN_ONLY_PROVIDER_ERROR
-        : PROVIDER_UNAVAILABLE_ERROR;
-    };
-    // The environment is built for the engine the session runs on — the one it was spawned with and
-    // is re-spawned with now — from wherever its credential now comes from: a switch moves the
-    // credential, never the engine.
-    const engine = await sessionEngine(tx, session);
-    if (!engine) return { refusal: await unavailable(null) };
-    // As on the claim: the key the slug names or a retired name of one, and a legacy built-in dsh
-    // session's default DeepSeek key when its workspace holds no key itself.
-    // Claude Code on an OpenAI key re-spawns on a token minted for this reload, as the claim mints one.
-    const keyRow = await withKeyGatewayToken(tx, session, engine, await dispatchKeyRow(tx, session, session.workspace?.env));
-    const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
-      ? keyRow
-      : (keyRow ??
-        (await this.queue.resolveLoginPool(tx, session, session.provider!, false, engine)) ??
-        (await this.queue.resolvePoolMember(tx, session, session.provider!)) ??
-        (await this.queue.resolveSharedPool(tx, session, session.provider!)));
-    // As on the claim: a Claude pool of the owner's own that none of its members can run re-spawns on
-    // the Claude default, as the line resolvePoolMember owed says; any other slug nothing holds is refused.
-    const poolFallback = !customRow && !isBuiltinProvider(session.provider, session.providerBuiltin)
-      && (await accountPoolRuntime(tx, session.ownerId, session.provider!)) === AgentProvider.CLAUDE;
-    let exec: ReturnType<typeof resolveProviderExec>;
-    try {
-      exec = resolveProviderExec({
-        engine,
-        declaredProvider: poolFallback ? AgentProvider.CLAUDE : session.provider,
-        declaredProviderBuiltin: poolFallback || session.providerBuiltin,
-        customRow,
-        openCodeKeys:
-          session.provider === AgentProvider.OPENCODE && openCodeKeyOf(session.model)
-            ? await openCodeKeyRows(tx, session.ownerId)
-            : undefined,
-        sessionModel: session.model,
-        usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
-        runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
-        workspaceModel: session.workspace?.model,
-        modelCatalog: session.assignedRunner?.modelCatalog,
-        workspaceEnv: session.workspace?.env as Record<string, string> | null,
-        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-        claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
-        antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
-        kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
-        cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
-        runner: session.assignedRunner,
-      });
-    } catch (error) {
-      // Every refusal it makes is of the credential: gone, disabled, on a runtime no engine speaks, or
-      // one this session's engine cannot run — which last the claim and the reclaim say in its own words.
-      if (!(error instanceof BadRequestException)) throw error;
-      const refusal = error.getResponse() as { code?: string; message?: string };
-      return {
-        refusal: refusal.code === 'PROVIDER_ENGINE_INCOMPATIBLE' && refusal.message
-          ? refusal.message
-          : await unavailable(customRow),
-      };
-    }
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
     // previous provider's variables must still go, which an empty map is how the runner is told.
-    return { env: exec.env ?? {} };
+    return { env: resolved.exec.env ?? {} };
+  }
+
+  /** The SubAgent run a card names, when it is one of this session's; 404 for any other id. */
+  private async subagentRunOfSession(sessionId: string, raw: string | undefined): Promise<string | null> {
+    const given = stripNul(raw ?? '').trim();
+    if (given === '') return null;
+    // The route's pipe has decoded a base62 id already; a caller that skips it (a spec) may hand either spelling.
+    let runId: string | null = null;
+    try {
+      runId = toUuid(given);
+    } catch {
+      runId = null;
+    }
+    const run = runId
+      ? await this.prisma.subagentRun.findFirst({ where: { id: runId, sessionId }, select: { id: true } })
+      : null;
+    if (!run) throw new NotFoundException('SubAgent run not found');
+    return run.id;
   }
 
   /**
@@ -6063,9 +6151,9 @@ export class RunnerApiController {
   async createApproval(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() dto: ApprovalCreateRequest,
+    @Body(PublicIdPipe.forFields('subagentRunId')) dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const session = await this.assertSessionOrSubagentTarget(sessionId, runner, dto.subagentRunId);
     // Stripped before the lookup, not only before the write, so a retry finds the row the first
     // call created: the idempotency key and the column it was stored in have to agree.
     const toolUseId = stripNul(dto.toolUseId);
@@ -6077,16 +6165,19 @@ export class RunnerApiController {
         })
       : null;
     if (existing) return { id: existing.id, status: existing.status as ApprovalStatus };
+    // A scheduled CHECK_ONLY run on Claude Code may ask only about a shell command (schedule-access.ts): anything
+    // else it asks about is answered DENY here and never becomes a card, a Waiting on you item or a push.
+    const refused = await this.checkOnlyRunRefuses(session, dto);
     // A call this workspace has permanently allowed is answered here instead of waking a human
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
-    const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
+    const autoAllowed = existing || refused ? false : await this.standingGrantCovers(session, dto);
     // The same shape for a coordinator's task creates in its own project when nobody has started it
     // (the start card reviews them) or its Automatic is on (the coordinator decides them): none of
     // them is a question on its own (`unstarted-project-create.ts`).
     const allowedMessage = autoAllowed
       ? AUTO_ALLOWED_MESSAGE
-      : existing
+      : existing || refused
         ? null
         : await coordinatorCreateAllowedBy(this.prisma, session, dto.toolName, dto.input);
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
@@ -6108,6 +6199,10 @@ export class RunnerApiController {
     // and an in-turn MCP call has none (`sessions/abandoned-approvals.ts` reads it back against the
     // jobs the runner says are still up).
     const backgroundJobId = stripNul(dto.backgroundJobId ?? '').trim();
+    // The third reader: a SubAgent's child engine, asking under its parent's session (docs/subagent-design.md
+    // §5.3). It outlives the parent's turn and calls, so the card names its run, which has to be one of this
+    // session's: anything else names nothing here.
+    const subagentRunId = await this.subagentRunOfSession(sessionId, dto.subagentRunId);
     const approvalData = {
       sessionId,
       // Stripped for the same reason the event batch is (see strip-nul): a tool argument is
@@ -6123,14 +6218,16 @@ export class RunnerApiController {
       toolUseId: toolUseId || null,
       turnId: openingTurn?.id ?? null,
       backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
+      subagentRunId,
       ...(allowedMessage
         ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
         : {}),
+      ...(refused ? { status: 'DENIED', decidedAt: new Date(), message: CHECK_ONLY_REFUSED_MESSAGE } : {}),
     };
     let held = false;
     let fallback: string | null = null;
     let routed: Awaited<ReturnType<typeof this.prisma.approval.create>> | null = null;
-    if (!existing && !allowedMessage && dto.toolName === 'AskUserQuestion') {
+    if (!existing && !allowedMessage && !refused && dto.toolName === 'AskUserQuestion') {
       const recipient = await questionRecipient(this.prisma, sessionId);
       if (recipient) {
         fallback = recipient.reason;
@@ -6173,12 +6270,18 @@ export class RunnerApiController {
     if (held) this.realtime.publishSessionUpdated(sessionId);
     // An already-answered approval raises no card and buzzes no phone: not interrupting is the
     // entire point of having granted it.
-    if (!existing && !allowedMessage && !held) {
+    if (!existing && !allowedMessage && !refused && !held) {
       this.realtime.publish(sessionId, approvalRequestEvent(approval, new Date().toISOString()));
       // Fire-and-forget: nudge the owner's iOS devices that a reply is needed. Not awaited so a
       // slow APNs round-trip can't delay the runner's approval-create response.
       if (fallback) void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName, true);
       else void this.push.notifyApprovalRequest(sessionId, approval.id, approval.toolName);
+      // Settings › Translation (3A, reply-translation.ts): the card goes out in the agent's words at once, and again in
+      // the owner's language once it is translated.
+      if (cardHasText(approval.input)) {
+        const langs = await translationLanguages(this.prisma, session.ownerId).catch(() => null);
+        translateApprovalCard(this.translationDeps(), sessionId, approval.id, approval.input, langs);
+      }
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
   }
@@ -6256,6 +6359,23 @@ export class RunnerApiController {
     }
   }
 
+  /** Whether this session serves a scheduled CHECK_ONLY run whose engine may not ask about this call (schedule-access.ts). */
+  private async checkOnlyRunRefuses(
+    session: SessionEngineFacts & { scheduleRunId: string | null },
+    dto: ApprovalCreateRequest,
+  ): Promise<boolean> {
+    if (!session.scheduleRunId) return false;
+    // The level the run started with, not the schedule's now: moving the schedule to OPEN_PR, or deleting it, mid-run
+    // does not open this check to cards for other tools (runAccessLevel).
+    const run = await this.prisma.scheduleRun.findUnique({
+      where: { id: session.scheduleRunId },
+      select: { accessLevel: true, schedule: { select: { accessLevel: true } } },
+    });
+    if (runAccessLevel(run) !== 'CHECK_ONLY') return false;
+    return checkOnlyRefusesApproval('CHECK_ONLY', await sessionEngine(this.prisma, session), stripNul(dto.toolName),
+      stripNul(dto.backgroundJobId ?? ''));
+  }
+
   /** The MCP tool name a single create asks under — the card this controller enriches with a preview. */
   private static readonly taskCreateApprovalToolName = 'orbit_task_create';
 
@@ -6308,7 +6428,8 @@ export class RunnerApiController {
     /** A link call reads the decision once and answers (wait=0): a hint says when there is one. */
     @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<ApprovalDecisionResponse> {
-    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
+    const card = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId }, select: { subagentRunId: true } });
+    await this.assertSessionOrSubagentTarget(sessionId, runner, card?.subagentRunId ?? undefined);
     const deadline = Date.now() + (link ? 0 : APPROVAL_LONG_POLL_MS);
     for (;;) {
       const a = await this.prisma.approval.findFirst({
@@ -7767,9 +7888,10 @@ export class RunnerApiController {
         // answers unrun: held for the retry armed above or dropped, and taken out of its loop's runs
         // (wake-turn-withdraw.ts).
         droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-        // Drain queued turns so nothing can be leased after the session ends.
+        // Drain queued turns so nothing can be leased after the session ends. A turn HELD for its
+        // translation is never leased and stays as it is (DRAIN_SKIPS_HELD).
         await tx.conversationTurn.updateMany({
-          where: { sessionId, status: { not: 'ANSWERED' } },
+          where: { sessionId, status: { notIn: DRAIN_SKIPS_HELD } },
           data: { status: 'ANSWERED', answeredAt: new Date() },
         });
       }
@@ -7856,6 +7978,16 @@ export class RunnerApiController {
       }
       if (finalized.regionHeld) this.queue.notifySessionQueued(runner.id);
       return { ok: true, status: finalized.status };
+    }
+    // A coordinator's handoff note turn that ended (projects/coordinator-handoff.service.ts): a success
+    // runs the coordinator replacement, which the runner — blocked on this reply — must not wait for,
+    // so it is settled off the response path. Any other turn of the session is a read that finds
+    // no WRITING handoff and stops.
+    if (finalized.applied && !finalized.steer && this.coordinatorHandoffs) {
+      void this.coordinatorHandoffs.afterTurn(sessionId, dto.turnId, dto.status).catch((error) => this.logger.warn(
+        `coordinator handoff after turn ${dto.turnId} of ${sessionId} failed: `
+        + `${error instanceof Error ? error.message : error}`,
+      ));
     }
     // The review this completion recorded, handed to its reviewer after the commit (§2 D2); and the
     // ones this completion found it had been handed and dropped, whose cards are the owner's now (T5).
@@ -8079,6 +8211,15 @@ export class RunnerApiController {
    * rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has already
    * answered the runner by the time this runs.
    */
+  /** What reply-translation.ts writes with and publishes on. */
+  private translationDeps(): TranslationDeps {
+    return {
+      db: this.prisma as unknown as TranslationDeps['db'],
+      publish: (sessionId, event) => this.realtime.publish(sessionId, event),
+      approvalEvent: (approval) => approvalRequestEvent(approval, new Date().toISOString()),
+    };
+  }
+
   private async recapAfterTurn(sessionId: string): Promise<void> {
     await recapAfterSettle({
       db: this.prisma,
@@ -8602,11 +8743,16 @@ export class RunnerApiController {
             select: {
               id: true, content: true, clientTurnId: true, senderSessionId: true,
               externalSenderSource: true, externalSenderName: true,
+              displayPrompt: true, translationState: true, translationLang: true,
               senderClient: true, senderClientDetail: true,
             },
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
+      // Settings › Translation: what the owner wrote, for a turn delivered in English. The echo is the
+      // English (and `authoredUserText` stays it, since that is where the delivered words end); the row
+      // previews the owner's own words.
+      const ownerUserText = new Map(userTurns.map((turn) => [turn.id, turn.displayPrompt ?? turn.content]));
       const userTurnById = new Map(userTurns.map((turn) => [turn.id, turn]));
       // The cards those turns are drawn as rather than as the owner's own message — an exception
       // item's delivery, the owner's answer handed to the coordinator, a fact the coordinator is told
@@ -8649,6 +8795,11 @@ export class RunnerApiController {
         e.payload = withSessionMessage(e.payload, cards?.sessionMessage ?? null);
         e.payload = withSessionReplies(e.payload, cards?.sessionReplies ?? null);
         e.payload = withExternalSender(e.payload, cards?.externalSender ?? null);
+        // The owner's original beside the English the engine was given (@orbit/shared TurnTranslation).
+        // Only the turn row says so: whatever a runner put under the key is dropped.
+        delete e.payload.translation;
+        const translation = e.turnId ? turnTranslationOf(userTurnById.get(e.turnId) ?? {}) : undefined;
+        if (translation) e.payload.translation = translation;
         const sentTurn = e.turnId ? userTurnById.get(e.turnId) : undefined;
         e.payload = withSentFrom(
           e.payload,
@@ -8846,8 +8997,8 @@ export class RunnerApiController {
             (e.payload as { text?: string; content?: string } | null)?.text
             ?? (e.payload as { content?: string } | null)?.content
             ?? '';
-          const text = e.turnId && authoredUserText.has(e.turnId)
-            ? authoredUserText.get(e.turnId)
+          const text = e.turnId && ownerUserText.has(e.turnId)
+            ? ownerUserText.get(e.turnId)
             : echoed;
           pendingUserText = text?.trim() || null;
           const cards = e.turnId ? turnCards.get(e.turnId) : undefined;
@@ -9079,7 +9230,10 @@ export class RunnerApiController {
             e.type === RunEventType.TOOL_RESULT &&
             !(e.payload as { parentToolUseId?: string }).parentToolUseId &&
             !isAsyncAgentLaunchAck((e.payload as { content?: unknown }).content) &&
-            !workflowLaunchReceipt((e.payload as { content?: unknown }).content),
+            !workflowLaunchReceipt((e.payload as { content?: unknown }).content) &&
+            // A background SubAgent's `{ runId, status: "running" }`: it runs on, and its terminal
+            // background_task clears it.
+            !delegateLaunchReceipt((e.payload as { content?: unknown }).content),
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
@@ -9107,10 +9261,21 @@ export class RunnerApiController {
       // would be a second row. Only a report carrying a `kind` counts — that is what marks a
       // runner-hosted job, as background-jobs-context.ts reads it too — because an engine's own
       // shell carries none, and that shell died with its engine.
+      // A SubAgent still running, reported again behind a `resumed` handshake (runner-go subagent.go
+      // announceSubagents): its delegate call goes back into the running SubAgents, never the job sets.
+      const subRunning = events
+        .filter((e) => {
+          if (e.type !== RunEventType.BACKGROUND_TASK) return false;
+          const { status, subagentRunId } = e.payload as { status?: unknown; subagentRunId?: unknown };
+          return status === 'running' && typeof subagentRunId === 'string' && subagentRunId !== '';
+        })
+        .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
+        .filter(Boolean);
       const bgRunningReports = events
         .filter((e) => {
           if (e.type !== RunEventType.BACKGROUND_TASK) return false;
-          const { status, kind } = e.payload as { status?: unknown; kind?: unknown };
+          const { status, kind, subagentRunId } = e.payload as { status?: unknown; kind?: unknown; subagentRunId?: unknown };
+          if (typeof subagentRunId === 'string' && subagentRunId !== '') return false;
           return status === 'running' && typeof kind === 'string' && kind !== '';
         })
         .map((e) => {
@@ -9166,6 +9331,7 @@ export class RunnerApiController {
       // Same fold, narrower set: a shell an engine launched is in `shells` and never here.
       for (const id of bgJobRunning) if (!jobs.includes(id)) jobs = [...jobs, id];
       for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
+      for (const id of subRunning) if (!subagents.includes(id)) subagents = [...subagents, id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
       // removing from the set that doesn't hold it is a no-op, so clear from both.
       for (const id of bgEnded) {
@@ -9311,6 +9477,13 @@ export class RunnerApiController {
           }
         })();
       }
+    }
+    // Settings › Translation (reply-translation.ts): a reply or suggestion this batch stored whole is translated
+    // for an owner with translation on, in the background. The owner's switch is read only for a batch that holds
+    // something to translate — most hold none.
+    if (durable.some((e) => translatableText(e.type, e.payload) !== null)) {
+      const langs = await translationLanguages(this.prisma, eventOutcome.session.ownerId).catch(() => null);
+      translateStoredEvents(this.translationDeps(), sessionId, langs, durable);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
@@ -9604,9 +9777,10 @@ export class RunnerApiController {
       // And a wakeup filed onto a `bg-wake:` turn still queued, which the drain below answers unrun: held
       // for an armed retry or dropped, and taken out of its loop's runs (wake-turn-withdraw.ts).
       const droppedWakeups = await settleUnrunWakeTurns(tx, sessionId, { drained: true });
-      // Drain any queued turns so nothing can be leased after the session ends.
+      // Drain any queued turns so nothing can be leased after the session ends. A turn HELD for its
+      // translation is never leased and stays as it is (DRAIN_SKIPS_HELD).
       await tx.conversationTurn.updateMany({
-        where: { sessionId, status: { not: 'ANSWERED' } },
+        where: { sessionId, status: { notIn: DRAIN_SKIPS_HELD } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       // Every turn of this session has just ended, so every tool call still waiting on one is now
@@ -10553,6 +10727,9 @@ export class RunnerApiController {
         ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
       },
     });
+    if (updated.count > 0 && dto.branchMerged === true) {
+      await this.clearLandedMergeFailure(sessionId, runner.id);
+    }
     // Only persist the patches once we've confirmed the session is still live (count > 0);
     // a no-op update means it finalized, so its committed diff must stay authoritative.
     if (updated.count > 0 && dto.changedDiff !== undefined) {
@@ -11114,6 +11291,32 @@ export class RunnerApiController {
     if (landing) assertEngineSessionRow(landing);
   }
 
+  /**
+   * A card's door: the runner hosting the session, or — for a card a remote SubAgent's child asks under its parent
+   * (docs/subagent-design.md §10.3) — the run's target runner, for a run of this session and this account only.
+   */
+  private async assertSessionOrSubagentTarget(sessionId: string, runner: { id: string }, subagentRunId?: string) {
+    const ownerId = (runner as { ownerId?: string }).ownerId;
+    let runId: string | null = null;
+    try {
+      runId = subagentRunId ? toUuid(stripNul(subagentRunId).trim()) : null;
+    } catch {
+      runId = null;
+    }
+    if (runId && ownerId) {
+      const run = await this.prisma.subagentRun.findFirst({
+        where: { id: runId, sessionId, ownerId, targetRunnerId: runner.id },
+        select: { id: true },
+      });
+      const session = run ? await this.prisma.session.findUnique({ where: { id: sessionId } }) : null;
+      if (session && session.ownerId === ownerId) {
+        assertEngineSessionRow(session);
+        return session;
+      }
+    }
+    return this.assertSessionOwnership(sessionId, runner.id, ownerId);
+  }
+
   private async assertSessionOwnership(sessionId: string, runnerId: string, ownerId?: string) {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
@@ -11126,6 +11329,24 @@ export class RunnerApiController {
       throw new ForbiddenException('session does not belong to this runner');
     }
     return session;
+  }
+
+  /** A merge that failed (conflict or error) and then landed anyway — the branch rebased and merged by hand, or pushed
+   * from the command line — kept its failure on the row, so every client went on drawing "Merge conflict" for a
+   * branch already in its target. Once the runner reports the branch merged, that failure is history: clear it, and
+   * the bar reads "✓ In main". A failure with a merge recovery open is left to the recovery panel. */
+  private async clearLandedMergeFailure(sessionId: string, runnerId: string, leaseOwner?: string): Promise<void> {
+    await this.prisma.session.updateMany({
+      where: {
+        id: sessionId,
+        assignedRunnerId: runnerId,
+        status: { in: OPEN },
+        mergeStatus: { in: ['conflict', 'error'] },
+        mergeRecovery: { equals: Prisma.AnyNull },
+        ...(leaseOwner !== undefined ? { inboxLeaseOwner: leaseOwner } : {}),
+      },
+      data: { mergeStatus: null, mergeError: null },
+    });
   }
 
   /** Reconcile the runner's heuristic merged verdict with the exact source tip captured by a

@@ -12,6 +12,7 @@ import { SettingsLayout } from './components/settings';
 import { SettingsWorkspacePage } from './components/settings/WorkspaceSettingsPage';
 import { SettingsKeysPage, SettingsPoolsPage, SettingsProvidersHome } from './components/settings/SettingsProviderPages';
 import { MachineSettingsPage } from './components/settings/MachineSettingsPage';
+import { ManagedRunnerSetupPage } from './components/settings/ManagedRunnerSetupPage';
 import { useRememberOutsideSettings } from './lib/settingsReturn';
 import { ManagedRunnerLanding } from './components/ManagedRunnerNotice';
 import { WorkspaceConsole } from './components/WorkspaceConsole';
@@ -48,6 +49,7 @@ import { SharedWikiDocRoute } from './pages/SharedWikiPage';
 import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WaitingOnYouPage } from './pages/WaitingOnYouPage';
+import { ScheduledPage } from './pages/ScheduledPage';
 import { WikiPage } from './pages/WikiPage';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
@@ -287,6 +289,7 @@ export function App() {
             <Route path="integrations/feishu/connect-group" element={<FeishuConnectGroupPage />} />
             {/* Adding a machine from Settings stays in Settings; a new account's first sign-in still lands on the welcome card at /runners/register. */}
             <Route path="machines/new" element={<RunnerRegisterGuide inSettings />} />
+            <Route path="machines/managed" element={<ManagedRunnerSetupPage />} />
             <Route path="machines/:id" element={<SettingsMachineRoute />} />
             {/* Providers (owner's choice C1, board-4; choice A, docs/mocks/settings-providers-compact): every
                 API key on one page, a vendor's alone at its own address, Account pools, and a key's connect
@@ -312,6 +315,16 @@ export function App() {
             <Route path="providers" element={<ProvidersRedirect />} />
             <Route path="providers/*" element={<ProvidersRedirect />} />
             <Route path="admin/providers" element={<ProvidersRedirect />} />
+            {/* Scheduled tasks: a timeline with the inspector beside it, full-bleed so the inspector reaches the edge.
+                `?id=` opens one schedule, `?draft=` one draft. */}
+            <Route
+              path="scheduled"
+              element={
+                <FlushView>
+                  <ScheduledPage />
+                </FlushView>
+              }
+            />
             {/* Everything an agent has asked the owner to do: owner requests and coordinator questions. */}
             <Route
               path="waiting"

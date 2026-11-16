@@ -252,7 +252,9 @@ def main():
             time.sleep(1)
         tripwires = tuple(arg for engine in ENGINES for arg in (
             '--mount', f'type=bind,src={fixture / engine},dst=/usr/local/bin/{engine},readonly'))
-        common = (*mount, *tripwires,
+        # Cursor CLI and DeepSeek Harness are run from the image's engine store, not PATH: an empty store
+        # keeps every engine the runner could exec a recorded fake.
+        common = (*mount, *tripwires, '--mount', 'type=tmpfs,dst=/opt/orbit-engines',
                   '--env', 'ORBIT_RUNNER_SERVER_URL=http://127.0.0.1:8765', '--env', 'ORBIT_RUNNER_EXPECTED_ID=' + RUNNER)
         snapshots = []
         for attempt in range(2):

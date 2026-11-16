@@ -212,8 +212,8 @@ func TestWatchCommandsAreNeitherOfferedNorRunWithWatchesOff(t *testing.T) {
 
 func TestInstructionsLeaveTheWaitParagraphOutWithWatchesOff(t *testing.T) {
 	exe := "/usr/local/bin/orbit"
-	on := orbitCLIInstructions(exe, true, true)
-	off := orbitCLIInstructions(exe, true, false)
+	on := orbitCLIInstructions(exe, true, true, true)
+	off := orbitCLIInstructions(exe, true, false, true)
 	if !strings.Contains(on, orbitWaitInstructions) {
 		t.Fatalf("the instructions with Watch on do not route waits to task_await: %q", on)
 	}
@@ -228,7 +228,7 @@ func TestInstructionsLeaveTheWaitParagraphOutWithWatchesOff(t *testing.T) {
 		"codex context":    fmt.Sprint(codexAgentAdditionalContext(AgentExecConfig{}, exe, 1, job.insideRecordedWork(), job.watchesOn())),
 		"codex legacy":     codexLegacyAgentContext(AgentExecConfig{}, exe, job.insideRecordedWork(), job.watchesOn()),
 		"kimi":             kimiPromptText(AgentExecConfig{}, exe, "hello", job.insideRecordedWork(), job.watchesOn()),
-		"opencode":         openCodeOrbitCLIInstructions(exe, job.insideRecordedWork(), job.watchesOn()),
+		"opencode":         openCodeOrbitCLIInstructions(exe, job.insideRecordedWork(), job.watchesOn(), true),
 		"claude, Watch on": strings.Join(appendClaudeAgentInstructionArgs(nil, AgentExecConfig{}, exe, false, true, true), "\n"),
 	}
 	for provider, text := range rendered {

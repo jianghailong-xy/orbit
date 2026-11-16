@@ -598,8 +598,11 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envWatches+"="+watchesEnv(job.WatchesDisabled),
 		envWiki+"="+wikiEnv(job.WikiDisabled),
+		envScheduleRun+"="+scheduleRunEnv(job.ScheduleRun),
 		envMCPPermissionPrompt+"=0",
 		envSpawnDepth+"="+strconv.Itoa(job.SpawnDepth),
+		// Kimi's own deadline for a call of `orbit mcp` (kimiMCPConfigRecord): a wait ends inside it.
+		envMCPCallTimeout+"="+strconv.Itoa(int(kimiOrbitMCPToolTimeout/time.Second)),
 	)
 	// Runner-hosted background jobs (mcp__orbit__bg_run). Kimi's `orbit` MCP server
 	// is configured with an empty env block on purpose and inherits this process's
@@ -960,10 +963,19 @@ func kimiMCPConfigRecord(agent AgentExecConfig, orbitExe string) map[string]inte
 			// env startKimiACP sets. Writing the ids here would pin this session's
 			// identity into a file instead.
 			"env": map[string]string{},
+			// Kimi ends an MCP tool call after 60 seconds by default, which cuts a delegate or session_create
+			// wait short and reports a call that is still running as failed. Orbit's own server gets the longest
+			// wait it holds (`orbit mcp` is told it in startKimiACP, envMCPCallTimeout).
+			"toolTimeoutMs": int(kimiOrbitMCPToolTimeout / time.Millisecond),
 		}
 	}
 	return servers
 }
+
+// kimiOrbitMCPToolTimeout is how long Kimi lets a call of Orbit's own MCP server run: twice the longest wait
+// `orbit mcp` holds a call for (maxSessionWaitPolls × sessionWaitInterval, 10 minutes), as longestInlineWait
+// keeps a wait to half the engine's deadline.
+const kimiOrbitMCPToolTimeout = 22 * time.Minute
 
 func kimiMCPConfigEntry(name string, value interface{}) map[string]interface{} {
 	m := mapValue(value)
@@ -1049,7 +1061,7 @@ func kimiAgentInstructions(agent AgentExecConfig, orbitExe string, insideRecorde
 	if strings.TrimSpace(agent.SystemPrompt) != "" {
 		parts = append(parts, agent.SystemPrompt)
 	}
-	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches)); appendPrompt != "" {
+	if appendPrompt := strings.TrimSpace(withOrbitCLIInstructions(agent.AppendSystemPrompt, orbitExe, insideRecordedWork, watches, agentDelegates(agent))); appendPrompt != "" {
 		parts = append(parts, appendPrompt)
 	}
 	if len(agent.AllowedTools) > 0 {

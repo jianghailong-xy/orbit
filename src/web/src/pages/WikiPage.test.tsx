@@ -351,7 +351,7 @@ describe('the Wiki home', () => {
 
   it('draws the head from the spaces list and grey bars for the rest while the first read is out (mock 31 ⑦)', () => {
     const html = paint('home', '/wiki/orbit', { spaces: [{ ...SPACE, pendingOps: 3 }] });
-    expect(html).toContain('<span class="wk-space-tag" title="The codebase this wiki describes">orbit</span>');
+    expect(html).toContain('<span class="v">orbit</span>');
     expect(html).toContain('title="3 waiting on you"');
     expect(html).toContain('<div class="wk-home-state"><span class="wk-sk" aria-hidden="true"></span></div>');
     expect(html).toContain('class="wk-pl-cat wk-home-sk" aria-busy="true"');
@@ -487,10 +487,11 @@ const THREE_SPACES = [
 ];
 
 describe('the Wiki head', () => {
-  it('names a lone space by its repository, as a label with nothing to choose', () => {
+  it('names a lone space by its repository, and is a menu all the same: New wiki… lives in it (board 47)', () => {
     const html = paint('home', '/wiki/orbit');
-    expect(html).toContain('<span class="wk-space-tag" title="The codebase this wiki describes">orbit</span>');
-    expect(html).not.toContain('<select');
+    expect(html).toContain('<span class="v">orbit</span>');
+    expect(html).toMatch(/<button[^>]*class="wk-select"[^>]*aria-haspopup="menu"/);
+    expect(html).not.toContain('wk-space-tag');
   });
 
   it('draws several as the name over a menu button, no native select (board wiki-space-menu B; the menu: WikiPage.spaceMenu.test)', () => {

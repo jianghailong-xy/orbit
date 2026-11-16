@@ -38,11 +38,12 @@ func claudeInitFrame(t *testing.T, status string, withSkill bool) map[string]int
 	}
 }
 
-// agentToolsServedForTest is the Orbit tools `orbit mcp` lists under sw, the permission bridge not included.
+// agentToolsServedForTest is the Orbit tools `orbit mcp` lists under sw outside a scheduled run, the permission
+// bridge not included.
 func agentToolsServedForTest(sw agentToolsSwitches) []string {
 	var names []string
 	for _, op := range operationCatalog().Ops {
-		if agentToolsFamilyOf(op) != "" && agentToolsWithheldBy(op, sw) == "" {
+		if agentToolsFamilyOf(op) != "" && agentToolsWithheldBy(op, sw) == "" && op.Tool != scheduleRunReportTool {
 			names = append(names, op.Tool)
 		}
 	}
@@ -330,4 +331,28 @@ func TestAgentToolsReportReadsTheRecordedEngineFrames(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	_ = serverWriter.Close()
+}
+
+// schedule_run_report is a scheduled run's own (schedule_tools.go): a report read from the switches counts it in a
+// run's session and in no other, so it says what that session's `orbit mcp` lists.
+func TestAgentToolsReportCountsScheduleRunReportInAScheduledRunOnly(t *testing.T) {
+	schedules := func(job *ClaimedSession) agentToolsFamilyCount {
+		r := newAgentToolsReport(job, providerCodex, carrierAdditionalContext)
+		r.MCP.Status = "connected"
+		r.countFamilies(nil)
+		for _, f := range r.Families {
+			if f.ID == "schedules" {
+				return f
+			}
+		}
+		t.Fatal("the report has no schedules family")
+		return agentToolsFamilyCount{}
+	}
+	job := agentToolsJob()
+	plain := schedules(job)
+	job.ScheduleRun = true
+	run := schedules(job)
+	if plain.Served != plain.Total || plain.Reason != "" || run.Served != plain.Served+1 || run.Total != plain.Total+1 {
+		t.Errorf("schedules = %+v outside a scheduled run, %+v in one", plain, run)
+	}
 }

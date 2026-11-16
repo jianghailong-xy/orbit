@@ -1,3 +1,4 @@
+import { runningSubagentCards } from '../sessions/abandoned-approvals';
 import { visibleQuestions, questionHolds } from '../sessions/run-question';
 import http2 from 'node:http2';
 import { randomUUID } from 'node:crypto';
@@ -14,12 +15,21 @@ import { AgentProvider, ENGINE_CLI_NAMES, RUN_NOTICE_MESSAGE_MAX, uuidToBase62, 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
-import { conversationIsOver, openItemsNoLongerOwed } from '../projects/project-open-item';
+import {
+  SESSION_ENDING_SELECT,
+  conversationIsOver,
+  coordinatorUnreachable,
+  openItemsNoLongerOwed,
+  readCoordinatorReach,
+  type SessionEnding,
+} from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
 import { ownerRequestAlert, ownerRequestPushCategory, type OwnerRequestKind } from '../owner-requests/owner-request';
-import { settleAlert } from './settle-alert';
+import { ownerStarted, settleAlert } from './settle-alert';
+import { crossingRequestAlert } from './crossing-request-alert';
+import { CARD_SESSION_SELECT, crossingCardSessionId } from '../projects/project-handoff.service';
 import { FcmTransport } from './fcm-transport';
 import { FeishuTransport, orbitUrl, type FeishuTarget } from './feishu-transport';
 import { fcmData } from './fcm-payload';
@@ -94,6 +104,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'confirmation-raised': 'Coordinator raised this for your decision',
   'confirmation-problems': 'Problems found after you confirmed',
   'owner-request': 'Request for you',
+  'crossing-request': 'Cross-project request',
   'watch-matched': 'Watch matched',
   'loop-missed': 'Wakeup loop missed',
   'wakeup-dropped': 'Scheduled wakeup dropped',
@@ -101,6 +112,7 @@ const FEISHU_EVENT_KINDS: Readonly<Record<string, string>> = {
   'wiki-review-mode-tiered': 'Wiki switched to Tiered',
   'wiki-maintenance-failing': 'Wiki maintenance needs attention',
   'project-orphan': 'Nobody has this',
+  schedule: 'Scheduled task',
 };
 
 /**
@@ -230,15 +242,23 @@ export class PushService {
       const session = await this.prisma.session.findFirst({
         where: {
           id: sessionId,
-          status: RunStatus.RUNNING,
+          // A running turn asks, and so does a SubAgent still running after its parent's turn ended
+          // (docs/subagent-design.md §5.3); the "needs you" set below decides whether this card is one.
+          OR: [{ status: RunStatus.RUNNING }, { runningSubagents: { isEmpty: false } }],
           completedAt: null,
           archivedAt: null,
           deletedAt: null,
           cancelRequestedAt: null,
         },
-        select: { title: true, ownerId: true },
+        select: { title: true, ownerId: true, notificationsMuted: true, notifyNeedsYou: true, runSource: true },
       });
       if (!session) return;
+      // A scheduled task's run rings through its Waiting on you item instead (schedules/schedule-attention.ts).
+      if (session.runSource === 'SCHEDULE') return;
+      // The session's own switches (Settings → Notifications): muted silences it, and 'off' turns this alert off. There
+      // is no account preference for it, so inherit keeps it on. Decided before the stretch is claimed, so a silenced
+      // approval leaves `alerted_approval_at` where it was, and the next stretch still rings once the switch is back.
+      if (session.notificationsMuted || session.notifyNeedsYou === 'off') return;
 
       // App-icon badge = the owner's sessions that need a reply (the authoritative count, shared
       // with the in-app "needs you" list and the silent sync below). Record it so a follow-up
@@ -481,14 +501,29 @@ export class PushService {
           // The rolling recap, when one has been written: `settleAlert` prefers it over the
           // rules line, and falls back to that line when it is null.
           recapText: true,
+          notificationsMuted: true,
+          notifyTurnFinished: true,
           owner: { select: { preferences: true } },
+          runSource: true,
+          parentSessionId: true,
+          coordinatorForProject: { select: { id: true } },
+          task: { select: { project: { select: { coordinatorEnabled: true } } } },
         },
       });
       if (!session) return;
+      // A scheduled task's run is not a conversation anybody waits on: what it found or how it failed is told by
+      // §7.3's rules (notifySchedule), and a run with nothing new rings nobody.
+      if (session.runSource === 'SCHEDULE') return;
       const alert = settleAlert(session);
       if (!alert) return;
+      // Muted silences the session; its own 'on' or 'off' wins over the account's switch; inherit (null) reads that.
+      if (session.notificationsMuted || session.notifyTurnFinished === 'off') return;
+      // Only a session its owner started rings by default: one an agent or a coordinator started is read by
+      // whoever started it, and a project's end is told by its own push (notifyProjectDone). The session's
+      // own 'on' is the owner asking for this one anyway.
+      if (session.notifyTurnFinished !== 'on' && !ownerStarted(session)) return;
       const prefs = (session.owner?.preferences ?? {}) as { notifySessionFinished?: boolean };
-      if (prefs.notifySessionFinished === false) return;
+      if (session.notifyTurnFinished !== 'on' && prefs.notifySessionFinished === false) return;
       const { tokens, feishu } = await this.channels(session.ownerId);
       if (tokens.length === 0 && !feishu) return;
 
@@ -554,7 +589,7 @@ export class PushService {
    * the outcome back, so it can say "I've pinged you" only when somebody was actually pinged, and
    * knows to keep working rather than wait when nobody was.
    *
-   * Three things can refuse it, and each is reported rather than swallowed:
+   * Four things can refuse it, and each is reported rather than swallowed: the session is muted,
    * the account turned agent notifications off, no device is registered, or this session already
    * rang within `AGENT_NOTIFY_MIN_INTERVAL_MS`. The rate limit exists because the interrupt budget
    * is per-person while the number of agents running is not — the same reason `settleAlert` is as
@@ -584,7 +619,7 @@ export class PushService {
         // reads as absent rather than as a session whose title we would then leak.
         const session = await this.prisma.session.findFirst({
           where: { id: input.sessionId, ownerId: input.ownerId },
-          select: { title: true, agentNotifiedAt: true, task: { select: { id: true, title: true, project: true } } },
+          select: { title: true, agentNotifiedAt: true, notificationsMuted: true, task: { select: { id: true, title: true, project: true } } },
         });
         if (!session) return { delivered: false, reason: 'session not found' };
         const project = session.task?.project;
@@ -640,6 +675,8 @@ export class PushService {
           const result = await this.notifyAgentMessage({ ...input, message: `Not reviewed by the coordinator · ${input.message.trim()}` }, true);
           return { ...result, recipient: 'owner', fallback };
         }
+        // Before the claim, so a muted session spends none of its once-a-minute turn.
+        if (session.notificationsMuted) return { delivered: false, reason: 'notifications are muted for this session' };
         title = session.title || input.fallbackTitle;
         rang = session.agentNotifiedAt ?? null;
       }
@@ -759,6 +796,24 @@ export class PushService {
   }
 
   /**
+   * Whether the owner item's project has no coordinator to turn to as the push is sent — the same
+   * reading the project page draws the card from (`readCoordinatorReach`), so the banner and the
+   * card it opens name the same cause. Without the sessions service (a test module that never
+   * wired one) it answers false, and the banner says what it always said.
+   */
+  private async coordinatorUnreachableFor(
+    ownerId: string,
+    project: { coordinatorSessionId: string | null; coordinatorSession: SessionEnding | null } | null,
+  ): Promise<boolean> {
+    if (!project) return false;
+    if (!this.moduleRef) return false;
+    // Loaded where it is used, as the run-notify turn above does: the sessions module imports this one.
+    const { SessionsService } = await import('../sessions/sessions.service.js');
+    const sessions = this.moduleRef.get(SessionsService, { strict: false });
+    return coordinatorUnreachable(await readCoordinatorReach(sessions, ownerId, project));
+  }
+
+  /**
    * Tell the account owner that one of the four things only they can answer is waiting
    * (`docs/project-integration-line-contract.md` §7.6 V12).
    *
@@ -797,7 +852,13 @@ export class PushService {
           ownerId: true,
           projectId: true,
           promotionId: true,
-          project: { select: { title: true, coordinatorSessionId: true } },
+          project: {
+            select: {
+              title: true,
+              coordinatorSessionId: true,
+              coordinatorSession: { select: SESSION_ENDING_SELECT },
+            },
+          },
         },
       });
       // A resolved item is not waiting on anybody: the owner answered it in another window, or the
@@ -809,6 +870,7 @@ export class PushService {
         ...item,
         projectTitle: item.project?.title ?? null,
         promotion: await this.promotionFor(item.promotionId),
+        coordinatorUnreachable: await this.coordinatorUnreachableFor(item.ownerId, item.project),
       });
       if (!alert) return;
       const { tokens, feishu } = await this.channels(item.ownerId);
@@ -897,6 +959,94 @@ export class PushService {
       await this.deliver(tokens, body, 'alert', '10', `owner-request-${requestId}`);
     } catch (err) {
       this.log.warn(`owner request notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * A scheduled task's alert (docs/scheduled-tasks-design.md §7.3, schedules/schedule-attention.ts): a new finding,
+   * a failure, a hold, a run's card, a run's widen, a run ending its schedule, a missed one-off. Decided and written by
+   * the schedule's code; this only rings. The tap opens the run's session (`sessionID`) or the schedule
+   * (`scheduleID`); `ownerRequestID` names the Waiting on you item when there is one. Collapsed on the alert's own id,
+   * so a replay never stacks. Best-effort: a failure is logged, never thrown.
+   */
+  async notifySchedule(alert: {
+    kind: string;
+    ownerId: string;
+    scheduleId: string;
+    opens: { sessionId: string } | { scheduleId: string };
+    ownerRequestId: string | null;
+    title: string;
+    body: string;
+    collapseId: string;
+  }): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const { tokens, feishu } = await this.channels(alert.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const sessionId = 'sessionId' in alert.opens ? alert.opens.sessionId : null;
+      const body = JSON.stringify({
+        aps: {
+          alert: { title: alert.title, body: alert.body },
+          sound: 'default',
+          'thread-id': `schedule-${alert.scheduleId}`,
+        },
+        kind: 'schedule',
+        scheduleKind: alert.kind,
+        scheduleID: alert.scheduleId,
+        ...(sessionId ? { sessionID: sessionId } : {}),
+        ...(alert.ownerRequestId ? { ownerRequestID: alert.ownerRequestId } : {}),
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: 'schedule', title: alert.title, body: alert.body, collapseId: alert.collapseId, sessionId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', alert.collapseId);
+    } catch (err) {
+      this.log.warn(`schedule notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * A cross-project request an agent just filed, waiting on the account owner (`ProjectHandoffService
+   * .declare`, once, after the commit). The tap opens the conversation that draws its decision card
+   * (`crossingCardSessionId`) — the target's coordinator, or the source's for a task asked to be
+   * taken out of every project — else the project page that lists it. Every word is Orbit's: the
+   * projects' titles and the request's own title, never the agent's reason.
+   */
+  async notifyCrossingRequest(handoffId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const row = await this.prisma.projectHandoffApproval.findUnique({
+        where: { id: handoffId },
+        select: {
+          ...CARD_SESSION_SELECT,
+          ownerId: true,
+          state: true,
+          kind: true,
+          title: true,
+          fromProjectId: true,
+          fromProject: { select: { title: true, coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+          toProject: { select: { title: true, coordinatorSessionId: true, coordinatorSession: { select: { deletedAt: true } } } },
+        },
+      });
+      if (!row || row.state !== 'PENDING') return;
+      const { tokens, feishu } = await this.channels(row.ownerId);
+      if (tokens.length === 0 && !feishu) return;
+      const alert = crossingRequestAlert(row);
+      const sessionId = crossingCardSessionId(row);
+      const projectId = row.toProjectId ?? row.fromProjectId;
+      const body = JSON.stringify({
+        aps: { alert, sound: 'default', 'thread-id': `crossing-request-${sessionId ?? projectId}` },
+        kind: 'crossing-request',
+        ...(sessionId ? { sessionID: sessionId } : {}),
+        projectID: projectId,
+        handoffID: handoffId,
+      });
+      this.background(this.feishuOther(feishu, {
+        kind: 'crossing-request', ...alert, collapseId: `crossing-request-${handoffId}`, sessionId, projectId,
+      }));
+      await this.deliver(tokens, body, 'alert', '10', `crossing-request-${handoffId}`);
+    } catch (err) {
+      this.log.warn(`crossing request notify failed: ${(err as Error).message}`);
     }
   }
 
@@ -1087,8 +1237,10 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const { missed } = input;
       const because = WAKEUP_MISSED_REASONS[input.reason];
       const alert = {
@@ -1098,19 +1250,9 @@ export class PushService {
           : `Scheduled wakeup dropped: ${because}.`,
       };
       const collapseId = 'loopId' in missed ? `loop-${missed.loopId}-${missed.alertedAt.getTime()}` : `wakeup-${missed.wakeupId}`;
-      const body = JSON.stringify({
-        aps: {
-          alert,
-          sound: 'default',
-          'thread-id': input.sessionId,
-        },
-        sessionID: input.sessionId, // OrbitKit Notifications.keySession — routes the tap to this session
-        kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped',
-      });
       this.background(this.feishuOther(feishu, {
           kind: 'loopId' in missed ? 'loop-missed' : 'wakeup-dropped', ...alert, collapseId, sessionId: input.sessionId,
         }));
-      await this.deliver(tokens, body, 'alert', '10', collapseId);
     } catch (err) {
       this.log.warn(`wakeup missed notify failed: ${(err as Error).message}`);
     }
@@ -1134,8 +1276,10 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -1150,7 +1294,6 @@ export class PushService {
         kind: 'wiki-review-mode-manual',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki review-mode notify failed: ${(err as Error).message}`);
     }
@@ -1174,8 +1317,10 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -1190,7 +1335,6 @@ export class PushService {
         kind: 'wiki-review-mode-tiered',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki verification notify failed: ${(err as Error).message}`);
     }
@@ -1211,8 +1355,10 @@ export class PushService {
   async notifyWikiMemoryWritesQuiet(input: { ownerId: string; spaceId: string; title: string; runs: number }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const body = JSON.stringify({
         aps: {
           alert: {
@@ -1226,7 +1372,6 @@ export class PushService {
         kind: 'wiki-maintenance-failing',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki memory writes notify failed: ${(err as Error).message}`);
     }
@@ -1240,8 +1385,10 @@ export class PushService {
   async notifyWikiRepositoryAttention(input: { ownerId: string; spaceId: string; title: string; runs: number; detail: string }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const detail = input.detail.split('\n', 1)[0]!.trim();
       const body = JSON.stringify({
         aps: {
@@ -1256,7 +1403,6 @@ export class PushService {
         kind: 'wiki-maintenance-failing',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki repository notify failed: ${(err as Error).message}`);
     }
@@ -1271,8 +1417,10 @@ export class PushService {
   }): Promise<void> {
     if (!this.enabled) return;
     try {
-      const { tokens, feishu } = await this.channels(input.ownerId);
-      if (tokens.length === 0 && !feishu) return;
+      // Feishu only, never a device: nobody has to act on it now, and the session or the space shows it
+      // when its owner next looks (a phone banner here was a lock-screen line about Orbit's own housekeeping).
+      const { feishu } = await this.channels(input.ownerId);
+      if (!feishu) return;
       const said = (input.lastError ?? '').split('\n', 1)[0]!.trim();
       const body = JSON.stringify({
         aps: {
@@ -1288,7 +1436,6 @@ export class PushService {
         kind: 'wiki-maintenance-failing',
       });
       this.background(this.feishuOfPush(feishu, body));
-      await this.deliver(tokens, body, 'alert', '10');
     } catch (err) {
       this.log.warn(`wiki maintenance notify failed: ${(err as Error).message}`);
     }
@@ -1311,7 +1458,7 @@ export class PushService {
    *  make visible. It does carry the same gate a card does — a project with no coordinator bound,
    *  or one whose conversation was filed away, is counted by neither (`readOwnerItemSessionIds`). */
   async needsYouSessions(ownerId: string): Promise<string[]> {
-    const [rows, blockedOnOwner] = await Promise.all([
+    const [rows, blockedOnOwner, withSubagents] = await Promise.all([
       this.prisma.session.findMany({
         where: {
           ownerId,
@@ -1327,9 +1474,35 @@ export class PushService {
         select: { id: true, taskId: true, approvals: { where: { status: 'PENDING' }, select: { id: true, toolName: true } } },
       }),
       readOwnerItemSessionIds(this.prisma, ownerId),
+      // The conversations, at any status, whose running SubAgent asked a card (docs/subagent-design.md §5.3).
+      this.prisma.session.findMany({
+        where: {
+          ownerId,
+          sessionKind: 'CONVERSATION',
+          completedAt: null,
+          archivedAt: null,
+          deletedAt: null,
+          cancelRequestedAt: null,
+          runningSubagents: { isEmpty: false },
+          approvals: { some: { status: 'PENDING', subagentRunId: { not: null } } },
+        },
+        select: {
+          id: true,
+          approvals: { where: { status: 'PENDING', subagentRunId: { not: null } }, select: { id: true, toolName: true, subagentRunId: true } },
+        },
+      }),
     ]);
     const visible = new Set((await visibleQuestions(this.prisma, rows.filter(r => r.taskId).flatMap(r => r.approvals))).map(a => a.id));
-    return [...new Set([...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id), ...blockedOnOwner])];
+    // A running SubAgent's card is a question whatever its parent is doing (docs/subagent-design.md §5.3): a
+    // background SubAgent waiting on a person while its parent sits idle needs them as much as a blocked turn.
+    const subagentCards = await visibleQuestions(this.prisma, await runningSubagentCards(this.prisma, withSubagents.flatMap(
+      (r) => (r.approvals ?? []).map((card: { id: string; toolName: string; subagentRunId?: string | null }) => ({ ...card, sessionId: r.id })),
+    )));
+    return [...new Set([
+      ...rows.filter(r => !r.taskId || r.approvals.some(a => visible.has(a.id))).map(r => r.id),
+      ...subagentCards.map(card => card.sessionId),
+      ...blockedOnOwner,
+    ])];
   }
 
   /** Debounced: something that could lower `ownerId`'s "needs you" count happened (an approval

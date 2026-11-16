@@ -34,6 +34,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { sessionEngine } from '../providers/session-engine';
 import { PushService } from '../push/push.service';
 import { enqueueRecap } from '../sessions/recap';
+import { translationEventOf } from '../sessions/reply-translation';
 import { deriveSessionCapabilities } from '../sessions/session-state';
 import { readWorktreeArtifactRequest } from '../sessions/worktree-artifact';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
@@ -42,6 +43,7 @@ import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
 import { readOpenRequestPeers } from '../sessions/session-request';
 import { lastUserFromExternalOf, lastUserFromOf, lastUserFromOrbitOf } from '../sessions/session-message';
+import { readSessionCoordinatorHandoffs } from '../projects/coordinator-handoff';
 import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
@@ -317,7 +319,10 @@ function batchRowUpdate(): NormalizedRunEvent {
  * input is whatever the asker sent. Seq 0, like every live-only event: a card is never stored in run_event.
  */
 export function approvalRequestEvent(
-  approval: { id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; coordinatorFallback?: string | null },
+  approval: {
+    id: string; toolName: string; input: unknown; toolUseId: string | null; backgroundJobId: string | null; subagentRunId?: string | null; coordinatorFallback?: string | null;
+    translation?: unknown;
+  },
   ts: string,
 ): NormalizedRunEvent {
   return {
@@ -333,7 +338,13 @@ export function approvalRequestEvent(
       // up, whatever the conversation is doing, and a client that reads only the turn would
       // take the card down the moment the turn ended (`WorkspaceView`'s local predicate).
       backgroundJobId: approval.backgroundJobId ?? undefined,
+      // The SubAgent that asked under this session: the card's grey "SubAgent · …" line, and the reader that
+      // outlives the turn the way a job does.
+      ...(approval.subagentRunId ? { subagentRunId: approval.subagentRunId } : {}),
       ...(approval.coordinatorFallback ? { coordinatorFallback: approval.coordinatorFallback } : {}),
+      // Settings › Translation (ApprovalTranslation, reply-translation.ts): what the card shows, in the
+      // owner's language. A card is published again with it once it is translated.
+      ...(approval.translation ? { translation: approval.translation } : {}),
     },
     ts,
   };
@@ -539,7 +550,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     if (!payload) return;
     let m: {
       i?: string; r: string; c?: true; e?: NormalizedRunEvent; s?: number; b?: NormalizedRunEvent[]; f?: number; t?: number;
-      a?: string; ts?: string; u?: 1;
+      a?: string; ts?: string; u?: 1; x?: number;
     };
     try {
       m = JSON.parse(payload);
@@ -587,9 +598,23 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         this.readBackInOrder(m.r, `approval ${approvalId}`, async () => {
           const row = await this.prisma.approval.findFirst({
             where: { id: approvalId, sessionId: m.r },
-            select: { id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, createdAt: true, coordinatorFallback: true },
+            select: {
+              id: true, toolName: true, input: true, toolUseId: true, backgroundJobId: true, subagentRunId: true, createdAt: true, coordinatorFallback: true,
+              translation: true,
+            },
           });
           return row ? [approvalRequestEvent(row, ts ?? row.createdAt.toISOString())] : [];
+        });
+      } else if (typeof m.x === 'number') {
+        // A reply's translation too big to ride along: built again from the payload of the event it translates.
+        const seq = m.x;
+        this.readBackInOrder(m.r, `translation of ${seq}`, async () => {
+          const row = await this.prisma.runEvent.findUnique({
+            where: { sessionId_seq: { sessionId: m.r, seq } },
+            select: { seq: true, payload: true, turnId: true },
+          });
+          const event = row ? translationEventOf(row) : null;
+          return event ? [event] : [];
         });
       }
     }
@@ -833,6 +858,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // Read before this replica's streams are handed the card: a stream's public-id pass (addTwins) rewrites the ids of
     // what it sends in place, and the other replicas look the approval row up by the id it is stored under.
     const approvalId = event.type === RunEventType.APPROVAL_REQUEST ? approvalIdOf(event.payload) : null;
+    const translationOf = event.type === RunEventType.TRANSLATION ? (event.payload as { of?: unknown }).of : undefined;
     this.publishHere(runId, event);
     const payload = JSON.stringify({ i: this.instanceId, r: runId, e: event });
     // NOTE: NOTIFY's limit is 8000 BYTES — measure UTF-8 bytes, not string length
@@ -843,6 +869,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // A card is never stored: the other replicas build it again from its approval row (approvalRequestEvent), at
       // the `ts` it was published at here.
       this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, a: approvalId, ts: event.ts }));
+    } else if (typeof translationOf === 'number') {
+      // A reply's translation is never an event of its own: the other replicas read it back from the payload of
+      // the event it translates (reply-translation.ts), where it was written before this was published.
+      this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, x: translationOf }));
     } else {
       // Too big for a NOTIFY payload — signal by seq; other replicas fetch the
       // (already-persisted) RunEvent row.
@@ -1431,6 +1461,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   ): Promise<Record<string, unknown> | null> {
     switch (type) {
       case ControlEventType.SESSION_CREATED:
+        // A scheduled task's run enters no list (docs/scheduled-tasks-design.md §7.4, §12.1): an open list is not
+        // told about it. It is reached from its schedule's history and its notification.
+        if ((await this.prisma.session.findUnique({ where: { id: sessionId }, select: { runSource: true } }))?.runSource === 'SCHEDULE') {
+          return null;
+        }
+      // falls through
       case ControlEventType.SESSION_UPDATED: {
         const summary = await this.buildSessionSummary(sessionId);
         // Null when the session vanished mid-flight.
@@ -1498,7 +1534,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // and this is the number the client overwrites its row with.
         const reader = await this.prisma.session.findUnique({
           where: { id: sessionId },
-          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true },
+          select: { id: true, taskId: true, status: true, engineTurnActive: true, runningBgShells: true, runningSubagents: true },
         });
         const approvals = reader ? await countLiveApprovals(this.prisma, reader) : 0;
         const decisions = await this.ownerDecisionsOn(sessionId, ownerId);
@@ -1556,6 +1592,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         // Read by the approval count below: the set a card's `background_job_id` has to be in to
         // be a question on a conversation that is not generating (migration 0291).
         runningBgShells: true,
+        runningSubagents: true,
         engineStartedAt: true,
         enginePhase: true,
         runClaimedAt: true,
@@ -1690,6 +1727,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // That Orbit wrote it, with the notification card its line is written from; cleared with it.
       lastUserFromOrbit: lastUserFromOrbitOf(s),
       lastUserFromExternal: lastUserFromExternalOf(s),
+      // A coordinator's handoff, both halves, sent as null too — a value, which is how a row learns
+      // one cleared (projects/coordinator-handoff.ts).
+      ...(await readSessionCoordinatorHandoffs(this.prisma, sessionId)),
       recapText: s.recapText ?? null,
       recapAt: s.recapAt ? s.recapAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both

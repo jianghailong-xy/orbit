@@ -117,8 +117,12 @@ function fakePrisma(
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),
+    // …and no coordinator handoff (projects/coordinator-handoff.ts).
+    coordinatorHandoff: { findFirst: async () => null },
     projectOpenItem: { findMany: async () => [] },
     ownerRequest: { groupBy: async () => [] },
+    // A move out of a project waiting on the owner (57a2943fa4's crossing signal): none here.
+    projectHandoffApproval: { findMany: async () => [] },
   } as unknown as PrismaService;
 }
 

@@ -1,7 +1,7 @@
-# Orbit operation catalogue v1.7.0
+# Orbit operation catalogue v1.8.0
 
 > Generated from `src/runner-go/operation_catalog.go` — do not edit by hand.
-> Content hash: `949fc1b6cb953c23448e4820089109078ddbb96a11b68ad48c4a104bf0aef970`.
+> Content hash: `7a94e776fbbc7c66f3db94b17d3d681603961545c169d529b36df8d7c4862a07`.
 
 Every operation an Orbit agent can call is declared once in the operation catalogue. This table is that catalogue rendered for a person: `orbit capabilities --json` and the MCP `tools/list` payload are its two machine surfaces, and the leaf `--help` texts are held to it by tests. `MCP` and `CLI` say how each surface reaches the operation — `always`, an `orchestration` grant, an engine `permission_prompt` bridge, `session`-only, `headless`-only, or a `watch_switch`/`wiki_switch` — and `absent` when that surface deliberately has no door. Gates that must hold together are joined with `+` (for example `orchestration+watch_switch`). `Idempotency` is `read` (safe to repeat), `caller_key` (retry with the same key), `server_key` (a redelivered turn deduplicates) or `none` (re-read before retrying). `Plan` is what a session in Plan mode gets: the call `runs`, is `refused` with what to do instead, or its `own_gate` decides; the per-engine matrix is docs/permission-matrix.md.
 
@@ -80,6 +80,17 @@ Every operation an Orbit agent can call is declared once in the operation catalo
 | `runner_engine_install` | runner | high | yes | none | no | none | refused | orchestration | orchestration — `orbit runner install` | Install or update an engine CLI on one of this account's runners. |
 | `runner_engine_install_status` | runner | low | no | none | no | read | runs | orchestration | orchestration — `orbit runner install-status` | Read where an engine install or update stands. |
 | `runner_list` | runner | low | no | none | no | read | runs | orchestration | orchestration — `orbit runner list` | See the runners of this account and whether they are online. |
+| `schedule_create` | schedule | high | yes | owner | no | none | runs | always | absent | Propose a scheduled task on a create card the owner answers. |
+| `schedule_delete` | schedule | high | yes | none | yes | none | refused | always | absent | Delete a scheduled task; its runs and findings are kept. |
+| `schedule_end` | schedule | medium | yes | none | no | none | runs | always | absent | End a scheduled task whose goal is reached. |
+| `schedule_get` | schedule | low | no | none | no | read | runs | always | absent | Read one scheduled task: last result, findings, note, use and history. |
+| `schedule_list` | schedule | low | no | none | no | read | runs | always | absent | See the owner's scheduled tasks. |
+| `schedule_pause` | schedule | medium | yes | none | no | none | refused | always | absent | Pause a scheduled task. |
+| `schedule_resume` | schedule | medium | yes | none | no | none | refused | always | absent | Resume a paused or held scheduled task. |
+| `schedule_run_now` | schedule | medium | yes | none | no | none | refused | always | absent | Start one run of a scheduled task now. |
+| `schedule_run_report` | schedule | medium | yes | none | no | none | runs | always | absent | Report the scheduled run this session serves, once. |
+| `schedule_run_stop` | schedule | medium | yes | none | no | none | refused | always | absent | Stop one run of a scheduled task. |
+| `schedule_update` | schedule | high | yes | owner | no | none | runs | always | absent | Change a scheduled task; a change that grows its envelope waits on the owner's card. |
 | `schedule_wakeup` | session | medium | yes | none | no | none | runs | always | absent | Schedule a wake-up in this session, once or on a loop. |
 | `session_await` | watch | medium | yes | none | no | caller_key | runs | orchestration+watch_switch | orchestration+watch_switch — `orbit session await` | Be woken when sessions finish their turn, need a person, or end. |
 | `session_complete` | session | medium | yes | none | no | none | refused | orchestration | orchestration — `orbit session complete` | Move a session to Completed. |
@@ -148,6 +159,10 @@ Plan reads, waits and asks the owner, and refuses every other write. These are t
 | `bg_run` | own_gate | the background-job gate (background_gate.go) decides in every mode: Plan refuses the job, with what to do instead |
 | `notify` | runs | puts a line in front of the owner; a message is not work |
 | `request_owner_action` | runs | asks the owner for an action that is theirs to take; a question is not work |
+| `schedule_create` | runs | puts a create card in front of the owner; nothing is scheduled until they press Create |
+| `schedule_end` | runs | ends a schedule whose goal is reached; it changes no code, and the owner can undo it |
+| `schedule_run_report` | runs | reports the scheduled run this session serves, which is what a check-only run is for |
+| `schedule_update` | runs | changes a schedule inside what the owner allowed, or asks them on a card; it changes no code |
 | `schedule_wakeup` | runs | schedules this session's own next turn; it changes no work |
 | `session_await` | runs | waits on Orbit's own work for this session; a wait changes no work |
 | `task_await` | runs | waits on Orbit's own work for this session; a wait changes no work |
@@ -178,6 +193,17 @@ An operation missing from one surface is a declared decision, not drift: the cat
 | `open_item_resolve` | CLI | closes an item as the project's coordinator session: a terminal outside one is refused by the server |
 | `permission_prompt` | CLI | runtime approval bridge, called by the engine mid-turn |
 | `request_owner_action` | CLI | files as the calling session and answers it with a turn: a terminal outside one is refused by the server |
+| `schedule_create` | CLI | proposes a schedule in the calling session's workspace, on its engine: a terminal outside a session has neither |
+| `schedule_delete` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |
+| `schedule_end` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |
+| `schedule_get` | CLI | a scheduled task's reads are served to sessions; the person reads them in the app |
+| `schedule_list` | CLI | a scheduled task's reads are served to sessions; the person reads them in the app |
+| `schedule_pause` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |
+| `schedule_resume` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |
+| `schedule_run_now` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |
+| `schedule_run_report` | CLI | reports the scheduled run the calling session serves: a terminal is no such session |
+| `schedule_run_stop` | CLI | controls a schedule as the calling session: a terminal outside one is refused by the server |
+| `schedule_update` | CLI | changes a schedule as the calling session, which the envelope rule judges: a terminal outside one is refused by the server |
 | `schedule_wakeup` | CLI | wakes the calling session: there is no session to wake at a terminal outside one |
 | `withdraw_owner_request` | CLI | withdraws as the calling session what it filed: a terminal outside one is refused by the server |
 | `api` | MCP | calls any user REST route with the person's own token; a general escape hatch, not an agent operation |

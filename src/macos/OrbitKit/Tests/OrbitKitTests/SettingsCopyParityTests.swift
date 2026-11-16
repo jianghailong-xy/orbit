@@ -23,6 +23,9 @@ final class SettingsCopyParityTests: XCTestCase {
     private static let notifications = "src/web/src/pages/settings/NotificationsPage.tsx"
     private static let appearance = "src/web/src/pages/settings/AppearancePage.tsx"
     private static let profile = "src/web/src/pages/ProfilePage.tsx"
+    /// Since the profile-change-password-dialog landing, the form is its own dialog, opened from the
+    /// Password row of Profile's Sign-in methods.
+    private static let passwordDialog = "src/web/src/components/ChangePasswordDialog.tsx"
     private static let sharedLinks = "src/web/src/pages/SharedLinksPage.tsx"
     private static let accessTokens = "src/web/src/pages/AccessTokensPage.tsx"
     private static let accessTokenTable = "src/web/src/components/AccessTokenTable.tsx"
@@ -85,8 +88,12 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.settingsIndex)
         assertSays(index, "{ path: '/settings/access-tokens', label: '\(SettingsHome.title(.accessTokens))' },",
                    in: Self.settingsIndex)
-        assertSays(try web(Self.profile), "<Card title=\"\(SettingsHome.title(.changePassword))\">",
-                   in: Self.profile)
+        for row in [SettingsHome.Row.general, .profile, .terminals] {
+            assertSays(index, "label: '\(SettingsHome.title(row))' },", in: Self.settingsIndex)
+        }
+        // Profile's Change password opens a dialog whose title is the page's name.
+        assertSays(try web(Self.passwordDialog), "export const CHANGE_PASSWORD = '\(SettingsPage.changePassword.title)';",
+                   in: Self.passwordDialog)
     }
 
     /// The account's two alert switches, with the web Notifications page's titles and its
@@ -160,16 +167,20 @@ final class SettingsCopyParityTests: XCTestCase {
         assertSays(page, "export const NAME_CAPTION = '\(SettingsCopy.nameCaption)';", in: Self.profile)
     }
 
-    /// Change password: the web Profile page's form.
+    /// Change password: the web's dialog, opened from Profile → Sign-in methods → Password.
     func testThePasswordFormSaysWhatTheProfilePageSays() throws {
-        let page = try web(Self.profile)
+        let dialog = try web(Self.passwordDialog)
         for label in [SettingsCopy.currentPassword, SettingsCopy.newPassword, SettingsCopy.confirmPassword] {
-            assertSays(page, "label=\"\(label)\"", in: Self.profile)
+            assertSays(dialog, "label=\"\(label)\"", in: Self.passwordDialog)
         }
-        assertSays(page, "? null : '\(SettingsCopy.passwordRule)'", in: Self.profile)
-        assertSays(page, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.profile)
-        assertSays(page, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.profile)
-        assertSays(page, "> \(SettingsCopy.changePassword) </Button>", in: Self.profile)
+        // The rule is the dialog's own constant, drawn as the field's hint while it has no error.
+        assertSays(dialog, "export const NEW_PASSWORD_RULE = '\(SettingsCopy.passwordRule)';", in: Self.passwordDialog)
+        assertSays(dialog, "extra={form.errors.newPassword?.length ? undefined : NEW_PASSWORD_RULE}",
+                   in: Self.passwordDialog)
+        assertSays(dialog, "? null : '\(SettingsCopy.passwordsDoNotMatch)'", in: Self.passwordDialog)
+        assertSays(dialog, "message.success('\(SettingsCopy.passwordChanged)')", in: Self.passwordDialog)
+        assertSays(dialog, "export const CHANGE_PASSWORD = '\(SettingsCopy.changePassword)';", in: Self.passwordDialog)
+        assertSays(dialog, "> {CHANGE_PASSWORD} </Button>", in: Self.passwordDialog)
     }
 
     /// Shared links: the web page's tabs, lines and words.
@@ -264,8 +275,10 @@ final class SettingsCopyParityTests: XCTestCase {
     /// line went with the page.
     func testMachinesAndModelssSectionsSayWhatTheWebPageSays() throws {
         XCTAssertEqual(MachinesAndModels.subtitle, "Where your agents run, and whose model quota they spend.")
-        XCTAssertEqual(SettingsHome.footer(.machines), MachinesAndModels.subtitle)
         assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(MachinesAndModels.machines)\"", in: Self.settingsNav)
+        // iOS Settings' Machines and Providers rows are the web nav's two groups, by name.
+        XCTAssertEqual(SettingsHome.title(.machines), MachinesAndModels.machines)
+        assertSays(try web(Self.settingsNav), "<NavGroup title=\"\(SettingsHome.title(.providers))\"", in: Self.settingsNav)
         XCTAssertEqual(MachinesAndModels.machinesDetail,
                        "Subscriptions signed in here are spent only by sessions on that machine.")
         XCTAssertEqual(ProvidersOverview.apiKeys, "API keys")

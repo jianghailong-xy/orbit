@@ -712,6 +712,26 @@ describe('ExceptionCards — the same items in the coordinator’s conversation'
     expect(html).not.toContain('goes to the owner');
   });
 
+  it('says an escalated item\u2019s coordinator can\u2019t take messages when the server read it unreachable, and keeps the heading otherwise', () => {
+    // 2026-11-15: "no one acted on this" over doors and a chat that could not reach the coordinator.
+    const unreachable = paint(
+      {
+        needsYou: [{ ...ESCALATED, coordinatorUnreachable: true, actions: ['OPEN_TASK_SESSION', 'CANCEL_TASK'] }],
+        withCoordinator: [],
+      },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+    expect(unreachable).toContain('Now yours — the coordinator can’t take messages');
+    expect(unreachable).not.toContain('no one acted on this');
+
+    const reachable = paint(
+      { needsYou: [{ ...ESCALATED, coordinatorUnreachable: false }], withCoordinator: [] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    );
+    expect(reachable).toContain('Now yours — no one acted on this for 2h');
+    expect(reachable).not.toContain('can’t take messages');
+  });
+
   it('gives each other way an item became yours its own heading', () => {
     const ended = { ...ESCALATED, assigneeReason: 'COORDINATOR_ENDED' as const };
     const chain = { ...ESCALATED, assigneeReason: 'CHAIN_LIMIT' as const };

@@ -677,6 +677,12 @@ data class AcceptanceDraft(val criteria: String = "", val command: String = "", 
 }
 
 object TaskDetailLogic {
+    /** What an unpinned task runs on: the server's `runsWith`, the resolution its dispatch makes (its project's coordinator session,
+     * else the workspace's newest person-opened session; web `unpinnedRuns`). Null under a pin, which the pins already say, and from
+     * an older server, which sends none. */
+    fun unpinnedRuns(task: JsonObject): JsonObject? =
+        task.obj("runsWith")?.takeIf { it.text("source").let { source -> source != null && source != "TASK_PIN" } }
+
     /** A stopped task — done or cancelled — draws no run here: Reopen task and Run again are in ⋯ (board 05), as on iOS. */
     fun actionRow(owner: OwnerPanelAction?, status: String?, gate: Boolean, entry: TaskRunHandoff.Entry): TaskActionRow {
         val leading = when (owner) {

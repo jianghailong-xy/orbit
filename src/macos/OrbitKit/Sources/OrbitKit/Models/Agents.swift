@@ -29,6 +29,9 @@ public struct CreateAgentRequest: Encodable, Sendable {
     public let env: [String: String]?
     public let enabled: Bool?
     public let autoInitGit: Bool?
+    /// Instead of `workDir`, with `runnerId`: one folder name the server joins to the runner's new-folder root,
+    /// made as the workspace's first session starts (docs/first-workspace-contract.md).
+    public let newFolder: String?
 
     public init(name: String, description: String? = nil,
                 model: String? = nil,
@@ -38,7 +41,7 @@ public struct CreateAgentRequest: Encodable, Sendable {
                 maxTurns: Int? = nil, maxBudgetUsd: Double? = nil,
                 targetRunnerId: String? = nil, targetLabels: [String]? = nil,
                 runnerId: String? = nil, workDir: String? = nil, env: [String: String]? = nil,
-                enabled: Bool? = nil, autoInitGit: Bool? = nil) {
+                enabled: Bool? = nil, autoInitGit: Bool? = nil, newFolder: String? = nil) {
         self.name = name
         self.description = description
         self.model = model
@@ -57,6 +60,7 @@ public struct CreateAgentRequest: Encodable, Sendable {
         self.env = env
         self.enabled = enabled
         self.autoInitGit = autoInitGit
+        self.newFolder = newFolder
     }
 }
 
@@ -85,6 +89,12 @@ public struct UpdateAgentRequest: Encodable, Sendable {
     public var enableWorktree: Bool?
     /// Smart model selection for this Agent's task runs (`Agent.modelRouting`).
     public var modelRouting: Bool?
+    /// What smart model selection and SubAgents rank by: `cost`, `balance` or `intelligence`.
+    public var modelRoutingOptimizeFor: String?
+    /// SubAgents for this Agent's sessions (docs/subagent-design.md §7).
+    public var subagentsEnabled: Bool?
+    /// How many of one session's SubAgents run at once, 1…16.
+    public var subagentsMaxRunning: Int?
 
     public init(name: String? = nil, description: String? = nil,
                 model: String? = nil,
@@ -95,7 +105,8 @@ public struct UpdateAgentRequest: Encodable, Sendable {
                 targetRunnerId: String? = nil, targetLabels: [String]? = nil,
                 runnerId: String? = nil, workDir: String? = nil, env: [String: String]? = nil,
                 enabled: Bool? = nil, autoInitGit: Bool? = nil, enableWorktree: Bool? = nil,
-                modelRouting: Bool? = nil) {
+                modelRouting: Bool? = nil, modelRoutingOptimizeFor: String? = nil,
+                subagentsEnabled: Bool? = nil, subagentsMaxRunning: Int? = nil) {
         self.name = name
         self.description = description
         self.model = model
@@ -116,6 +127,9 @@ public struct UpdateAgentRequest: Encodable, Sendable {
         self.autoInitGit = autoInitGit
         self.enableWorktree = enableWorktree
         self.modelRouting = modelRouting
+        self.modelRoutingOptimizeFor = modelRoutingOptimizeFor
+        self.subagentsEnabled = subagentsEnabled
+        self.subagentsMaxRunning = subagentsMaxRunning
     }
 }
 

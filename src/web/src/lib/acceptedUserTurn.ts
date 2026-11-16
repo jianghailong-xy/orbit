@@ -1,5 +1,8 @@
+import { COORDINATOR_HANDOFF_PROMPT_HEAD } from '@orbit/shared';
+import type { TurnTranslation } from '@orbit/shared';
 import type { TurnCards } from '../api';
 import { parseBackgroundWake } from './backgroundWake';
+import { parseSubagentFinished } from './subagentFinished';
 
 /** A user turn the API accepted but whose durable `user` event has not reached this tab yet.
  *
@@ -19,6 +22,8 @@ export interface AcceptedUserTurn extends TurnCards {
   text: string;
   acceptedAt: string;
   attachments: { id: string; mime?: string; name?: string }[];
+  /** Settings › Translation: the turn's translation, carried as the runner's echo will carry it. */
+  translation?: TurnTranslation;
 }
 
 /** Every field of `TurnCards`, which the compiler holds this list to: a card added there cannot be
@@ -65,6 +70,7 @@ interface QueuedTurnLike {
   delivery?: 'failed' | 'unconfirmed';
   deliveryCode?: string;
   deliveryReason?: string;
+  content?: string;
 }
 
 const terminalDeliveryForEvent = (event: UserTurnEvent): string | null => {
@@ -142,6 +148,7 @@ export function acceptedUserTurnEvent(
     payload: {
       text: turn.text,
       ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
+      ...(turn.translation ? { translation: turn.translation } : {}),
       // Beside the text, as the control plane records them on the runner's echo (readTurnCards,
       // turn-cards.ts): the words and the cards they are drawn as, one payload either way — so the
       // placeholder is drawn as the card, by the same parser, rather than as a bubble the card
@@ -159,6 +166,8 @@ interface QueuedTurnRow extends TurnCards {
   createdAt?: string;
   attachments?: { id: string; mimeType: string }[];
   authoredByOrbit?: true;
+  /** Settings › Translation: carried onto the event as the runner's echo will carry it. */
+  translation?: TurnTranslation;
 }
 
 /** Whether the queue listed this turn with the block it will be delivered with rather than with
@@ -175,7 +184,7 @@ function listedWithItsBlock(turn: QueuedTurnRow): boolean {
   ) {
     return true;
   }
-  return parseBackgroundWake(turn.content) !== null;
+  return parseBackgroundWake(turn.content) !== null || parseSubagentFinished(turn.content) !== null;
 }
 
 /**
@@ -206,6 +215,7 @@ export function queuedTurnEvent(turn: QueuedTurnRow): UserTurnEvent {
         : {}),
       ...(listedWithItsBlock(turn) ? { controlPlaneNote: turn.content } : {}),
       ...(turn.shell ? { shell: true } : {}),
+      ...(turn.translation ? { translation: turn.translation } : {}),
       ...turnCardsOf(turn),
     },
   };
@@ -223,12 +233,15 @@ export function queuedTurnEvent(turn: QueuedTurnRow): UserTurnEvent {
  * lists the opening as the accepted head until the runner echoes it, so a snapshot carrying a row is
  * that same message under its id (`opening`), and the id-less copy gives way to it: one bubble, not
  * two. A server that does not list the opening returns nothing for it, and the local copy stays.
+ * An opening held for its translation is listed as queued, not accepted (`openingQueued`): the queued
+ * row draws it with its chip, so the id-less copy gives way to that row just the same.
  */
 export function reconcileAcceptedUserTurnSnapshot(
   snapshot: readonly AcceptedUserTurn[],
   current: readonly AcceptedUserTurn[],
   sessionId: string,
   knownBefore: ReadonlySet<string>,
+  openingQueued = false,
 ): AcceptedUserTurn[] {
   const next = current.filter((turn) => turn.sessionId !== sessionId);
   const included = new Set<string>();
@@ -247,7 +260,7 @@ export function reconcileAcceptedUserTurnSnapshot(
     included.add(turn.key);
   }
 
-  const openingListed = snapshot.some((turn) => turn.opening);
+  const openingListed = openingQueued || snapshot.some((turn) => turn.opening);
   for (const turn of current) {
     if (turn.sessionId !== sessionId || included.has(turn.key)) continue;
     if (openingListed && turn.source === 'local' && turn.turnId === undefined) continue;
@@ -305,6 +318,10 @@ export function queuedTurnsOutsideTranscript<T extends QueuedTurnLike>(
     return turnId ? [turnId] : [];
   }));
   return queued.filter((turn) => {
+    // The platform's ask for a coordinator's handoff note is drawn only as the handoff's own row
+    // (board 02 ②), as Transcript leaves out its echo: never a queued card, not even an empty one
+    // with the queue's line and a Cancel. The listing carries no turn key, so its first line tells it.
+    if (turn.content?.startsWith(COORDINATOR_HANDOFF_PROMPT_HEAD)) return false;
     // A live steer has its own authored USER event and must never disappear merely because the
     // target event was already in the transcript before it was sent.
     // A durable terminal receipt sharing a USER's turnId is merged into that existing bubble by

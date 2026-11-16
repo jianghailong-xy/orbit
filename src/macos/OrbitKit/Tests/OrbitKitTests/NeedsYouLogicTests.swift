@@ -504,4 +504,52 @@ final class NeedsYouLogicTests: XCTestCase {
         XCTAssertEqual(garbled.ownerItems?.first?.kind, .promotionApproval)
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [garbled])?.text, "Approve merge to main")
     }
+
+    // MARK: noticed once (the owner, 2026-11-15, docs/mocks/needs-you-capsule/12-once)
+
+    /// A conversation that starts waiting is noticed once, by name and by what it waits on; the same
+    /// wait is not noticed again, a new wait in the same conversation is, and the one on screen never.
+    func testAWaitIsNoticedOnceByNameAndWhat() throws {
+        let a = session("a", approvals: 1, agentName: "orbit-develop", title: "Android 自动更新报错",
+                        lastTurnAt: "2026-11-15T01:00:00Z")
+        let b = session("b", approvals: 1, agentName: "orbit-op", title: "Orbit 接入 Ollama",
+                        lastTurnAt: "2026-11-15T02:00:00Z")
+        let seen = Set([a].map(NeedsYouLogic.waitKey))
+        let fresh = NeedsYouLogic.newlyWaiting([a, b], seen: seen)
+        XCTAssertEqual(fresh.map(\.target.id), ["b"], "only what was not waiting before")
+        let notice = try XCTUnwrap(fresh.first)
+        XCTAssertEqual(notice.title, "Orbit 接入 Ollama")
+        XCTAssertEqual(notice.line, "Needs your reply · orbit-op")
+        XCTAssertEqual(notice.glyph, .hand)
+
+        let bothSeen = Set([a, b].map(NeedsYouLogic.waitKey))
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: bothSeen).isEmpty, "the same wait, not again")
+        let bAgain = session("b", approvals: 1, agentName: "orbit-op", title: "Orbit 接入 Ollama",
+                             lastTurnAt: "2026-11-15T03:00:00Z")
+        XCTAssertEqual(NeedsYouLogic.newlyWaiting([a, bAgain], seen: bothSeen).map(\.target.id), ["b"],
+                       "stopping again is a new wait")
+        XCTAssertTrue(NeedsYouLogic.newlyWaiting([a, b], seen: seen, excluding: "b").isEmpty,
+                      "the conversation on screen has its own card in front of the reader")
+    }
+
+    // MARK: here (the owner, 2026-11-15, docs/mocks/needs-you-capsule/07-console-one-capsule)
+
+    /// The conversation's own capsule: its cards first, in their words and direction; its approvals
+    /// after them, at its tail — so alone they say "below" and press to the approval's row.
+    func testTheConversationsOwnCapsuleCountsItsCardsAndItsApprovals() throws {
+        let alone = try XCTUnwrap(NeedsYouLogic.here(rows: [], approvalIDs: ["a1"], side: nil))
+        XCTAssertEqual(alone.text, "1 waiting below")
+        XCTAssertEqual(alone.rowID, "approval-a1")
+        XCTAssertEqual(alone.side, .below)
+        XCTAssertEqual(alone.glyph, .hand)
+
+        let both = try XCTUnwrap(NeedsYouLogic.here(rows: [questionRow("q1")], approvalIDs: ["a1"], side: .above))
+        XCTAssertEqual(both.text, "2 waiting above")
+        XCTAssertEqual(both.rowID, "q1", "the oldest card first, then the tail")
+        XCTAssertEqual(both.glyph, .question)
+
+        XCTAssertEqual(NeedsYouLogic.here(rows: [questionRow("q1")], approvalIDs: [], side: .below)?.text,
+                       "1 open question below", "no approval: the words the bar always had")
+        XCTAssertNil(NeedsYouLogic.here(rows: [], approvalIDs: [], side: .below))
+    }
 }

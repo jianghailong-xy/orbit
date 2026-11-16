@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#f2f3f5;font-family:Inter,"Noto Sans SC",sans-serif;color:#1f2329;width:1400px;padding:36px 40px 44px;box-sizing:border-box}
+h1{font-size:26px;margin:0 0 6px}.sub{color:#646a73;font-size:14px;margin-bottom:24px;line-height:1.6}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.f{background:#fff;border-radius:14px;padding:18px 20px 20px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.fh{font-size:16px;font-weight:600;margin-bottom:4px}.fh b{display:inline-block;width:24px;height:24px;border-radius:12px;background:#1f2329;color:#fff;text-align:center;line-height:24px;font-size:13px;margin-right:8px}
+.fh b.t{background:#a8acb3}
+.fc{font-size:13px;color:#646a73;margin-bottom:12px;line-height:1.6}
+img{width:100%;border:1px solid #eceef1;border-radius:8px;display:block}
+</style></head><body>
+<h1>Update engines 失败时让 Agent 去修 · 实际页面效果</h1>
+<div class="sub">真实的机器页（本分支的 web 代码 + 假数据），只截 Engines 区顶部。三个决定都按推荐走：整个报告框一个按钮；跟 Needs attention 卡片各算各的；Agent 修完自己重跑 Update engines。</div>
+<div class="grid">
+<div class="f"><div class="fh"><b class="t">0</b>今天</div><div class="fc">只有 Dismiss。</div><img src="real/0-today.png"></div>
+<div class="f"><div class="fh"><b>1</b>能修</div><div class="fc">按钮在 Dismiss 前；下面一行写明会话在哪起、用哪个引擎。</div><img src="real/1-ready.png"></div>
+<div class="f"><div class="fh"><b>2</b>修理中</div><div class="fc">按钮换成 “An agent is fixing this in … · Open session”，Dismiss 还在。</div><img src="real/2-fixing.png"></div>
+<div class="f"><div class="fh"><b>3</b>修不了</div><div class="fc">按钮置灰，写原因；引擎行在下面，所以写 “below”。</div><img src="real/3-blocked.png"></div>
+<div class="f"><div class="fh"><b>4</b>修好了</div><div class="fc">Agent 重跑 Update engines，新报告没有红行，按钮也就不出现了。</div><img src="real/4-fixed.png"></div>
+</div></body></html>

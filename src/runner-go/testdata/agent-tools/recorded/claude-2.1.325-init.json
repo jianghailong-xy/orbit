@@ -11,8 +11,6 @@
  "skills": [
   "deep-research",
   "orbit:playbooks",
-  "design",
-  "design-sync",
   "dataviz",
   "update-config",
   "verify",
@@ -31,6 +29,9 @@
  ],
  "subtype": "init",
  "tools": [
+  "Bash",
+  "Read",
+  "Skill",
   "mcp__orbit__ask_owner",
   "mcp__orbit__bg_kill",
   "mcp__orbit__bg_list",
@@ -40,6 +41,7 @@
   "mcp__orbit__criterion_check_start",
   "mcp__orbit__criterion_confirm",
   "mcp__orbit__criterion_confirmation_withdraw",
+  "mcp__orbit__delegate",
   "mcp__orbit__file_fetch",
   "mcp__orbit__file_list",
   "mcp__orbit__file_pin",
@@ -55,7 +57,6 @@
   "mcp__orbit__notify",
   "mcp__orbit__open_item_hand_over",
   "mcp__orbit__open_item_resolve",
-  "mcp__orbit__permission_prompt",
   "mcp__orbit__project_blocker_resolve",
   "mcp__orbit__project_create",
   "mcp__orbit__project_crossings",
@@ -71,6 +72,16 @@
   "mcp__orbit__provider_list",
   "mcp__orbit__provider_update",
   "mcp__orbit__request_owner_action",
+  "mcp__orbit__schedule_create",
+  "mcp__orbit__schedule_delete",
+  "mcp__orbit__schedule_end",
+  "mcp__orbit__schedule_get",
+  "mcp__orbit__schedule_list",
+  "mcp__orbit__schedule_pause",
+  "mcp__orbit__schedule_resume",
+  "mcp__orbit__schedule_run_now",
+  "mcp__orbit__schedule_run_stop",
+  "mcp__orbit__schedule_update",
   "mcp__orbit__schedule_wakeup",
   "mcp__orbit__task_attribution",
   "mcp__orbit__task_await",
@@ -111,10 +122,7 @@
   "mcp__orbit__wiki_note",
   "mcp__orbit__wiki_propose",
   "mcp__orbit__wiki_search",
-  "mcp__orbit__withdraw_owner_request",
-  "Bash",
-  "Read",
-  "Skill"
+  "mcp__orbit__withdraw_owner_request"
  ],
  "type": "system"
 }

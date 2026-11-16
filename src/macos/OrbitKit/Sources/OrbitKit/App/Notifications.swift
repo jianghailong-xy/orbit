@@ -145,6 +145,9 @@ public enum AppIntent: Equatable, Sendable {
     case snoozeOwnerRequest(requestID: String)
     /// A terminal asking to be approved (push kind `terminal-login`): the "Waiting on you" inbox, where its card is.
     case openTerminalRequests
+    /// A scheduled task's alert (push kind `schedule`, apiserver `PushService.notifySchedule`): the run's session when
+    /// it names one, else the schedule's detail on the Scheduled page (docs/scheduled-tasks-design.md §7.3).
+    case openSchedule(scheduleID: String, sessionID: String?)
 }
 
 public enum Notifications {
@@ -159,6 +162,9 @@ public enum Notifications {
     public static let actionOwnerRequestLater = "OWNER_REQUEST_LATER"
     /// `userInfo` key naming the owner request an alert is about (apiserver `PushService.notifyOwnerRequest`).
     public static let keyOwnerRequest = "ownerRequestID"
+    /// A scheduled task's alert: its push kind, and the key naming the schedule.
+    public static let scheduleKind = "schedule"
+    public static let keySchedule = "scheduleID"
 
     /// The category the server files an owner request's alert under, one per kind
     /// (apiserver `ownerRequestPushCategory`), so each kind's first action can say what it opens.
@@ -173,6 +179,7 @@ public enum Notifications {
         case .decision:   return "Answer"
         case .manualStep: return "Mark done"
         case .confirm:    return "Review"
+        case .wikiCreate: return "Review"
         }
     }
 
@@ -209,8 +216,13 @@ public enum Notifications {
     /// A runner draining for its update with the owner's work waiting on it (D3): a tap opens its page,
     /// where Later and Update Now are.
     public static let runnerUpdatingKind = "runner-updating"
+    /// The server's runner pushes that name a `runnerID` and no session; a tap opens that runner.
+    static let runnerKinds: Set<String> = [runnerUpdatingKind, "engine-signed-out", "claude-region-blocked"]
     /// The owner-item alert kind of a merge into main waiting on the owner (`OWNER_ITEM_PUSH_KINDS`).
     static let approveMergeKind = "approve-merge-to-main"
+    /// An agent asking to take a task out of its project. A tap opens the conversation that draws
+    /// the decision card when the payload names one, and the project otherwise.
+    public static let crossingRequestKind = "crossing-request"
 
     public static func content(for event: NotificationEvent) -> NotificationContent {
         switch event {
@@ -252,17 +264,30 @@ public enum Notifications {
     /// `UNNotificationDefaultActionIdentifier` (→ open) or one of the action constants above.
     public static func intent(actionId: String, userInfo: [String: String],
                               responseText: String? = nil) -> AppIntent? {
-        if userInfo[keyKind] == "project-done", let project = userInfo[keyProject] {
+        // Project done and a project nobody has (`project-orphan`) both open the project.
+        if userInfo[keyKind] == "project-done" || userInfo[keyKind] == "project-orphan",
+           let project = userInfo[keyProject] {
             return .openProject(projectID: project)
         }
+        // A crossing request opens the conversation that draws its card; a source with no
+        // coordinator conversation leaves only the project itself to open.
+        if userInfo[keyKind] == crossingRequestKind {
+            if let sid = userInfo[keySession] { return .open(.session(sid)) }
+            return userInfo[keyProject].map { .openProject(projectID: $0) }
+        }
         if userInfo[keyKind] == "terminal-login" { return .openTerminalRequests }
+        // A scheduled task's alert opens its run's session or the schedule; never the owner-request actions below.
+        if userInfo[keyKind] == scheduleKind, let schedule = userInfo[keySchedule] {
+            return .openSchedule(scheduleID: schedule, sessionID: userInfo[keySession])
+        }
         // An owner request's actions open its card or put it off; its plain tap opens the session below.
         if let request = userInfo[keyOwnerRequest] {
             if actionId == actionOwnerRequestOpen { return .openOwnerRequest(requestID: request) }
             if actionId == actionOwnerRequestLater { return .snoozeOwnerRequest(requestID: request) }
         }
         guard let sid = userInfo[keySession] else {
-            if userInfo[keyKind] == runnerUpdatingKind, let runner = userInfo[keyRunner] {
+            // The machine's alerts (updating, an engine signed out, Claude blocked in its region) open the runner.
+            if let kind = userInfo[keyKind], runnerKinds.contains(kind), let runner = userInfo[keyRunner] {
                 return .open(.runner(PublicID.toPublic(runner)))
             }
             // A watch's alert names no session and carries no actions: tapping it opens the watch.

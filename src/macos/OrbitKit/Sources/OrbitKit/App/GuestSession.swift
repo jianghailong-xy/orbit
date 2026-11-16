@@ -4,7 +4,7 @@ import Foundation
 // docs/mocks/share-links/10-session-guests and 11-guest-one-link): Shared with me, the sessions other
 // people invited this account to reply in, and the guest view a row opens — its head (title,
 // `Shared by <owner>`, status, a Guest badge), the transcript the guest door projects, and a composer
-// that takes text only. Everything here is the web's (src/web/src/components/SharedWithMe.tsx,
+// that takes text and images. Everything here is the web's (src/web/src/components/SharedWithMe.tsx,
 // src/web/src/pages/GuestSessionPage.tsx), in the web's words.
 
 /// The guest view's and Shared with me's words.
@@ -26,6 +26,24 @@ public enum GuestCopy {
     public static let waitsItsTurn = "Your message waits its turn"
     public static func restarts(_ owner: String) -> String {
         "Send to continue \u{2014} this restarts the session on \(owner)\u{2019}s machine."
+    }
+}
+
+/// What the guest's composer takes: text, images, or both — the owner's image rules (PNG, JPEG, WebP
+/// or GIF, at most 5 MB), and nothing but images.
+public enum GuestComposer {
+    /// The guest door's own sentence for anything that is not one of the four image types.
+    public static let imagesOnly = "A guest can attach PNG, JPEG, WebP or GIF images only."
+
+    /// `nil` ⇒ OK to upload; otherwise the sentence it was refused with.
+    public static func rejectReason(mimeType: String, byteCount: Int) -> String? {
+        guard Attachments.isInlineImage(mimeType: mimeType) else { return imagesOnly }
+        return Attachments.rejectReason(mimeType: mimeType, byteCount: byteCount)
+    }
+
+    /// Whether there is anything to send: words, or at least one image on its own.
+    public static func canSend(text: String, imageCount: Int) -> Bool {
+        imageCount > 0 || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 
@@ -156,5 +174,29 @@ public enum SharedWithMe {
         guard let id else { return false }
         let key = PublicID.storageKey(id)
         return sessions.contains { PublicID.storageKey($0.id) == key }
+    }
+}
+
+/// One row of a guest conversation's transcript: the earlier-messages control, an item, or the
+/// bottom anchor the view scrolls to. One array, so the list holds one ForEach and no conditional
+/// row of its own.
+public enum GuestTranscriptListRow: Equatable, Sendable, Identifiable {
+    case loadOlder
+    case item(TranscriptItem)
+    case bottom(String)
+
+    public var id: String {
+        switch self {
+        case .loadOlder: "load-older"
+        case .item(let item): "item:\(item.id)"
+        case .bottom(let id): "bottom:\(id)"
+        }
+    }
+}
+
+public enum GuestTranscriptListLogic {
+    public static func rows(_ items: [TranscriptItem], hasMoreOlder: Bool,
+                            bottomID: String) -> [GuestTranscriptListRow] {
+        (hasMoreOlder ? [.loadOlder] : []) + items.map(GuestTranscriptListRow.item) + [.bottom(bottomID)]
     }
 }

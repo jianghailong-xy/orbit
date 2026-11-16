@@ -31,6 +31,9 @@ const (
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
+	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
+	// (heartbeatMerge); a commit is refused while a background job is still changing it.
+	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
 	abandonedCheckoutCapabilityV1 = "abandoned-checkout-v1"
@@ -82,6 +85,7 @@ func init() {
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
 		abandonedCheckoutCapabilityV1,
+		sessionMergeBesideTurnV1,
 		sessionCurrentWorkRoutingV1,
 		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,
@@ -99,6 +103,7 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		claudeScheduledCheckOnlyAsksCapabilityV1,
 		antigravityAccountLoginCapabilityV1,
 		antigravityAccountRemoveCapabilityV1,
 		kimiLoginRegionCapabilityV1,
@@ -113,6 +118,7 @@ func init() {
 		cursorKeyCheckCapabilityV1,
 		dirProbeCapabilityV1,
 		createWorkDirCapabilityV1,
+		createWorkDirCapabilityV2,
 		claudeRegionCapabilityV1,
 		mainCheckoutGitCapabilityV1,
 		mainCheckoutDiscardCapabilityV1,
@@ -121,6 +127,7 @@ func init() {
 		taskForkCapabilityV1,
 		codelessCheckoutCapabilityV1,
 		machineResourcesCapabilityV1,
+		subagentRemoteResumeCapabilityV1,
 	}, cursorAccountCapabilities()...), declaredSteerCapabilities()...), ",")
 	// Where 0600 means something (secret_file_unix.go); a Windows runner is never handed a secret.
 	if secretFilesSupported {
@@ -360,8 +367,10 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 // doVia is doHeaders sent through client: t.client for every call but the wiki door's
 // (wiki_conn.go). On the daemon's transport a daemon route's call goes over the runner link
 // instead (linkMode.doVia); every other call is doHTTP's.
-func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
-	var err error
+func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) (err error) {
+	// What this process sent and how it ended, for the failure it may have to report (recovery_render.go).
+	noteTransportAttempt()
+	defer func() { noteTransportResultHeaders(method, err, headers, body) }()
 	if t.link != nil {
 		err = t.link.doVia(ctx, method, path, body, out, timeout, headers, func(ctx context.Context) error {
 			return t.doHTTP(ctx, client, method, path, body, out, timeout, headers)
@@ -1173,7 +1182,13 @@ const maxSessionAttachmentBytes = 25 << 20
 
 var errAttachmentTooLarge = errors.New("File exceeds the 25 MiB limit")
 
-func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
+func (t *Transport) uploadSessionAttachmentFile(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (id string, err error) {
+	noteTransportAttempt()
+	defer func() { noteTransportResult(http.MethodPost, err) }()
+	return t.uploadSessionAttachmentFileOnce(ctx, sessionID, file, mimeType, filename)
+}
+
+func (t *Transport) uploadSessionAttachmentFileOnce(ctx context.Context, sessionID string, file *os.File, mimeType, filename string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1261,6 +1276,8 @@ func (t *Transport) createApproval(ctx context.Context, sessionID string, body i
 		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
+	// A SubAgent's engine asks under its parent's session, and its card names the run (subagentApprovalBody).
+	body = subagentApprovalBody(ctx, body)
 	if err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/approvals", body, &r, 20*time.Second); err != nil {
 		return "", err
 	}
@@ -1420,9 +1437,16 @@ func (t *Transport) labelSummary(listID string) (json.RawMessage, error) {
 // listProviders returns the provider slugs this owner may pass as `provider` — the built-in
 // engines plus their configured ones. Plain runner auth, like the task routes whose `provider`
 // field it answers for, so it works outside an orchestration-enabled session too.
-func (t *Transport) listProviders() (json.RawMessage, error) {
+//
+// With workspace (a workspace of the owner's, by name or id) the server answers instead which provider ×
+// engine that workspace's runner can run, each usable or not with the reason, and the workspace's default.
+func (t *Transport) listProviders(workspace string) (json.RawMessage, error) {
+	path := "/runner/providers"
+	if workspace != "" {
+		path += "?" + url.Values{"workspace": {workspace}}.Encode()
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/providers", nil, &out, taskOpTimeout)
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
 	return out, err
 }
 
@@ -1814,13 +1838,18 @@ func (t *Transport) recordProjectMergeEvidence(id string, body map[string]interf
 // orchestration grant, so that body, and only that body, travels through doOrchestration: it
 // carries the session-bound credential and refreshes it once if it has expired. A create without
 // the field is byte-identical to what it always sent.
-func (t *Transport) createProject(sessionID, orchestrationToken string, body map[string]interface{}) (json.RawMessage, error) {
+//
+// requestID names this create (create_request.go): sent again under the same id, the server answers with
+// the project the first delivery created instead of creating another. Empty sends no id.
+func (t *Transport) createProject(sessionID, orchestrationToken, requestID string, body map[string]interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	if _, named := body["workspaceId"]; named {
-		err := t.doOrchestration("POST", "/runner/projects", body, &out, sessionID, orchestrationToken)
+		err := t.doOrchestrationWith("POST", "/runner/projects", body, &out, sessionID, orchestrationToken, taskOpTimeout,
+			createRequestHeaders(nil, requestID))
 		return out, err
 	}
-	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout,
+		createRequestHeaders(sessionHeader(sessionID), requestID))
 	return out, err
 }
 
@@ -2370,8 +2399,9 @@ func randomUUID() (string, error) {
 }
 
 // How far a named run request is resent, and how long it waits between attempts: three resends
-// after the first delivery, backing off 250ms -> 500ms -> 1s. A bounded ~1.75s in the worst case,
-// and then the invocation fails and says exactly why. Bounded because this is for a dropped
+// after the first delivery, backing off 250ms -> 500ms -> 1s, or longer when the server's
+// retryAfter asks for it (each wait capped at keyedResendCap, so ~15s at worst). Then the
+// invocation fails and says exactly why, keeping its id. Bounded because this is for a dropped
 // connection and a lease being handed over, not for an outage.
 const (
 	runRequestResendAttempts = 4
@@ -2503,26 +2533,12 @@ func (t *Transport) startTask(id, triggerID string) (json.RawMessage, error) {
 }
 
 // deliverRunRequest sends one named run request until it is answered, resending only what
-// `isResendableRunFailure` says left it unanswered — the runner's door and the person's alike.
+// `isResendableRunFailure` says left it unanswered — the runner's door and the person's alike. The
+// waits honour the server's retryAfter (deliverKeyed). Once the attempts are spent it returns the
+// real last answer, not a summary of it: a caller that ran out of attempts while the control plane
+// kept saying "being answered right now" needs to be told that.
 func deliverRunRequest(send func() (json.RawMessage, error)) (json.RawMessage, error) {
-	var lastErr error
-	for attempt := range runRequestResendAttempts {
-		if attempt > 0 {
-			time.Sleep(runRequestResendDelay << (attempt - 1))
-		}
-		out, err := send()
-		if err == nil {
-			return out, nil
-		}
-		lastErr = err
-		if !isResendableRunFailure(err) {
-			return nil, err
-		}
-	}
-	// The real last answer, not a summary of it: a caller that ran out of attempts while the
-	// control plane kept saying "being answered right now" needs to be told that, and a lost
-	// connection needs to read as one.
-	return nil, lastErr
+	return deliverKeyed(send, isResendableRunFailure)
 }
 
 // A comment names the session it was written from, so the control plane can record which run of
@@ -2666,9 +2682,12 @@ func (t *Transport) deleteTaskList(id string) (json.RawMessage, error) {
 // Owner-scoped, runner-token-authenticated. Each call also carries the current session id
 // and its signed credential so the server can prove which claimed process made the request.
 
-func (t *Transport) createSession(parentSessionID, orchestrationToken string, body interface{}) (json.RawMessage, error) {
+// createSession spawns a session. requestID names this create (create_request.go): sent again under the
+// same id, the server answers with the session the first delivery created. Empty sends no id.
+func (t *Transport) createSession(parentSessionID, orchestrationToken, requestID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doOrchestration("POST", "/runner/sessions", body, &out, parentSessionID, orchestrationToken)
+	err := t.doOrchestrationWith("POST", "/runner/sessions", body, &out, parentSessionID, orchestrationToken, taskOpTimeout,
+		createRequestHeaders(nil, requestID))
 	return out, err
 }
 
@@ -3103,17 +3122,22 @@ func (t *Transport) doOrchestration(method, path string, body, out interface{}, 
 // outlast the server's wait, or every successful wait comes back as a transport error and the
 // answer the caller asked for is the one thing they never see.
 func (t *Transport) doOrchestrationTimeout(method, path string, body, out interface{}, sessionID, fallbackToken string, timeout time.Duration) error {
+	return t.doOrchestrationWith(method, path, body, out, sessionID, fallbackToken, timeout, nil)
+}
+
+// doOrchestrationWith is doOrchestrationTimeout with headers of the request's own beside the credential.
+func (t *Transport) doOrchestrationWith(method, path string, body, out interface{}, sessionID, fallbackToken string, timeout time.Duration, extra map[string]string) error {
 	// A headless caller (launchd/cron) has no calling session, so there is no session-bound
 	// credential to read or refresh: the runner token alone authenticates, and the server
 	// narrows the request to this runner's own sessions.
 	if strings.TrimSpace(sessionID) == "" {
-		return t.doHeaders(nil, method, path, body, out, timeout, nil)
+		return t.doHeaders(nil, method, path, body, out, timeout, extra)
 	}
 	token, err := credentialForOrchestrationRequest(sessionID, fallbackToken)
 	if err != nil {
 		return err
 	}
-	err = t.doHeaders(nil, method, path, body, out, timeout, orchestratorHeaders(sessionID, token))
+	err = t.doHeaders(nil, method, path, body, out, timeout, createRequestMerge(orchestratorHeaders(sessionID, token), extra))
 	if !isRefreshableOrchestrationCredentialError(err) {
 		return err
 	}
@@ -3121,7 +3145,7 @@ func (t *Transport) doOrchestrationTimeout(method, path string, body, out interf
 	if refreshErr != nil {
 		return fmt.Errorf("refresh session orchestration credential: %w", refreshErr)
 	}
-	return t.doHeaders(nil, method, path, body, out, timeout, orchestratorHeaders(sessionID, token))
+	return t.doHeaders(nil, method, path, body, out, timeout, createRequestMerge(orchestratorHeaders(sessionID, token), extra))
 }
 
 func (t *Transport) listAgents(sessionID, orchestrationToken string) (json.RawMessage, error) {

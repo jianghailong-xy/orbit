@@ -1,0 +1,224 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Session settings (iOS / Android)</title>
+<style>
+body{margin:0;background:#eef0f3;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#1f2329}
+.board{width:2200px;padding:40px;box-sizing:border-box;background:#eef0f3}
+h1{margin:0 0 6px;font-size:30px} .sub{color:#646a73;font-size:16px;margin-bottom:24px}
+h3{font-size:20px;margin:8px 0 14px}
+.row{display:flex;gap:26px;align-items:flex-start;margin-bottom:30px}
+.cell{display:flex;flex-direction:column;gap:8px}
+.cap{font-size:14px;color:#646a73;width:393px;line-height:1.5}
+.cap b{color:#1f2329}
+.phone{width:393px;height:852px;border-radius:44px;overflow:hidden;position:relative;box-shadow:0 0 0 10px #1f2329,0 8px 30px rgba(0,0,0,.25);margin:10px;flex:none}
+.sb{height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 30px 0 36px;font-size:16px;font-weight:600}
+/* iOS */
+.ios{background:#f2f2f7;font-size:17px}
+.i-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 16px 10px}
+.i-nav .t{font-weight:600;font-size:17px}
+.i-nav .a{color:#007aff;font-size:17px}
+.i-nav .a.b{font-weight:600}
+.i-h{font-size:13px;color:#6d6d72;text-transform:uppercase;margin:18px 32px 6px;display:flex;justify-content:space-between}
+.i-h span:last-child{text-transform:none}
+.i-g{background:#fff;border-radius:12px;margin:0 16px;overflow:hidden}
+.i-r{display:flex;align-items:center;min-height:44px;padding:0 16px;gap:10px;position:relative}
+.i-r+.i-r:before{content:'';position:absolute;left:16px;right:0;top:0;border-top:.5px solid #c6c6c8}
+.i-r .l{flex:1;padding:10px 0}
+.i-r .l small{display:block;font-size:13px;color:#8a8a8e;margin-top:2px;line-height:1.3}
+.i-r .v{color:#8a8a8e;font-size:17px;white-space:nowrap}
+.i-r .v.blue{color:#007aff}
+.i-r .mono,.mono{font-family:'SF Mono',Menlo,monospace;font-size:13px}
+.tog{width:51px;height:31px;border-radius:16px;background:#e9e9ea;position:relative;flex:none}
+.tog:after{content:'';position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.2)}
+.tog.on{background:#34c759}.tog.on:after{left:22px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 10px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:14px;background:#f2f2f7;font-size:14px}
+.chip i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.chip.add{background:none;border:1px dashed #c6c6c8;color:#8a8a8e}
+.updown{font-size:12px;color:#8a8a8e;margin-left:4px}
+.warn{margin:8px 16px 0;background:#fff8e6;border:1px solid #ffd591;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.4}
+.warn b{display:block;margin-bottom:2px}
+.warn .btn{display:block;margin-top:10px;text-align:center;border-radius:10px;padding:9px 0;font-weight:600;color:#fff;background:#007aff;font-size:15px}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.18)}
+.i-menu{position:absolute;right:14px;top:104px;width:250px;background:rgba(248,248,248,.98);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.25);overflow:hidden;font-size:17px}
+.i-menu div{display:flex;justify-content:space-between;padding:11px 16px;border-top:.5px solid #d8d8d8}
+.i-menu div:first-child{border-top:0}.i-menu .sep{border-top:8px solid #e5e5ea}
+.i-menu .red{color:#ff3b30}.i-menu .hl{background:#e5e5ea}
+.ic{width:20px;text-align:center;color:inherit;opacity:.9}
+.chat{padding:8px 16px}
+.bub{background:#007aff;color:#fff;border-radius:18px;padding:9px 14px;margin:10px 0 10px auto;width:fit-content;max-width:260px;font-size:16px}
+.txt{font-size:16px;line-height:1.45;margin:8px 0}
+.i-top{display:flex;align-items:center;gap:8px;padding:4px 14px 10px;border-bottom:.5px solid #d8d8d8;background:#fff}
+.i-top .ti{flex:1;font-weight:600;font-size:17px;text-align:center}
+.sheet{position:absolute;left:0;right:0;top:0;bottom:0}
+.grab{width:36px;height:5px;border-radius:3px;background:#c7c7cc;margin:6px auto 4px}
+/* Android */
+.and{background:#fdfcff;font-family:Roboto,Inter,sans-serif;color:#1b1b1f}
+.a-bar{display:flex;align-items:center;gap:18px;height:64px;padding:0 16px;font-size:22px}
+.a-bar .ar{font-size:24px}
+.a-h{color:#3a5ba9;font-size:14px;font-weight:600;margin:18px 24px 6px;display:flex;justify-content:space-between}
+.a-h span:last-child{color:#74777f;font-weight:400;font-size:12px}
+.a-r{display:flex;align-items:center;gap:14px;padding:12px 24px;min-height:40px}
+.a-r .l{flex:1;font-size:16px}
+.a-r .l small{display:block;font-size:14px;color:#44474f;margin-top:2px;line-height:1.35}
+.a-r .v{font-size:14px;color:#44474f}
+.msw{width:52px;height:32px;border-radius:16px;border:2px solid #74777f;box-sizing:border-box;position:relative;flex:none;background:#e1e2ec}
+.msw:after{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#74777f;top:6px;left:6px}
+.msw.on{background:#3a5ba9;border-color:#3a5ba9}.msw.on:after{background:#fff;width:24px;height:24px;top:2px;left:22px}
+.a-div{height:1px;background:#e1e2ec;margin:6px 0}
+.achip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:8px;border:1px solid #c4c6d0;font-size:14px}
+.achip i{width:8px;height:8px;border-radius:50%}
+.a-warn{margin:6px 16px;background:#fff1d6;border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.4}
+.a-warn b{display:block}
+.a-warn .btn{display:inline-block;margin-top:10px;border-radius:20px;padding:9px 18px;font-weight:600;color:#fff;background:#3a5ba9}
+.a-menu{position:absolute;right:10px;top:104px;width:230px;background:#f0f0f7;border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.25);padding:8px 0;font-size:16px}
+.a-menu div{padding:13px 16px}.a-menu .hl{background:#dde1f5}.a-menu .red{color:#ba1a1a}.a-menu .sep{border-top:1px solid #c4c6d0;margin:4px 0;padding:0}
+.a-top{display:flex;align-items:center;gap:14px;height:64px;padding:0 12px 0 16px;font-size:20px}
+.a-top .ti{flex:1}
+.notes{flex:1;font-size:15px;line-height:1.6;background:#fff;border-radius:14px;padding:18px 22px}
+table{border-collapse:collapse;width:100%;font-size:14px} td,th{border-top:1px solid #e3e5e8;padding:7px 8px;text-align:left;vertical-align:top} th{color:#646a73;font-weight:600}
+.todo{background:#fff7e6;border:1px solid #ffd591;border-radius:10px;padding:12px 16px;margin-top:14px}
+code{font-family:'SF Mono',Menlo,monospace;font-size:13px;background:#f2f3f5;padding:1px 4px;border-radius:4px}
+</style></head><body><div class="board">
+<h1>Session 页面 · Settings 设置（iOS / Android）</h1>
+<div class="sub">与 Web 第 3 版同一份内容：Session（Labels、Public link）· Environment（Compact at、变量、Restart）· Notifications · Info。输入框里已有的（模型、权限模式、Effort、Fast mode）不放。</div>
+
+<h3>iOS</h3>
+<div class="row">
+ <div class="cell"><div class="phone ios" style="background:#fff">
+  <div class="sb"><span>9:41</span><span>▂▄▆ ▮</span></div>
+  <div class="i-top"><span style="color:#007aff;font-size:22px">‹</span><span class="ti">Session page settings</span><span style="color:#007aff;font-size:20px">⋯</span></div>
+  <div class="chat"><div class="bub">Add a Settings entry to the session page.</div><div class="txt">Here is the board: Settings… in the header ⋯ opens a sheet with Session, Environment, Notifications and Info.</div></div>
+  <div class="dim"></div>
+  <div class="i-menu">
+   <div><span>Share…</span><span class="ic">⇪</span></div>
+   <div><span>Copy link</span><span class="ic">🔗</span></div>
+   <div class="sep"><span>Rename…</span><span class="ic">✎</span></div>
+   <div><span>Pin</span><span class="ic">📌</span></div>
+   <div><span>Move…</span><span class="ic">▭</span></div>
+   <div><span>Tags…</span><span class="ic">⌂</span></div>
+   <div class="hl"><span><b>Settings…</b></span><span class="ic">⚙︎</span></div>
+   <div class="sep"><span>Complete Session</span><span class="ic">✓</span></div>
+   <div class="red"><span>Move to Trash</span><span class="ic">🗑</span></div>
+  </div>
+ </div><div class="cap"><b>① 入口</b>：⋯ 菜单里 Tags… 下面加 Settings…（灰底为新增）。</div></div>
+
+ <div class="cell"><div class="phone ios">
+  <div class="sb"><span>9:41</span><span>▂▄▆ ▮</span></div>
+  <div class="grab"></div>
+  <div class="i-nav"><span style="width:50px"></span><span class="t">Session Settings</span><span class="a b">Done</span></div>
+  <div class="i-h"><span>Session</span><span></span></div>
+  <div class="i-g">
+   <div class="i-r"><div class="l">Labels<div class="chips"><span class="chip"><i style="background:#3370ff"></i>web ✕</span><span class="chip"><i style="background:#f5a623"></i>needs review ✕</span><span class="chip add">＋ Add</span></div></div></div>
+   <div class="i-r"><div class="l">Public link<small style="color:#34c759">Live · anyone with the link can read it</small></div><div class="tog on"></div></div>
+   <div class="i-r"><div class="l mono" style="color:#8a8a8e">orbit.example.com/s/k3Rw9Tq2…</div><span class="v blue">Copy</span></div>
+  </div>
+  <div class="i-h"><span>Environment</span><span>Applies when the engine next starts</span></div>
+  <div class="i-g">
+   <div class="i-r"><div class="l">Working directory</div><span class="v mono">…/01a1c927…</span></div>
+   <div class="i-r"><div class="l">Compact at</div><span class="v">Default<span class="updown">⌃⌄</span></span></div>
+   <div class="i-r"><div class="l">Variables</div><span class="v">3 ›</span></div>
+  </div>
+  <div class="i-h"><span>Notifications</span><span>Web, iOS and Android</span></div>
+  <div class="i-g">
+   <div class="i-r"><div class="l">When a turn finishes</div><span class="v">As in Settings<span class="updown">⌃⌄</span></span></div>
+   <div class="i-r"><div class="l">When it needs you</div><span class="v">As in Settings<span class="updown">⌃⌄</span></span></div>
+   <div class="i-r"><div class="l">Mute this session</div><div class="tog"></div></div>
+  </div>
+ </div><div class="cap"><b>② 设置页（上半）</b>：sheet 弹出，右上 Done。改完即生效。Variables 点进二级页。</div></div>
+
+ <div class="cell"><div class="phone ios">
+  <div class="sb"><span>9:41</span><span>▂▄▆ ▮</span></div>
+  <div class="i-nav"><span class="a">‹ Settings</span><span class="t">Variables</span><span class="a">Add</span></div>
+  <div class="i-h"><span>This session</span><span></span></div>
+  <div class="i-g">
+   <div class="i-r"><div class="l mono" style="font-size:15px">DEBUG<small class="mono">orbit:*</small></div></div>
+   <div class="i-r"><div class="l mono" style="font-size:15px">LOG_LEVEL<small class="mono">trace</small></div><span style="width:8px;height:8px;border-radius:50%;background:#ff9500"></span></div>
+  </div>
+  <div class="warn"><b>LOG_LEVEL is waiting for the engine to restart.</b>A turn is running. Orbit restarts the engine with the new variables when it ends. The conversation is kept.<span class="btn">Restart after this turn</span></div>
+  <div class="i-h"><span>From the workspace</span><span></span></div>
+  <div class="i-g">
+   <div class="i-r"><div class="l mono" style="font-size:15px;color:#8a8a8e">NODE_OPTIONS<small class="mono">--max-old-space-size=6144</small></div></div>
+   <div class="i-r"><div class="l mono" style="font-size:15px;color:#8a8a8e">GOCACHE<small class="mono">/mnt/data/gocache</small></div></div>
+  </div>
+  <div style="font-size:13px;color:#6d6d72;margin:8px 32px">A session variable with the same name replaces the workspace's. Swipe left to delete.</div>
+ </div><div class="cap"><b>③ Variables 二级页</b>：本会话的可增删（左滑删除）；Workspace 的灰色只读。引擎在跑时出现黄条；空闲时按钮是 Restart；引擎已结束不出现，下一条消息自动带上。</div></div>
+
+ <div class="cell"><div class="phone ios">
+  <div class="sb"><span>9:41</span><span>▂▄▆ ▮</span></div>
+  <div class="grab"></div>
+  <div class="i-nav"><span style="width:50px"></span><span class="t">Session Settings</span><span class="a b">Done</span></div>
+  <div class="i-h"><span>Info</span><span></span></div>
+  <div class="i-g">
+   <div class="i-r"><div class="l">Engine</div><span class="v">Claude Code 2.4.1</span></div>
+   <div class="i-r"><div class="l">Runner</div><span class="v">HPC</span></div>
+   <div class="i-r"><div class="l">Account</div><span class="v">Claude · Max (2)</span></div>
+   <div class="i-r"><div class="l">Branch</div><span class="v mono">orbit/session-sett…</span></div>
+   <div class="i-r"><div class="l">Created</div><span class="v">Sep 28, 20:00</span></div>
+   <div class="i-r"><div class="l">Tokens<small>in 1.71M · out 108K · cache 1.52M</small></div><span class="v">1.82M</span></div>
+   <div class="i-r"><div class="l">Cost<small>23 turns</small></div><span class="v">$4.37</span></div>
+   <div class="i-r"><div class="l">Session ID</div><span class="v mono">…ac2e648c946c</span></div>
+   <div class="i-r"><div class="l">Engine session</div><span class="v mono">…03def5c4</span></div>
+  </div>
+  <div style="font-size:13px;color:#6d6d72;margin:8px 32px">Touch and hold an ID to copy it.</div>
+ </div><div class="cap"><b>④ 设置页（下滑到 Info）</b>：只读；长按 ID 复制。</div></div>
+</div>
+
+<h3>Android</h3>
+<div class="row">
+ <div class="cell"><div class="phone and">
+  <div class="sb"><span>9:41</span><span>▾ ▮</span></div>
+  <div class="a-top"><span>←</span><span class="ti">Session page settings</span><span>⋮</span></div>
+  <div class="chat"><div class="bub" style="background:#dde1f5;color:#1b1b1f">Add a Settings entry to the session page.</div><div class="txt">Here is the board: Settings… in the header ⋯ opens a sheet with Session, Environment, Notifications and Info.</div></div>
+  <div class="a-menu">
+   <div>Copy link</div><div>Rename…</div><div>Pin</div><div>Move…</div><div>Tags…</div>
+   <div class="hl"><b>Settings</b></div>
+   <div>Session details</div><div class="sep"></div>
+   <div>Complete Session</div><div class="red">Move to Trash</div>
+  </div>
+ </div><div class="cap"><b>⑤ 入口</b>：⋮ 菜单 Tags… 下加 Settings；现有 Session details（Worktree / 后台任务）保留，见待定 1。</div></div>
+
+ <div class="cell"><div class="phone and">
+  <div class="sb"><span>9:41</span><span>▾ ▮</span></div>
+  <div class="a-bar"><span class="ar">←</span><span>Session settings</span></div>
+  <div class="a-h"><span>Session</span><span></span></div>
+  <div class="a-r"><div class="l">Labels<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><span class="achip"><i style="background:#3370ff"></i>web ✕</span><span class="achip"><i style="background:#f5a623"></i>needs review ✕</span><span class="achip">＋ Add</span></div></div></div>
+  <div class="a-r"><div class="l">Public link<small style="color:#1b7f3b">Live · anyone with the link can read it</small></div><div class="msw on"></div></div>
+  <div class="a-r" style="padding-top:0"><div class="l mono" style="color:#44474f">orbit.example.com/s/k3Rw9Tq2…</div><span style="color:#3a5ba9;font-weight:600;font-size:14px">Copy</span></div>
+  <div class="a-div"></div>
+  <div class="a-h"><span>Environment</span><span>Applies when the engine next starts</span></div>
+  <div class="a-r"><div class="l">Working directory<small class="mono">~/.orbit/worktrees/01a1c927…</small></div></div>
+  <div class="a-r"><div class="l">Compact at<small>Default</small></div></div>
+  <div class="a-r"><div class="l">Variables<small>DEBUG, LOG_LEVEL · 2 from the workspace</small></div><span class="v">›</span></div>
+  <div class="a-warn"><b>LOG_LEVEL is waiting for the engine to restart.</b>A turn is running. Orbit restarts the engine when it ends.<br><span class="btn">Restart after this turn</span></div>
+ </div><div class="cap"><b>⑥ 设置页（上半）</b>：整页（返回箭头关闭）。Compact at 点开单选对话框；Variables 二级页同 iOS ③。</div></div>
+
+ <div class="cell"><div class="phone and">
+  <div class="sb"><span>9:41</span><span>▾ ▮</span></div>
+  <div class="a-bar"><span class="ar">←</span><span>Session settings</span></div>
+  <div class="a-h"><span>Notifications</span><span>Web, iOS and Android</span></div>
+  <div class="a-r"><div class="l">When a turn finishes<small>As in Settings (Notify)</small></div></div>
+  <div class="a-r"><div class="l">When it needs you<small>As in Settings (Notify)</small></div></div>
+  <div class="a-r"><div class="l">Mute this session<small>No notifications at all, until you turn this off</small></div><div class="msw"></div></div>
+  <div class="a-div"></div>
+  <div class="a-h"><span>Info</span><span></span></div>
+  <div class="a-r"><div class="l">Engine</div><span class="v">Claude Code 2.4.1</span></div>
+  <div class="a-r"><div class="l">Runner · Account</div><span class="v">HPC · Claude Max (2)</span></div>
+  <div class="a-r"><div class="l">Branch</div><span class="v mono">orbit/session-sett…</span></div>
+  <div class="a-r"><div class="l">Tokens<small>in 1.71M · out 108K · cache 1.52M</small></div><span class="v">1.82M</span></div>
+  <div class="a-r"><div class="l">Cost<small>23 turns</small></div><span class="v">$4.37</span></div>
+  <div class="a-r"><div class="l">Session ID</div><span class="v mono">…ac2e648c946c ⧉</span></div>
+ </div><div class="cap"><b>⑦ 设置页（下滑）</b>：通知与 Info。ID 后 ⧉ 复制。</div></div>
+
+ <div class="notes"><b>原生端规则（与 Web 一致）</b>
+  <table><tr><th>项</th><th>iOS</th><th>Android</th></tr>
+  <tr><td>入口</td><td>⋯ → Settings…，sheet</td><td>⋮ → Settings，整页</td></tr>
+  <tr><td>保存</td><td colspan="2">改了马上生效，无 Save</td></tr>
+  <tr><td>Restart</td><td colspan="2">引擎在跑：Restart after this turn；空闲：Restart；已结束：不显示，下一条消息带上新变量</td></tr>
+  <tr><td>通知</td><td colspan="2">推送发送端读会话级设置，Web / iOS / Android 一致</td></tr>
+  <tr><td>Completed</td><td colspan="2">不置灰</td></tr></table>
+  <div class="todo"><b>待你定</b><br>
+  1. Android 已有 “Session details”（Worktree / Git、后台任务）。保留两项并列，还是把它并进 Settings 的 Info 下（Info 里加一行 “Worktree and background jobs ›”）？推荐并进去，菜单少一项。<br>
+  2. macOS 用同一套 SwiftUI 代码，要一起加吗？（推荐一起，成本很小）</div>
+  <p style="color:#646a73;font-size:13px">会改：iOS <code>Views/Console/ConsoleView.swift</code>（菜单项）+ 新 <code>SessionSettingsView.swift</code>；Android <code>reader/SessionMenu.kt</code> + 新 <code>reader/SessionSettings.kt</code>；推送 <code>ios/Sources/Push.swift</code> 不用改，发送端在 apiserver。</p>
+ </div>
+</div>
+</div></body></html>

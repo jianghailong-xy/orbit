@@ -30,6 +30,64 @@ RUN test "$(node --version)" = v26.10.0 \
       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude" \
       /opt/claude/bin/claude
 
+FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS opencode
+# The platform package's native binary, as for Codex. On x64 the baseline build, which needs no AVX2:
+# the image runs on whatever host a channel schedules it on.
+ARG TARGETARCH
+RUN test "$(node --version)" = v26.10.0 \
+ && case "$TARGETARCH" in amd64) package=opencode-linux-x64-baseline ;; arm64) package=opencode-linux-arm64 ;; *) exit 1 ;; esac \
+ && npm install --prefix /tmp/opencode --ignore-scripts --no-audit --no-fund "$package@1.19.5" \
+ && install -D -m 0755 "/tmp/opencode/node_modules/$package/bin/opencode" /opt/opencode/bin/opencode
+
+FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS dsh
+# DeepSeek Harness exactly as the runner installs it (src/runner-go/dsh_install.go): `npm ci` from the
+# runner's own frozen lock into the version directory the runner looks in, under ORBIT_ENGINE_STORE.
+# The runner admits Harness on Linux x64 only, so an arm64 image ships an empty store.
+ARG TARGETARCH
+COPY src/runner-go/dsh-install/package.json src/runner-go/dsh-install/package-lock.json /tmp/dsh/
+RUN install -d /opt/orbit-engines/engines/dsh \
+ && if [ "$TARGETARCH" = amd64 ]; then \
+      cd /tmp/dsh \
+      && HOME=/tmp/dsh-home DSH_TELEMETRY_DISABLED=1 npm ci --prefix /tmp/dsh --cache /tmp/dsh-cache --no-audit --no-fund \
+      && mv /tmp/dsh /opt/orbit-engines/engines/dsh/0.2.0-rc.2; \
+    fi \
+ && chown -R root:root /opt/orbit-engines && chmod -R go-w /opt/orbit-engines
+
+FROM golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 AS downloads
+# Native builds fetched by URL, each checked against the digest its publisher's manifest gives for the pinned
+# version (pins.json names the manifests). One RUN per engine, so a new pin refetches only its own engine.
+ARG TARGETARCH
+RUN case "$TARGETARCH" in \
+      amd64) target=linux-x64 sum=c2070d77947b000016d1bc9c189f2e258c51f29d5f9eb537388cc44fa61c5856 ;; \
+      arm64) target=linux-arm64 sum=f8fe55edacfb3dd96e230f86e56da1392cb3aaa8f7b95712e2c8d786c6d61350 ;; \
+      *) exit 1 ;; esac \
+ && curl -fsSL -o /tmp/kimi "https://code.kimi.com/kimi-code/binaries/2.6.2/kimi-code-$target" \
+ && echo "$sum  /tmp/kimi" | sha256sum -c - \
+ && install -D -m 0755 /tmp/kimi /opt/kimi-code/bin/kimi \
+ && rm /tmp/kimi
+RUN case "$TARGETARCH" in \
+      amd64) path=linux-x64/cli_linux_x64.tar.gz sum=d01eb13ba7750eed18907f1ae8860864371e0ad9064415e8d033d22b4bd7b9b4e4c7f962058520b452d67db1c33163d9a889d55a7dffa159596ec6cd91a87b79 ;; \
+      arm64) path=linux-arm/cli_linux_arm64.tar.gz sum=16c632a09b81f598f7652bc11180861f9d2ee4408ffa161dadc83b2010de7a9cd055e97b4b46cd01903e35c0e8bf21d8262462ba7c5f168cc6dada9ac3d522c0 ;; \
+      *) exit 1 ;; esac \
+ && curl -fsSL -o /tmp/agy.tar.gz "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.9-4515810895593472/$path" \
+ && echo "$sum  /tmp/agy.tar.gz" | sha512sum -c - \
+ && mkdir /tmp/agy && tar -xzf /tmp/agy.tar.gz -C /tmp/agy --no-same-owner \
+ && install -D -m 0755 /tmp/agy/antigravity /opt/agy/bin/agy \
+ && rm -r /tmp/agy /tmp/agy.tar.gz
+# Cursor CLI: the build and SHA-256 the runner pins (cursorSupportedVersion and cursorArtifacts in
+# src/runner-go/cursor_install.go), unpacked as the runner unpacks it into the version directory it looks in.
+# Measured on Linux x64 only, so an arm64 image ships an empty store, as the runner would install nothing there.
+RUN install -d /opt/orbit-engines/cursor/versions \
+ && if [ "$TARGETARCH" = amd64 ]; then \
+      curl -fsSL -o /tmp/cursor.tar.gz https://downloads.cursor.com/lab/2026.10.14-941492e/linux/x64/agent-cli-package.tar.gz \
+      && echo "6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d  /tmp/cursor.tar.gz" | sha256sum -c - \
+      && test "$(stat -c %s /tmp/cursor.tar.gz)" = 183861376 \
+      && mkdir /tmp/cursor && tar -xzf /tmp/cursor.tar.gz -C /tmp/cursor --no-same-owner \
+      && mv /tmp/cursor/dist-package /opt/orbit-engines/cursor/versions/2026.10.14-941492e \
+      && rm -r /tmp/cursor /tmp/cursor.tar.gz; \
+    fi \
+ && chown -R root:root /opt/orbit-engines && chmod -R go-w /opt/orbit-engines
+
 FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
 # Bootstrap HTTPS trust from Node's bundled public roots before installing Debian's
 # ca-certificates. Snapshot expiry is disabled; apt signature checks remain enabled.
@@ -53,25 +111,36 @@ RUN mkdir -p /etc/ssl/certs \
 COPY --from=orbit-build /usr/local/go/ /usr/local/go/
 COPY --from=codex /opt/codex/ /opt/codex/
 COPY --from=claude /opt/claude/ /opt/claude/
+COPY --from=opencode /opt/opencode/ /opt/opencode/
+COPY --from=downloads /opt/kimi-code/ /opt/kimi-code/
+COPY --from=downloads /opt/agy/ /opt/agy/
+COPY --from=downloads /opt/orbit-engines/ /opt/orbit-engines/
+COPY --from=dsh /opt/orbit-engines/engines/ /opt/orbit-engines/engines/
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
 ENV PATH="/usr/local/go/bin:${PATH}" \
     HOME=/var/lib/orbit/home \
     ORBIT_HOME=/var/lib/orbit/home/.orbit \
     CODEX_HOME=/var/lib/orbit/home/.codex \
     CLAUDE_CONFIG_DIR=/var/lib/orbit/home/.claude \
+    ORBIT_ENGINE_STORE=/opt/orbit-engines \
     ORBIT_NO_SELFUPDATE=1 \
     ORBIT_NO_ENGINE_UPDATE=1 \
     DISABLE_AUTOUPDATER=1 \
     GOTOOLCHAIN=local \
     PYTHONDONTWRITEBYTECODE=1
 # COPY --chmod=0644 gives the directory it creates that mode too: make it traversable again.
+# /opt/orbit-engines (Cursor CLI's ~590 MB and Harness's node_modules) is made root-owned and read-only in the
+# stages that build it: a chown here would copy every file of it into another layer.
 # The runner's commits (the autoInitGit baseline, finalize, checkpoints) need an identity, and
 # a fresh volume has none: give a neutral one at system level, the lowest precedence, so an
 # identity in the repository, the user's global config or the environment still wins.
 RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && ln -s /opt/claude/bin/claude /usr/local/bin/claude \
- && chown -R root:root /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit \
- && chmod -R go-w /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit \
+ && ln -s /opt/opencode/bin/opencode /usr/local/bin/opencode \
+ && ln -s /opt/kimi-code/bin/kimi /usr/local/bin/kimi \
+ && ln -s /opt/agy/bin/agy /usr/local/bin/agy \
+ && chown -R root:root /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /usr/local/go /usr/local/share/orbit \
+ && chmod -R go-w /opt/codex /opt/claude /opt/opencode /opt/kimi-code /opt/agy /usr/local/go /usr/local/share/orbit \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
  && git config --system user.email runner@orbit.invalid
@@ -112,9 +181,20 @@ actual = {
     'ripgrep': version('rg', '--version'),
     'sqlite': version('sqlite3', '--version'),
     'tini': version('/usr/bin/tini', '--version'),
+    'opencode': version('opencode', '--version'),
+    'kimi': version('kimi', '--version'),
+    'agy': version('agy', '--version'),
 }
-for tool, expected in {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.158.0',
-                       'claude': '2.1.300 (Claude Code)'}.items():
+# Cursor CLI and DeepSeek Harness are where the runner looks for them (ORBIT_ENGINE_STORE), on Linux x64 only.
+store = Path(os.environ['ORBIT_ENGINE_STORE'])
+if platform.machine() == 'x86_64':
+    actual['cursor'] = version(str(store / 'cursor/versions/2026.10.14-941492e/cursor-agent'), '--version')
+    actual['dsh'] = version(str(store / 'engines/dsh/0.2.0-rc.2/node_modules/.bin/dsh'), '--version')
+expected_versions = {'go': 'go1.27.1', 'node': 'v26.10.0', 'codex': 'codex-cli 0.158.0',
+                     'claude': '2.1.300 (Claude Code)', 'opencode': '1.19.5', 'kimi': '2.6.2', 'agy': '1.5.9'}
+if platform.machine() == 'x86_64':
+    expected_versions.update(cursor='2026.10.14-941492e', dsh='0.2.0-rc.2')
+for tool, expected in expected_versions.items():
     if actual[tool] != expected:
         raise SystemExit(f'{tool}: expected {expected}, got {actual[tool]}')
 orbit = json.loads(version('orbit', 'capabilities', '--json'))

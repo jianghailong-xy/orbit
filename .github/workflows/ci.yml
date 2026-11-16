@@ -56,6 +56,8 @@ jobs:
           fi
       - name: Test documentation checks
         run: npm run test:docs
+      - name: Test ALREADY_COORDINATING Agent interaction contract and negative outputs
+        run: node --test test/already-coordinating-eval.test.mjs
       - name: Validate public documentation
         run: npm run docs:check
       - name: Test the release identity rules

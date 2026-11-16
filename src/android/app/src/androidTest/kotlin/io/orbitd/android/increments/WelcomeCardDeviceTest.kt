@@ -60,7 +60,7 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
             "canRetry":false,"canDelete":false},"workspacePublicId":"$wid","runnerPublicId":"$rid"}"""
         Fleet.MANAGED_MODEL -> """{"contractVersion":1,"enabled":true,"revision":6,"managementState":"STARTING","desiredState":"RUNNING",
             "runnerId":"$rid","workspaceId":"$wid","heartbeatStatus":"ONLINE","lastHeartbeatAt":"${ago(0)}","usable":false,
-            "reason":{"code":"MODEL_UNAVAILABLE","message":"The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; a runner that has stopped waiting for it can then be retried.","retryable":true},
+            "reason":{"code":"MODEL_UNAVAILABLE","message":"The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from the Machines & models page; it waits for one and becomes ready by itself.","retryable":true},
             "retryAfter":null,"initialProvider":null,"firstSessionProvider":null,"actions":{"canEnsure":false,"canWake":false,"canSleep":false,
             "canRetry":false,"canDelete":false},"workspacePublicId":"$wid","runnerPublicId":"$rid"}"""
         else -> """{"contractVersion":1,"enabled":true,"revision":8,"managementState":"READY","desiredState":"RUNNING","runnerId":"$rid",
@@ -184,14 +184,11 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         signIn()
         awaitTag("machine-setup-card")
         await("the welcome head on the setup card") { says(WelcomeCopy.welcomeTitle("Mia Chen")) }
-        verify("the setup title gives way to the greeting", !says("machine-setup-card", "Set up mia-macbook"))
-        verifyPlaceholder()
-        verifyWebSignIn("Claude Code")
-        verify("the other installed CLI is offered", says(MachineSetupCopy.setupUseEngine("Codex")))
+        verify("the card's title gives way to the greeting", !says(MachineSetupCopy.setupNewWorkspaceTitle("mia-macbook")))
+        // The card makes the workspace from a folder and a name: no sign-in, no examples, no composer.
+        verify("the folder and the name", says(MachineSetupCopy.SETUP_FOLDER_HINT) && says(MachineSetupCopy.SETUP_NAME_HINT))
+        verify("no sign-in and no examples", !says(WelcomeSignInCopy.USE_API_KEY_INSTEAD) && !exists(hasTestTag("welcome-example"), unmerged = true))
         capture("4-machine")
-        compose.onAllNodesWithTag("welcome-example", useUnmergedTree = true).onFirst().performScrollTo()
-        verify("step 3 offers the three examples", WelcomeCopy.WELCOME_EXAMPLES.all { says(it) } && says(WelcomeCopy.WELCOME_FIRST))
-        capture("4-machine-examples")
     }
 
     @Test fun noMachine() = journey {
@@ -230,10 +227,10 @@ class WelcomeCardDeviceTest : IncrementDeviceTest() {
         fleet = Fleet.MACHINE
         signIn()
         awaitTag("machine-setup-card")
-        await("the setup title") { says("Set up mia-macbook") }
+        await("the card's title") { says(MachineSetupCopy.setupNewWorkspaceTitle("mia-macbook")) }
         awaitNewAccountRead()
         verify("no greeting and no examples", !says(WelcomeCopy.welcomeTitle("Mia Chen")) && !exists(hasTestTag("welcome-example"), unmerged = true))
-        verify("the setup card keeps its own Sign In", says(RunnerCopy.SIGN_IN) && !says(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
+        verify("no sign-in on the card", !says(RunnerCopy.SIGN_IN) && !says(WelcomeSignInCopy.USE_API_KEY_INSTEAD))
         capture("6-history-machine")
     }
 }

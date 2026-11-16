@@ -1,3 +1,4 @@
+import { SCHEDULE_COPY } from '@orbit/shared';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { openProjectsQuery, ownerRequestsQuery } from './queries';
@@ -11,7 +12,12 @@ import { formatSpan, sameResourceId } from './watches';
  * waiting, and the one thing the server does not hold — a reminder for later.
  */
 
-export type OwnerRequestKind = 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM';
+export type OwnerRequestKind =
+  | 'DECISION' | 'SECRET' | 'MANUAL_STEP' | 'CONFIRM' | 'WIKI_CREATE'
+  // A scheduled task's items, which no session can file (apiserver schedules/schedule-attention.ts).
+  | 'SCHEDULE_FAILED' | 'SCHEDULE_HELD' | 'SCHEDULE_APPROVAL' | 'SCHEDULE_WIDEN';
+/** The kinds a session files, answered on the request's own doors. */
+export type AgentRequestKind = Exclude<OwnerRequestKind, `SCHEDULE_${string}`>;
 export type OwnerRequestState = 'PENDING' | 'DONE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN';
 export type OwnerRequestListFilter = 'open' | 'done' | 'declined' | 'all';
 
@@ -72,6 +78,14 @@ export interface OwnerRequest {
   secretScope?: 'TASK' | 'SESSION';
   secretGrant: OwnerRequestSecretGrant | null;
   verifyHint: string | null;
+  /** WIKI_CREATE: the repository the wiki is asked for, and the asking session's workspace it would read it from. */
+  repoUrlNorm?: string | null;
+  workspaceId?: string | null;
+  /** SCHEDULE_*: the schedule, run, approval card and change request the item is about. */
+  scheduleId?: string | null;
+  scheduleRunId?: string | null;
+  approvalId?: string | null;
+  scheduleChangeRequestId?: string | null;
   expiresAt: string | null;
   askedBySessionId: string;
   projectId: string | null;
@@ -79,7 +93,8 @@ export interface OwnerRequest {
   resolvedByUserId: string | null;
   resolvedBySessionId: string | null;
   resolutionNote: string | null;
-  answer: { option?: number; text?: string } | null;
+  /** DECISION: the option and text; WIKI_CREATE once DONE: the wiki made. */
+  answer: { option?: number; text?: string; spaceId?: string; name?: string } | null;
   /** The client that ended it, from `X-Orbit-Client`. Not served yet: without it the summary names no device. */
   resolvedClient?: string | null;
   createdAt: string;
@@ -92,6 +107,11 @@ export const KIND_TAGS: Readonly<Record<OwnerRequestKind, string>> = {
   SECRET: 'SECRET',
   MANUAL_STEP: 'STEPS',
   CONFIRM: 'CONFIRM',
+  WIKI_CREATE: 'WIKI',
+  SCHEDULE_FAILED: SCHEDULE_COPY.waiting.kinds.schedule,
+  SCHEDULE_HELD: SCHEDULE_COPY.waiting.kinds.schedule,
+  SCHEDULE_APPROVAL: SCHEDULE_COPY.waiting.kinds.run,
+  SCHEDULE_WIDEN: SCHEDULE_COPY.waiting.kinds.schedule,
 };
 
 const DEVICES: Readonly<Record<string, string>> = {

@@ -1027,6 +1027,31 @@ func codexStderrDiagnostic(line string) (map[string]interface{}, bool) {
 	return nil, false
 }
 
+// codexReadonlySubagentMode is the mode a read-only SubAgent's Codex child runs in, in place of plan. Plan on
+// Codex refuses every command, and Codex reads a repository only through its shell, so a read-only child
+// could read nothing. This mode runs every command in Codex's own read-only sandbox (no writes, no network)
+// without asking. A session's plan mode keeps its meaning: only a child claim carries readonlySubagent, and
+// only a scheduled CHECK_ONLY run's claim carries scheduledCheckOnly (codexScheduledCheckOnly).
+const codexReadonlySubagentMode = "orbitReadonlySubagent"
+
+// codexPermissionMode is the permission mode Codex is configured from for this claim.
+func codexPermissionMode(job *ClaimedSession) string {
+	if job.readonlySubagent || codexScheduledCheckOnly(job) {
+		return codexReadonlySubagentMode
+	}
+	return job.Agent.PermissionMode
+}
+
+// codexScheduledCheckOnly is a scheduled CHECK_ONLY run's Plan session, as the control plane says on the
+// claim (agent.scheduledCheckOnly). Under the `untrusted` policy every other Plan session runs on, Codex asks
+// about every command, `ls` included, and Plan declines them all, so a check could fetch but not read its
+// checkout. This one session runs in the read-only sandbox instead: commands run without asking, the OS
+// refuses every write, the shell has no network, and the built-in web search still fetches
+// (docs/scheduled-tasks-engine-modes.md §8).
+func codexScheduledCheckOnly(job *ClaimedSession) bool {
+	return job.Agent.ScheduledCheckOnly && job.Agent.PermissionMode == "plan"
+}
+
 // codexApprovalPolicy is the `approvalPolicy` Codex is started with, derived from the session's
 // permission mode. This is what makes an "ask me first" mode mean that on Codex too: `untrusted`
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
@@ -1047,6 +1072,9 @@ func codexApprovalPolicy(permissionMode string) string {
 	switch permissionMode {
 	case "default", "acceptEdits", "plan":
 		return "untrusted"
+	case codexReadonlySubagentMode:
+		// Nothing to ask: the read-only sandbox is the boundary (codexSandboxPolicy).
+		return "never"
 	case "auto":
 		return "on-request"
 	default:
@@ -1080,6 +1108,12 @@ func codexAutomaticApproval(permissionMode string, request codexApprovalRequest)
 	// this are the destructive writes and bg_run.
 	if request.mcpTool && request.server == codexOrbitMCPServer && catalogMCPTool(request.tool) {
 		return true, true
+	}
+	if permissionMode == codexReadonlySubagentMode {
+		// Under `never` Codex asks nothing about a command: each runs in the read-only sandbox, which refuses
+		// writes and network. What still comes here asks to go beyond it (an escalation, a grant, an edit), or is
+		// another server's tool, which could write: refused, as Plan refuses them.
+		return false, true
 	}
 	// Codex has asked for MCP tool-call consent under the `never` policy the non-asking modes run on as
 	// well (measured on 0.166; 0.167.2 answers it itself under full disk access, which is what those
@@ -1124,7 +1158,7 @@ func bridgeCodexApprovalWithContext(ctx context.Context, t *Transport, job *Clai
 	if ctx.Err() != nil || t == nil || job == nil {
 		return false
 	}
-	if allowed, decided := codexAutomaticApproval(job.Agent.PermissionMode, request); decided {
+	if allowed, decided := codexAutomaticApproval(codexPermissionMode(job), request); decided {
 		return allowed
 	}
 	if job.Agent.PermissionMode == "auto" {
@@ -1404,7 +1438,7 @@ func (a *codexAppServer) injectAgentContext(
 }
 
 func codexAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches)
+	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches, agentDelegates(agent))
 	if strings.TrimSpace(context) == "" {
 		return codexImageDeliveryInstructions
 	}
@@ -1606,7 +1640,7 @@ func codexAgentAdditionalContext(
 	}
 	// Orbit's instructions, the agent primer first, as whole paragraphs: one value of their length
 	// would pass the 1,000-token cap, and Codex would keep only part of it.
-	for i, part := range codexContextParagraphs(orbitCLIInstructions(executable, insideRecordedWork, watches), codexContextValueMaxBytes) {
+	for i, part := range codexContextParagraphs(orbitCLIInstructions(executable, insideRecordedWork, watches, agentDelegates(agent)), codexContextValueMaxBytes) {
 		context[fmt.Sprintf("%scli_%08d", prefix, i)] = map[string]interface{}{
 			"kind":  "application",
 			"value": part,
@@ -1644,11 +1678,11 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 		"clientUserMessageId":   orbitTurnID,
 		"input":                 input,
 		"cwd":                   execDir,
-		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
-		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
-		"sandboxPolicy":         codexSandboxPolicy(job.Agent.PermissionMode, job, execDir, upDir),
+		"approvalPolicy":        codexApprovalPolicy(codexPermissionMode(job)),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(codexPermissionMode(job), job, execDir, upDir),
+		"sandboxPolicy":         codexSandboxPolicy(codexPermissionMode(job), job, execDir, upDir),
 	}
-	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
+	if reviewer := codexApprovalsReviewer(codexPermissionMode(job)); reviewer != "" {
 		params["approvalsReviewer"] = reviewer
 	}
 	if contextOptions.Mode == codexInstructionsAdditionalContext {
@@ -1681,14 +1715,14 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]interface{} {
 	params := map[string]interface{}{
 		"cwd":                   execDir,
-		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
-		"sandbox":               codexSandboxMode(job.Agent.PermissionMode),
-		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
+		"approvalPolicy":        codexApprovalPolicy(codexPermissionMode(job)),
+		"sandbox":               codexSandboxMode(codexPermissionMode(job)),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(codexPermissionMode(job), job, execDir, upDir),
 		// The thread's own source: a user's turn, as the CLI reports one, not Orbit's "orbit" — the
 		// backend sees `thread_source: user` in the turn metadata.
 		"threadSource": "user",
 	}
-	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
+	if reviewer := codexApprovalsReviewer(codexPermissionMode(job)); reviewer != "" {
 		params["approvalsReviewer"] = reviewer
 	}
 	if job.Agent.Model != "" {

@@ -33,6 +33,9 @@ var agentPrimerHashes = map[string]string{
 	// claude-sonnet-5-5 filing recorded work again in E7, three runs of three); the start paragraph no longer
 	// repeats the first's autoRunWhenReady default. No rule changed.
 	"1.3.0": "a2f8545151a69611f5b5803badb03624728e0a2a793e5d8db6f2fbacd2d5017e",
+	// Agent Contract 1.10.0 (main merged into the project line): the first line names the new contract; no rule
+	// changed.
+	"1.4.0": "1296cbd8056a8227ac243f1a1c44ad12cff908472db13bedee0debdaee5cbe07",
 }
 
 // The snapshots: the primer exactly as `initialize` sends it, and the four shapes of the instructions
@@ -42,10 +45,10 @@ func TestAgentPrimerSnapshots(t *testing.T) {
 	const exe = "/usr/local/bin/orbit"
 	snapshots := map[string]string{
 		"mcp-instructions.txt":                agentPrimer,
-		"engine-instructions-free.txt":        orbitCLIInstructions(exe, false, true),
-		"engine-instructions-free-nowait.txt": orbitCLIInstructions(exe, false, false),
-		"engine-instructions-task.txt":        orbitCLIInstructions(exe, true, true),
-		"engine-instructions-task-nowait.txt": orbitCLIInstructions(exe, true, false),
+		"engine-instructions-free.txt":        orbitCLIInstructions(exe, false, true, true),
+		"engine-instructions-free-nowait.txt": orbitCLIInstructions(exe, false, false, true),
+		"engine-instructions-task.txt":        orbitCLIInstructions(exe, true, true, true),
+		"engine-instructions-task-nowait.txt": orbitCLIInstructions(exe, true, false, true),
 	}
 	names := make([]string, 0, len(snapshots))
 	for name := range snapshots {
@@ -106,7 +109,7 @@ func TestAgentPrimerBudgets(t *testing.T) {
 	// An executable path longer than any runner's, so a paragraph that names it still fits one value.
 	long := "/home/a-long-account-name/.orbit/bin/versions/0.1.999/orbit"
 	for _, form := range []struct{ inside, watches bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
-		instructions := orbitCLIInstructions(long, form.inside, form.watches)
+		instructions := orbitCLIInstructions(long, form.inside, form.watches, true)
 		if n := len(instructions); n > orbitInstructionsMaxBytes {
 			t.Errorf("instructions (inside=%v, watches=%v) are %d bytes, over their %d-byte budget", form.inside, form.watches, n, orbitInstructionsMaxBytes)
 		}

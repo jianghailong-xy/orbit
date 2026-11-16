@@ -186,7 +186,7 @@ private plan:
 
 ```json
 {"subtype": "agent_contract_telemetry", "agentContractTelemetry": {
-  "v": 1, "contract": "1.9.0", "primer": "1.3.0", "catalog": "1.7.0", "engine": "claude", "mode": "default",
+  "v": 1, "contract": "1.10.0", "primer": "1.4.0", "catalog": "1.8.0", "engine": "claude", "mode": "default",
   "orchestration": true, "toolCalls": 7, "orbitCalls": 5, "orbitCallsCli": 2, "orbitWrites": 1,
   "firstOrbitSuccessStep": 2, "discoveryCalls": 1, "discoveryBytes": 6123, "instructionBytes": 4321,
   "operations": {"guide": 1, "task_create": 1, "task_list": 1}, "outcomes": {"written": 1, "read": 2},

@@ -19,6 +19,17 @@ export interface SessionGuestPerson {
   emailSentAt: string | null;
 }
 
+/**
+ * Someone the owner has invited before, to any of their sessions, as `GET /sessions/:id/guests/suggestions` offers
+ * them to the email field of People who can reply (board docs/mocks/share-links/14-guest-suggestions).
+ */
+export interface SessionGuestSuggestion {
+  name: string;
+  email: string;
+  /** The owner's latest invitation of this person, to any session. */
+  lastInvitedAt: string;
+}
+
 /** One row of the guest's Shared with me (`GET /guest-sessions`). */
 export interface GuestSessionSummary {
   id: string;

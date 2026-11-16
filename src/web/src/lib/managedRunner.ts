@@ -10,12 +10,15 @@ import {
   MANAGED_RUNNER_STATUS_POLL_SECONDS,
   firstSessionProvider,
   managedRunnerDisplay,
+  managedRunnerRow,
   managedRunnersOffered,
   type ManagedRunnerDisplay,
+  type ManagedRunnerRow,
   type ManagedRunnerStatus,
   type ServerCapabilities,
 } from '@orbit/shared';
 import { api, ApiError } from '../api';
+import { routeId } from './idCodec';
 import { useToast } from './toast';
 import { compatibleUuid } from './uuid';
 
@@ -88,6 +91,17 @@ export function useManagedRunner(ask = true): { managed: ManagedRunner | null; s
 }
 
 /**
+ * How a place that shows a runner by its heartbeat shows the account's managed runner instead
+ * (docs/managed-runner-existing-account-entry-design.md, D4): the shared short label and tone, Asleep
+ * rather than Offline. Null for any other runner, and for every runner with the feature off.
+ */
+export function managedRowOf(managed: ManagedRunner | null, runnerId: string | null | undefined): ManagedRunnerRow | null {
+  const id = managed?.status.runnerId;
+  if (!id || !runnerId || routeId(id) !== routeId(runnerId)) return null;
+  return managedRunnerRow(id, managed.status);
+}
+
+/**
  * What a first session in the managed default workspace starts on moves while its runner comes up —
  * the owner adds a key, READY records what it was found ready with — and the workspace list says
  * it as the draft's default (`lastProvider`, which the server derives): the list is read again
@@ -105,6 +119,25 @@ export function useFollowFirstSessionProvider(managed: ManagedRunner | null): vo
     }
     seen.current = startsOn;
   }, [startsOn, qc]);
+}
+
+/**
+ * A managed runner asleep (or going to sleep) while it waits for a login can only be signed in once it
+ * is up again, so the page that signs it in wakes it when it is opened: one wake per page, then the
+ * status is read again. Nothing for any other state, and nothing when the server offers no wake.
+ */
+export function useWakeForSignIn(managed: ManagedRunner | null): void {
+  const qc = useQueryClient();
+  const asked = useRef(false);
+  const status = managed?.status;
+  const wanted = !!status && !!managed?.display.signIn && status.actions.canWake && status.desiredState === 'SLEEPING';
+  useEffect(() => {
+    if (!wanted || asked.current) return;
+    asked.current = true;
+    void api<ManagedRunnerStatus>('/managed-runner/wake', { method: 'POST', body: { idempotencyKey: compatibleUuid() } })
+      .catch(() => undefined)
+      .finally(() => void qc.invalidateQueries({ queryKey: managedRunnerStatusQuery().queryKey }));
+  }, [wanted, qc]);
 }
 
 /**

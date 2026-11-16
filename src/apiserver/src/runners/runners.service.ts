@@ -15,6 +15,7 @@ import type {
   InstallEngine,
   LoginEngine,
   ReportedEngine,
+  RunnerAccountRemoveSession,
   RunnerAccountRemoveState,
   RunnerEngineAccount,
   RunnerInstallState,
@@ -42,7 +43,6 @@ import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { sanitizeRunnerSelfUpdate } from '../common/runner-self-update';
 import { drainWaitingOf } from '../common/runner-drain-waiting';
 import { postponeUntil } from './self-update-postpone';
-import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -65,6 +65,7 @@ import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunn
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
 import { RUNNER_BEATS, runnerIsOnline, runnerLastBeatAt } from './runner-presence';
+import { runningSessionCounts } from './runner-background-holders';
 import { runnerResourcesAnswerOf } from './runner-resources';
 import { DIR_PROBE_MAX_PATH, dirProbeAnswerOf } from './dir-probe';
 import { isInternalAddress } from '../shared/public-surface.guard';
@@ -145,8 +146,10 @@ export class RunnersService {
         status: true,
         maxConcurrent: true,
         version: true,
-        // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`.
+        // When it was last heard from (runners/runner-presence.ts), shown as `lastHeartbeatAt`, and the
+        // sessions its background jobs hold slots for, which `activeSessions` counts while it is online.
         ...RUNNER_BEATS,
+        presence: { select: { lastBeatAt: true, backgroundJobSessionIds: true } },
         enrolledAt: true,
         position: true,
         availableCommands: true,
@@ -202,24 +205,16 @@ export class RunnersService {
         codexAccountRemoveAccount: true,
         codexAccountRemoveStatus: true,
         codexAccountRemoveMessage: true,
+        codexAccountRemoveSessions: true,
         // Where this machine's Claude connection to Anthropic comes out (docs/claude-region-check-contract.md §6), read
         // with the capabilities above: only a runner that declares claude-region/v1 has a region to show.
         region: true,
       },
     });
     // How many slots each runner is currently using, so the list can show
-    // utilization (e.g. "3 / 16 running") rather than capacity alone.
-    const liveCounts = await this.prisma.session.groupBy({
-      by: ['assignedRunnerId'],
-      where: {
-        assignedRunnerId: { in: runners.map((r) => r.id) },
-        status: { in: ACTIVE_TURN_STATUSES },
-      },
-      _count: { _all: true },
-    });
-    const activeByRunner = new Map(
-      liveCounts.map((c) => [c.assignedRunnerId, c._count._all]),
-    );
+    // utilization (e.g. "3 / 16 running") rather than capacity alone: its sessions in a turn, and
+    // the ones its background jobs hold slots for (runner-background-holders.ts).
+    const activeByRunner = await runningSessionCounts(this.prisma, runners, Date.now());
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const now = Date.now();
@@ -234,6 +229,8 @@ export class RunnersService {
     // Fix with an agent: where a press would start its session on each runner, or why it can't, and the
     // agents already at work there (attention-fix.ts, the same answer the fix endpoint acts on).
     const agentFixes = await agentFixesOf(this.prisma, where.ownerId, runners, now);
+    // The sessions a refused account removal named, by title, for the row that asked.
+    const removalSessions = await accountRemoveSessionsOf(this.prisma, where.ownerId, runners);
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -253,6 +250,7 @@ export class RunnersService {
       codexAccountRemoveAccount,
       codexAccountRemoveStatus,
       codexAccountRemoveMessage,
+      codexAccountRemoveSessions: _removalSessionIds,
       selfUpdate,
       presence,
       region,
@@ -285,6 +283,7 @@ export class RunnersService {
         codexAccountRemoveAccount,
         codexAccountRemoveStatus,
         codexAccountRemoveMessage,
+        sessions: removalSessions.get(r.id),
       }),
       online: runnerIsOnline({ status: r.status, lastHeartbeatAt: r.lastHeartbeatAt, presence }, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
@@ -843,6 +842,7 @@ export class RunnersService {
         codexAccountRemoveAccount: account,
         codexAccountRemoveStatus: 'pending',
         codexAccountRemoveMessage: null,
+        codexAccountRemoveSessions: [],
         codexAccountRemoveAt: new Date(),
       },
     });
@@ -1495,14 +1495,48 @@ export function accountRemoveStateOf(r: {
   codexAccountRemoveAccount?: string | null;
   codexAccountRemoveStatus?: string | null;
   codexAccountRemoveMessage?: string | null;
+  sessions?: RunnerAccountRemoveSession[];
 }): RunnerAccountRemoveState {
+  // Only a refusal over sessions in the account lists any; every other state leaves the field out.
+  const sessions = r.codexAccountRemoveStatus === 'failed' ? (r.sessions ?? []) : [];
   return {
     // A row written before accounts-per-engine meant Codex.
     engine: (r.accountRemoveEngine as LoginEngine) ?? 'codex',
     account: r.codexAccountRemoveStatus ? (r.codexAccountRemoveAccount ?? null) : null,
     status: (r.codexAccountRemoveStatus as RunnerAccountRemoveState['status']) ?? null,
     message: r.codexAccountRemoveStatus ? (r.codexAccountRemoveMessage ?? null) : null,
+    ...(sessions.length > 0 ? { sessions } : {}),
   };
+}
+
+/**
+ * The sessions each runner's refused account removal named, by runner: only the viewer's own and only
+ * those assigned to that runner, so a report cannot name anyone else's. Read live, so a title renamed
+ * since the refusal reads as it is now; a session deleted since is left out.
+ */
+export async function accountRemoveSessionsOf(
+  db: Pick<PrismaService, 'session'>,
+  ownerId: string,
+  runners: Array<{ id: string; codexAccountRemoveStatus?: string | null; codexAccountRemoveSessions?: string[] | null }>,
+): Promise<Map<string, RunnerAccountRemoveSession[]>> {
+  const out = new Map<string, RunnerAccountRemoveSession[]>();
+  const named = runners.filter((r) => r.codexAccountRemoveStatus === 'failed' && (r.codexAccountRemoveSessions?.length ?? 0) > 0);
+  if (named.length === 0) return out;
+  const rows = await db.session.findMany({
+    where: {
+      ownerId,
+      OR: named.map((r) => ({ assignedRunnerId: r.id, id: { in: r.codexAccountRemoveSessions ?? [] } })),
+    },
+    select: { id: true, title: true, status: true, assignedRunnerId: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  for (const row of rows) {
+    if (!row.assignedRunnerId) continue;
+    const list = out.get(row.assignedRunnerId) ?? [];
+    list.push({ id: row.id, title: row.title, status: row.status as RunnerAccountRemoveSession['status'] });
+    out.set(row.assignedRunnerId, list);
+  }
+  return out;
 }
 
 /** Project a runner row onto the browser-facing relay view (no code, ever). */

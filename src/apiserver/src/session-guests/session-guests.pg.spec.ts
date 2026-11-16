@@ -129,6 +129,26 @@ test('session guests: invite by email, a guest turn as ORBIT_GUEST, Shared with 
     assert.equal(page.json.waitingOnOwner, false, 'nothing waits on the owner yet');
     ok(await api('GET', `/guest-sessions/${sessionId}/events?after=0`, guestLogin), 'the guest page following');
 
+    // An image a turn carried reaches the guest through the door, as the owner's own `/attachments/:id` does not;
+    // a stranger is refused it, and a file of another session is not this door's to open.
+    const image = Buffer.from(`png-${RUN}`);
+    const attachment = await db.attachment.create({
+      data: { ownerId: owner.id, sessionId, mimeType: 'image/png', sizeBytes: image.length, data: image },
+      select: { id: true },
+    });
+    const elsewhere = await db.attachment.create({
+      data: { ownerId: owner.id, sessionId: await session('another conversation', RunStatus.AWAITING_INPUT), mimeType: 'image/png', sizeBytes: image.length, data: image },
+      select: { id: true },
+    });
+    const bytes = ok(await api('GET', `/guest-sessions/${sessionId}/attachments/${attachment.id}`, guestLogin), 'the guest reading an image');
+    assert.equal(bytes.text, image.toString());
+    assert.match(String(bytes.headers['content-type']), /^image\/png/);
+    assert.equal((await api('GET', `/attachments/${attachment.id}`, guestLogin)).status, 404, 'the owner route stays the owner’s');
+    const strangerImage = await api('GET', `/guest-sessions/${sessionId}/attachments/${attachment.id}`, strangerLogin);
+    assert.equal(strangerImage.status, 404, strangerImage.text);
+    assert.equal(strangerImage.json.message, GUEST_SESSION_NOT_SHARED);
+    assert.equal((await api('GET', `/guest-sessions/${sessionId}/attachments/${elsewhere.id}`, guestLogin)).status, 404);
+
     // A card pending for the owner: the guest page is told the agent waits on them, and nothing of what it asks.
     const card = await db.approval.create({
       data: { sessionId, toolName: 'Bash', input: { command: `secret-${RUN}` }, status: 'PENDING' },

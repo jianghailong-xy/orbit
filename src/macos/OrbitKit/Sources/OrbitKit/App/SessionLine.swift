@@ -78,6 +78,8 @@ public struct SessionLine: Equatable, Sendable {
             // A runner draining for its update is the one queue word in the warning colour (board 5,
             // web `sessionLine`): it can last hours, and only the owner can shorten it.
             if RunnerUpdating.holds(s) { return SessionLine(text: RunnerUpdating.title(s), tone: .warning) }
+            // A full runner, run or batch names itself, in the queue's own colour (web `queuedLabel`).
+            if QueuedCapacity.holds(s) { return SessionLine(text: QueuedCapacity.title(s), tone: .queued) }
             return SessionLine(text: "Queued", tone: .queued)
         }
         // Parked while a sub-agent or workflow it started works on: the workspace itself still
@@ -97,11 +99,6 @@ public struct SessionLine: Equatable, Sendable {
         if live, s.resumesOnItsOwn {
             return SessionLine(text: SessionHeader.waitingToResume, tone: .watching)
         }
-        // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
-        // not the agent working either (see the glyph): muted, not the working blue.
-        if live, let bg = s.runningBgCount, bg > 0 {
-            return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
-        }
         // A message that never got an answer — the turn was interrupted, or failed, before any
         // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
         // what the session is left waiting on. The server only keeps it while it stands
@@ -118,6 +115,12 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: r, tone: .preview)
         }
         if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
+        // Parked (AWAITING_INPUT) but a background process is still running. It never takes the line
+        // from the unanswered message, the recap or the reply (the owner, 2026-11-16; web parity):
+        // the glyph already says a process is up, so the words only fill a row with nothing else to say.
+        if live, let bg = s.runningBgCount, bg > 0 {
+            return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
+        }
         // Nothing to preview at all (a run that died before even its user turn was recorded, or an
         // older row from before the server kept the pending message). Fall back to the run's own
         // state word — the same one the console header shows — so the row still says what happened

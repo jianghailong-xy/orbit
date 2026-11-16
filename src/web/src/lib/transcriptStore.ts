@@ -120,6 +120,24 @@ export function trimForStorage(
 }
 
 /**
+ * The older edge to resume a stored window with.
+ *
+ * A window filled by a cursor-less replay (its tail page failed) used to be stored with no edge
+ * (`oldestSeq` null) and "nothing older", on top of the rows an earlier window had left on disk. A
+ * reload then painted those rows as the start of the conversation and never paged past them. With
+ * no edge recorded, the oldest stored row is the edge, and older events may exist unless that row
+ * is the session's first (seqs start at 1); one page fetch settles it.
+ */
+export function storedOlderEdge(
+  meta: { oldestSeq: number | null; hasMoreOlder: boolean },
+  events: StoredEvent[],
+): { oldestSeq: number | null; hasMoreOlder: boolean } {
+  if (meta.oldestSeq !== null || events.length === 0) return meta;
+  const first = rangeOf(events)!.min;
+  return { oldestSeq: first, hasMoreOlder: meta.hasMoreOlder || first > 1 };
+}
+
+/**
  * Every key this store writes is the UUID spelling, whatever spelling the caller happens to be
  * holding.
  *
@@ -293,7 +311,8 @@ export async function loadTranscript(id: string): Promise<TranscriptSnapshot | n
       .sort((a, b) => a.seq - b.seq);
     const range = rangeOf(events);
     if (range) written.set(sessionId, range);
-    return { events, oldestSeq: meta.oldestSeq, hasMoreOlder: meta.hasMoreOlder };
+    const edge = storedOlderEdge(meta, events);
+    return { events, oldestSeq: edge.oldestSeq, hasMoreOlder: edge.hasMoreOlder };
   } catch {
     return null;
   }

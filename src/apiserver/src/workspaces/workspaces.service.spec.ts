@@ -333,7 +333,7 @@ test('GET /workspaces/:id says when the workspace was last used and how many con
   assert.deepEqual(read.lastActiveAt, lastActive);
   // Conversations only: not the sessions spawned from another, and not the trashed ones.
   assert.deepEqual(counted, [
-    { where: { workspaceId: 'workspace-1', sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null } },
+    { where: { workspaceId: 'workspace-1', sessionKind: 'CONVERSATION', parentSessionId: null, deletedAt: null, runSource: { not: 'SCHEDULE' } } },
   ]);
 
   // A save reads the workspace back without counting.
@@ -366,4 +366,43 @@ test('the workspace list carries when each was last used, and never counts sessi
       ['workspace-2', null, false],
     ],
   );
+});
+
+// The setup card's Create workspace (docs/first-workspace-contract.md §3, outside a session): a new folder under
+// the runner's reposRoot, made by the runner at the first session's claim, as POST /sessions `newWorkspace` makes one.
+function newFolderStub(writes: Record<string, unknown>[], runner: Record<string, unknown>) {
+  const prisma = prismaStub(writes) as unknown as Record<string, Record<string, unknown>>;
+  prisma.runner = {
+    ...prisma.runner,
+    findFirst: async () => ({ id: 'runner-1' }),
+    findFirstOrThrow: async () => runner,
+  };
+  return new WorkspacesService(prisma as unknown as PrismaService);
+}
+const MAKES_FOLDERS = { reposRoot: '/root/orbit-repos/', capabilities: ['create-workdir/v1'], capabilitiesReportedAt: new Date() };
+
+test('newFolder makes the workspace in a folder under reposRoot that its first session creates', async () => {
+  const writes: Record<string, unknown>[] = [];
+  await newFolderStub(writes, MAKES_FOLDERS).create('owner-1', { name: 'app', runnerId: 'runner-1', newFolder: 'app' });
+  assert.equal(writes[0].workDir, '/root/orbit-repos/app');
+  assert.equal(writes[0].autoCreateWorkDir, true);
+  assert.equal('newFolder' in writes[0], false);
+});
+
+test('a workDir workspace never has its folder made', async () => {
+  const writes: Record<string, unknown>[] = [];
+  await newFolderStub(writes, MAKES_FOLDERS).create('owner-1', { name: 'app', runnerId: 'runner-1', workDir: '/srv/app' });
+  assert.equal(writes[0].workDir, '/srv/app');
+  assert.equal(writes[0].autoCreateWorkDir, false);
+});
+
+test('newFolder is refused without a runner, beside a workDir, with a bad name, or on a runner that cannot make one', async () => {
+  const writes: Record<string, unknown>[] = [];
+  const service = newFolderStub(writes, MAKES_FOLDERS);
+  await assert.rejects(service.create('owner-1', { name: 'a', newFolder: 'a' }), /needs runnerId/);
+  await assert.rejects(service.create('owner-1', { name: 'a', runnerId: 'runner-1', newFolder: 'a', workDir: '/a' }), /one of workDir and newFolder/);
+  await assert.rejects(service.create('owner-1', { name: 'a', runnerId: 'runner-1', newFolder: '../a' }), /one folder name/);
+  const old = newFolderStub(writes, { ...MAKES_FOLDERS, capabilities: [] });
+  await assert.rejects(old.create('owner-1', { name: 'a', runnerId: 'runner-1', newFolder: 'a' }), (e: { response?: { code?: string } }) => e.response?.code === 'NEW_FOLDER_UNSUPPORTED');
+  assert.equal(writes.length, 0);
 });

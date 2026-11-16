@@ -28,7 +28,7 @@ class MachinesAndModelsCopyParityTest {
         val source = listOf("${kit}MachinesAndModels.swift", "${kit}ProvidersOverview.swift", "${kit}AppSection.swift", "${views}RunnerEnginePage.swift")
             .joinToString("\n") { read(it) }
         val words = constants(MachinesAndModels)
-        assertTrue("MachinesAndModels holds no words", words.size >= 15)
+        assertTrue("MachinesAndModels holds no words", words.size >= 14)
         assertEquals("MachinesAndModels strings not in the Swift sources", emptyMap<String, String>(), words.filterValues { !source.contains("\"$it\"") })
         // The sentences built around a name keep iOS's words around it.
         listOf("\"\\(machine) is offline\"", "\"\\(machine) has no coding CLI signed in\"",
@@ -39,13 +39,16 @@ class MachinesAndModelsCopyParityTest {
             "\"Install \\(RunnerPageFormat.engineName(engine))\"").forEach { assertTrue("$it is not in the Swift sources", source.contains(it)) }
         val settings = read("${kit}SettingsHome.swift")
         listOf("\"1 needs you\"", " need you\"").forEach { assertTrue("$it is not in SettingsHome.swift", settings.contains(it)) }
-        // Settings' Machines & models group has no header, as on iOS: its one row says the name.
-        assertTrue("iOS heads Machines & models", settings.contains("case .machines:    return nil"))
+        // Settings' Machines group has no header, as on iOS: its one row says the name; Providers' neither.
+        assertTrue("iOS heads Machines", settings.contains("case .machines:  return nil"))
+        assertTrue("iOS heads Providers", settings.contains("case .providers: return nil"))
         assertTrue(read("${views}SkillsRunnersView.swift").contains("failedTitle: \"Machines couldn't be loaded\""))
     }
 
-    /** No product string points at a Providers page: it became Infrastructure on every client (web 33e0e2e09, iOS 5e75edbde). Comments and
-     * code may still name the Swift types the words were ported from (ProvidersOverview). */
+    /** No product string points at the old Providers page: it became Infrastructure on every client (web 33e0e2e09, iOS 5e75edbde). Comments
+     * and code may still name the Swift types the words were ported from (ProvidersOverview). Two rows are named Providers: the Agent
+     * form's SubAgents group's (docs/mocks/subagent/05.png), the providers SubAgents may use; and Settings' own, the pools' half of
+     * Machines & models, as the web's Settings nav and iOS name it (docs/mocks/ios-settings-web-groups). */
     @Test fun noProductStringSaysProviders() {
         val literal = Regex("\"(?:[^\"\\\\\\n]|\\\\.)*\"")
         val found = listOf("app", "core").flatMap { module ->
@@ -54,8 +57,14 @@ class MachinesAndModelsCopyParityTest {
                     .flatMap { (index, line) -> literal.findAll(line).filter { "Providers" in it.value }.map { "${file.name}:${index + 1} ${it.value}" }.toList() }
             }
         }
-        assertEquals(emptyList<String>(), found)
+        // `subagentBlockedProviders` is the preferences field's wire name, never shown.
+        assertEquals(emptyList<String>(), found.filterNot { it.endsWith(" \"subagentBlockedProviders\"") } -
+            setOf("Subagents.kt:${row("Subagents.kt", "const val PROVIDERS = \"Providers\"")} \"Providers\"",
+                "SettingsScreen.kt:${row("SettingsScreen.kt", "const val SETTINGS_PROVIDERS = \"Providers\"")} \"Providers\""))
     }
+
+    private fun row(file: String, line: String) = File(root, "src/android/app/src/main/kotlin/io/orbitd/android/management/$file").readLines()
+        .indexOfFirst { it.contains(line) } + 1
 
     @Test fun theAntigravityRepairCardSaysMachinesAndModelsAsIosDoes() {
         val engineAuth = read("${kit}EngineAuth.swift")

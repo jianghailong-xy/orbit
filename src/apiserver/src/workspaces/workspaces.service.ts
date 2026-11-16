@@ -24,6 +24,7 @@ import {
 } from '../common/runner-repo-health';
 import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
+import { isNewFolderName, newFolderWorkDirOn } from '../sessions/new-workspace';
 
 /** The engines a list names, each once and in the order the router weighs them. Absent stays absent:
  *  a patch that says nothing about the list leaves it as it is. */
@@ -83,9 +84,26 @@ export class WorkspacesService {
     if (!runner) throw new ForbiddenException('runner not found');
   }
 
+  /** Where `newFolder` puts the workspace: under its runner's reposRoot, as POST /sessions `newWorkspace` does. */
+  private async newFolderOn(ownerId: string, dto: CreateWorkspaceDto): Promise<string> {
+    if (!dto.runnerId) throw new BadRequestException('newFolder needs runnerId: the machine it is made on');
+    if (dto.workDir !== undefined) throw new BadRequestException('Send one of workDir and newFolder');
+    if (!isNewFolderName(dto.newFolder)) {
+      throw new BadRequestException(
+        'newFolder must be one folder name of 1 to 64 letters, digits, ".", "_" or "-", other than "." and ".."',
+      );
+    }
+    const runner = await this.prisma.runner.findFirstOrThrow({
+      where: { id: dto.runnerId, ownerId },
+      select: { reposRoot: true, capabilities: true, capabilitiesReportedAt: true },
+    });
+    return newFolderWorkDirOn(runner, dto.newFolder);
+  }
+
   async create(ownerId: string, dto: CreateWorkspaceDto) {
     await this.assertOwnedRunner(ownerId, dto.targetRunnerId);
     await this.assertOwnedRunner(ownerId, dto.runnerId);
+    const workDir = dto.newFolder === undefined ? dto.workDir : await this.newFolderOn(ownerId, dto);
     const workspace = await this.prisma.workspace.create({
       data: {
         ownerId,
@@ -105,7 +123,8 @@ export class WorkspacesService {
         targetRunnerId: dto.targetRunnerId,
         targetLabels: dto.targetLabels ?? [],
         runnerId: dto.runnerId,
-        workDir: dto.workDir,
+        workDir,
+        autoCreateWorkDir: dto.newFolder !== undefined,
         // Stored exactly as stated. The one reader — `project-integration-line.ts` — normalizes it
         // itself (canonicalRepoUrl), so nothing here has to agree with that function's shape.
         repoUrl: dto.repoUrl,
@@ -124,6 +143,8 @@ export class WorkspacesService {
         modelRouting: dto.modelRouting ?? false,
         modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor ?? 'cost',
         modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
+        subagentsEnabled: dto.subagentsEnabled ?? true,
+        subagentsMaxRunning: dto.subagentsMaxRunning ?? 4,
       },
     });
     if (workspace.workDir && workspace.runnerId) this.realtime?.markRunnerChanged(workspace.runnerId);
@@ -358,6 +379,8 @@ export class WorkspacesService {
       modelRouting: dto.modelRouting,
       modelRoutingOptimizeFor: dto.modelRoutingOptimizeFor,
       modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
+      subagentsEnabled: dto.subagentsEnabled,
+      subagentsMaxRunning: dto.subagentsMaxRunning,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

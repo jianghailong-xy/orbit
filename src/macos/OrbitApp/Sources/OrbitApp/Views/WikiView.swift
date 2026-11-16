@@ -25,6 +25,8 @@ struct WikiHomeActions {
     var search: (String) async -> [WikiSearchHit] = { _ in [] }
     /// The space's Wiki settings: the gear in the bar (mock 12 ①) and Manage spaces.
     var openSettings: () -> Void = {}
+    /// New wiki…, the head picker's item under the spaces: the Create wiki form.
+    var createWiki: () -> Void = {}
     /// The Contents sheet — the directory — from the list button in the bar (mock 30 ③).
     var openContents: () -> Void = {}
     /// Activity, from the bar's history mark (design §12.3.2).
@@ -175,7 +177,8 @@ struct WikiHomePage: View {
     /// The space's name as the page's title, a picker among several — the web's page head (board docs/mocks/wiki-rail-name B).
     private var header: some View {
         HStack(alignment: .center, spacing: 10) {
-            WikiSpacePicker(space: space, spaces: spaces, title: .largeTitle.bold(), pick: actions.pickSpace, manage: actions.openSettings)
+            WikiSpacePicker(space: space, spaces: spaces, title: .largeTitle.bold(), pick: actions.pickSpace, manage: actions.openSettings,
+                            create: actions.createWiki)
             Spacer(minLength: 0)
         }
         .padding(.top, 4)
@@ -577,20 +580,25 @@ struct WikiFirstStartPage: View {
 
     var body: some View {
         List {
-            Section {
-                Text(WikiCopy.title)
-                    .font(.largeTitle.bold())
-                    .accessibilityAddTraits(.isHeader)
-                    .padding(.top, 4)
-                    .wikiHomeOnBackground()
-            }
-            WikiStartSection(card: card, act: act)
-            if trashed > 0 {
-                Section {
-                    Button(WikiModeCopy.trashOpenTrash, action: openTrash)
-                } header: {
-                    Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))
-                        .textCase(nil)
+            ForEach(WikiFirstStartListLogic.rows(trashed: trashed)) { row in
+                switch row {
+                case .title:
+                    Section {
+                        Text(WikiCopy.title)
+                            .font(.largeTitle.bold())
+                            .accessibilityAddTraits(.isHeader)
+                            .padding(.top, 4)
+                            .wikiHomeOnBackground()
+                    }
+                case .start:
+                    WikiStartSection(card: card, act: act)
+                case .trash:
+                    Section {
+                        Button(WikiModeCopy.trashOpenTrash, action: openTrash)
+                    } header: {
+                        Text(WikiModeCopy.trashHoldsWhenEmpty(trashed))
+                            .textCase(nil)
+                    }
                 }
             }
         }
@@ -604,20 +612,22 @@ struct WikiFirstStartPage: View {
 }
 
 /// The space beside the title, by the name a reader knows it by (design §12.3.4, mock 31 ④) — the home's head
-/// on a phone, the directory column's beside it. With one space it is a grey label and no control: no chevron,
-/// no menu. With several, a menu of every space, the current one ticked — a toggle per space, whose tick a menu
-/// draws in its own column, its name the title and the repository and documents the line under it — what waits
-/// in each in the row's icon cell, and Manage spaces at the foot, into Wiki settings. Trash is not in it: it opens
-/// from Wiki settings (docs/mocks/wiki-trash/02-trash-entry).
+/// on a phone, the directory column's beside it. It is always a menu, even with one space, since it is the way to
+/// New wiki… (no sidebar or drawer has that row): every space, the current one ticked — a toggle per space, whose
+/// tick a menu draws in its own column, its name the title and the repository and documents the line under it — what waits
+/// in each in the row's icon cell, and under a divider New wiki… — the Create wiki form (docs/wiki-explicit-creation-
+/// design.md §3.4, board 46 part 4 ③) — then Manage spaces at the foot, into Wiki settings. Trash is not in it: it
+/// opens from Wiki settings (docs/mocks/wiki-trash/02-trash-entry).
 ///
 /// Given a `title` font, the name is the head's title (board docs/mocks/wiki-rail-name B): no capsule, the name in that
-/// type, and with several spaces a small chevron after it that opens the same menu.
+/// type, and a small chevron after it that opens the same menu.
 struct WikiSpacePicker: View {
     let space: WikiSpace
     let spaces: [WikiSpace]
     var title: Font? = nil
     var pick: (String) -> Void = { _ in }
     var manage: () -> Void = {}
+    var create: () -> Void = {}
 
     var body: some View {
         let names = WikiSpaceLogic.names(spaces)
@@ -629,34 +639,25 @@ struct WikiSpacePicker: View {
         }
     }
 
-    @ViewBuilder private func titled(_ name: String, names: [String: String], font: Font) -> some View {
-        if spaces.count < 2 {
-            Text(name)
-                .font(font)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityLabel(WikiCopy.spacePickerHint)
-                .accessibilityValue(name)
-        } else {
-            Menu {
-                menuRows(names)
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(name)
-                        .font(font)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.orbitMeta.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .foregroundStyle(Color.primary)
-                .contentShape(Rectangle())
+    private func titled(_ name: String, names: [String: String], font: Font) -> some View {
+        Menu {
+            menuRows(names)
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(name)
+                    .font(font)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
-            .menuIndicator(.hidden)
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityLabel(WikiCopy.spacePickerHint)
-            .accessibilityValue(name)
+            .foregroundStyle(Color.primary)
+            .contentShape(Rectangle())
         }
+        .menuIndicator(.hidden)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel(WikiCopy.spacePickerHint)
+        .accessibilityValue(name)
     }
 
     @ViewBuilder private func menuRows(_ names: [String: String]) -> some View {
@@ -674,41 +675,33 @@ struct WikiSpacePicker: View {
             }
         }
         Divider()
+        Button(action: create) {
+            Label(WikiStartCopy.newWiki, systemImage: "plus")
+        }
+        .accessibilityIdentifier("wiki-picker-new-wiki")
         Button(action: manage) {
             Label(WikiCopy.manageSpaces, systemImage: "gearshape")
         }
     }
 
-    @ViewBuilder private func capsule(_ name: String, names: [String: String]) -> some View {
-        if spaces.count < 2 {
-            Text(name)
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.primary.opacity(0.07), in: Capsule())
-                .accessibilityLabel(WikiCopy.spacePickerHint)
-                .accessibilityValue(name)
-        } else {
-            Menu {
-                menuRows(names)
-            } label: {
-                HStack(spacing: 4) {
-                    Text(name)
-                        .font(.orbitLabel.weight(.semibold))
-                        .lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.orbitMeta.weight(.semibold))
-                }
-                .foregroundStyle(Color.primary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.primary.opacity(0.07), in: Capsule())
+    private func capsule(_ name: String, names: [String: String]) -> some View {
+        Menu {
+            menuRows(names)
+        } label: {
+            HStack(spacing: 4) {
+                Text(name)
+                    .font(.orbitLabel.weight(.semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.orbitMeta.weight(.semibold))
             }
-            .accessibilityLabel(WikiCopy.spacePickerHint)
-            .accessibilityValue(name)
+            .foregroundStyle(Color.primary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.07), in: Capsule())
         }
+        .accessibilityLabel(WikiCopy.spacePickerHint)
+        .accessibilityValue(name)
     }
 }
 

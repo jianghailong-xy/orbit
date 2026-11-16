@@ -31,6 +31,7 @@ var mcpHelpObjects = []struct {
 	{objectBackgroundJob, "background jobs"},
 	{objectPermission, "engine permission prompts"},
 	{objectMergeReceipt, "merge receipts"},
+	{objectSchedule, "scheduled tasks"},
 	{objectCatalog, "the operation catalogue itself (the guide)"},
 }
 

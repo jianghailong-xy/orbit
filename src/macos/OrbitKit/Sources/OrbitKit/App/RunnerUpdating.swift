@@ -171,10 +171,30 @@ public enum RunnerUpdating {
         return "\(first) This message is sent right after."
     }
 
-    /// The message whose foot row carries `Queued · runner updating`: the reader's last one in the
-    /// transcript (web `queuedFoot`). Nil where the transcript has none, and then the queued page says
-    /// it instead — the two are never drawn together.
-    public static func footBubbleID(_ items: [TranscriptItem]) -> String? {
+    /// A turn on the queued tail the update holds: still waiting for a turn of its own — not a steer,
+    /// nor one whose delivery settled. Its own queued line says `Queued · runner updating`
+    /// (docs/mocks/queued-card-runner-updating ②⑤; web `queuedTurnWaitsItsTurn`).
+    public static func holdsQueued(_ bubble: UserBubble) -> Bool {
+        !bubble.steer && !bubble.undelivered && !SteerDelivery.settles(bubble.delivery)
+    }
+
+    /// Whether a waiting turn is one the update holds — a card on the queued tail, or the reader's own
+    /// message in the tray, each of which says why on its own line (docs/mocks/queued-card-runner-full ②).
+    /// Then neither the last message nor the queued page does (web `tailHeld`).
+    public static func tailHolds(_ queued: [UserBubble]) -> Bool {
+        queued.contains(where: holdsQueued)
+    }
+
+    /// The message whose foot row carries `Queued · runner updating` where the queued tail holds
+    /// nothing (`tailHolds`): the reader's last one in the transcript (web `queuedFoot`). Nil where the
+    /// transcript has none, and then the queued page says it instead — the two are never drawn together.
+    ///
+    /// `accepted` is the accepted head (`TranscriptState.accepted`): a message the server has but no
+    /// runner has echoed yet, drawn after the transcript. It is the last message on screen, so it is
+    /// the one the full runner or the update holds (web draws it as a placeholder `user` event, which
+    /// `lastUserEventSeq` lands on).
+    public static func footBubbleID(_ items: [TranscriptItem], accepted: [UserBubble] = []) -> String? {
+        if let last = accepted.last { return last.id }
         for item in items.reversed() {
             if case .user(let bubble) = item { return bubble.id }
         }

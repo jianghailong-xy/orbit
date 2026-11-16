@@ -111,6 +111,36 @@ final class RunnerUpdatingTests: XCTestCase {
         }
         XCTAssertEqual(users.count, 2)
         XCTAssertEqual(RunnerUpdating.footBubbleID(reducer.state.items), users.last)
+        // A message the server accepted but no runner has taken yet is drawn after the transcript:
+        // it is the one held (a full runner), so it says so rather than "Sending…".
+        let head = UserBubble(id: "head", text: "next", ts: nil, turnId: "t-2", pending: true)
+        XCTAssertEqual(RunnerUpdating.footBubbleID(reducer.state.items, accepted: [head]), "head")
+    }
+
+    // docs/mocks/queued-card-runner-updating ②⑤: a turn on the queued tail — a card Orbit queued — is what
+    // the update holds, so its own line says why; the tray's rows, a steer and a settled delivery are not.
+    func testAQueuedTailTurnTheUpdateHoldsSaysSoItselfAndTheTrayDoesNot() {
+        var card = UserBubble(id: "n", text: "Background job ended", ts: nil, turnId: "tn", pending: true, queued: true)
+        card.authoredByOrbit = true
+        let mine = UserBubble(id: "m", text: "also check iOS", ts: nil, turnId: "tm", pending: true, queued: true)
+        var steer = card
+        steer.steer = true
+        var failed = card
+        failed.delivery = "failed"
+        var undelivered = card
+        undelivered.undelivered = true
+
+        XCTAssertTrue(RunnerUpdating.holdsQueued(card))
+        XCTAssertFalse(RunnerUpdating.holdsQueued(steer))
+        XCTAssertFalse(RunnerUpdating.holdsQueued(failed))
+        XCTAssertFalse(RunnerUpdating.holdsQueued(undelivered))
+
+        XCTAssertTrue(RunnerUpdating.tailHolds([card]))
+        XCTAssertTrue(RunnerUpdating.tailHolds([mine, steer, card]))
+        // The reader's own message waits in the tray, whose row says it: the last message does not.
+        XCTAssertTrue(RunnerUpdating.tailHolds([mine]))
+        XCTAssertFalse(RunnerUpdating.tailHolds([steer, failed, undelivered]))
+        XCTAssertFalse(RunnerUpdating.tailHolds([]))
     }
 
     func testTheListRowDecodesTheGateAndAnEventKeepsItOnlyWhileQueued() throws {

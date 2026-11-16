@@ -351,6 +351,21 @@ describe('ProjectCrossingsCard — only what no conversation answers (docs/mocks
     expect(text).toContain('2 waiting');
   });
 
+  it('leaves off a move out of every project that the source coordinator answers', async () => {
+    const node = await mountWith([
+      moveRow({
+        id: 'AAAOutCovered', toProjectId: null, toProjectPublicId: null, toProject: null,
+        fromProject: { title: 'Ollama', status: 'CANCELLED', coordinatorSessionId: 'AAASourceCoordinator' },
+        title: 'Asked in the source conversation', subjectTask: null,
+      }),
+      moveRow({ id: 'AAAOutBare', toProjectId: null, toProjectPublicId: null, toProject: null, title: 'No source coordinator', subjectTask: null }),
+    ]);
+    const text = node.textContent ?? '';
+    expect(text).not.toContain('Asked in the source conversation');
+    expect(text).toContain('No source coordinator');
+    expect(text).toContain('1 waiting');
+  });
+
   it('keeps every row from a server that does not say where a row is answered', async () => {
     const node = await mountWith([moveRow()]);
     expect(node.textContent).toContain('Wire the drain watchdog');

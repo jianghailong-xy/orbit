@@ -256,6 +256,92 @@ class PushAuthorityTest {
         }
     }
 
+    /** A cross-project request waiting on the owner (push.service notifyCrossingRequest): it parses, opens the conversation that draws
+     * its card when it names one and the project otherwise, and stands while the project's handoffs list it PENDING. Without its project
+     * or its request it is not a notification. */
+    @Test fun aCrossingRequestOpensItsCardOrItsProjectAndStandsWhileItIsPending() = runBlocking {
+        val withSession = message("crossing-request", "sessionID" to sid, "projectID" to pid, "handoffID" to hid)
+        val withoutSession = message("crossing-request", "projectID" to pid, "handoffID" to hid)
+        assertTrue(withSession.payload.isOwnerDecision)
+        assertFalse(withSession.payload.isReminder)
+        assertTrue(ObjectId.same(withSession.payload.handoffId, hid))
+        assertEquals(OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL),
+            withSession.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        val project = OrbitLinks.parse(withoutSession.link!!)!!
+        assertEquals(Destination.PROJECT, project.destination)
+        assertTrue(ObjectId.same(project.id, pid))
+        for (payload in listOf("""{"title":"A","body":"B","kind":"crossing-request","handoffID":"$hid"}""",
+            """{"title":"A","body":"B","kind":"crossing-request","projectID":"$pid"}""")) {
+            assertNull(payload, PushMessage.parse(fixtureData() + ("payload" to payload)))
+        }
+        authorityFixture { authority, server, _ ->
+            var state = "PENDING"
+            server.respond = { r ->
+                assertEquals("/api/projects/$pid/handoffs?state=PENDING", r.path)
+                response(if (state == "PENDING") """[{"id":"$hid","state":"PENDING"}]""" else "[]")
+            }
+            assertEquals(PushCheck.ACTIVE, authority.check(withSession))
+            assertEquals(PushCheck.ACTIVE, authority.check(withoutSession))
+            state = "APPROVED"
+            assertEquals(PushCheck.STALE, authority.check(withSession))
+            assertEquals(PushCheck.STALE, authority.check(withoutSession))
+        }
+    }
+
+    /** A coordinator raising a task for the owner's confirmation (push.service notifyConfirmationRaised): it parses, opens the run's
+     * session, and stands while the task's owner confirmation still waits on that session. */
+    @Test fun aRaisedConfirmationOpensItsSessionAndStandsWhileTheOwnerIsStillAsked() = runBlocking {
+        val push = message("confirmation-raised", "sessionID" to sid, "taskID" to tid, "recordID" to rid)
+        assertTrue(push.payload.isOwnerDecision)
+        assertEquals(OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL),
+            push.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        assertNull(PushMessage.parse(fixtureData() + ("payload" to
+            """{"title":"A","body":"B","kind":"confirmation-raised","taskID":"$tid","recordID":"$rid"}""")))
+        authorityFixture { authority, server, _ ->
+            var waiting = true
+            var deleted = false
+            server.respond = { r -> when (r.path) {
+                "/api/sessions/$sid" -> response("""{"id":"$sid","status":"AWAITING_INPUT","lifecycleState":"OPEN","deletedAt":${if (deleted) "\"2026-11-01\"" else "null"}}""")
+                "/api/tasks/$tid/owner-confirmation" -> response("""{"taskId":"$tid","waiting":${if (waiting) """{"sessionId":"$sid"}""" else "null"},"decisions":[]}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(push))
+            waiting = false
+            assertEquals(PushCheck.STALE, authority.check(push))
+            deleted = true
+            assertEquals(PushCheck.MISSING, authority.check(push))
+        }
+    }
+
+    /** A scheduled task's alert (push.service notifySchedule): it opens the run's session when it names one, and the schedule on the
+     * Scheduled page when it names none. With a session it stands while that session does; without, while its schedule exists.
+     * Without its schedule it is not a notification. */
+    @Test fun aScheduleAlertOpensItsRunsSessionAndStandsWhileItOrItsScheduleDoes() = runBlocking {
+        val run = message("schedule", "scheduleID" to scheduleId, "scheduleKind" to "finding", "sessionID" to sid)
+        val bare = message("schedule", "scheduleID" to scheduleId, "scheduleKind" to "missed")
+        assertTrue(ObjectId.same(run.payload.scheduleId, scheduleId))
+        assertEquals("finding", run.payload.scheduleKind)
+        assertFalse(run.payload.isOwnerDecision)
+        assertEquals(OrbitRoute(Destination.SESSION, sid, origin = Origin.EXTERNAL),
+            run.link?.let { OrbitLinks.parse(it, origin = Origin.EXTERNAL) })
+        val scheduled = OrbitLinks.parse(bare.link!!)!!
+        assertEquals(Destination.SCHEDULED, scheduled.destination)
+        assertTrue(ObjectId.same(scheduled.id, scheduleId))
+        assertNull(PushMessage.parse(fixtureData() + ("payload" to """{"title":"A","body":"B","kind":"schedule","sessionID":"$sid"}""")))
+        authorityFixture { authority, server, _ ->
+            var exists = true
+            server.respond = { r -> when {
+                r.path == "/api/sessions/$sid" -> response("""{"id":"$sid","status":"SUCCEEDED","lifecycleState":"OPEN","deletedAt":null}""")
+                r.path == "/api/schedules/$scheduleId" && exists -> response("""{"schedule":{"id":"$scheduleId"}}""")
+                else -> response("{}", 404)
+            } }
+            assertEquals(PushCheck.ACTIVE, authority.check(run))
+            assertEquals(PushCheck.ACTIVE, authority.check(bare))
+            exists = false
+            assertEquals(PushCheck.MISSING, authority.check(bare))
+        }
+    }
+
     @Test fun watchNeedsExactMatchGenerationAndConfirmationNeedsActualProblemsRecord() = runBlocking {
         authorityFixture { authority, server, _ ->
             val watch = message("watch-matched", "watchID" to wid, "generation" to 2)
@@ -421,6 +507,8 @@ private val tid = "019a0000-0000-7000-8000-000000000005"
 private val rid = "019a0000-0000-7000-8000-000000000006"
 private val wid = "019a0000-0000-7000-8000-000000000007"
 private val runnerId = "019a0000-0000-7000-8000-000000000008"
+private val hid = "019a0000-0000-7000-8000-00000000000c"
+private val scheduleId = "019a0000-0000-7000-8000-00000000000d"
 
 private fun pushFixture(): JsonObject {
     val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }

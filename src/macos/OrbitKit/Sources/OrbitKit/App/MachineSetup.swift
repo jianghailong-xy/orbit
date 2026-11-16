@@ -17,10 +17,6 @@ public struct MachineToSetUp: Equatable, Sendable, Identifiable {
     }
 }
 
-public enum FolderChoice: String, Equatable, Sendable {
-    case suggested, new, other
-}
-
 /// How a checked path reads, and whether it may be used. Rule 4: what isn't there can't be picked; a
 /// folder that is not a git repository can, and says what that costs; a repository names its branch.
 public struct FolderVerdict: Equatable, Sendable {
@@ -33,7 +29,7 @@ public struct FolderVerdict: Equatable, Sendable {
     public let usable: Bool
 }
 
-/// The folder step's answer, once the person has pressed Use This Folder.
+/// The folder the card's Create workspace makes the workspace in: one that is there, or one made with it.
 public enum PickedFolder: Equatable, Sendable {
     case existing(path: String, note: String)
     case new(name: String, path: String)
@@ -44,20 +40,12 @@ public enum PickedFolder: Equatable, Sendable {
         }
     }
 
-    /// What POST /sessions is told. An existing folder is sent as the runner resolved it: a typed `~`
-    /// is the runner's to expand, and a workspace's workDir is not.
+    /// What the workspace's create is told (web `newWorkspaceOf`). An existing folder is sent as the runner
+    /// resolved it: a typed `~` is the runner's to expand, and a workspace's workDir is not.
     public var newWorkspace: NewWorkspaceRequest {
         switch self {
         case .existing(let path, _): return NewWorkspaceRequest(workDir: path)
         case .new(let name, _): return NewWorkspaceRequest(newFolder: name)
-        }
-    }
-
-    /// The workspace it makes, as the server names it (§3.2).
-    public var workspaceName: String {
-        switch self {
-        case .existing(let path, _): return MachineSetup.folderName(path)
-        case .new(let name, _): return name
         }
     }
 }
@@ -84,29 +72,27 @@ public enum MachineSetup {
     /// What a runner declares when it answers the directory probe, and when it makes a new folder.
     public static let dirProbeCapability = "dir-probe/v1"
     public static let createWorkDirCapability = "create-workdir/v1"
+    /// What a runner declares when it makes a new folder in its home, the directory its reposRoot sits in
+    /// (`<home>/orbit-repos`): `newFolder` is then `<home>/<name>` rather than `<reposRoot>/<name>`.
+    public static let createWorkDirHomeCapability = "create-workdir/v2"
 
-    /// Whether the directory `orbit register` ran in is worth asking about: the two answers a path can
-    /// give on its face are left unasked. Nil when there is nothing to ask.
-    public static func registerDirToProbe(_ registerDir: String?) -> String? {
-        var dir = (registerDir ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        while dir.count > 1, dir.hasSuffix("/") { dir.removeLast() }
-        return dir.isEmpty || dir == "~" || dir == "/" ? nil : dir
+    /// The directory a runner's new folders go in: its home, the parent of its reposRoot, when it declares
+    /// create-workdir/v2, else reposRoot itself (@orbit/shared `newFolderRoot`, as the server joins it). The
+    /// separator is the one the root is written with.
+    public static func newFolderRoot(reposRoot: String, capabilities: [String]?) -> String {
+        var root = reposRoot.trimmingCharacters(in: .whitespacesAndNewlines)
+        while root.count > 1, root.hasSuffix("/") || root.hasSuffix("\\") { root.removeLast() }
+        guard capabilities?.contains(createWorkDirHomeCapability) == true,
+              let cut = root.lastIndex(where: { $0 == "/" || $0 == "\\" }) else { return root }
+        // `/orbit-repos` sits in `/`, and `C:\orbit-repos` in `C:\`.
+        if cut == root.startIndex || root[root.index(before: cut)] == ":" { return String(root[...cut]) }
+        return String(root[..<cut])
     }
 
-    /// Rule 2: a checked register directory is offered only when it is a folder that exists and is
-    /// neither the home directory nor the root. The installer runs where the terminal stands, which is
-    /// usually home, and all of home is no default.
-    public static func isOfferedFolder(_ probe: DirProbe?) -> Bool {
-        guard let probe else { return false }
-        return (probe.error ?? "").isEmpty && probe.exists && probe.isDir && !probe.isHome && probe.path != "/"
-    }
-
-    /// Rule 2 again: the register directory leads when it is a git repository; otherwise a new folder.
-    /// The rest is what a machine that can't make one leaves.
-    public static func defaultFolderChoice(suggested: DirProbe?, offersNewFolder: Bool) -> FolderChoice {
-        if suggested?.isGit == true { return .suggested }
-        if offersNewFolder { return .new }
-        return suggested != nil ? .suggested : .other
+    /// The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2,
+    /// its Repos Folder on an older one.
+    public static func newFolderRoot(_ runner: Runner) -> String {
+        newFolderRoot(reposRoot: runner.reposRoot ?? "", capabilities: runner.capabilities)
     }
 
     /// Whether a machine can be asked about a path at all: the capability it declares (§2).
@@ -118,6 +104,11 @@ public enum MachineSetup {
     public static func makesNewFolders(_ runner: Runner) -> Bool {
         runner.capabilities?.contains(createWorkDirCapability) == true
             && !(runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Whether the card's folder can be checked and made here at all: both of the above.
+    public static func checksFolders(_ runner: Runner) -> Bool {
+        answersDirProbe(runner) && makesNewFolders(runner)
     }
 
     /// Whether a machine too old to answer gets there by itself: not one that reports its updater off,
@@ -154,17 +145,12 @@ public enum MachineSetup {
         }
     }
 
-    /// Where a new folder lands: `<reposRoot>/<name>`, as the server joins it.
-    public static func newFolderPath(reposRoot: String, name: String) -> String {
-        let separator = reposRoot.contains("\\") && !reposRoot.contains("/") ? "\\" : "/"
-        var root = reposRoot
+    /// Where a new folder lands: `<root>/<name>`, as the server joins it.
+    public static func newFolderPath(root: String, name: String) -> String {
+        let separator = root.contains("\\") && !root.contains("/") ? "\\" : "/"
+        var root = root
         while root.hasSuffix("/") || root.hasSuffix("\\") { root.removeLast() }
         return root + separator + name
-    }
-
-    /// The workspace name a folder gives, as the server derives it (§3.2): its last segment.
-    public static func folderName(_ path: String) -> String {
-        path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? path
     }
 
     public static func folderVerdict(_ probe: DirProbe, machine: String) -> FolderVerdict {
@@ -181,9 +167,9 @@ public enum MachineSetup {
                              short: short, usable: true)
     }
 
-    /// What a new folder's name finds at `<reposRoot>/<name>`, asked before anything is sent. Nothing there is what a
-    /// new folder starts as; a directory is used as it stands, with what is in it, so it isn't said to start empty; a
-    /// file can't become one.
+    /// What the folder step's name finds at `<root>/<name>`, asked before anything is sent. Nothing there is a new
+    /// folder, made as the session starts; a directory is used as it stands, read as any folder is; a file can't
+    /// become one.
     public static func newFolderVerdict(_ probe: DirProbe, machine: String) -> FolderVerdict {
         func refused(_ text: String) -> FolderVerdict {
             FolderVerdict(tone: .bad, text: text, short: text, usable: false)
@@ -196,18 +182,17 @@ public enum MachineSetup {
                                  short: MachineSetupCopy.SETUP_NEW_FOLDER_DONE, usable: true)
         }
         if !probe.isDir { return refused(MachineSetupCopy.setupNewFolderIsFile(machine: machine)) }
-        return FolderVerdict(tone: .warn, text: MachineSetupCopy.setupNewFolderExists(machine: machine),
-                             short: folderVerdict(probe, machine: machine).short, usable: true)
+        return folderVerdict(probe, machine: machine)
     }
 
-    /// What Use This Folder picks on that answer: a new folder while nothing is there, else the directory that is,
+    /// What Create workspace makes the workspace in on that answer: a new folder while nothing is there, else the directory that is,
     /// which is then a folder like any other and is sent by its path.
-    public static func newFolderPick(_ probe: DirProbe, name: String, reposRoot: String, machine: String) -> PickedFolder? {
+    public static func newFolderPick(_ probe: DirProbe, name: String, root: String, machine: String) -> PickedFolder? {
         let verdict = newFolderVerdict(probe, machine: machine)
         guard verdict.usable else { return nil }
         return probe.exists
             ? .existing(path: probe.path, note: verdict.short)
-            : .new(name: name, path: newFolderPath(reposRoot: reposRoot, name: name))
+            : .new(name: name, path: newFolderPath(root: root, name: name))
     }
 
     /// The login CLIs installed here, in the app's order.
@@ -248,13 +233,6 @@ public enum MachineSetup {
         return .signIn
     }
 
-    /// Rule 5's Use X instead: the other sign-ins installed here, among the engines these apps draw.
-    public static func otherEngines(on runner: Runner, than engine: String, fleet: [Runner]?) -> [LoginEngine] {
-        installedLogins(runner.engines).filter {
-            $0.rawValue != engine && ProviderEngines.appleShowsEngine($0.rawValue, runners: fleet)
-        }
-    }
-
     /// Rule 5's Use an API Key: the first key or pool that can run here, the draft's own engine's first.
     /// Nil with none, and then the card doesn't offer it: a key is connected on the web.
     public static func firstKey(in engines: [EngineChoice], preferring engine: String) -> EnginePick? {
@@ -266,134 +244,91 @@ public enum MachineSetup {
         return nil
     }
 
-    /// Rule 1 and §3: both steps are done and the machine is here, so the next send makes the workspace.
-    public static func isReady(bare: Bool, folder: PickedFolder?, online: Bool, credential: SetupCredential) -> Bool {
-        bare && folder != nil && online && credential.done
-    }
-}
-
-extension Agent {
-    /// What a machine's first draft stands on. The composer's engine, model and account pickers read a
-    /// workspace, and a machine with none has a name and a runner to give them, and no id: the session's
-    /// create names the machine and a folder instead (`ConsoleModel.draftRequest`).
-    public static func machineDraft(runnerID: String, name: String, engine: LoginEngine) -> Agent {
-        let row = ["id": "", "name": name, "runnerId": runnerID, "lastProvider": engine.rawValue,
-                   "lastEngine": engine.rawValue]
-        // Can't fail: a row needs an `id` and a `name`, and has them.
-        return try! JSONDecoder().decode(Agent.self, from: JSONEncoder().encode(row))
-    }
-
-    public var standsInForMachine: Bool { id.isEmpty }
-}
-
-/// The first message, waiting for a machine's two steps (rule 6). What a send needs and nothing that
-/// dies with the page: files are on the control plane already, so they wait as their ids, with what
-/// their chips draw when the message is taken back.
-public struct HeldMessage: Equatable, Sendable {
-    public struct Attachment: Equatable, Sendable {
-        public let id: String
-        public let filename: String
-        public let mimeType: String
-        public let byteCount: Int
-        public let preview: Data?
-
-        public init(id: String, filename: String, mimeType: String, byteCount: Int, preview: Data? = nil) {
-            self.id = id
-            self.filename = filename
-            self.mimeType = mimeType
-            self.byteCount = byteCount
-            self.preview = preview
+    /// The line under the card's folder field (web `MachineSetupCard`). `folder` is the field's text trimmed,
+    /// `found` the machine's answer about `<root>/<folder>` (nil while there is none for it), and `unanswered`
+    /// that the machine gave no answer to that question.
+    public static func folderLine(folder: String, createError: String?, found: DirProbe?, unanswered: Bool,
+                                  machine: String) -> SetupFolderLine {
+        // Why the last Create workspace was refused stands in for the rest until the next try.
+        if let createError { return .createFailed(MachineSetupCopy.setupCreateFailed(why: createError)) }
+        if folder.isEmpty { return .meta(MachineSetupCopy.SETUP_FOLDER_HINT) }
+        if !isValidNewFolder(folder) { return .verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, .bad) }
+        if let found {
+            let verdict = newFolderVerdict(found, machine: machine)
+            // Nothing there yet reads as a note; anything there says what it is, and so does a check that failed.
+            if !found.exists, verdict.usable { return .meta(MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE) }
+            return .verdict(verdict.text, verdict.tone)
         }
+        return unanswered ? .noAnswer : .checking
     }
 
-    public let content: String
-    public let shell: Bool
-    public let attachments: [Attachment]
-    /// Why the last send of it was refused: it waits for the person, not for another try by itself.
-    public var error: String?
+    /// Create workspace can be pressed: the folder has an answer to make it in, the workspace a name, and the
+    /// machine is here and can check and make folders, with no create already out.
+    public static func canCreate(pick: PickedFolder?, name: String, online: Bool, checksFolders: Bool,
+                                 creating: Bool) -> Bool {
+        pick != nil && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && online && checksFolders
+            && !creating
+    }
 
-    public init(content: String, shell: Bool = false, attachments: [Attachment] = [], error: String? = nil) {
-        self.content = content
-        self.shell = shell
-        self.attachments = attachments
-        self.error = error
+    /// POST /workspaces for the card's Create workspace: the workspace alone, under its name, on the machine,
+    /// in the folder picked (`workDir` for one that is there, `newFolder` for one made with it).
+    public static func createRequest(folder: PickedFolder, name: String, runnerID: String) -> CreateAgentRequest {
+        let target = folder.newWorkspace
+        return CreateAgentRequest(name: name.trimmingCharacters(in: .whitespacesAndNewlines), runnerId: runnerID,
+                                  workDir: target.workDir, newFolder: target.newFolder)
     }
 }
 
-/// What a composer's send does on a machine's new session page.
-public enum MachineSend: Equatable, Sendable {
-    /// Not known yet, or on the way to a workspace it turns out to have: nothing to send it with.
-    case nothing
-    /// One waits at a time, since what is waiting is a session's first message.
-    case alreadyWaiting
-    /// Not ready: it waits under the card (rule 6) and leaves the composer the way a sent one does.
-    case hold
-    /// Ready: one request makes the workspace with the session and this message (rule 7).
-    case create(NewWorkspaceRequest)
+/// What the line under the card's folder field says.
+public enum SetupFolderLine: Equatable, Sendable {
+    /// A note in the secondary colour.
+    case meta(String)
+    /// What the machine found, or what is wrong, in its tone.
+    case verdict(String, FolderVerdict.Tone)
+    /// Couldn't create the workspace: why. Drawn as a bad verdict.
+    case createFailed(String)
+    /// The machine didn't answer: said with Check again.
+    case noAnswer
+    /// Asked, and waiting for the answer.
+    case checking
 }
 
-/// What a machine's new session page has been told so far: the folder and the message waiting on it.
-/// The page is left and come back to on the way (a key is picked elsewhere, a sign-in goes through a
-/// browser), and neither answer should have to be given twice.
-public struct MachineSetupState: Equatable, Sendable {
-    public private(set) var folder: PickedFolder?
-    public private(set) var held: HeldMessage?
-    /// The message that waited has gone out and has not been answered yet.
-    public private(set) var sendingHeld = false
+/// The card's Name (owner 2026-11-16): the folder's until it is edited, and from then on what was typed, emptied
+/// included, never filled again from the folder. Any text goes; it is sent trimmed.
+public struct WorkspaceNameField: Equatable, Sendable {
+    /// What was typed into the field; nil while it follows the folder.
+    public private(set) var edited: String?
 
-    public init(folder: PickedFolder? = nil, held: HeldMessage? = nil) {
-        self.folder = folder
-        self.held = held
+    public init(edited: String? = nil) {
+        self.edited = edited
     }
 
-    public mutating func pick(_ folder: PickedFolder?) {
-        self.folder = folder
+    /// The field's text took `text`. A field writing back the folder's own text while it follows it (a platform
+    /// text field may on focus or submit) is no edit.
+    public mutating func edit(_ text: String, folder: String) {
+        if edited == nil, text == folder { return }
+        edited = text
     }
 
-    /// The composer's send. `bare` is the machine as the workspace list last said, `ready` is
-    /// `MachineSetup.isReady`.
-    public func send(bare: Bool, ready: Bool) -> MachineSend {
-        guard bare else { return .nothing }
-        if held != nil { return .alreadyWaiting }
-        if ready, let folder { return .create(folder.newWorkspace) }
-        return .hold
+    /// What the field shows: `folder` is the folder field's text trimmed.
+    public func shown(folder: String) -> String { edited ?? folder }
+
+    /// The name sent.
+    public func name(folder: String) -> String {
+        shown(folder: folder).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public mutating func hold(_ message: HeldMessage) {
-        held = message
+    /// Edited down to nothing: the workspace has no name to be made with.
+    public func missing(folder: String) -> Bool { edited != nil && name(folder: folder).isEmpty }
+
+    public static func placeholder(folder: String) -> String {
+        folder.isEmpty ? MachineSetupCopy.SETUP_NAME_PLACEHOLDER : folder
     }
 
-    /// Both steps done with a message waiting: it goes, with nobody pressing anything (rule 6). Once per
-    /// waiting message, because the send makes a workspace: while it is out this answers nil, and a
-    /// refusal leaves it waiting on the person (`error`) rather than on another try.
-    public mutating func takeHeldToSend(ready: Bool, busy: Bool) -> (message: HeldMessage, folder: NewWorkspaceRequest)? {
-        guard ready, !busy, !sendingHeld, let held, held.error == nil, let folder else { return nil }
-        sendingHeld = true
-        return (held, folder.newWorkspace)
-    }
-
-    /// The send of what is waiting was refused: say why, and send nothing more until asked.
-    public mutating func failHeld(_ why: String) {
-        sendingHeld = false
-        held?.error = why
-    }
-
-    /// Try again: the next pass sends it.
-    public mutating func retryHeld() {
-        held?.error = nil
-    }
-
-    /// Take it back. What comes out goes back in the composer, the way a queued message's words do.
-    /// Nothing comes out while it is on its way: the send has it.
-    public mutating func withdraw() -> HeldMessage? {
-        guard !sendingHeld else { return nil }
-        defer { held = nil }
-        return held
-    }
-
-    /// That machine has a workspace: nothing of its setup is left to remember.
-    public mutating func finish() {
-        self = MachineSetupState()
+    /// The line under it, and whether it is a refusal.
+    public func line(folder: String) -> (text: String, bad: Bool) {
+        if missing(folder: folder) { return (MachineSetupCopy.SETUP_NAME_EMPTY, true) }
+        return (edited != nil ? MachineSetupCopy.SETUP_NAME_EDITED : MachineSetupCopy.SETUP_NAME_HINT, false)
     }
 }
 
@@ -429,13 +364,6 @@ public enum DirProbeRelay {
         /// The question was replaced, or a stored answer was all there was to read.
         case replaced
         case unanswered
-    }
-
-    /// Whether the register directory is asked about again. A path asked before the machine had answered about it
-    /// took its question's place, and the suggestion would never come: it is asked again once nothing else on the
-    /// card waits for an answer. Only while the machine can be asked: offline, a stored answer is all there is.
-    public static func asksAgain(_ outcome: Outcome?, online: Bool, otherWaiting: Bool) -> Bool {
-        outcome == .replaced && online && !otherWaiting
     }
 
     /// `ask` is nil where only what is stored can be read, which is all an offline machine gives.

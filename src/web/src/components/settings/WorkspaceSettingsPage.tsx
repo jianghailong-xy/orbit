@@ -11,6 +11,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
 import { AgentProvider, ENGINE_CLI_NAMES, type MainCheckoutRepoHealth, type RunnerRepoHealth } from '@orbit/shared';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -60,6 +61,7 @@ import { Select } from '../ui/Select';
 import { Spinner } from '../ui/Spinner';
 import { Switch } from '../ui/Switch';
 import { Textarea } from '../ui/Textarea';
+import { SubagentSettings } from '../SubagentSettings';
 import {
   WorktreeIsolationDialog,
   worktreeIsolationDialogFor,
@@ -100,6 +102,9 @@ export interface SettingsWorkspace {
   modelRoutingOptimizeFor?: 'cost' | 'balance' | 'intelligence';
   /** The other engines smart selection may move this Agent's task runs to (§6). */
   modelRoutingProviders?: string[];
+  /** SubAgents (docs/subagent-design.md §7): on by default, 4 of one session's at once. */
+  subagentsEnabled?: boolean;
+  subagentsMaxRunning?: number;
   effort?: string | null;
   /** What the runner last saw at `workDir` on its own disk (refreshed each heartbeat). */
   workDirExists?: boolean | null;
@@ -127,6 +132,8 @@ type WorkspacePatch = Partial<
     | 'modelRouting'
     | 'modelRoutingOptimizeFor'
     | 'modelRoutingProviders'
+    | 'subagentsEnabled'
+    | 'subagentsMaxRunning'
     | 'env'
     | 'appendSystemPrompt'
     | 'enabled'
@@ -715,6 +722,15 @@ function WorkspaceSettingsPage({ id }: { id: string }) {
         </SettingsCard>
       </SettingsSection>
 
+      <SubagentSettings
+        enabled={workspace.subagentsEnabled ?? true}
+        onEnabledChange={(subagentsEnabled) => save({ subagentsEnabled })}
+        optimizeFor={workspace.modelRoutingOptimizeFor ?? 'cost'}
+        onOptimizeForChange={(modelRoutingOptimizeFor) => save({ modelRoutingOptimizeFor })}
+        maxRunning={workspace.subagentsMaxRunning ?? 4}
+        onMaxRunningChange={(subagentsMaxRunning) => save({ subagentsMaxRunning })}
+      />
+
       <SettingsSection title="Agent environment" className="workspace-section-environment">
         <SettingsCard>
           <SettingsRow
@@ -1198,6 +1214,8 @@ function NewWorkspacePage() {
   const [params, setParams] = useSearchParams();
   const runnersQ = useQuery(runnersQuery());
   const runners = (runnersQ.data ?? []) as Runner[];
+  // The account's managed runner reads its shared state here (Asleep, Waking up…), never Offline.
+  const { managed } = useManagedRunner();
   const machineId = routeId(params.get('machine'));
   const runner = runners.find((r) => r.id === machineId) ?? null;
 
@@ -1275,7 +1293,7 @@ function NewWorkspacePage() {
                   >
                     <SettingsRow
                       title={runnerName(r)}
-                      description={offline ? 'Offline' : 'Online'}
+                      description={managedRowOf(managed, r.id)?.label ?? (offline ? 'Offline' : 'Online')}
                       control={<RightOutlined />}
                     />
                   </button>

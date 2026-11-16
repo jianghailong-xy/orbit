@@ -231,6 +231,10 @@ export function SessionOutputs({
   // A merge/commit failure has recovery info (reason + manual command) worth surfacing inline.
   const failed =
     detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error' || detail.commitStatus === 'error';
+  // A merge failure (conflict or precondition error) sits inset to the row's padding
+  // (.wt-merge-inset); a failed commit's card brings its own.
+  const mergeFailShown =
+    (detail.mergeStatus === 'conflict' || detail.mergeStatus === 'error') && detail.commitStatus !== 'error';
 
   // Git-state-driven primary action. When the runner reports `worktreeDirty`, the bar shows
   // Commit while the worktree has uncommitted changes and Merge once it's clean. Older runners
@@ -348,7 +352,7 @@ export function SessionOutputs({
         waitingForTurn={!!turnActive}
         failed={detail.mergeStatus === 'error' || detail.mergeStatus === 'conflict'} />}
       {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
-        <div className="wt-merge wt-bar-fail">
+        <div className={`wt-merge wt-bar-fail${mergeFailShown ? ' wt-merge-inset' : ''}`}>
           {detail.commitStatus === 'error' ? (
             <CommitFailure
               key={detail.commitError ?? ''}
@@ -359,20 +363,38 @@ export function SessionOutputs({
             />
           ) : detail.mergeStatus === 'conflict' ? (
             <div className="wt-merge-manual">
-              <span className="wt-merge-err" title={detail.mergeError ?? undefined}>
-                Merge conflict — aborted, working tree left clean. Resolve in the session above, or
-                by hand:
-              </span>
-              <span className="wt-merge-or">
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd, 'command')}>
-                  {manualRebaseCmd}
-                </code>
-                <span className="wt-merge-where"> in the session’s worktree, then </span>
-                <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd, 'command')}>
-                  {manualFfCmd}
-                </code>
-                <span className="wt-merge-where"> in the repo</span>
-              </span>
+              <div className="wt-merge-head" title={detail.mergeError ?? undefined}>
+                <ExclamationCircleFilled className="wt-commit-fail-icon" aria-hidden="true" />
+                Merge conflict with {mergeTargetName}
+              </div>
+              <div className="wt-merge-why">
+                The merge was aborted and nothing changed.{' '}
+                {onResolveInSession ? (
+                  <>
+                    Use <b>Resolve in session</b>, or resolve it by hand:
+                  </>
+                ) : (
+                  'Resolve it by hand:'
+                )}
+              </div>
+              <ol className="wt-merge-steps">
+                <li>
+                  <span className="wt-merge-step-n" aria-hidden="true">1</span>
+                  <span className="wt-merge-where">In the session’s worktree</span>
+                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualRebaseCmd, 'command')}>
+                    {manualRebaseCmd}
+                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                  </code>
+                </li>
+                <li>
+                  <span className="wt-merge-step-n" aria-hidden="true">2</span>
+                  <span className="wt-merge-where">Then in the repo</span>
+                  <code className="wt-merge-cmd" title="Copy" onClick={() => copy(manualFfCmd, 'command')}>
+                    {manualFfCmd}
+                    <span className="wt-merge-cmd-copy" aria-hidden="true">Copy</span>
+                  </code>
+                </li>
+              </ol>
             </div>
           ) : (
             // A precondition failure, not a conflict: no git command run here would help, and the

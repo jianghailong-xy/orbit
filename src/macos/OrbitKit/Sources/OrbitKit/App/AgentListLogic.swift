@@ -128,16 +128,22 @@ public enum AgentListLogic {
     /// The work rows the Mac source list opens with, in `sections`' order. `wiki` is the server's
     /// answer (`WikiLogic.shown`): a false one drops the Wiki row here, as data, so the List body
     /// holds no branch. The waiting counts are the drawer's amber numbers, 0 when nothing waits.
+    /// `scheduled` (the server serves scheduled tasks) adds Scheduled right under Tasks, as the drawer does
+    /// (`DrawerWorkLogic.rows(scheduled:)`, board docs/mocks/scheduled-tasks/web/01-board.png ①), its count the
+    /// schedules failing or held (`scheduledNeedsYou`). Account-wide: it is never a row of a workspace's list.
     public static func sidebarSections(_ sections: [AppSection], wiki: Bool,
-                                       projectsWaiting: Int, wikiWaiting: Int) -> [SidebarSectionRow] {
-        sections.filter { $0 != .wiki || wiki }.map { section in
+                                       projectsWaiting: Int, wikiWaiting: Int,
+                                       scheduled: Bool = false, scheduledNeedsYou: Int = 0) -> [SidebarSectionRow] {
+        sections.filter { $0 != .wiki || wiki }.flatMap { section -> [SidebarSectionRow] in
             let waiting: Int
             switch section {
             case .projects: waiting = projectsWaiting
             case .wiki:     waiting = wikiWaiting
             default:        waiting = 0
             }
-            return SidebarSectionRow(section, waiting: waiting)
+            let row = SidebarSectionRow(section, waiting: waiting)
+            if section == .tasks && scheduled { return [row, SidebarSectionRow(.scheduled, waiting: scheduledNeedsYou)] }
+            return [row]
         }
     }
 

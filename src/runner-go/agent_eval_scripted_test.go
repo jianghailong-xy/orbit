@@ -211,7 +211,7 @@ func (e *scriptedEngine) stop(*evalSession) {
 
 // orbitCLIInstructionsFor is the engine-side instructions this session's engine is given (contract §2.6).
 func orbitCLIInstructionsFor(job *ClaimedSession, exe string) string {
-	return withOrbitCLIInstructions(job.Agent.AppendSystemPrompt, exe, job.insideRecordedWork(), job.watchesOn())
+	return withOrbitCLIInstructions(job.Agent.AppendSystemPrompt, exe, job.insideRecordedWork(), job.watchesOn(), agentDelegates(job.Agent))
 }
 
 // ── The golden agent ───────────────────────────────────────────────────────────────────────────────

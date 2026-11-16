@@ -446,6 +446,27 @@ func currentRuntimeSessionID(job *ClaimedSession) string {
 	return ""
 }
 
+// moveIdleSessionToItsAccount is what a reload does for a session it finds idle, besides leaving it
+// cold: an account switch carries its conversation now, as its next spawn would, so the account it
+// left can be removed while it waits for its next message (2026-11-16). Each engine moves the way its
+// own spawn does, and records the new account only once the conversation is there. A reload that did
+// not switch accounts finds nothing to carry. Antigravity keeps no conversation in an account and
+// records its new one as it retires agy (runAntigravitySessionProcess).
+func moveIdleSessionToItsAccount(job *ClaimedSession, execDir, scratch string) {
+	switch runtimeProvider(job) {
+	case providerClaude:
+		moveIdleClaudeConversation(job, execDir, scratch)
+	case providerCodex:
+		if moved, err := moveCodexThreadToClaimedAccount(job, scratch, execDir); err != nil {
+			logln("codex session", job.SessionID, "stays on its account: moving its thread failed:", err)
+		} else if moved {
+			logln("codex session", job.SessionID, "moved to the account it was switched to")
+		}
+	case providerKimi:
+		moveIdleKimiConversation(job, execDir, scratch)
+	}
+}
+
 func writeSessionMeta(scratch string, job *ClaimedSession, execDir string) {
 	writeSessionMetaRecord(scratch, job, execDir, "", "", "", false, false, "")
 }
@@ -977,6 +998,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if eventType == evToolResult {
 			volumeSyncAfterTools.nudge()
 		}
+		// A delegate call, whose id an engine other than Claude Code does not send with it (delegateCallLog).
+		delegateCalls.note(sessionID, eventType, payload)
 		if eventType == evError {
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
 				lastErrMu.Lock()
@@ -1009,7 +1032,18 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if admitted && eventType == evSystem {
 			if subtype, _ := payload["subtype"].(string); subtype == "resumed" {
 				bg.announceRunningJobs()
+				// The SubAgents this runner hosts did not die with the engine either (subagent.go).
+				bg.mu.Lock()
+				announceSubagents := bg.announceSubagents
+				bg.mu.Unlock()
+				if announceSubagents != nil {
+					announceSubagents()
+				}
 			}
+		}
+		// What the parent's own edit tools write, for a stopped SubAgent's hold to leave to it (subagent_tree.go).
+		if admitted && bg != nil {
+			bg.parentEdits.note(eventType, payload)
 		}
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
 		// slow post must never stall draining claude's stdout (backpressure freeze).
@@ -1129,6 +1163,12 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// only looked at the turn permit would rewrite the checkout under it.
 	bg = newBgTailer(sessionCtx, emitOn(bgEmissionGate), pool.worktreeHoldsFor(job.SessionID))
 	defer bg.stopAll()
+	bg.parentEdits.mu.Lock()
+	bg.parentEdits.dir = execDir
+	bg.parentEdits.mu.Unlock()
+	// A session another runner process took over ends here without being ended: its SubAgents are stopped owing
+	// the parent a wake, which the server delivers in the session's new home (subagent.go).
+	bg.subagentHandoff = func() bool { return ownershipLost.Load() && ctx.Err() == nil }
 	// A Monitor watches from inside this engine, so the pool's warm timer and LRU order are what
 	// end it — between turns, where the agent is not there to see the events stop coming, and
 	// where Claude writes no terminal notification for it. Lend the pool the one fact that defers
@@ -1136,21 +1176,14 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// holds p.mu when it asks, and this tailer reaches into the pool from under b.mu.
 	clearMonitorProbe := pool.setMonitorProbe(live, bg.hasLiveMonitors)
 	defer clearMonitorProbe()
+	// A SubAgent of the session still running defers the idle park the same way, until it ends (subagent.go).
+	clearSubagentProbe := pool.setSubagentProbe(live, bg.hasRunningSubagents)
+	defer clearSubagentProbe()
 	// A runner that stops — re-executing into an update, or its service stopped — ends these
 	// jobs too, and that is not this session ending. Its drain starts the moment the runner
 	// starts to stop rather than after this supervisor's turn drain, so what it kills is
 	// reported inside the grace the final event flush is given (eventCtx above).
 	bg.drainOnRunnerShutdown(shutdownCtx)
-	// A runner-hosted job outlives the engine that asked for it, so it can also finish long after
-	// the last engine was recycled — with the whole point being that nobody has to sit and watch.
-	// Lend the tailer the pool's own notion of residency and the account's existing push channel,
-	// so a job that lands on a cold session says so on somebody's phone instead of waiting to be
-	// discovered. The alert is the same one `orbit notify` sends, rate limit and all, on the daemon's
-	// own route (sessionNotify).
-	bg.notifyWhenCold(
-		func() bool { return pool.engineResident(live) },
-		func(message string) error { return t.sessionNotify(job.SessionID, message) },
-	)
 	// A job that asked to wake this session does it through the control plane, which files the wake
 	// as a turn: delivered to the resident engine, or resumed into a new one when the engine that
 	// started the wait is gone. The receipt says which, for this runner's log.
@@ -1221,6 +1254,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				endSessionLeases(sessionID)
 			}
 			stopBgJobService()
+			delegateCalls.forget(sessionID)
 		}()
 	}
 
@@ -1721,8 +1755,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			// --resume + the new flags (already applied to job.Agent). Not a crash, so
 			// it doesn't consume the respawn budget. If the session is idle, leave it
 			// cold rather than spawning a process that owns no active permit; its next
-			// claim resumes directly with these updated flags.
+			// claim resumes directly with these updated flags. An account switch is the one
+			// change that cannot wait for that claim: the conversation is carried now, so the
+			// account the session left can be removed while it is idle.
 			if !pool.isActive(live) {
+				moveIdleSessionToItsAccount(job, execDir, scratch)
 				continue
 			}
 			emit(evSystem, map[string]interface{}{"subtype": "resumed", "reason": "config_changed"})
@@ -1945,7 +1982,7 @@ func withBuiltinTaskToolsDisallowed(configured []string) []string {
 func sessionContextEnvKey(key string) bool {
 	switch strings.ToUpper(key) {
 	case "ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth,
-		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID:
+		envMCPOrchestration, envOrchestrationToken, envMCPPermissionPrompt, envBgJobID, envScheduleRun:
 		return true
 	default:
 		return false
@@ -2989,6 +3026,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	var lastAnsweredTurnID string
 	// What this process's engine says about Orbit's tools, sent when it changes (agent_tools_report.go).
 	var agentTools agentToolsReporter
+	// Whether a compaction boundary has gone by since the last result: what tells a `/compact`
+	// turn's result from the resume carrier it otherwise looks exactly like.
+	var compactedThisTurn bool
 	targetFenceTripped := false
 scanLoop:
 	for sc.Scan() {
@@ -3045,6 +3085,9 @@ scanLoop:
 				agentTools.send(claudeAgentToolsReport(job, msg), emit)
 			}
 		}
+		if msg["type"] == "system" && msg["subtype"] == "compact_boundary" {
+			compactedThisTurn = true
+		}
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes
 		// in a pipe. Replays arrive in the order the frames were read, so the oldest
@@ -3089,7 +3132,9 @@ scanLoop:
 			// the reply the user is waiting for — and leave `pending` untouched: the message
 			// that was fed is still unanswered, and the result of the work it actually starts
 			// is what acks it.
-			if isResumeCarrierResult(r, lastAssistantText) {
+			compacted := compactedThisTurn
+			compactedThisTurn = false
+			if isResumeCarrierResult(r, lastAssistantText, compacted) {
 				continue
 			}
 			var turnID string

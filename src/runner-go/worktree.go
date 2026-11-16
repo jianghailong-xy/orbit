@@ -473,7 +473,7 @@ func baseRefName(sessionID string) string {
 // it (persisted must be an ancestor of the candidate), never loosened — a branch forked off a
 // non-HEAD branch (e.g. develop while the root sits on main) keeps its tighter recorded fork.
 // And it is never tightened all the way TO the branch tip: a fully-merged branch keeps its old
-// fork, so the bar still shows the session's cumulative work and branchMergedInto's ≥1-commit
+// fork (or, when it was rebased before landing, that rebase's onto point), so the bar still shows the session's cumulative work and branchMergedInto's ≥1-commit
 // guard keeps reading "✓ In main" (tip==base would read as a session that never worked). The
 // moment new work lands past the merge, the candidate falls behind the tip again and the base
 // snaps to it — diffs then show only the new work. Healed values are re-persisted to the base
@@ -507,7 +507,21 @@ func (ops worktreeGitOps) resolveBaseSha(repoRoot, sessionID, branch, persisted 
 		}
 	}
 	if valid {
-		if persisted == mb || mb == tip {
+		if mb == tip {
+			// Fully landed. Keep the old fork — unless the branch was rebased before it landed: then
+			// the old fork also spans the target commits that rebase brought in, and the bar counts
+			// them as this session's work. The last rebase's onto point is the tighter fork, as long
+			// as it still sits strictly between the old fork and the tip (≥1 commit stays ahead).
+			if onto := ops.lastRebaseOnto(repoRoot, branch); onto != "" && onto != persisted && onto != tip &&
+				ops.isAncestor(repoRoot, persisted, onto) && ops.isAncestor(repoRoot, onto, tip) {
+				if ops.persistBaseRef {
+					_, _ = ops.run(repoRoot, "update-ref", baseRefName(sessionID), onto)
+				}
+				return onto
+			}
+			return persisted
+		}
+		if persisted == mb {
 			return persisted
 		}
 		// Tighten a slack fork (rebase moved it forward); keep a fork the candidate can't see
@@ -524,6 +538,31 @@ func (ops worktreeGitOps) resolveBaseSha(repoRoot, sessionID, branch, persisted 
 		_, _ = ops.run(repoRoot, "update-ref", baseRefName(sessionID), mb)
 	}
 	return mb
+}
+
+// lastRebaseOnto is the commit the branch's newest rebase put it onto, from the branch's reflog
+// ("rebase (finish): refs/heads/<branch> onto <sha>"), or "" when its newest rebase can't be read.
+func (ops worktreeGitOps) lastRebaseOnto(repoRoot, branch string) string {
+	out, err := ops.run(repoRoot, "reflog", "show", "--format=%gs", "-n", "50", "refs/heads/"+branch, "--")
+	if err != nil || ops.cancelled() {
+		return ""
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "rebase (finish): ") {
+			continue
+		}
+		if i := strings.LastIndex(line, " onto "); i >= 0 {
+			return strings.TrimSpace(line[i+len(" onto "):])
+		}
+		return ""
+	}
+	return ""
+}
+
+// isAncestor reports whether a is an ancestor of (or equal to) b.
+func (ops worktreeGitOps) isAncestor(repoRoot, a, b string) bool {
+	_, err := ops.run(repoRoot, "merge-base", "--is-ancestor", a, b)
+	return err == nil && !ops.cancelled()
 }
 
 // freshenBaseSha re-validates wt.BaseSha before a diff is computed: a branch rebased mid-session
@@ -957,6 +996,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 	}
 	// A file holding an owner-request secret is left out of the commit, and the session is told (secret_git.go).
 	unstageHeldSecrets(wt.Path, nil, wt.Session)
+	// Nor is what a SubAgent stopped with the session was writing (subagent.go holdSubagentPaths).
+	unstageSubagentPaths(wt.Path, wt.Session)
 	// `diff --cached --quiet` exits non-zero when something is staged → there's work to commit.
 	if _, err := git(wt.Path, "diff", "--cached", "--quiet"); err != nil {
 		var msg string

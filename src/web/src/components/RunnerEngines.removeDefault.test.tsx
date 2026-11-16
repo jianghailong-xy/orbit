@@ -426,7 +426,7 @@ describe('removing an added account while Default is removed', () => {
 
     await clickRunnerMenuItem(workRow, 'Remove account');
     const dialog = (await confirmation()).closest('[role="dialog"]')!;
-    expect(dialogDescription(dialog)).toBe('Its sign-in is deleted from wikova. Workspaces set to this account run on Default.');
+    expect(dialogDescription(dialog)).toBe('Workspaces using it switch to Default.');
   });
 });
 

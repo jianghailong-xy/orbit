@@ -43,7 +43,7 @@ func TestOrchestrationTransportMethodsSendSessionCredential(t *testing.T) {
 			method: http.MethodPost,
 			path:   "/api/runner/sessions",
 			call: func(transport *Transport) error {
-				_, err := transport.createSession("caller-session", "session-token", map[string]string{"prompt": "work"})
+				_, err := transport.createSession("caller-session", "session-token", "", map[string]string{"prompt": "work"})
 				return err
 			},
 		},

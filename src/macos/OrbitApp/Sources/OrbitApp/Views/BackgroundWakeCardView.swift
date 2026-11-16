@@ -63,7 +63,7 @@ struct BackgroundWakeCardView: View {
                         Text(BackgroundWakeCard.name(job))
                             .font(.orbitMeta).foregroundStyle(Color.secondary)
                     }
-                    BackgroundWakeFailedOutput(text: job.outputTail)
+                    BackgroundWakeOutputTail(text: job.outputTail)
                 }
                 .padding(.leading, 20)
             }
@@ -218,6 +218,15 @@ struct BackgroundWakeCardView: View {
             Text(BackgroundWakeCard.jobMeta(job))
                 .font(.orbitMonoFine).foregroundStyle(Color.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if let stall = job.stall {
+                Text(BackgroundWakeCard.stallLine(stall))
+                    .font(.orbitMonoFine).foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                // A quiet job is no bad news: what it last wrote stays in the fold, not under the line.
+                if !job.outputTail.isEmpty {
+                    BackgroundWakeOutputTail(text: job.outputTail).padding(.top, 4)
+                }
+            }
         }
     }
 
@@ -259,7 +268,7 @@ struct BackgroundWakeCardView: View {
     /// is withdrawn by an ordinary cancel, so unlike a watch's wake it asks nothing first.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)
@@ -282,9 +291,10 @@ struct BackgroundWakeCardView: View {
     }
 }
 
-/// A failed job's received output tail, bounded by rendered lines so compact JSON cannot fill the
-/// transcript. Its disclosure is independent of the job details above it.
-private struct BackgroundWakeFailedOutput: View {
+/// A job's received output tail — a failure's under the line, a quiet job's in its row in the fold —
+/// bounded by rendered lines so compact JSON cannot fill the transcript. Its disclosure is
+/// independent of the job details above it.
+private struct BackgroundWakeOutputTail: View {
     let text: String
     @State private var open = false
 

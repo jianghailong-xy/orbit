@@ -106,7 +106,7 @@ struct OpenItemDeliveryCardView: View {
     /// control plane gets files a new turn for it — so unlike a watch's wake this asks nothing first.
     private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 8) {
-            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            QueuedWord()
             Button("Cancel") { cancel() }
                 .buttonStyle(.plain)
                 .font(.orbitMeta)
