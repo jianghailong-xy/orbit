@@ -8,10 +8,13 @@ import io.orbitd.android.core.net.ApiRequest
 import io.orbitd.android.core.net.ApiResponse
 import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
+import io.orbitd.android.core.realtime.ReconnectPolicy
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.realtime.SseFrame
 import java.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -511,5 +514,221 @@ class GuestSessionsTest {
         view.attach("a.png", "image/png", byteArrayOf(1))
         runCurrent()
         assertTrue(view.state.value.gone)
+    }
+
+    // The guest stream (docs/session-viewer-stream-design.md §3–§5)
+
+    /** The guest stream, scripted: every open is one connection the test feeds frames into, drops or ends. */
+    private class Stream : GuestStream {
+        /** The cursor each open asked from. */
+        val opened = mutableListOf<Long>()
+        /** Thrown before the headers: the stream cannot be opened. */
+        var refuse: Exception? = null
+        var open = false
+        private var connection = Channel<Any>(Channel.UNLIMITED)
+        override suspend fun open(id: String, sinceSeq: Long, onOpen: suspend () -> Unit, onFrame: suspend (SseFrame) -> Unit) {
+            opened += sinceSeq
+            refuse?.let { throw it }
+            connection = Channel(Channel.UNLIMITED)
+            open = true
+            try {
+                onOpen()
+                for (item in connection) when (item) {
+                    is String -> onFrame(SseFrame(item, null, null))
+                    is Exception -> throw item
+                    else -> return
+                }
+            } finally { open = false }
+        }
+        fun frame(json: String) { connection.trySend(json) }
+        fun drop() { connection.trySend(IllegalStateException("dropped")) }
+        fun end() { connection.trySend(Unit) }
+    }
+
+    private fun streamed(session: Session, stream: Stream, scope: kotlinx.coroutines.CoroutineScope) =
+        GuestConversation(conversationDoor(session), handle, "34A", "Bo", scope, newTurnId = { "k1" }, stream = stream,
+            reconnect = ReconnectPolicy { 0.0 })
+
+    private fun frame(seq: Long, type: String, text: String, turnId: String? = null, guest: String? = null) =
+        event(seq, type, text, guest, turnId).toString()
+
+    private fun delta(text: String) = """{"seq":0,"type":"text_delta","payload":{"delta":"$text"}}"""
+
+    private fun headFrame(runState: String, waitingOnOwner: Boolean = false, title: String = "Fix it") =
+        """{"seq":0,"type":"head","payload":{"title":"$title","runState":"$runState","lifecycleState":"OPEN","waitingOnOwner":$waitingOnOwner}}"""
+
+    @Test fun theStreamIsAskedFromTheNewestSeqWithTheListedPayloadCap() {
+        assertEquals(listOf("guest-sessions", "34A", "stream"), guestStreamRequest("34A", 7).path)
+        assertEquals(listOf("sinceSeq" to "7", "maxPayload" to "2048"), guestStreamRequest("34A", 7).query)
+        // Nothing read yet: the server replays the newest page.
+        assertEquals(listOf("maxPayload" to "2048"), guestStreamRequest("34A", 0).query)
+    }
+
+    @Test fun deltasAreTypedOutUntilTheBlockTheyBecomeIsReadAndNothingIsPolled() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        assertEquals(listOf(1L), stream.opened)
+        stream.frame(delta("Hel")); stream.frame(delta("lo, "))
+        runCurrent()
+        assertEquals(mapOf("" to "Hello, "), view.state.value.textDrafts)
+        stream.frame("""{"seq":0,"type":"thinking_delta","payload":{"delta":"hmm","parentToolUseId":"tu1"}}""")
+        runCurrent()
+        assertEquals(mapOf("tu1" to "hmm"), view.state.value.thinkingDrafts)
+        // The block read in full replaces its draft, and is drawn in its place.
+        stream.frame(frame(2, "assistant", "Hello, Cy."))
+        runCurrent()
+        assertEquals(emptyMap<String, String>(), view.state.value.textDrafts)
+        assertEquals(listOf("hi", "Hello, Cy."), view.state.value.events.map { it.text })
+        // A replayed event already held is not drawn twice.
+        stream.frame(frame(2, "assistant", "Hello, Cy."))
+        runCurrent()
+        assertEquals(listOf(1L, 2L), view.state.value.events.map { it.seq })
+        // The stream carries everything: the door is never polled while it is up.
+        advanceTimeBy(120_000)
+        assertEquals(listOf("guest-sessions/34A"), session.asked)
+        follow.cancel()
+    }
+
+    @Test fun aSentMessageIsDrawnAtOnceAndItsEchoOnTheStreamReplacesIt() = runTest {
+        val session = Session().apply { runState = "RUNNING"; echoesAtOnce = false; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        view.edit("Ship it on Friday")
+        view.send()
+        assertEquals(listOf("hi", "Ship it on Friday"), view.state.value.events.map { it.text })
+        runCurrent()
+        stream.frame(frame(2, "user", "Ship it on Friday", turnId = "T", guest = "Bo"))
+        runCurrent()
+        assertEquals(listOf(1L, 2L), view.state.value.events.map { it.seq })
+        assertEquals(buildJsonObject { put("source", "ORBIT_READER") }, view.state.value.events.last().fields["externalSender"])
+        // Only the send went to the door; the echo came over the stream.
+        assertEquals(listOf("guest-sessions/34A", "guest-sessions/34A/turns"), session.asked)
+        follow.cancel()
+    }
+
+    @Test fun headFramesUpdateTheStateTheTitleAndTheWaitingLine() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        assertEquals(GuestCopy.runsOn("Ana"), view.state.value.state.hint("Ana"))
+        stream.frame(headFrame("AWAITING_INPUT", waitingOnOwner = true, title = "Fix the redirect"))
+        runCurrent()
+        assertTrue(view.state.value.state.waiting)
+        assertEquals(GuestCopy.WAITS_ITS_TURN, view.state.value.state.hint("Ana"))
+        assertEquals("Fix the redirect", view.state.value.title)
+        // A run that ended takes its half-typed reply with it, and the next message restarts the session.
+        stream.frame(delta("Half a"))
+        stream.frame(headFrame("ENDED"))
+        runCurrent()
+        assertEquals(GuestRunState.ENDED, view.state.value.state.resolvedRunState)
+        assertEquals(emptyMap<String, String>(), view.state.value.textDrafts)
+        assertEquals(GuestCopy.restarts("Ana"), view.state.value.state.hint("Ana"))
+        follow.cancel()
+    }
+
+    @Test fun aGoneFrameIsTheNotSharedStateAndNothingIsAskedAfterIt() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        stream.frame("""{"type":"gone"}""")
+        runCurrent()
+        assertTrue(view.state.value.gone)
+        assertFalse(follow.isActive)
+        advanceTimeBy(120_000)
+        assertEquals(listOf(1L), stream.opened)
+        assertEquals(listOf("guest-sessions/34A"), session.asked)
+    }
+
+    @Test fun aDroppedOrEndedStreamReconnectsFromTheNewestSeqRead() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        stream.frame(frame(5, "assistant", "first"))
+        stream.frame(delta("sec"))
+        stream.drop()
+        runCurrent()
+        // Dropped: the draft goes (the server types the turn's prefix out again), and it reconnects after the first backoff.
+        assertFalse(stream.open)
+        assertEquals(emptyMap<String, String>(), view.state.value.textDrafts)
+        advanceTimeBy(801)
+        assertEquals(listOf(1L, 5L), stream.opened)
+        stream.frame(frame(6, "assistant", "second"))
+        stream.end()
+        runCurrent()
+        // Ended cleanly (an apiserver stopping): it reconnects at once from where it got to.
+        advanceTimeBy(301)
+        assertEquals(listOf(1L, 5L, 6L), stream.opened)
+        assertEquals(listOf(1L, 5L, 6L), view.state.value.events.map { it.seq })
+        // A gap too long to replay: the newest page is read again, and the stream reopens after it.
+        session.events += event(9, "assistant", "ninth")
+        stream.frame("""{"seq":0,"type":"resync"}""")
+        runCurrent()
+        advanceTimeBy(801)
+        assertEquals(listOf(1L, 5L, 6L, 9L), stream.opened)
+        assertEquals(listOf("guest-sessions/34A", "guest-sessions/34A"), session.asked)
+        follow.cancel()
+    }
+
+    @Test fun theStreamClosesWhenThePageStopsFollowingAndReopensFromWhereItGot() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream()
+        val view = streamed(session, stream, backgroundScope)
+        var follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        stream.frame(frame(3, "assistant", "x"))
+        runCurrent()
+        assertTrue(stream.open)
+        // The page leaves STARTED: its follow is cancelled, and the connection with it.
+        follow.cancel()
+        runCurrent()
+        assertFalse(stream.open)
+        follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        assertTrue(stream.open)
+        assertEquals(listOf(1L, 3L), stream.opened)
+        // The root is not read again.
+        assertEquals(listOf("guest-sessions/34A"), session.asked)
+        follow.cancel()
+    }
+
+    @Test fun aStreamThatCannotOpenFallsBackToPollingEveryFourSeconds() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream().apply { refuse = ApiError.parse(429, """{"code":"VIEWER_STREAM_CAPPED"}""".encodeToByteArray()) }
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        assertEquals(listOf(1L), stream.opened)
+        session.events += event(2, "assistant", "polled")
+        advanceTimeBy(4_001)
+        assertEquals(listOf("guest-sessions/34A", "guest-sessions/34A/events?after=1"), session.asked)
+        assertEquals(listOf("hi", "polled"), view.state.value.events.map { it.text })
+        follow.cancel()
+    }
+
+    @Test fun aStream404FromAServerWithoutTheRouteFallsBackAndTheDoorDecidesNotShared() = runTest {
+        val session = Session().apply { runState = "RUNNING"; events += event(1, "user", "hi", guest = "Cy") }
+        val stream = Stream().apply { refuse = ApiError.parse(404, "{}".encodeToByteArray()) }
+        val view = streamed(session, stream, backgroundScope)
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        // Polling: the door still shares it, so the view follows by reading.
+        advanceTimeBy(4_001)
+        assertFalse(view.state.value.gone)
+        assertEquals("guest-sessions/34A/events?after=1", session.asked.last())
+        session.shared = false
+        advanceTimeBy(4_001)
+        assertTrue(view.state.value.gone)
+        assertFalse(follow.isActive)
     }
 }

@@ -3,8 +3,10 @@ package io.orbitd.android.core.guests
 import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiError
+import io.orbitd.android.core.realtime.ReconnectPolicy
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.core.realtime.SENTINEL_SEQ
+import io.orbitd.android.core.realtime.SseFrame
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -12,6 +14,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +26,11 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlin.coroutines.ContinuationInterceptor
+import kotlin.coroutines.EmptyCoroutineContext
 
 /** What the guest view draws. [events] are the door's, the reader's own messages already read as theirs ([GuestTranscript]). */
 data class GuestView(
@@ -42,6 +50,11 @@ data class GuestView(
     val images: List<GuestImage> = emptyList(),
     val sending: Boolean = false,
     val sendError: String? = null,
+    /** The agent's reply as the stream types it out, by the sub-agent writing it ("" is the agent itself): the owner's reader's
+     *  `Transcript.textDrafts`, gone when the block it becomes is read. */
+    val textDrafts: Map<String, String> = emptyMap(),
+    /** Its reasoning as it is typed out, the same way (`Transcript.thinkingDrafts`). */
+    val thinkingDrafts: Map<String, String> = emptyMap(),
 ) {
     /** An image is still on its way to the door: a send waits for it. */
     val uploading: Boolean get() = images.any { it.uploading }
@@ -56,7 +69,8 @@ data class GuestImage(val id: String, val name: String, val mime: String, val si
 }
 
 /**
- * One guest view's reads and its one write (web `GuestConversation`): the root, the follow loop at [GuestFollow]'s cadence, older pages,
+ * One guest view's reads and its one write (web `GuestConversation`): the root, the follow over the guest [stream] — or, when it
+ * cannot be opened, the follow loop at [GuestFollow]'s cadence — older pages,
  * and a message — words, images or both, each image uploaded as it is staged. A sent message's words are drawn at once, before the
  * door answers, until the runner's echo of its turn replaces them; the send waits for the uploads still running, then asks at once,
  * every [ECHO_MS] while that echo is missing (for up to [ECHO_FOR_MS]), and every 4 s until the run it started has been seen. A 404
@@ -69,6 +83,9 @@ class GuestConversation(
     private val myName: String?,
     private val scope: CoroutineScope,
     initial: GuestSession? = null,
+    /** The guest stream; none follows by polling alone. */
+    private val stream: GuestStream? = null,
+    private val reconnect: ReconnectPolicy = ReconnectPolicy(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val newTurnId: () -> String = { UUID.randomUUID().toString() },
 ) {
@@ -88,6 +105,10 @@ class GuestConversation(
     private var sentCount = 0L
 
     private class SentTurn(val key: Long, val turnId: String?, val text: String, val ts: String)
+    /** The stream asked for a fresh tail: the gap since its cursor is too long to replay. */
+    private class Resync : Exception()
+    /** The stream's `gone` frame: access ended (removed, left, revoked, Trash or deleted). */
+    private class Gone : Exception()
 
     init { initial?.let(::seed) }
 
@@ -131,10 +152,12 @@ class GuestConversation(
     /** Asks for the root again after a failed first read. */
     fun retryLoad() = mutable.update { it.copy(error = null) }
 
-    /** Follows the conversation until cancelled (the page leaving, or its Activity stopping). Started again, it reads at once. */
+    /** Follows the conversation until cancelled (the page leaving, or its Activity stopping), over the guest stream while it can be
+     *  opened and by polling once it cannot. Started again, it opens the stream again (or reads at once). */
     suspend fun follow() {
         load()
         if (!mutable.value.loaded) return
+        if (stream != null && streamed(stream)) return
         var wait: Long? = if (followed || expecting) 0 else GuestFollow.delay(mutable.value.state, moved = false, expecting = expecting)
         followed = true
         while (!mutable.value.gone) {
@@ -143,6 +166,92 @@ class GuestConversation(
             wait = read()
         }
     }
+
+    /**
+     * Follows over the guest stream from the newest seq read, reconnecting from there when it drops or the server ends it. True once
+     * the conversation is no longer shared; false when a stream could not be opened (a refusal, a server without the route, no
+     * network), so polling takes over. Frames are handled on the caller's dispatcher, as the sends that share this state are.
+     */
+    private suspend fun streamed(stream: GuestStream): Boolean {
+        val here = currentCoroutineContext()[ContinuationInterceptor] ?: EmptyCoroutineContext
+        while (!mutable.value.gone) {
+            var opened = false
+            var failed = false
+            try {
+                stream.open(id, after, onOpen = {
+                    // The server sends the turn's whole prefix again on each connect: a draft from the last one would double it.
+                    withContext(here) { opened = true; mutable.update { it.copy(textDrafts = emptyMap(), thinkingDrafts = emptyMap()) } }
+                }, onFrame = { frame -> withContext(here) { frame(frame) } })
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (_: Gone) { break }
+            catch (_: Resync) {
+                failed = true
+                try { reseed() } catch (cancel: CancellationException) { throw cancel }
+                catch (failure: Exception) { if (gone(failure)) mutable.update { it.copy(gone = true) } }
+            } catch (_: Exception) {
+                if (!opened) return mutable.value.gone
+                failed = true
+            } finally { mutable.update { it.copy(textDrafts = emptyMap(), thinkingDrafts = emptyMap()) } }
+            if (mutable.value.gone) break
+            delay(reconnect.delayMs(failed))
+        }
+        return true
+    }
+
+    /** The newest page again, for a stream whose gap was too long to replay: what was read before is dropped for it. */
+    private suspend fun reseed() {
+        val root = api.guestSession(handle, id)
+        raw = emptyList()
+        seed(root)
+    }
+
+    /** One frame of the guest stream. */
+    private fun frame(frame: SseFrame) {
+        val event = try { RunEvent.decode(frame) } catch (_: Exception) { return }
+        when (event.type) {
+            "ping" -> return
+            "resync" -> throw Resync()
+            "gone" -> { mutable.update { it.copy(gone = true) }; throw Gone() }
+            "head" -> {
+                val (title, state) = GuestWire.head(event.fields)
+                if (state.live) expecting = false
+                mutable.update { view ->
+                    view.copy(state = state, title = title ?: view.title,
+                        textDrafts = if (state.live) view.textDrafts else emptyMap(),
+                        thinkingDrafts = if (state.live) view.thinkingDrafts else emptyMap())
+                }
+            }
+            "text_delta", "thinking_delta" -> {
+                val parent = event.fields.string("parentToolUseId") ?: ""
+                val text = event.fields.string("delta") ?: event.fields.string("text") ?: ""
+                mutable.update { view ->
+                    if (event.type == "text_delta") view.copy(textDrafts = view.textDrafts + (parent to view.textDrafts[parent].orEmpty() + text))
+                    else view.copy(thinkingDrafts = view.thinkingDrafts + (parent to view.thinkingDrafts[parent].orEmpty() + text))
+                }
+            }
+            else -> {
+                if (!event.durable || raw.any { it.seq == event.seq }) return
+                raw = merge(raw, listOf(event))
+                after = maxOf(after, event.seq)
+                if (event.type == "user") event.turnId?.let(awaitingEcho::remove)
+                val parent = event.fields.string("parentToolUseId") ?: ""
+                mutable.update { view ->
+                    // A block read in full replaces the draft it was typed out as, as the owner's reader's Transcript.apply does.
+                    when (event.type) {
+                        "assistant" -> view.copy(textDrafts = view.textDrafts - parent)
+                        "thinking" -> view.copy(thinkingDrafts = view.thinkingDrafts - parent)
+                        "tool_use" -> view.copy(textDrafts = view.textDrafts - parent, thinkingDrafts = view.thinkingDrafts - parent)
+                        "user", "turn_end", "interrupt", "result" -> view.copy(textDrafts = emptyMap(), thinkingDrafts = emptyMap())
+                        else -> view
+                    }.copy(events = shown())
+                }
+            }
+        }
+        reconnect.healthy()
+    }
+
+    private fun kotlinx.serialization.json.JsonObject.string(key: String): String? =
+        (get(key) as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
 
     /** One follow read; the wait before the next, or null to wait for a send. */
     private suspend fun read(): Long? = try {
