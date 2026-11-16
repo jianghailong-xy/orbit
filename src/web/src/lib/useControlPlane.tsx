@@ -3,7 +3,7 @@ import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-q
 import type { WatchView } from '@orbit/shared';
 import { getToken } from '../api';
 import { streamReport } from './listBudget';
-import { cloneOf, hearClone } from './workspaceClone';
+import { cloneEventOf, hearClone, sameWorkspace } from './workspaceClone';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
 // single refetch per list. A second, as the list budget asks (docs/list-freshness-design.md R1): a
@@ -538,6 +538,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
             taskIds?: unknown;
             resync?: unknown;
             repoHealth?: unknown;
+            agentId?: unknown;
             clone?: unknown;
           } | null;
         };
@@ -594,14 +595,14 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         // A GitHub workspace's clone (docs/github-workspace-design.md §5.4): git's percentage is drawn from what is
         // heard here and read from nothing else, so a percentage alone reads nothing again. A state that moved is what
         // the server stored: the lists (a session's queued reason) and the open details of that workspace's sessions.
-        const clone = ev.type === 'agent.changed' && typeof id === 'string' && id ? cloneOf(ev.data?.clone) : null;
-        if (clone) {
-          if (!hearClone(id as string, clone)) return;
+        const cloned = cloneEventOf(ev.type, ev.data);
+        if (cloned) {
+          if (!hearClone(cloned.workspaceId, cloned.clone)) return;
           void qc.invalidateQueries({
             predicate: ({ queryKey, state }) =>
               queryKey[0] === 'session' &&
               queryKey.length === 2 &&
-              (state.data as { workspace?: { id?: string } | null } | undefined)?.workspace?.id === id,
+              sameWorkspace((state.data as { workspace?: { id?: string } | null } | undefined)?.workspace?.id, cloned.workspaceId),
           });
         }
         scheduleRefresh(ev.type, subject, ev.data);

@@ -7,7 +7,18 @@ import { MemoryRouter } from 'react-router-dom';
 import type { GithubIntegration } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pendingSlotDescription, queuedLabel, queuedTitle } from '../lib/runnerSlots';
-import { cloneFailureOf, cloneNow, cloneOf, githubRepositoryOf, hearClone, resetCloneHeard } from '../lib/workspaceClone';
+import { encodeId } from '../lib/idCodec';
+import {
+  cloneEventOf,
+  cloneFailureOf,
+  cloneNow,
+  cloneOf,
+  githubRepositoryOf,
+  hearClone,
+  resetCloneHeard,
+  sameWorkspace,
+  useCloneHeard,
+} from '../lib/workspaceClone';
 import { RunNeverStartedCard, runNeverStarted } from './RunNeverStartedCard';
 
 /**
@@ -219,10 +230,39 @@ describe('the clone as the stream reports it', () => {
     expect(hearClone(WORKSPACE, { state: 'READY', progress: null })).toBe(true);
   });
 
-  it('a stored end is not walked back by an older relay', () => {
-    expect(cloneNow('READY', { state: 'CLONING', progress: 50 })).toEqual({ state: 'READY', progress: null });
-    expect(cloneNow('FAILED', { state: 'PENDING', progress: null })).toEqual({ state: 'PENDING', progress: null });
+  it('a stored READY is not walked back; otherwise the newer of the two wins', () => {
+    expect(cloneNow('READY', { state: 'CLONING', progress: 50, at: 2_000 }, 1_000)).toEqual({ state: 'READY', progress: null });
     expect(cloneNow('CLONING', null)).toEqual({ state: 'CLONING', progress: null });
+    expect(cloneNow('CLONING', { state: 'CLONING', progress: 30, at: 1_000 }, 2_000)).toEqual({ state: 'CLONING', progress: 30, at: 1_000 });
+    // A Retry heard after the detail was read: the stream is ahead.
+    expect(cloneNow('FAILED', { state: 'PENDING', progress: null, at: 2_000 }, 1_000)?.state).toBe('PENDING');
+    // The failure this tab's stream missed, read in a detail after the Retry it heard (QA, 2026-11-16): the store is ahead.
+    expect(cloneNow('FAILED', { state: 'PENDING', progress: null, at: 1_000 }, 2_000)).toEqual({ state: 'FAILED', progress: null });
+  });
+
+  it('reads the workspace off agent.changed as the server writes it (agentId), and nothing else', () => {
+    expect(cloneEventOf('agent.changed', { agentId: 'abc', affectsTaskRows: false, clone: { state: 'CLONING', progress: 16 } } as never)).toEqual({
+      workspaceId: 'abc',
+      clone: { state: 'CLONING', progress: 16 },
+    });
+    expect(cloneEventOf('workspace.changed', { id: 'abc', clone: { state: 'READY', progress: null } })?.workspaceId).toBe('abc');
+    expect(cloneEventOf('agent.changed', { agentId: 'abc', repoHealth: true } as never)).toBeNull();
+    expect(cloneEventOf('session.updated', { id: 'abc', clone: { state: 'READY', progress: null } })).toBeNull();
+  });
+
+  it('a frame and a payload that spell the workspace differently still meet', async () => {
+    expect(sameWorkspace(WORKSPACE, encodeId(WORKSPACE))).toBe(true);
+    expect(sameWorkspace(WORKSPACE, null)).toBe(false);
+    hearClone(WORKSPACE, { state: 'CLONING', progress: 61 });
+    let seen: unknown = null;
+    function Probe() {
+      seen = useCloneHeard(encodeId(WORKSPACE));
+      return null;
+    }
+    host = document.createElement('div');
+    root = createRoot(host);
+    await act(async () => root!.render(<Probe />));
+    expect(seen).toMatchObject({ state: 'CLONING', progress: 61 });
   });
 
   it('names the three failures v1 names, and nothing else', () => {

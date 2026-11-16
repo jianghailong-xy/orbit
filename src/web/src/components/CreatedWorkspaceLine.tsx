@@ -83,7 +83,9 @@ export function CreatedWorkspaceLine({
   // A workspace deleted since is still what this conversation made; it just has nothing to change.
   const live = !workspace.deletedAt;
   const heard = useCloneHeard(workspace.cloneState ? workspace.id : null);
-  const clone = workspace.cloneState ? cloneNow(workspace.cloneState, heard) : null;
+  // When the detail this line draws from was read: a frame heard before it is older news than its cloneState.
+  const storedAt = qc.getQueryState(sessionQuery(sessionId).queryKey)?.dataUpdatedAt || undefined;
+  const clone = workspace.cloneState ? cloneNow(workspace.cloneState, heard, storedAt) : null;
   const repository = clone ? githubRepositoryOf(workspace.repoUrl) : null;
   if (clone && repository && live && clone.state !== 'READY') {
     return (

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import type { WorkspaceCloneState } from '@orbit/shared';
 import { api } from '../api';
+import { encodeId } from './idCodec';
 
 /**
  * A GitHub workspace's clone as this tab last heard it (docs/github-workspace-design.md §5.4, §8). The state is the
@@ -10,6 +11,31 @@ import { api } from '../api';
 export interface CloneHeard {
   state: WorkspaceCloneState;
   progress: number | null;
+  /** When this tab heard it (ms), to weigh it against a detail read since. */
+  at?: number;
+}
+
+/** One spelling for a workspace id, whichever the frame or the payload used. */
+function keyOf(workspaceId: string): string {
+  try {
+    return encodeId(workspaceId);
+  } catch {
+    return workspaceId;
+  }
+}
+
+/**
+ * The workspace and clone a realtime frame reports, or null for any other frame. The server's `agent.changed` names
+ * the workspace as `agentId` (its older name); `id` is read for a frame that says so.
+ */
+export function cloneEventOf(
+  type: string,
+  data: { agentId?: unknown; id?: unknown; clone?: unknown } | null | undefined,
+): { workspaceId: string; clone: CloneHeard } | null {
+  if (type !== 'agent.changed' && !type.startsWith('workspace.')) return null;
+  const id = typeof data?.agentId === 'string' && data.agentId ? data.agentId : typeof data?.id === 'string' ? data.id : '';
+  const clone = id ? cloneOf(data?.clone) : null;
+  return clone ? { workspaceId: id, clone } : null;
 }
 
 const heard = new Map<string, CloneHeard>();
@@ -34,11 +60,17 @@ export function cloneOf(value: unknown): CloneHeard | null {
  * has to be read again. A percentage with no state change keeps the last one heard when it names none.
  */
 export function hearClone(workspaceId: string, clone: CloneHeard): boolean {
-  const before = heard.get(workspaceId);
+  const key = keyOf(workspaceId);
+  const before = heard.get(key);
   const progress = clone.progress ?? (before?.state === clone.state ? before.progress : null);
-  heard.set(workspaceId, { state: clone.state, progress });
+  heard.set(key, { state: clone.state, progress, at: Date.now() });
   for (const listener of listeners) listener();
   return before?.state !== clone.state;
+}
+
+/** Whether two spellings of a workspace id name the same workspace. */
+export function sameWorkspace(a: string | null | undefined, b: string | null | undefined): boolean {
+  return !!a && !!b && keyOf(a) === keyOf(b);
 }
 
 /** For tests: forget everything heard. */
@@ -54,18 +86,21 @@ const subscribe = (listener: () => void) => {
 
 /** What the stream last said about this workspace's clone, or null when it has said nothing yet. */
 export function useCloneHeard(workspaceId: string | null | undefined): CloneHeard | null {
-  return useSyncExternalStore(subscribe, () => (workspaceId ? heard.get(workspaceId) ?? null : null));
+  return useSyncExternalStore(subscribe, () => (workspaceId ? heard.get(keyOf(workspaceId)) ?? null : null));
 }
 
 /**
- * Where a clone stands, from what the server stored (the detail's `cloneState`) and what the stream said since.
- * The stream is newer while the two agree on a live clone; a stored READY or FAILED is an end the stream cannot
- * walk back, except by a Retry, which the stream reports as PENDING.
+ * Where a clone stands, from what the server stored (the detail's `cloneState`, read at `storedAt`) and what the
+ * stream said. Agreeing, the stream adds git's percentage. Disagreeing, the newer one wins: the stream is ahead of a
+ * detail read before it (a Retry's PENDING, a clone that just ended), and a detail read after it is ahead of the
+ * stream (a frame this tab missed). A stored READY is an end nothing walks back.
  */
-export function cloneNow(stored: string | null | undefined, live: CloneHeard | null): CloneHeard | null {
+export function cloneNow(stored: string | null | undefined, live: CloneHeard | null, storedAt?: number): CloneHeard | null {
   if (!stored || !STATES.has(stored)) return live;
-  if (!live) return { state: stored as WorkspaceCloneState, progress: null };
-  if (stored === 'READY') return { state: 'READY', progress: null };
+  const fromStore: CloneHeard = { state: stored as WorkspaceCloneState, progress: null };
+  if (!live || stored === 'READY') return fromStore;
+  if (live.state === stored) return live;
+  if (storedAt !== undefined && (live.at ?? 0) <= storedAt) return fromStore;
   return live;
 }
 
