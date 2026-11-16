@@ -625,11 +625,15 @@ func (r *evalRun) evalIsRecordWrite(s evalStep) bool {
 	return evalIsWriteAttempt(s)
 }
 
-// evalIsWriteAttempt says whether an Orbit step tries to write: a mutating operation, except task_progress_report
-// asked with none of its fields, which reads.
+// evalIsWriteAttempt says whether an Orbit step tries to write: a mutating operation, except the ones Plan runs
+// because they change no work (a wait, this session's own wake-up, a line or a question for the owner:
+// catalogPlanRunsWrites) and task_progress_report asked with none of its fields, which reads.
 func evalIsWriteAttempt(s evalStep) bool {
 	op := lookupCatalogOperation(s.Operation)
 	if op == nil || !op.Mutates {
+		return false
+	}
+	if _, changesNoWork := catalogPlanRunsWrites[s.Operation]; changesNoWork {
 		return false
 	}
 	if s.Operation == "task_progress_report" {

@@ -126,11 +126,11 @@ type evalLedgerEvent struct {
 type evalPlane struct {
 	srv *httptest.Server
 
-	mu            sync.Mutex
-	turn          int
-	selfSession   string // decoded (UUID) id of the session under eval
-	selfAgent     string
-	selfTask      string // the task the session runs, when it is a task's run
+	mu          sync.Mutex
+	turn        int
+	selfSession string // decoded (UUID) id of the session under eval
+	selfAgent   string
+	selfTask    string // the task the session runs, when it is a task's run
 	// selfMode and selfEngine are the session's live permission mode and its engine: what a session it starts is
 	// compared with (evalModeIsWider).
 	selfMode      string

@@ -154,7 +154,8 @@ owner's answers, the control plane's rules, every setup and every turn's words),
 clause. A run given
 `--transcripts DIR` also writes each run's transcript there, and `scripts/agent-eval.sh regrade OUT.json DIR` grades
 those transcripts again with the checkout's graders. A grader fix is then read against what the engines did, without
-running them again. Only transcripts with the same `scenarioHash` can be regraded. A transcript holds the engines'
+running them again. Only transcripts with the same `scenarioHash` can be regraded, and the regraded report names the
+commit the runs were played on, which each transcript records. A transcript holds the engines'
 words and the tools' answers, so it is a local diagnostic: it is never uploaded or committed.
 
 ## Metrics

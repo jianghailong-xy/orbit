@@ -24,8 +24,9 @@
 #
 #   scripts/agent-eval.sh regrade OUT.json TRANSCRIPT_DIR
 #       A report from the transcripts a live run kept (--transcripts DIR), graded by this checkout's graders: a
-#       grader fix re-reads what the engines did instead of running them again. Transcripts hold the engines' words
-#       and the tools' answers; they are local diagnostics, never uploaded or committed.
+#       grader fix re-reads what the engines did instead of running them again. The report names the commit the
+#       transcripts were played on (ORBIT_AGENT_EVAL_REPO_SHA for transcripts that do not record it). Transcripts hold
+#       the engines' words and the tools' answers; they are local diagnostics, never uploaded or committed.
 #
 # The eval must not see the calling Orbit session: a session's ORBIT_* variables would send the eval's own
 # `orbit` processes to the real control plane, so they are removed here, as they are for every runner-go test run
@@ -49,7 +50,7 @@ clean_env=(env
 deterministic_tests='^(TestAgentEval|TestAgentContractTelemetry|TestOrbitCLIInvocationReadsInsideAShell|TestATurnThatTouchedOrbitFilesItsTelemetryBeforeItsTurnEnd|TestTheMessageAfterACompactionCarriesTheContextResetNote|TestCodexTurnAfterACompactionOrAResumeCarriesTheContextResetNote|TestEveryAdvertisedArgvAndHelpArgvRuns|TestContract|TestCLIReceipt|TestCLIRefusesAnInvalidBatchDocumentBeforeAnyRequest|TestEveryAdvertisedObjectSchemaIsClosed|TestCatalogSchemasUseOnlyTheValidatedSubset|TestPlanGate|TestOrbitMCPRefusesAWriteInPlanBeforeItReachesTheControlPlane|TestTheInSessionCLIRefusesAWriteInPlan|TestCLIPlanGateRefusesTheSameWrites|TestAgentPrimer|TestMCPInitializeAnswersWithTheVersionedPrimer|TestEveryEngineIsGivenTheSamePrimer|TestCodexPutsThePrimerBackAfterCompaction|TestMCPToolListIsProjectedFromCatalog)'
 
 usage() {
-  sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
   exit 2
 }
 
@@ -119,7 +120,7 @@ case "$cmd" in
     [ $# -eq 2 ] || usage
     out="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
     dir="$(cd "$2" && pwd)"
-    sha="$(git -C "$here/.." rev-parse HEAD 2>/dev/null || true)"
+    sha="${ORBIT_AGENT_EVAL_REPO_SHA:-$(git -C "$here/.." rev-parse HEAD 2>/dev/null || true)}"
     cd "$runner"
     exec "${clean_env[@]}" ORBIT_AGENT_EVAL_REGRADE="$out,$dir" ORBIT_AGENT_EVAL_REPO_SHA="$sha" \
       go test -count=1 -v -run '^TestAgentEvalRegrade$' .

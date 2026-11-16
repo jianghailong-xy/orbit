@@ -60,7 +60,9 @@ const (
 
 // evalTranscript is one live run as it was played, everything a newer grader needs to judge it again.
 type evalTranscript struct {
-	ScenarioHash  string           `json:"scenarioHash"`
+	ScenarioHash string `json:"scenarioHash"`
+	// RepoSHA is the commit the run was played on: what a report regraded from it describes.
+	RepoSHA       string           `json:"repoSha,omitempty"`
 	Scenario      string           `json:"scenario"`
 	Engine        string           `json:"engine"`
 	Backend       string           `json:"backend"`
@@ -722,7 +724,7 @@ func TestAgentEvalLive(t *testing.T) {
 				orchestration := s.job.AllowOrchestration
 				s.close()
 				if dir := os.Getenv(evalTranscriptsEnv); dir != "" {
-					if err := writeEvalTranscript(dir, evalTranscript{ScenarioHash: evalScenarioHash(), Scenario: sc.ID, Engine: run.Engine,
+					if err := writeEvalTranscript(dir, evalTranscript{ScenarioHash: evalScenarioHash(), RepoSHA: evalRepoSHA(), Scenario: sc.ID, Engine: run.Engine,
 						Backend: run.Backend, EngineVersion: run.EngineVersion, Model: run.Model, Repeat: repeat, Exe: run.Exe,
 						Orchestration: orchestration, World: run.World, Turns: run.Turns, Events: run.Events, Ledger: run.Ledger,
 						ToolsListed: run.ToolsListed, Context: run.Context, HarnessError: run.HarnessError, DurationMs: run.DurationMs}); err != nil {
@@ -847,6 +849,7 @@ func TestAgentEvalRegrade(t *testing.T) {
 	var runs []*evalRun
 	var skipped []evalSkip
 	seenSkips := map[string]bool{}
+	played := map[string]bool{}
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -861,6 +864,9 @@ func TestAgentEvalRegrade(t *testing.T) {
 		}
 		if tr.ScenarioHash != evalScenarioHash() {
 			t.Fatalf("%s was played under scenarios %.12s, this code's are %.12s", entry.Name(), tr.ScenarioHash, evalScenarioHash())
+		}
+		if tr.Skip == nil {
+			played[tr.RepoSHA] = true
 		}
 		if tr.Skip != nil {
 			if key := tr.Skip.Scenario + "|" + tr.Skip.Engine; !seenSkips[key] {
@@ -889,7 +895,17 @@ func TestAgentEvalRegrade(t *testing.T) {
 		}
 		return a.Repeat < b.Repeat
 	})
-	rep := buildEvalReport(runs, evalRepoSHA(), nil, skipped...)
+	// The report describes the commit the engines were played on, when every transcript names the same one; a
+	// transcript that names none (written before RepoSHA was kept) leaves it to ORBIT_AGENT_EVAL_REPO_SHA.
+	repoSHA := evalRepoSHA()
+	if len(played) == 1 {
+		for sha := range played {
+			if sha != "" {
+				repoSHA = sha
+			}
+		}
+	}
+	rep := buildEvalReport(runs, repoSHA, nil, skipped...)
 	if err := writeEvalReport(rep, parts[0]); err != nil {
 		t.Fatal(err)
 	}
