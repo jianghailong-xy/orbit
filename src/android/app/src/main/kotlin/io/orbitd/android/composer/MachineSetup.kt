@@ -52,9 +52,9 @@ data class DirProbeAnswer(
 }
 
 /**
- * Sent on `POST /sessions` when the session makes its machine's first workspace (docs/first-workspace-contract.md §3).
+ * The folder `POST /workspaces` makes a machine's workspace in (docs/first-workspace-contract.md §3).
  * Exactly one of the three is set. [workDir] is a folder the runner has confirmed, as it resolved it; [newFolder] is one path segment the
- * server joins to the runner's Repos Folder; [github] is a clone of one of the person's repositories into that folder
+ * server joins to the runner's folder root; [github] is a clone of one of the person's repositories into its Repos Folder
  * (docs/github-workspace-design.md §5.3).
  */
 data class NewWorkspaceRequest(
@@ -62,8 +62,7 @@ data class NewWorkspaceRequest(
     val newFolder: String? = null,
     val github: GithubClone? = null,
 ) {
-    /** `newWorkspace.github`: the repository by GitHub's id, the branch when it isn't the default one, and the folder under the Repos
-     *  Folder. */
+    /** `github`: the repository by GitHub's id, the branch when it isn't the default one, and the folder under the Repos Folder. */
     data class GithubClone(val repoId: Long, val ref: String? = null, val folder: String? = null)
 
     fun toJson(): JsonObject = buildJsonObject {
@@ -96,7 +95,7 @@ data class FolderVerdict(
     enum class Tone { OK, WARN, BAD }
 }
 
-/** The folder step's answer, once the person has pressed Use This Folder. */
+/** The folder the card's name finds, which Create workspace makes the workspace in. */
 sealed interface PickedFolder {
     val path: String
 
@@ -107,42 +106,12 @@ sealed interface PickedFolder {
         override val path: String get() = pick.path
     }
 
-    /** What `POST /sessions` is told. An existing folder is sent as the runner resolved it. */
+    /** What `POST /workspaces` is told. An existing folder is sent as the runner resolved it. */
     val newWorkspace: NewWorkspaceRequest
         get() = when (this) {
             is Existing -> NewWorkspaceRequest(workDir = path)
             is New -> NewWorkspaceRequest(newFolder = name)
             is Github -> NewWorkspaceRequest(github = NewWorkspaceRequest.GithubClone(pick.repoId, pick.ref, pick.name))
-        }
-
-    /** The workspace it makes, as the server names it (§3.2). */
-    val workspaceName: String
-        get() = when (this) {
-            is Existing -> MachineSetup.folderName(path)
-            is New -> name
-            is Github -> pick.name
-        }
-
-    /** The folder's line once it is picked: the path, or for a clone `owner/repo → ~/orbit-repos/repo` (board 01, P4). */
-    val doneLine: String
-        get() = when (this) {
-            is Existing, is New -> path
-            is Github -> MachineSetupCopy.setupGithubDonePath(pick.repository, MachineSetup.homeShortPath(pick.path))
-        }
-
-    /** What it says under that line. */
-    val doneNote: String
-        get() = when (this) {
-            is Existing -> note
-            is New -> MachineSetupCopy.SETUP_NEW_FOLDER_DONE
-            is Github -> MachineSetupCopy.SETUP_GITHUB_DONE
-        }
-
-    /** The card's foot once both steps are done. */
-    val readySentence: String
-        get() = when (this) {
-            is Github -> MachineSetupCopy.setupReadyClone(pick.repository, MachineSetup.homeShortPath(pick.path), pick.name)
-            else -> MachineSetupCopy.setupReady(workspaceName, path)
         }
 }
 
@@ -287,10 +256,6 @@ object MachineSetup {
         return "$dir$separator$name"
     }
 
-    /** The workspace name a folder gives, as the server derives it (§3.2): its last segment. */
-    fun folderName(path: String): String =
-        path.trimEnd('/', '\\').split('/', '\\').lastOrNull()?.takeIf { it.isNotEmpty() } ?: path
-
     fun folderVerdict(probe: DirProbe, machine: String): FolderVerdict {
         fun refused(text: String) = FolderVerdict(FolderVerdict.Tone.BAD, text, text, usable = false)
         if (!probe.error.isNullOrEmpty()) return refused(MachineSetupCopy.setupCouldNotCheck(machine, probe.error))
@@ -324,12 +289,36 @@ object MachineSetup {
         return folderVerdict(probe, machine)
     }
 
-    /** What Use This Folder picks on that answer: a new folder while nothing is there, else the directory that is, sent by its path. */
+    /** What Create workspace makes the workspace in on that answer: a new folder while nothing is there, else the directory that is, sent by its path. */
     fun newFolderPick(probe: DirProbe, name: String, root: String, machine: String): PickedFolder? {
         val verdict = newFolderVerdict(probe, machine)
         if (!verdict.usable) return null
         return if (probe.exists) PickedFolder.Existing(probe.path, verdict.short)
         else PickedFolder.New(name, newFolderPath(root, name))
+    }
+
+    /**
+     * The workspace's name on the card: the folder's until it is edited ([edited] non-null), and from then on what was typed, empty
+     * included: an emptied name is never filled in again.
+     */
+    fun shownName(edited: String?, folder: String): String = edited ?: folder
+
+    /** The line under the Name field, and whether it is a refusal. */
+    fun nameLine(edited: String?): Pair<String, Boolean> = when {
+        edited != null && edited.trim().isEmpty() -> MachineSetupCopy.SETUP_NAME_EMPTY to true
+        edited != null -> MachineSetupCopy.SETUP_NAME_EDITED to false
+        else -> MachineSetupCopy.SETUP_NAME_HINT to false
+    }
+
+    /** Whether Create workspace can be pressed: a folder found usable, a name, a machine that can check and make folders, nothing out. */
+    fun canCreate(pick: PickedFolder?, name: String, usable: Boolean, creating: Boolean): Boolean =
+        pick != null && name.trim().isNotEmpty() && usable && !creating
+
+    /** `POST /workspaces`: the workspace alone, in [folder] on the runner, under [name] (trimmed). */
+    fun createWorkspaceBody(name: String, runnerId: String, folder: PickedFolder): JsonObject = buildJsonObject {
+        put("name", name.trim())
+        put("runnerId", runnerId)
+        folder.newWorkspace.toJson().forEach { (key, value) -> put(key, value) }
     }
 
     /** The login CLIs installed here, in the app's order. */
@@ -380,12 +369,6 @@ object MachineSetup {
         return SetupCredential.SignIn
     }
 
-    /** Rule 5's Use X instead: the other sign-ins installed here, among the engines this app draws. */
-    fun otherEngines(runner: JsonObject, engine: String, fleet: List<JsonObject>? = null): List<String> =
-        installedLogins(runner).filter {
-            it != engine && ProviderEngines.androidShowsEngine(it, fleet ?: listOf(runner))
-        }
-
     /**
      * Rule 5's Use an API Key: the first key or pool that can run here, the draft's own engine's first. Null with none, and then the
      * card doesn't offer it: a key is connected on the web.
@@ -400,10 +383,6 @@ object MachineSetup {
         }
         return null
     }
-
-    /** Rule 1 and §3: both steps are done and the machine is here, so the next send makes the workspace. */
-    fun isReady(bare: Boolean, folder: PickedFolder?, online: Boolean, credential: SetupCredential): Boolean =
-        bare && folder != null && online && credential.done
 
     /**
      * Rule 9: the machines that get a Set up row in the drawer, in the runner list's order. Online, with no workspace of this account
@@ -445,71 +424,6 @@ object MachineSetup {
     }
 
     fun standsInForMachine(workspace: JsonObject): Boolean = workspace.text("id").isNullOrEmpty()
-}
-
-/**
- * The first message, waiting for a machine's two steps (rule 6). Files are on the control plane already, so they wait as
- * [StagedAttachment]s, ready to restore to the composer if withdrawn.
- */
-data class HeldMessage(
-    val content: String,
-    val shell: Boolean = false,
-    val attachments: List<StagedAttachment> = emptyList(),
-    val error: String? = null,
-)
-
-/** What a composer's send does on a machine's new session page. */
-sealed interface MachineSend {
-    data object Nothing : MachineSend
-    data object AlreadyWaiting : MachineSend
-    data object Hold : MachineSend
-    data class Create(val newWorkspace: NewWorkspaceRequest) : MachineSend
-}
-
-/**
- * What a machine's new session page has been told so far: the folder and the message waiting on it. The page is left and come back
- * to on the way (a key is picked elsewhere, a sign-in goes through a browser), and neither answer should have to be given twice.
- */
-data class MachineSetupState(
-    val folder: PickedFolder? = null,
-    val held: HeldMessage? = null,
-    val sendingHeld: Boolean = false,
-) {
-    fun pick(folder: PickedFolder?): MachineSetupState = copy(folder = folder)
-
-    fun send(bare: Boolean, ready: Boolean): MachineSend {
-        if (!bare) return MachineSend.Nothing
-        if (held != null) return MachineSend.AlreadyWaiting
-        if (ready && folder != null) return MachineSend.Create(folder.newWorkspace)
-        return MachineSend.Hold
-    }
-
-    fun hold(message: HeldMessage): MachineSetupState = copy(held = message)
-
-    /**
-     * Both steps done with a message waiting: it goes, with nobody pressing anything (rule 6). Once per waiting message, because the
-     * send makes a workspace: while it is out this answers null, and a refusal leaves it waiting on the person (`error`) rather than
-     * on another try.
-     */
-    fun takeHeldToSend(ready: Boolean, busy: Boolean): Pair<MachineSetupState, Pair<HeldMessage, NewWorkspaceRequest>>? {
-        val currentHeld = held ?: return null
-        val currentFolder = folder ?: return null
-        if (!ready || busy || sendingHeld || currentHeld.error != null) return null
-        return copy(sendingHeld = true) to (currentHeld to currentFolder.newWorkspace)
-    }
-
-    fun failHeld(why: String): MachineSetupState =
-        copy(sendingHeld = false, held = held?.copy(error = why))
-
-    fun retryHeld(): MachineSetupState =
-        copy(held = held?.copy(error = null))
-
-    fun withdraw(): Pair<MachineSetupState, HeldMessage?> {
-        if (sendingHeld) return this to null
-        return copy(held = null) to held
-    }
-
-    fun finish(): MachineSetupState = MachineSetupState()
 }
 
 /**

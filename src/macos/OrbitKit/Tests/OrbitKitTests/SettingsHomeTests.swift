@@ -43,7 +43,7 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(Set(rows.map(SettingsHome.systemImage)).count, rows.count, "two rows share a glyph")
         XCTAssertEqual(rows.map(SettingsHome.title),
                        ["General", "Notifications", "Appearance", "Profile", "Shared links", "Access tokens",
-                        "Terminals", "Machines", "Providers"])
+                        "Terminals", "GitHub", "Machines", "Providers"])
         XCTAssertEqual(SettingsHome.systemImage(.machines), AppSection.runners.systemImage)
     }
 

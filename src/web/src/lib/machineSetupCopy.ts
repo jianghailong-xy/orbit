@@ -6,25 +6,17 @@
  */
 
 export const setupTitle = (machine: string) => `Set up ${machine}`;
-export const SETUP_LEAD = 'Pick where it works and sign in a coding CLI. Anything you send waits until both are done.';
-export const setupOffline = (machine: string) => `${machine} is offline. It can’t check folders or sign in until it’s back.`;
 // Not on a board: a machine approved a moment ago that has not connected yet. It has declared nothing because it has not
 // beaten yet, not because it is too old, and nothing is wrong with it: the card waits for it, as a message sent meanwhile does.
-export const setupConnecting = (machine: string) =>
-  `Waiting for ${machine} to connect. It can check folders and sign in as soon as it does.`;
 
 // The two sentences for a runner too old to answer the directory probe. Not on a board: the interface
 // agreement asks for one, and the second is for a machine whose updater is off, where the first would
 // be a promise nothing keeps.
-export const setupUpdating = (machine: string) =>
-  `${machine} updates itself first: this version can’t check folders yet. You can sign in meanwhile.`;
 export const setupNeedsUpdate = (machine: string) =>
   `${machine} can’t check folders on this version, and it can’t update itself.`;
 export const SETUP_OPEN_MACHINE = 'Open machine';
 
 export const SETUP_FOLDER = 'Folder';
-export const setupFolderHelp = (machine: string) =>
-  `Where on ${machine} should sessions work? They can read and change everything in it.`;
 export const SETUP_NEW_FOLDER_NAME = 'name';
 export const SETUP_FOLDER_HINT = 'Uses this folder if it exists, otherwise creates it.';
 export const SETUP_NEW_FOLDER_META = 'New folder · created as the session starts.';
@@ -65,7 +57,6 @@ export const SETUP_OTHER_BRANCH = 'Other branch';
 export const SETUP_DEFAULT_BRANCH = 'Default branch';
 export const SETUP_BRANCH = 'Branch';
 export const setupGithubFolderExists = (machine: string) => `This folder already exists on ${machine}. Pick another name.`;
-export const SETUP_USE_REPOSITORY = 'Use this repository';
 export const SETUP_GITHUB_DONE = 'cloned before the session starts';
 export const setupGithubDonePath = (repository: string, path: string) => `${repository} → ${path}`;
 // A machine too old to clone: the board's edge row, in the words the folder check already uses for the same case.
@@ -85,7 +76,6 @@ export const pushedAgo = (pushedAt: string | null, now: number = Date.now()): st
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
   return `pushed ${date.toLocaleDateString('en-US', sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })}`;
 };
-export const SETUP_USE_FOLDER = 'Use this folder';
 export const SETUP_CHANGE = 'Change';
 
 export const setupChecking = (machine: string) => `Checking on ${machine}…`;
@@ -99,21 +89,11 @@ export const setupNoAnswer = (machine: string) => `${machine} didn’t answer.`;
 export const setupCouldNotCheck = (machine: string, why: string) => `Couldn’t check on ${machine}: ${why}`;
 export const SETUP_CHECK_AGAIN = 'Check again';
 
-export const setupSignIn = (engine: string, machine: string) => `Sign in ${engine} on ${machine}`;
-export const SETUP_SIGN_IN_HELP = 'Sessions run on the coding CLIs signed in on that machine, and spend its subscription.';
-export const setupSignedIn = (machine: string) => `signed in on ${machine}`;
-export const setupUseEngine = (engine: string) => `Use ${engine} instead`;
 // Not on a board: the step's two other shapes. A credential that needs no sign-in here, and an engine
 // the machine doesn't have.
 export const SETUP_ON_A_KEY = 'API key';
 export const SETUP_ON_A_POOL = 'account pool';
-export const setupNotInstalled = (engine: string, machine: string) => `${engine} isn’t installed on ${machine}.`;
 
-export const SETUP_FOOT = 'Nothing is created until you send. You can rename the workspace or change these later.';
-export const setupReady = (workspace: string, path: string) =>
-  `Ready. Send a task — Orbit adds the workspace “${workspace}” for ${path} as it starts.`;
-export const setupReadyClone = (repository: string, path: string, workspace: string) =>
-  `Ready. Send a task — Orbit clones ${repository} into ${path} and adds the workspace “${workspace}” as it starts.`;
 
 // The web card's own lines (owner 2026-11-16, docs/mocks/new-folder-in-home/workspace-card-with-name): on the web a
 // machine with no workspace draws the card alone, which makes the workspace from a folder and a name, and asks no
@@ -138,13 +118,7 @@ export const setupCreateFailed = (why: string) => `Couldn’t create the workspa
 export const composerPlaceholderFor = (machine: string) => `Send ${machine} a task…`;
 
 export const heldWaiting = (machine: string) => `Waiting for ${machine} — sends once both steps are done`;
-export const HELD_WITHDRAW = 'Withdraw';
 // Not on a board: the moment it goes, and the refusal it can meet there.
-export const HELD_SENDING = 'Sending…';
-export const heldFailed = (why: string) => `Couldn’t send: ${why}`;
-export const HELD_TRY_AGAIN = 'Try again';
-export const HELD_ALREADY_WAITING = 'One message is already waiting';
-export const HELD_ALREADY_WAITING_DETAIL = 'Withdraw it to send a different one.';
 
 export const CREATED_WORKSPACE = 'Created workspace';
 export const CREATED_ON = 'on';

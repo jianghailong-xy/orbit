@@ -1618,10 +1618,6 @@ struct NewSessionView: View {
             if let pick = app.consoleRegistry?.takeDraftAccount(agentID: agent.id) {
                 draft.pickDraftAccount(pick.engine, pick.account)
             }
-            // What waited on this machine before it got this workspace.
-            if let held = app.consoleRegistry?.takeDraftMessage(agentID: agent.id) {
-                draft.restoreHeld(held)
-            }
             await draft.prepareDraft()
         }
         // Whether this account has never had a session, read as the managed default draft appears.

@@ -10,9 +10,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
@@ -20,11 +17,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
-import io.orbitd.android.core.auth.AuthState
-import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.ManagementFixture
 import io.orbitd.android.ui.OrbitTheme
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.*
 import org.junit.Before
@@ -43,8 +37,8 @@ import java.util.concurrent.CopyOnWriteArrayList
  * The setup card's From GitHub (board 01 P1–P4 in board 04 A's place, web `MachineSetupCard.tsx` + `GithubFolderOption.tsx`): a row
  * under the folder's name behind an "or" rule, offered only where the deployment has the App, which swaps the step to the picker and
  * back again with Type a folder name instead;
- * Connect until the account is connected, the repository list, a picked repository with its folder's verdict, and what Use This
- * Repository picks. Each state is drawn to a PNG.
+ * Connect until the account is connected, the repository list, a picked repository with its folder's verdict, the Name following its
+ * folder, and what Create workspace sends. Each state is drawn to a PNG.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = io.orbitd.android.management.ManagementShellApplication::class, qualifiers = "w411dp-h1100dp-xhdpi")
@@ -59,17 +53,11 @@ class GithubFolderOptionTest {
     @get:Rule(order = 1) val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val opened = CopyOnWriteArrayList<String>()
-    private val picks = CopyOnWriteArrayList<PickedFolder?>()
+    private val created = CopyOnWriteArrayList<Pair<PickedFolder, String>>()
     private val probed = CopyOnWriteArrayList<String>()
     private val settingsOpened = CopyOnWriteArrayList<Unit>()
 
     @Before fun reset() = ManagementFixture.reset()
-
-    private fun api(): ManagementApi {
-        val session = ManagementFixture.session()
-        runBlocking { ManagementFixture.signIn(session) }
-        return ManagementApi(session, (session.state.value as AuthState.SignedIn).handle)
-    }
 
     /** The machine's answer about a folder: `orbit-web` is there already, anything else is free. */
     private suspend fun probe(path: String): DirProbeRelay.Outcome {
@@ -78,21 +66,17 @@ class GithubFolderOptionTest {
         return DirProbeRelay.Outcome.Answered(DirProbe(path, exists = taken, isDir = taken, isGit = taken, isHome = false))
     }
 
-    private fun card(github: FakeGithub, runner: JsonObject = cloningRunner(), state: MachineSetupState = MachineSetupState(),
-                     ready: Boolean = false, online: Boolean = true) {
-        val api = api()
+    private fun card(github: FakeGithub, runner: JsonObject = cloningRunner(), online: Boolean = true) {
         compose.setContent {
             OrbitTheme(darkTheme = false) {
                 CompositionLocalProvider(LocalUriHandler provides object : UriHandler { override fun openUri(uri: String) { opened += uri } }) {
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        var shown by androidx.compose.runtime.remember { mutableStateOf(state) }
                         Column(Modifier.verticalScroll(rememberScrollState()).padding(14.dp)) {
                             MachineSetupCard(
-                                runner = runner, online = online, state = shown, engine = "claude", credential = SetupCredential.SignedIn,
-                                ready = ready, otherEngines = emptyList(), keyToUse = null, managementApi = api,
+                                runner = runner, online = online,
                                 probeDir = { path, _ -> probe(path) },
-                                onPickFolder = { picks += it; shown = shown.pick(it) },
-                                onUseEngine = {}, onUseKey = {}, onOpenMachine = {}, onSignedIn = {},
+                                onCreate = { folder, name -> created += folder to name },
+                                creating = false, createError = null, onOpenMachine = {},
                                 github = github, onOpenGithubSettings = { settingsOpened += Unit },
                             )
                         }
@@ -108,7 +92,8 @@ class GithubFolderOptionTest {
         compose.waitForIdle()
     }
 
-    private fun useButton() = compose.onNode(hasText(MachineSetupCopy.SETUP_USE_REPOSITORY) and hasClickAction())
+    private fun createButton() = compose.onNodeWithTag("setup-create")
+    private fun nameField() = compose.onNodeWithTag("setup-workspace-name")
 
     @Test fun notOfferedWhereTheDeploymentHasNoApp() {
         card(FakeGithub(GithubIntegration(available = false, connected = false)))
@@ -135,6 +120,9 @@ class GithubFolderOptionTest {
         compose.onNodeWithTag("setup-new-folder-name").assertDoesNotExist()
         compose.onNodeWithTag("setup-github-row").assertDoesNotExist()
         compose.onNodeWithText(MachineSetupCopy.SETUP_FOLDER, useUnmergedTree = true).assertExists()
+        // The picker takes the folder field's place; the Name and Create workspace stay.
+        nameField().assertExists()
+        createButton().assertExists()
 
         compose.onNodeWithTag("setup-folder-name-instead").performClick()
         compose.waitForIdle()
@@ -164,8 +152,8 @@ class GithubFolderOptionTest {
         compose.ghAwait(MachineSetupCopy.SETUP_GITHUB_META)
         compose.ghAwait(MachineSetupCopy.SETUP_CONNECT_GITHUB_META)
         compose.onNodeWithText(MachineSetupCopy.SETUP_NEW_TAG).assertExists()
-        // Nothing to use until the account is connected: the step offers Connect, and the way back.
-        useButton().assertDoesNotExist()
+        // Nothing to create until the account is connected: the field offers Connect, and the way back.
+        createButton().assertIsNotEnabled()
         compose.onNodeWithTag("setup-folder-name-instead").assertExists()
         compose.ghShot("01-from-github-not-connected")
 
@@ -235,16 +223,20 @@ class GithubFolderOptionTest {
         compose.ghAwait(MachineSetupCopy.setupGithubFolderExists("orbit@austin"))
         compose.ghAwait(MachineSetupCopy.SETUP_GITHUB_CLONED_META)
         assertTrue(probed.contains("/Users/austin/orbit-repos/orbit-web"))
-        useButton().assertIsNotEnabled()
+        createButton().assertIsNotEnabled()
         compose.ghShot("03-from-github-picked-folder-exists")
 
         compose.onNodeWithTag("setup-github-folder").performTextReplacement("bad/name")
         compose.ghAwait(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID)
-        useButton().assertIsNotEnabled()
+        createButton().assertIsNotEnabled()
 
         compose.onNodeWithTag("setup-github-folder").performTextReplacement("orbit-web-2")
         compose.waitUntil(10_000) { probed.contains("/Users/austin/orbit-repos/orbit-web-2") }
-        compose.waitUntil(10_000) { runCatching { useButton().assertIsEnabled() }.isSuccess }
+        compose.waitUntil(10_000) { runCatching { createButton().assertIsEnabled() }.isSuccess }
+        // Found: where the clone goes, and the Name follows its folder.
+        compose.ghAwait("orbit-labs/orbit-web → ~/orbit-repos/orbit-web-2")
+        compose.ghAwait(MachineSetupCopy.SETUP_GITHUB_DONE)
+        nameField().assert(hasText("orbit-web-2"))
         compose.onNodeWithTag("setup-github-other-branch").performClick()
         compose.waitUntil(10_000) { github.calls.contains("branches 101") }
         compose.ghAwait("release/1.4")
@@ -253,22 +245,36 @@ class GithubFolderOptionTest {
         compose.waitForIdle()
         compose.ghShot("04-from-github-picked-free-other-branch")
 
-        useButton().performClick()
+        createButton().performClick()
         compose.waitForIdle()
-        val picked = picks.filterNotNull().single() as PickedFolder.Github
+        val (folder, name) = created.single()
+        val picked = folder as PickedFolder.Github
+        assertEquals("orbit-web-2", name)
         assertEquals(GithubPick(101, "orbit-labs/orbit-web", true, "main", "dev", "orbit-web-2", "/Users/austin/orbit-repos/orbit-web-2"), picked.pick)
-        assertEquals(ghJson("""{"github":{"repoId":101,"folder":"orbit-web-2","ref":"dev"}}"""), picked.newWorkspace.toJson())
-        // Picked: the step's done line.
-        compose.ghAwait("orbit-labs/orbit-web → ~/orbit-repos/orbit-web-2")
-        compose.ghAwait(MachineSetupCopy.SETUP_GITHUB_DONE)
+        assertEquals(ghJson("""{"name":"orbit-web-2","runnerId":"r1","github":{"repoId":101,"folder":"orbit-web-2","ref":"dev"}}"""),
+            MachineSetup.createWorkspaceBody(name, "r1", picked))
     }
 
-    @Test fun oncePickedTheCardSaysWhereTheCloneGoesAndThatItIsReady() {
-        val pick = PickedFolder.Github(GithubPick(101, "orbit-labs/orbit-web", true, "main", null, "orbit-web", "/Users/austin/orbit-repos/orbit-web"))
-        card(FakeGithub(FakeGithub.connected()), state = MachineSetupState(folder = pick), ready = true)
-        compose.ghAwait("orbit-labs/orbit-web → ~/orbit-repos/orbit-web")
-        compose.ghAwait(MachineSetupCopy.SETUP_GITHUB_DONE)
-        compose.ghAwait(MachineSetupCopy.setupReadyClone("orbit-labs/orbit-web", "~/orbit-repos/orbit-web", "orbit-web"))
+    /** An edited Name stays the person's; Type a folder name instead drops the repository, and the Name follows the typed folder again. */
+    @Test fun anEditedNameIsSentAndTheWayBackDropsTheRepository() {
+        card(FakeGithub(FakeGithub.connected()))
+        chooseFromGithub()
+        compose.ghAwait("orbit-api")
+        compose.onAllNodesWithTag("setup-github-repo", useUnmergedTree = true)[1].performClick()
+        compose.ghAwait("orbit-labs/orbit-api → ~/orbit-repos/orbit-api")
+        nameField().assert(hasText("orbit-api"))
         compose.ghShot("05-from-github-picked-ready")
+
+        nameField().performTextReplacement("api")
+        createButton().assertIsEnabled().performClick()
+        compose.waitForIdle()
+        assertEquals("api", created.single().second)
+        assertEquals(ghJson("""{"github":{"repoId":102,"folder":"orbit-api"}}"""), created.single().first.newWorkspace.toJson())
+
+        compose.onNodeWithTag("setup-folder-name-instead").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("setup-new-folder-name").assertExists()
+        compose.onAllNodesWithText("orbit-labs/orbit-api → ~/orbit-repos/orbit-api", useUnmergedTree = true).assertCountEquals(0)
+        createButton().assertIsNotEnabled()
     }
 }

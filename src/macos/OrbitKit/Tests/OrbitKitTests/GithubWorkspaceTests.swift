@@ -72,13 +72,16 @@ final class GithubWorkspaceTests: XCTestCase {
         XCTAssertTrue(body.contains("\"github\":{"), body)
         XCTAssertTrue(body.contains("\"repoId\":42"), body)
         XCTAssertFalse(body.contains("\"ref\""), "the default branch is asked for by leaving ref out: \(body)")
-        XCTAssertEqual(pick.workspaceName, "orbit-web")
-        XCTAssertEqual(pick.doneLine, "orbit-labs/orbit-web → ~/orbit-repos/orbit-web")
-        XCTAssertEqual(pick.doneNote, "cloned before the session starts")
-        XCTAssertEqual(pick.readySentence,
-                       "Ready. Send a task — Orbit clones orbit-labs/orbit-web into ~/orbit-repos/orbit-web and adds the workspace “orbit-web” as it starts.")
-        let state = MachineSetupState(folder: pick)
-        XCTAssertEqual(state.send(bare: true, ready: true), .create(NewWorkspaceRequest(github: .init(repoId: 42, folder: "orbit-web"))))
+        // Create workspace (board 04 A on the one-field card) sends it as POST /workspaces `github`, under the Name.
+        let create = MachineSetup.createRequest(folder: pick, name: " orbit-web ", runnerID: "r1")
+        let sent = String(decoding: try JSONEncoder().encode(create), as: UTF8.self)
+        XCTAssertTrue(sent.contains("\"github\":{"), sent)
+        XCTAssertTrue(sent.contains("\"name\":\"orbit-web\""), sent)
+        XCTAssertFalse(sent.contains("\"workDir\"") || sent.contains("\"newFolder\""), sent)
+        XCTAssertEqual(MachineSetupCopy.setupGithubDonePath(repository: "orbit-labs/orbit-web",
+                                                            path: MachineSetup.homeShortPath(pick.path)),
+                       "orbit-labs/orbit-web → ~/orbit-repos/orbit-web")
+        XCTAssertEqual(MachineSetupCopy.SETUP_GITHUB_DONE, "cloned before the session starts")
     }
 
     func testTheIntegrationDecodesAnOlderServersAnswer() throws {

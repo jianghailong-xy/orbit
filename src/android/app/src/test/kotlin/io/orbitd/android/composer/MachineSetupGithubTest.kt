@@ -62,22 +62,9 @@ class MachineSetupGithubTest {
         val noRef = PickedFolder.Github(GithubPick(77, "o/r", false, "main", null, "r", "/x/r"))
         assertEquals(json("""{"github":{"repoId":77,"folder":"r"}}"""), noRef.newWorkspace.toJson())
         assertEquals(json("""{"newFolder":"r"}"""), PickedFolder.New("r", "/x/r").newWorkspace.toJson())
-        assertEquals(MachineSend.Create(noRef.newWorkspace), MachineSetupState(folder = noRef).send(bare = true, ready = true))
-    }
-
-    @Test fun aPickedCloneSaysWhereItGoesAndWhatHappensAsItStarts() {
-        val picked = PickedFolder.Github(GithubPick(77, "orbit-labs/orbit-web", false, "main", null, "orbit-web",
-            "/Users/austin/orbit-repos/orbit-web"))
-        assertEquals("orbit-labs/orbit-web → ~/orbit-repos/orbit-web", picked.doneLine)
-        assertEquals(MachineSetupCopy.SETUP_GITHUB_DONE, picked.doneNote)
-        assertEquals("orbit-web", picked.workspaceName)
-        assertEquals(
-            "Ready. Send a task — Orbit clones orbit-labs/orbit-web into ~/orbit-repos/orbit-web and adds the workspace “orbit-web” as it starts.",
-            picked.readySentence,
-        )
-        val folder = PickedFolder.New("x", "/r/x")
-        assertEquals("/r/x", folder.doneLine)
-        assertEquals(MachineSetupCopy.setupReady("x", "/r/x"), folder.readySentence)
+        // POST /workspaces: the workspace's name and machine, and the clone in place of a folder.
+        assertEquals(json("""{"name":"web","runnerId":"r1","github":{"repoId":77,"folder":"r"}}"""),
+            MachineSetup.createWorkspaceBody(" web ", "r1", noRef))
     }
 
     @Test fun theCreatedLineReadsTheClonesFields() {

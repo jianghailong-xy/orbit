@@ -328,8 +328,6 @@ struct ComposerView: View {
         if cursorTurnRunning, console.replyContext == nil { return CursorRuntime.runningPlaceholder }
         // A new account's welcome card above: what to write (docs/mocks/new-user-onboarding).
         if console.welcomes, console.replyContext == nil { return WelcomeCopy.WELCOME_PLACEHOLDER }
-        // A machine's new session page has no workspace to send to, and no question to answer.
-        if let machine = console.machinePlaceholder { return machine }
         // A wiki chat's panel says what to ask, unless a reply has its own words.
         if console.replyContext == nil, let emptyPlaceholder { return emptyPlaceholder }
         return console.replyContext?.placeholder ?? "Message…"

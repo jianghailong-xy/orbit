@@ -97,6 +97,8 @@ export interface RunnerObjects {
   runningTaskId: string;
   runningTaskSessionId: string;
   allowedApprovalId: string;
+  /** Of `machineSessionId`: an ended SubAgent run, which a delegate call's `resumeOf` names. */
+  subagentRunId: string;
   artifactRequestId: string;
   /** An integration job, and a Codex reset operation, the machine holds the claim of (`leaseOwner`, generation 1). */
   integrationJobId: string;
@@ -967,6 +969,14 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
   'POST /runner/git-credential body workspaceId': {
     as: RUNNER,
     request: (of) => ({ params: {}, body: { workspaceId: of.workspaceId, host: 'github.com', path: 'census/none' } }),
+  },
+  // A delegate call resuming A's ended SubAgent run, from B's own session: looked up only among that session's runs.
+  'POST /runner/sessions/:id/subagents body resumeOf': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.runner.machineSessionId },
+      body: { toolUseId: 'toolu_census_resume', type: 'general', definitionSource: 'builtin', resumeOf: of.runner.subagentRunId },
+    }),
   },
   // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
   'POST /runner/link/welcome body sessionIds[]': {
