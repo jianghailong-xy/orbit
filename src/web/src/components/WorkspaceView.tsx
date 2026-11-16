@@ -528,8 +528,10 @@ import {
   type PickedFolder,
 } from '../lib/machineSetup';
 import {
+  CLONE_RETRY_FAILED,
   composerPlaceholderFor,
 } from '../lib/machineSetupCopy';
+import { githubRepositoryOf, hearClone, retryClone } from '../lib/workspaceClone';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -4407,11 +4409,18 @@ export function WorkspaceView({
             keyName: selectedKeyName,
             runnerName: runnerShownName,
             region: runner.region ?? null,
+            clone: detailForSelected?.workspace?.cloneState
+              ? {
+                  repository: githubRepositoryOf(detailForSelected.workspace.repoUrl),
+                  error: detailForSelected.workspace.cloneError ?? null,
+                }
+              : null,
           })
         : null,
     [
       selected,
       selectedSession,
+      detailForSelected?.workspace,
       selectedTrashed,
       selectedMissing,
       selectedRuntime,
@@ -8792,6 +8801,16 @@ export function WorkspaceView({
       navigate,
     ],
   );
+  // A failed clone's Retry, from the never-started card (the conversation's first line has its own).
+  const retryCloneNow = useMutation({
+    mutationFn: (workspaceId: string) => retryClone(workspaceId),
+    onSuccess: (_answer, workspaceId) => {
+      hearClone(workspaceId, { state: 'PENDING', progress: null });
+      if (selectedId) void qc.invalidateQueries({ queryKey: sessionQuery(selectedId).queryKey });
+      refreshSessionLists();
+    },
+    onError: (e: Error) => message.error(CLONE_RETRY_FAILED, e.message),
+  });
   // What the never-started card's presses do, in either of the places it stands (see its render).
   const neverStartedActions: NeverStartedActions = {
     // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
@@ -8828,7 +8847,8 @@ export function WorkspaceView({
       configEditable && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
     moveSession: selectedSession ? () => openMove(selectedSession) : undefined,
     checkAgain: runner.region ? regionCheck.checkAgain : undefined,
-    busy: retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
+    retryClone: detailForSelected?.workspace?.cloneState === 'FAILED' ? () => retryCloneNow.mutate(detailForSelected.workspace!.id) : undefined,
+    busy: retryCloneNow.isPending || retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
   };
   const pickModel = (v: string): void => {
     // A pick applies to this session (or draft) only: the next draft's model is the workspace's

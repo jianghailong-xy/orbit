@@ -68,14 +68,31 @@ public struct DirProbeAnswer: Codable, Equatable, Sendable {
 }
 
 /// `POST /sessions`' folder for the workspace a machine's first session makes (§3): exactly one of the
-/// two. `workDir` is a folder the runner has confirmed, as it resolved it; `newFolder` is one path
-/// segment the server joins to the runner's Repos Folder.
+/// three. `workDir` is a folder the runner has confirmed, as it resolved it; `newFolder` is one path
+/// segment the server joins to the runner's Repos Folder; `github` is a clone of one of the person's
+/// repositories into that folder (docs/github-workspace-design.md §5.3).
 public struct NewWorkspaceRequest: Codable, Equatable, Sendable {
     public let workDir: String?
     public let newFolder: String?
+    public let github: GithubClone?
 
-    public init(workDir: String? = nil, newFolder: String? = nil) {
+    /// `newWorkspace.github`: the repository by GitHub's id, the branch when it isn't the default one, and the
+    /// folder under the Repos Folder.
+    public struct GithubClone: Codable, Equatable, Sendable {
+        public let repoId: Int64
+        public let ref: String?
+        public let folder: String?
+
+        public init(repoId: Int64, ref: String? = nil, folder: String? = nil) {
+            self.repoId = repoId
+            self.ref = ref
+            self.folder = folder
+        }
+    }
+
+    public init(workDir: String? = nil, newFolder: String? = nil, github: GithubClone? = nil) {
         self.workDir = workDir
         self.newFolder = newFolder
+        self.github = github
     }
 }

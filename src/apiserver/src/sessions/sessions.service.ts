@@ -130,6 +130,7 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
+  CLONE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
   type TranslationActionResponse,
@@ -153,7 +154,10 @@ import {
   type AgentProviderSeed,
   type SessionOpenedBy,
 } from '../workspaces/workspace-provider';
+import { GithubConnectionService } from '../github/github-connection.service';
+import { githubRepoUrl } from '../github/github-workspace.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { workspaceCloneHoldSql, workspaceCloneReasonSql } from '../common/workspace-clone-gate';
 import {
   reprojectAfterSettledChecks,
   settleChecksOfEndedRun,
@@ -248,9 +252,12 @@ import {
 } from './dto';
 import {
   folderNameOf,
+  folderOfRepoName,
   freeWorkspaceName,
+  newFolderWorkDir,
   newFolderWorkDirOn,
   readNewWorkspace,
+  type NewWorkspaceGithubAsk,
   type NewWorkspaceTarget,
 } from './new-workspace';
 import {
@@ -991,6 +998,12 @@ export class SessionsService {
      * their own over the same prisma and the same environment, which behaves the same.
      */
     @Optional() files?: FilesService,
+    /**
+     * Each account's GitHub connection (github/github-connection.service.ts): a `newWorkspace.github` asks it whether
+     * the caller can see the repository now. Absent in the specs that build this service by hand, where a GitHub
+     * workspace is refused as GitHub not being connected.
+     */
+    @Optional() private readonly githubConnections?: GithubConnectionService,
   ) {
     this.files = files ?? new FilesService(prisma);
   }
@@ -1278,8 +1291,9 @@ export class SessionsService {
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
     // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
-    // makes its sessions run with no branch, so the runner runs them in the shared workDir.
-    let enableWorktree = false;
+    // makes its sessions run with no branch, so the runner runs them in the shared workDir. A workspace this
+    // request clones from GitHub starts with it on (createInNewWorkspace), and so does its first session.
+    let enableWorktree = !!newWorkspace?.clone;
     // The owner's account-level permission default, materialized onto the session below when the
     // caller picked none (MCP spawns, task runs — the web/native composers always send one).
     // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
@@ -1895,11 +1909,65 @@ export class SessionsService {
     if (ask.workDir !== undefined) {
       return { runnerId: runner.id, workDir: ask.workDir, name: folderNameOf(ask.workDir), autoCreateWorkDir: false };
     }
+    if (ask.github !== undefined) return this.githubWorkspaceFor(ownerId, runner, ask.github);
     return {
       runnerId: runner.id,
       workDir: newFolderWorkDirOn(runner, ask.newFolder),
       name: ask.newFolder,
       autoCreateWorkDir: true,
+    };
+  }
+
+  /**
+   * `newWorkspace.github` (docs/github-workspace-design.md §5.3), after readNewWorkspace's 400s and the machine's 403,
+   * refused in the design's order and reading only: 409 GITHUB_NOT_CONNECTED (none, or one GitHub no longer takes; GitHub
+   * off on this Orbit is the 409 GITHUB_NOT_CONFIGURED in its place), 403 GITHUB_REPO_FORBIDDEN (GitHub, asked now with
+   * the caller's own user token, does not show the caller this repository), 409 CLONE_UNSUPPORTED (the runner has not
+   * reported its reposRoot, or does not declare clone-workdir/v1). What is left is refused by `create` as for any other
+   * new workspace. The folder is the one asked for, else the repository's name; the URL is the repository's current
+   * one, without a credential. POST /workspaces `github` (WorkspacesService.create) is held to the same refusals.
+   */
+  async githubWorkspaceFor(
+    ownerId: string,
+    runner: { id: string; reposRoot: string | null; capabilities: string[]; capabilitiesReportedAt: Date | null },
+    ask: NewWorkspaceGithubAsk,
+  ): Promise<NewWorkspaceTarget> {
+    if (!this.githubConnections) {
+      throw new ConflictException({ code: 'GITHUB_NOT_CONNECTED', message: 'Connect GitHub in Settings → Integrations first.' });
+    }
+    const repo = await this.githubConnections.reachableRepository(ownerId, ask.repoId, { fresh: true });
+    if (!repo) {
+      throw new ForbiddenException({
+        code: 'GITHUB_REPO_FORBIDDEN',
+        message: 'Your GitHub account cannot reach that repository through Orbit\'s GitHub App. Add it to the App on GitHub, or pick another.',
+      });
+    }
+    const reposRoot = runner.reposRoot?.trim();
+    const clones = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CLONE_WORKDIR_CAPABILITY);
+    if (!clones || !reposRoot) {
+      throw new ConflictException({
+        code: 'CLONE_UNSUPPORTED',
+        message: clones
+          ? 'This runner has not reported its Repos Folder, so it cannot clone a repository. Choose an existing folder.'
+          : 'This runner is too old to clone a repository — update it, or choose an existing folder.',
+      });
+    }
+    const name = repo.fullName.split('/').pop() ?? '';
+    const folder = ask.folder ?? folderOfRepoName(name);
+    if (!folder) {
+      throw new BadRequestException(`The repository's name ${JSON.stringify(name)} is not a folder name: send newWorkspace.github.folder`);
+    }
+    return {
+      runnerId: runner.id,
+      workDir: newFolderWorkDir(reposRoot, folder),
+      name: folder,
+      autoCreateWorkDir: false,
+      clone: {
+        repoUrl: githubRepoUrl(repo.fullName),
+        githubRepoId: BigInt(repo.id),
+        githubInstallationId: BigInt(repo.installationId),
+        cloneRef: ask.ref,
+      },
     };
   }
 
@@ -1984,9 +2052,12 @@ export class SessionsService {
           name: freeWorkspaceName(target.name, taken.map((w) => w.name)),
           runnerId: target.runnerId,
           workDir: target.workDir,
-          // Isolation off, as every new workspace starts (board 04, settled item 3).
-          enableWorktree: false,
+          // Isolation off, as every new workspace starts (board 04, settled item 3) — except a clone from GitHub, whose
+          // point is landing work back to the repository, which needs each session on its own branch.
+          enableWorktree: !!target.clone,
           autoCreateWorkDir: target.autoCreateWorkDir,
+          // A clone (docs/github-workspace-design.md §5.3): PENDING until the runner reports it, and its sessions with it.
+          ...(target.clone ? { ...target.clone, cloneState: 'PENDING' } : {}),
         },
         select: { id: true, name: true },
       });
@@ -4475,6 +4546,10 @@ export class SessionsService {
               -- offline there.
               WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
                 THEN 'runner_offline'
+              -- A GitHub workspace whose clone is not READY (docs/github-workspace-design.md §6): the claim's own gate,
+              -- named before capacity, because a slot coming free would not start this session.
+              WHEN ${workspaceCloneHoldSql(Prisma.sql`s.workspace_id`)}
+                THEN ${workspaceCloneReasonSql(Prisma.sql`s.workspace_id`)}
               -- Second, for the offline gate's reason: a runner draining for a self-update claims
               -- nothing whatever its counts say (runner drainForUpdate), so naming a capacity gate
               -- here would send the reader to the wrong cause. Ends only when the update does.
