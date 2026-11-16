@@ -250,6 +250,62 @@ final class GuestSessionTests: XCTestCase {
                             addedAt: "2026-11-13T09:00:00.000Z", lastTurnAt: lastTurnAt)
     }
 
+    // A sent message is drawn at once and asked for often until its echo replaces it (production 11-16)
+
+    func testASentMessageIsDrawnAtOnceHeadedAsTheReadersUntilItsEchoReplacesIt() {
+        var sent = GuestSentTurns()
+        let start = Date(timeIntervalSince1970: 1_000)
+        let key = sent.draw("Ship it on Friday", at: start)
+        let drawn = sent.events
+        XCTAssertEqual(drawn.count, 1)
+        XCTAssertEqual(drawn[0].type, .user)
+        XCTAssertEqual(drawn[0].payload["text"]?.stringValue, "Ship it on Friday")
+        XCTAssertEqual(ExternalSender.parse(drawn[0].payload["externalSender"])?.source, ExternalSender.readerSource)
+        // After every real event, and below the sentinel the cursor ignores.
+        XCTAssertGreaterThan(drawn[0].seq, 1_000_000)
+        XCTAssertLessThan(drawn[0].seq, RunEvent.sentinelSeq)
+
+        // Drawn into the transcript after what was read, as the reader's own words.
+        var reducer = TranscriptReducer()
+        reducer.applyTailPage(EventPage(events: [RunEvent(seq: 1, type: .assistant, turnId: "t0", payload: .object(["text": .string("hi")]))],
+                                        hasMore: false))
+        reducer.appendNewer(EventPage(events: drawn, hasMore: false))
+        guard case .user(let bubble)? = reducer.state.items.last else { return XCTFail("no user bubble: \(reducer.state.items)") }
+        XCTAssertEqual(bubble.text, "Ship it on Friday")
+
+        sent.accepted(key, turnId: "T", at: start)
+        // Someone else's message or another turn's events leave it drawn.
+        sent.read([RunEvent(seq: 2, type: .user, turnId: "other", payload: .object(["text": .string("x")])),
+                   RunEvent(seq: 3, type: .assistant, turnId: "T", payload: .object(["text": .string("On it.")]))])
+        XCTAssertEqual(sent.events.count, 1)
+        sent.read([RunEvent(seq: 4, type: .user, turnId: "T", payload: .object(["text": .string("Ship it on Friday")]))])
+        XCTAssertTrue(sent.isEmpty)
+    }
+
+    func testWhileAnEchoIsMissingTheFollowAsksEveryHalfSecondForTenSeconds() {
+        var sent = GuestSentTurns()
+        let start = Date(timeIntervalSince1970: 1_000)
+        XCTAssertEqual(sent.delay(4, at: start), 4)
+        let key = sent.draw("Ship it on Friday", at: start)
+        // Not accepted yet: nothing to ask for.
+        XCTAssertEqual(sent.delay(4, at: start), 4)
+        sent.accepted(key, turnId: "T", at: start)
+        XCTAssertEqual(sent.delay(4, at: start), 0.5)
+        XCTAssertEqual(sent.delay(nil, at: start), 0.5)
+        XCTAssertEqual(sent.delay(0, at: start), 0)
+        // Behind a running turn it can be minutes: after ten seconds it is the follow's own clock again, still drawn.
+        XCTAssertEqual(sent.delay(4, at: start.addingTimeInterval(10.5)), 4)
+        XCTAssertEqual(sent.events.count, 1)
+    }
+
+    func testASendTheDoorRefusesIsNoLongerDrawn() {
+        var sent = GuestSentTurns()
+        let key = sent.draw("Ship it on Friday")
+        sent.refused(key)
+        XCTAssertTrue(sent.isEmpty)
+        XCTAssertEqual(sent.delay(4), 4)
+    }
+
     func testNoGroupWhileThereIsNone() {
         XCTAssertFalse(SharedWithMe.showsGroup([]))
         XCTAssertTrue(SharedWithMe.showsGroup([summary()]))
