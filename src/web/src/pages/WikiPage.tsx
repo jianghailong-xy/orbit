@@ -449,8 +449,8 @@ function WikiActivityRow({ space, waiting, on }: { space: SpaceRow; waiting: num
 }
 
 /**
- * The head's space (design §12.3.4, mock 31 ④): with one space, its name as a label with nothing to
- * choose; with more, the native select — closed, the name alone; open, every space with what waits in
+ * The head's space (design §12.3.4, mock 31 ④): a menu, one space or several, since it is the way to New wiki…
+ * (no sidebar has that row; board 47) — closed, the name alone; open, every space with what waits in
  * it, then New wiki… under a divider (docs/wiki-explicit-creation-design.md §3.4), which opens the Create
  * wiki form and leaves the head on this space. The name is the repository's (`wikiSpaceNames`), not the slug.
  */
@@ -459,13 +459,6 @@ function WikiHeadSpace({ space, spaces }: { space: SpaceRow; spaces: readonly Sp
   const names = useMemo(() => wikiSpaceNames(spaces), [spaces]);
   const [creating, setCreating] = useState(false);
   const name = names.get(space.id) ?? space.title;
-  if (spaces.length < 2) {
-    return (
-      <span className="wk-space-tag" title={WIKI_SPACE_PICKER_HINT}>
-        {name}
-      </span>
-    );
-  }
   // The console's own menu, as the Tasks title's scope picker opens (board docs/mocks/wiki-space-menu): a row a space —
   // its name, the repository and its documents under it, what waits in it as the sidebar's amber count — the current one
   // lit, and Manage spaces at the foot, into Wiki settings, as the native pickers end (iOS and Android `WikiSpacePicker`).

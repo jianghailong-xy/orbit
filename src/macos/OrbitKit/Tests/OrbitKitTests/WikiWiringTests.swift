@@ -351,21 +351,18 @@ final class WikiWiringTests: XCTestCase {
         XCTAssertTrue(home.contains("case .selection: model.nav.replaceTop(with: node)"))
     }
 
-    /// The space beside the title (§12.3.4): one space is its name, a grey label with no chevron and no menu;
-    /// several are a menu of toggles — name, then the repository and documents under it, the amber number in
-    /// the icon cell — with Manage spaces at the foot, into Wiki settings.
-    func testTheSpaceIsALabelAloneAndAPickerAmongSeveral() throws {
+    /// The space beside the title (§12.3.4): always a menu, one space or several — it is the way to New wiki… —
+    /// of toggles — name, then the repository and documents under it, the amber number in the icon cell — with
+    /// Manage spaces at the foot, into Wiki settings.
+    func testTheSpaceIsAlwaysAPicker() throws {
         let picker = code(try slice(try source("Views/WikiView.swift"),
                                     from: "struct WikiSpacePicker: View {", to: "private extension View {"))
         XCTAssertTrue(picker.contains("let names = WikiSpaceLogic.names(spaces)"), "the repository's name, not the slug")
-        // Both looks — the head's title (board docs/mocks/wiki-rail-name B) and the capsule — say one space as its name alone.
+        XCTAssertFalse(picker.contains("spaces.count < 2"), "one space is a menu too: New wiki… lives in it")
+        // Both looks — the head's title (board docs/mocks/wiki-rail-name B) and the capsule — open the space menu.
         for look in ["private func titled(", "private func capsule("] {
             let drawn = try slice(picker, from: look, to: "\n    }\n")
-            let alone = try slice(drawn, from: "if spaces.count < 2 {", to: "} else {")
-            XCTAssertTrue(alone.contains("Text(name)"), look)
-            XCTAssertFalse(alone.contains("Menu"), "one space is a label, not a control: \(look)")
-            XCTAssertFalse(alone.contains("chevron"), look)
-            XCTAssertTrue(drawn.contains("Menu {\n                menuRows(names)\n            } label: {"), "several: the space menu, \(look)")
+            XCTAssertTrue(drawn.contains("Menu {\n            menuRows(names)\n        } label: {"), "the space menu, \(look)")
         }
         let title = try slice(picker, from: "private func titled(", to: "private func menuRows(")
         XCTAssertTrue(title.contains(".font(font)") && title.contains("Image(systemName: \"chevron.down\")"),

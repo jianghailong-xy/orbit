@@ -201,13 +201,16 @@ class WikiIncrementShellTest {
         awaitTag("wiki-settings-page")
     }
 
-    /** One space: its name as a label and no control. */
-    @Test fun oneSpaceIsALabelAndNoMenu() {
+    /** One space is a menu too (board 47): the drawer has no New wiki… row, so the head's menu is the way to it. */
+    @Test fun oneSpaceIsStillAMenuWithNewWiki() {
         shell.spaces = JsonArray(listOf(Wire.json.parseToJsonElement(WikiFixtures.spaces).jsonArray[0])).toString()
         signIn()
         open("orbit://wiki/${WikiShell.SPACE}")
         awaitTag("wiki-home-list")
-        compose.onNodeWithTag("wiki-space-picker").assertTextContains("orbit").assert(hasNoClickAction())
+        compose.onNodeWithTag("wiki-space-picker").assertTextContains("orbit").assert(hasClickAction())
+        press("wiki-space-picker")
+        awaitTag("wiki-space-new")
+        compose.onNodeWithTag("wiki-space:orbit").assertIsSelected()
     }
 
     /** Coming into the Wiki from a workspace opens the space bound to it; from the Tasks list, the one last looked at. */

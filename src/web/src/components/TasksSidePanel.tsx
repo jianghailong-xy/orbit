@@ -103,8 +103,6 @@ import { Avatar } from './ui/Avatar';
 import { useConfirm } from './ui/ConfirmDialog';
 import { Menu, type MenuItem } from './ui/Menu';
 import { useMoveWikiToTrash } from './WikiTrashDialog';
-import { WikiCreateDialog } from './WikiSetUpDialog';
-import { WIKI_NEW } from '../lib/wikiStart';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -391,7 +389,6 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   const wikiNames = useMemo(() => wikiSpaceNames(wikiSpaces.data ?? []), [wikiSpaces.data]);
   const [wikiOpen, setWikiOpen] = useState(true);
   // New wiki… (docs/wiki-explicit-creation-design.md §3.4): the Create wiki form, opened from the group's last row.
-  const [creatingWiki, setCreatingWiki] = useState(false);
 
   // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
@@ -1173,23 +1170,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                     menu={wikiMenu(space)}
                   />
                 ))}
-              {wikiOpen && (
-                <div
-                  className="tp-item tp-wiki-new"
-                  onClick={() => setCreatingWiki(true)}
-                  onKeyDown={(event) => handleNavActivation(event, () => setCreatingWiki(true))}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <span className="tp-ico">
-                    <PlusOutlined aria-hidden="true" />
-                  </span>
-                  <span className="tp-label">{WIKI_NEW}</span>
-                </div>
-              )}
             </div>
           )}
-          {creatingWiki && <WikiCreateDialog onClose={() => setCreatingWiki(false)} />}
 
           {(hasWorkspaceRows || hasWikis) && hasProjects && <div className="tp-divider" />}
 
