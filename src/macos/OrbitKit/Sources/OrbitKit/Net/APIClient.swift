@@ -1891,6 +1891,43 @@ public final class APIClient: @unchecked Sendable {
         try await getCancellable("runners/\(runnerID)/dir-probe", query: [URLQueryItem(name: "path", value: path)])
     }
 
+    // MARK: GitHub (docs/github-workspace-design.md §5.2, §5.3)
+
+    /// `GET /integrations/github`: whether the deployment has the App, and the account's connection.
+    public func githubIntegration() async throws -> GithubIntegration {
+        try await get("integrations/github")
+    }
+
+    /// `GET /integrations/github/repos?q=`: the repositories the person can pick, most recently pushed first.
+    public func githubRepositories(query: String) async throws -> GithubRepositoryPage {
+        try await getCancellable("integrations/github/repos",
+                                 query: query.isEmpty ? [] : [URLQueryItem(name: "q", value: query)])
+    }
+
+    /// `GET /integrations/github/repos/:id/branches`: asked only once Other branch is opened.
+    public func githubBranches(repoID: Int64) async throws -> GithubBranches {
+        try await getCancellable("integrations/github/repos/\(repoID)/branches")
+    }
+
+    /// `GET /integrations/github/start?return=`: where to send the person to sign in to GitHub. `returnTo` is the
+    /// Orbit path the callback comes back to.
+    public func githubStart(returnTo: String) async throws -> URL {
+        let start: GithubStart = try await get("integrations/github/start",
+                                               query: [URLQueryItem(name: "return", value: returnTo)])
+        guard let url = URL(string: start.authorizationUrl) else { throw URLError(.badURL) }
+        return url
+    }
+
+    /// `DELETE /integrations/github`: forget the connection; answers the view as it now stands.
+    public func disconnectGithub() async throws -> GithubIntegration {
+        try await delete("integrations/github")
+    }
+
+    /// `POST /workspaces/:id/clone/retry`: a FAILED clone goes back to PENDING, and the runner is told.
+    public func retryClone(workspaceID: String) async throws -> CloneRetryAnswer {
+        try await post("workspaces/\(workspaceID)/clone/retry", body: [String: String]())
+    }
+
     // MARK: managed runner (docs/managed-runner-design.md, "Server and three client interfaces")
 
     /// `GET /api/auth/capabilities`. A server from before the feature answers 404: nil, which is no

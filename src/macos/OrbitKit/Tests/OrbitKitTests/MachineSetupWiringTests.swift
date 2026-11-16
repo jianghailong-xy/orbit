@@ -199,8 +199,8 @@ final class MachineSetupWiringTests: XCTestCase {
         XCTAssertTrue(view.contains("createdWorkspace: console.createdWorkspaceLine)"))
         XCTAssertTrue(view.contains("case .createdWorkspace(let line):\n            CreatedWorkspaceLineView(line: line, console: console)"))
         let model = try app("ConsoleModel.swift")
-        XCTAssertTrue(model.contains("if session.createdWorkspace == true { madeWorkspace = session.agent }"),
-                      "only the detail moves it: a list row's nil says nothing")
+        XCTAssertTrue(model.contains("if session.createdWorkspace == true {\n            madeWorkspace = session.agent\n            madeWorkspaceReadAt = Date()"),
+                      "only the detail moves it: a list row's nil says nothing; when it was read weighs a clone frame against it")
         let line = try slice(try app("Views/MachineSetupCard.swift"), from: "struct CreatedWorkspaceLineView: View {", to: "private var made: AttributedString")
         try assertInOrder(line, ["if line.live {", "MachineSetupCopy.CREATED_RENAME", "MachineSetupCopy.CREATED_SETTINGS"],
                           "Rename and Settings, while there is a workspace to change")

@@ -6,7 +6,7 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`).
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case machinesAndModels, sessions, notifications, sharedLinks, accessTokens, terminals, changePassword, admin
+    case machinesAndModels, sessions, notifications, github, sharedLinks, accessTokens, terminals, changePassword, admin
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
@@ -14,6 +14,7 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
         case .machinesAndModels: return SettingsHome.title(.machinesAndModels)
         case .sessions:       return SettingsHome.title(.sessions)
         case .notifications:  return SettingsHome.title(.notifications)
+        case .github:         return SettingsHome.title(.github)
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
         case .terminals:      return SettingsHome.title(.terminals)
@@ -37,12 +38,14 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 /// wherever it has one.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
-        case machines, preferences, account
+        case machines, preferences, integrations, account
     }
 
     public enum Row: String, CaseIterable, Sendable {
         case machinesAndModels
         case sessions, notifications, appearance
+        /// Settings → GitHub (docs/github-workspace-design.md §8): the web's Integrations group's GitHub page.
+        case github
         case email, instance, sharedLinks, accessTokens, terminals, changePassword, admin
     }
 
@@ -52,6 +55,7 @@ public enum SettingsHome {
         switch group {
         case .machines:    return nil
         case .preferences: return "Preferences"
+        case .integrations: return GithubCopy.INTEGRATIONS
         case .account:     return "Account"
         }
     }
@@ -61,6 +65,7 @@ public enum SettingsHome {
         switch group {
         case .machines:    return [.machinesAndModels]
         case .preferences: return [.sessions, .notifications, .appearance]
+        case .integrations: return [.github]
         case .account:
             let rows: [Row] = [.email, .instance, .sharedLinks, .accessTokens, .terminals, .changePassword]
             return isAdmin ? rows + [.admin] : rows
@@ -73,6 +78,7 @@ public enum SettingsHome {
         case .sessions:          return "Sessions"
         case .notifications:     return "Notifications"
         case .appearance:        return "Appearance"
+        case .github:            return GithubCopy.TITLE
         case .email:             return "Email"
         case .instance:          return "Instance"
         case .sharedLinks:       return "Shared links"
@@ -90,6 +96,7 @@ public enum SettingsHome {
         case .sessions:          return "bubble.left.and.bubble.right"
         case .notifications:     return "bell"
         case .appearance:        return "circle.lefthalf.filled"
+        case .github:            return "chevron.left.forwardslash.chevron.right"
         case .email:             return "envelope"
         case .instance:          return "globe"
         case .sharedLinks:       return "link"
@@ -107,6 +114,7 @@ public enum SettingsHome {
         case .machinesAndModels: return .machinesAndModels
         case .sessions:       return .sessions
         case .notifications:  return .notifications
+        case .github:         return .github
         case .sharedLinks:    return .sharedLinks
         case .accessTokens:   return .accessTokens
         case .terminals:      return .terminals
@@ -136,6 +144,12 @@ public enum SettingsHome {
         guard !runners.isEmpty else { return "None" }
         let online = runners.filter { $0.online == true }.count
         return "\(online) of \(runners.count) online"
+    }
+
+    /// "@ada" — the GitHub account connected, once the connection has been read; nil before, and when none is.
+    public static func githubValue(_ integration: GithubIntegration?) -> String? {
+        guard let integration, integration.connected, let login = integration.login else { return nil }
+        return "@\(login)"
     }
 
     /// "25 active" — the links that open for anyone who has them.

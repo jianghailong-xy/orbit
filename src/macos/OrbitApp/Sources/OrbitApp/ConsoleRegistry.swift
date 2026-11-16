@@ -232,6 +232,14 @@ final class ConsoleRegistry {
         }
     }
 
+    /// A GitHub workspace's clone moved to another state: the cached consoles whose conversation made that workspace
+    /// read their detail again, which carries the state the server stored and, for a failure, why.
+    func cloneStateMoved(workspaceID: String) {
+        for model in models.values where WorkspaceClone.sameWorkspace(model.madeWorkspaceID, workspaceID) {
+            Task { await model.refreshMadeWorkspace() }
+        }
+    }
+
     /// Drop all in-memory consoles after persisting them (sign-out). Disk snapshots remain for the
     /// next sign-in.
     func reset() {

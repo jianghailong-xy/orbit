@@ -17,7 +17,13 @@ final class SettingsHomeTests: XCTestCase {
     /// the account.
     func testTheGroupsReadInTheOrderTheyWerePicked() {
         // Machines & models has no header: its one row says that name (docs/mocks/machines-and-models, ⑥-2).
-        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), [nil, "Preferences", "Account"])
+        XCTAssertEqual(SettingsHome.Group.allCases.map(SettingsHome.header), [nil, "Preferences", "Integrations", "Account"])
+        // Integrations, as the web's settings nav groups it: GitHub's page (docs/github-workspace-design.md §8).
+        XCTAssertEqual(SettingsHome.rows(.integrations, isAdmin: false), [.github])
+        XCTAssertEqual(SettingsHome.page(.github), .github)
+        XCTAssertEqual(SettingsHome.githubValue(nil), nil)
+        XCTAssertEqual(SettingsHome.githubValue(GithubIntegration(available: true, connected: true, login: "ada")), "@ada")
+        XCTAssertEqual(SettingsHome.githubValue(GithubIntegration(available: true, connected: false)), nil)
         // One row: the web's Runners and Providers pages are one page, Machines & models.
         XCTAssertEqual(SettingsHome.rows(.machines, isAdmin: false), [.machinesAndModels])
         // The five session settings are one row's page now (`SessionSettings`), first in Preferences.

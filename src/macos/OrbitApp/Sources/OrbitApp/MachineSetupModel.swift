@@ -70,6 +70,10 @@ final class MachineSetupModel {
         state.pick(folder)
     }
 
+    /// The folder option chosen by hand, kept with the page: a card come back from GitHub's sign-in in the browser
+    /// still has From GitHub chosen (board 01, note 2).
+    var folderChoice: FolderChoice?
+
     func useEngine(_ engine: LoginEngine) {
         draft.pickDraft(engine: engine.rawValue, provider: engine.rawValue)
     }

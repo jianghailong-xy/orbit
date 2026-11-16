@@ -928,6 +928,9 @@ final class AppModel {
         linkCards = nil
         managedRunner?.reset()
         newAccount = nil
+        github = nil
+        githubLoadError = nil
+        cloneLedger = CloneLedger()
         #if os(iOS)
         disablePush()   // reads the access token, so before the store is cleared below
         #endif
@@ -1353,6 +1356,14 @@ final class AppModel {
             nudgeProjects()
         default:
             break
+        }
+        // A GitHub workspace's clone (docs/github-workspace-design.md §5.4): git's percentage is drawn from what is heard
+        // here and read from nothing else, so a percentage alone reads nothing again. A state that moved is what the
+        // server stored: the open conversations of that workspace read their detail again, and the lists below.
+        if let (workspaceID, clone) = WorkspaceClone.event(type: ev.type.rawValue, data: ev.data,
+                                                           envelopeAgentID: ev.agentId) {
+            guard cloneLedger.hear(workspaceID, clone) else { return }
+            consoleRegistry?.cloneStateMoved(workspaceID: workspaceID)
         }
         switch ControlEventRoute.of(ev) {
         // A task event carries the changed row ids. Fold those exact rows into the loaded page;
@@ -2135,6 +2146,83 @@ final class AppModel {
         let answer = Welcome.isNewAccount(openRows: open, completedRows: completed)
         guard generation == apiGeneration, self.api === api else { return }
         newAccount = answer
+    }
+
+    // MARK: GitHub (docs/github-workspace-design.md §5.2, §8)
+
+    /// `GET /integrations/github` as last read: whether the deployment has Orbit's GitHub App, and the account's
+    /// connection. Nil until read.
+    private(set) var github: GithubIntegration?
+    /// Why the last read failed; nil after one that answered.
+    private(set) var githubLoadError: String?
+    /// What the realtime stream said about each GitHub workspace's clone: git's percentage lives only here.
+    private(set) var cloneLedger = CloneLedger()
+
+    /// Read the connection again: Settings → GitHub and the setup card ask as they appear, and again when the app
+    /// comes back from GitHub's sign-in in the browser.
+    func loadGithub() async {
+        guard let api else { return }
+        let generation = apiGeneration
+        do {
+            let view = try await api.githubIntegration()
+            guard generation == apiGeneration else { return }
+            github = view
+            githubLoadError = nil
+        } catch {
+            guard generation == apiGeneration else { return }
+            githubLoadError = APIClient.failureReason(error)
+        }
+    }
+
+    /// Where to sign in to GitHub. The callback comes back to Settings → GitHub on the web; the app reads the
+    /// connection again as it comes back to the front.
+    func githubSignInURL() async throws -> URL {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubStart(returnTo: GithubFlow.returnPath)
+    }
+
+    /// Disconnect, and keep what the server answers. Nil on success, else why not.
+    func disconnectGithub() async -> String? {
+        guard let api else { return nil }
+        do {
+            github = try await api.disconnectGithub()
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
+    }
+
+    /// Settings → GitHub: the sheet's page on iOS, the Settings section on the Mac, where GitHub is a group of its form.
+    func showGithubSettings() {
+        #if os(iOS)
+        nav.openSettings(at: .github)
+        #else
+        selectedSection = .settings
+        #endif
+    }
+
+    func githubRepositories(query: String) async throws -> GithubRepositoryPage {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubRepositories(query: query)
+    }
+
+    func githubBranches(repoID: Int64) async throws -> GithubBranches {
+        guard let api else { throw URLError(.userAuthenticationRequired) }
+        return try await api.githubBranches(repoID: repoID)
+    }
+
+    /// Retry a failed clone (POST /workspaces/:id/clone/retry): heard as PENDING at once, and the conversations of that
+    /// workspace read their detail again. Nil on success, else why not.
+    func retryClone(workspaceID: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            _ = try await api.retryClone(workspaceID: workspaceID)
+            cloneLedger.hear(workspaceID, CloneHeard(state: .pending))
+            consoleRegistry?.cloneStateMoved(workspaceID: workspaceID)
+            return nil
+        } catch {
+            return APIClient.failureReason(error)
+        }
     }
 
     // MARK: a machine with no workspace (board rules 1–12)

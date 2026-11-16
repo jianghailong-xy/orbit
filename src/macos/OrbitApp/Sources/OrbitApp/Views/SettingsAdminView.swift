@@ -97,6 +97,8 @@ struct SettingsView: View {
         Form {
             accountSection
             machinesSection
+            // Settings → GitHub (docs/github-workspace-design.md §8): the web's Integrations page, as groups of this form.
+            GithubSettingsSections()
             preferencesSection
             translationSection
             orchestrationSection

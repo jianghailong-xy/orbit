@@ -325,27 +325,21 @@ private struct MachineSetupCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(MachineSetupCopy.SETUP_FOLDER).fontWeight(.semibold)
-                    Text(folder.path)
+                    Text(folder.doneLine)
                         .font(.orbitMono)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer(minLength: 4)
                     change { setup.pick(nil) }
                 }
-                Text(folderNote(folder))
+                Text(folder.doneNote)
                     .font(.orbitLabel)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         } else {
-            FolderOptions(runner: runner, disabled: offline || !probes) { setup.pick($0) }
-        }
-    }
-
-    private func folderNote(_ folder: PickedFolder) -> String {
-        switch folder {
-        case .existing(_, let note): return note
-        case .new: return MachineSetupCopy.SETUP_NEW_FOLDER_DONE
+            FolderOptions(runner: runner, disabled: offline || !probes,
+                          touched: Binding(get: { setup.folderChoice }, set: { setup.folderChoice = $0 })) { setup.pick($0) }
         }
     }
 
@@ -432,7 +426,7 @@ private struct MachineSetupCard: View {
     private var foot: some View {
         Group {
             if ready, let folder = setup.state.folder {
-                Text(MachineSetupCopy.setupReady(workspace: folder.workspaceName, path: folder.path))
+                Text(folder.readySentence)
                     .foregroundStyle(SetupInk.found)
             } else {
                 Text(MachineSetupCopy.SETUP_FOOT)
@@ -451,11 +445,15 @@ private struct FolderOptions: View {
     @Environment(AppModel.self) private var app
     let runner: Runner
     let disabled: Bool
+    /// Untouched, the choice follows what the machine says: its answer about the register directory can
+    /// arrive a heartbeat after the card does. Kept with the page (`MachineSetupModel.folderChoice`), so a card come
+    /// back from GitHub's sign-in in the browser still has From GitHub chosen.
+    @Binding var touched: FolderChoice?
     let onPick: (PickedFolder) -> Void
 
-    /// Untouched, the choice follows what the machine says: its answer about the register directory can
-    /// arrive a heartbeat after the card does.
-    @State private var touched: FolderChoice?
+    @Environment(\.scenePhase) private var scenePhase
+    /// What From GitHub would pick, as its option last said.
+    @State private var githubCandidate: PickedFolder?
     @State private var newName = ""
     @State private var typed = ""
     /// What the machine said about the register directory, about where a new folder's name would go, and about
@@ -484,6 +482,9 @@ private struct FolderOptions: View {
         touched ?? MachineSetup.defaultFolderChoice(suggested: suggested, offersNewFolder: offersNewFolder)
     }
 
+    /// From GitHub (docs/github-workspace-design.md §8): offered only where the deployment has a GitHub App.
+    private var github: GithubIntegration? { app.github?.available == true ? app.github : nil }
+
     private var checked: DirProbe? {
         guard case .answered(let probe)? = typedAnswer else { return nil }
         return probe
@@ -502,6 +503,8 @@ private struct FolderOptions: View {
             guard let checked else { return nil }
             let verdict = MachineSetup.folderVerdict(checked, machine: machine)
             return verdict.usable ? .existing(path: checked.path, note: verdict.short) : nil
+        case .github:
+            return github == nil ? nil : githubCandidate
         }
     }
 
@@ -534,13 +537,17 @@ private struct FolderOptions: View {
                 if suggested != nil { Divider().padding(.leading, 36) }
                 newFolderRow
             }
-            if suggested != nil || offersNewFolder { Divider().padding(.leading, 36) }
+            if let github {
+                if suggested != nil || offersNewFolder { Divider().padding(.leading, 36) }
+                githubRow(github)
+            }
+            if suggested != nil || offersNewFolder || github != nil { Divider().padding(.leading, 36) }
             otherRow
         }
         .background(SetupInk.options, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .padding(.top, 8)
         .disabled(disabled)
-        Button(MachineSetupCopy.SETUP_USE_FOLDER) {
+        Button(choice == .github ? MachineSetupCopy.SETUP_USE_REPOSITORY : MachineSetupCopy.SETUP_USE_FOLDER) {
             if let candidate { onPick(candidate) }
         }
         .buttonStyle(.borderedProminent)
@@ -549,6 +556,12 @@ private struct FolderOptions: View {
         .fontWeight(.semibold)
         .disabled(candidate == nil || disabled)
         .padding(.top, 9)
+        // Whether the deployment has a GitHub App, and the account's connection; again on the way back from GitHub's
+        // sign-in in the browser.
+        .task { await app.loadGithub() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await app.loadGithub() } }
+        }
         // Offline it can't be asked, and what it last answered is still worth showing.
         .task(id: Question(path: MachineSetup.answersDirProbe(runner) ? MachineSetup.registerDirToProbe(runner.registerDir) : nil,
                            attempt: online ? 1 + registerAttempt : 0)) {
@@ -662,6 +675,33 @@ private struct FolderOptions: View {
             noAnswer { newAttempt += 1 }
         } else {
             checking
+        }
+    }
+
+    private func githubRow(_ integration: GithubIntegration) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            row(.github) {
+                HStack(spacing: 5) {
+                    GithubMark()
+                    Text(MachineSetupCopy.SETUP_FROM_GITHUB).foregroundStyle(.primary)
+                    Text(MachineSetupCopy.SETUP_NEW_TAG)
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                }
+            }
+            if choice == .github {
+                VStack(alignment: .leading, spacing: 3) {
+                    GithubFolderOption(runner: runner, integration: integration, disabled: disabled,
+                                       onCandidate: { githubCandidate = $0 },
+                                       onEnter: { if let githubCandidate { onPick(githubCandidate) } })
+                }
+                .padding(.leading, 36)
+                .padding(.trailing, 10)
+                .padding(.bottom, 8)
+            }
         }
     }
 
@@ -815,7 +855,28 @@ struct CreatedWorkspaceLineView: View {
     @State private var draft = ""
     @State private var showSettings = false
 
+    /// Where the clone stands, from the detail's cloneState and what the stream said since (`WorkspaceClone.now`). Nil
+    /// for a workspace that was not cloned from GitHub.
+    private var clone: CloneHeard? {
+        guard line.cloneState != nil else { return nil }
+        return WorkspaceClone.now(stored: line.cloneState, live: app.cloneLedger.heard(line.workspaceID),
+                                  storedAt: console.madeWorkspaceReadAt)
+    }
+
     var body: some View {
+        if let clone, let repository = line.repository, line.live, clone.state != .ready {
+            CloneStatusLineView(line: line, repository: repository, clone: clone, showSettings: $showSettings)
+                .sheet(isPresented: $showSettings) {
+                    if let agents = app.agents, let agent = agents.agent(line.workspaceID) {
+                        AgentSettingsSheet(agents: agents, agent: agent)
+                    }
+                }
+        } else {
+            created
+        }
+    }
+
+    private var created: some View {
         VStack(spacing: 2) {
             // All on one line where it fits; a path that doesn't goes under it, whole, rather than
             // breaking at one of its slashes.
@@ -831,6 +892,16 @@ struct CreatedWorkspaceLineView: View {
                             .truncationMode(.middle)
                     }
                 }
+            }
+            // A workspace cloned from GitHub names its repository, a link to it there.
+            if let repository = line.repository, let url = URL(string: "https://github.com/\(repository)") {
+                Link(destination: url) {
+                    HStack(spacing: 3) {
+                        GithubMark()
+                        Text(repository)
+                    }
+                }
+                .foregroundStyle(Color.accentColor)
             }
             if line.live {
                 HStack(spacing: 5) {
@@ -877,5 +948,131 @@ struct CreatedWorkspaceLineView: View {
 
     private var madeAndWhere: AttributedString {
         line.path.map { made + AttributedString(" · \($0)") } ?? made
+    }
+}
+
+/// The same first line while a GitHub workspace's clone has not finished (board 01, P5), the port of web's
+/// `CloneStatusLine`: Cloning with git's percentage, or why it failed with the way out — Retry always
+/// (POST /workspaces/:id/clone/retry), and before it what the reason asks for: the App installed again, GitHub connected
+/// again, or the workspace's settings for a folder already taken.
+struct CloneStatusLineView: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.openURL) private var openURL
+    let line: CreatedWorkspaceLine
+    let repository: String
+    let clone: CloneHeard
+    @Binding var showSettings: Bool
+
+    @State private var retrying = false
+
+    private var failure: CloneFailure? { clone.state == .failed ? WorkspaceClone.failureOf(line.cloneError) : nil }
+
+    var body: some View {
+        Group {
+            if let failure {
+                failed(failure)
+            } else {
+                running
+            }
+        }
+        .font(.orbitLabel)
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("created-workspace")
+        // Where to install the App again: only asked for when the App is what is missing.
+        .task(id: failure) {
+            if failure == .appRemoved, app.github == nil { await app.loadGithub() }
+        }
+    }
+
+    private var running: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 5) {
+                ProgressView().controlSize(.mini)
+                Text(clone.state == .cloning ? MachineSetupCopy.CLONE_CLONING : MachineSetupCopy.CLONE_WAITING)
+                Text(repository).fontWeight(.semibold).foregroundStyle(.primary)
+                Text(MachineSetupCopy.CREATED_ON)
+                Text(line.machine).fontWeight(.semibold).foregroundStyle(.primary)
+            }
+            .lineLimit(1)
+            .truncationMode(.middle)
+            if let progress = clone.progress {
+                HStack(spacing: 6) {
+                    ProgressView(value: Double(progress), total: 100)
+                        .frame(width: 120)
+                        .accessibilityLabel("\(MachineSetupCopy.CLONE_CLONING) \(repository)")
+                    Text(verbatim: "\(progress)%").monospacedDigit()
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private func failed(_ failure: CloneFailure) -> some View {
+        VStack(spacing: 3) {
+            // The mark rides inside the reason, so a long reason wraps with it.
+            (Text(Image(systemName: "exclamationmark.circle.fill")) + Text(verbatim: " ") + Text(reason(failure)))
+                .foregroundStyle(Color.red)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 5) {
+                switch failure {
+                case .appRemoved:
+                    if let installURL = app.github?.installUrl.flatMap(URL.init(string:)) {
+                        Link(destination: installURL) {
+                            HStack(spacing: 3) {
+                                Text(MachineSetupCopy.CLONE_INSTALL_ON_GITHUB)
+                                Image(systemName: "arrow.up.right.square")
+                            }
+                        }
+                        Text(verbatim: "·")
+                    }
+                    retryButton
+                case .signInExpired:
+                    Button(MachineSetupCopy.CLONE_RECONNECT) { reconnect() }
+                    Text(verbatim: "·")
+                    retryButton
+                case .folderTaken, .other:
+                    retryButton
+                    Text(verbatim: "·")
+                    Button(MachineSetupCopy.CREATED_SETTINGS) { showSettings = true }
+                        .disabled(app.agents?.agent(line.workspaceID) == nil)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+        }
+    }
+
+    private func reason(_ failure: CloneFailure) -> String {
+        switch failure {
+        case .appRemoved: return MachineSetupCopy.cloneAppRemoved(repository: repository)
+        case .signInExpired: return MachineSetupCopy.CLONE_SIGN_IN_EXPIRED
+        case .folderTaken, .other:
+            return MachineSetupCopy.cloneCouldNot(repository: repository, why: WorkspaceClone.reason(line.cloneError))
+        }
+    }
+
+    private var retryButton: some View {
+        Button(MachineSetupCopy.CLONE_RETRY) {
+            retrying = true
+            Task {
+                if let why = await app.retryClone(workspaceID: line.workspaceID) {
+                    app.showToast(MachineSetupCopy.CLONE_RETRY_FAILED, detail: why, tone: .error)
+                }
+                retrying = false
+            }
+        }
+        .disabled(retrying)
+    }
+
+    private func reconnect() {
+        Task {
+            do {
+                openURL(try await app.githubSignInURL())
+            } catch {
+                app.showToast(MachineSetupCopy.setupGithubConnectFailed(why: APIClient.failureReason(error)), tone: .error)
+            }
+        }
     }
 }
