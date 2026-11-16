@@ -7,9 +7,13 @@ import {
   type OpenItemDoorCell,
 } from './open-item-doors';
 import {
+  coordinatorUnreachable,
+  openItemActions,
   openItemRequiredAction,
   ownerItemNeed,
   primaryAction,
+  readCoordinatorReach,
+  type SessionEnding,
 } from './project-open-item';
 
 /**
@@ -144,4 +148,78 @@ test('a landing session on the row changes neither the primary action nor the re
     assert.equal(openItemRequiredAction(withSession), openItemRequiredAction(row),
       `${where}: the required sentence moved when the landing session was named`);
   }
+});
+
+/**
+ * 2026-11-15: an escalated merge conflict told the owner to "ask the coordinator to do it" on a card
+ * that drew no Ask-again door and refused the chat. The owner's sentence names the coordinator only
+ * while the row's own projection holds ASK_COORDINATOR_AGAIN.
+ */
+const ASKS_COORDINATOR = /ask the coordinator/i;
+
+function ownerRowFor(cell: OpenItemDoorCell, askable: boolean, taskBranch: boolean) {
+  const base = rowFor(cell);
+  return { ...base, askable, payload: { ...base.payload, ...(taskBranch ? { sourceKind: 'TASK_BRANCH' } : {}) } };
+}
+
+test('an owner sentence offers the coordinator exactly when the ASK_COORDINATOR_AGAIN door is drawn, in every cell that words it', () => {
+  let worded = 0;
+  for (const cell of OPEN_ITEM_DOOR_TABLE.filter((candidate) => candidate.assignee === 'OWNER')) {
+    for (const taskBranch of [false, true]) {
+      const reachable = ownerRowFor(cell, true, taskBranch);
+      const where = `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}${taskBranch ? '/TASK_BRANCH' : ''}`;
+      if (!ASKS_COORDINATOR.test(openItemRequiredAction(reachable))) continue;
+      worded += 1;
+      assert.ok(openItemActions(reachable).includes('ASK_COORDINATOR_AGAIN'),
+        `${where}: the sentence asks the coordinator but the door is not drawn`);
+
+      const unreachable = ownerRowFor(cell, false, taskBranch);
+      assert.ok(!openItemActions(unreachable).includes('ASK_COORDINATOR_AGAIN'), `${where}: door still drawn`);
+      const sentence = openItemRequiredAction(unreachable);
+      assert.doesNotMatch(sentence, ASKS_COORDINATOR, `${where}: ${sentence}`);
+      assert.match(sentence, /[^\s—]\.$/, `${where}: not a finished sentence: ${sentence}`);
+    }
+  }
+  // CONFLICT, CHECK_FAILED, CHECK_TIMED_OUT and ERROR on a task's landing, and the promotion cells.
+  assert.ok(worded >= 6, `only ${worded} owner cells word the coordinator`);
+});
+
+test('the 2026-11-15 card: an escalated landing conflict with no coordinator to ask says only what the owner can do', () => {
+  const row = {
+    kind: 'INTEGRATION_CONFLICT',
+    assignee: 'OWNER',
+    taskId: 'task-id',
+    promotionId: null,
+    fuseEpisodeId: null,
+    payload: { jobKind: 'LAND_TASK', phase: 'MERGE', failureClass: 'CONFLICT', nothingLanded: true },
+    state: 'OPEN',
+  } as const;
+  assert.deepEqual(openItemActions({ ...row, askable: false }), ['OPEN_TASK_SESSION', 'CANCEL_TASK']);
+  assert.equal(openItemRequiredAction({ ...row, askable: false }),
+    'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch.');
+  assert.ok(openItemActions({ ...row, askable: true }).includes('ASK_COORDINATOR_AGAIN'));
+  assert.equal(openItemRequiredAction({ ...row, askable: true }),
+    'This task cannot reach the project branch until its merge conflict is repaired — fix the task branch or ask the coordinator to do it.');
+});
+
+test('a coordinator\'s own sentence is untouched by whether the owner could ask it', () => {
+  for (const cell of OPEN_ITEM_DOOR_TABLE.filter((candidate) => candidate.assignee === 'COORDINATOR')) {
+    assert.equal(openItemRequiredAction({ ...rowFor(cell), askable: false }), openItemRequiredAction(rowFor(cell)),
+      `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}`);
+  }
+});
+
+test('coordinatorUnreachable: nothing to ask again, or no conversation a message reaches', async () => {
+  const live: SessionEnding = { status: 'AWAITING_INPUT', endReason: null, completedAt: null, archivedAt: null, deletedAt: null, cancelRequestedAt: null };
+  const reaped: SessionEnding = { ...live, status: 'FAILED', cancelRequestedAt: new Date() };
+  const answering = (reason: string | null) => ({ receiveBlockedReasonFor: async () => reason });
+  const project = (session: SessionEnding | null) => ({ coordinatorSessionId: session ? 'coordinator' : null, coordinatorSession: session });
+
+  assert.equal(coordinatorUnreachable(await readCoordinatorReach(answering(null), 'owner', project(live))), false);
+  // The reaper's FAILED run: nothing to hand the item back to, whatever the chat would say.
+  assert.equal(coordinatorUnreachable(await readCoordinatorReach(answering(null), 'owner', project(reaped))), true);
+  assert.equal(coordinatorUnreachable(await readCoordinatorReach(answering('RUNNER_OFFLINE'), 'owner', project(reaped))), true);
+  // A live run a message cannot reach (its run retired) is unreachable too.
+  assert.equal(coordinatorUnreachable(await readCoordinatorReach(answering('RUN_RETIRED'), 'owner', project(live))), true);
+  assert.equal(coordinatorUnreachable(await readCoordinatorReach(answering(null), 'owner', project(null))), true);
 });

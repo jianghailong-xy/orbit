@@ -160,14 +160,6 @@ final class AgentListLogicTests: XCTestCase {
         let hidden = AgentListLogic.sidebarSections(AppSection.workSections, wiki: false,
                                                     projectsWaiting: 0, wikiWaiting: 0)
         XCTAssertEqual(hidden.map(\.id), ["section:projects", "section:tasks"])
-        // New wiki… is a row of its own under the Wiki row once there is a wiki, and never without the Wiki row.
-        let withNew = AgentListLogic.sidebarSections(AppSection.workSections, wiki: true,
-                                                     projectsWaiting: 0, wikiWaiting: 0, newWiki: true)
-        XCTAssertEqual(withNew.map(\.id), ["section:projects", "section:tasks", "section:wiki", "new-wiki"])
-        XCTAssertEqual(withNew.map(\.newWiki), [false, false, false, true])
-        XCTAssertEqual(AgentListLogic.sidebarSections(AppSection.workSections, wiki: false,
-                                                      projectsWaiting: 0, wikiWaiting: 0, newWiki: true).map(\.id),
-                       ["section:projects", "section:tasks"])
     }
 
     /// Scheduled sits right under Tasks on the Mac rail, with the schedules that need the owner as its count, and

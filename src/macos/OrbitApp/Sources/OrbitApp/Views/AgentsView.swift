@@ -764,18 +764,18 @@ struct AgentPanes: View {
             // list, the header stays to bring them back. The rows are dropped here
             // rather than through `Section(isExpanded:)`, whose disclosure only draws in
             // the sidebar list style.
-            Section {
+            TitledListSection {
                 if !pinnedCollapsed {
                     ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
                 }
-            } header: {
-                sectionHeaderBand { pinnedSectionHeader(section.title) }
+            } title: {
+                pinnedSectionHeader(section.title)
             }
         } else {
-            Section {
+            TitledListSection {
                 ForEach(section.sessions) { listRow($0, projects: projectRows, marks: projectMarks) }
-            } header: {
-                sectionHeaderBand { Text(section.title).textCase(nil) }
+            } title: {
+                Text(section.title).textCase(nil)
             }
         }
     }
@@ -1051,23 +1051,21 @@ struct AgentPanes: View {
     /// pose as a row of *this* agent's list. Tapping one opens it, switching agent if it belongs to
     /// another.
     @ViewBuilder private var searchResults: some View {
-        Section {
+        TitledListSection {
             ForEach(hits) { hit in
                 Button { app.route(to: .session(hit.id)) } label: {
                     SessionSearchRow(hit: hit, query: hitsQuery)
                 }
                 .buttonStyle(.plain)
             }
-        } header: {
+        } title: {
             // Doubles as the short-query notice the palette keeps in its footer: below the
             // server's content threshold only names are matched, which is worth saying before
             // "no matches" reads as "this doesn't exist".
-            sectionHeaderBand {
-                Text(contentSearched
-                     ? "All sessions"
-                     : "Matching names only — type more to search message text.")
-                    .textCase(nil)
-            }
+            Text(contentSearched
+                 ? "All sessions"
+                 : "Matching names only — type more to search message text.")
+                .textCase(nil)
         }
     }
 
@@ -1155,10 +1153,10 @@ struct AgentPanes: View {
     /// One tag's sessions under the tag's header band. The section is the row the list's ForEach
     /// draws, so the ForEach closure holds no branch of its own.
     @ViewBuilder private func tagGroupSection(_ section: SessionTagSection) -> some View {
-        Section {
+        TitledListSection {
             ForEach(section.sessions) { sessionRow($0) }
-        } header: {
-            sectionHeaderBand { tagSectionHeader(section.tag) }
+        } title: {
+            tagSectionHeader(section.tag)
         }
     }
 
@@ -1193,63 +1191,45 @@ struct AgentPanes: View {
         .accessibilityAddTraits(.isHeader)
         .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
     }
+}
 
-    /// A section header's band: its title drawn over the list's own surface, so that the header
-    /// *pins* with something behind it. SwiftUI's plain list floats a section's header over the rows
-    /// as they scroll under it but paints nothing behind a custom header — so a row on its way up
-    /// read straight through "Yesterday" / "2–7 days ago", its title overlapping the header's glyph
-    /// for glyph (every appearance, light and dark).
-    ///
-    /// The list's own header insets sit *outside* the header's view, so a bare `.background` on the
-    /// title would cover its line and leave the strips above and below it see-through. The surface
-    /// is therefore grown past the title's own frame by the insets that surround it — measured off
-    /// the header this replaces on the simulator (iOS 26.5: the title sits 33pt below the band's
-    /// top, which ends 9pt below the title's line). Nothing here is layout: a background lays out
-    /// nothing, so the header keeps the system's own metrics, the band stays the height it was (a
-    /// header that added its own padding instead measured 2pt short per section), and the Pinned
-    /// header's tap target — the button, not this — is exactly the size it was.
-    ///
-    /// The fill is `systemBackground`, what the list itself draws in each appearance — the same fill
-    /// the rows and their chips sit on (see `TagChipColor`). A row sliding under a pinned header now
-    /// disappears behind it instead of reading through it.
-    ///
-    /// On iOS 26 the list meets its top on the soft edge (the needs-you bar's `SoftEdgeLayer`), and
-    /// an opaque band pinned under it read as a solid strip cutting that edge off (the owner,
-    /// 2026-11-14: "Pinned has no glass"). There the band is glass of the same make — a material blur
-    /// under a wash of the page's colour — solid under the title, so a row still can't read through
-    /// it, and fading out over the 9pt below it, so rows blur into the header rather than end at a line.
-    /// Glass shows its own edges, so it is grown by the 20pt side insets as well and runs edge to edge
-    /// (measured on the iOS 26 simulator, probe run 43601744335: without them, a slab with hard sides).
-    ///
-    /// The Mac's list draws its own section headers' backing, so there the band is the title alone.
-    @ViewBuilder private func sectionHeaderBand<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+/// A titled section of a session list — the workspace list's and a folder page's. On iOS the title
+/// is the section's first row rather than its header: a plain list pins its section headers, so
+/// "Today" / "Yesterday" / Pinned stuck under the title bar as the rows scrolled, on a glass band of
+/// their own. The owner (2026-11-16): the titles need not stick — they scroll away with their rows,
+/// and the only glass at the top is the title area's own soft edge (`softTopEdgeEffect`), which the
+/// rows pass under. The title row is styled as the system header it replaces, carries no separator
+/// and cannot be selected.
+///
+/// The Mac's list draws its section headers in the sidebar's own way, so there it stays a header.
+struct TitledListSection<Rows: View, Title: View>: View {
+    let rows: Rows
+    let title: Title
+
+    init(@ViewBuilder _ rows: () -> Rows, @ViewBuilder title: () -> Title) {
+        self.rows = rows()
+        self.title = title()
+    }
+
+    var body: some View {
         #if os(iOS)
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                if #available(iOS 26.0, *) {
-                    ZStack {
-                        Rectangle().fill(.ultraThinMaterial)
-                        Color(uiColor: .systemBackground).opacity(0.85)
-                    }
-                    .mask {
-                        VStack(spacing: 0) {
-                            Color.black
-                            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                                .frame(height: 9)
-                        }
-                    }
-                    .padding(.top, -33)
-                    .padding(.bottom, -9)
-                    .padding(.horizontal, -20)
-                } else {
-                    Color(uiColor: .systemBackground)
-                        .padding(.top, -33)
-                        .padding(.bottom, -9)
-                }
-            }
+        Section {
+            title
+                .font(.headline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowInsets(EdgeInsets(top: 20, leading: 20, bottom: 6, trailing: 20))
+                .listRowSeparator(.hidden)
+                .selectionDisabled()
+                .accessibilityAddTraits(.isHeader)
+            rows
+        }
         #else
-        content()
+        Section {
+            rows
+        } header: {
+            title
+        }
         #endif
     }
 }

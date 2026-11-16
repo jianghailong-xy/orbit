@@ -125,10 +125,10 @@ export function UserTranslationFoot({
     case 'DONE':
       // Both languages on: the English is in the bubble, so there is nothing to flip to.
       if (actions?.bilingual) {
-        return <span className="chat-translate-foot">{sentToAgentLabel(actions.agentLanguage ?? DEFAULT_AGENT_LANGUAGE)}</span>;
+        return <span className="chat-translate-foot is-hover">{sentToAgentLabel(actions.agentLanguage ?? DEFAULT_AGENT_LANGUAGE)}</span>;
       }
       return (
-        <span className="chat-translate-foot is-flip">
+        <span className="chat-translate-foot is-hover">
           <button type="button" className="chat-translate-action" onClick={onFlip}>
             {flipped ? COPY.showTranslation : COPY.showOriginal}
           </button>
