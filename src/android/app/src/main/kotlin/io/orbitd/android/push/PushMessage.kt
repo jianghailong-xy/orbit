@@ -53,6 +53,8 @@ data class PushPayload(
         // A terminal asking to be approved: the Waiting on you inbox, whose Open tab heads with its card (iOS `.openTerminalRequests`).
         kind == TERMINAL_LOGIN -> terminalLoginId?.let { "orbit://terminal-login/$it" }
         kind == "watch-matched" -> watchId?.let { "orbit://watch/$it" }
+        // A scheduled task's alert: its run's session when it names one, else the schedule's detail on the Scheduled page.
+        kind == SCHEDULE -> sessionId?.let { "orbit-session:$it" } ?: scheduleId?.let { "orbit://schedule/$it" }
         // About a machine: its sign-in lapsed, its Claude connection to Anthropic is in a region Anthropic does not offer Claude in,
         // or it drains for an update with the owner's work waiting on it.
         kind == "engine-signed-out" || kind == "claude-region-blocked" || kind == "runner-updating" -> runnerId?.let { "orbit://runner/$it" }
