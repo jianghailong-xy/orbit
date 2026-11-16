@@ -8089,20 +8089,20 @@ button.chat-jump-start:hover {
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-/* A delivered message's Show original / Show translation (docs/mocks/translation-user-hover): shown on
-   hover with copy and time, flipped or not; always on a touch screen. */
-.chat-user-meta > .chat-translate-foot.is-flip {
+/* A delivered message's Show original / Show translation, and bilingual's "Sent to the agent in English"
+   (docs/mocks/translation-user-hover): shown on hover with copy and time; always on a touch screen. */
+.chat-user-meta > .chat-translate-foot.is-hover {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
 }
-.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-flip,
-.chat-user-meta > .chat-translate-foot.is-flip:focus-within {
+.chat-user-wrap:hover .chat-user-meta > .chat-translate-foot.is-hover,
+.chat-user-meta > .chat-translate-foot.is-hover:focus-within {
   opacity: 1;
   pointer-events: auto;
 }
 @media (hover: none) {
-  .chat-user-meta > .chat-translate-foot.is-flip {
+  .chat-user-meta > .chat-translate-foot.is-hover {
     opacity: 1;
     pointer-events: auto;
   }
