@@ -1,5 +1,6 @@
 import { INTEGRATION_PAGES, PERSONAL_PAGES, PERSONAL_SETTINGS } from '../../pages/settings/settingsIndex';
 import { vendorName, vendorOf } from '../ProviderGallery';
+import { machineName } from '../../lib/machineSetup';
 
 /**
  * Settings' search box (docs/mocks/settings-redesign, board-2 note 2): one query over all five groups —
@@ -28,6 +29,8 @@ export type SettingsSearchSources = {
     displayName?: string | null;
     hostname?: string | null;
   }>;
+  /** The account's managed runner, named Orbit Cloud (machineName). */
+  managedRunnerId?: string | null;
   keys: ReadonlyArray<{ id: string; label: string; presetSlug: string | null }>;
   workspaces: ReadonlyArray<{
     id: string;
@@ -75,7 +78,7 @@ export function searchSettings(query: string, sources: SettingsSearchSources): S
 
   const machines: SettingsHit[] = [];
   for (const runner of sources.runners) {
-    const name = runner.displayName?.trim() || runner.name;
+    const name = machineName(runner, sources.managedRunnerId);
     const byName = has(name, q) || has(runner.name, q);
     if (!byName && !has(runner.hostname, q)) continue;
     machines.push({

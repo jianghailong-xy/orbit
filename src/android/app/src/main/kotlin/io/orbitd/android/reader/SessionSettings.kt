@@ -139,7 +139,9 @@ internal object SessionSettings {
     }
     /** HPC · Claude Code · Max (2): the machine it runs on and the account it signs in with ([account]). */
     fun runnerAccount(detail: JsonObject): String? {
-        val runner = (detail["assignedRunner"] as? JsonObject)?.let { it.string("displayName") ?: it.string("name") }
+        val runner = (detail["assignedRunner"] as? JsonObject)?.let {
+            io.orbitd.android.management.RunnerPage.nameOf(detail.string("assignedRunnerId"), it.string("name"), it.string("displayName")).takeIf { n -> n.isNotEmpty() }
+        }
         return listOfNotNull(runner, account(detail)).joinToString(" · ").ifEmpty { null }
     }
     /** iOS `SessionSettingsPanel.accountLabel`: a Codex pool's ChatGPT login by its email; else, on an engine's own sign-in, the

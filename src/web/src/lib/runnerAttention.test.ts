@@ -62,7 +62,7 @@ describe('runnerAttention.cases.json', () => {
         })),
       ).toEqual(c.expected.items);
       expect(listAttentionLine(items)).toBe(c.expected.listLine);
-      expect(runnerListSubtitle(c.input.runner, c.input.nowMs)).toBe(c.expected.subtitle);
+      expect(runnerListSubtitle(c.input.runner, c.input.nowMs, c.input.managed)).toBe(c.expected.subtitle);
       expect(runnerDisk(c.input.workspaces)).toEqual(c.expected.disk);
     });
   }

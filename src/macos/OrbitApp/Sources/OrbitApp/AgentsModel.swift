@@ -379,7 +379,7 @@ final class AgentsModel {
     /// snapshot, so the page and the app's tick do not each read the same list.
     func adoptRunnerSnapshot(_ runners: [Runner]) {
         let order = runners.map(\.id)
-        let names = Dictionary(runners.map { ($0.id, $0.displayName ?? $0.name) },
+        let names = Dictionary(runners.map { ($0.id, RunnerPageFormat.displayName($0)) },
                                uniquingKeysWith: { a, _ in a })
         let online = Dictionary(runners.compactMap { runner in
             WorkspaceRunnerAvailabilityLogic.onlineValue(

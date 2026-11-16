@@ -35,7 +35,7 @@ private struct RunnerNameForm: View {
     var body: some View {
         Form {
             Section {
-                TextField(runner.name, text: $name)
+                TextField(RunnerPageFormat.defaultName(runner), text: $name)
                     .focused($focused)
                     .autocorrectionDisabled()
                     .submitLabel(.done)
@@ -44,7 +44,7 @@ private struct RunnerNameForm: View {
                         dismiss()
                     }
             } footer: {
-                Text("Leave empty to use the machine name (\(runner.name)).")
+                Text("Leave empty to use the machine name (\(RunnerPageFormat.defaultName(runner))).")
             }
         }
         .formStyle(.grouped)
