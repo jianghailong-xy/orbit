@@ -6531,7 +6531,7 @@ final class ConsoleModel {
 /// Downsample an image to a small PNG for the composer's thumbnail chip. Done once at attach time
 /// so SwiftUI isn't decoding the full-resolution source on every body pass — a multi-MB screenshot
 /// re-decoded per keystroke would jank typing. Best-effort: nil falls back to a name + size chip.
-private func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> Data? {
+func composerThumbnail(from data: Data, maxDimension: CGFloat = 96) -> Data? {
     guard let source = PlatformImage(data: data) else { return nil }
     let size = source.size
     guard size.width > 0, size.height > 0 else { return nil }

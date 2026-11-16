@@ -181,8 +181,10 @@ public struct GuestTurnAccepted: Decodable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey { case turnId, revived }
 }
 
-/// A guest's message: text only — no mode, model, effort or attachment can ride it (§5).
+/// A guest's message: text and images — no mode, model or effort can ride it (§5). `attachmentIds`
+/// names images uploaded through the guest door; nil omits the field (a text-only message).
 struct GuestTurnRequest: Encodable {
     let clientTurnId: String
     let content: String
+    let attachmentIds: [String]?
 }

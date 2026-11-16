@@ -74,6 +74,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'id',
   'ownerId',
   'userId',
+  // `attachment.uploaded_by_guest_id` — the session guest who uploaded an image (0880): a user's id, as `userId`.
+  'uploadedByGuestId',
   'sessionId',
   'parentSessionId',
   'rootSessionId',

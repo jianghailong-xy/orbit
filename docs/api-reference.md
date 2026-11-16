@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 31 |
-| `user` | 461 |
+| `user` | 463 |
 | `admin` | 28 |
 | `runner` | 197 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **721** |
+| **Total** | **723** |
 
 ## Public routes
 
@@ -129,6 +129,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
 | `GET` | `/api/guest-sessions/:id` | path `id`; query `limit`, `maxPayload` | `GuestSessionsController.get` |
+| `POST` | `/api/guest-sessions/:id/attachments` | path `id` | `GuestSessionsController.uploadImage` |
 | `GET` | `/api/guest-sessions/:id/attachments/:attachmentId` | path `attachmentId`, `id` | `GuestSessionsController.attachment` |
 | `GET` | `/api/guest-sessions/:id/events` | path `id`; query `after`, `before`, `limit`, `maxPayload` | `GuestSessionsController.events` |
 | `GET` | `/api/guest-sessions/:id/events/:seq` | path `id`, `seq` | `GuestSessionsController.event` |

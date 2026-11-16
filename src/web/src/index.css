@@ -17049,6 +17049,31 @@ button.chat-jump-start:hover {
   color: #fff;
   cursor: pointer;
 }
+.guest-composer.is-dragging {
+  border-color: var(--brand);
+}
+/* The owner composer's staged-image chips (.composer-attachments), above the guest's words. */
+.guest-composer-attachments {
+  padding: 0 0 8px;
+}
+.guest-composer-attach {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 16px;
+  cursor: pointer;
+}
+.guest-composer-attach:hover {
+  background: var(--bg-sunken);
+  color: var(--text-1);
+}
 .guest-composer-send:disabled {
   background: var(--bg-sunken);
   color: var(--text-4);

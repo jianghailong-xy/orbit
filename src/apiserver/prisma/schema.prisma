@@ -3292,6 +3292,10 @@ model Attachment {
   /// counts, duration and failed and skipped names. Metadata, so it outlives the bytes when they
   /// expire (§2.8). NULL on every other row.
   testReportSummary Json?   @map("test_report_summary")
+  /// The session guest who uploaded this image through the guest door (0880, docs/session-guests-design.md §5): a
+  /// guest's turn may name only rows carrying its own id here. NULL on every other row. No relation, as
+  /// session_guest's owner_id has none.
+  uploadedByGuestId String? @map("uploaded_by_guest_id") @db.Uuid
   createdAt DateTime          @default(now()) @map("created_at")
 
   @@index([ownerId])
