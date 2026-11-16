@@ -332,6 +332,34 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     /// server read it with the list. An escalated card's heading says so instead of "no one acted on
     /// this" (`ExceptionCards.heading`). False from a server that predates it.
     public let coordinatorUnreachable: Bool
+    /// The coordinator's own words when it handed the item to the owner on purpose — what the
+    /// owner exception card's coordinator row quotes (`ExceptionCards.coordinatorRowSentence`).
+    /// Nil for every other item, and from a server that predates it.
+    public let handoverNote: String?
+    /// "Chat about this": where the item's handling stands, and whether a message about it can reach
+    /// the project's coordinator conversation. Nil from a server that predates it.
+    public let chat: Chat?
+
+    /// The browser's `OpenItemChat`: the conversation the chat is held in, the stage, and — when
+    /// the chat cannot be had — why (`NO_COORDINATOR`, `COORDINATOR_UNAVAILABLE`, …).
+    public struct Chat: Codable, Equatable, Sendable {
+        public let sessionId: String?
+        public let stage: String?
+        public let refusal: String?
+
+        public init(sessionId: String? = nil, stage: String? = nil, refusal: String? = nil) {
+            self.sessionId = sessionId
+            self.stage = stage
+            self.refusal = refusal
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            sessionId = (try? c.decodeIfPresent(String.self, forKey: .sessionId)) ?? nil
+            stage = (try? c.decodeIfPresent(String.self, forKey: .stage)) ?? nil
+            refusal = (try? c.decodeIfPresent(String.self, forKey: .refusal)) ?? nil
+        }
+    }
 
     public var id: String { itemId }
 
@@ -348,7 +376,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 question: CoordinatorQuestion? = nil,
                 startRequest: ProjectStartRequest? = nil, doneRequest: DoneRequest? = nil,
                 facts: OpenItemFacts? = nil, handling: OpenItemHandling? = nil,
-                coordinatorUnreachable: Bool = false) {
+                coordinatorUnreachable: Bool = false, handoverNote: String? = nil,
+                chat: Chat? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -376,6 +405,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.facts = facts
         self.handling = handling
         self.coordinatorUnreachable = coordinatorUnreachable
+        self.handoverNote = handoverNote
+        self.chat = chat
     }
 
     public init(from decoder: Decoder) throws {
@@ -414,6 +445,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
         handling = (try? c.decodeIfPresent(OpenItemHandling.self, forKey: .handling)) ?? nil
         coordinatorUnreachable = (try? c.decodeIfPresent(Bool.self, forKey: .coordinatorUnreachable)) ?? false
+        handoverNote = (try? c.decodeIfPresent(String.self, forKey: .handoverNote)) ?? nil
+        chat = (try? c.decodeIfPresent(Chat.self, forKey: .chat)) ?? nil
     }
 }
 
