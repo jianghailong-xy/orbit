@@ -531,9 +531,12 @@ the checkout's files named in step 4. Stop and report at the first step that fai
    old="$(git rev-parse HEAD)"
    git fetch --quiet origin +refs/heads/main:refs/remotes/origin/main && git cat-file -e "<commit>^{commit}"
    git update-ref --no-deref HEAD <commit> && git reset -q && git update-index -q --refresh
-   `git status --porcelain --untracked-files=no` now lists only files the release did not ship. If it lists
-   docker-compose.yml, or anything under gateway/, scripts/, deploy/ or src/link-gateway/ as modified (` M`), stop:
-   the deployed files are not the commit's. Otherwise bring the rest up to the commit:
+   The files the release shipped (RELEASE_FILES in deploy/two-stage/release.sh) must already be the commit's:
+   git status --porcelain --untracked-files=no -- docker-compose.yml gateway scripts/pg-archive-wal.sh \
+     scripts/pg-backup.sh src/link-gateway/nats.conf deploy/runner-link deploy/postgres-pinned.yml deploy/db-proxy.yml deploy/db-proxy
+   must print nothing; if it prints anything, stop: the deployed files are not the commit's. Any other file it lists
+   without that pathspec only lags behind the commit (a CI script, client sources), and is no reason to stop.
+   Bring the rest up to the commit:
    git diff --name-only -z | xargs -0 -r git checkout --
    git diff --name-only -z --diff-filter=D "$old" <commit> | xargs -0 -r rm -f --
    `git status --porcelain --untracked-files=no` must then print nothing.
