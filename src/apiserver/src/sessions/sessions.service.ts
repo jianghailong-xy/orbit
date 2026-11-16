@@ -5298,7 +5298,7 @@ export class SessionsService {
 
   /** A shared session's header — what its public page says of it above the transcript — and nothing
    *  else about it (see getSharedTranscript). A trashed session is the link's 404. */
-  private async sharedHead(sessionId: string) {
+  async sharedHead(sessionId: string) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, deletedAt: null },
       select: {

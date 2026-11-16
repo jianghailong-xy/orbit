@@ -1005,6 +1005,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * A session's `session_updated` signals — a rename, a row change — which streamForRun keeps out of the transcript
+   * stream (isLifecycleType). The viewer streams re-read their head on them (sessions/viewer-stream.service.ts); the
+   * hub alone carries them, from this replica and over NOTIFY from the others.
+   */
+  sessionUpdatesForRun(runId: string): Observable<NormalizedRunEvent> {
+    return this.hub.asObservable().pipe(
+      filter((m) => m.runId === runId && m.event.type === RunEventType.SESSION_UPDATED),
+      map((m) => m.event),
+    );
+  }
+
+  /**
    * The half of a session's stream the runner link carries (docs/runner-link-design.md §5.9; runner-hints.ts): while
    * it is open, this stream counts as one of the session's watchers, so the runner sends its live stream; it starts
    * with what the runner's current turn has streamed so far, asked of the runner, and goes on with the live events

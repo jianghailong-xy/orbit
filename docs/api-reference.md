@@ -42,13 +42,13 @@ controllers and their decorators, so it lists what the server mounts, not what a
 
 | Caller | Routes |
 | --- | --- |
-| `public` | 31 |
-| `user` | 464 |
+| `public` | 33 |
+| `user` | 465 |
 | `admin` | 28 |
 | `runner` | 197 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **724** |
+| **Total** | **727** |
 
 ## Public routes
 
@@ -84,6 +84,8 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/shared/:token/sessions/:sessionId` | path `sessionId`, `token`; query `limit`, `maxPayload` | `SharedController.conversation` |
 | `GET` | `/api/shared/:token/sessions/:sessionId/events` | path `sessionId`, `token`; query `after`, `before`, `limit`, `maxPayload` | `SharedController.conversationEvents` |
 | `GET` | `/api/shared/:token/sessions/:sessionId/events/:seq` | path `seq`, `sessionId`, `token` | `SharedController.conversationEvent` |
+| `GET` | `/api/shared/:token/sessions/:sessionId/stream` | query `maxPayload`, `sinceSeq` | `SharedController.conversationStream` |
+| `GET` | `/api/shared/:token/stream` | query `maxPayload`, `sinceSeq` | `SharedController.stream` |
 | `GET` | `/api/shared/:token/tasks/:taskId` | path `taskId`, `token` | `SharedController.task` |
 
 ## User routes
@@ -134,6 +136,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/guest-sessions/:id/events` | path `id`; query `after`, `before`, `limit`, `maxPayload` | `GuestSessionsController.events` |
 | `GET` | `/api/guest-sessions/:id/events/:seq` | path `id`, `seq` | `GuestSessionsController.event` |
 | `POST` | `/api/guest-sessions/:id/leave` | path `id` | `GuestSessionsController.leave` |
+| `GET` | `/api/guest-sessions/:id/stream` | path `id`; query `maxPayload`, `sinceSeq` | `GuestSessionsController.stream` |
 | `POST` | `/api/guest-sessions/:id/turns` | body `Object`; path `id` | `GuestSessionsController.turn` |
 | `DELETE` | `/api/guest-sessions/:id/turns/:turnId` | path `id`, `turnId` | `GuestSessionsController.cancelTurn` |
 | `POST` | `/api/guest-sessions/:id/turns/:turnId/steer` | path `id`, `turnId` | `GuestSessionsController.steerTurn` |

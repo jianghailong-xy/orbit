@@ -365,11 +365,17 @@ export class SessionGuestsService {
     return { ...page, waitingOnOwner: await this.waitingOnOwner(sessionId) };
   }
 
+  /** The guest door's 404 unless the caller has a live invitation to the session: what GuestInvitationGuard asks
+   *  before the guest's stream (GuestSessionsController.stream) reads anything. */
+  async assertInvited(guestId: string, sessionId: string): Promise<void> {
+    await this.invitation(guestId, sessionId);
+  }
+
   /**
    * Whether the agent is waiting on the owner — a permission card or a question still pending — which the guest page
    * says as `Waiting for <owner> to approve` (§4). Only that it waits: what the card asks is the owner's alone.
    */
-  private async waitingOnOwner(sessionId: string): Promise<boolean> {
+  async waitingOnOwner(sessionId: string): Promise<boolean> {
     const cards = await this.prisma.approval.findMany({
       where: { sessionId, status: 'PENDING' },
       select: { id: true, toolName: true },
