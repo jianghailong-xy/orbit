@@ -139,8 +139,8 @@ async function visit(path: string): Promise<void> {
 }
 
 const text = (el: Element | null | undefined) => el?.textContent?.trim() ?? null;
-/** The wikis' rows: the group's last row, New wiki…, is no wiki. */
-const rows = () => [...container!.querySelectorAll<HTMLElement>('.tp-group-wiki .tp-item:not(.tp-wiki-new)')];
+/** The wikis' rows. */
+const rows = () => [...container!.querySelectorAll<HTMLElement>('.tp-group-wiki .tp-item')];
 const rowNames = () => rows().map((row) => text(row.querySelector('.tp-label')));
 const row = (name: string) => rows().find((one) => text(one.querySelector('.tp-label')) === name)!;
 const menuItems = () => [...document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];

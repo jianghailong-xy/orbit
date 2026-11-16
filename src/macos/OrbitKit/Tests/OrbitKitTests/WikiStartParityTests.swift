@@ -869,13 +869,10 @@ final class WikiStartParityTests: XCTestCase {
         XCTAssertTrue(try native("WikiModel.swift").contains("WikiCopy.noSpaces"), "a write with no space on screen still says why")
     }
 
-    /// New wiki… (design §3.4, board 46 part 4; board 47): the web's sidebar row, and on every client the head picker's
-    /// item under its divider, raising the one Create wiki form over the shell. The iPhone/iPad drawer and the Mac
-    /// sidebar have no Wiki group, so they draw no New wiki… row: the head picker is the way in.
+    /// New wiki… (design §3.4, board 46 part 4; board 47): on every client the head picker's item under its divider,
+    /// raising the one Create wiki form over the shell. No sidebar or drawer draws a New wiki… row.
     func testNewWikiOpensTheCreateWikiForm() throws {
-        let sidebar = try web("src/web/src/components/TasksSidePanel.tsx")
-        assertOrder(sidebar, ["className=\"tp-item tp-wiki-new\"", "onClick={() => setCreatingWiki(true)}", "<PlusOutlined aria-hidden=\"true\" />",
-                              "<span className=\"tp-label\">{WIKI_NEW}</span>"], "the web's row")
+        XCTAssertFalse(try web("src/web/src/components/TasksSidePanel.tsx").contains("WIKI_NEW"), "the web's sidebar draws no New wiki… row")
         let page = try web("src/web/src/pages/WikiPage.tsx")
         assertOrder(page, ["{ type: 'separator', key: 'rule' },", "{ key: 'new', label: WIKI_NEW, icon: <PlusOutlined />, onSelect: () => setCreating(true) },"],
                     "the web's picker")
