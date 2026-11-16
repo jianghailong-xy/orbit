@@ -90,6 +90,12 @@ final class ConsoleRegistry {
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
+    /// The image store of a guest view: one session's files, read through the guest door. Its own, not
+    /// `attachments`, so a guest's ids never sit in the owner-route cache as files it won't serve.
+    func guestAttachments(_ sessionID: String) -> AttachmentImageStore {
+        AttachmentImageStore(baseURL: baseURL, tokenStore: tokenStore, guestSessionID: sessionID)
+    }
+
     /// Application Support/Orbit/Transcripts/<host> — scoped per instance so two servers never
     /// collide. Falls back to a temp dir if Application Support is unavailable.
     static func defaultStore(for baseURL: URL) -> FileTranscriptStore {

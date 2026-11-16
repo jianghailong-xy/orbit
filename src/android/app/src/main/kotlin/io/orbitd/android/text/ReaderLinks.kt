@@ -27,13 +27,14 @@ import java.net.URI
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 
-/** Only API paths can receive credentials. External image requests use a separate, bare client. */
+/** Only API paths can receive credentials. External image requests use a separate, bare client. [guestSessionId] is set on a guest
+ * page's: its files are read through the guest door, since the owner's `attachments/:id` answers a guest 404. */
 class ReaderResources(val auth: AuthSession, val handle: SessionHandle, val sessionId: String? = null,
     val available: () -> Boolean = { true }, val metadata: (String) -> Pair<String, String>? = { null },
-    val images: () -> List<String> = { emptyList() }) {
+    val images: () -> List<String> = { emptyList() }, val guestSessionId: String? = null) {
     suspend fun bytes(source: String): ByteArray {
         if ((auth.state.value as? AuthState.SignedIn)?.handle !== handle || !available()) throw SessionChanged()
-        val request = resourceRequest(source, sessionId)
+        val request = resourceRequest(source, sessionId, guestSessionId)
         val bytes = if (request != null) auth.request(handle, request).body else withContext(Dispatchers.IO) {
             if (source.startsWith("data:image/") && source.substringBefore(',').endsWith(";base64")) {
                 require(source.length <= MAX_BYTES * 2)
@@ -61,10 +62,11 @@ class ReaderResources(val auth: AuthSession, val handle: SessionHandle, val sess
     }
 }
 
-internal fun resourceRequest(source: String, sessionId: String?): ApiRequest? {
+internal fun resourceRequest(source: String, sessionId: String?, guestSessionId: String? = null): ApiRequest? {
     if (source.startsWith("orbit-attachment:")) {
         val id = ObjectId.canonical(source.substringAfter(':')) ?: return null
-        return ApiRequest(listOf("attachments", id), maxResponseBytes = 25L * 1024 * 1024)
+        val path = if (guestSessionId != null) listOf("guest-sessions", guestSessionId, "attachments", id) else listOf("attachments", id)
+        return ApiRequest(path, maxResponseBytes = 25L * 1024 * 1024)
     }
     val path = source.replace(Regex(":\\d+(?::\\d+)?(?:-\\d+(?::\\d+)?)?$"), "")
     val match = Regex("^/(?:root|home/[^/]+|Users/[^/]+)/\\.orbit/(?:uploads|worktrees)/([^/]+)/(.+)$").matchEntire(path) ?: return null
