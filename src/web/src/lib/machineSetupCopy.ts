@@ -67,6 +67,16 @@ export const SETUP_FOOT = 'Nothing is created until you send. You can rename the
 export const setupReady = (workspace: string, path: string) =>
   `Ready. Send a task — Orbit adds the workspace “${workspace}” for ${path} as it starts.`;
 
+// The web card's own lines (owner 2026-11-16): on the web a machine with no workspace draws the card alone, with no
+// composer under it, and the card's button makes the workspace. The native clients still send to make it, so the
+// lines above stay theirs (copy parity).
+export const SETUP_LEAD_CREATE = 'Pick where it works and sign in a coding CLI, then create the workspace.';
+export const SETUP_FOOT_CREATE = 'Nothing is created until you create the workspace. You can rename it or change these later.';
+export const setupReadyCreate = (workspace: string, path: string) =>
+  `Ready. Orbit adds the workspace “${workspace}” for ${path}.`;
+export const SETUP_CREATE = 'Create workspace';
+export const setupCreateFailed = (why: string) => `Couldn’t create the workspace: ${why}`;
+
 export const composerPlaceholderFor = (machine: string) => `Send ${machine} a task…`;
 
 export const heldWaiting = (machine: string) => `Waiting for ${machine} — sends once both steps are done`;

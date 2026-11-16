@@ -130,7 +130,6 @@ import {
   withEnginePlanUsage,
   type AccountEngine,
   type PlanUsage,
-  CREATE_WORKDIR_CAPABILITY,
   credentialIsAnthropicBound,
   type WikiChatContext,
   type TranslationActionResponse,
@@ -250,7 +249,7 @@ import {
 import {
   folderNameOf,
   freeWorkspaceName,
-  newFolderWorkDir,
+  newFolderWorkDirOn,
   readNewWorkspace,
   type NewWorkspaceTarget,
 } from './new-workspace';
@@ -1891,19 +1890,9 @@ export class SessionsService {
     if (ask.workDir !== undefined) {
       return { runnerId: runner.id, workDir: ask.workDir, name: folderNameOf(ask.workDir), autoCreateWorkDir: false };
     }
-    const reposRoot = runner.reposRoot?.trim();
-    const makesFolders = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CREATE_WORKDIR_CAPABILITY);
-    if (!makesFolders || !reposRoot) {
-      throw new ConflictException({
-        code: 'NEW_FOLDER_UNSUPPORTED',
-        message: makesFolders
-          ? 'This runner has not reported its Repos Folder, so it cannot make a new folder. Choose an existing folder.'
-          : 'This runner is too old to make a new folder — update it, or choose an existing folder.',
-      });
-    }
     return {
       runnerId: runner.id,
-      workDir: newFolderWorkDir(reposRoot, ask.newFolder),
+      workDir: newFolderWorkDirOn(runner, ask.newFolder),
       name: ask.newFolder,
       autoCreateWorkDir: true,
     };

@@ -215,6 +215,16 @@ published; and the runner is marked changed, so its next heartbeat lists the new
   from it, with Rename (`PATCH /workspaces/:id`) and Settings. The name and path are the workspace's
   (`GET /sessions/:id` includes it), the machine is the session's runner.
 
+### 3.4 The workspace alone: `POST /workspaces`
+
+The web setup card makes the workspace by itself, with no session (owner 2026-11-16): the page draws the card
+alone, with no composer, and its Create workspace button sends `POST /workspaces` with `name` (the folder's
+name), `runnerId`, and one of `workDir` (a folder already there) and `newFolder` (§3's rule: one path segment,
+made under the runner's reposRoot). `newFolder` gets the same 400s and the same 409 `NEW_FOLDER_UNSUPPORTED`
+as `newWorkspace`, and writes `workDir = <reposRoot>/<newFolder>` with `autoCreateWorkDir`, so the folder is
+made at the first session's claim (§4). Unlike §3.2 the name is taken as sent, not numbered. The native
+clients still make the first workspace with the first session (§3).
+
 ## 4. Claim: `createWorkDir`
 
 `ClaimedSession.createWorkDir?: true` (`GET /runner/sessions/claim`) and `ReclaimSession.createWorkDir?: true`

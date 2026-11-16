@@ -70,6 +70,7 @@ let host: HTMLDivElement | null = null;
 let client: QueryClient | null = null;
 const onEngine = vi.fn();
 const onUseApiKey = vi.fn();
+const onCreate = vi.fn();
 let picked: PickedFolder | null = null;
 
 function Page({
@@ -102,6 +103,9 @@ function Page({
       }}
       onEngine={onEngine}
       onUseApiKey={onUseApiKey}
+      onCreate={onCreate}
+      creating={false}
+      createError={null}
     />
   );
 }
@@ -227,6 +231,7 @@ beforeEach(() => {
   picked = null;
   onEngine.mockReset();
   onUseApiKey.mockReset();
+  onCreate.mockReset();
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation((async (path: string) => {
     if (path.endsWith('/login')) return { status: null, engine: null, url: null, userCode: null, message: null };
@@ -249,16 +254,20 @@ afterEach(async () => {
 });
 
 describe('the card’s head and foot', () => {
-  it('says what it asks for, and that nothing is made until a send', async () => {
+  it('says what it asks for, and that nothing is made until Create workspace', async () => {
     const page = await open();
     expect(said(page.querySelector('.msc-title'))).toBe('Set up orbit@austin');
     expect(said(page.querySelector('.msc-sub'))).toBe(
-      'Pick where it works and sign in a coding CLI. Anything you send waits until both are done.',
+      'Pick where it works and sign in a coding CLI, then create the workspace.',
     );
     expect(said(page.querySelector('.msc-foot'))).toBe(
-      'Nothing is created until you send. You can rename the workspace or change these later.',
+      'Nothing is created until you create the workspace. You can rename it or change these later.',
     );
     expect(page.querySelector('.msc-foot.ready')).toBeNull();
+    // Nothing to create yet: the button waits for both steps.
+    const create = page.querySelector<HTMLButtonElement>('.msc-create button')!;
+    expect(said(create)).toBe('Create workspace');
+    expect(create.disabled).toBe(true);
   });
 
   it('names a machine by its display name', async () => {
@@ -266,15 +275,19 @@ describe('the card’s head and foot', () => {
     expect(said(page.querySelector('.msc-title'))).toBe('Set up Austin box');
   });
 
-  it('both done: says what the send will make', async () => {
+  it('both done: says what Create workspace will make, and makes it', async () => {
     const page = await open({
       runner: machine({ engines: engines('yes') }),
       ready: true,
       start: { kind: 'existing', path: REGISTER, note: 'git repository · main' },
     });
     expect(said(page.querySelector('.msc-foot.ready'))).toBe(
-      'Ready. Send a task — Orbit adds the workspace “app” for /home/orbit/code/app as it starts.',
+      'Ready. Orbit adds the workspace “app” for /home/orbit/code/app.',
     );
+    const create = page.querySelector<HTMLButtonElement>('.msc-create button')!;
+    expect(create.disabled).toBe(false);
+    await act(async () => create.click());
+    expect(onCreate).toHaveBeenCalledTimes(1);
     // Both steps are their done lines: no question is left on the card.
     expect(said(page.querySelector('[data-step="folder"]'))).toBe('Folder /home/orbit/code/app git repository · main Change');
     expect(said(page.querySelector('[data-step="engine"]'))).toBe('Claude Code signed in on orbit@austin');
@@ -288,7 +301,7 @@ describe('the card’s head and foot', () => {
       start: { kind: 'new', name: 'payments-api', path: '/home/orbit/orbit-repos/payments-api' },
     });
     expect(said(page.querySelector('.msc-foot.ready'))).toBe(
-      'Ready. Send a task — Orbit adds the workspace “payments-api” for /home/orbit/orbit-repos/payments-api as it starts.',
+      'Ready. Orbit adds the workspace “payments-api” for /home/orbit/orbit-repos/payments-api.',
     );
     expect(said(page.querySelector('[data-step="folder"]'))).toBe(
       'Folder /home/orbit/orbit-repos/payments-api new folder · created as the session starts Change',
