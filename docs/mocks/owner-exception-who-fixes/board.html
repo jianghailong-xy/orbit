@@ -235,7 +235,7 @@
   <p class="b-lede">
     两个情形贯穿全板：<b>(a) 协调者不可达</b>（<code>coordinatorUnreachable</code>：消息送不进去——这里用「它的工作区 mac-mini 被停用」），<b>(b) 协调者可达</b>（2 小时没人动，钟把它交给了你）。
     数据：示例项目 <b>Checkout v2</b>、任务 <b>Retry failed webhook deliveries</b>、9 个冲突文件、在协调者手里 2h 56m 后升级、读卡时共等了 3h 1m（真实条目的形状，名字是示例——仓库公开）。
-    红色编号 = 今天的问题；绿色编号 = 提议的改动。产品文案全是英文（CLAUDE.md §5）。
+    红色编号 = 今天的问题；绿色编号 = 提议的改动。产品文案全是英文（CLAUDE.md §5）。<br>「今天」按 main 现状画（含 <code>ff4ffab74</code>/<code>c2420ff05</code>：不可达时标题已是「can’t take messages」、必做句不再提「ask the coordinator」；<code>d2bc7fc4f</code>：Ask again 与 Chat about this 读同一个 <code>readCoordinatorReach</code>）。所以提议第 1 点在 (a) 已经落地，本板在它之上做第 2–5 点。
   </p>
   <div class="b-row">
     <div class="b-col"><p class="b-cap now">① 今天 · web · (a) 协调者不可达</p><div class="b-web" id="web-today-a"></div></div>
@@ -244,7 +244,7 @@
   <ol class="b-notes">
     <li><i class="b-mk">1</i><span><b>两个钟各说各的。</b>(b) 标题「no one acted on this for 2h 56m」，脚注「waiting 3h 1m · came to the owner at 2h 56m」——同一个 2h 56m 出现两次，第三个数 3h 1m 又是另一回事。读者要自己做减法才知道「到我手里 5 分钟」。</span></li>
     <li><i class="b-mk">2</i><span><b>一列门，按机制排。</b>修（Open task session）、看（Open landing）、停（Cancel task）、结（Mark as handled）在同一列、同一种「按钮 + 一句后果」的形状里；只有重量在区分它们。卡没回答 owner 第一个问题：<b>这事该谁修？</b></span></li>
-    <li><i class="b-mk">3</i><span><b>(a) 少了真正的第一步。</b>协调者收不到消息时 Ask again 不画（服务端 <code>askable</code> 为假），于是卡上的主门变成「自己修」。但服务端早有路：<code>COORDINATOR_UNAVAILABLE</code> 指向 <code>POST :id/coordinator/rebind</code>（<code>projects.controller.ts</code> ~L896），项目页的协调者卡上也已经有 <code>Enable mac-mini</code> / <code>Change workspace…</code>。例外卡一个都没给。</span></li>
+    <li><i class="b-mk">3</i><span><b>(a) 少了真正的第一步。</b>协调者收不到消息时 Ask again 不画（<code>readCoordinatorReach</code> 的 <code>askable</code> 为假，<code>d2bc7fc4f</code> 起与 Chat 同一个答案），必做句也已不提它，于是卡上的主门只剩「自己修」。但服务端早有路：<code>COORDINATOR_UNAVAILABLE</code> 指向 <code>POST :id/coordinator/rebind</code>（<code>projects.controller.ts</code> ~L896），项目页的协调者卡上也已经有 <code>Enable mac-mini</code> / <code>Change workspace…</code>。例外卡一个都没给。</span></li>
     <li><i class="b-mk">4</i><span><b>原始事实。</b><code>refs/heads/project/&lt;id&gt; at &lt;sha&gt;</code> 和 9 个路径全量平铺，占了卡的一半高度，却不是做决定要用的东西。</span></li>
     <li><i class="b-mk">5</i><span><b>没说怎么结束。</b>只有事实块里一行「After a fix: push to the task branch — Orbit re-integrates and re-checks on its own」，没说<b>事项会自己关</b>；于是 owner 修完还会再按一次 Mark as handled——那是给「从别的路落地」用的门。</span></li>
     <li><i class="b-mk">6</i><span><b>灰掉的 Chat about this。</b>(a) 一个按不了的按钮 + 一句「can’t take a message right now」，与标题「can’t take messages」说同一件事第二遍。</span></li>
@@ -262,7 +262,7 @@
     <div class="b-col"><p class="b-cap new">② 提议 · web · Details 展开 <span>（(a)(b) 相同）</span></p><div class="b-web" id="web-new-details"></div></div>
   </div>
   <ol class="b-notes b-note-new">
-    <li><i class="b-mk g">1</i><span><b>标题 = 此刻的原因，只有一个钟。</b>标题说现在为什么是你：(a)「the coordinator can’t take messages」，(b)「the coordinator didn’t get to it」——是<b>实时</b>的读数（交过来之后协调者结束了，标题就改说 ended）。钟只剩右上角一个「waiting 3h 1m」；「2h 56m 后交给你」进 Details。脚注整行删掉（「Owner: you」标题已说）。</span></li>
+    <li><i class="b-mk g">1</i><span><b>标题 = 此刻的原因（已部分落地），只有一个钟。</b>(a) 的「the coordinator can’t take messages」是 main 上已有的（<code>ff4ffab74</code>），不改；剩下的是 (b)：「no one acted on this for 2h 56m」→「the coordinator didn’t get to it」，去掉标题里的数字；以及读数改成<b>实时</b>（交过来之后协调者结束了，标题就改说 ended——今天 ESCALATED 只在不可达时换句）。钟只剩右上角一个「waiting 3h 1m」；「2h 56m 后交给你」进 Details。脚注整行删掉（「Owner: you」标题已说）。</span></li>
     <li><i class="b-mk g">2</i><span><b>「Who fixes it?」两行：协调者 / 你。</b>(a) 第一行先说为什么它来不了（<code>ProjectCoordinatorCard</code> 的同一句 refusal），主按钮是<b>把它请回来</b>——<code>Enable mac-mini</code>（同一张协调者卡的 fix 标签），旁边 <code>Change workspace…</code>（= rebind）。(b) 第一行是 <code>Ask the coordinator again</code>。第二行永远是「You · <code>Fix it myself</code>」，即今天的 Open task session，换成说人话的名字。</span></li>
     <li><i class="b-mk g">3</i><span><b>一行说它怎么结束</b>（绿色，不是按钮）：<i>Closes by itself once this work lands — push a fix to the task branch and you’re done.</i> 只画在有任务分支的集成类事项上（CONFLICT / CHECK_FAILED / ERROR），取代事实块里的「After a fix」行。</span></li>
     <li><i class="b-mk g">4</i><span><b>事实折叠。</b>标题下一行「Merge conflict · 任务名 → 项目名」；其余收进 <code>Details · 9 files</code>：文件最多 5 个 + 「4 more」、目标分支（项目名 + 短 ref，mono 小字）、到你手里的时刻、<code>Open landing</code>（看，不是做）。</span></li>
