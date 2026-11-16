@@ -23,7 +23,7 @@ struct PromptOptimizeButton: View {
                 if busy {
                     ProgressView().controlSize(.small)
                 } else {
-                    Text("✦").font(.system(size: 17, weight: .medium))
+                    Text("✦").font(.title3.weight(.medium))
                 }
             }
             .foregroundStyle(Color.secondary)
