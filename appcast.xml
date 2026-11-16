@@ -3,15 +3,15 @@
     <channel>
         <title>Orbit</title>
         <item>
-            <title>0.1.261-beta.12</title>
-            <pubDate>Mon, 16 Nov 2026 04:01:09 +0000</pubDate>
+            <title>0.1.261-beta.13</title>
+            <pubDate>Mon, 16 Nov 2026 04:25:27 +0000</pubDate>
             <link>https://github.com/jianghailong-xy/orbit</link>
             <sparkle:channel>beta</sparkle:channel>
-            <sparkle:version>12021</sparkle:version>
-            <sparkle:shortVersionString>0.1.261-beta.12</sparkle:shortVersionString>
+            <sparkle:version>12026</sparkle:version>
+            <sparkle:shortVersionString>0.1.261-beta.13</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.261-beta.12/Orbit-v0.1.261-beta.12-arm64.zip" length="26692032" type="application/octet-stream" sparkle:edSignature="3NrjS9DiVlwojHTW9hCCsTkgsOrnACF5+lToumRmVF2xCgVghxBWuSN/IyRUZiH+8KQgO6inUDESR/cnBd6lBQ=="/>
+            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.261-beta.13/Orbit-v0.1.261-beta.13-arm64.zip" length="26692103" type="application/octet-stream" sparkle:edSignature="pqhwvtxBWcsgSz+gpGcGvxMo9sGiLFkL/uHKh6uJzJjmW6R3SzJvJKMmdEpVhn88EKkxnUD3xcqeoeyBdZGxAQ=="/>
         </item>
         <item>
             <title>0.1.261-beta.11</title>
