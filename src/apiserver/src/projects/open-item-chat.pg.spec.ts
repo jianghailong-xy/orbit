@@ -772,6 +772,111 @@ test('escalated, coordinator reaped while its runner is away: the sentence stops
     }
   });
 
+test('escalated, coordinator reaped and its runner back (2026-11-15): Ask again is drawn, the chat is live, the heading is the ordinary one, and the press revives the conversation',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'ask-revivable');
+      const red = await failedLanding(stack, w, 'ask-revivable');
+      await escalate(stack, red.itemId);
+
+      // The reaper failed the run while the runner was silent — FAILED with the cancel it writes
+      // beside it, nobody closing the conversation — and then the runner came back.
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId },
+        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+      });
+      await stack.db.runner.update({
+        where: { id: w.runnerId },
+        data: { status: RunnerStatus.ONLINE, lastHeartbeatAt: new Date() },
+      });
+
+      const read = await rowOf(stack, w, red.itemId);
+      assert.equal(read.group, 'needsYou');
+      assert.equal(read.row.assigneeReason, 'ESCALATED', 'the ordinary escalation heading: no one acted on this');
+      assert.ok(read.row.actions.includes('ASK_COORDINATOR_AGAIN'), 'the press that asks the coordinator is drawn');
+      assert.equal(read.row.chat.refusal, null, 'and the chat is live');
+      assert.equal(read.row.coordinatorUnreachable, false, 'so the heading does not say it cannot take messages');
+      assert.equal(read.row.requiredAction,
+        'This task cannot reach the project branch until its landing check passes — re-run it or ask the coordinator to fix it.');
+
+      // The drawn press is not refused: the item is the coordinator's again, and its message
+      // revived the conversation as a message in "Chat about this" would have.
+      const returned = await stack.openItems.returnToCoordinator(w.ownerId, w.projectId, red.itemId);
+      assert.equal(returned.assignee, 'COORDINATOR');
+      const after = await stack.db.projectOpenItem.findUniqueOrThrow({
+        where: { id: red.itemId }, select: { assignee: true, state: true, assignedAt: true },
+      });
+      assert.deepEqual({ assignee: after.assignee, state: after.state }, { assignee: 'COORDINATOR', state: 'OPEN' });
+      const delivery = await stack.db.projectOpenItemDelivery.findFirst({
+        where: { itemId: red.itemId, sessionId: w.coordinatorSessionId, purpose: 'ITEM', returnedAt: null },
+        select: { clientTurnId: true, turnId: true },
+      });
+      assert.ok(delivery?.turnId, 'the item was put in front of the coordinator as a turn');
+      const turn = await stack.db.conversationTurn.findUniqueOrThrow({
+        where: { id: delivery!.turnId! }, select: { kind: true, content: true },
+      });
+      assert.equal(turn.kind, 'message');
+      const session = await stack.db.session.findUniqueOrThrow({
+        where: { id: w.coordinatorSessionId }, select: { status: true, cancelRequestedAt: true },
+      });
+      assert.notEqual(session.status, RunStatus.FAILED, 'the press revived the conversation');
+      assert.equal(session.cancelRequestedAt, null);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('escalated, coordinator that truly cannot receive — runner away, ended with no revival, in Trash, none at all: Ask again is not drawn, the chat is refused, the row says unreachable, and the press is refused',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'ask-unreachable');
+      const red = await failedLanding(stack, w, 'ask-unreachable');
+      await escalate(stack, red.itemId);
+
+      const expectUnreachable = async (label: string, refusal: 'COORDINATOR_UNAVAILABLE' | 'NO_COORDINATOR') => {
+        const read = await rowOf(stack, w, red.itemId);
+        assert.equal(read.group, 'needsYou', label);
+        assert.ok(!read.row.actions.includes('ASK_COORDINATOR_AGAIN'), `${label}: no press that asks the coordinator`);
+        assert.equal(read.row.chat.refusal, refusal, `${label}: the chat is refused`);
+        assert.equal(read.row.coordinatorUnreachable, true, `${label}: the heading names the unreachable coordinator`);
+        const pressed = await denied(() => stack.openItems.returnToCoordinator(w.ownerId, w.projectId, red.itemId));
+        assert.equal(pressed.status, 409, label);
+        assert.equal(pressed.code, 'OPEN_ITEM_NO_COORDINATOR', `${label}: the press is refused`);
+        const item = await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: red.itemId }, select: { assignee: true } });
+        assert.equal(item.assignee, 'OWNER', `${label}: nothing moved`);
+      };
+      const runnerAway = { status: RunnerStatus.OFFLINE, lastHeartbeatAt: new Date(Date.now() - 60 * 60_000) };
+
+      // Reaped while the runner is away: the run is down, and nothing can reach it until it is back.
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId },
+        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+      });
+      await stack.db.runner.update({ where: { id: w.runnerId }, data: runnerAway });
+      await expectUnreachable('reaped, runner away', 'COORDINATOR_UNAVAILABLE');
+
+      // Ended and closed, with nothing to revive it on.
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId },
+        data: { status: RunStatus.CANCELLED, endReason: 'COMPLETED', completedAt: new Date(), cancelRequestedAt: null },
+      });
+      await expectUnreachable('ended without revival', 'COORDINATOR_UNAVAILABLE');
+
+      // In Trash, its runner back: still nothing a message reaches.
+      await stack.db.runner.update({ where: { id: w.runnerId }, data: { status: RunnerStatus.ONLINE, lastHeartbeatAt: new Date() } });
+      await stack.db.session.update({ where: { id: w.coordinatorSessionId }, data: { deletedAt: new Date() } });
+      await expectUnreachable('in Trash', 'COORDINATOR_UNAVAILABLE');
+
+      // Gone: the project names no conversation.
+      await stack.db.project.update({ where: { id: w.projectId }, data: { coordinatorSessionId: null } });
+      await expectUnreachable('no conversation', 'NO_COORDINATOR');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('the open-item-chat PostgreSQL target is explicitly disposable', { skip }, () => {
   assert.doesNotThrow(() => assertCoordinatorPgUrlIsIsolated(URL));
 });
