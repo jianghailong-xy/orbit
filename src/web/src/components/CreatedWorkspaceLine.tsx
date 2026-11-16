@@ -213,13 +213,15 @@ function CloneStatusLine({
     </button>
   );
   if (failure) {
-    const mark = <ExclamationCircleFilled className="msc-clone-error" aria-hidden="true" />;
+    // The mark rides inside the reason, so a long reason wraps with it rather than leaving it on a row of its own.
+    const mark = <ExclamationCircleFilled aria-hidden="true" />;
     if (failure.kind === 'appRemoved') {
       const installUrl = integration.data?.installUrl;
       return (
         <div className="msc-created" data-clone="FAILED" data-clone-failure="appRemoved">
-          {mark}
-          <span className="msc-clone-error">{cloneAppRemoved(repository)}</span>
+          <span className="msc-clone-error">
+            {mark} {cloneAppRemoved(repository)}
+          </span>
           {installUrl && (
             <>
               <a href={installUrl} target="_blank" rel="noreferrer">
@@ -235,8 +237,9 @@ function CloneStatusLine({
     if (failure.kind === 'signInExpired') {
       return (
         <div className="msc-created" data-clone="FAILED" data-clone-failure="signInExpired">
-          {mark}
-          <span className="msc-clone-error">{CLONE_SIGN_IN_EXPIRED}</span>
+          <span className="msc-clone-error">
+            {mark} {CLONE_SIGN_IN_EXPIRED}
+          </span>
           <button className="msc-change" type="button" onClick={() => void reconnect()}>
             {CLONE_RECONNECT}
           </button>
@@ -248,8 +251,9 @@ function CloneStatusLine({
     const why = (error ?? '').trim().replace(/\.?$/, '.');
     return (
       <div className="msc-created" data-clone="FAILED" data-clone-failure={failure.kind}>
-        {mark}
-        <span className="msc-clone-error">{cloneCouldNot(repository, why)}</span>
+        <span className="msc-clone-error">
+          {mark} {cloneCouldNot(repository, why)}
+        </span>
         {retryButton}
         <span className="msc-created-sep">·</span>
         {settings}
