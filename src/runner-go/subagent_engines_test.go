@@ -231,9 +231,9 @@ func TestSubagentResumeRefusalSaysWhy(t *testing.T) {
 	if err := subagentResumeRefusal(&subagentRecord{RunID: "r3", Engine: providerCodex, EngineSession: "thr"}); err != nil {
 		t.Fatalf("a Codex run with its thread was refused: %v", err)
 	}
-	err = subagentResumeRefusal(&subagentRecord{RunID: "r4", Workspace: "orbit-op"})
-	if err == nil || !strings.Contains(err.Error(), "ran on workspace orbit-op") || strings.Contains(err.Error(), "left no conversation") {
-		t.Fatalf("refusal of a remote run = %v", err)
+	// A remote run's conversation is on its workspace's runner, which answers for it.
+	if err := subagentResumeRefusal(&subagentRecord{RunID: "r4", Workspace: "orbit-op"}); err != nil {
+		t.Fatalf("a remote run was refused here: %v", err)
 	}
 }
 
@@ -285,7 +285,8 @@ func TestCodexDelegateCardTakesTheCanonicalName(t *testing.T) {
 	}
 }
 
-// A remote run is refused as remote whether this process still holds it or only its run.json is left after a restart.
+// A remote run's record names where it ran, whether this process still holds it or only its run.json is left after a
+// restart, so its resume goes there.
 func TestSubagentRecordOfARemoteRunNamesItsWorkspace(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 	s := &bgJobService{sessionID: "sess1"}
@@ -302,8 +303,8 @@ func TestSubagentRecordOfARemoteRunNamesItsWorkspace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", id, err)
 		}
-		if err := subagentResumeRefusal(rec); err == nil || !strings.Contains(err.Error(), "ran on workspace orbit-op") {
-			t.Fatalf("%s: refusal = %v", id, err)
+		if rec.Workspace != "orbit-op" || subagentResumeRefusal(rec) != nil {
+			t.Fatalf("%s: record %+v, refusal %v", id, rec, subagentResumeRefusal(rec))
 		}
 	}
 }

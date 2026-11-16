@@ -27,6 +27,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { IsPublicId } from '../common/public-id';
 import { MODEL_AT_CAPACITY_ERROR_MARKER, type SubagentRoutingDecision } from '../tasks/model-routing';
 import { stripNul } from './strip-nul';
 
@@ -111,6 +112,11 @@ export class SubagentRunCreateDto implements SubagentRunCreateRequest {
   @IsString()
   @MaxLength(400_000)
   prompt?: string;
+
+  /** A finished remote run of this session to continue (§10.2). */
+  @IsOptional()
+  @IsPublicId()
+  resumeOf?: string;
 }
 
 export class SubagentRunUpdateDto implements SubagentRunUpdateRequest {
