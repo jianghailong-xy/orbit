@@ -271,6 +271,7 @@ import {
   HELD_TURN_STATUS,
   accountAgentLanguage,
   heldTurnColumns,
+  readOptimizedTranslation,
   translationLanguages,
   turnTranslationOf,
   turnTranslationQueue,
@@ -1730,6 +1731,7 @@ export class SessionsService {
       },
     });
     // Settings › Translation: the language the opening message is translated from, or null.
+    const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const heldFrom = opts?.translate && dto.skipTranslation !== true && !dto.taskId && !wikiChat && !opts.helpAsk && !dto.shell && !attachmentsAlone
       && !opts.externalSender && !opts.fence && dto.prompt.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
@@ -1799,7 +1801,7 @@ export class SessionsService {
         where: { sessionId_clientTurnId: { sessionId: session.id, clientTurnId: SessionsService.initialTurnClientId(session.id) } },
         select: { id: true },
       });
-      if (opening) this.startTurnTranslation(ownerId, session.id, opening.id);
+      if (opening) this.startTurnTranslation(ownerId, session.id, opening.id, optimizedTranslation);
     }
     this.queue.notifySessionQueued(session.assignedRunnerId);
     // A task run, a delegation or a message opening a session on a sleeping managed runner wakes it.
@@ -6865,6 +6867,7 @@ export class SessionsService {
     const wikiContext = readWikiChatContext(dto.wikiContext);
     // Settings › Translation: the language this message is translated from, or null when it goes as
     // written. Words only — a `!cmd` is a command, and attachments alone carry no words.
+    const optimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const translateFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
@@ -7259,7 +7262,9 @@ export class SessionsService {
     if (queued.wakeQueue) this.queue.notifySessionQueued(turnRunnerId);
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     // A held message starts being translated now that the turn exists for everyone to see.
-    if (!queued.idempotent && queued.turn.status === HELD_TURN_STATUS) this.startTurnTranslation(ownerId, id, queued.turn.id);
+    if (!queued.idempotent && queued.turn.status === HELD_TURN_STATUS) {
+      this.startTurnTranslation(ownerId, id, queued.turn.id, optimizedTranslation);
+    }
     // A message, a scheduled wakeup, a watch or a task's prompt that left the session waiting for its
     // runner wakes a sleeping managed runner. A turn joining a running one needs no wake.
     if (queued.wakeQueue) await this.wakeManagedRunner(turnRunnerId, 'turn');
@@ -7336,10 +7341,12 @@ export class SessionsService {
     while (this.translationsInFlight.size > 0) await Promise.all([...this.translationsInFlight]);
   }
 
-  /** Translate a held message in the background, after the request that held it has answered. */
-  private startTurnTranslation(ownerId: string, sessionId: string, turnId: string): void {
+  /** Translate a held message in the background, after the request that held it has answered. `prepared` is
+   *  the prompt optimizer's agent-language text the send carried (readOptimizedTranslation): the message is
+   *  released with it, and the translator is not called. A Retry later translates as usual. */
+  private startTurnTranslation(ownerId: string, sessionId: string, turnId: string, prepared?: string | null): void {
     const run: Promise<void> = turnTranslationQueue
-      .run(() => this.translateHeldTurn(ownerId, sessionId, turnId))
+      .run(() => this.translateHeldTurn(ownerId, sessionId, turnId, prepared ?? null))
       .catch((error: unknown) => {
         this.logger.warn(`translating turn ${turnId} of session ${sessionId} failed: ${(error as Error)?.message ?? error}`);
       })
@@ -7352,7 +7359,7 @@ export class SessionsService {
    * translator's refusal, a mangled reply, the 20 s timeout — and so not delivered (decision 1A). Every
    * change is announced on the session's stream (QUEUED_TURNS_CHANGED), which is what turns the chip.
    */
-  private async translateHeldTurn(ownerId: string, sessionId: string, turnId: string): Promise<void> {
+  private async translateHeldTurn(ownerId: string, sessionId: string, turnId: string, prepared: string | null = null): Promise<void> {
     const turn = await this.prisma.conversationTurn.findFirst({
       where: { id: turnId, sessionId, status: HELD_TURN_STATUS, translationState: 'TRANSLATING' },
       select: { displayPrompt: true, translationLang: true },
@@ -7361,7 +7368,9 @@ export class SessionsService {
     const original = turnTranslationOf({ ...turn, translationState: 'TRANSLATING' });
     let translated: string | null = null;
     let why = 'the message could not be read';
-    if (original) {
+    if (original && prepared !== null) {
+      translated = prepared;
+    } else if (original) {
       try {
         // Into the agent language the account has now: a held turn records only the language it was written in.
         const agent = await accountAgentLanguage(this.prisma, ownerId);
@@ -10432,6 +10441,7 @@ export class SessionsService {
     // locks taken inside the closure and writes from that read; nothing outside it moves between
     // attempts, and the runner is notified after this returns.
     // Settings › Translation on the revive: its message is laid down HELD (insertHeldOpeningLocked's rule).
+    const reviveOptimizedTranslation = readOptimizedTranslation(dto.optimizedTranslation);
     const reviveHeldFrom = opts?.translate && dto.skipTranslation !== true && dto.kind !== 'shell' && dto.content?.trim()
       ? (await translationLanguages(this.prisma, ownerId))?.owner ?? null
       : null;
@@ -10842,7 +10852,7 @@ export class SessionsService {
     if (revived.wasRevived && !askedManagedRunner) await this.wakeManagedRunner(session.assignedRunnerId, 'resume');
     if (revived.wasRevived && revived.turn.status === HELD_TURN_STATUS) {
       this.realtime.publishQueuedTurnsChanged(id);
-      this.startTurnTranslation(ownerId, id, revived.turn.id);
+      this.startTurnTranslation(ownerId, id, revived.turn.id, reviveOptimizedTranslation);
     }
     return {
       ...(turnTranslationOf(revived.turn) ? { translation: turnTranslationOf(revived.turn) } : {}),

@@ -615,6 +615,12 @@ export const LOGIN_LINK_REFUSED = "This runner reported a sign-in link that isn'
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
 /** A session id, as an account removal's report names the sessions in the account. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The session ids a removal report names, kept only when they are ids, and a bounded number of them. */
+function accountInUseSessionIds(body: AccountRemoveResult): string[] {
+  if (!Array.isArray(body.sessionIds)) return [];
+  return [...new Set(body.sessionIds.filter((id) => typeof id === 'string' && UUID_PATTERN.test(id)))].slice(0, 50);
+}
 // The checkout repair is seconds of local git, so this window only has to cover a runner that
 // went away between the click and picking the request up.
 const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
@@ -3784,8 +3790,10 @@ export class RunnerApiController {
       data: {
         codexAccountRemoveStatus: status,
         // Only a failure carries one; a success clears whatever the last one said.
-        codexAccountRemoveMessage:
-          status === 'failed' ? ((await this.accountInUseMessage(runnerId, engine, body)) ?? body.message ?? null) : null,
+        codexAccountRemoveMessage: status === 'failed' ? (body.message ?? null) : null,
+        // The sessions a refusal names, which the page lists (accountRemoveSessionsOf reads only those
+        // this runner runs for the viewer); a success, or any other refusal, names none.
+        codexAccountRemoveSessions: status === 'failed' ? accountInUseSessionIds(body) : [],
       },
     });
     // The name the account was given in Orbit goes with it (RunnersService.renameAccount): nothing
@@ -3798,30 +3806,6 @@ export class RunnerApiController {
            AND "account_names" #> ARRAY[${engine}::text, ${body.account}::text] IS NOT NULL`;
     }
     return { ok: true, applied: count > 0 };
-  }
-
-  /**
-   * A refused removal's message naming the sessions in the account, by title, or undefined when the
-   * report names none this runner is running (an older runner, or another reason) and the runner's
-   * own words stand. Only sessions assigned to this runner are read: a report cannot name another's.
-   */
-  private async accountInUseMessage(
-    runnerId: string,
-    engine: LoginEngine,
-    body: AccountRemoveResult,
-  ): Promise<string | undefined> {
-    const ids = Array.isArray(body.sessionIds) ? body.sessionIds.filter((id) => UUID_PATTERN.test(String(id))) : [];
-    if (ids.length === 0 || !body.account) return undefined;
-    const sessions = await this.prisma.session.findMany({
-      where: { id: { in: ids }, assignedRunnerId: runnerId },
-      select: { title: true },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (sessions.length === 0) return undefined;
-    const titles = sessions.map((s) => `“${s.title || 'Untitled session'}”`).join(', ');
-    return sessions.length === 1
-      ? `${engine} account ${body.account} is in use by the session ${titles} — end that session, then remove it`
-      : `${engine} account ${body.account} is in use by the sessions ${titles} — end them, then remove it`;
   }
 
   /**

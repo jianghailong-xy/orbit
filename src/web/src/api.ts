@@ -530,8 +530,9 @@ export const createInteractiveSession = (body: {
   /** Instead of `workspaceId`, on `assignedRunnerId`: the folder of a workspace this session makes, in
    *  the transaction that creates it (docs/first-workspace-contract.md §3). */
   newWorkspace?: NewWorkspaceRequest;
-  /** Prompt optimizer (D2): the opening message is still exactly the inserted optimized English. */
-  skipTranslation?: boolean;
+  /** Prompt optimizer (D2): the opening message is still exactly what Use put in the box. */
+  skipTranslation?: true;
+  optimizedTranslation?: string;
 }) =>
   api<{ id: string; workspaceId?: string | null }>('/sessions', {
     method: 'POST',
@@ -638,6 +639,13 @@ export const removeImportedSessions = (workspaceId: string) =>
  *  `placement` is the server's row-locked answer to whether this specific turn was accepted as
  *  the next executable, queued behind an earlier one, or steered into the running one. New Web is deployed only after every API replica supports this required receipt;
  *  silently guessing across version skew would reintroduce the race. */
+/**
+ * Prompt optimizer (D2, @orbit/shared prompt-optimizer.ts): what a send of the unedited optimized text adds to
+ * its body. With a reading copy (Translation on), the box holds the owner-language text and the send carries the
+ * optimizer's agent-language prompt as its translation; without one, the text goes as written.
+ */
+export type OptimizedSend = { skipTranslation: true } | { optimizedTranslation: string };
+
 export const sendTurn = (
   sessionId: string,
   content: string,
@@ -645,9 +653,9 @@ export const sendTurn = (
   kind?: 'message' | 'shell',
   intent: SessionTurnIntent = 'NEXT_TURN',
   clientTurnId: string = uuid(),
-  /** Prompt optimizer (D2): the text is still exactly the inserted optimized English, so the server
-   *  does not hold it for Translation. Sent only when true. */
-  skipTranslation?: boolean,
+  /** Prompt optimizer (D2): the text is still exactly what Use put in the box, so the server sends it
+   *  as written or with the optimizer's own translation. Absent for anything else. */
+  optimized?: OptimizedSend,
 ) =>
   api<{
     turnId: string;
@@ -665,7 +673,7 @@ export const sendTurn = (
       intent,
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
-      ...(skipTranslation ? { skipTranslation: true } : {}),
+      ...optimized,
     },
   });
 
@@ -922,8 +930,8 @@ export const resumeSession = (
    *  Only `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED` asks for one, and only the person
    *  answering that question supplies it (see `lib/taskRunHandoff.ts#stopSessionIdFor`). */
   stopSessionId?: string,
-  /** As sendTurn's: the text is still exactly the inserted optimized English (D2). */
-  skipTranslation?: boolean,
+  /** As sendTurn's: the text is still exactly what the optimizer's Use put in the box (D2). */
+  optimized?: OptimizedSend,
 ) =>
   api<{
     turnId: string;
@@ -946,7 +954,7 @@ export const resumeSession = (
       ...(attachmentIds?.length ? { attachmentIds } : {}),
       ...(kind === 'shell' ? { kind } : {}),
       ...(stopSessionId ? { stopSessionId } : {}),
-      ...(skipTranslation ? { skipTranslation: true } : {}),
+      ...optimized,
     },
   });
 
@@ -2261,17 +2269,6 @@ export const getWorktreeFile = async (idOrPublicId: string, path: string, signal
   }
   return res.blob();
 };
-
-/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
- *  it wrote none. */
-export type RecapOutcome =
-  | { written: true; recapText: string; recapEventSeq: number }
-  | { written: false; reason: string };
-
-/** Rewrite this session's recap now, past the settle hooks' two-minute window (POST
- *  /sessions/:id/recap). Answers once the pass has finished, with what it did. */
-export const refreshSessionRecap = (idOrPublicId: string) =>
-  api<RecapOutcome>(`/sessions/${idOrPublicId}/recap`, { method: 'POST' });
 
 /** Enable per-session worktree isolation for a workspace whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline

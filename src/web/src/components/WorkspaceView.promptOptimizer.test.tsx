@@ -10,7 +10,8 @@ import type { Runner } from './TasksSidePanel';
  * The prompt optimizer in the session composer (docs/prompt-optimizer-design.md, board
  * docs/mocks/prompt-optimizer/01-board.png, frames 2–6): ✦ Optimize beside Send, the suggestion card
  * above the composer, the box changed only by Use / Edit, then use, Undo, the failure line, and
- * skipTranslation sent only for unedited optimized text (D2).
+ * D2: with Translation on the card opens in the owner's language and Use inserts that; an unedited send carries
+ * the optimizer's prompt as `optimizedTranslation` (without Translation, `skipTranslation`).
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -258,6 +259,7 @@ async function mount(): Promise<void> {
 const DRAFT = 'fix the login redirect bug, it goes to the wrong page after sign in';
 const OPTIMIZED =
   'After signing in, users land on the wrong page. The redirect target is meant to come from the returnTo query parameter.';
+const GLOSS = 'GLOSS-IN-READER-LANGUAGE';
 const RESULT = {
   segments: [
     { text: 'After signing in, users land on the wrong page. ', added: false },
@@ -265,7 +267,7 @@ const RESULT = {
   ],
   text: OPTIMIZED,
   language: 'en' as const,
-  gloss: 'GLOSS-IN-READER-LANGUAGE',
+  gloss: GLOSS,
   contextUsed: [
     { kind: 'TURNS' as const, count: 6 },
     { kind: 'RECAP' as const },
@@ -300,7 +302,7 @@ async function ready(draft = DRAFT): Promise<void> {
   await mount();
   await waitForUi(() => expect(box()).toBeTruthy());
   await typeDraft(draft);
-  await waitForUi(() => expect(optimizeButton()).toBeTruthy());
+  await waitForUi(() => expect(optimizeButton()?.disabled).toBe(false));
 }
 
 async function openCard(): Promise<void> {
@@ -316,25 +318,32 @@ async function send(): Promise<void> {
 }
 
 describe('✦ Optimize (frame 2)', () => {
-  it('sits just left of Send once there is a draft', async () => {
+  it('sits just left of Send once there is a draft, a ✦ icon named by its label', async () => {
     await ready();
     const button = optimizeButton()!;
-    expect(button.textContent).toContain('✦');
-    expect(button.textContent).toContain('Optimize');
+    expect(button.textContent).toBe('✦');
+    expect(button.getAttribute('aria-label')).toBe('Optimize this draft');
     const send = mounted().querySelector('.composer-send')!;
     expect(button.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('is hidden while the box is empty', async () => {
+  it('keeps its slot but is disabled while the box is empty, so the toolbar never shifts', async () => {
     await mount();
     await waitForUi(() => expect(box()).toBeTruthy());
-    expect(optimizeButton()).toBeNull();
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(true));
     await typeDraft('   ');
-    expect(optimizeButton()).toBeNull();
+    expect(optimizeButton()!.disabled).toBe(true);
+    await key(box(), { key: 'O', code: 'KeyO', metaKey: true, shiftKey: true });
+    expect(optimizeMock).not.toHaveBeenCalled();
   });
 
-  it('is hidden with the switch off (absent preference)', async () => {
+  it('is shown for an account that never set the switch (absent = on)', async () => {
     preferences = { translationEnabled: true };
+    await ready();
+  });
+
+  it('is hidden with the switch off (promptOptimizer: false)', async () => {
+    preferences = { translationEnabled: true, promptOptimizer: false };
     await mount();
     await waitForUi(() => expect(box()).toBeTruthy());
     await typeDraft(DRAFT);
@@ -351,14 +360,14 @@ describe('✦ Optimize (frame 2)', () => {
     expect(optimizeButton()).toBeNull();
   });
 
-  it('is hidden in shell mode and for a draft that is only a /command', async () => {
+  it('is disabled in shell mode and for a draft that is only a /command', async () => {
     await ready();
     await typeDraft('!ls -la');
-    await waitForUi(() => expect(optimizeButton()).toBeNull());
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(true));
     await typeDraft('/compact');
-    await waitForUi(() => expect(optimizeButton()).toBeNull());
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(true));
     await typeDraft('/review the login page');
-    await waitForUi(() => expect(optimizeButton()).toBeTruthy());
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(false));
   });
 });
 
@@ -372,12 +381,13 @@ describe('Optimizing… (frame 3)', () => {
     await ready();
     await act(async () => optimizeButton()!.click());
     expect(optimizeMock).toHaveBeenCalledWith({ draft: DRAFT, sessionId: SESSION_PUBLIC }, expect.anything());
-    expect(optimizeButton()!.textContent).toContain('Optimizing…');
+    expect(optimizeButton()!.getAttribute('aria-label')).toBe('Optimizing… press to cancel');
+    expect(optimizeButton()!.querySelector('.composer-optimize-spin')).toBeTruthy();
     // The draft stays editable while it works.
     expect(box().disabled).toBe(false);
     await act(async () => optimizeButton()!.click());
     expect(signal?.aborted).toBe(true);
-    expect(optimizeButton()!.textContent).not.toContain('Optimizing…');
+    expect(optimizeButton()!.getAttribute('aria-label')).toBe('Optimize this draft');
     expect(card()).toBeNull();
     expect(box().value).toBe(DRAFT);
   });
@@ -392,6 +402,7 @@ describe('Optimizing… (frame 3)', () => {
 
 describe('the suggestion card (frame 4)', () => {
   it('shows the optimized prompt with its additions tinted and the Used: chips, leaving the box untouched', async () => {
+    optimizeMock.mockImplementation(async () => ({ ...RESULT, gloss: undefined }));
     await ready();
     await openCard();
     expect(card()!.textContent).toContain('Optimized prompt');
@@ -405,24 +416,33 @@ describe('the suggestion card (frame 4)', () => {
     expect(box().value).toBe(DRAFT);
   });
 
-  it('"Show in <language>" flips to the gloss and back', async () => {
+  it('with Translation on, opens in the owner\'s language and says what the agent receives', async () => {
     await ready();
     await openCard();
-    await act(async () => cardButton('Show in Chinese (Simplified)').click());
-    expect(card()!.textContent).toContain('GLOSS-IN-READER-LANGUAGE');
+    expect(card()!.textContent).toContain(GLOSS);
     expect(card()!.textContent).not.toContain(OPTIMIZED);
+    expect(card()!.textContent).toContain('The agent receives the English version.');
+  });
+
+  it('"Show in <language>" flips to the prompt the agent receives and back', async () => {
+    await ready();
+    await openCard();
     await act(async () => cardButton('Show in English').click());
     expect(card()!.textContent).toContain(OPTIMIZED);
+    expect(card()!.textContent).not.toContain(GLOSS);
+    await act(async () => cardButton('Show in Chinese (Simplified)').click());
+    expect(card()!.textContent).toContain(GLOSS);
   });
 
   it('"Show in" names the agent language the prompt was written in, not English', async () => {
     optimizeMock.mockImplementation(async () => ({ ...RESULT, language: 'ja' }));
     await ready();
     await openCard();
-    await act(async () => cardButton('Show in Chinese (Simplified)').click());
-    expect(card()!.textContent).toContain('GLOSS-IN-READER-LANGUAGE');
+    expect(card()!.textContent).toContain('The agent receives the Japanese version.');
     await act(async () => cardButton('Show in Japanese').click());
     expect(card()!.textContent).toContain(OPTIMIZED);
+    await act(async () => cardButton('Show in Chinese (Simplified)').click());
+    expect(card()!.textContent).toContain(GLOSS);
   });
 
   it('offers no "Show in" without a gloss', async () => {
@@ -430,6 +450,7 @@ describe('the suggestion card (frame 4)', () => {
     await ready();
     await openCard();
     expect(card()!.textContent).not.toContain('Show in');
+    expect(card()!.textContent).not.toContain('The agent receives');
   });
 
   it('Use replaces the draft only on the press, keeps attachments, and offers Undo', async () => {
@@ -443,7 +464,7 @@ describe('the suggestion card (frame 4)', () => {
     await openCard();
     expect(box().value).toBe(DRAFT);
     await act(async () => cardButton('Use').click());
-    expect(box().value).toBe(OPTIMIZED);
+    expect(box().value).toBe(GLOSS);
     expect(card()).toBeNull();
     expect(mounted().querySelector('.composer-file, .composer-attach')).toBeTruthy();
     await waitForUi(() => expect(document.body.textContent).toContain('Draft replaced with the optimized prompt'));
@@ -456,16 +477,16 @@ describe('the suggestion card (frame 4)', () => {
     await ready();
     await openCard();
     await act(async () => cardButton('Edit, then use').click());
-    expect(box().value).toBe(OPTIMIZED);
+    expect(box().value).toBe(GLOSS);
     await waitForUi(() => expect(document.activeElement).toBe(box()));
-    expect(box().selectionStart).toBe(OPTIMIZED.length);
+    expect(box().selectionStart).toBe(GLOSS.length);
   });
 
   it('⌘Z in the box after Use puts the owner\'s draft back', async () => {
     await ready();
     await openCard();
     await act(async () => cardButton('Use').click());
-    expect(box().value).toBe(OPTIMIZED);
+    expect(box().value).toBe(GLOSS);
     await key(box(), { key: 'z', metaKey: true });
     expect(box().value).toBe(DRAFT);
   });
@@ -505,7 +526,7 @@ describe('the suggestion card (frame 4)', () => {
     expect(card()!.textContent).toContain('Based on an earlier draft');
     // Use asks nothing more: it takes the suggestion.
     await act(async () => cardButton('Use').click());
-    expect(box().value).toBe(OPTIMIZED);
+    expect(box().value).toBe(GLOSS);
   });
 });
 
@@ -526,39 +547,49 @@ describe('failure (frame 6)', () => {
   });
 });
 
-describe('skipTranslation (D2)', () => {
-  const skipOf = (): unknown => sendMock.mock.calls.at(-1)?.[6];
+describe('the send of the optimized text (D2)', () => {
+  const optimizedOf = (): unknown => sendMock.mock.calls.at(-1)?.[6];
 
-  it('is sent when the text is still exactly the inserted optimized English', async () => {
+  it('with Translation on, sends the owner-language text with the optimizer\'s prompt as its translation', async () => {
+    await ready();
+    await openCard();
+    await act(async () => cardButton('Use').click());
+    await send();
+    expect(sendMock.mock.calls.at(-1)?.[1]).toBe(GLOSS);
+    expect(optimizedOf()).toEqual({ optimizedTranslation: OPTIMIZED });
+  });
+
+  it('without a reading copy, sends the optimized text as written', async () => {
+    optimizeMock.mockImplementation(async () => ({ ...RESULT, gloss: undefined }));
     await ready();
     await openCard();
     await act(async () => cardButton('Use').click());
     await send();
     expect(sendMock.mock.calls.at(-1)?.[1]).toBe(OPTIMIZED);
-    expect(skipOf()).toBe(true);
+    expect(optimizedOf()).toEqual({ skipTranslation: true });
   });
 
-  it('is not sent once the owner edits the optimized text', async () => {
+  it('carries nothing once the owner edits the inserted text', async () => {
     await ready();
     await openCard();
     await act(async () => cardButton('Use').click());
-    await typeDraft(`${OPTIMIZED} Also check the logout page.`);
+    await typeDraft(`${GLOSS} Also check the logout page.`);
     await send();
-    expect(skipOf()).toBeFalsy();
+    expect(optimizedOf()).toBeUndefined();
   });
 
-  it('is not sent for the owner\'s own draft, or after Undo', async () => {
+  it('carries nothing for the owner\'s own draft, or after Undo', async () => {
     await ready();
     await send();
-    expect(skipOf()).toBeFalsy();
+    expect(optimizedOf()).toBeUndefined();
     sendMock.mockClear();
     await typeDraft(DRAFT);
-    await waitForUi(() => expect(optimizeButton()).toBeTruthy());
+    await waitForUi(() => expect(optimizeButton()?.disabled).toBe(false));
     await openCard();
     await act(async () => cardButton('Use').click());
     await key(box(), { key: 'z', metaKey: true });
     expect(box().value).toBe(DRAFT);
     await send();
-    expect(skipOf()).toBeFalsy();
+    expect(optimizedOf()).toBeUndefined();
   });
 });

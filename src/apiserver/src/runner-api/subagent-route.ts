@@ -115,6 +115,13 @@ export interface SubagentRouteArgs {
   strictNamedModel?: boolean;
 }
 
+/** A built-in provider's credential, as the region check reads it: the engine's own sign-in, OpenCode's own
+ *  configuration, or DeepSeek Harness's default key, which is DeepSeek's. */
+function builtinCredential(slug: AgentProvider): SubagentProvider['credential'] {
+  if (isLoginEngine(slug)) return { kind: 'login', engine: slug };
+  return slug === AgentProvider.OPENCODE ? { kind: 'opencode' } : { kind: 'key', presetSlug: null };
+}
+
 /** What planSubagentRoute hands routeSubagent, read the same way: for a remote SubAgent's own checks (§10.3). */
 export async function subagentRouteInput(
   db: Prisma.TransactionClient,
@@ -149,6 +156,7 @@ export async function subagentRouteInput(
     // A sign-in spends its subscription; OpenCode's own config and DeepSeek Harness's default key are billed per token.
     billing: isLoginEngine(slug) ? 'subscription' : 'key',
     inScope: true,
+    credential: builtinCredential(slug),
     engines: [{ engine: slug }],
     ...(states[slug] ? { account: { quota: states[slug].quota ?? null, paused: states[slug].paused === true } } : {}),
   }));
@@ -224,6 +232,7 @@ async function readConfiguredProviders(
         },
       } : {}),
       inScope: usable.has(row.id),
+      credential,
       engines: runsOn.map((engine, index) => (
         // On its native engine a vendor that IS that engine's endpoint has the engine's own catalogue (ownModelSpace).
         // Priced from models.dev like every other preset (an Anthropic key on Claude Code, an OpenAI key on Codex).
@@ -255,6 +264,7 @@ async function readConfiguredProviders(
   const poolProviders = pools.map((pool): ConfiguredProvider => {
     if (pool.shared) {
       return { label: pool.label, kind: 'pool', providerId: null, provider: { slug: pool.slug, billing: 'key', inScope: true,
+        credential: { kind: 'pool', engine: pool.engine },
         engines: [{ engine: AgentProvider.CODEX, prices: catalogPrices(openai, catalog, AgentProvider.CODEX) }] } };
     }
     const members: SubagentPoolMember[] = pool.engine === AgentProvider.CODEX
@@ -283,7 +293,8 @@ async function readConfiguredProviders(
           };
         });
     return { label: pool.label, kind: 'pool', providerId: null,
-      provider: { slug: pool.slug, billing: 'subscription', inScope: true, engines: [{ engine: pool.engine }], pool: { members } } };
+      provider: { slug: pool.slug, billing: 'subscription', inScope: true, credential: { kind: 'pool', engine: pool.engine },
+        engines: [{ engine: pool.engine }], pool: { members } } };
   });
   return [...keys, ...poolProviders];
 }
@@ -310,7 +321,9 @@ export async function subagentTierView(db: Prisma.TransactionClient, ownerId: st
     label: ENGINE_CLI_NAMES[slug],
     kind: 'key',
     providerId: null,
-    provider: { slug, billing: isLoginEngine(slug) ? 'subscription' : 'key', inScope: true, engines: [{ engine: slug }] },
+    provider: {
+      slug, billing: isLoginEngine(slug) ? 'subscription' : 'key', inScope: true, credential: builtinCredential(slug), engines: [{ engine: slug }],
+    },
   }));
   return {
     providers: [...builtins, ...configured]

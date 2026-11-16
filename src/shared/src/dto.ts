@@ -2359,6 +2359,17 @@ export interface RunnerAccountRemoveState {
   /** The machine's own words when it failed: the account is in use by a session, the runner is too
    *  old to remove accounts at all, or the directory would not go away. */
   message: string | null;
+  /** With `failed` because the account is in use: the sessions the machine named as running in it,
+   *  as far as the viewer can see them, oldest first. Absent otherwise (and from an older server),
+   *  and then `message` alone says what happened. */
+  sessions?: RunnerAccountRemoveSession[];
+}
+
+/** A session that keeps an account from being removed: what the runner's page lists and opens. */
+export interface RunnerAccountRemoveSession {
+  id: string;
+  title: string;
+  status: RunStatus;
 }
 
 /** @deprecated Codex's name for the same state; read RunnerAccountRemoveState, whose `engine` says

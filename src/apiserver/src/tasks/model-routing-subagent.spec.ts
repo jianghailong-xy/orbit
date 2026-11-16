@@ -29,13 +29,13 @@ const CATALOG: RunnerModelCatalog = {
 };
 
 const claude = (over: Partial<SubagentProvider> = {}): SubagentProvider => ({
-  slug: 'claude', billing: 'subscription', inScope: true, engines: [{ engine: 'claude' }], ...over,
+  slug: 'claude', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'claude' }, engines: [{ engine: 'claude' }], ...over,
 });
 const codex = (over: Partial<SubagentProvider> = {}): SubagentProvider => ({
-  slug: 'codex', billing: 'subscription', inScope: true, engines: [{ engine: 'codex' }], ...over,
+  slug: 'codex', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'codex' }, engines: [{ engine: 'codex' }], ...over,
 });
 const key = (slug: string, models: SubagentModelRow[], over: Partial<SubagentProvider> = {}): SubagentProvider => ({
-  slug, billing: 'key', inScope: true, engines: [{ engine: 'claude', models }], ...over,
+  slug, billing: 'key', inScope: true, credential: { kind: 'key', presetSlug: null }, engines: [{ engine: 'claude', models }], ...over,
 });
 const DEEPSEEK = key('deepseek', [
   { model: 'deepseek-v4-pro', effort: null, level: 'L', outputPricePerMTok: 1.98 },
@@ -161,8 +161,8 @@ test('each removal is recorded with its reason', () => {
       key('opencode-key', [{ model: 'm', effort: null, level: 'M', outputPricePerMTok: 1 }], {
         engines: [{ engine: 'opencode', models: [{ model: 'm', effort: null, level: 'M', outputPricePerMTok: 1 }] }],
       }),
-      { slug: 'claude-team', billing: 'subscription', inScope: true, engines: [{ engine: 'claude' }], account: { paused: true } },
-      { slug: 'kimi', billing: 'subscription', inScope: true, engines: [{ engine: 'kimi' }] },
+      { slug: 'claude-team', billing: 'subscription', inScope: true, credential: { kind: 'pool', engine: 'claude' }, engines: [{ engine: 'claude' }], account: { paused: true } },
+      { slug: 'kimi', billing: 'subscription', inScope: true, credential: { kind: 'login', engine: 'kimi' }, engines: [{ engine: 'kimi' }] },
       key('custom-endpoint', [{ model: 'house-model', effort: null, level: null }]),
       DEEPSEEK,
     ],
@@ -191,6 +191,33 @@ test('each removal is recorded with its reason', () => {
   const region = route(input({ engines: { claude: { installed: true, regionBlocked: true }, codex: { installed: true } } }));
   assert.deepEqual(region.candidates.filter((c) => c.provider === 'claude').map((c) => c.reason),
     ["claude can’t use Anthropic on the parent's runner"]);
+  // Every Anthropic-bound credential on claude goes with it (contract §8); DeepSeek's key and codex stay (⑥).
+  const sonnetKey = (slug: string, credential: SubagentProvider['credential']): SubagentProvider => ({
+    slug, billing: 'key', inScope: true, credential, engines: [{ engine: 'claude', prices: { [SONNET]: 10 } }],
+  });
+  const blocked = route(input({
+    runnerLabel: 'HPC',
+    providers: [
+      claude(), codex(),
+      sonnetKey('anthropic-key', { kind: 'key', presetSlug: 'anthropic' }),
+      sonnetKey('proxy-key', { kind: 'key', presetSlug: null, baseUrl: 'https://API.anthropic.com./v1' }),
+      sonnetKey('lookalike-key', { kind: 'key', presetSlug: null, baseUrl: 'https://anthropic.com.example' }),
+      pool('team-pool', [{ label: 'bob@team', quota: null }]),
+      DEEPSEEK,
+    ],
+    engines: { claude: { installed: true, regionBlocked: true }, codex: { installed: true } },
+  }));
+  const out = (provider: string) => blocked.candidates.filter((c) => c.provider === provider).map((c) => c.reason);
+  for (const provider of ['claude', 'anthropic-key', 'proxy-key', 'team-pool']) {
+    assert.deepEqual(out(provider), ['claude can’t use Anthropic on HPC'], provider);
+  }
+  assert.deepEqual(out('lookalike-key'), [], 'a look-alike host is not Anthropic');
+  assert.deepEqual(out('deepseek'), []);
+  assert.deepEqual(out('codex'), []);
+  assert.equal(blocked.provider, 'codex', 'a subscription first (Cost), and not an Anthropic one');
+  const keysOnly = route(input({ runnerLabel: 'HPC', providers: [claude(), sonnetKey('anthropic-key', { kind: 'key', presetSlug: 'anthropic' }), DEEPSEEK],
+    engines: { claude: { installed: true, regionBlocked: true } } }));
+  assert.equal(keysOnly.provider, 'deepseek', 'on claude alone the DeepSeek key runs it');
   const missing = route(input({ engines: { claude: { installed: true } } }));
   assert.deepEqual(missing.candidates.filter((c) => c.provider === 'codex').map((c) => c.reason),
     ["codex is not installed on the parent's runner"]);
@@ -263,7 +290,7 @@ test("ties go by the owner's provider order", () => {
 });
 
 const pool = (slug: string, members: SubagentPoolMember[], engine = 'claude'): SubagentProvider => ({
-  slug, billing: 'subscription', inScope: true, engines: [{ engine }], pool: { members },
+  slug, billing: 'subscription', inScope: true, credential: { kind: 'pool', engine }, engines: [{ engine }], pool: { members },
 });
 
 test('Cost: an account pool with headroom before a single subscription with less', () => {
@@ -309,7 +336,7 @@ test('an exhausted account pool, and one whose quota cannot be read, is removed 
 
 test('Cost: a key on its native engine is ordered by its models.dev price among the other keys', () => {
   const anthropic: SubagentProvider = {
-    slug: 'anthropic-key', billing: 'key', inScope: true,
+    slug: 'anthropic-key', billing: 'key', inScope: true, credential: { kind: 'key', presetSlug: 'anthropic' },
     engines: [{ engine: 'claude', prices: { [SONNET]: 10, [OPUS]: 20 } }],
   };
   const dear = key('dear-key', [{ model: 'dear', effort: null, level: 'M', outputPricePerMTok: 12 }]);
@@ -322,7 +349,7 @@ test('Cost: a key on its native engine is ordered by its models.dev price among 
   const tierL = route(input({ caller: { size: 'L' }, providers: [anthropic, key('l-key', [{ model: 'l', effort: null, level: 'L', outputPricePerMTok: 25 }])] }));
   assert.deepEqual([tierL.provider, tierL.model, tierL.effort], ['anthropic-key', OPUS, 'high']);
   // A model models.dev has no price for sorts after the priced keys, and the decision says so.
-  const unpriced: SubagentProvider = { slug: 'unpriced-key', billing: 'key', inScope: true, engines: [{ engine: 'claude', prices: {} }] };
+  const unpriced: SubagentProvider = { slug: 'unpriced-key', billing: 'key', inScope: true, credential: { kind: 'key', presetSlug: null }, engines: [{ engine: 'claude', prices: {} }] };
   const last = route(input({ providers: [unpriced, dear] }));
   assert.equal(last.provider, 'dear-key');
   assert.ok(last.reasons.includes(`No price known for ${SONNET} on unpriced-key; ordered after priced keys`), last.reasons.join('\n'));

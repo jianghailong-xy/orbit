@@ -19,6 +19,8 @@
  *      once with what the workspace can run; never another model (§10.3).
  *  11. A default engine the target runner reports signed out is skipped, the run routed onto a usable candidate there
  *      and the skip recorded; nothing usable is NO_SUBAGENT_PROVIDER with each provider's reason.
+ *  12. A target runner whose Claude region verdict is blocked: the default Claude sign-in, an Anthropic key and a Claude
+ *      pool are all skipped with "claude can’t use Anthropic on …", and the run goes to a DeepSeek key on Claude Code.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/subagent-remote.pg.spec.ts
  *
@@ -29,12 +31,13 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { type PrismaClient, type Runner, RunStatus, SessionDispatchOrigin } from '@prisma/client';
-import { RunEventType, type SubagentRemoteRunCreateResponse } from '@orbit/shared';
+import { CLAUDE_REGION_V1, RunEventType, type SubagentRemoteRunCreateResponse } from '@orbit/shared';
 import { HttpException } from '@nestjs/common';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
+import { encryptSecret } from '../providers/provider-crypto';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -554,5 +557,41 @@ test('Cross-workspace SubAgents: choice of workspace, refusals, hand-over, relay
     assert.ok(message.includes("- codex (codex): codex is not installed on orbit-macos's runner"));
     assert.ok(message.includes("- orbit-macos's default claude: claude is signed out on orbit-macos's runner"));
     assert.equal(await prisma.subagentRun.count({ where: { sessionId: e.sessionId } }), 0, 'nothing was written');
+  });
+
+  await t.test('a region-blocked target: no Anthropic sign-in, key or pool is picked; a DeepSeek key on Claude Code runs', async () => {
+    const e = await estateWithMac({ capabilities: ['os:darwin', CLAUDE_REGION_V1] });
+    const now = new Date().toISOString();
+    await prisma.runner.update({
+      where: { id: e.mac.id },
+      data: { region: { verdict: 'blocked', country: 'CN', regionCode: null, name: 'mainland China', viaProxy: false,
+        decidedAt: now, checkedAt: now, blockedChecks: 2 } },
+    });
+    const tag = e.macos.slice(0, 8);
+    const [anthropicKey, anthropicEndpoint, deepseek, member] = await Promise.all([
+      { slug: `anthropic-${tag}`, label: 'Anthropic', presetSlug: 'anthropic', followsPreset: true, baseUrl: 'https://api.anthropic.com' },
+      { slug: `proxy-${tag}`, label: 'Anthropic endpoint', baseUrl: 'https://api.anthropic.com/v1',
+        models: [{ value: 'claude-sonnet-5-5', label: 'Sonnet' }] },
+      { slug: `deepseek-${tag}`, label: 'DeepSeek', presetSlug: 'deepseek', followsPreset: true, baseUrl: 'https://api.deepseek.com/anthropic' },
+      { slug: `member-${tag}`, label: 'Subscription', baseUrl: 'https://api.anthropic.com', models: [],
+        apiKeyEnc: encryptSecret(`sk-ant-oat01-${tag}`) },
+    ].map((row, position) => prisma.modelProvider.create({
+      data: { runtime: 'claude', apiKeyEnc: encryptSecret(`sk-${randomUUID()}`), ownerId: e.ownerId, position, ...row },
+    })));
+    const pool = await prisma.providerPool.create({ data: { slug: `team-${tag}`, label: 'Team', ownerId: e.ownerId, engine: 'claude' } });
+    await prisma.providerPoolMember.create({ data: { poolId: pool.id, providerId: member.id, ownerId: e.ownerId } });
+
+    const opened = await subagents.openSubagentRun(e.hpc, e.sessionId, create({
+      toolUseId: 'toolu_01Region', workspace: 'orbit-macos',
+    })) as SubagentRemoteRunCreateResponse;
+    t.diagnostic(`reasons ${JSON.stringify(opened.decision.reasons)}`);
+    t.diagnostic(`candidates ${JSON.stringify(opened.decision.candidates)}`);
+    const REFUSED = "claude can’t use Anthropic on orbit-macos's runner";
+    assert.equal(opened.decision.reasons[1], `Skipped orbit-macos's default claude: ${REFUSED}`);
+    for (const provider of [anthropicKey.slug, anthropicEndpoint.slug, member.slug, pool.slug]) {
+      assert.ok(opened.decision.candidates.some((c) => c.provider === provider && c.engine === 'claude' && c.model === null && c.reason === REFUSED),
+        `${provider} is removed for the region`);
+    }
+    assert.deepEqual([opened.decision.provider, opened.decision.engine], [deepseek.slug, 'claude'], 'the DeepSeek key on Claude Code runs it');
   });
 });

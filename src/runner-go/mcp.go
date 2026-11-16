@@ -1548,7 +1548,7 @@ func (s *mcpServer) runTool(name string, args map[string]interface{}) map[string
 		return toolResult(prettyJSON(raw), false)
 
 	case "provider_list":
-		raw, err := s.t.listProviders()
+		raw, err := s.t.listProviders(strings.TrimSpace(getString(args, "workspace")))
 		if err != nil {
 			return toolResult("list providers failed: "+err.Error(), true)
 		}

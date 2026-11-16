@@ -2585,8 +2585,15 @@ func buildOperationCatalog() []*operation {
 				"its account pools. One key can run on several engines: a DeepSeek key on Claude Code, OpenCode and " +
 				"DeepSeek Harness. Read this before pinning a `provider` or an `engine` on a task or session: a key's slug " +
 				"is derived from its label, not chosen, so it cannot be guessed from the vendor's name, and a slug that is " +
-				"not on this list is refused with \"provider not available\".",
-			"inputSchema": obj(map[string]interface{}{}),
+				"not on this list is refused with \"provider not available\". With `workspace` (one of this account's " +
+				"workspaces, by name or id) it answers instead for that workspace's runner: every provider × engine with " +
+				"`usable` true or false as SubAgent routing judges it (installed, signed in, quota, the SubAgent block " +
+				"list), a one-line `reason` when false, and the models usable there; the pair its sessions start on is " +
+				"marked `default`. Call it this way before delegate(workspace) or session_create on another workspace, " +
+				"to learn whether that machine can run what you mean to ask of it.",
+			"inputSchema": obj(map[string]interface{}{
+				"workspace": map[string]interface{}{"type": "string", "description": "A workspace of this account, by name or id: judge every provider × engine against its runner instead of listing them."},
+			}),
 		},
 		{
 			"name": "provider_create",
@@ -3939,7 +3946,7 @@ var agentCLICapabilities = []cliCapabilitySpec{
 }
 
 var providerCLICapabilities = []cliCapabilitySpec{
-	{Tool: "provider_list", Argv: []string{"orbit", "provider", "list"}, Usage: "orbit provider list [--json]", Arguments: []string{"--json"}},
+	{Tool: "provider_list", Argv: []string{"orbit", "provider", "list"}, Usage: "orbit provider list [--workspace NAME_OR_ID] [--json]", Arguments: []string{"--workspace <name or id> (judge every provider × engine against that workspace's runner)", "--json"}},
 	{Tool: "provider_create", Argv: []string{"orbit", "provider", "create"}, Usage: "orbit provider create --label LABEL --base-url URL (--api-key KEY | --api-key-file -) --models JSON [options]", Arguments: []string{"--label <text> (required)", "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol the endpoint speaks: Anthropic Messages, OpenAI Responses, Moonshot, Gemini or a Cursor User API Key; it decides which engines can run the key)", "--base-url <url> (required but for --runtime cursor; resolved on the runner the session runs on)", "--api-key <key> | --api-key-file - (required)", "--models <json array> (required but for --runtime cursor; [{value,label,contextWindow?,reasoningLevels?}])", "--default-model <model id>", "--json"}, Mutates: true},
 	{Tool: "provider_update", Argv: []string{"orbit", "provider", "update"}, Usage: "orbit provider update SLUG [options]", Arguments: []string{"[slug] (required)", "--label <text>", "--runtime <claude|codex|kimi|antigravity|cursor> (the protocol the endpoint speaks)", "--base-url <url>", "--api-key <key> | --api-key-file -", "--models <json array> (replaces the list)", "--default-model <model id>", "--json"}, Mutates: true},
 	{Tool: "provider_delete", Argv: []string{"orbit", "provider", "delete"}, Usage: "orbit provider delete SLUG [--json]", Arguments: []string{"[slug] (required)", "--json"}, Mutates: true},

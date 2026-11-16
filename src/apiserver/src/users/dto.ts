@@ -175,7 +175,8 @@ export class UpdatePreferencesDto {
 
   /**
    * Prompt optimizer (@orbit/shared prompt-optimizer.ts): whether the composer offers ✦ Optimize,
-   * which has DeepSeek improve the draft before it is sent. Default OFF (absent = off). Without the
+   * which has DeepSeek improve the draft before it is sent. Default ON (absent = on;
+   * only `false` turns it off). Without the
    * server's DeepSeek key it does nothing (`promptOptimizerAvailable` on `me`).
    */
   @IsOptional()

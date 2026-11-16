@@ -2,8 +2,7 @@ import XCTest
 @testable import OrbitKit
 
 /// The conversation's Recap card (`RecapCard`): when a conversation is at rest for it, what it says
-/// about when the recap was written, what a refresh that wrote nothing says, and the row it is in
-/// the transcript. Ports the web's `SessionRecapCard.test.tsx` and `WorkspaceView.recapRow.test.tsx`
+/// about when the recap was written, and the row it is in the transcript. Ports the web's `SessionRecapCard.test.tsx` and `WorkspaceView.recapRow.test.tsx`
 /// cases, and holds the words to the web file they came from.
 final class RecapCardTests: XCTestCase {
     private let recap = "Moved the recap onto the list row; the three states are covered by tests."
@@ -74,16 +73,6 @@ final class RecapCardTests: XCTestCase {
                                       recaps: true, now: now)?.when, clock.string(from: now))
     }
 
-    func testARefreshThatWroteNothingSaysWhy() {
-        XCTAssertEqual(RecapCard.notice(for: "no-events"), .init(text: RecapCard.upToDate, failed: false))
-        XCTAssertEqual(RecapCard.notice(for: "too-few-events"), .init(text: RecapCard.tooLittle, failed: false))
-        XCTAssertEqual(RecapCard.notice(for: "no-key"), .init(text: RecapCard.unavailable, failed: false))
-        XCTAssertEqual(RecapCard.notice(for: "disabled"), .init(text: RecapCard.unavailable, failed: false))
-        XCTAssertEqual(RecapCard.notice(for: "llm-failed"), .init(text: RecapCard.failed, failed: true))
-        XCTAssertEqual(RecapCard.notice(for: "error"), .init(text: RecapCard.failed, failed: true))
-        XCTAssertNil(RecapCard.notice(for: "cas-lost"), "another pass wrote first: reading again shows its line")
-    }
-
     /// The card is the conversation's last row: under everything it said, above the questions still
     /// trailing at the tail, and absent from a window with nothing loaded to sum up.
     func testTheRecapRowClosesTheConversationAboveTheTrailingQuestions() {
@@ -102,16 +91,12 @@ final class RecapCardTests: XCTestCase {
     }
 
     /// The card's words are the web card's (`RECAP_CARD_COPY` in components/SessionRecapCard.tsx).
+    /// The web card dropped its ⋯ menu and Refresh (the owner, 2026-11-16), so only the words both
+    /// still say are held here.
     func testTheWordsAreTheWebCardsWords() throws {
         let web = try webSource("src/web/src/components/SessionRecapCard.tsx")
         XCTAssertTrue(web.contains("word: '\(RecapCard.word)'"))
-        XCTAssertTrue(web.contains("more: '\(RecapCard.more)'"))
-        XCTAssertTrue(web.contains("refresh: '\(RecapCard.refresh)'"))
         XCTAssertTrue(web.contains("hide: '\(RecapCard.hide)'"))
-        XCTAssertTrue(web.contains("upToDate: '\(RecapCard.upToDate)'"))
-        XCTAssertTrue(web.contains("tooLittle: \"\(RecapCard.tooLittle)\""))
-        XCTAssertTrue(web.contains("unavailable: \"\(RecapCard.unavailable)\""))
-        XCTAssertTrue(web.contains("failed: \"\(RecapCard.failed)\""))
     }
 
     private func webSource(_ relative: String) throws -> String {

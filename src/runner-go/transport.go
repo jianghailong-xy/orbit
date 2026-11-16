@@ -1432,9 +1432,16 @@ func (t *Transport) labelSummary(listID string) (json.RawMessage, error) {
 // listProviders returns the provider slugs this owner may pass as `provider` — the built-in
 // engines plus their configured ones. Plain runner auth, like the task routes whose `provider`
 // field it answers for, so it works outside an orchestration-enabled session too.
-func (t *Transport) listProviders() (json.RawMessage, error) {
+//
+// With workspace (a workspace of the owner's, by name or id) the server answers instead which provider ×
+// engine that workspace's runner can run, each usable or not with the reason, and the workspace's default.
+func (t *Transport) listProviders(workspace string) (json.RawMessage, error) {
+	path := "/runner/providers"
+	if workspace != "" {
+		path += "?" + url.Values{"workspace": {workspace}}.Encode()
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/providers", nil, &out, taskOpTimeout)
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
 	return out, err
 }
 

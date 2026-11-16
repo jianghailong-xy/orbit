@@ -2,7 +2,9 @@ import {
   AgentProvider,
   PermissionMode,
   autoAvailable,
+  credentialIsAnthropicBound,
   runnerCatalogRow,
+  type AnthropicBoundCredential,
   type PlanUsage,
   type RunnerModelCatalog,
   type RunnerModelInfo,
@@ -449,6 +451,8 @@ export interface SubagentProvider {
   /** Inside usableProviderScope: a shared provider is for admins only. */
   inScope: boolean;
   engines: readonly SubagentProviderEngine[];
+  /** The credential it spends, as far as the Claude region check asks (credentialIsAnthropicBound, contract §8). */
+  credential: AnthropicBoundCredential;
   /** A subscription's account on the parent's runner: its fullest window, and whether it is paused. */
   account?: { quota?: ModelRoutingEngineState['quota']; paused?: boolean; refused?: boolean; unreadable?: boolean } | null;
   /** An account pool: a subscription on its members' own credentials, whose headroom is its best member's. */
@@ -676,6 +680,10 @@ function engineVerdict(
   const report = input.engines?.[engine];
   // A runner that reported nothing is not judged on it; one that reported others lacks this one.
   if (input.engines && !report?.installed) return { reason: `${engine} is not installed on ${where}` };
+  // Only Claude Code is gated, and only on a credential that talks to Anthropic: a sign-in, a pool or a key (§8, ⑥).
+  if (engine === AgentProvider.CLAUDE && report?.regionBlocked && credentialIsAnthropicBound(provider.credential)) {
+    return { reason: `${engine} can’t use Anthropic on ${where}` };
+  }
   if (provider.pool) {
     // A pool runs on its members' own credentials, not the runner's sign-in: its best member decides.
     const best = bestPoolMember(provider.pool.members);
@@ -685,7 +693,6 @@ function engineVerdict(
   const quota = provider.account?.quota;
   if (provider.billing === 'subscription') {
     if (report?.signedOut) return { reason: `${engine} is signed out on ${where}` };
-    if (report?.regionBlocked) return { reason: `${engine} can’t use Anthropic on ${where}` };
     if (quota && quota.utilization >= ENGINE_QUOTA_LIMIT) {
       return { reason: `The account is at ${quota.utilization}% of its ${quota.window} quota` };
     }
@@ -717,24 +724,50 @@ function offersModel(input: SubagentRoutingInput, engine: SubagentProviderEngine
     : (input.modelCatalog?.[engine.engine as AgentProvider] ?? []).some((entry) => entry.value === model);
 }
 
+/** One provider × engine as the runner `engines` reports on stands toward it (§4.2 filters 1 to 4). */
+export interface SubagentPairVerdict {
+  provider: string;
+  engine: string;
+  /** Why it cannot run there; absent when it can. */
+  reason?: string;
+  /** Every model it lists, tier or no tier: its own model space, else the runner-reported catalogue. */
+  models: string[];
+}
+
+/**
+ * Every provider × engine of `input`, in the owner's order, with why it cannot run on the runner `engines` reports
+ * (§4.2 filters 1 to 4, through providerRefusal and engineVerdict) and the models it lists. What
+ * subagentRunnableModels keeps the usable ones of, and what provider_list's workspace view shows whole.
+ */
+export function subagentPairVerdicts(input: SubagentRoutingInput): SubagentPairVerdict[] {
+  const out: SubagentPairVerdict[] = [];
+  for (const provider of input.providers) {
+    const refused = providerRefusal(input, provider);
+    for (const engine of provider.engines) {
+      const verdict = refused ? { reason: refused } : engineVerdict(input, provider, engine.engine);
+      const models = engine.models
+        ? engine.models.map((entry) => entry.model)
+        : (input.modelCatalog?.[engine.engine as AgentProvider] ?? []).map((entry) => entry.value);
+      out.push({
+        provider: provider.slug,
+        engine: engine.engine,
+        ...('reason' in verdict ? { reason: verdict.reason } : {}),
+        models: [...new Set(models)],
+      });
+    }
+  }
+  return out;
+}
+
 /**
  * What the runner `engines` reports on can run, by provider and engine: every model each usable provider × engine
  * lists (§4.2 filters 1 to 4; tiers do not matter, since a named model needs none). What a refused named model on
  * a remote SubAgent lists (§10.3).
  */
 export function subagentRunnableModels(input: SubagentRoutingInput): Array<{ provider: string; engine: string; models: string[] }> {
-  const out: Array<{ provider: string; engine: string; models: string[] }> = [];
-  for (const provider of input.providers) {
-    if (providerRefusal(input, provider)) continue;
-    for (const engine of provider.engines) {
-      if ('reason' in engineVerdict(input, provider, engine.engine)) continue;
-      const models = engine.models
-        ? engine.models.map((entry) => entry.model)
-        : (input.modelCatalog?.[engine.engine as AgentProvider] ?? []).map((entry) => entry.value);
-      if (models.length) out.push({ provider: provider.slug, engine: engine.engine, models: [...new Set(models)] });
-    }
-  }
-  return out;
+  return subagentPairVerdicts(input)
+    .filter((pair) => pair.reason === undefined && pair.models.length > 0)
+    .map(({ provider, engine, models }) => ({ provider, engine, models }));
 }
 
 /**

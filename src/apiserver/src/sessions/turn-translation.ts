@@ -6,6 +6,7 @@ import {
   type TurnTranslation,
   type TurnTranslationState,
 } from '@orbit/shared';
+import { BadRequestException } from '@nestjs/common';
 import { AsyncWorkQueue } from '../common/async-work-queue';
 import { translationAvailable } from './translation';
 
@@ -79,6 +80,24 @@ export async function translationLanguages(db: PreferencesDb, ownerId: string): 
  *  when its translation runs (a held turn records only the language it was written in). */
 export async function accountAgentLanguage(db: PreferencesDb, ownerId: string): Promise<TranslationLanguage> {
   return agentLanguageOf(await preferencesOf(db, ownerId));
+}
+
+/** The longest `optimizedTranslation` a send may carry. */
+export const OPTIMIZED_TRANSLATION_MAX_CHARS = 64_000;
+
+/**
+ * A send's `optimizedTranslation` (prompt optimizer D2, @orbit/shared prompt-optimizer.ts): the optimizer's prompt
+ * in the agent language, sent beside the owner-language text Use put in the box. The message is held as any
+ * translated message is, and released with this text instead of a translator call. Null when absent or blank;
+ * anything but a string, or a longer one than OPTIMIZED_TRANSLATION_MAX_CHARS, is a 400.
+ */
+export function readOptimizedTranslation(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') throw new BadRequestException('optimizedTranslation must be a string');
+  if (value.length > OPTIMIZED_TRANSLATION_MAX_CHARS) {
+    throw new BadRequestException(`optimizedTranslation must be at most ${OPTIMIZED_TRANSLATION_MAX_CHARS} characters`);
+  }
+  return value.trim() ? value : null;
 }
 
 /** The columns a held message is written with. */
