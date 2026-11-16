@@ -2,56 +2,54 @@
 <html lang="zh">
 <head>
 <meta charset="utf-8">
-<title>iOS session list: terminal glyph for every background process</title>
+<title>iOS session list: a status glyph on every row, as the web list draws it</title>
 <style>
-  body { margin: 0; background: #ECEDF0; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1C1C1E; }
-  .b-part { padding: 36px 48px; width: 1240px; background: #ECEDF0; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; }
-  #today, #after { position: relative; padding-left: 40px; }
+  body { margin: 0; background: #ECEDF0; }
+  .b-part { padding: 36px 48px; width: 1460px; background: #ECEDF0; font: 15px/1.6 Inter, "Noto Sans SC", sans-serif; color: #1C1C1E; }
   .b-part h1 { font-size: 28px; margin: 0 0 6px; }
   .b-part h2 { font-size: 22px; margin: 0 0 4px; }
   .b-sub { color: #6B6B70; margin: 0 0 22px; }
-  .b-stage { display: flex; gap: 48px; align-items: flex-start; }
+  .b-stage { display: flex; gap: 36px; align-items: flex-start; }
   .b-col { display: flex; flex-direction: column; gap: 10px; }
   .b-cap { font-weight: 600; font-size: 17px; }
   .b-cap small { font-weight: 400; color: #6B6B70; font-size: 14px; margin-left: 6px; }
+  .b-host { position: relative; padding-left: 36px; }
 
-  /* phone */
-  .ph { width: 440px; background: #fff; border-radius: 44px; box-shadow: 0 0 0 10px #1C1C1E, 0 18px 40px rgba(0,0,0,.18); overflow: hidden; position: relative; }
+  .ph { width: 440px; background: #fff; border-radius: 44px; box-shadow: 0 0 0 10px #1C1C1E, 0 18px 40px rgba(0,0,0,.18); overflow: hidden; }
   .ph-bar { height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 34px 0 46px; font-weight: 600; font-size: 17px; }
-  .ph-nav { display: flex; align-items: center; gap: 14px; padding: 4px 20px 10px; }
+  .ph-nav { display: flex; align-items: center; gap: 14px; padding: 4px 20px 6px; }
   .ph-cap { width: 44px; height: 44px; border-radius: 22px; border: 1px solid #E5E5EA; display: grid; place-items: center; }
   .ph-title { font-size: 19px; font-weight: 500; flex: 1; }
-  .ph-sec { padding: 14px 20px 4px; color: #8A8A8D; font-size: 17px; font-weight: 600; }
-  .row { margin: 0 20px; padding: 13px 0 14px; border-bottom: 1px solid #E5E5EA; position: relative; }
+  .row { padding: 13px 20px 14px; position: relative; }
+  .row::after { content: ""; position: absolute; left: 20px; right: 20px; bottom: 0; border-bottom: 1px solid #E5E5EA; }
   .row-top { display: flex; align-items: center; gap: 8px; }
   .row-t { font-size: 17px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .row-time { color: #8A8A8D; font-size: 13px; }
   .row-l { font-size: 15px; color: #8A8A8D; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .row-l.blue { color: #007AFF; }
-  .g { width: 22px; height: 22px; display: grid; place-items: center; }
+  .row.miss { background: #FFF6D6; }
+  .row.add { background: #E4F6E8; }
+  .g { width: 22px; height: 22px; display: inline-grid; place-items: center; flex: none; }
   .g svg { display: block; }
-  .row.hl { background: #FFF6D6; margin: 0; padding-left: 20px; padding-right: 20px; }
-  .row.hl.ok { background: #E4F6E8; }
   .breath { position: relative; }
-  .breath { margin-right: 6px; }
-  .breath::after { content: "≈"; position: absolute; right: -7px; top: -11px; font-size: 12px; color: #FF9500; font-weight: 700; }
+  .breath::after { content: "≈"; position: absolute; right: -6px; top: -11px; font-size: 12px; color: #FF9500; font-weight: 700; }
+  .breath { margin-right: 4px; }
 
-  .mk { position: absolute; width: 22px; height: 22px; border-radius: 11px; background: #FF3B30; color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px #fff; }
+  .mk { position: absolute; left: 0; width: 22px; height: 22px; border-radius: 11px; background: #FF3B30; color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
   .mk.blue { background: #007AFF; }
-
   .notes { flex: 1; display: flex; flex-direction: column; gap: 14px; padding-top: 40px; }
   .note { background: #fff; border-radius: 14px; padding: 14px 18px; }
-  .note b.n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 11px; background: #FF3B30; color: #fff; font-size: 13px; margin-right: 8px; }
-  .note b.n.blue { background: #007AFF; }
+  b.n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 11px; background: #FF3B30; color: #fff; font-size: 13px; margin-right: 8px; }
+  b.n.blue { background: #007AFF; }
   code { font-family: "JetBrains Mono", monospace; font-size: 13px; background: #F2F2F7; padding: 1px 5px; border-radius: 5px; }
 
   table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 14px; overflow: hidden; }
-  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #E5E5EA; vertical-align: middle; }
+  th, td { padding: 9px 14px; text-align: left; border-bottom: 1px solid #E5E5EA; vertical-align: middle; }
   th { background: #F7F7F9; font-size: 14px; color: #6B6B70; font-weight: 600; }
-  td .g { display: inline-grid; vertical-align: middle; margin-right: 6px; }
-  .none { color: #C7C7CC; }
-  .chg { color: #34C759; font-weight: 600; }
-  .bad { color: #FF3B30; font-weight: 600; }
+  td .g { vertical-align: middle; margin-right: 6px; }
+  .none { color: #FF3B30; font-weight: 600; }
+  .same { color: #8A8A8D; }
+  .chg { background: #E4F6E8; }
   .opt { background: #fff; border-radius: 14px; padding: 16px 20px; flex: 1; }
   .opt.rec { box-shadow: 0 0 0 2px #34C759; }
   .opt h3 { margin: 0 0 6px; font-size: 17px; }
@@ -62,125 +60,129 @@
 </head>
 <body>
 <script>
-// SF "terminal" look-alike: a rounded box with a >_ prompt, in the row's quiet tone.
-const TERM = (op = 1) => `<svg width="20" height="17" viewBox="0 0 20 17" style="opacity:${op}"><rect x="1" y="1" width="18" height="15" rx="3.2" fill="none" stroke="#8A8A8D" stroke-width="1.6"/><path d="M5 6l3 2.5L5 11" fill="none" stroke="#8A8A8D" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 11.2h4.5" stroke="#8A8A8D" stroke-width="1.6" stroke-linecap="round"/></svg>`;
-const SPIN = `<svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 2a8 8 0 1 1-8 8" fill="none" stroke="#8A8A8D" stroke-width="2" stroke-linecap="round"/></svg>`;
+// SF-symbol look-alikes, 20 pt, in the row's quiet tone unless a state owns a colour.
+const C = '#8A8A8D';
+const SVG = (body) => `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="${C}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const ICON = {
+  spin: SVG('<path d="M10 2.5a7.5 7.5 0 1 1-7.5 7.5" stroke-width="2"/>'),
+  term: SVG('<rect x="1.5" y="3" width="17" height="14" rx="3.2"/><path d="M5.5 7.5l2.8 2.4-2.8 2.4M10.5 12.6h4"/>'),
+  clock: SVG('<circle cx="10" cy="10" r="7.6"/><path d="M10 5.6V10l3 1.8"/>'),
+  msg: SVG('<path d="M4 3.5h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 3v-3H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z"/>'),
+  eye: SVG('<path d="M1.8 10S5 4.5 10 4.5 18.2 10 18.2 10 15 15.5 10 15.5 1.8 10 1.8 10z"/><circle cx="10" cy="10" r="2.6"/>'),
+  ended: SVG('<circle cx="10" cy="10" r="7.6"/><path d="M6.6 10.2l2.3 2.3 4.5-4.6"/>'),
+  ok: `<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8.4" fill="#34C759"/><path d="M6.4 10.2l2.4 2.4 4.8-4.8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  pause: `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#FF9500" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="7.6"/><path d="M8.2 7v6M11.8 7v6"/></svg>`,
+  dot: `<svg width="20" height="20"><circle cx="10" cy="10" r="3.5" fill="#FF9500"/></svg>`,
+};
+const g = (k, extra = '') => `<span class="g ${extra}">${ICON[k]}</span>`;
 const MENU = `<svg width="22" height="16"><path d="M1 2h20M1 8h20M1 14h20" stroke="#1C1C1E" stroke-width="2" stroke-linecap="round"/></svg>`;
-const g = (inner, cls = '') => `<span class="g ${cls}">${inner}</span>`;
 
-// kind: 'job' (breathing terminal), 'svc' (left-up service), 'run' (spinner), 'idle'
-function row({ t, line, kind, time = 'just now', blue = false, proposal = false, hl = '' }) {
-  let glyph = '';
-  if (kind === 'run') glyph = g(SPIN);
-  if (kind === 'job') glyph = g(TERM(1), 'breath');
-  if (kind === 'svc' && proposal) glyph = g(TERM(1));
-  return `<div class="row ${hl}"><div class="row-top"><span class="row-t">${t}</span>${glyph}<span class="row-time">${time}</span></div>
-    <div class="row-l ${blue ? 'blue' : ''}">${line}</div></div>`;
-}
-function phone(rows) {
-  return `<div class="ph"><div class="ph-bar"><span>2:36</span><span>5G ▮</span></div>
-    <div class="ph-nav"><span class="ph-cap">${MENU}</span><span class="ph-title">orbit-develop</span></div>
-    <div class="ph-sec">Today</div>${rows.join('')}<div style="height:28px"></div></div>`;
-}
-const BG = 'Background process running…';
-const sample = (proposal) => [
-  row({ t: 'Release checklist', line: 'Running Agent…', kind: 'run', time: '', blue: true, proposal }),
-  row({ t: 'Push pipeline audit', line: BG, kind: 'job', proposal, hl: proposal ? 'hl ok' : '' }),
-  row({ t: 'Session access across machines', line: BG, kind: 'svc', proposal, hl: proposal ? 'hl ok' : 'hl' }),
-  row({ t: 'Session list not refreshing', line: BG, kind: 'svc', proposal, hl: proposal ? 'hl ok' : 'hl' }),
-  row({ t: 'Runner capacity check', line: 'Runner full', kind: 'idle', proposal }),
-  row({ t: 'Codex upgrade notes', line: 'The gateway needs no change for this Codex upgrade…', kind: 'idle', time: '1d ago', proposal }),
+// One sample row per state. today = what the iPhone list draws now; web = what the web list draws
+// for the same session; b = option B's subset (only states where something is still under way).
+const ROWS = [
+  { id: 'run',  t: 'Draft the email prompt mock', line: 'Running Bash…', blue: true, time: '10m', today: 'spin', web: 'spin', b: 'spin' },
+  { id: 'ask',  t: 'Approve the deploy step', line: 'Waiting for approval', time: '1m ago', today: 'dot', web: 'dot', b: 'dot' },
+  { id: 'eye',  t: 'Wait for the release build', line: 'Watching CI · release', time: '2m ago', today: 'eye', web: 'eye', b: 'eye' },
+  { id: 'q',    t: 'Background icon on iOS', line: 'Runner full', time: '3m ago', today: null, web: 'clock', b: 'clock' },
+  { id: 'job',  t: 'Push pipeline audit', line: 'Background process running…', time: 'just now', today: 'term+', web: 'term+', b: 'term+' },
+  { id: 'svc',  t: 'Session list not refreshing', line: 'Background process running…', time: 'just now', today: null, web: 'term', b: 'term' },
+  { id: 'msg',  t: 'Review model fallback', line: 'No release needed: beta.14 already has the…', time: '7m ago', today: null, web: 'msg', b: null },
+  { id: 'end',  t: 'UI review of outer borders', line: 'Ended', time: '10m ago', today: null, web: 'ended', b: null },
+  { id: 'ok',   t: 'Check the Git setup', line: 'Succeeded', time: '1h ago', today: null, web: 'ok', b: null },
 ];
+const glyphOf = (k) => k == null ? '' : k === 'term+' ? g('term', 'breath') : g(k);
+function row(r, variant) {
+  const k = r[variant];
+  const cls = variant === 'today' ? (r.web !== r.today && r.b ? 'miss' : '') : (r[variant] !== r.today ? 'add' : '');
+  return `<div class="row ${cls}" data-row="${r.id}"><div class="row-top"><span class="row-t">${r.t}</span>${glyphOf(k)}<span class="row-time">${r.time}</span></div>
+    <div class="row-l ${r.blue ? 'blue' : ''}">${r.line}</div></div>`;
+}
+function phone(variant) {
+  return `<div class="ph"><div class="ph-bar"><span>2:40</span><span>5G ▮</span></div>
+    <div class="ph-nav"><span class="ph-cap">${MENU}</span><span class="ph-title">orbit-develop</span></div>
+    ${ROWS.map((r) => row(r, variant)).join('')}<div style="height:26px"></div></div>`;
+}
 </script>
 
 <section class="b-part" id="part-1">
-  <h1>iOS 会话列表：后台进程的终端图标</h1>
-  <p class="b-sub">你截图里三行都写着 “Background process running…”，但只有一行有终端图标。问题在于图标只给 <b>job</b> 画，<b>service</b> 什么都不画。</p>
+  <h1>iOS 会话列表：状态图标按 Web 列表来画</h1>
+  <p class="b-sub">两张截图里的毛病是同一个：iPhone 列表只给“在动”的状态画图标。排队（“Runner full”）和只挂着 service 的后台进程，右侧都是空的。Web 列表的每一行都有图标。</p>
   <div class="b-stage">
     <div class="b-col">
-      <div class="b-cap">① 今天 <small>iPhone 会话列表 · 示例数据</small></div>
-      <div id="today"></div>
+      <div class="b-cap">① 今天 <small>iPhone 会话列表 · 示例数据 · 黄底 = 状态在动却没图标</small></div>
+      <div class="b-host" id="today"></div>
     </div>
     <div class="notes">
-      <div class="note"><b class="n">1</b><b>有图标的行</b>：后台有一个 <b>job</b>（bg_run 跑的、会结束的命令，比如测试、构建）。终端图标在<b>呼吸</b>（透明度 1 → 0.42 → 1，2.4 s 一次）。</div>
-      <div class="note"><b class="n">2</b><b>没图标的行</b>：后台只有 <b>service</b>（dev server、watcher 这类常驻进程）。文字照样写 “Background process running…”，右侧却<b>什么都没有</b>。字和图标对不上，看起来像漏画了。</div>
-      <div class="note">原因：<code>SessionLiveIndicator</code>（iPhone 紧凑行和抽屉 Recents 共用）只在 <code>glyph.pulse</code> 为真时画终端；<code>pulse</code> 只对 job 为真。service 掉进 <code>default: EmptyView()</code>。<br>
-      同一个 glyph 在 <b>Web</b> 和 <b>macOS 宽行</b>（<code>StatusGlyphView</code>）里，service 是<b>静止</b>的终端，job 是<b>呼吸</b>的终端。只有 iPhone（以及照着它做的 Android）把 service 这一半去掉了。</div>
+      <div class="note"><b class="n">1</b><b>排队</b>（Runner full / Queued）：会话在等 runner 空位，什么都没画。Web 画的是灰色<b>时钟</b>。</div>
+      <div class="note"><b class="n">2</b><b>后台只有 service</b>（dev server、watcher）：文字写着 “Background process running…”，却没有图标。Web 画的是<b>静止的终端</b>。有 job 时 iPhone 才画<b>呼吸的终端</b>。</div>
+      <div class="note"><b class="n">3</b><b>等你回复 / 已结束 / 成功</b>：iPhone 都不画。Web 分别画<b>对话气泡</b>、<b>灰色勾</b>、<b>绿色实心勾</b>。</div>
+      <div class="note">原因：iPhone 行和抽屉 Recents 用的是 <code>SessionLiveIndicator</code>，它是 <code>SessionStatusGlyph</code> 的“精简版”：只留 spinner、眼睛、审核时钟、呼吸终端、琥珀点、红点，其余落进 <code>default: EmptyView()</code>。<br>Web 的 <code>StatusIcon</code> 和 macOS 宽行的 <code>StatusGlyphView</code> 用的是完整版，每种状态都有图标。三端吃的是同一份 <code>SessionStatusGlyph</code>，iPhone 只是没把它画全。</div>
     </div>
   </div>
 </section>
 
 <section class="b-part" id="part-2">
-  <h2>② 建议：凡是写着 “Background process running” 的行，都画终端图标</h2>
-  <p class="b-sub">图标的形状和颜色不变（灰色终端，不是 spinner）。job 呼吸、service 静止，和 Web、macOS 用的是同一条规则。不新造外观。</p>
+  <h2>② 两种改法</h2>
+  <p class="b-sub">图标位置不变：标题右侧、时间前面，也就是今天 spinner 所在的位置。绿底 = 比今天多出图标的行。iPhone 已有的灰色 spinner、琥珀点、红点保持不变。</p>
   <div class="b-stage">
     <div class="b-col">
-      <div class="b-cap">建议 <small>绿底 = 有终端图标的行</small></div>
-      <div id="after"></div>
+      <div class="b-cap">方案 A · 和 Web 一样，每行都有 <small>推荐</small></div>
+      <div class="b-host" id="a"></div>
     </div>
-    <div class="notes">
-      <div class="note"><b class="n blue">1</b><b>job</b>：不变，还是呼吸的终端（图中橙色 ≈ 表示在动）。</div>
-      <div class="note"><b class="n blue">2</b><b>service</b>：新增一个<b>静止</b>的终端，和 job 同样的形状和灰色，只是不动。文字说有进程在跑，图标也这么说。“动”只留给真正在干活的 job，所以常驻的 dev server 不会让这行看起来很忙。</div>
-      <div class="note">优先级不变：等你批准的琥珀点、审核中的时钟、spinner（Agent 在生成或子 Agent 在跑）、watch 的眼睛，都还排在终端前面。终端只在会话停下来、后台还有进程的时候出现。</div>
-      <div class="note">VoiceOver 不变：行的 accessibilityValue 已经读出 “Background process running”。</div>
+    <div class="b-col">
+      <div class="b-cap">方案 B · 只补“还有事在进行”的两种</div>
+      <div class="b-host" id="b"></div>
     </div>
   </div>
 </section>
 
 <section class="b-part" id="part-3">
-  <h2>③ 各端对照</h2>
-  <p class="b-sub">同一种状态，在每一端画什么。</p>
-  <table>
-    <tr><th>端</th><th>后台只有 service</th><th>后台有 job</th><th>说明</th></tr>
-    <tr><td>Web 会话列表（<code>StatusIcon</code>）</td><td><span class="g" id="t1"></span>静止终端</td><td><span class="g" id="t2"></span>呼吸终端</td><td>基准</td></tr>
-    <tr><td>macOS 宽行（<code>StatusGlyphView</code>）</td><td><span class="g" id="t3"></span>静止终端</td><td><span class="g" id="t4"></span>呼吸终端</td><td>和 Web 一致</td></tr>
-    <tr><td>iPhone 列表 / 抽屉 Recents · 今天</td><td class="bad">无图标</td><td><span class="g" id="t5"></span>呼吸终端</td><td>本次问题</td></tr>
-    <tr><td>iPhone 列表 / 抽屉 Recents · 建议</td><td class="chg"><span class="g" id="t6"></span>静止终端</td><td><span class="g" id="t7"></span>呼吸终端</td><td>改成和 Web / macOS 一样</td></tr>
-    <tr><td>Android 列表（<code>SessionLiveMark</code>）· 今天</td><td class="bad">无图标</td><td><span class="g" id="t8"></span>呼吸终端</td><td>照着 iOS 做的，问题一样</td></tr>
-  </table>
+  <h2>③ 逐个状态对照</h2>
+  <p class="b-sub">同一个会话状态，Web、iPhone 今天、方案 A、方案 B 各画什么。绿底 = 要改的格子。</p>
+  <table id="tbl"></table>
 </section>
 
 <section class="b-part" id="part-4">
   <h2>④ 待定 · 要你拍板</h2>
   <div class="b-stage" style="gap:20px">
     <div class="opt rec">
-      <h3>方案 A：service 静止、job 呼吸 <span class="tag">推荐</span></h3>
-      <p>和 Web、macOS 完全一致，共用的 <code>SessionStatusGlyph</code> 一行都不用改。“在动”仍然只表示有会结束的活在跑。如果一个会话常年挂着 dev server，这行就一直有个静止的终端，安静、不抢眼。</p>
+      <h3>方案 A：完全按 Web 画 <span class="tag">推荐</span></h3>
+      <p>每一行都有图标，形状和 Web、macOS 一样。一眼扫过去就能分出排队、后台、等你、结束、成功。图标都是灰色，只有成功是绿色，所以不会比今天吵太多。代价是列表右侧不再有“空”的行，“没图标 = 没事”这层含义没了，改成看图标形状。</p>
     </div>
     <div class="opt">
-      <h3>方案 B：只要有后台进程就呼吸</h3>
-      <p>手机上更醒目，但长期挂着 service 的会话会一直在动，和真正在跑测试的会话没法区分。而且会和 Web、macOS 不一样，要么三端一起改，要么 iPhone 单独一套。</p>
+      <h3>方案 B：只补排队和后台进程</h3>
+      <p>只给“还有事在进行、但 Agent 不在生成”的两种状态补图标：排队 → 时钟，service → 静止终端。等你回复、结束、成功这些“已经停下”的行还是空的，靠文字说明。列表更轻，但和 Web 仍然不完全一样。</p>
     </div>
   </div>
-  <p style="margin:18px 0 6px"><b>Android</b>：默认跟 iOS 走同一个方案（<code>SessionLiveMark</code> 加 service 分支，复用 <code>ic_terminal</code>，不加动画）。你也可以只改 iOS。</p>
+  <p style="margin:18px 0 6px"><b>Android</b>：<code>SessionLiveMark</code> 是照着 iPhone 做的，问题一样。默认跟 iOS 用同一个方案，你也可以只改 iOS。</p>
   <h2 style="margin-top:22px">落地（按代价排）</h2>
   <ol class="land">
-    <li><b>iOS</b>：<code>SessionLiveIndicator</code> 加一个分支：<code>.symbol("terminal")</code> 且不呼吸时画静止的 <code>Image(systemName: "terminal")</code>，次要色。约 3 行，抽屉 Recents 一起生效。</li>
-    <li><b>Android</b>：<code>SessionLiveMark</code> 在 <code>isRunningJob</code> 下面加 “parked 且 runningBgCount &gt; 0” → 静止的 <code>ic_terminal</code>，补一个 Compose 测试（<code>session-mark-services</code>）。</li>
-    <li>OrbitKit / Web / 服务端都不用动：glyph 已经给了 service 一个 <code>terminal</code>，只是 iPhone 的视图没画。</li>
+    <li><b>iOS</b>：<code>SessionLiveIndicator</code> 的 <code>default: EmptyView()</code> 换成画 glyph 自己的 SF Symbol（灰色，成功为绿色）。方案 A 就是这一处。方案 B 只放行 <code>clock</code> 和 <code>terminal</code>。抽屉 Recents 共用这个视图，一起生效。<code>SessionStatusGlyph</code> 和 OrbitKit 测试都不用动。</li>
+    <li><b>Android</b>：<code>SessionLiveMark</code> 补同样的分支，复用 <code>ic_clock</code> / <code>ic_terminal</code>。方案 A 还要补消息、勾两个 drawable。每个分支补一个 Compose 测试标签。</li>
+    <li>Web、macOS、服务端：不用改。</li>
   </ol>
 </section>
 
 <script>
-document.getElementById('today').innerHTML = phone(sample(false));
-document.getElementById('after').innerHTML = phone(sample(true));
-for (const [id, op] of [['t1',1],['t2',1],['t3',1],['t4',1],['t5',1],['t6',1],['t7',1],['t8',1]]) document.getElementById(id).innerHTML = TERM(op);
-for (const id of ['t2','t4','t5','t7','t8']) document.getElementById(id).classList.add('breath');
-// numbered markers on the phones, placed after layout
+document.getElementById('today').innerHTML = phone('today');
+document.getElementById('a').innerHTML = phone('web');
+document.getElementById('b').innerHTML = phone('b');
+const NAME = { run: '在生成（Running）', ask: '等你批准', eye: 'watch 会唤醒它', q: '排队（Runner full / Queued）', job: '后台有 job', svc: '后台只有 service', msg: '等你回复', end: '已结束', ok: '成功' };
+const cell = (k, changed) => `<td class="${changed ? 'chg' : ''}">${k == null ? '<span class="none">无图标</span>' : glyphOf(k)}</td>`;
+document.getElementById('tbl').innerHTML = '<tr><th>状态</th><th>Web / macOS</th><th>iPhone 今天</th><th>方案 A</th><th>方案 B</th></tr>' +
+  ROWS.map((r) => `<tr><td>${NAME[r.id]}</td><td>${glyphOf(r.id === 'ask' ? 'pause' : r.web)}</td>${cell(r.today, false)}${cell(r.web, r.web !== r.today)}${cell(r.b, r.b !== r.today)}</tr>`).join('');
+
 window.drawMarks = () => {
-  const mark = (phoneId, rowIdx, n, blue) => {
-    const host = document.getElementById(phoneId);
-    const ph = host.querySelector('.ph');
-    const r = ph.querySelectorAll('.row')[rowIdx];
+  const mark = (host, id, n, blue) => {
+    const h = document.getElementById(host);
+    const r = h.querySelector(`[data-row="${id}"]`);
     const m = document.createElement('div');
     m.className = 'mk' + (blue ? ' blue' : '');
     m.textContent = n;
-    m.style.left = '0px';
-    m.style.top = (r.offsetTop + 15) + 'px';
-    host.appendChild(m);
+    m.style.top = (r.getBoundingClientRect().top - h.getBoundingClientRect().top + 15) + 'px';
+    h.appendChild(m);
   };
-  mark('today', 1, 1); mark('today', 2, 2); mark('today', 3, 2);
-  mark('after', 1, 1, true); mark('after', 2, 2, true); mark('after', 3, 2, true);
+  mark('today', 'q', 1); mark('today', 'svc', 2); mark('today', 'msg', 3); mark('today', 'end', 3); mark('today', 'ok', 3);
 };
 </script>
 </body>
