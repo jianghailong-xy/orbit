@@ -863,10 +863,9 @@ final class ExceptionCardsTests: XCTestCase {
     /// A RETRY on a row that names a merge candidate is the RERUN of that candidate's check — the
     /// same door the browser sends through
     /// `POST /projects/:id/promotions/:promotionId/integration/retry` — and it wears the re-check
-    /// words, not the landing-retry ones. Its reason is the item's own sentence about the failure,
-    /// and the browser's fallback when the row has none: the door requires one, so a press never
-    /// travels empty.
-    func testARerunOfACheckIsSaidSoAndCarriesAReason() throws {
+    /// words, not the landing-retry ones. Its reason is the one the owner types into the press's
+    /// prompt — never the item's own sentence — and a blank one is no press at all.
+    func testARerunOfACheckIsSaidSoAndCarriesTheOwnersReason() throws {
         let promoted = row { $0.kind = .integrationCheckFailed
                              $0.promotionId = "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"
                              $0.taskId = nil; $0.sessionId = nil
@@ -875,23 +874,57 @@ final class ExceptionCardsTests: XCTestCase {
         let press = try XCTUnwrap(ExceptionCards.presses(promoted).first { $0.action == .retry })
         XCTAssertEqual(press.label, ExceptionCards.rerunCheck)
         XCTAssertEqual(press.consequence, ExceptionCards.promotionRetryConsequence)
-        XCTAssertEqual(ExceptionCards.retryReason(promoted),
-                       "Nothing reaches main until this check passes.")
-        // A row with no sentence of its own still carries one: the browser's `RETRY_REASON_FALLBACK`.
-        let bare = row { $0.kind = .taskFailed; $0.requiredAction = nil }
-        XCTAssertEqual(ExceptionCards.retryReason(bare), ExceptionCards.retryReasonFallback)
-        XCTAssertEqual(ExceptionCards.retryReason(row { $0.requiredAction = "   " }),
-                       ExceptionCards.retryReasonFallback)
+
+        // The body the door is sent is exactly the typed reason (trimmed), whatever the row says.
+        let request = try XCTUnwrap(ExceptionCards.retryRequest("  The runner was swapping; it has more memory now.\n"))
+        let body = try JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: String]
+        XCTAssertEqual(body, ["reason": "The runner was swapping; it has more memory now."])
+        XCTAssertNil(ExceptionCards.retryRequest(""))
+        XCTAssertNil(ExceptionCards.retryRequest("   \n"))
+        XCTAssertNil(ExceptionCards.retryRequest(String(repeating: "x", count: ExceptionCards.retryReasonMaxLength + 1)))
 
         let web = try webSource()
         XCTAssertEqual(ExceptionCards.rerunCheck, try declaration(web, "RERUN_CHECK_ACTION_LABEL"))
         XCTAssertEqual(ExceptionCards.promotionRetryConsequence,
                        try declaration(web, "PROMOTION_RETRY_CONSEQUENCE"))
-        XCTAssertEqual(ExceptionCards.retryReasonFallback,
-                       try declaration(web, "RETRY_REASON_FALLBACK"))
-        try require(web, "const reason = row.requiredAction?.trim() || RETRY_REASON_FALLBACK;")
+        XCTAssertEqual(ExceptionCards.retryReasonQuestion, try declaration(web, "RETRY_REASON_QUESTION"))
+        XCTAssertEqual(ExceptionCards.retryReasonHint, try declaration(web, "RETRY_REASON_HINT"))
+        XCTAssertEqual(ExceptionCards.retryReasonBack, try declaration(web, "RETRY_REASON_BACK"))
+        XCTAssertFalse(web.contains("row.requiredAction?.trim() || RETRY_REASON_FALLBACK"),
+                       "the browser no longer sends the row's own sentence as the reason")
+        try require(web, "integration.mutate({ reason: trimmed }")
         // The route the re-run travels: the candidate's, on the row that names one (T5's owner door).
         try require(web, "/integration/retry")
+    }
+
+    /// A check the platform stopped at its budget (CHECK_TIMED_OUT): the You row says how long it
+    /// ran against the limit, read off the item's own payload (`check.durationMs`,
+    /// `check.timeoutSeconds`), and offers the press onto where the merge check is set — every word
+    /// the browser's.
+    func testATimedOutCheckSaysItsRunTimeAgainstTheLimit() throws {
+        let payload = #"{"name":"MERGE_CHECK","command":"npm test","exitCode":null,"timedOut":true,"durationMs":14400000,"outputTail":"","timeoutSeconds":14400}"#
+        let check = try JSONDecoder().decode(IntegrationCheckResult.self, from: Data(payload.utf8))
+        XCTAssertEqual(check.timeoutSeconds, 14_400)
+        let timedOut = row { $0.kind = .integrationCheckFailed
+                             $0.facts = OpenItemFacts(check: check) }
+        XCTAssertEqual(ExceptionCards.timedOutCheck(timedOut), check)
+        XCTAssertEqual(ExceptionCards.checkRanAgainstLimit(check), "The check ran 4h of a 4h limit.")
+        let older = IntegrationCheckResult(name: "MERGE_CHECK", command: "npm test", exitCode: nil,
+                                           timedOut: true, durationMs: 5_412_000)
+        XCTAssertEqual(ExceptionCards.checkRanAgainstLimit(older),
+                       "The check ran 1h 30m and was stopped at its time limit.")
+        // A check that failed rather than ran out of time has no such line.
+        let red = IntegrationCheckResult(name: "MERGE_CHECK", command: "npm test", exitCode: 1,
+                                         timedOut: false, durationMs: 360_000)
+        XCTAssertNil(ExceptionCards.timedOutCheck(row { $0.kind = .integrationCheckFailed
+                                                        $0.facts = OpenItemFacts(check: red) }))
+
+        let web = try webSource()
+        XCTAssertEqual(ExceptionCards.checkTimeLimitPress, try declaration(web, "CHECK_TIME_LIMIT_PRESS"))
+        XCTAssertEqual(ExceptionCards.checkTimeLimitConsequence,
+                       try declaration(web, "CHECK_TIME_LIMIT_CONSEQUENCE"))
+        try require(web, "`The check ran ${checkDuration(durationMs)} of a ${checkDuration(timeoutSeconds * 1000)} limit.`")
+        try require(web, "`The check ran ${checkDuration(durationMs)} and was stopped at its time limit.`")
     }
 
     /// A RETRY on a FAILED task is the run-again door (`taskFailureDoors`, §4.7): the task starts a

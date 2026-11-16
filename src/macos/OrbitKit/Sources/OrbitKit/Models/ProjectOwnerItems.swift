@@ -806,9 +806,13 @@ public struct IntegrationCheckResult: Codable, Equatable, Sendable {
     /// merge card's checks, which draw the measurement and not the log; the exception card's fact
     /// block draws it, so it is read here rather than re-declared for one caller.
     public let outputTail: String?
+    /// The budget a check the platform stopped was given, in seconds — recorded on an exception
+    /// item's payload since the check's limit was (absent on an older item and on the merge card).
+    public let timeoutSeconds: Int?
 
     public init(name: String, command: String, expectedExitCode: Int? = 0, exitCode: Int? = 0,
-                timedOut: Bool? = false, durationMs: Int? = nil, outputTail: String? = nil) {
+                timedOut: Bool? = false, durationMs: Int? = nil, outputTail: String? = nil,
+                timeoutSeconds: Int? = nil) {
         self.name = name
         self.command = command
         self.expectedExitCode = expectedExitCode
@@ -816,6 +820,7 @@ public struct IntegrationCheckResult: Codable, Equatable, Sendable {
         self.timedOut = timedOut
         self.durationMs = durationMs
         self.outputTail = outputTail
+        self.timeoutSeconds = timeoutSeconds
     }
 
     /// Whether this one passed: the exit code the check declared, and not a timeout.

@@ -96,9 +96,14 @@ class ExceptionCardViewTest {
         assertEquals("exit 1", text.text.substring(bad.start, bad.end))
         assertTrue(top("$key:fact:Check") < top("$key:log")); assertTrue(top("$key:log") < top("$key:fact:Branch"))
         compose.onNodeWithTag("$key:owner", useUnmergedTree = true).assertExists()
+        // Re-run asks for the owner's reason first; only its confirm sends, carrying what was typed.
         compose.onNodeWithTag("$key:RERUN_CHECK").performClick()
+        assertTrue(pressed.isEmpty())
+        compose.onNodeWithTag("$key:retry-reason").performScrollTo().performTextInput("A fix landed on main since.")
+        compose.onNodeWithTag("$key:retry-confirm").performScrollTo().performClick()
         assertEquals(listOf(CardVerb.RERUN_CHECK), pressed.map { it.first })
-        compose.onNodeWithTag("$key:REVIEW").performClick()
+        assertEquals("A fix landed on main since.", pressed.single().second.text)
+        compose.onNodeWithTag("$key:REVIEW").performScrollTo().performClick()
         assertEquals(listOf("pr1"), reviewed)
     }
 

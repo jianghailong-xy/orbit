@@ -293,8 +293,20 @@ final class ExceptionCardsWiringTests: XCTestCase {
                       "and a FAILED task runs again through the owner's own route "
                           + "(`POST /tasks/:id/execute`) — the integration retry would refuse it "
                           + "(J-T1b), so it is never the press a failed task's Retry makes")
-        XCTAssertTrue(doors.contains("let reason = ExceptionCards.retryReason(row)"),
-                      "the reason the door requires is the item's own sentence, from the model")
+        XCTAssertTrue(doors.contains("guard let request = ExceptionCards.retryRequest(reason) else { return nil }"),
+                      "the reason the door requires is the one the owner typed, and a blank one is no press")
+        XCTAssertFalse(doors.contains("requiredAction"),
+                       "the item's own sentence is never sent in the owner's place")
+        // The press asks first; only the prompt's confirm sends, and Back sends nothing.
+        XCTAssertTrue(card.contains("askingToRetry = true\n            return"),
+                      "an integration Retry or Re-run puts the reason prompt up rather than sending")
+        XCTAssertTrue(card.contains("await console.retryIntegration(row, reason: retryReason)"),
+                      "the prompt's confirm sends the typed reason")
+        let back = try section(card, from: "@ViewBuilder private func retryPanel(",
+                               to: "sendRetry(row)\n")
+        XCTAssertTrue(back.contains("askingToRetry = false\n                } label: {\n"
+                                    + "                    Text(ExceptionCards.retryReasonBack)"),
+                      "and Back only closes the prompt")
         XCTAssertTrue(doors.contains("await refreshRulerQuestions(force: true)"),
                       "and the press re-reads the item list, where the rerun shows itself")
         XCTAssertTrue(doors.contains("statusMessage = \"\\(headline) — "),

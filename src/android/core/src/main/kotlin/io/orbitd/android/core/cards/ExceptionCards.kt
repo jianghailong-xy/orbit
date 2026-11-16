@@ -93,8 +93,18 @@ object ExceptionCards {
      * none happened. A legacy claim reports only between steps, so its silence proves nothing — nor does a row without facts. */
     fun pushIsImpossible(lease: JsonObject?): Boolean =
         lease?.text("jobKind") == "CHECK_PROMOTION" || (lease?.text("progressProtocol") == "v2" && lease?.flag("pushReported") == false)
-    /** The reason a RETRY carries when the row has no `requiredAction`: the door requires one. */
-    const val retryReasonFallback = "Retry the integration after the failed check."
+    /** The prompt an integration Retry or a Re-run opens before anything is sent — the browser's `RETRY_REASON_QUESTION`,
+     * `RETRY_REASON_HINT` and `RETRY_REASON_BACK`. The reason the door requires is the owner's own, typed there. */
+    const val retryReasonQuestion = "Why will this run come out differently?"
+    const val retryReasonHint = "For example: a fix has landed since, or the runner was overloaded."
+    const val retryReasonBack = "Back"
+    /** The door's own bound on the reason (`MAX_INTEGRATION_RETRY_REASON`). */
+    const val retryReasonMaxLength = 2_000
+    /** A check the platform stopped at its budget (CHECK_TIMED_OUT): the You row's quiet press onto where the project's merge check
+     * is set, and its line — the browser's `CHECK_TIME_LIMIT_PRESS` and `CHECK_TIME_LIMIT_CONSEQUENCE`. On this client that is the
+     * project page, whose How it runs holds the Merge check row. */
+    const val checkTimeLimitPress = "Change the check or its time limit…"
+    const val checkTimeLimitConsequence = "Opens the merge check in How it runs."
     const val markHandledConsequence = "Only if you dealt with it yourself. Your reason goes on the record."
 
     /** The doors a card may lead with; the rest only look or only stop, and are drawn quiet. */
@@ -123,8 +133,17 @@ object ExceptionCards {
         return actionConsequences[action].orEmpty()
     }
 
-    /** What a RETRY press carries as its reason: the item's own sentence about what has to happen, trimmed, else the fallback. */
-    fun retryReason(row: JsonObject): String = row.text("requiredAction")?.trim()?.takeIf { it.isNotEmpty() } ?: retryReasonFallback
+    /** The check an item's facts carry when the platform stopped it at its budget (CHECK_TIMED_OUT), else null. */
+    fun timedOutCheck(row: JsonObject): JsonObject? = row.obj("facts")?.obj("check")?.takeIf { it.flag("timedOut") }
+
+    /** The run time against the limit — the browser's `checkRanAgainstLimit`: "The check ran 4h of a 4h limit.", or, for an item
+     * recorded before the limit was (`check.timeoutSeconds` absent), only how long it ran. */
+    fun checkRanAgainstLimit(check: JsonObject): String {
+        val ran = checkDuration((check["durationMs"] as? JsonPrimitive)?.doubleOrNull ?: 0.0)
+        val limit = (check["timeoutSeconds"] as? JsonPrimitive)?.doubleOrNull
+        return if (limit != null) "The check ran $ran of a ${checkDuration(limit * 1_000)} limit."
+        else "The check ran $ran and was stopped at its time limit."
+    }
 
     /**
      * Which of RETRY's three doors this row's press goes through (`open-item-doors.ts`): a failed task runs again (`task-start`,

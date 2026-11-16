@@ -62,10 +62,10 @@ class ExceptionCardsTest {
             requiredAction = "  Nothing on the project branch reaches main until this check passes.  ")).single()
         assertTrue(CardVerb.RERUN_CHECK in candidate.actions)
         assertFalse(CardVerb.RETRY_TASK in candidate.actions); assertFalse(CardVerb.RETRY_INTEGRATION in candidate.actions)
-        val rerun = CardRequests.build(candidate, CardVerb.RERUN_CHECK)
+        val rerun = CardRequests.build(candidate, CardVerb.RERUN_CHECK, CardInput(text = "A fix to the slow test landed since."))
         assertEquals(HttpMethod.POST, rerun.method)
         assertEquals(listOf("projects", "p1", "promotions", "pr1", "integration", "retry"), rerun.path)
-        assertEquals("the item's own sentence, trimmed", "Nothing on the project branch reaches main until this check passes.", body(rerun).text("reason"))
+        assertEquals("the owner's typed reason, never the item's own sentence", "A fix to the slow test landed since.", body(rerun).text("reason"))
 
         // A failed task runs again through Run now's door, as it always did, with the press's own identity.
         val failed = cards(row(kind = "TASK_FAILED", actions = listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "RETRY", "CANCEL_TASK"))).single()
@@ -79,16 +79,17 @@ class ExceptionCardsTest {
         for (kind in listOf("INTEGRATION_ERROR", "INTEGRATION_CHECK_FAILED", "INTEGRATION_CONFLICT", "DELIVERY_REVIEW")) {
             val landing = cards(row(kind = kind, actions = listOf("ASK_COORDINATOR_AGAIN", "RETRY"))).single()
             assertEquals(kind, listOf(CardVerb.RETURN_COORDINATOR, CardVerb.RETRY_INTEGRATION), landing.actions.filter { it != CardVerb.MARK_HANDLED })
-            val request = CardRequests.build(landing, CardVerb.RETRY_INTEGRATION)
+            val request = CardRequests.build(landing, CardVerb.RETRY_INTEGRATION, CardInput(text = "The runner was overloaded."))
             assertEquals(kind, listOf("projects", "p1", "tasks", "01a03f58-40bd-76ac-85c1-d9c6b29f8ca9", "integration", "retry"), request.path)
-            assertEquals("a row with no sentence still carries one", ExceptionCards.retryReasonFallback, body(request).text("reason"))
+            assertEquals("the owner's typed reason", "The runner was overloaded.", body(request).text("reason"))
         }
 
         // A row that names only a candidate is drawn a Retry now, through the candidate's door.
         val onlyCandidate = cards(row(kind = "INTEGRATION_ERROR", promotionId = "pr2", taskId = null, sessionId = null,
             actions = listOf("RETRY", "ASK_COORDINATOR_AGAIN"))).single()
         assertTrue(CardVerb.RERUN_CHECK in onlyCandidate.actions)
-        assertEquals(listOf("projects", "p1", "promotions", "pr2", "integration", "retry"), CardRequests.build(onlyCandidate, CardVerb.RERUN_CHECK).path)
+        assertEquals(listOf("projects", "p1", "promotions", "pr2", "integration", "retry"),
+            CardRequests.build(onlyCandidate, CardVerb.RERUN_CHECK, CardInput(text = "why")).path)
         assertEquals(listOf("RETRY", "ASK_COORDINATOR_AGAIN"), ExceptionCards.drawn(onlyCandidate.source))
         assertEquals(CardVerb.RERUN_CHECK, ExceptionCards.verb(onlyCandidate.source, "RETRY"))
 
@@ -518,7 +519,8 @@ class ExceptionCardsTest {
             .replace(Regex("\"\\s*\\n\\s*\\+\\s*\""), "")
         listOf(ExceptionCards.escalatedTitle, ExceptionCards.pauseTitle, ExceptionCards.provenance, ExceptionCards.gone, ExceptionCards.requiredActionFallback,
             ExceptionCards.openTaskSession, ExceptionCards.retry, ExceptionCards.rerunCheck, ExceptionCards.promotionRetryConsequence,
-            ExceptionCards.taskRunAgainConsequence, ExceptionCards.retryReasonFallback, ExceptionCards.markHandledConsequence, ExceptionCards.markHandled,
+            ExceptionCards.taskRunAgainConsequence, ExceptionCards.retryReasonQuestion, ExceptionCards.retryReasonHint,
+            ExceptionCards.checkTimeLimitPress, ExceptionCards.checkTimeLimitConsequence, ExceptionCards.markHandledConsequence, ExceptionCards.markHandled,
             ExceptionCards.markHandledTitle, ExceptionCards.markHandledBody, ExceptionCards.markHandledReason, ExceptionCards.notMarkedHandled,
             ExceptionCards.notRerunCheck, ExceptionCards.notRetriedLanding, ExceptionCards.notRunAgain, ExceptionCards.notReturned, ExceptionCards.notResumed,
             ExceptionCards.ownerPrefix, ExceptionCards.cameToOwnerAt, ExceptionCards.nothingLanded, ExceptionCards.afterAFix, ExceptionCards.branchUnchanged,

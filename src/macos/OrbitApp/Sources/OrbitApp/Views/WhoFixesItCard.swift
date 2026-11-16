@@ -177,7 +177,7 @@ struct WhoFixesItBody: View {
     // MARK: WHO FIXES IT?
 
     @ViewBuilder private func whoBlock(_ reading: CoordinatorReading) -> some View {
-        let hasYou = taskSessionURL != nil || !youDoors.isEmpty
+        let hasYou = taskSessionURL != nil || !youDoors.isEmpty || ExceptionCards.timedOutCheck(row) != nil
         VStack(alignment: .leading, spacing: 10) {
             Text(ExceptionCards.whoFixesItLabel.uppercased())
                 .font(.orbitMeta.weight(.semibold))
@@ -357,6 +357,26 @@ struct WhoFixesItBody: View {
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // A check the platform stopped at its budget: rerun as it is, it times out again — so the
+            // row says how long it ran against the limit and opens the project page, whose How it
+            // runs holds the Merge check row.
+            if let check = ExceptionCards.timedOutCheck(row) {
+                Text(ExceptionCards.checkRanAgainstLimit(check))
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                if let projectID = console.projectID {
+                    doorRow(ExceptionCards.checkTimeLimitConsequence) {
+                        weighted(.link) {
+                            Button {
+                                PlatformHaptics.tap()
+                                model.openProjectFromConversation(projectID, overConsole: overConsole)
+                            } label: { Text(ExceptionCards.checkTimeLimitPress) }
+                        }
+                    }
+                }
             }
         }
     }

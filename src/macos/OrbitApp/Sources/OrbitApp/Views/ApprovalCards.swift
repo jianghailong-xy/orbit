@@ -4583,6 +4583,10 @@ private struct OwnerItemCardView: View {
     /// kept after a refusal, so a press that was turned down does not cost the reader their words.
     @State private var askingToHandle = false
     @State private var reason = ""
+    /// An integration Retry or a Re-run asks for the owner's reason before anything is sent: the
+    /// press puts this prompt up, Back sends nothing, and only the door taking it clears the draft.
+    @State private var askingToRetry = false
+    @State private var retryReason = ""
     /// Whether a failed check's log is drawn whole rather than folded to its last lines.
     @State private var expandedTail = false
     @State private var expandedFacts: Set<String> = []
@@ -4651,6 +4655,7 @@ private struct OwnerItemCardView: View {
                                    askingToHandle = true
                                },
                                makePress: { makePress($0, row: whoFixes) })
+                if askingToRetry { retryPanel(whoFixes) }
                 if askingToHandle { markHandledPanel() }
                 if observing {
                     ObserveAgainPanel(console: console, sending: $sending) { observing = false }
@@ -4667,6 +4672,7 @@ private struct OwnerItemCardView: View {
                 nextBlock(row)
                 factBlock(row)
                 handlingBlock(row)
+                if askingToRetry { retryPanel(row) }
                 if askingToHandle { markHandledPanel() }
                 if observing {
                     ObserveAgainPanel(console: console, sending: $sending) { observing = false }
@@ -4944,7 +4950,7 @@ private struct OwnerItemCardView: View {
         case .retry:
             // `Run it again` (§4.7 H1, T5): the owner's own route through the browser's same pair —
             // a candidate's check re-run when the item names one, a failed landing's retry
-            // otherwise. The reason the door requires is the item's own sentence about the failure.
+            // otherwise. The reason the door requires is the owner's, asked for before anything is sent.
             guard ExceptionCards.addressed(row, .retry) else { return nil }
             return { retry(row) }
         case .review:
@@ -5125,10 +5131,83 @@ private struct OwnerItemCardView: View {
     private func retry(_ row: ProjectOpenItemRow) {
         guard !sending else { return }
         PlatformHaptics.tap()
+        // An integration rerun carries the owner's reason: the press asks for it first. A failed
+        // task's run-again takes none, so it is pressed straight away.
+        guard row.kind == .taskFailed else {
+            askingToRetry = true
+            return
+        }
         sending = true
         Task {
             await console.retryIntegration(row)
             sending = false
+        }
+    }
+
+    /// The prompt's confirm: the typed reason, trimmed, through the console's door. A blank one is
+    /// no press (`ExceptionCards.retryRequest`). The draft and the prompt go only once the door
+    /// took it; a refusal leaves both, under the console's sentence about what was refused.
+    private func sendRetry(_ row: ProjectOpenItemRow) {
+        guard !sending, ExceptionCards.retryRequest(retryReason) != nil else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            if await console.retryIntegration(row, reason: retryReason) != nil {
+                retryReason = ""
+                askingToRetry = false
+            }
+            sending = false
+        }
+    }
+
+    /// "Why will this run come out differently?" — asked in place, as the ending's reason is, empty
+    /// to start, with its one-line hint. Back sends nothing.
+    @ViewBuilder private func retryPanel(_ row: ProjectOpenItemRow) -> some View {
+        let label = ExceptionCards.actionLabel(row, .retry) ?? ExceptionCards.retry
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.orbitProse.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(ExceptionCards.retryReasonQuestion)
+                .font(.orbitLabel.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            TextField("", text: $retryReason, axis: .vertical)
+                .lineLimit(2...5)
+                .font(.orbitProse)
+                .textFieldStyle(.roundedBorder)
+                .disabled(sending)
+                .accessibilityLabel(ExceptionCards.retryReasonQuestion)
+                .onChange(of: retryReason) { _, typed in
+                    if typed.count > ExceptionCards.retryReasonMaxLength {
+                        retryReason = String(typed.prefix(ExceptionCards.retryReasonMaxLength))
+                    }
+                }
+            Text(ExceptionCards.retryReasonHint)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                Button {
+                    askingToRetry = false
+                } label: {
+                    Text(ExceptionCards.retryReasonBack).approvalActionLabel()
+                }
+                .buttonStyle(.bordered)
+                .disabled(sending)
+                Button {
+                    sendRetry(row)
+                } label: {
+                    Text(label).approvalActionLabel()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(sending || ExceptionCards.retryRequest(retryReason) == nil)
+            }
+        }
+        .padding(.horizontal, 10).padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12))
         }
     }
 

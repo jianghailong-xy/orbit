@@ -6204,13 +6204,13 @@ final class ConsoleModel {
     /// the browser's RETRY sends through — a candidate's failed check for a row that names one, a
     /// failed task landing otherwise, and on a FAILED task (`taskFailureDoors`) the task itself.
     ///
-    /// The reason the door requires is the item's own sentence about what failed
-    /// (`ExceptionCards.retryReason`), so a press never travels empty and the rerun's record says
-    /// why it was made. A refusal leaves the card standing and says which refusal it met; a taken
+    /// The reason the door requires is the one the owner typed into the press's prompt
+    /// (`ExceptionCards.retryRequest`): a blank one is no press, and the row's own sentence is never
+    /// sent in its place. A failed task's run-again takes none. A refusal leaves the card standing and says which refusal it met; a taken
     /// press re-reads the item list, which is where the rerun shows itself — the item is being
     /// handled from then on, and the bar over its card says so (§4.7 H1–H3).
     @discardableResult
-    func retryIntegration(_ row: ProjectOpenItemRow) async -> IntegrationRetryReceipt? {
+    func retryIntegration(_ row: ProjectOpenItemRow, reason: String = "") async -> IntegrationRetryReceipt? {
         guard let projectID, ExceptionCards.addressed(row, .retry) else { return nil }
         // A failed task's Retry is the run-again door, and the owner's own route for it is Run
         // now's (`POST /tasks/:id/execute`): it starts a new run and clears the failure. The
@@ -6227,19 +6227,17 @@ final class ConsoleModel {
                 return nil
             }
         }
-        let reason = ExceptionCards.retryReason(row)
+        guard let request = ExceptionCards.retryRequest(reason) else { return nil }
         let headline = row.promotionId != nil ? ExceptionCards.notRerunCheck
                                               : ExceptionCards.notRetriedLanding
         do {
             let receipt: IntegrationRetryReceipt
             if let promotionID = row.promotionId {
                 receipt = try await api.retryPromotionCheck(
-                    projectID: projectID, promotionID: promotionID,
-                    IntegrationRetryRequest(reason: reason))
+                    projectID: projectID, promotionID: promotionID, request)
             } else if let taskID = row.taskId {
                 receipt = try await api.retryTaskIntegration(
-                    projectID: projectID, taskID: taskID,
-                    IntegrationRetryRequest(reason: reason))
+                    projectID: projectID, taskID: taskID, request)
             } else {
                 return nil
             }

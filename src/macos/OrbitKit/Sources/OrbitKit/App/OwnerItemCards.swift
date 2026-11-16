@@ -1506,10 +1506,20 @@ public enum ExceptionCards {
     /// starts a new run and the item closes with that fact (`taskFailureDoors`, §4.7) — the
     /// browser's `TASK_RUN_AGAIN_CONSEQUENCE`.
     public static let taskRunAgainConsequence = "The task runs again and this item closes with it."
-    /// What a RETRY press carries as its reason when the row has no `requiredAction` of its own —
-    /// the browser's `RETRY_REASON_FALLBACK`. The door requires a reason (`RetryIntegrationDto`), so
-    /// a press never travels empty.
-    public static let retryReasonFallback = "Retry the integration after the failed check."
+    /// The prompt an integration Retry or a Re-run opens before anything is sent — the browser's
+    /// `RETRY_REASON_QUESTION`, `RETRY_REASON_HINT` and `RETRY_REASON_BACK`. The reason the door
+    /// requires (`RetryIntegrationDto`) is the owner's own, typed there.
+    public static let retryReasonQuestion = "Why will this run come out differently?"
+    public static let retryReasonHint = "For example: a fix has landed since, or the runner was overloaded."
+    public static let retryReasonBack = "Back"
+    /// The door's own bound on that reason (`MAX_INTEGRATION_RETRY_REASON`).
+    public static let retryReasonMaxLength = 2_000
+    /// A check the platform stopped at its budget (CHECK_TIMED_OUT): the You row's quiet press onto
+    /// where the project's merge check is set, and its line — the browser's
+    /// `CHECK_TIME_LIMIT_PRESS` and `CHECK_TIME_LIMIT_CONSEQUENCE`. On this client that is the
+    /// project page, whose How it runs holds the Merge check row.
+    public static let checkTimeLimitPress = "Change the check or its time limit…"
+    public static let checkTimeLimitConsequence = "Opens the merge check in How it runs."
     /// The line under the owner's own ending, in the browser's map.
     public static let markHandledConsequence =
         "Only if you dealt with it yourself. Your reason goes on the record."
@@ -1559,12 +1569,30 @@ public enum ExceptionCards {
         return URL(string: "orbit-session:\(PublicID.toPublic(id))")
     }
 
-    /// What a RETRY press carries: the item's own `requiredAction` when the server named one, and
-    /// the standing sentence for a failed check when it did not — the browser's own reading
-    /// (`RetryPress`). Trimmed, because the door takes a reason and the sentence is not a blank.
-    public static func retryReason(_ row: ProjectOpenItemRow) -> String {
-        let said = row.requiredAction?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return said.isEmpty ? retryReasonFallback : said
+    /// What an integration Retry or a Re-run sends: the reason the owner typed, trimmed — the
+    /// browser's `RetryPress`. Nil for a blank one, which is not a press: the door requires a reason,
+    /// and the row's own sentence is never sent in its place.
+    public static func retryRequest(_ reason: String) -> IntegrationRetryRequest? {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.count <= retryReasonMaxLength else { return nil }
+        return IntegrationRetryRequest(reason: trimmed)
+    }
+
+    /// The check an item's facts carry when the platform stopped it at its budget
+    /// (CHECK_TIMED_OUT), else nil.
+    public static func timedOutCheck(_ row: ProjectOpenItemRow) -> IntegrationCheckResult? {
+        guard let check = row.facts?.check, check.timedOut == true else { return nil }
+        return check
+    }
+
+    /// The run time against the limit — the browser's `checkRanAgainstLimit`: "The check ran 4h of
+    /// a 4h limit.", or, for an item recorded before the limit was, only how long it ran.
+    public static func checkRanAgainstLimit(_ check: IntegrationCheckResult) -> String {
+        let ran = checkDuration(check.durationMs ?? 0)
+        guard let limit = check.timeoutSeconds else {
+            return "The check ran \(ran) and was stopped at its time limit."
+        }
+        return "The check ran \(ran) of a \(checkDuration(limit * 1_000)) limit."
     }
 
     /// What the next step is for a kind of exception, where the design names one (mock 7 ①②③). A

@@ -86,14 +86,14 @@ object CardRequests {
             CardVerb.MARK_HANDLED -> request(projectPath("open-items", card.objectId, "resolve"), buildJsonObject { put("note", note(2000)) })
             // RETRY's three doors (A08-17, `open-item-doors.ts`): a failed task runs again through Run now's door; an integration
             // item queues its task's landing again, and one that names a merge candidate re-runs that candidate's check — both with
-            // the item's own sentence as the reason the door requires.
+            // the reason the owner typed into the press's prompt, which the door requires.
             CardVerb.RETRY_TASK -> request(listOf("tasks", required("taskId"), "execute"), buildJsonObject {
                 put("triggerId", requireNotNull(input.triggerId).also { require(it.isNotBlank()) })
             })
             CardVerb.RETRY_INTEGRATION -> request(projectPath("tasks", required("taskId"), "integration", "retry"),
-                buildJsonObject { put("reason", ExceptionCards.retryReason(row)) })
+                buildJsonObject { put("reason", note(2000)) })
             CardVerb.RERUN_CHECK -> request(projectPath("promotions", required("promotionId"), "integration", "retry"),
-                buildJsonObject { put("reason", ExceptionCards.retryReason(row)) })
+                buildJsonObject { put("reason", note(2000)) })
             CardVerb.CANCEL_TASK -> request(listOf("tasks", required("taskId")), buildJsonObject { put("status", "CANCELLED") }, HttpMethod.PATCH)
             // J-T10's owner end of a timed-out attempt (§4.6 X-E5): the one job the item names, through the same door the landing
             // page's menu presses. It ends it, and nothing is queued again.

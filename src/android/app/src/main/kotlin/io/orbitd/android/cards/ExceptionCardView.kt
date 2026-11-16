@@ -65,6 +65,12 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
     var why by rememberSaveable(card.key) { mutableStateOf("") }
     var observing by remember(card.key) { mutableStateOf(false) }
     var cancelling by remember(card.key) { mutableStateOf(false) }
+    // An integration Retry or a Re-run asks for the owner's reason first (the door requires one): the press opens this prompt, Back
+    // sends nothing, and only the door taking it clears what was typed.
+    var retryVerb by rememberSaveable(card.key) { mutableStateOf<String?>(null) }
+    var retryWhy by rememberSaveable(card.key) { mutableStateOf("") }
+    var retrying by remember(card.key) { mutableStateOf(false) }
+    LaunchedEffect(retrying, result.settled) { if (retrying && result.settled) { retryWhy = ""; retryVerb = null; retrying = false } }
     LaunchedEffect(marking, result.settled) { if (marking && result.settled) { reason = ""; asking = false; marking = false } }
     LaunchedEffect(observing, result.settled) { if (observing && result.settled) { why = ""; lookingAgain = false; observing = false } }
     // A door this client cannot make from here draws nothing, its line included: one the catalogue did not grant, or one the row
@@ -76,6 +82,7 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 if (verb == CardVerb.CANCEL_TASK) cancelling = true
                 // The observation door requires a reason: the press asks for it first.
                 else if (verb == CardVerb.OBSERVE) lookingAgain = true
+                else if (verb == CardVerb.RETRY_INTEGRATION || verb == CardVerb.RERUN_CHECK) retryVerb = verb.name
                 else submit(verb, CardInput(triggerId = if (verb == CardVerb.RETRY_TASK) UUID.randomUUID().toString() else null))
             })
             action == "OPEN_TASK_SESSION" -> ExceptionCards.openTaskSessionLink(row)?.let { link -> { open(link) } }
@@ -84,6 +91,14 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
             action == "OPEN_COORDINATOR" -> row.obj("delivery")?.text("sessionId")?.let { id -> { open("orbit-session:$id") } }
             action == "REVIEW" -> row.text("promotionId")?.let { id -> { review(id) } }
             else -> null
+        }
+    }
+    @Composable fun retryPrompt() {
+        val verb = retryVerb?.let { name -> CardVerb.entries.firstOrNull { it.name == name } } ?: return
+        val label = ExceptionCards.actionLabel(row, "RETRY") ?: verb.label
+        ReasonPanel("${card.key}:retry", "${card.key}:retry-reason", label, ExceptionCards.retryReasonHint, ExceptionCards.retryReasonQuestion, label,
+            retryWhy, { retryWhy = it.take(ExceptionCards.retryReasonMaxLength) }, enabled, back = { retryVerb = null }) {
+            retrying = true; submit(verb, CardInput(text = retryWhy))
         }
     }
     val tone = LocalOrbitColors.current.needsYou
@@ -108,6 +123,7 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
         if (whoFixes) {
             WhoFixesBody(card, enabled, fresh, result, mergeCard, projectName, escalationSeconds, coordinator, open, discuss, main, ::pressFor,
                 markHandled = { asking = true }, cancel = { cancelling = true })
+            retryPrompt()
             if (asking) ReasonPanel("${card.key}:mark-handled", "${card.key}:reason", ExceptionCards.markHandledTitle, ExceptionCards.markHandledBody,
                 ExceptionCards.markHandledReason, ExceptionCards.markHandled, reason, { reason = it.take(ExceptionCards.markHandledMaxLength) }, enabled,
                 back = { asking = false }) {
@@ -167,6 +183,7 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 ExceptionCards.handlingReason(row)?.let { FactRowView(card.key, ExceptionCards.FactRow(ExceptionCards.reasonLabel, it)) }
             }
         }
+        retryPrompt()
         if (lookingAgain) ReasonPanel("${card.key}:observe", "${card.key}:observe-reason", ExceptionCards.observeTitle, ExceptionCards.observeBody,
             ExceptionCards.observeReason, ExceptionCards.observeAgain, why, { why = it.take(ExceptionCards.observeReasonMaxLength) }, enabled,
             back = { lookingAgain = false }) {
@@ -428,7 +445,10 @@ private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean
     val youDoors = drawn.filter { it !in setOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "CANCEL_TASK", "OPEN_LANDING", "OPEN_COORDINATOR") }
         .mapNotNull { action -> pressFor(action)?.let { action to it } }
     val fixMyself = if ("OPEN_TASK_SESSION" in drawn) pressFor("OPEN_TASK_SESSION") else null
-    val youRow: (@Composable () -> Unit)? = if (fixMyself == null && youDoors.isEmpty()) null else ({
+    // A check the platform stopped at its budget: rerun as it is, it times out again — so the You row says how long it ran against the
+    // limit and opens the project page, whose How it runs holds the Merge check row.
+    val timedOut = ExceptionCards.timedOutCheck(row)
+    val youRow: (@Composable () -> Unit)? = if (fixMyself == null && youDoors.isEmpty() && timedOut == null) null else ({
         Column(Modifier.fillMaxWidth().testTag("$key:who:you"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(ExceptionCards.whoFixesYou, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
             fixMyself?.let {
@@ -443,6 +463,15 @@ private fun WhoFixesBody(card: InteractionCard, enabled: Boolean, fresh: Boolean
                 Door(tag, ExceptionCards.actionConsequence(row, action)) {
                     Weighted(ExceptionCards.PressTier.SECONDARY, ExceptionCards.actionLabel(row, action) ?: action, if (verb == null) true else enabled, tag,
                         danger = action == "ABANDON", onClick = pressed)
+                }
+            }
+            timedOut?.let { check ->
+                Text(ExceptionCards.checkRanAgainstLimit(check), Modifier.testTag("$key:time-limit"), style = MaterialTheme.typography.bodySmall,
+                    color = secondary)
+                projectId?.let { id ->
+                    Door("$key:change-check", ExceptionCards.checkTimeLimitConsequence) {
+                        LinkPress(ExceptionCards.checkTimeLimitPress, true, "$key:change-check") { open("orbit-project:$id") }
+                    }
                 }
             }
         }
