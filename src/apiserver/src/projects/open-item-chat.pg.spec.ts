@@ -729,6 +729,49 @@ test('refused with its reason where there is no conversation to take the message
     }
   });
 
+// ── an escalated item whose coordinator cannot be reached ─────────────────────────────────────
+
+test('escalated, coordinator reaped while its runner is away: the sentence stops offering the coordinator and the row says it cannot be reached; reachable, both are as before',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'chat-unreachable');
+      const red = await failedLanding(stack, w, 'chat-unreachable');
+      await escalate(stack, red.itemId);
+
+      // Reachable: the owner may ask the coordinator again, and the sentence says so.
+      await stack.db.runner.update({ where: { id: w.runnerId }, data: { lastHeartbeatAt: new Date() } });
+      let read = await rowOf(stack, w, red.itemId);
+      assert.equal(read.group, 'needsYou');
+      assert.equal(read.row.assigneeReason, 'ESCALATED');
+      assert.ok(read.row.actions.includes('ASK_COORDINATOR_AGAIN'), 'the press that asks the coordinator is drawn');
+      assert.equal(read.row.requiredAction,
+        'This task cannot reach the project branch until its landing check passes — re-run it or ask the coordinator to fix it.');
+      assert.equal(read.row.chat.refusal, null);
+      assert.equal(read.row.coordinatorUnreachable, false);
+
+      // 2026-11-15: the runner went silent mid-turn and the reaper failed the coordinator's run —
+      // FAILED with the cancel it writes beside it — while the runner stayed away.
+      await stack.db.session.update({
+        where: { id: w.coordinatorSessionId },
+        data: { status: RunStatus.FAILED, cancelRequestedAt: new Date(), finishedAt: new Date(), error: 'runner offline' },
+      });
+      await stack.db.runner.update({
+        where: { id: w.runnerId },
+        data: { status: RunnerStatus.OFFLINE, lastHeartbeatAt: new Date(Date.now() - 60 * 60_000) },
+      });
+      read = await rowOf(stack, w, red.itemId);
+      assert.ok(!read.row.actions.includes('ASK_COORDINATOR_AGAIN'), 'no press that asks the coordinator');
+      assert.equal(read.row.requiredAction,
+        'This task cannot reach the project branch until its landing check passes — re-run it.');
+      assert.doesNotMatch(read.row.requiredAction ?? '', /coordinator/i);
+      assert.equal(read.row.chat.refusal, 'COORDINATOR_UNAVAILABLE');
+      assert.equal(read.row.coordinatorUnreachable, true, 'the heading names the unreachable coordinator');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('the open-item-chat PostgreSQL target is explicitly disposable', { skip }, () => {
   assert.doesNotThrow(() => assertCoordinatorPgUrlIsIsolated(URL));
 });

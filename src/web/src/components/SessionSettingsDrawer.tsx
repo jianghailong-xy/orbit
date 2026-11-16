@@ -401,8 +401,8 @@ export function SessionSettingsDrawer({
         </Section>
 
         <Section title="Notifications" note="iOS and Android">
-          <Row label="When a turn finishes">
-            <Select className="ss-select" aria-label="When a turn finishes" disabled={!settings}
+          <Row label="When the session finishes">
+            <Select className="ss-select" aria-label="When the session finishes" disabled={!settings}
               value={settings?.notifyTurnFinished ?? 'inherit'}
               onValueChange={(v) => setNotify('notifyTurnFinished', v)}
               options={notifyOptions(prefs?.notifySessionFinished === false ? "Don't notify" : 'Notify')} />

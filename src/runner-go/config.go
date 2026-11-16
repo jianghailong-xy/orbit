@@ -82,6 +82,17 @@ func machineHome() string {
 	return ".orbit"
 }
 
+// engineStore is where the runner keeps the pinned builds it installs itself (Cursor CLI's and DeepSeek
+// Harness's version directories): Orbit's home, unless ORBIT_ENGINE_STORE names a directory that already
+// ships them, as the managed runner image's read-only /opt/orbit-engines does. Accounts, usage and every
+// other piece of state stay in Orbit's home either way.
+func engineStore() string {
+	if d := os.Getenv("ORBIT_ENGINE_STORE"); d != "" {
+		return d
+	}
+	return machineHome()
+}
+
 func configPath() string { return filepath.Join(machineHome(), "config.json") }
 func runsDir() string    { return filepath.Join(machineHome(), "runs") }
 

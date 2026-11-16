@@ -1139,7 +1139,9 @@ export const MACHINE_RESOURCES_CAPABILITY = 'machine-resources/v1';
 /** One reading of a machine (RunnerHeartbeatRequest.resources; the runner's MachineResources). A figure the
  *  platform has no answer for is absent — the page shows a dash, never a zero. Bytes are whole numbers. */
 export interface RunnerResources {
-  /** The whole machine's CPU in use since the runner's previous reading, 0–100. */
+  /** The whole machine's CPU in use since the runner's previous reading, 0–100. A runner in a container reports
+   *  the container's: the share of its CPU limit, its limit as cpuCores (rounded up), its memory limit and what is
+   *  left of it, and no load1 (the kernel keeps one only for the machine). */
   cpuPercent?: number;
   cpuCores?: number;
   /** The one-minute load average. */
@@ -1147,7 +1149,8 @@ export interface RunnerResources {
   memTotalBytes?: number;
   /** What the system can hand out without swapping; dropped page cache counts as available. */
   memAvailableBytes?: number;
-  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. */
+  /** The fullest filesystem among the agents' working directories, else the one holding the repos root. A managed
+   *  runner on Docker reports its volume instead: the volume's limit, and what is left of it. */
   diskTotalBytes?: number;
   diskFreeBytes?: number;
 }

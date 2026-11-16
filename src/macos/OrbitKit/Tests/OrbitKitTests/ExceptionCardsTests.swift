@@ -103,6 +103,8 @@ final class ExceptionCardsTests: XCTestCase {
         var question: CoordinatorQuestion?
         /// What the item's payload holds, as the read serves it (§7.5). Nil for an older item.
         var facts: OpenItemFacts?
+        /// The server's reading that the coordinator can be neither asked nor messaged now.
+        var coordinatorUnreachable = false
 
         func build() -> ProjectOpenItemRow {
             ProjectOpenItemRow(itemId: itemId, kind: kind, title: title, detailLine: detailLine,
@@ -112,7 +114,8 @@ final class ExceptionCardsTests: XCTestCase {
                                promotionId: promotionId,
                                fuseEpisodeId: fuseEpisodeId, delivery: delivery, actions: actions,
                                requiredAction: requiredAction, primaryAction: primaryAction,
-                               handledBy: handledBy, question: question, facts: facts)
+                               handledBy: handledBy, question: question, facts: facts,
+                               coordinatorUnreachable: coordinatorUnreachable)
         }
     }
 
@@ -282,6 +285,35 @@ final class ExceptionCardsTests: XCTestCase {
         XCTAssertEqual(ExceptionCards.headingLine(escalated, now: now),
                        "Now yours — no one acted on this for 2h")
         XCTAssertEqual(ExceptionCards.subject(escalated, now: now), escalated.title)
+    }
+
+    /// 2026-11-15: an escalated card said "no one acted on this" over doors and a chat that could not
+    /// reach the coordinator. With the server reading it unreachable, the heading says so — the
+    /// browser's own sentence — and with it reachable the heading is what it was.
+    func testAnEscalatedItemWhoseCoordinatorCannotBeReachedSaysSo() throws {
+        let web = try webSource()
+        let unreachable = row {
+            $0.coordinatorUnreachable = true
+            $0.actions = [.openTaskSession, .cancelTask]
+        }
+        XCTAssertEqual(ExceptionCards.heading(unreachable, now: now),
+                       try require(web, "Now yours — the coordinator can’t take messages"))
+        XCTAssertEqual(ExceptionCards.heading(unreachable, now: now),
+                       ExceptionCards.escalatedUnreachableHeading)
+        XCTAssertEqual(ExceptionCards.heading(row(), now: now), "Now yours — no one acted on this for 2h")
+
+        let decoded = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+            {"itemId":"i","kind":"INTEGRATION_CONFLICT","title":"Merge conflict: t","assignee":"OWNER",
+             "assigneeReason":"ESCALATED","waitingSince":"2026-09-19T19:01:41.497Z",
+             "escalatedAt":"2026-09-19T21:02:23.903Z","actions":["OPEN_TASK_SESSION"],
+             "coordinatorUnreachable":true}
+            """.utf8))
+        XCTAssertTrue(decoded.coordinatorUnreachable)
+        let older = try JSONDecoder().decode(ProjectOpenItemRow.self, from: Data("""
+            {"itemId":"i","kind":"INTEGRATION_CONFLICT","title":"Merge conflict: t","assignee":"OWNER",
+             "assigneeReason":"ESCALATED","waitingSince":"2026-09-19T19:01:41.497Z","actions":[]}
+            """.utf8))
+        XCTAssertFalse(older.coordinatorUnreachable, "a server that predates the field reads as reachable")
     }
 
     /// How long the coordinator had it, from the two instants — never from the project's setting,

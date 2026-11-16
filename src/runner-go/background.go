@@ -196,16 +196,6 @@ type bgTailer struct {
 	// shutdown stays nil where no runner is at stake.
 	shutdown          context.Context
 	stopShutdownDrain func() bool
-	// engineResident answers "is there an engine to read this right now". Immutable
-	// after newBgTailer/notifyWhenCold; never called while b.mu is held, because the
-	// pool holds its own lock to answer and already calls back into this tailer.
-	// nil where no pool is at stake (parsing tests), and read as "resident" — the
-	// safe direction, since it only ever suppresses an alert.
-	engineResident func() bool
-	// notify is the existing per-account push channel (`orbit notify` / the notify
-	// MCP tool), reached here for the one thing this project exists to deliver: the
-	// job you left running finished, and nobody was here to see it. nil disables it.
-	notify func(message string) error
 	// wake asks the control plane to wake this session for one of its jobs (sendWake). Installed
 	// once by wakeSessionVia, before any job can start, so it stays immutable for the tailer's
 	// life; nil where no control plane is at stake, and then no job wakes anybody.
@@ -259,14 +249,6 @@ func newBgTailer(ctx context.Context, emit emitFn, holds worktreeHoldRegistry) *
 	// has to remember it, and stopped by cancel with every other goroutine this ctx owns.
 	go tailer.heartbeatJobs()
 	return tailer
-}
-
-// notifyWhenCold installs the two halves of "tell the human": how to ask whether
-// an engine is resident, and how to reach their devices. Called once, before any
-// job can be started, so the fields stay immutable for the tailer's life.
-func (b *bgTailer) notifyWhenCold(engineResident func() bool, notify func(message string) error) {
-	b.engineResident = engineResident
-	b.notify = notify
 }
 
 // wakeSessionVia installs how a job that asked to wake its session reaches the control plane.

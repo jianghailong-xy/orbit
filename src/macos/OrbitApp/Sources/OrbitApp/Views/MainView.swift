@@ -197,18 +197,13 @@ struct SectionSidebar: View {
             // Scheduled under Tasks with the schedules failing or held (web board 01 ①): account-wide, never a
             // row of a workspace's list; away while the server predates scheduled tasks.
             scheduled: model.scheduled.map { !$0.unsupported } ?? false,
-            scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0,
-            // New wiki… under the Wiki row once there is a wiki (docs/wiki-explicit-creation-design.md §3.4).
-            newWiki: model.wiki?.shown == true && model.wiki?.spaces.isEmpty == false)
+            scheduledNeedsYou: model.scheduled?.needsYouCount ?? 0)
         let openProjects = model.projects?.drawerProjects(coordinators: model.projectCoordinators) ?? []
         let projects = AgentListLogic.sidebarProjects(openProjects, coordinators: model.projectCoordinators)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
         return List(selection: $selection) {
             ForEach(sections) { row in
-                switch row.newWiki {
-                case true:  newWikiRow
-                case false: sectionRow(row)
-                }
+                sectionRow(row)
             }
             // "Waiting on you", raised as a sheet over whatever is selected.
             OwnerRequestInboxEntry()
@@ -303,20 +298,6 @@ struct SectionSidebar: View {
             applied = now
             selection = now
         }
-    }
-
-    /// New wiki…: grey, a plus and no count, as the drawer draws it; it raises the Create wiki form and selects nothing.
-    private var newWikiRow: some View {
-        Button {
-            model.wiki?.creating = true
-        } label: {
-            Label(WikiStartCopy.newWiki, systemImage: "plus")
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("sidebar-new-wiki")
     }
 
     /// Projects, Tasks or the Wiki, with the drawer's amber count of what waits on you there. One

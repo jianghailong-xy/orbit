@@ -699,7 +699,6 @@ func (b *bgTailer) finishJob(job *bgJob, exit int) {
 	if b.ctx.Err() == nil || reason != "" {
 		if b.markTerminal(job.id) {
 			b.emit(evBackgroundTask, job.endPayload(status, exit, reason))
-			b.alertIfNobodyIsWatching(job, status, exit)
 			b.wakeOnEnd(job, reason)
 		}
 	}
@@ -751,33 +750,6 @@ func (j *bgJob) endPayload(status string, exit int, reason string) map[string]in
 		payload["reason"] = reason
 	}
 	return payload
-}
-
-// alertIfNobodyIsWatching is the whole point of stage 2b: a job that finishes while
-// the session is cold has nobody to tell. The event above is durable, but a durable
-// event is something you find when you come back — and "come back and find out" is
-// the behaviour this project is removing.
-//
-// Cold only. A resident engine is going to be handed the transcript of this event on
-// its next turn, and paying a lock-screen alert for something already on screen is
-// how a channel gets muted. A kill is not announced either: an explicit one was asked
-// for by whoever is reading the answer, and a drain kill happens while the session is
-// being torn down around it.
-//
-// Called with b.mu released — engineResident takes the pool's lock, and the pool
-// takes this tailer's.
-func (b *bgTailer) alertIfNobodyIsWatching(job *bgJob, status string, exit int) {
-	if b.notify == nil || b.engineResident == nil || b.engineResident() {
-		return
-	}
-	if status != bgStatusCompleted && status != bgStatusFailed {
-		return
-	}
-	// Read on a lock screen: what ended, how it ended, and the id that reads the rest.
-	message := fmt.Sprintf("Background %s %s ended (exit code %d): %s", job.kind, job.id, exit, job.command)
-	if err := b.notify(message); err != nil {
-		logln("could not alert the owner about background job", job.id+":", err)
-	}
 }
 
 // bgWake is what a job tells the control plane when it wakes its session. Field names are the wire

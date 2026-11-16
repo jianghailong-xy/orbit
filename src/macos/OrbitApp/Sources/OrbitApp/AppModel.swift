@@ -1887,6 +1887,10 @@ final class AppModel {
             // (PushService.notifyApprovalRequest) — posting the diff's banner too would alert
             // twice for one approval. macOS has no APNs path, so it keeps announcing them here.
             if case .needsApproval = event { continue }
+            // A settled run likewise (PushService.notifySessionSettled), which also honours the
+            // session's mute and the account's switch; this banner would be a second, differently
+            // worded alert for the same run.
+            if case .finished = event { continue }
             #endif
             notifications.post(Notifications.content(for: event))
         }
