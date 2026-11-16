@@ -4,7 +4,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 import { Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { RunEventType } from '@orbit/shared';
+import { PROMPT_OPTIMIZER_MAX_REPLYING_TO_CHARS, RunEventType } from '@orbit/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersController } from '../users/users.controller';
@@ -354,6 +354,25 @@ test('contextUsed names only what was there: a picked workspace with no wiki, a 
   assert.deepEqual((await optimize({ draft: 'x' })).body.contextUsed, []);
   assert.deepEqual(wikiSearches, [], 'no wiki space: the wiki is not searched');
   assert.equal(asked[3].body.messages[1].content, 'Draft:\nx');
+});
+
+test('a reply to a card carries what it answers, in front of the draft, cut to the most the server reads', async (t) => {
+  const { optimize } = await boot(t);
+  replies = [plain('A'), plain('B'), plain('C')];
+  const question = 'Runner full: which way should the subtitle go?\n- Add the count — "Runner full · 16/16"';
+  assert.equal((await optimize({ draft: 'mock it first', sessionId: BARE_SESSION, replyingTo: `  ${question}\n` })).status, 200);
+  assert.equal(
+    asked[0].body.messages[1].content,
+    `The draft is the owner's reply to this, which the agent is waiting on:\n${question}\n\n` +
+      'Keep it a reply to that: make clear which question or option it answers, and do not turn it into a new request.' +
+      '\n\nDraft:\nmock it first',
+  );
+  await optimize({ draft: 'x', replyingTo: 'q'.repeat(PROMPT_OPTIMIZER_MAX_REPLYING_TO_CHARS + 50) });
+  assert.ok(asked[1].body.messages[1].content.includes(`${'q'.repeat(PROMPT_OPTIMIZER_MAX_REPLYING_TO_CHARS)}\n\nKeep`));
+  assert.ok(!asked[1].body.messages[1].content.includes('q'.repeat(PROMPT_OPTIMIZER_MAX_REPLYING_TO_CHARS + 1)));
+  // Blank says nothing.
+  await optimize({ draft: 'x', replyingTo: '  ' });
+  assert.equal(asked[2].body.messages[1].content, 'Draft:\nx');
 });
 
 test('code blocks, inline code and URLs never reach the model and come back byte for byte', async (t) => {

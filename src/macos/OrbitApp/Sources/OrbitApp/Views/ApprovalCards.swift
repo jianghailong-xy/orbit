@@ -934,7 +934,8 @@ struct QuestionCard: View {
         Button {
             dismissReview()
             console.startChatReply(approvalID: approval.id,
-                                   question: Approvals.chatReplyLabel(questions))
+                                   question: Approvals.chatReplyLabel(questions),
+                                   about: Approvals.chatReplyContext(questions))
         } label: {
             Label("Chat about this", systemImage: "bubble.left.and.bubble.right")
                 .approvalActionLabel()
