@@ -35,6 +35,11 @@
 .settings-back .anticon {
   font-size: 11px;
 }
+/* In the nav, Back to Orbit takes the whole row: anywhere across it is a click. */
+.settings-nav > .settings-back {
+  display: flex;
+  width: 100%;
+}
 
 .settings-title {
   margin: 10px 8px 12px;
