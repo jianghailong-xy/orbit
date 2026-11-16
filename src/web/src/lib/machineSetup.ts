@@ -1,5 +1,7 @@
 import {
   CREATE_WORKDIR_CAPABILITY,
+  managedSetupState,
+  type ManagedRunnerStatus,
   DIR_PROBE_CAPABILITY,
   type DirProbe,
   type LoginEngine,
@@ -7,7 +9,8 @@ import {
   type RunnerEngineHealth,
   newFolderRoot,
 } from '@orbit/shared';
-import { encodeId } from './idCodec';
+import { encodeId, routeId } from './idCodec';
+import { MANAGED_RUNNER_LABEL } from './runnerCopy';
 import {
   SETUP_FOUND_PREFIX,
   SETUP_NEW_FOLDER_DONE,
@@ -32,18 +35,27 @@ import { workspaceRunnerId, type OrderableWorkspace } from './workspaceOrder';
  *  machine with none has no workspace to name; `/workspaces/<runner>` redirects here (WorkspaceConsole). */
 export const machineDraftPath = (runnerId: string): string => `/runners/${encodeId(runnerId)}/new`;
 
-/** The name the app labels a machine with everywhere. */
-export const machineName = (runner: { name: string; displayName?: string | null }): string =>
-  runner.displayName || runner.name;
+/** The name the app labels a machine with everywhere: the owner's own name for it, else Orbit Cloud for
+ *  the account's managed runner (`managedRunnerId`, the managed status's runnerId — never its stored
+ *  name), else the name it registered with. */
+export const machineName = (
+  runner: { id?: string; name?: string; displayName?: string | null },
+  managedRunnerId?: string | null,
+): string =>
+  runner.displayName?.trim() || (isManagedRunner(runner, managedRunnerId) ? MANAGED_RUNNER_LABEL : (runner.name ?? ''));
 
-/** Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no workspace
- *  of this account on them: an offline one is already what Machines & models says needs you. */
+/** Whether `runner` is the account's managed runner, by id. */
+export const isManagedRunner = (runner: { id?: string } | null | undefined, managedRunnerId: string | null | undefined): boolean =>
+  !!runner?.id && !!managedRunnerId && routeId(runner.id) === routeId(managedRunnerId);
+
+/** Machines without a workspace, in list order: online machines and managed machines accepting queued work. */
 export function machinesToSetUp<R extends { id: string; online?: boolean }>(
   runners: readonly R[],
   workspaces: readonly OrderableWorkspace[],
+  managedStatus?: ManagedRunnerStatus | null,
 ): R[] {
   const taken = new Set(workspaces.map(workspaceRunnerId));
-  return runners.filter((runner) => runner.online && !taken.has(runner.id));
+  return runners.filter((runner) => (runner.online || managedSetupState(runner.id, managedStatus) !== null) && !taken.has(runner.id));
 }
 
 /** Whether a machine can be asked about a path at all, and whether it can make a new folder: the

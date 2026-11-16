@@ -2124,7 +2124,7 @@ final class ConsoleModel {
     }
 
     var availability: SendAvailability {
-        isDraft ? (managed?.blocksNewSession == true ? .blocked : .sendNow)
+        isDraft ? .sendNow
                 : ComposerLogic.availability(status: sessionStatus, capabilities: sendCapabilities)
     }
 
@@ -2226,7 +2226,7 @@ final class ConsoleModel {
                                fastMode: Bool)?
 
     private func adoptRunnerSnapshot(_ runner: Runner) {
-        runnerName = runner.displayName?.isEmpty == false ? runner.displayName : runner.name
+        runnerName = RunnerPageFormat.displayName(runner)
         runnerRegion = runner.region
         runnerOnline = runner.online
         runnerHeartbeatLeaseOwner = runner.heartbeatLeaseOwner

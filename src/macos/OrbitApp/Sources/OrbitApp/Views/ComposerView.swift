@@ -749,7 +749,7 @@ struct ComposerView: View {
             Spacer(minLength: 8).layoutPriority(-1)
             // No model to show where a first session cannot start yet: the managed default workspace
             // before its runner was ever ready (`ConsoleModel.managed`), as on the web.
-            if console.managed?.blocksNewSession != true { modelMenu }
+            modelMenu
             // A session on an account pool spends one of its accounts at a time: name that account
             // beside the quota, which is that account's own (web parity — the pool's name is the
             // model control's provider row, and says nothing about whose quota this is). Beside

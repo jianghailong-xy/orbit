@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { CREATE_WORKDIR_CAPABILITY, newFolderRoot } from '@orbit/shared';
+import { CREATE_WORKDIR_CAPABILITY, MANAGED_RUNNER_REPOS_ROOT, newFolderRoot } from '@orbit/shared';
 
 /**
  * The workspace POST /sessions makes with a session, read from the request (docs/first-workspace-contract.md §3): the
@@ -75,11 +75,16 @@ export function isNewFolderName(value: unknown): value is string {
  * Where a new folder goes on this runner: `<home>/<folder>` on one that declares create-workdir/v2 (home being the directory
  * its reposRoot sits in), `<reposRoot>/<folder>` on an older one (@orbit/shared newFolderRoot), or the 409 when the runner cannot make one — too old
  * to declare `create-workdir/v1`, or without a reported reposRoot. Shared by POST /sessions and POST /workspaces.
+ *
+ * A managed runner that has not reported yet — still being set up, or never woken since — makes it in its image's
+ * fixed repos folder (MANAGED_RUNNER_REPOS_ROOT), so its first workspace can be made before it is up
+ * (docs/managed-runner-no-default-workspace.md).
  */
 export function newFolderWorkDirOn(
-  runner: { reposRoot: string | null; capabilities: readonly string[]; capabilitiesReportedAt: Date | null },
+  runner: { reposRoot: string | null; capabilities: readonly string[]; capabilitiesReportedAt: Date | null; managedRunner?: { id: string } | null },
   folder: string,
 ): string {
+  if (runner.managedRunner && !runner.capabilitiesReportedAt) return newFolderWorkDir(MANAGED_RUNNER_REPOS_ROOT, folder);
   const reposRoot = runner.reposRoot?.trim();
   const makesFolders = !!runner.capabilitiesReportedAt && runner.capabilities.includes(CREATE_WORKDIR_CAPABILITY);
   if (!makesFolders || !reposRoot) {

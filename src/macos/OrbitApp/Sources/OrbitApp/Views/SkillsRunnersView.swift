@@ -634,7 +634,8 @@ struct RunnerDetailContent: View {
         } ?? false
         let items = RunnerAttention.runnerAttention(runner: runner, workspaces: workspaces,
                                                     nowMs: RunnerPageFormat.nowMs(now),
-                                                    latestVersion: runners.latestVersion)
+                                                    latestVersion: runners.latestVersion,
+                                                    managed: managed != nil)
             // The managed runner's heartbeat "offline" card is not repeated beside its shared state.
             .filter { !(managed != nil && $0.kind == .offline) }
         Form {
@@ -668,7 +669,7 @@ struct RunnerDetailContent: View {
         }
         .formStyle(.grouped)
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
-        .navigationTitle(RunnerPageFormat.displayName(runner))
+        .navigationTitle(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow?.runnerID))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -716,12 +717,12 @@ struct RunnerDetailContent: View {
     /// its mark. The managed runner's state is the shared short label (Asleep, never Offline), in its
     /// tone's colour.
     @ViewBuilder private func head(now: Date) -> some View {
-        let host = RunnerPageFormat.hostLine(runner)
+        let host = RunnerPageFormat.hostLine(runner, managed: managedRow != nil)
         Section {
             HStack(spacing: 14) {
                 RunnerMachineTile(presence: RunnerPageFormat.presence(runner, now: now))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(RunnerPageFormat.displayName(runner))
+                    Text(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow?.runnerID))
                         .font(.title3.weight(.bold))
                         .lineLimit(2)
                     if let managed = managedRow {
@@ -1097,8 +1098,9 @@ struct RunnerDetailContent: View {
             .runnerRowButtonStyle()
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_HOSTNAME, runner.hostname)
             aboutRow(RunnerPageCopy.RUNNER_ABOUT_VERSION,
-                     RunnerPageFormat.versionValue(runner, latest: runners.latestVersion))
-            aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, RunnerPageFormat.lastUpdate(runner))
+                     RunnerPageFormat.versionValue(runner, latest: runners.latestVersion, managed: managedRow != nil))
+            // A managed runner never installs a release into itself: Orbit replaces its image.
+            aboutRow(RunnerPageCopy.RUNNER_ABOUT_LAST_UPDATE, managedRow == nil ? RunnerPageFormat.lastUpdate(runner) : nil)
             // Only while a release is waiting: a check with nothing newer to install is not offered.
             if RunnerPageFormat.isBehindLatest(runner, latest: runners.latestVersion),
                RunnerAttention.runnerCanUpdateNow(runner, nowMs: RunnerPageFormat.nowMs(now)) {
