@@ -2407,6 +2407,54 @@
     }
   },
   {
+    "name": "selfUpdate disabledByEnv on a managed runner: its version is no release, so nothing is behind",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "managed-95884b154feb3d4e2a575fb012c4185b20c282ac",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "selfUpdate": {
+          "state": "disabledByEnv",
+          "reason": "ORBIT_NO_SELFUPDATE is set"
+        },
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes"
+          },
+          {
+            "engine": "kimi",
+            "installed": true,
+            "version": "2.1.1",
+            "auth": "yes"
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · vmanaged-95884b154feb3d4e2a575fb012c4185b20c282ac",
+      "disk": null
+    }
+  },
+  {
     "name": "selfUpdate failed and behind: its update failed, with Update Runner Now, though it runs as root",
     "input": {
       "runner": {

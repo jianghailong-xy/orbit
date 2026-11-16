@@ -958,7 +958,8 @@ internal object RunnerPage {
      * report it is judged by runsAsRoot, as before: a regular user stays on its version until someone runs the command.
      */
     private fun cannotSelfUpdateItem(runner: JsonObject, latest: String?, offline: Boolean): AttentionItem? {
-        val version = runner.str("version")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // A version that isn't a release number (a managed runner's managed-<sha>, a dev build) is behind nothing.
+        val version = runner.str("version")?.trim()?.takeIf { Regex("^[vV]?[0-9]").containsMatchIn(it) } ?: return null
         if (latest.isNullOrEmpty() || compareRunnerVersions(version, latest) >= 0) return null
         val command = RunnerCopy.UPGRADE_COMMAND
         val report = runner.obj("selfUpdate")
