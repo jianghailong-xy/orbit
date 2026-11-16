@@ -124,12 +124,12 @@ final class SubagentBlockTests: XCTestCase {
 
     // MARK: - the third line: what came of it
 
-    func testAWriterThatEndedCountsTheFilesItChangedWithItsTimeAndCost() {
+    func testAWriterThatEndedCountsTheFilesItChangedWithItsTimeButNoCost() {
         let block = SubagentBlock.describe(
             input: call, run: run(changedFiles: ["a.ts", "b.ts", "c.ts"]), status: .ok, result: "Added backoff.")
         XCTAssertEqual(block.outcome, "3 files changed")
         XCTAssertTrue(block.outcomeIsFiles)
-        XCTAssertEqual(block.numbers, "41s · $0.21")
+        XCTAssertEqual(block.numbers, "41s", "the run's cost is not shown")
         XCTAssertEqual(block.changedFiles, ["a.ts", "b.ts", "c.ts"])
         let one = SubagentBlock.describe(input: call, run: run(changedFiles: ["a.ts"]), status: .ok)
         XCTAssertEqual(one.outcome, "1 file changed")
@@ -162,11 +162,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertNotNil(block.startedAt)
     }
 
-    func testACostUnderACentReadsAsLessThanACent() {
-        XCTAssertEqual(SubagentBlock.describe(input: call, run: run(costUsd: 0.004), status: .ok).numbers, "41s · <$0.01")
-        XCTAssertEqual(SubagentBlock.describe(input: call, run: run(costUsd: 0), status: .ok).numbers, "41s · <$0.01")
-    }
-
     func testTheRunningLineCountsTimeAndSteps() {
         XCTAssertEqual(SubagentBlock.runningNumbers(elapsed: 72, steps: 9), "1m 12s · 9 steps")
         XCTAssertEqual(SubagentBlock.runningNumbers(elapsed: 5, steps: 1), "5s · 1 step")
@@ -193,7 +188,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(group.progress, "2 of 3 done")
         XCTAssertEqual(group.engines, "Claude → Codex, DeepSeek", "the parent's own engine is not a move")
         XCTAssertEqual(group.machines, "2 machines")
-        XCTAssertEqual(group.cost, "$0.02 so far")
         XCTAssertEqual([group.done, group.failed, group.running], [2, 0, 1])
     }
 
@@ -204,7 +198,6 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(done.progress, "All done")
         XCTAssertNil(done.engines, "all ran on the parent's engine")
         XCTAssertNil(done.machines)
-        XCTAssertEqual(done.cost, "$0.42")
         let mixed = [run(status: "DONE"), run(status: "FAILED")]
         let failed = SubagentGroup.describe(mixed.map { SubagentBlock.describe(input: call, run: $0, status: .ok) },
                                             runs: mixed, parentEngine: "dsh")
