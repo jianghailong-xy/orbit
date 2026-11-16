@@ -59,6 +59,13 @@ public enum CoordinatorHandoffCopy {
     public static func waitsMovedHere(_ count: Int) -> String {
         count == 1 ? "1 wait moved here" : "\(count) waits moved here"
     }
+    public static func historyBefore(_ decisions: Int, _ merges: Int) -> String? {
+        guard decisions != 0 || merges != 0 else { return nil }
+        let decision = decisions == 1 ? "decision" : "decisions"
+        let merge = merges == 1 ? "merge" : "merges"
+        return "\(decisions) \(decision) and \(merges) \(merge) before this conversation"
+    }
+    public static let openPrevious = "Open previous coordinator"
     public static let handedOver = "Handed over to a new coordinator."
     public static let openIt = "Open it"
     public static let tryAgain = "Try again"
@@ -250,5 +257,26 @@ public struct CoordinatorHandoffNote: Equatable, Sendable {
         let bare = text.trimmingCharacters(in: CharacterSet(charactersIn: "*_:"))
             .trimmingCharacters(in: .whitespaces)
         return CoordinatorHandoffCopy.sections.contains(bare) ? bare : nil
+    }
+}
+
+/// Pure counts of readable records strictly before a conversation's creation.
+public enum CoordinatorCleanStart {
+    public struct Counts: Equatable, Sendable {
+        public let decisions: Int
+        public let merges: Int
+    }
+
+    public static func counts(createdAt: String?, decisions: [String], merges: [String]) -> Counts {
+        guard let createdAt, let start = ThinkingSummary.date(createdAt) else {
+            return Counts(decisions: 0, merges: 0)
+        }
+        func before(_ stamps: [String]) -> Int {
+            stamps.filter { stamp in
+                guard let at = ThinkingSummary.date(stamp) else { return false }
+                return at < start
+            }.count
+        }
+        return Counts(decisions: before(decisions), merges: before(merges))
     }
 }

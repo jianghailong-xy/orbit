@@ -1415,6 +1415,7 @@ struct TranscriptView: View {
                              running: console.state.status == .running,
                              decisionCards: console.decisionCards,
                              clocks: console.receiptClocks,
+                             conversationCreatedAt: app.session(id: console.sessionID)?.createdAt,
                              recap: recapCard,
                              watchName: watchWakeName,
                              handoffReceived: app.session(id: console.sessionID)?.coordinatorHandoffReceived,
@@ -1502,7 +1503,10 @@ struct TranscriptView: View {
             CreatedWorkspaceLineView(line: line, console: console)
         case .handoffReceived(let received):
             // The note this coordinator opened with, linking back to the one that wrote it.
-            CoordinatorHandoffNoteCardView(received: received) {
+            CoordinatorHandoffNoteCardView(
+                received: received,
+                counts: console.coordinatorHistoryCounts(
+                    createdAt: app.session(id: console.sessionID)?.createdAt)) {
                 app.route(to: .session(received.handoffFromSessionId))
             }
         case .loadOlder:

@@ -58,6 +58,7 @@ final class CoordinatorContextCopyParityTests: XCTestCase {
             ("noteCardTitle", CoordinatorHandoffCopy.noteCardTitle),
             ("handedOver", CoordinatorHandoffCopy.handedOver),
             ("openIt", CoordinatorHandoffCopy.openIt),
+            ("openPrevious", CoordinatorHandoffCopy.openPrevious),
             ("tryAgain", CoordinatorHandoffCopy.tryAgain),
             ("handOverWithoutNote", CoordinatorHandoffCopy.handOverWithoutNote),
             ("keepThisCoordinator", CoordinatorHandoffCopy.keepThisCoordinator),
@@ -73,6 +74,10 @@ final class CoordinatorContextCopyParityTests: XCTestCase {
                    in: Self.shared)
         assertSays(ts, "count === 1 ? '\(CoordinatorHandoffCopy.waitsMovedHere(1))' : "
                    + "`\(CoordinatorHandoffCopy.waitsMovedHere(7).replacingOccurrences(of: "7", with: "${count}"))`",
+                   in: Self.shared)
+        assertSays(ts, "decisions === 0 && merges === 0 ? null", in: Self.shared)
+        assertSays(ts, "`${decisions} ${decisions === 1 ? 'decision' : 'decisions'} and "
+                   + "${merges} ${merges === 1 ? 'merge' : 'merges'} before this conversation`",
                    in: Self.shared)
         // A refused press: web's toast title is this line's lead (double-quoted for its apostrophe).
         assertSays(ts, "refused: \"\(CoordinatorHandoffCopy.refused)\",", in: Self.shared)

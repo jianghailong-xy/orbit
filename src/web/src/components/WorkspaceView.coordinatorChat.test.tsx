@@ -101,7 +101,8 @@ const COORDINATOR = {
   runStatus: 'AWAITING_INPUT',
   runState: 'AWAITING_INPUT',
   provider: 'claude',
-  createdAt: '2026-09-11T03:00:00Z',
+  // Created before every record these tests place (handoff v2 §4: one stamped before it is not drawn).
+  createdAt: '2026-09-09T00:00:00Z',
   updatedAt: '2026-09-11T03:10:00Z',
 };
 
