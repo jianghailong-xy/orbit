@@ -9381,6 +9381,7 @@ export function WorkspaceView({
     eventsSessionId === selectedId ? currentPromptSuggestion(events) : null,
     {
       idle,
+      queuedTurns: visibleQueuedTurns.length,
       draftEmpty: text === '' && images.length === 0,
       replying: !!replyTo,
       pendingApprovals: approvals.length + (waitingSummary?.pendingApprovals ?? 0),
