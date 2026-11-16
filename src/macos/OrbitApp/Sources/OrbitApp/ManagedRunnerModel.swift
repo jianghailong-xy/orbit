@@ -87,6 +87,7 @@ final class ManagedRunnerModel {
     func reset() {
         status = nil
         display = nil
+        ManagedRunnerIdentity.runnerID = nil
         errorText = nil
         offered = nil
         refreshNotBefore = .distantPast
@@ -110,6 +111,8 @@ final class ManagedRunnerModel {
     private func adopt(_ answer: ManagedRunnerStatus?) {
         status = answer
         display = ManagedRunnerLogic.display(answer)
+        // Every screen that names a machine says Orbit Cloud for this one (RunnerPageFormat.displayName).
+        ManagedRunnerIdentity.runnerID = display == nil ? nil : answer?.runnerId
         refreshNotBefore = Date().addingTimeInterval(ManagedRunnerLogic.refreshInterval(display))
         onStatusChanged(answer)
     }

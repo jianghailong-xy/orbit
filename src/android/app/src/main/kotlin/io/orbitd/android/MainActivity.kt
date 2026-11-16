@@ -394,7 +394,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                 // keyboard — back, title and the page's buttons come back when the keyboard goes.
                 val machineName = if (route.destination == Destination.DRAFT && route.workspaceId == null && route.id != null) {
                     data.effectiveRunnerRows.firstOrNull { ObjectId.same(it.text("id"), route.id) }?.let(RunnerPage::displayName)
-                        ?: data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name
+                        ?: data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName) }
                 } else null
                 if (!PageBar.folds(route)) TopAppBar(modifier = Modifier.testTag("app-bar"),
                     title = {
@@ -526,7 +526,7 @@ private fun routeTitle(route: OrbitRoute, data: DirectoryData): String = when (r
     Destination.GUEST_SESSION -> io.orbitd.android.core.guests.GuestCopy.SHARED_WITH_ME
     Destination.SETTINGS -> if (route.id == "workspace") data.workspaces.firstOrNull { ObjectId.same(it.id, route.workspaceId) }?.name
         ?.let { "$it settings" } ?: settingsTitle(route.id) else settingsTitle(route.id, route.recordId)
-    Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.name)
+    Destination.RUNNER -> runnerTitle(route.recordId, route.id, data.runners.firstOrNull { ObjectId.same(it.id, route.id) }?.let { RunnerPage.nameOf(it.id, it.name, it.displayName) })
     else -> route.destination.name.lowercase().replaceFirstChar(Char::uppercase)
 }
 

@@ -48,7 +48,7 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
     val provider get() = detail?.string("provider").orEmpty()
     val runnerId get() = detail?.string("assignedRunnerId") ?: detail?.string("runnerId")
     val runnerName get() = runner?.let(RunnerPage::displayName)?.takeIf { it.isNotEmpty() }
-        ?: (detail?.get("assignedRunner") as? JsonObject)?.let { it.string("displayName") ?: it.string("name") }
+        ?: (detail?.get("assignedRunner") as? JsonObject)?.let { RunnerPage.nameOf(runnerId, it.string("name"), it.string("displayName")).takeIf { n -> n.isNotEmpty() } }
     val runnerVersion get() = runner?.string("version") ?: (detail?.get("assignedRunner") as? JsonObject)?.string("version")
     /** The engine this session runs on for good: the one it records, else the one its provider ran on before engines were. */
     val engine get() = ProviderEngines.sessionEngine(detail?.string("engine"), provider, providers)
