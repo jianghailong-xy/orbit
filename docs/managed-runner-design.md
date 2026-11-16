@@ -1929,3 +1929,21 @@ which the Docker backend's isolation does not give them.
 - fake-model.py stands in for a model: its steps are regular and fast. The rounds ran beside other sessions' work on the
   HPC host, whose memory pressure made some rounds re-read their page cache from the disk; each round records that, and
   the comparison pools the rounds of a kind.
+
+## Implementation record: a startup deadline outlasted by an image pull
+
+Recorded 2026-11-16, from production. Two hosted runners were rolled onto a new image at 13:35Z (the image roll: drained,
+woken at once as the next generation). Their node, `workstation` in `orbit-ws03`, pulled that image from the registry
+from 13:35:34 to 14:23:15Z: about 800 MB of layers at 100–170 KB/s, as the registry's own log times each blob. Both Pods
+stayed Pending, their init container not yet started, for 48 minutes. The startup deadline is 30 minutes, so at 14:05Z
+the manager failed both `STARTUP_TIMEOUT` ("no fresh heartbeat"). At 14:23:29Z the runners started, reported in with
+the right generation and Pod UID, and stayed `ONLINE` under a mapping left FAILED. Nothing took them up again but an
+owner's retry. The heartbeat identity checks were not at fault.
+
+| Area | As implemented |
+| --- | --- |
+| A Pod still being made | The Kubernetes backend reads a Pod as `preparing` when it is Pending on a node and every container is waiting as `ContainerCreating` or `PodInitializing`, or has started or completed (`kubernetes-backend.ts`, `podPreparing`). STARTING waits on such a Pod past its startup deadline: once the deadline passes it is moved on, with one warn line each time (`whilePreparing`), as `withoutSupply` does for a runner waiting for a login. A pull error (`ErrImagePull`, `ImagePullBackOff`), a container that cannot be created, an init container that crashed, and a Pod no node took are not `preparing`, so the deadline fails them as before. A running Pod whose runner stays silent still fails at the deadline (`managed-runner-manager.pg.spec.ts` case 12). The Docker backend makes an instance whole in its create, so it never reports `preparing`. |
+| A FAILED start that reported in | A mapping FAILED `STARTUP_TIMEOUT` with RUNNING desired is looked at on every sweep. Once the runner has heartbeated freshly since the failure, it goes back to STARTING on the same instance, as an owner's retry would wait on it again (`startupResumed`); `starting` then checks the instance and its report as on any start. Only the instance recorded for the generation can heartbeat at all, because the runner door refuses any other. Its compute was never given back, since a recorded instance keeps it. Silent, it stays FAILED for a retry. This also takes up the two production mappings once a release with it is deployed: their runners heartbeat now. |
+
+The local evidence is cases (5) and (6) of `managed-runner-image-roll.pg.spec.ts`, run with `scripts/run-pg-spec.sh`.
+The Pod's pull is played by the in-memory cluster's Pending status, not a real kubelet.
