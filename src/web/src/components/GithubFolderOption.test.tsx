@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, useState } from 'react';
+import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import type { DirProbe, GithubIntegration, GithubRepository } from '@orbit/shared';
@@ -10,8 +10,8 @@ import { newWorkspaceOf, type PickedFolder } from '../lib/machineSetup';
 
 /**
  * From GitHub on a machine's setup card (docs/github-workspace-design.md §8, docs/mocks/github-workspace board 01
- * P1–P4, placed by board 04 A: a row under the folder's name that swaps the step to the picker), over the
- * integration's routes and the directory probe relay as they answer.
+ * P1–P4, placed by board 04 A on main's one-field card: a row under the folder and its Name that swaps the folder
+ * field for the picker), over the integration's routes and the directory probe relay as they answer.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -26,7 +26,7 @@ vi.mock('../lib/githubIntegration', async (importOriginal) => ({
 }));
 const { api, askDirProbe, readDirProbe } = await import('../api');
 const { connectGithub } = await import('../lib/githubIntegration');
-const { MachineSetupCard, setupCredentialOf } = await import('./MachineSetupCard');
+const { MachineSetupCard } = await import('./MachineSetupCard');
 
 const RUNNER_ID = encodeId('0199f0a8-3c2e-7b51-9a6e-1f2d3c4b5a69');
 const ROOT = '/Users/austin/orbit-repos';
@@ -90,25 +90,16 @@ function runnerSays(path: string): DirProbe {
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 let client: QueryClient | null = null;
-let picked: PickedFolder | null = null;
+/** What Create workspace was pressed with. */
+let created: { folder: PickedFolder; name: string } | null = null;
 
-function Page({ runner, start, ready }: { runner: never; start: PickedFolder | null; ready: boolean }) {
-  const [folder, setFolder] = useState<PickedFolder | null>(start);
+function Page({ runner }: { runner: never }) {
   return (
     <MachineSetupCard
       runner={runner}
-      fleet={null}
-      engine="claude"
-      credential={setupCredentialOf(runner, 'claude', null)}
-      folder={folder}
-      ready={ready}
-      onFolder={(next) => {
-        picked = next;
-        setFolder(next);
+      onCreate={(folder, name) => {
+        created = { folder, name };
       }}
-      onEngine={vi.fn()}
-      onUseApiKey={vi.fn()}
-      onCreate={vi.fn()}
       creating={false}
       createError={null}
     />
@@ -129,7 +120,7 @@ const wait = async (ms: number) => {
   await settle();
 };
 
-async function open({ runner = machine(), start = null as PickedFolder | null, ready = false } = {}): Promise<HTMLDivElement> {
+async function open({ runner = machine() } = {}): Promise<HTMLDivElement> {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   host = document.createElement('div');
   document.body.append(host);
@@ -138,7 +129,7 @@ async function open({ runner = machine(), start = null as PickedFolder | null, r
     root!.render(
       <QueryClientProvider client={client!}>
         <MemoryRouter>
-          <Page runner={runner} start={start} ready={ready} />
+          <Page runner={runner} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -169,14 +160,17 @@ async function type(input: HTMLInputElement, value: string): Promise<void> {
   });
 }
 const repoRows = () => [...host!.querySelectorAll('.ghp-item')].map((row) => said(row));
-/** Main's step: one folder name in the machine's home. */
+/** Main's folder field: one folder name in the machine's home. */
 const nameField = () => host!.querySelector<HTMLInputElement>('.msc-input input[aria-label="Folder"]')!;
+/** The workspace's Name, beside Create workspace. */
+const workspaceName = () =>
+  [...host!.querySelectorAll<HTMLInputElement>('[data-field="name"] input')].find((input) => input.getAttribute('aria-label') === 'Name')!;
 const folderField = () =>
   [...host!.querySelectorAll<HTMLInputElement>('.msc-input input')].find((input) => input.getAttribute('aria-label') === 'name')!;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-  picked = null;
+  created = null;
   view = integration();
   asked.length = 0;
   sessionStorage.clear();
@@ -228,15 +222,17 @@ describe('the option', () => {
     expect(githubRow()).toBeNull();
   });
 
-  it('is a row under the folder’s name, behind an “or”, saying what it is', async () => {
+  it('is a row under the folder and its Name, behind an “or”, saying what it is', async () => {
     await open();
     expect(said(host!.querySelector('.msc-or'))).toBe('or');
     expect(said(githubRow())).toBe(
       'From GitHub NEW Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.',
     );
-    // The name field comes first: the row follows the field and its button.
-    const order = [...host!.querySelectorAll('.msc-folder, .msc-github-row')].map((e) => e.className.split(' ')[0]);
-    expect(order).toEqual(['msc-folder', 'msc-github-row']);
+    // The folder and the Name with Create workspace come first: the row follows them.
+    const order = [...host!.querySelectorAll('[data-field], .msc-github-row')].map(
+      (e) => e.getAttribute('data-field') ?? e.className.split(' ')[0],
+    );
+    expect(order).toEqual(['folder', 'name', 'github', 'msc-github-row']);
   });
 
   it('swaps the step to the picker, and Type a folder name instead swaps it back', async () => {
@@ -276,8 +272,8 @@ describe('P1: not connected', () => {
       'Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.',
     );
     expect(said(option)).toContain('Connect GitHub Opens GitHub, then comes back here.');
-    // Nothing to pick until GitHub is connected, so no Use this repository yet.
-    expect(button('Use this repository')).toBeUndefined();
+    // Nothing to pick until GitHub is connected, so nothing to create yet.
+    expect(button('Create workspace')!.disabled).toBe(true);
   });
 
   it('Connect leaves for GitHub, coming back to this page, and the card comes back on From GitHub', async () => {
@@ -359,10 +355,23 @@ describe('P3: a repository picked', () => {
     expect(said(step())).toContain('Cloned before the session starts. Work lands back on GitHub. Other branch');
   });
 
-  it('Use this repository picks the clone, sent as newWorkspace.github', async () => {
+  it('the Name follows the repository’s folder until it is edited', async () => {
     await pickWeb();
-    await press(button('Use this repository')!);
-    expect(picked).toEqual({
+    expect(workspaceName().value).toBe('orbit-web');
+    await type(folderField(), 'web');
+    await wait(450);
+    expect(workspaceName().value).toBe('web');
+    await type(workspaceName(), 'Orbit web');
+    await type(folderField(), 'orbit-web');
+    await wait(450);
+    expect(workspaceName().value).toBe('Orbit web');
+  });
+
+  it('Create workspace makes it with the clone, sent as newWorkspace.github', async () => {
+    await pickWeb();
+    await press(button('Create workspace')!);
+    expect(created?.name).toBe('orbit-web');
+    expect(created?.folder).toEqual({
       kind: 'github',
       repoId: 11,
       repository: 'orbit-labs/orbit-web',
@@ -372,15 +381,15 @@ describe('P3: a repository picked', () => {
       name: 'orbit-web',
       path: `${ROOT}/orbit-web`,
     });
-    expect(newWorkspaceOf(picked!)).toEqual({ github: { repoId: 11, folder: 'orbit-web' } });
+    expect(newWorkspaceOf(created!.folder)).toEqual({ github: { repoId: 11, folder: 'orbit-web' } });
   });
 
-  it('a folder already there can’t be cloned into: it says so, and Use is off', async () => {
+  it('a folder already there can’t be cloned into: it says so, and Create workspace is off', async () => {
     await pickWeb();
     await type(folderField(), 'orbit-runner');
     await wait(450);
     expect(said(step())).toContain('This folder already exists on orbit@austin. Pick another name.');
-    expect(button('Use this repository')!.disabled).toBe(true);
+    expect(button('Create workspace')!.disabled).toBe(true);
   });
 
   it('Other branch opens a branch field, and the branch typed is sent', async () => {
@@ -396,8 +405,8 @@ describe('P3: a repository picked', () => {
     ]);
     await type(field, 'release');
     await settle();
-    await press(button('Use this repository')!);
-    expect(newWorkspaceOf(picked!)).toEqual({ github: { repoId: 11, folder: 'orbit-web', ref: 'release' } });
+    await press(button('Create workspace')!);
+    expect(newWorkspaceOf(created!.folder)).toEqual({ github: { repoId: 11, folder: 'orbit-web', ref: 'release' } });
   });
 
   it('Change goes back to the list', async () => {
@@ -408,29 +417,25 @@ describe('P3: a repository picked', () => {
 });
 
 describe('P4: picked, and ready', () => {
-  const clone: PickedFolder = {
-    kind: 'github',
-    repoId: 11,
-    repository: 'orbit-labs/orbit-web',
-    private: true,
-    defaultBranch: 'main',
-    ref: null,
-    name: 'orbit-web',
-    path: `${ROOT}/orbit-web`,
-  };
-
-  it('the done line reads repository → folder, cloned before the session starts', async () => {
-    await open({ start: clone });
-    expect(said(host!.querySelector('[data-step="folder"] .msc-done-line'))).toBe(
-      'Folder orbit-labs/orbit-web → ~/orbit-repos/orbit-web cloned before the session starts Change',
+  it('the folder reads repository → folder, cloned before the session starts', async () => {
+    await open();
+    await chooseGithub();
+    await press(host!.querySelector<HTMLButtonElement>('.ghp-item')!);
+    await wait(450);
+    expect(said(step()!.querySelector('.msc-done-line'))).toBe(
+      'orbit-labs/orbit-web → ~/orbit-repos/orbit-web cloned before the session starts',
     );
+    expect(button('Create workspace')!.disabled).toBe(false);
   });
 
-  it('the ready sentence says the clone comes before the first session', async () => {
-    await open({ start: clone, ready: true });
-    expect(said(host!.querySelector('.msc-foot'))).toBe(
-      'Ready. Orbit adds the workspace “orbit-web” and clones orbit-labs/orbit-web into ~/orbit-repos/orbit-web before its first session starts.',
-    );
+  it('Type a folder name instead drops the repository: the Name follows the typed folder again', async () => {
+    await open();
+    await chooseGithub();
+    await press(host!.querySelector<HTMLButtonElement>('.ghp-item')!);
+    await wait(450);
+    await press(button('Type a folder name instead')!);
+    expect(workspaceName().value).toBe('');
+    expect(button('Create workspace')!.disabled).toBe(true);
   });
 });
 

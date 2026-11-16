@@ -2109,7 +2109,7 @@ final class ConsoleModel {
 
     /// × / Esc: the card (or the failure line) goes; the draft is kept.
     func dismissOptimization() {
-        promptOptimizer.dismiss()
+        promptOptimizer.dismiss(current: composerText)
     }
 
     /// Use, or Edit, then use: the suggestion replaces the draft (attachments stay). Edit, then use
@@ -3217,7 +3217,8 @@ final class ConsoleModel {
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
                                             steer: SteerDelivery.isSteerKind(accepted.kind),
                                             translation: accepted.turnTranslation,
-                                            placement: accepted.placement)
+                                            placement: accepted.placement,
+                                            acceptedAt: ISO8601DateFormatter().string(from: Date()))
                 publishStateNow()
             }
         } catch {

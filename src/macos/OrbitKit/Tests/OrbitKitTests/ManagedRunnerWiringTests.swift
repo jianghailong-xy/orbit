@@ -194,7 +194,7 @@ final class ManagedRunnerWiringTests: XCTestCase {
         // Its row in the list is the managed one: the shared short label, never Online/Offline (D4).
         XCTAssertTrue(flat(list).contains("managed: ManagedRunnerLogic.row(runnerID: r.id, status: model.managedRunner?.status)"))
         // Needs you does not repeat the heartbeat's "offline" for it.
-        XCTAssertTrue(flat(page).contains("let attention = lists.attention.filter { !isManagedOffline($0) }"))
+        XCTAssertTrue(flat(page).contains("let attention = lists.attention.filter { !isManagedOffline($0) && shows($0) }"))
         let notOffline = try slice(list, from: "private func isManagedOffline(", to: "\n    }")
         XCTAssertTrue(notOffline.contains("guard case .offline(let runnerID) = item.kind else { return false }"))
         XCTAssertTrue(notOffline.contains("ManagedRunnerLogic.row(runnerID: runnerID, status: model.managedRunner?.status) != nil"))

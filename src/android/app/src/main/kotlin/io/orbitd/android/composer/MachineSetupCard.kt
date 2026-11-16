@@ -158,7 +158,8 @@ internal fun MachineSetupCard(
 
             HorizontalDivider(Modifier.padding(top = 12.dp))
 
-            SetupStepRow(number = 1, done = state.folder != null) {
+            // The card's one question: no step number beside it.
+            Column(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 val folder = state.folder
                 if (folder != null) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {

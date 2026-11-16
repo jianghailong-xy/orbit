@@ -1,16 +1,13 @@
-import { CheckCircleFilled, DesktopOutlined, GithubOutlined } from '@ant-design/icons';
+import { DesktopOutlined, GithubOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import type { GithubIntegration, LoginEngine } from '@orbit/shared';
-import type { CursorRunnerFacts } from '../lib/cursorRuntime';
+import type { LoginEngine } from '@orbit/shared';
 import { githubIntegrationQuery } from '../lib/githubIntegration';
 import { encodeId } from '../lib/idCodec';
 import {
   answersDirProbe,
-  firstEngineOn,
   homeShortPath,
-  installedLogins,
   isConnecting,
   isValidNewFolder,
   makesNewFolders,
@@ -19,56 +16,44 @@ import {
   newFolderPick,
   newFolderRootOf,
   newFolderVerdict,
-  newWorkspaceName,
   updatesItself,
   type PickedFolder,
 } from '../lib/machineSetup';
 import {
-  SETUP_CHANGE,
   SETUP_CHECK_AGAIN,
   SETUP_CREATE,
   SETUP_FOLDER,
+  SETUP_FOLDER_HINT,
   SETUP_FOLDER_NAME_INSTEAD,
-  SETUP_FOOT_CREATE,
   SETUP_FROM_GITHUB,
   SETUP_GITHUB_DONE,
   SETUP_GITHUB_META,
-  SETUP_NEW_TAG,
-  SETUP_OR,
-  SETUP_USE_REPOSITORY,
-  setupGithubDonePath,
-  setupReadyCreateClone,
-  SETUP_LEAD_CREATE,
-  SETUP_NEW_FOLDER_DONE,
+  SETUP_NAME,
+  SETUP_NAME_EDITED,
+  SETUP_NAME_EMPTY,
+  SETUP_NAME_HINT,
+  SETUP_NAME_PLACEHOLDER,
   SETUP_NEW_FOLDER_INVALID,
-  SETUP_FOLDER_HINT,
   SETUP_NEW_FOLDER_NAME,
-  SETUP_ON_A_KEY,
-  SETUP_ON_A_POOL,
+  SETUP_NEW_FOLDER_WITH_WORKSPACE,
+  SETUP_NEW_TAG,
   SETUP_OPEN_MACHINE,
-  SETUP_SIGN_IN_HELP,
-  SETUP_USE_FOLDER,
+  SETUP_OR,
   setupChecking,
-  setupConnecting,
+  setupConnectingCreate,
   setupCreateFailed,
-  setupFolderHelp,
+  setupGithubDonePath,
   setupNeedsUpdate,
+  setupNewWorkspaceLead,
+  setupNewWorkspaceTitle,
   setupNoAnswer,
-  setupNotInstalled,
-  setupOffline,
-  setupReadyCreate,
-  setupSignIn,
-  setupSignedIn,
-  setupTitle,
-  setupUpdating,
-  setupUseEngine,
+  setupOfflineCreate,
+  setupUpdatingCreate,
 } from '../lib/machineSetupCopy';
 import type { ProviderChoice } from '../lib/sessionProviderChoices';
 import { useDirProbe } from '../lib/useDirProbe';
 import { GithubFolderOption, takeGithubReturn } from './GithubFolderOption';
-import { webShowsEngine } from '../lib/runnerEngines';
-import { isLoginProvider } from '../lib/workspaceDefaults';
-import { ENGINE_NAME, probeReportsSignedIn, RunnerSignIn } from './RunnerSignIn';
+import { probeReportsSignedIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -100,8 +85,6 @@ export function setupCredentialOf(
   return { step: 'signIn' };
 }
 
-const engineName = (engine: string): string => ENGINE_NAME[engine as LoginEngine] ?? engine;
-
 /** A check the machine gave no answer to, and the way to ask it again. */
 function NoAnswer({ machine, onAgain }: { machine: string; onAgain: () => void }) {
   return (
@@ -124,189 +107,30 @@ function useSettled(value: string): string {
   return settled;
 }
 
-/** Step one before it has an answer: one folder name in the machine's home (its Repos Folder on an older runner),
- *  which the machine itself checks as it is typed. A folder that is there is used; one that isn't is made. */
-function FolderName({
-  runner,
-  disabled,
-  onPick,
-  onGithub,
-}: {
-  runner: Runner;
-  disabled: boolean;
-  onPick: (folder: PickedFolder) => void;
-  /** From GitHub is offered here (board 04 A): the row under the field that swaps the step to the repository picker. */
-  onGithub?: () => void;
-}) {
-  const machine = machineName(runner);
-  const root = newFolderRootOf(runner);
-  const [typed, setTyped] = useState('');
-  const name = typed.trim();
-  const settledName = useSettled(name);
-  // The name is asked about where it would go: a folder, or a file, may be there already.
-  const probe = useDirProbe(
-    runner.id,
-    !disabled && isValidNewFolder(settledName) ? newFolderPath(root, settledName) : undefined,
-    true,
-  );
-  const found = settledName === name && probe.state === 'answered' ? probe.probe : null;
-  const verdict = found ? newFolderVerdict(found, machine) : null;
-  const candidate = found && isValidNewFolder(name) ? newFolderPick(found, name, root, machine) : null;
-
-  const onFieldKey = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && candidate) onPick(candidate);
-  };
-  return (
-    <>
-      <div className="msc-step-title">{SETUP_FOLDER}</div>
-      <div className="msc-step-help">{setupFolderHelp(machine)}</div>
-      <div className="msc-folder">
-      <Input
-        className="msc-input"
-        size="small"
-        prefix={<span className="msc-prefix">{newFolderPath(root, '')}</span>}
-        placeholder={SETUP_NEW_FOLDER_NAME}
-        aria-label={SETUP_FOLDER}
-        value={typed}
-        disabled={disabled}
-        autoComplete="off"
-        spellCheck={false}
-        onChange={(e) => setTyped(e.target.value)}
-        onKeyDown={onFieldKey}
-        invalid={!!name && !isValidNewFolder(name)}
-      />
-      {!name ? (
-        <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
-      ) : !isValidNewFolder(name) ? (
-        <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
-      ) : verdict ? (
-        // Nothing there yet reads as a note; anything there says what it is.
-        <span className={found?.exists ? `msc-verdict ${verdict.tone}` : 'msc-meta'}>{verdict.text}</span>
-      ) : settledName === name && (probe.state === 'unanswered' || probe.state === 'idle') ? (
-        <NoAnswer machine={machine} onAgain={probe.again} />
-      ) : (
-        <span className="msc-verdict wait">{setupChecking(machine)}</span>
-      )}
-      </div>
-      <Button
-        className="msc-use"
-        variant="primary"
-        size="small"
-        disabled={!candidate || disabled}
-        onClick={() => candidate && onPick(candidate)}
-      >
-        {SETUP_USE_FOLDER}
-      </Button>
-      {onGithub && (
-        <>
-          <div className="msc-or">{SETUP_OR}</div>
-          {/* Not the field's lock: a machine too old to make folders may clone, and the picker says when it can't. */}
-          <button className="msc-github-row" type="button" disabled={runner.online !== true} onClick={onGithub}>
-            <GithubOutlined className="msc-github-mark" aria-hidden="true" />
-            <span>
-              <span className="msc-github-title">
-                {SETUP_FROM_GITHUB}
-                <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
-              </span>
-              <span className="msc-meta">{SETUP_GITHUB_META}</span>
-            </span>
-          </button>
-        </>
-      )}
-    </>
-  );
-}
-
-/** Step one on From GitHub (board 04 A, P2's picker): the repository and the folder it is cloned into, and the way
- *  back to a folder's name. */
-function GithubStep({
-  runner,
-  integration,
-  disabled,
-  onPick,
-  onBack,
-}: {
-  runner: Runner;
-  integration: GithubIntegration;
-  disabled: boolean;
-  onPick: (folder: PickedFolder) => void;
-  onBack: () => void;
-}) {
-  const [candidate, setCandidate] = useState<PickedFolder | null>(null);
-  return (
-    <>
-      <div className="msc-step-title">{SETUP_FOLDER}</div>
-      <div className="msc-step-help">{setupFolderHelp(machineName(runner))}</div>
-      <div className="msc-folder msc-github">
-        <span className="msc-github-title">
-          <GithubOutlined aria-hidden="true" /> {SETUP_FROM_GITHUB}
-          <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
-        </span>
-        <GithubFolderOption
-          runner={runner}
-          integration={integration}
-          disabled={disabled}
-          onCandidate={setCandidate}
-          onEnter={() => candidate && onPick(candidate)}
-        />
-      </div>
-      {integration.connected && !integration.needsReconnect && (
-        <Button
-          className="msc-use"
-          variant="primary"
-          size="small"
-          disabled={!candidate || disabled}
-          onClick={() => candidate && onPick(candidate)}
-        >
-          {SETUP_USE_REPOSITORY}
-        </Button>
-      )}
-      <div className="msc-back">
-        <button className="msc-change" type="button" onClick={onBack}>
-          {SETUP_FOLDER_NAME_INSTEAD}
-        </button>
-      </div>
-    </>
-  );
-}
-
 /**
- * A machine with no workspace, on its new session page, which it fills alone: no session list beside it
- * and no composer under it (owner 2026-11-16). It asks the two things only the owner can answer: the
- * folder sessions may read and change, and the coding CLI they run on (board rules 1–5), and once both
- * are answered its button makes the workspace. The folder and the engine belong to the page, which
- * makes the workspace with them: this card only shows them and takes the answers.
+ * A machine with no workspace, on its new session page, which it fills alone (owner 2026-11-16,
+ * docs/mocks/new-folder-in-home/workspace-card-with-name): the card makes the machine's first workspace and asks
+ * only what that needs. The folder is one name in the machine's home (its Repos Folder on an older runner), which
+ * the machine checks as it is typed: a folder there is used, one that isn't is made with the workspace. The
+ * workspace's name follows the folder's until it is edited. Signing in a coding CLI is not asked here: the new
+ * workspace's sessions ask for it where they need it.
+ *
+ * From GitHub (docs/github-workspace-design.md §8, board 04 A): under the folder and its Name, an "or" rule and a row
+ * that swaps the folder field for P2's repository picker; "Type a folder name instead" swaps it back. A picked
+ * repository is cloned into the Repos Folder (`repo → ~/orbit-repos/<name>`), and the Name follows its folder as it
+ * follows a typed one.
  */
 export function MachineSetupCard({
   runner,
-  fleet,
-  engine,
-  credential,
-  folder,
-  ready,
-  onFolder,
-  onEngine,
-  onUseApiKey,
   onCreate,
   creating,
   createError,
   welcome,
 }: {
   runner: Runner;
-  /** Every runner of the account, which decides whether Cursor CLI is drawn at all (webShowsEngine). */
-  fleet: readonly CursorRunnerFacts[] | null;
-  /** The engine the draft runs on, which the composer's picks follow too. */
-  engine: string;
-  credential: SetupCredential;
-  folder: PickedFolder | null;
-  /** Both steps are done and the machine is here: Create workspace makes it. */
-  ready: boolean;
-  onFolder: (folder: PickedFolder | null) => void;
-  /** Run on this engine's own sign-in instead, which is also how a key is left again. */
-  onEngine: (engine: LoginEngine) => void;
-  onUseApiKey: () => void;
-  onCreate: () => void;
-  /** The workspace is being made: the button waits. */
+  /** Make the workspace in this folder, under this name. */
+  onCreate: (folder: PickedFolder, name: string) => void;
+  /** The workspace is being made: the fields and the button wait. */
   creating: boolean;
   /** Why the last Create workspace was refused, said on the card until the next try. */
   createError: string | null;
@@ -316,28 +140,47 @@ export function MachineSetupCard({
   const machine = machineName(runner);
   const offline = runner.online !== true;
   const probes = answersDirProbe(runner);
-  const name = engineName(engine);
-  const others = installedLogins(runner.engines).filter((e) => e !== engine && webShowsEngine(e, fleet));
-  const done = credential.step === 'signedIn' || credential.step === 'onKey';
-  // From GitHub (docs/github-workspace-design.md §8): offered only where the deployment has a GitHub App. A card come
-  // back from GitHub's sign-in opens on it.
+  const usable = probes && makesNewFolders(runner);
+  const disabled = offline || !usable;
+  const root = newFolderRootOf(runner);
+
+  const [typed, setTyped] = useState('');
+  const folder = typed.trim();
+  const settled = useSettled(folder);
+  // The name is asked about where it would go: a folder, or a file, may be there already.
+  const probe = useDirProbe(
+    runner.id,
+    !disabled && isValidNewFolder(settled) ? newFolderPath(root, settled) : undefined,
+    true,
+  );
+  const found = settled === folder && probe.state === 'answered' ? probe.probe : null;
+  const verdict = found ? newFolderVerdict(found, machine) : null;
+  const typedPick = found && isValidNewFolder(folder) ? newFolderPick(found, folder, root, machine) : null;
+
+  // From GitHub: offered only where the deployment has a GitHub App. A card come back from GitHub's sign-in opens on it.
   const github = useQuery(githubIntegrationQuery());
   const offersGithub = github.data?.available === true;
   const [githubOpen, setGithubOpen] = useState(() => takeGithubReturn(runner.id));
-  const folderDisabled = offline || !probes || !makesNewFolders(runner);
+  const [repository, setRepository] = useState<PickedFolder | null>(null);
+  const fromGithub = offersGithub && !!github.data && githubOpen;
+  const candidate = fromGithub ? repository : typedPick;
+  // Not the folder field's lock: a machine too old to make folders may clone, and the picker says when it can't.
+  const locked = fromGithub ? offline : disabled;
 
-  const alternatives = others.length > 0 && (
-    <div className="msc-alt">
-      {others.map((other, i) => (
-        <span key={other}>
-          {i > 0 && ' · '}
-          <button className="msc-change" type="button" disabled={offline} onClick={() => onEngine(other)}>
-            {setupUseEngine(engineName(other))}
-          </button>
-        </span>
-      ))}
-    </div>
-  );
+  // The workspace's name: the folder's until it is edited, and from then on what was typed, empty included.
+  const [editedName, setEditedName] = useState<string | null>(null);
+  const followed = fromGithub ? (repository?.kind === 'github' ? repository.name : '') : folder;
+  const shownName = editedName ?? followed;
+  const name = shownName.trim();
+  const nameMissing = editedName !== null && !name;
+
+  const canCreate = !!candidate && !!name && !locked && !creating;
+  const create = () => {
+    if (canCreate && candidate) onCreate(candidate, name);
+  };
+  const onFieldKey = (e: KeyboardEvent) => {
+    if (e.key === 'Enter') create();
+  };
 
   return (
     <div className="msc">
@@ -349,8 +192,8 @@ export function MachineSetupCard({
             <DesktopOutlined aria-hidden="true" />
           </span>
           <div>
-            <div className="msc-title">{setupTitle(machine)}</div>
-            <div className="msc-sub">{SETUP_LEAD_CREATE}</div>
+            <div className="msc-title">{setupNewWorkspaceTitle(machine)}</div>
+            <div className="msc-sub">{setupNewWorkspaceLead(machine)}</div>
           </div>
         </div>
       )}
@@ -358,12 +201,12 @@ export function MachineSetupCard({
       {offline ? (
         // Never heard from is a machine still coming up, not one gone away; and with nothing declared yet, not
         // one too old to check folders either.
-        <div className="msc-notice">{isConnecting(runner) ? setupConnecting(machine) : setupOffline(machine)}</div>
+        <div className="msc-notice">{isConnecting(runner) ? setupConnectingCreate(machine) : setupOfflineCreate(machine)}</div>
       ) : (
-        !(probes && makesNewFolders(runner)) && (
+        !usable && (
           <div className="msc-notice">
             {updatesItself(runner) ? (
-              setupUpdating(machine)
+              setupUpdatingCreate(machine)
             ) : (
               <>
                 {setupNeedsUpdate(machine)} <Link to={`/settings/machines/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
@@ -373,97 +216,134 @@ export function MachineSetupCard({
         )
       )}
 
-      <div className="msc-step" data-step="folder">
-        {folder ? <CheckCircleFilled className="msc-num done" /> : <span className="msc-num">1</span>}
-        <div>
-          {folder ? (
-            <div className="msc-done-line">
-              <span className="msc-step-title">{SETUP_FOLDER}</span>
-              <span className="msc-path">
-                {folder.kind === 'github' ? setupGithubDonePath(folder.repository, homeShortPath(folder.path)) : folder.path}
-              </span>
-              <span className="msc-meta">
-                {folder.kind === 'new' ? SETUP_NEW_FOLDER_DONE : folder.kind === 'github' ? SETUP_GITHUB_DONE : folder.note}
-              </span>
-              <button className="msc-change" type="button" disabled={offline} onClick={() => onFolder(null)}>
-                {SETUP_CHANGE}
-              </button>
+      <div className="msc-body">
+        {fromGithub && github.data ? (
+          <div className="msc-field msc-github" data-field="folder">
+            <div className="msc-step-title">{SETUP_FOLDER}</div>
+            <span className="msc-github-title">
+              <GithubOutlined aria-hidden="true" /> {SETUP_FROM_GITHUB}
+              <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
+            </span>
+            <GithubFolderOption
+              runner={runner}
+              integration={github.data}
+              disabled={offline || creating}
+              onCandidate={setRepository}
+              onEnter={create}
+            />
+            <div className="msc-line">
+              {createError ? (
+                <span className="msc-verdict bad">{setupCreateFailed(createError)}</span>
+              ) : (
+                repository?.kind === 'github' && (
+                  <span className="msc-done-line">
+                    <span className="msc-path">{setupGithubDonePath(repository.repository, homeShortPath(repository.path))}</span>
+                    <span className="msc-meta">{SETUP_GITHUB_DONE}</span>
+                  </span>
+                )
+              )}
             </div>
-          ) : (
-            offersGithub && github.data && githubOpen ? (
-              <GithubStep
-                runner={runner}
-                integration={github.data}
-                disabled={offline}
-                onPick={onFolder}
-                onBack={() => setGithubOpen(false)}
-              />
-            ) : (
-              <FolderName
-                runner={runner}
-                disabled={folderDisabled}
-                onPick={onFolder}
-                onGithub={offersGithub ? () => setGithubOpen(true) : undefined}
-              />
-            )
-          )}
-        </div>
-      </div>
-
-      <div className="msc-step" data-step="engine">
-        {done ? <CheckCircleFilled className="msc-num done" /> : <span className="msc-num">2</span>}
-        <div>
-          {credential.step === 'signedIn' ? (
-            <div className="msc-done-line">
-              <span className="msc-step-title">{name}</span>
-              <span className="msc-meta">{setupSignedIn(machine)}</span>
-            </div>
-          ) : credential.step === 'onKey' ? (
-            <div className="msc-done-line">
-              <span className="msc-step-title">{credential.label}</span>
-              <span className="msc-meta">{credential.pool ? SETUP_ON_A_POOL : SETUP_ON_A_KEY}</span>
+            <div className="msc-back">
               <button
                 className="msc-change"
                 type="button"
-                disabled={offline}
-                // Back to a sign-in: this engine's, or for one that has none, the machine's first.
-                onClick={() => onEngine(isLoginProvider(engine) ? (engine as LoginEngine) : firstEngineOn(runner.engines))}
+                disabled={creating}
+                onClick={() => {
+                  setGithubOpen(false);
+                  setRepository(null);
+                }}
               >
-                {SETUP_CHANGE}
+                {SETUP_FOLDER_NAME_INSTEAD}
               </button>
             </div>
-          ) : (
-            <>
-              <div className="msc-step-title">{setupSignIn(name, machine)}</div>
-              <div className="msc-step-help">{SETUP_SIGN_IN_HELP}</div>
-              {credential.step === 'notInstalled' ? (
-                <div className="msc-step-help msc-not-installed">
-                  {setupNotInstalled(name, machine)}{' '}
-                  <Link to={`/settings/machines/${encodeId(runner.id)}`}>{SETUP_OPEN_MACHINE}</Link>
-                </div>
-              ) : (
-                !offline && (
-                  <RunnerSignIn key={engine} runnerId={runner.id} engine={engine as LoginEngine} onUseApiKey={onUseApiKey} />
+          </div>
+        ) : (
+          <div className="msc-field" data-field="folder">
+            <div className="msc-step-title">{SETUP_FOLDER}</div>
+            <Input
+              className="msc-input"
+              size="small"
+              prefix={<span className="msc-prefix">{newFolderPath(root, '')}</span>}
+              placeholder={SETUP_NEW_FOLDER_NAME}
+              aria-label={SETUP_FOLDER}
+              value={typed}
+              disabled={disabled || creating}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={onFieldKey}
+              invalid={!!folder && !isValidNewFolder(folder)}
+            />
+            <div className="msc-line">
+              {createError ? (
+                <span className="msc-verdict bad">{setupCreateFailed(createError)}</span>
+              ) : !folder ? (
+                <span className="msc-meta">{SETUP_FOLDER_HINT}</span>
+              ) : !isValidNewFolder(folder) ? (
+                <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
+              ) : verdict ? (
+                // Nothing there yet reads as a note; anything there says what it is.
+                found?.exists ? (
+                  <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
+                ) : (
+                  <span className="msc-meta">{SETUP_NEW_FOLDER_WITH_WORKSPACE}</span>
                 )
+              ) : settled === folder && (probe.state === 'unanswered' || probe.state === 'idle') ? (
+                <NoAnswer machine={machine} onAgain={probe.again} />
+              ) : (
+                <span className="msc-verdict wait">{setupChecking(machine)}</span>
               )}
-              {alternatives}
-            </>
-          )}
-        </div>
-      </div>
+            </div>
+          </div>
+        )}
 
-      <div className={`msc-foot${ready ? ' ready' : ''}`}>
-        {ready && folder
-          ? folder.kind === 'github'
-            ? setupReadyCreateClone(newWorkspaceName(folder), folder.repository, homeShortPath(folder.path))
-            : setupReadyCreate(newWorkspaceName(folder), folder.path)
-          : SETUP_FOOT_CREATE}
-      </div>
-      {createError && <div className="msc-create-error">{setupCreateFailed(createError)}</div>}
-      <div className="msc-create">
-        <Button variant="primary" disabled={!ready} loading={creating} onClick={onCreate}>
-          {SETUP_CREATE}
-        </Button>
+        <div className="msc-field" data-field="name">
+          <div className="msc-step-title">{SETUP_NAME}</div>
+          <div className="msc-row">
+            <Input
+              className="msc-input"
+              size="small"
+              placeholder={followed || SETUP_NAME_PLACEHOLDER}
+              aria-label={SETUP_NAME}
+              value={shownName}
+              disabled={locked || creating}
+              onChange={(e) => setEditedName(e.target.value)}
+              onKeyDown={onFieldKey}
+              invalid={nameMissing}
+            />
+            <Button variant="primary" disabled={!canCreate} loading={creating} onClick={create}>
+              {SETUP_CREATE}
+            </Button>
+          </div>
+          <div className="msc-line">
+            {nameMissing ? (
+              <span className="msc-verdict bad">{SETUP_NAME_EMPTY}</span>
+            ) : (
+              <span className="msc-meta">{editedName !== null ? SETUP_NAME_EDITED : SETUP_NAME_HINT}</span>
+            )}
+          </div>
+        </div>
+
+        {offersGithub && !fromGithub && (
+          <div className="msc-field" data-field="github">
+            <div className="msc-or">{SETUP_OR}</div>
+            <button
+              className="msc-github-row"
+              type="button"
+              disabled={offline || creating}
+              onClick={() => setGithubOpen(true)}
+            >
+              <GithubOutlined className="msc-github-mark" aria-hidden="true" />
+              <span>
+                <span className="msc-github-title">
+                  {SETUP_FROM_GITHUB}
+                  <span className="msc-new-tag">{SETUP_NEW_TAG}</span>
+                </span>
+                <span className="msc-meta">{SETUP_GITHUB_META}</span>
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

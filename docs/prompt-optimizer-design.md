@@ -38,7 +38,9 @@ recommendation on 2026-11-15 ("As suggested").
   language unchanged.
 - **D3 A: the card above the composer.** Text added from context is tinted. Actions are Use, Edit then
   use, Try again, and × / Esc (dismiss, draft kept). Tab in the composer box is Use on web and Mac (the
-  key that takes a reply suggestion; board docs/mocks/prompt-optimizer-use-key). After Use, an "Undo" toast (and ⌘Z in the box)
+  key that takes a reply suggestion; board docs/mocks/prompt-optimizer-use-key). On a draft ✦ can take,
+  with no card open and no press out, Tab optimizes it. Once its card is used or dismissed, Tab moves
+  focus again until the draft changes (Tab, Esc, Tab reaches the toolbar). After Use, an "Undo" toast (and ⌘Z in the box)
   restores the owner's draft. On the phone the card is a sheet over the composer with the same actions.
 
 ## Wire contract (`src/shared/src/prompt-optimizer.ts`)

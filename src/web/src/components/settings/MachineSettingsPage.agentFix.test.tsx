@@ -279,8 +279,10 @@ describe('on a Needs Attention card', () => {
     }));
     const titles = $$('.machine-attention .rd-attention-title').map((t) => text(t));
     expect(titles).toContain('Codex update failed');
-    expect(everyFixButton()).toHaveLength(1);
-    expect(everyFixButton()[0].closest('.rd-attention-card')).toBe(card('Codex update failed'));
+    // One on the cards, and the same fix on Codex's own row (below).
+    const onCards = everyFixButton().filter((b) => b.closest('.machine-attention'));
+    expect(onCards).toHaveLength(1);
+    expect(onCards[0].closest('.rd-attention-card')).toBe(card('Codex update failed'));
     act(() => root?.unmount());
     document.body.innerHTML = '';
 
@@ -315,6 +317,40 @@ describe('on a Needs Attention card', () => {
   it('is not drawn by a server that does not say where an agent would run', async () => {
     await mount(behind({ agentFix: undefined }));
     expect(cardButtons(card('Codex update failed'))).toEqual(['Update Engines Now', 'Dismiss until next Codex release']);
+  });
+});
+
+describe('on an engine row\'s update warning', () => {
+  const panel = () => $('.re-panel.warn', row('codex'));
+
+  it('says where it runs; a press starts the card\'s own fix, and both give way to the session', async () => {
+    const runner = behind();
+    const { sent } = await mount(runner);
+    expect(text($('.re-panel-row', panel()))).toBe('Error: No such file or directory (os error 2)');
+    expect(fixButton(panel())).not.toBeNull();
+    expect(lineOf(panel())).toBe('Starts a session in orbit-dev on this machine, with Claude Code.');
+    expect(fixButton(row('claude'))).toBeNull();
+
+    thenServe({
+      ...runner,
+      agentFix: ready({ fixing: [{ kind: 'engineNotUpdating', engine: 'codex', sessionId: SESSION, workspaceId: 'ws1', workspaceName: 'orbit-dev' }] }),
+    });
+    await click(fixButton(panel())!);
+    expect(sent).toEqual([{ method: 'POST', path: `/runners/${RUNNER_ID}/attention/engineNotUpdating/fix`, body: { engine: 'codex' } }]);
+
+    expect(everyFixButton()).toEqual([]);
+    expect(lineOf(panel())).toBe('An agent is fixing this in orbit-dev · Open session');
+    expect($<HTMLAnchorElement>('.agent-fix-line a', panel()).getAttribute('href')).toBe(`/sessions/${SESSION}`);
+    expect(lineOf(card('Codex update failed'))).toBe('An agent is fixing this in orbit-dev · Open session');
+  });
+
+  it('is disabled with the reason, pointing at the Sign in above it', async () => {
+    const { sent } = await mount(behind({ agentFix: ready({ blocked: { code: 'engineSignedOut', message: signedOutLine } }) }));
+    const pressed = fixButton(panel())!;
+    expect(pressed.hasAttribute('disabled') || pressed.getAttribute('aria-disabled') === 'true').toBe(true);
+    expect(lineOf(panel())).toBe(`${signedOutLine} Sign in to Claude Code above to use this.`);
+    await click(pressed);
+    expect(sent).toEqual([]);
   });
 });
 

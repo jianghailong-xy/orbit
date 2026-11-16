@@ -122,6 +122,25 @@ export function useFollowFirstSessionProvider(managed: ManagedRunner | null): vo
 }
 
 /**
+ * A managed runner asleep (or going to sleep) while it waits for a login can only be signed in once it
+ * is up again, so the page that signs it in wakes it when it is opened: one wake per page, then the
+ * status is read again. Nothing for any other state, and nothing when the server offers no wake.
+ */
+export function useWakeForSignIn(managed: ManagedRunner | null): void {
+  const qc = useQueryClient();
+  const asked = useRef(false);
+  const status = managed?.status;
+  const wanted = !!status && !!managed?.display.signIn && status.actions.canWake && status.desiredState === 'SLEEPING';
+  useEffect(() => {
+    if (!wanted || asked.current) return;
+    asked.current = true;
+    void api<ManagedRunnerStatus>('/managed-runner/wake', { method: 'POST', body: { idempotencyKey: compatibleUuid() } })
+      .catch(() => undefined)
+      .finally(() => void qc.invalidateQueries({ queryKey: managedRunnerStatusQuery().queryKey }));
+  }, [wanted, qc]);
+}
+
+/**
  * Retry and Set up. Each press is one idempotency key; the answer (202 with the status) replaces the
  * status read, and a refusal — a revision another client moved, an account the server does not give
  * one to — is said with the server's own sentence and the status read again.

@@ -1607,6 +1607,11 @@ export const SELF_UPDATE_POSTPONE_V1 = 'self-update-postpone/v1';
  *  A runner without it is refused Update Now as too old. runner-go asserts the same string. */
 export const SELF_UPDATE_NOW_V1 = 'self-update-now/v1';
 
+/** Declared by a runner that keeps a remote SubAgent's conversation when the run ends and continues it on a claim's
+ *  `resumeOf` (docs/subagent-design.md §10.2). A resume is refused for a target runner without it, which would start
+ *  a new conversation instead. runner-go declares the same string (subagentRemoteResumeCapabilityV1). */
+export const SUBAGENT_REMOTE_RESUME_V1 = 'subagent-remote-resume/v1';
+
 /** The body of POST /runners/:id/self-update/now: the owner's explicit "interrupt these turns". */
 export interface RunnerSelfUpdateNowRequest {
   interruptTurns: true;
@@ -2711,6 +2716,9 @@ export interface SubagentRunCreateRequest {
   needs?: string[];
   /** The brief. Sent for a call that may run remotely: the target runner needs it, the parent's machine has it. */
   prompt?: string;
+  /** A finished remote run of this session to continue (§10.2): the new run goes to the workspace and runner that
+   *  ran it, whose runner continues its conversation. Not with `workspace` or `needs`. */
+  resumeOf?: string;
 }
 
 export interface SubagentRunCreateResponse {
@@ -2750,6 +2758,8 @@ export interface RemoteSubagentClaim {
   prompt: string;
   /** How to run the child: the target workspace's own default engine and model, as a session claim hands it. */
   exec: AgentExecConfig;
+  /** The earlier run of this runner whose conversation this one continues, or null for a new conversation. */
+  resumeOf: string | null;
 }
 
 /** One child event the target runner relays (§10.3), numbered by the run from 1. */

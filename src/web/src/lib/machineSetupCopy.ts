@@ -115,16 +115,23 @@ export const setupReady = (workspace: string, path: string) =>
 export const setupReadyClone = (repository: string, path: string, workspace: string) =>
   `Ready. Send a task — Orbit clones ${repository} into ${path} and adds the workspace “${workspace}” as it starts.`;
 
-// The web card's own lines (owner 2026-11-16): on the web a machine with no workspace draws the card alone, with no
-// composer under it, and the card's button makes the workspace. The native clients still send to make it, so the
-// lines above stay theirs (copy parity).
-export const SETUP_LEAD_CREATE = 'Pick where it works and sign in a coding CLI, then create the workspace.';
-export const SETUP_FOOT_CREATE = 'Nothing is created until you create the workspace. You can rename it or change these later.';
-export const setupReadyCreate = (workspace: string, path: string) =>
-  `Ready. Orbit adds the workspace “${workspace}” for ${path}.`;
-// Board 04: the same line for a repository, which is cloned once the workspace's first session is claimed.
-export const setupReadyCreateClone = (workspace: string, repository: string, path: string) =>
-  `Ready. Orbit adds the workspace “${workspace}” and clones ${repository} into ${path} before its first session starts.`;
+// The web card's own lines (owner 2026-11-16, docs/mocks/new-folder-in-home/workspace-card-with-name): on the web a
+// machine with no workspace draws the card alone, which makes the workspace from a folder and a name, and asks no
+// sign-in. The native clients still send to make it, so the lines above stay theirs (copy parity).
+export const setupNewWorkspaceTitle = (machine: string) => `New workspace on ${machine}`;
+export const setupNewWorkspaceLead = (machine: string) =>
+  `Pick the folder on ${machine} this workspace works in. Its sessions can read and change everything in it.`;
+export const SETUP_NEW_FOLDER_WITH_WORKSPACE = 'New folder · created with the workspace.';
+export const SETUP_NAME = 'Name';
+export const SETUP_NAME_PLACEHOLDER = 'Same as the folder';
+export const SETUP_NAME_HINT = 'Same as the folder unless you change it. Shown in the sidebar.';
+export const SETUP_NAME_EDITED = 'Shown in the sidebar. You can rename it later.';
+export const SETUP_NAME_EMPTY = 'Give the workspace a name.';
+export const setupOfflineCreate = (machine: string) => `${machine} is offline. It can’t check folders until it’s back.`;
+export const setupConnectingCreate = (machine: string) =>
+  `Waiting for ${machine} to connect. It can check folders as soon as it does.`;
+export const setupUpdatingCreate = (machine: string) =>
+  `${machine} updates itself first: this version can’t check folders yet.`;
 export const SETUP_CREATE = 'Create workspace';
 export const setupCreateFailed = (why: string) => `Couldn’t create the workspace: ${why}`;
 

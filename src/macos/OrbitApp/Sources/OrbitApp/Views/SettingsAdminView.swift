@@ -55,39 +55,46 @@ struct SettingsView: View {
         form
         // The photo is cut to its middle square and scaled down here, then sent at once — a form
         // takes effect as it is used, as the web Profile page's photo does.
-        .fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image]) { result in
-            guard case .success(let url) = result else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard let jpeg = NSImage(contentsOf: url)?.orbitAvatarJPEG() else {
-                accountMessage = SettingsCopy.photoNotSaved("that file isn't an image this Mac can read")
-                return
-            }
-            Task { accountMessage = await model.saveAvatar(jpeg) }
-        }
+        .fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image], onCompletion: photoChosen)
         .task { await model.accessTokens?.load() }
         .task { await model.runners?.load() }
-        .onAppear {
-            guard !loaded else { return }
-            loaded = true
-            let p = model.user?.preferences
-            theme = p?.theme ?? "system"
-            // An unset preference is the server's floor (Auto), not Default — showing Default here
-            // would name a mode the account isn't actually running.
-            permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "")
-                ?? AgentDefaults.defaultPermissionMode
-            orchestration = p?.enableOrchestration ?? true
-            modelRouting = p?.smartModelSelection ?? false
-            promptSuggestions = p?.suggestedReplies ?? true
-            recaps = p?.showRecaps ?? true
-            translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
-            promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)
-            translationLanguage = SessionTranslation.language(p)
-            translationAgentLanguage = SessionTranslation.agentLanguage(p)
-            bilingual = p?.translationBilingual == true
-            name = model.user?.name ?? ""
-        }
+        .onAppear(perform: loadPreferences)
         .onChange(of: name) { accountMessage = nil }
+    }
+
+    /// The chosen photo, sent as the account's avatar. Apart from `body`, as `loadPreferences` is:
+    /// the release build could not type-check `body` with both closures inline.
+    private func photoChosen(_ result: Result<URL, Error>) {
+        guard case .success(let url) = result else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let jpeg = NSImage(contentsOf: url)?.orbitAvatarJPEG() else {
+            accountMessage = SettingsCopy.photoNotSaved("that file isn't an image this Mac can read")
+            return
+        }
+        Task { accountMessage = await model.saveAvatar(jpeg) }
+    }
+
+    /// The form's controls, read once from the account's preferences when Settings first appears.
+    private func loadPreferences() {
+        guard !loaded else { return }
+        loaded = true
+        let p = model.user?.preferences
+        theme = p?.theme ?? "system"
+        // An unset preference is the server's floor (Auto), not Default — showing Default here
+        // would name a mode the account isn't actually running.
+        permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "")
+            ?? AgentDefaults.defaultPermissionMode
+        orchestration = p?.enableOrchestration ?? true
+        modelRouting = p?.smartModelSelection ?? false
+        promptSuggestions = p?.suggestedReplies ?? true
+        recaps = p?.showRecaps ?? true
+        translation = !SessionTranslation.unavailable(model.user) && p?.translationEnabled == true
+        promptOptimizer = !PromptOptimizer.unavailable(model.user) && PromptOptimizer.switchedOn(p)
+        translationLanguage = SessionTranslation.language(p)
+        translationAgentLanguage = SessionTranslation.agentLanguage(p)
+        bilingual = p?.translationBilingual == true
+        name = model.user?.name ?? ""
     }
 
     /// The form, with the account switches it writes the moment they flip. Apart from `body`, and each section a
@@ -178,7 +185,7 @@ struct SettingsView: View {
                     Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 }
             } label: {
-                Label(SettingsHome.title(.machinesAndModels), systemImage: SettingsHome.systemImage(.machinesAndModels))
+                Label(AppSection.runners.title, systemImage: AppSection.runners.systemImage)
             }
             .contentShape(Rectangle())
         }
