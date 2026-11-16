@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>从 GitHub 建 workspace · 04 只有一个目录名的 Folder 步骤里，From GitHub 放哪</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/foundation.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/ChoiceControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Button.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/TextControls.css">
+<link rel="stylesheet" href="../../../src/web/src/components/ui/Badge.css">
+<link rel="stylesheet" href="../../../src/web/src/components/MachineSetupCard.css">
+<link rel="stylesheet" href="board.css">
+<style>
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
+.grid3 .app .msc { max-width: none; }
+.phone { width: 330px; margin: 18px auto 4px; border-radius: 38px; padding: 12px; background: #1c1c1f;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.3), 0 8px 22px rgba(0,0,0,.18); }
+.phone .scr { position: relative; border-radius: 28px; overflow: hidden; background: var(--bg-base); padding: 34px 14px 18px;
+  color: var(--text-1); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; font-size: 13px; line-height: 1.5; min-height: 300px; }
+.phone .scr::before { content: ""; position: absolute; top: 9px; left: 50%; width: 86px; height: 22px; margin-left: -43px; border-radius: 12px; background: #1c1c1f; }
+.phone .msc-path, .phone .msc-prefix { font-family: "JetBrains Mono", monospace; }
+.phone .msc-step { margin-top: 0; padding-top: 0; border-top: 0; }
+.phone .msc-input, .phone .ghp-menu { max-width: none; }
+.phone .fr-label { top: -26px; left: 0; }
+.phone .ghp-item { grid-template-columns: 16px 1fr; }
+.phone .ghp-when { grid-column: 2; font-size: 11px; }
+.phone .ghp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seg span { white-space: nowrap; }
+.phone .seg span { padding: 3px 9px; }
+.phone .seg .newtag { display: none; }
+.scr-label { text-align: center; font: 600 11px Inter, sans-serif; color: #6a6a74; margin-top: 2px; }
+/* A: From GitHub as a second row under the name field */
+.gh-alt { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg-raised); max-width: 520px; cursor: pointer; }
+.gh-alt .ic { font-size: 16px; margin-top: 2px; color: var(--text-1); flex: none; }
+.gh-alt-title { font-weight: 600; }
+.or-rule { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--text-3); font-size: 12px; max-width: 520px; }
+.or-rule::before, .or-rule::after { content: ""; flex: 1; border-top: 1px solid var(--border-subtle); }
+.or-rule + .gh-alt { margin-top: 8px; }
+/* B: segmented switch above the field */
+.seg { display: inline-flex; padding: 2px; margin-top: 10px; border-radius: 8px; background: var(--fill-muted); }
+.seg span { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 6px; color: var(--text-2); font-weight: 500; font-size: 12.5px; }
+.seg span.on { background: var(--bg-raised); color: var(--text-1); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.back { margin-top: 6px; }
+.newstr { background: #fff3c4; border-radius: 3px; padding: 0 2px; }
+.cmp td:nth-child(2) { background: #f3f7ff; }
+.cmp td:nth-child(3) { background: #fff; }
+</style>
+<body>
+<div class="board">
+<h1>从 GitHub 建 workspace · 04 main 改了设置卡以后，From GitHub 放哪</h1>
+<div class="lede">
+main 今天（11-16）把设置卡改了两处：<b>Folder 步骤只剩一个目录名输入框</b>（前缀是机器的 home，<code>aa6fff481</code>），
+<b>Web 上卡片自己用 Create workspace 建 workspace</b>，不再「发消息时才建」（<code>27a0dedbf</code>）。
+P2/P3 把 From GitHub 做成 Folder 步骤的第四个选项，现在那组选项没了，所以要重新定 From GitHub 的位置。
+下面两种方案，每种画三个状态（刚打开 / 仓库列表打开 / 选中一个仓库），上面是 Web，下面是手机（iOS 和 Android 一样的结构）。
+帧用的是 main 新版 <code>MachineSetupCard.css</code> 的类名；界面文案全部英文，<span class="newstr">黄底</span>是要新加的英文句子，其余都是 Web 现有的原文。
+机器 orbit@austin，home 是 <code>/Users/austin</code>。
+</div>
+
+<div class="section"><span class="sec after">A · 推荐（所有者 11-16 选定）</span><span class="sec-sub">目录名输入框不动；下面一条「or」分隔线，再一行 From GitHub（NEW 标签 + 说明）。点它，整个步骤换成 P2 的仓库选择器。</span></div>
+<div class="grid3" id="a"></div>
+
+<div class="section"><span class="sec now">B · 备选</span><span class="sec-sub">输入框上面一个两段开关 Folder name | From GitHub，切到右边换成仓库选择器。</span></div>
+<div class="grid3" id="b"></div>
+
+<div class="section"><span class="sec after">说明</span><span class="sec-sub">建议、服务端改动、原生客户端、待你定</span></div>
+<div class="grid2">
+<figure class="tile">
+  <div class="tile-title">建议选 A</div>
+  <ul class="notes">
+    <li><span class="num">1</span><span class="t"><b>A 不改 main 的默认路径。</b>大多数人只输一个目录名，A 里输入框还是第一眼看到的东西，和 main 刚定的样子一模一样；
+      From GitHub 是下面一行，带 NEW 和一句说明，看得见但不抢。</span></li>
+    <li><span class="num">2</span><span class="t"><b>B 的开关把两条路摆成平级。</b>每次进来都要先看懂开关，而且左边那段不好起名（main 的输入框既能用已有目录，也能新建，叫 “New folder” 不对，只能叫 “Folder name”）。</span></li>
+    <li><span class="num">3</span><span class="t">A 在手机上更省：一行按钮比开关好点，不会挤；B 的开关在手机宽度放不下 NEW 标签，手机帧里只好去掉。两种方案选中仓库以后都一样：P2 的仓库行 + 目录名 + <i>Use this repository</i>。</span></li>
+    <li><span class="num">4</span><span class="t">从选择器回到目录名：A 用一个链接 <span class="newstr"><i>Type a folder name instead</i></span>；B 点开关左段。</span></li>
+    <li><span class="num">5</span><span class="t">选好仓库后，底部就绪句子换成 <span class="newstr"><i>Ready. Orbit adds the workspace “orbit-web” and clones orbit-labs/orbit-web into ~/orbit-repos/orbit-web before its first session starts.</i></span>
+      （Web 的 Create workspace 流程；P2 的 <i>Ready. Send a task — Orbit clones …</i> 留给还在「发消息才建」的原生客户端）。</span></li>
+  </ul>
+</figure>
+<figure class="tile">
+  <div class="tile-title">不管选哪个，要一起做的</div>
+  <ul class="notes">
+    <li><span class="num">6</span><span class="t"><b>服务端：</b><code>POST /workspaces</code> 加 <code>github {repoId, ref?, folder?}</code>（要带 <code>runnerId</code>，和 <code>workDir</code>/<code>newFolder</code> 三选一），
+      走和 <code>POST /sessions newWorkspace.github</code> 一样的检查和拒绝（<code>githubWorkspaceFor</code>：GitHub 没连上、仓库没权限、机器太旧不能 clone、目录已存在）。
+      workspace 先建好，状态 PENDING；<b>runner 下一次对账就开始 clone</b>（心跳里的 <code>cloneRequests</code>，和 P2 一样），会话在 clone 好之前一直排队；会话第一行的 cloning / done / 失败 + Retry 不变。</span></li>
+    <li><span class="num">7</span><span class="t"><b>原生客户端（iOS / macOS / Android）：</b>main 也把它们改成了一个输入框，但它们还是「发消息时建 workspace」。
+      From GitHub 照选中的方案一样放过去，文案和 Web 一字不差（parity 测试锁着）；它们继续用 <code>POST /sessions newWorkspace.github</code>，不用改。</span></li>
+    <li><span class="num">8</span><span class="t"><b>待你定：clone 放哪。</b>main 的新目录放在 home（<code>~/name</code>），P2 的 clone 还在 <code>~/orbit-repos/name</code>
+      （runner 先 clone 到 repos 目录里的临时目录再改名，要放到 home 得改 runner）。这一轮建议<b>先不动</b>，clone 仍在 <code>~/orbit-repos/</code>，帧里也是这么画的；要统一到 home 另开一个任务。</span></li>
+  </ul>
+</figure>
+</div>
+</div>
+
+<script>
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const machine = 'orbit@austin';
+const help = `Where on ${machine} should sessions work? They can read and change everything in it.`;
+const meta = 'Clone a repository you can reach on GitHub. Orbit signs in for the clone and when it lands your work — nothing is saved on the machine.';
+
+const nameField = (value, line) => `
+  <div class="msc-folder">
+    <span class="orbit-text-control orbit-input orbit-input-affix msc-input"><span class="orbit-input-prefix"><span class="msc-prefix">/Users/austin/</span></span><input class="orbit-input-field" placeholder="name" value="${esc(value)}"></span>
+    ${line}
+  </div>`;
+const useFolder = (on) => `<div><button class="orbit-button orbit-button-primary orbit-button-middle msc-use" type="button" ${on ? '' : 'disabled'}>Use this folder</button></div>`;
+const account = `<div class="ghp-acct" style="margin-top:10px">Signed in to GitHub as @octo-dev · 14 repositories · <a>Change</a></div>`;
+const picker = `
+  <span class="orbit-text-control orbit-input orbit-input-affix msc-input" style="display:flex;max-width:none;margin-top:6px"><span class="orbit-input-prefix"><i data-ic="search" style="color:var(--text-3)"></i></span><input class="orbit-input-field" placeholder="Search your repositories" value="orbit"></span>
+  <div class="ghp-menu" style="max-width:none">
+    <div class="ghp-item active"><i data-ic="lock"></i><span class="ghp-name"><span class="owner">orbit-labs/</span>orbit-web</span><span class="ghp-when">pushed 2 hours ago</span></div>
+    <div class="ghp-item"><i data-ic="lock"></i><span class="ghp-name"><span class="owner">orbit-labs/</span>orbit-runner</span><span class="ghp-when">pushed yesterday</span></div>
+    <div class="ghp-item"><i data-ic="github"></i><span class="ghp-name"><span class="owner">octo-dev/</span>orbit-playground</span><span class="ghp-when">pushed Oct 28</span></div>
+    <div class="ghp-foot">Not listed? <a>Add repositories on GitHub <i data-ic="export"></i></a></div>
+  </div>`;
+const picked = `
+  <div class="ghp-row" style="margin-top:10px"><span class="ghp-repo"><i data-ic="lock" style="color:var(--text-3)"></i>orbit-labs/orbit-web</span>
+    <span class="msc-meta"><i data-ic="branch"></i> main</span><a class="msc-change">Change</a></div>
+  <div class="msc-folder" style="margin-top:6px">
+    <span class="orbit-text-control orbit-input orbit-input-affix msc-input"><span class="orbit-input-prefix"><span class="msc-prefix">/Users/austin/orbit-repos/</span></span><input class="orbit-input-field" value="orbit-web"></span>
+    <span class="msc-meta">Cloned before the session starts. Work lands back on GitHub. <a class="msc-change">Other branch</a></span>
+  </div>
+  <div><button class="orbit-button orbit-button-primary orbit-button-middle msc-use" type="button">Use this repository</button></div>`;
+const instead = `<div class="back"><a class="msc-change newstr">Type a folder name instead</a></div>`;
+const ghTitle = `<i data-ic="github"></i>&nbsp;From GitHub<span class="newtag">NEW</span>`;
+
+const A = [
+  ['1 · 刚打开', `${nameField('', '<span class="msc-meta">Uses this folder if it exists, otherwise creates it.</span>')}${useFolder(false)}
+    <div class="or-rule">or</div>
+    <div class="gh-alt"><i data-ic="github"></i><div><div class="gh-alt-title">From GitHub<span class="newtag">NEW</span></div><div class="msc-meta">${esc(meta)}</div></div></div>`],
+  ['2 · 点了 From GitHub：仓库列表', `<div class="msc-option-title" style="margin-top:10px;font-weight:600">${ghTitle}</div>${account}${picker}${instead}`],
+  ['3 · 选中一个仓库', `<div class="msc-option-title" style="margin-top:10px;font-weight:600">${ghTitle}</div>${picked}${instead}`],
+];
+const seg = (right) => `<div class="seg"><span class="${right ? '' : 'on'}">Folder name</span><span class="${right ? 'on' : ''}"><i data-ic="github"></i>From GitHub<span class="newtag" style="margin-left:2px">NEW</span></span></div>`;
+const B = [
+  ['1 · 刚打开', `${seg(false)}${nameField('', '<span class="msc-meta">Uses this folder if it exists, otherwise creates it.</span>')}${useFolder(false)}`],
+  ['2 · 切到 From GitHub：仓库列表', `${seg(true)}<div class="msc-meta" style="margin-top:8px">${esc(meta)}</div>${account}${picker}`],
+  ['3 · 选中一个仓库', `${seg(true)}${picked}`],
+];
+const step = (body) => `<div class="msc-step" style="margin-top:0;padding-top:0;border-top:0"><span class="msc-num">1</span><div style="min-width:0;flex:1">
+  <div class="msc-step-title">Folder</div><div class="msc-step-help">${esc(help)}</div>${body}</div></div>`;
+const frames = (rows, label) => rows.map(([title, body]) => `
+<figure class="tile">
+  <div class="tile-title">${title}</div>
+  <div class="app"><span class="fr-label">${label} · web</span><div class="msc">${step(body)}</div></div>
+  <div class="phone"><div class="scr"><div class="msc">${step(body)}</div></div></div>
+  <div class="scr-label">${label} · iOS / Android（同一结构，原生控件）</div>
+</figure>`).join('');
+document.getElementById('a').innerHTML = frames(A, 'A');
+document.getElementById('b').innerHTML = frames(B, 'B');
+</script>
+<script src="icons.js"></script>
+</body>
+</html>

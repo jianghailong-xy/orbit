@@ -1,5 +1,7 @@
 import {
   COORDINATOR_HANDOFF_COPY,
+  managedSetupState,
+  firstSessionProvider,
   type MergeRecoveryAction,
   type ProjectSidebarTaskCounts,
   type SessionCoordinatorHandoff,
@@ -255,10 +257,9 @@ import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { CreatedWorkspaceLine } from './CreatedWorkspaceLine';
 import { MachineSetupCard, RevealedOnArrival, setupCredentialOf } from './MachineSetupCard';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
-import { ManagedWelcomeCard, useNewAccount } from './WelcomeCard';
-import { WELCOME_PLACEHOLDER } from '../lib/welcomeCopy';
+import { useNewAccount } from './WelcomeCard';
 import type { LoginEngine } from '@orbit/shared';
-import { managedRowOf, managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
+import { managedRowOf, managedRunnerStatusQuery, useManagedRunnerId, type ManagedRunner } from '../lib/managedRunner';
 import { MANAGED_RUNNER_COPY } from '@orbit/shared';
 import {
   currentEngineChoice,
@@ -527,8 +528,10 @@ import {
   type PickedFolder,
 } from '../lib/machineSetup';
 import {
+  CLONE_RETRY_FAILED,
   composerPlaceholderFor,
 } from '../lib/machineSetupCopy';
+import { githubRepositoryOf, hearClone, retryClone } from '../lib/workspaceClone';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -1123,6 +1126,17 @@ const bgRunningLabel = (n: number): string =>
 const subagentRunningLabel = (n: number): string =>
   n > 1 ? `Running ${n} agents` : 'Running Agent';
 
+// The list row's words for the same, naming what the newest one is doing when the server knows
+// (runningSubagentTitle, its launch call's description): "Agent: Deploy …" for one, "Running 2
+// agents · Deploy …" for several. Without a title it is the label above. The row only — the header
+// and the glyph keep the short label.
+const subagentRunningLine = (s: any): string => {
+  const n = s.runningSubagentCount ?? 0;
+  const title = typeof s.runningSubagentTitle === 'string' ? s.runningSubagentTitle.trim() : '';
+  if (!title) return `${subagentRunningLabel(n)}…`;
+  return n > 1 ? `${subagentRunningLabel(n)} · ${title}…` : `Agent: ${title}…`;
+};
+
 // Whether to draw this session as working. RUNNING is the dispatched case. The second one is a
 // turn the runtime started for itself — a background task reporting in, a scheduled wake-up —
 // which never reaches /turn-complete and so stays parked at AWAITING_INPUT for its whole
@@ -1329,7 +1343,7 @@ export const sessionLine = (
     // the parent's own system progress events), so surface it explicitly instead of falling
     // through to the muted last-reply preview, which reads as idle.
     if ((s.runningSubagentCount ?? 0) > 0)
-      return { text: `${subagentRunningLabel(s.runningSubagentCount)}…`, tone: 'running' };
+      return { text: subagentRunningLine(s), tone: 'running' };
     // The workspace hasn't answered yet: show the message it was sent (the server keeps lastUserText
     // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
     // which would read as if this one had already been answered. It's content, not status — the
@@ -1349,7 +1363,7 @@ export const sessionLine = (
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
   // surfaces "Running Agent…".
   const parked = live ? parkedWorkLabel(s) : null;
-  if (parked?.kind === 'subagent') return { text: `${parked.text}…`, tone: 'running' };
+  if (parked?.kind === 'subagent') return { text: subagentRunningLine(s), tone: 'running' };
   // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever else it
   // left running — not a background process (contract §9.2). Said in the strip's own line, so the row
   // and the strip above its composer read the same.
@@ -1417,8 +1431,8 @@ export function CoordinatorBadge({ projectId }: { projectId?: string | null }) {
 
 /** Where and how the agent runs a guest's message, for the Share dialog's People who can reply: the session's own
  *  runner and permission mode, or the workspace's machine when the session names none. */
-const guestContextOf = (s: any, fallbackRunner: string) => ({
-  runnerName: s.assignedRunner?.displayName || s.assignedRunner?.name || fallbackRunner,
+const guestContextOf = (s: any, fallbackRunner: string, managedRunnerId: string | null) => ({
+  runnerName: (s.assignedRunner ? machineName(s.assignedRunner, managedRunnerId) : '') || fallbackRunner,
   permissionMode: typeof s.permissionMode === 'string' ? s.permissionMode : 'default',
 });
 
@@ -2369,6 +2383,9 @@ export function WorkspaceView({
   // A task opens over this conversation, not on its own page (lib/taskInPlace).
   const openTaskOverPage = useOpenTaskOverPage();
   const [searchParams, setSearchParams] = useSearchParams();
+  // How this console names its machine: Orbit Cloud for the account's managed runner (machineName).
+  const managedRunnerId = useManagedRunnerId() ?? managed?.status.runnerId ?? null;
+  const runnerShownName = machineName(runner, managedRunnerId);
   // Merge and Commit finish asynchronously on a runner heartbeat. Keep accepted operations by
   // session id so their result continues polling even if the user opens another conversation.
   const pendingOperationSeq = useRef(0);
@@ -3502,10 +3519,10 @@ export function WorkspaceView({
       needsYou: sessionNeedsYou,
       motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
       line: (s) => sessionLine(selectedSession?.id === s.id ? selectedSession : s,
-        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, machineName(runner)),
+        effectiveView !== 'trash', sessionWatching(watchingBySession, s.id), recapsEnabled, runnerShownName),
     }),
     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
-      effectiveView, listByTag, runner.online, runner.name, runner.displayName, watchingBySession, selectedSession, recapsEnabled,
+      effectiveView, listByTag, runner.online, runnerShownName, watchingBySession, selectedSession, recapsEnabled,
       resolvedWorkspaceId],
   );
   // A project's entry is in the list only where its coordinator runs (owner 2026-11-07), so it stands
@@ -3856,6 +3873,7 @@ export function WorkspaceView({
   // message (board rule 1). Only while the list says so; a machine with one is sent on to it
   // (WorkspaceConsole).
   const bareMachine = machineDraft && workspacesQ.isSuccess && workspacesForRunner.length === 0;
+  const managedSetup = managedSetupState(runner.id, managed?.status);
   // While the card is up its machine is read every few seconds, and more often while it is still connecting:
   // its first heartbeat is what opens the folder step (lib/machineSetup SETUP_POLL_MS).
   const machineConnecting = bareMachine && isConnecting(runner);
@@ -3902,20 +3920,10 @@ export function WorkspaceView({
   // workspaces/workspace-provider.ts): a workspace holds neither of its own. `provider` is the
   // deprecated alias of `lastProvider`, still served for older native builds.
   const lastWorkspaceProvider =
-    pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? firstEngineOn(runner.engines) : 'claude');
+    pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? (bareMachine ? (managedSetup && managed && firstSessionProvider(managed.status)) || firstEngineOn(runner.engines) : 'claude');
   const lastWorkspaceEngine = sessionEngineOf(pickedWorkspace?.lastEngine, lastWorkspaceProvider, configuredProviders);
   const pickedEngine: AgentProvider = draftHere?.engine ?? lastWorkspaceEngine;
   const pickedProvider: string = draftHere?.provider ?? lastWorkspaceProvider;
-  // The managed runner's default workspace has no engine for a first session until its runner has
-  // been ready with one (`initialProvider`): before that the server refuses the session with
-  // MODEL_UNAVAILABLE, so the draft offers no default engine and shows the runner's state instead.
-  const managedDraftBlocked =
-    !selected &&
-    !!managed &&
-    !managed.display.startsNewSession &&
-    !!workspaceId &&
-    !!managed.status.workspaceId &&
-    routeId(managed.status.workspaceId) === routeId(workspaceId);
   // The Codex, Claude, Antigravity or Kimi account picked for the draft on the New Session hero, scoped to
   // its workspace like the provider pick. Without one a new session starts where Automatic or its
   // workspace says.
@@ -4132,26 +4140,8 @@ export function WorkspaceView({
     () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
     [pickedEngine, pickedProvider, draftEngines, choiceSources],
   );
-  // A new account's first draft wears the welcome card (docs/mocks/new-user-onboarding): on its managed
-  // runner's default workspace in place of the runner's notice and the engine hero, and on a bare
-  // machine as the setup card's greeting. Only while the account has never had a session.
-  const managedDraft =
-    !selected &&
-    !!managed &&
-    !!workspaceId &&
-    !!managed.status.workspaceId &&
-    routeId(managed.status.workspaceId) === routeId(workspaceId);
-  const newAccount = useNewAccount(composing && (bareMachine || managedDraft));
-  const managedWelcome = newAccount && managedDraft && !bareMachine;
+  const newAccount = useNewAccount(composing && bareMachine);
   const machineWelcome = newAccount && bareMachine;
-  // Before a first session can start there is no draft engine to sign in, so the runner's own first one.
-  const welcomeEngine: LoginEngine =
-    !managedDraftBlocked && isLoginProvider(pickedEngine) ? (pickedEngine as LoginEngine) : firstEngineOn(runner.engines);
-  const welcomeCredential = setupCredentialOf(
-    runner,
-    welcomeEngine,
-    managedDraftBlocked && !draftHere ? null : currentDraftEngine.provider,
-  );
   // The credentials the composer's engine runs on here — the Provider menu's rows — and how any one
   // provider of it reads, listed or not (a key since removed, the legacy built-in `dsh`).
   const shownEngineProviders = useMemo(
@@ -4206,11 +4196,6 @@ export function WorkspaceView({
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
-  };
-  // A first message from the welcome card: into the composer, to be read, changed and sent there.
-  const pickWelcomeExample = (example: string): void => {
-    setText(example);
-    setTimeout(() => taRef.current?.focus(), 0);
   };
   // The setup card's Use an API key (rule 5): with a key or pool that can run here, that is the draft's
   // credential, this engine's first; with none yet, the keys are where one is connected.
@@ -4372,7 +4357,7 @@ export function WorkspaceView({
     activeSlots,
     runner.maxConcurrent,
     (selectedSession ?? selected) as QueuedGate | null,
-    machineName(runner),
+    runnerShownName,
   );
   const selectedStartingSession = selectedSession ?? selected;
   const selectedIsQueued = selected
@@ -4433,19 +4418,25 @@ export function WorkspaceView({
             session: selectedSession as NeverStartedSession,
             runtime: selectedRuntime,
             keyName: selectedKeyName,
-            runnerName: runner.displayName || runner.name,
+            runnerName: runnerShownName,
             region: runner.region ?? null,
+            clone: detailForSelected?.workspace?.cloneState
+              ? {
+                  repository: githubRepositoryOf(detailForSelected.workspace.repoUrl),
+                  error: detailForSelected.workspace.cloneError ?? null,
+                }
+              : null,
           })
         : null,
     [
       selected,
       selectedSession,
+      detailForSelected?.workspace,
       selectedTrashed,
       selectedMissing,
       selectedRuntime,
       selectedKeyName,
-      runner.displayName,
-      runner.name,
+      runnerShownName,
       runner.region,
     ],
   );
@@ -4717,13 +4708,13 @@ export function WorkspaceView({
   const queuedHeldTag = runnerUpdatingGate ? (
     <RunnerUpdatingTag
       gate={runnerUpdatingGate}
-      machine={machineName(runner)}
+      machine={runnerShownName}
       actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <RunnerUpdateLaterMenu runnerId={runner.id} />}
       updateNow={!isRunnerStopping(runnerUpdatingGate) && runnerTakesUpdateNow(runner) ? runner : undefined}
     />
   ) : capacityGate ? (
     // A full runner, run or batch, said in the same places by the same rules (board queued-card-runner-full ②④).
-    <CapacityHeldTag gate={capacityGate} machine={machineName(runner)} />
+    <CapacityHeldTag gate={capacityGate} machine={runnerShownName} />
   ) : null;
   // The reader's own waiting messages sit in the tray, which carries the tag itself; only where nothing
   // anywhere is waiting does it fall back to the last message they sent.
@@ -7064,13 +7055,13 @@ export function WorkspaceView({
       : undefined;
     const rows = localStatusRows({
       surface: 'Web',
-      runnerName: runner.displayName || runner.name,
+      runnerName: runnerShownName,
       runnerOnline: runner.online,
       activeSessions: runner.activeSessions,
       maxConcurrent: runner.maxConcurrent,
       sessionTitle: selected?.title ?? (selectedMissing ? 'Session not found' : null),
       sessionStatus: selectedSession
-        ? statusLabel(selectedSession, selectedWatchingWord, machineName(runner))
+        ? statusLabel(selectedSession, selectedWatchingWord, runnerShownName)
         : selectedMissing
           ? 'not found'
           : null,
@@ -7351,7 +7342,6 @@ export function WorkspaceView({
       !send.isPending &&
       !uploading &&
       runnerTakesWork &&
-      !managedDraftBlocked &&
       !selectedTrashed &&
       !sameSessionSendBlocked &&
       !selectedMissing &&
@@ -8110,7 +8100,7 @@ export function WorkspaceView({
     () => ({
       provider: outageProvider,
       cursor: cursorQuotaHelp,
-      runnerName: runner.name,
+      runnerName: runnerShownName,
       retryAt: detailForSelected?.retryAt ?? null,
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
@@ -8183,7 +8173,7 @@ export function WorkspaceView({
       // Rebuilt each render, so compared by what it says; its press only opens a draft.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       JSON.stringify(cursorQuotaHelp),
-      runner.name,
+      runnerShownName,
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
@@ -8302,7 +8292,7 @@ export function WorkspaceView({
   // Title shown above the session list (and in the draft header). /sessions/<id>
   // has no workspace in the URL, so fall back to the open session's workspace, then runner.
   const headWorkspaceName =
-    lockedWorkspace?.name ?? selected?.workspace?.name ?? runner.displayName ?? runner.name;
+    lockedWorkspace?.name ?? selected?.workspace?.name ?? runnerShownName;
 
   // ── Folders (docs/session-folders-move-design.md §3, §7) ──
   // In and out of a folder's page is a change of the `folder` param on whichever route the console
@@ -8708,7 +8698,7 @@ export function WorkspaceView({
     () => ({
       provider: shownProvider,
       keyName: selectedKeyName,
-      runnerName: runner.displayName || runner.name,
+      runnerName: runnerShownName,
       runnerId: runner.id,
       account: signedOutAccount?.id,
       accountLabel: signedOutAccount ? accountNameOf(signedOutAccount) : null,
@@ -8758,8 +8748,7 @@ export function WorkspaceView({
       shownProvider,
       shownEngine,
       selectedKeyName,
-      runner.name,
-      runner.displayName,
+      runnerShownName,
       runner.id,
       signedOutAccount,
       runner.version,
@@ -8795,6 +8784,16 @@ export function WorkspaceView({
       navigate,
     ],
   );
+  // A failed clone's Retry, from the never-started card (the conversation's first line has its own).
+  const retryCloneNow = useMutation({
+    mutationFn: (workspaceId: string) => retryClone(workspaceId),
+    onSuccess: (_answer, workspaceId) => {
+      hearClone(workspaceId, { state: 'PENDING', progress: null });
+      if (selectedId) void qc.invalidateQueries({ queryKey: sessionQuery(selectedId).queryKey });
+      refreshSessionLists();
+    },
+    onError: (e: Error) => message.error(CLONE_RETRY_FAILED, e.message),
+  });
   // What the never-started card's presses do, in either of the places it stands (see its render).
   const neverStartedActions: NeverStartedActions = {
     // SR34: a refused run is not re-resolved, it is replaced by a NEW run of the
@@ -8828,10 +8827,11 @@ export function WorkspaceView({
     // the Provider menu lists any (every row is the session's own engine's); a workspace on another
     // machine; and a check now, where this runner checks at all (`region` is null where it doesn't).
     otherProvider:
-      configEditable && !managedDraftBlocked && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
+      configEditable && providerSwitchChoices.length > 1 ? openProviderMenu : undefined,
     moveSession: selectedSession ? () => openMove(selectedSession) : undefined,
     checkAgain: runner.region ? regionCheck.checkAgain : undefined,
-    busy: retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
+    retryClone: detailForSelected?.workspace?.cloneState === 'FAILED' ? () => retryCloneNow.mutate(detailForSelected.workspace!.id) : undefined,
+    busy: retryCloneNow.isPending || retryInFlight || startRunAgain.isPending || installCursor.isPending || regionCheck.asking,
   };
   const pickModel = (v: string): void => {
     // A pick applies to this session (or draft) only: the next draft's model is the workspace's
@@ -9112,7 +9112,7 @@ export function WorkspaceView({
       ? []
       : [{ key: `provider-group:${key}`, type: 'group' as const, label, children: choices.flatMap(providerRows) }];
   // The machine the session's engine runs on, as its sign-in group names it.
-  const runnerLabel = runner.displayName || runner.name;
+  const runnerLabel = runnerShownName;
   const listedChoices = shownProviderListed ? providerSwitchChoices : providerSwitchChoices.slice(1);
   const ownCredential = listedChoices.filter((c) => c.kind === 'login' || c.kind === 'opencode');
   // A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run, so its
@@ -9315,7 +9315,7 @@ export function WorkspaceView({
     ? ''
     : handingOver
       ? COORDINATOR_HANDOFF_COPY.badgeHandingOver
-      : statusLabel(selectedSession ?? selected, selectedWatchingWord, machineName(runner));
+      : statusLabel(selectedSession ?? selected, selectedWatchingWord, runnerShownName);
   // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
   // session's bottom, and the label itself — one read of one helper, so the words and the ink are
   // not decided twice.
@@ -9360,9 +9360,7 @@ export function WorkspaceView({
       ? 'Session not found'
       : sameSessionSendBlocked
         ? sameSessionSendBlockedCopy
-        : managedWelcome
-          ? WELCOME_PLACEHOLDER
-        : managedDraftBlocked || !runnerTakesWork
+        : !runnerTakesWork
           ? (managed?.display.title ?? 'Runner offline')
           : replyTo
             ? replyTo.placeholder
@@ -9372,7 +9370,7 @@ export function WorkspaceView({
                 ? CURSOR_RUNNING_PLACEHOLDER
                 : 'Reply…'
               : machineDraft
-                ? composerPlaceholderFor(machineName(runner))
+                ? composerPlaceholderFor(runnerShownName)
                 : 'Send this workspace a task…';
   // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
   // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
@@ -9619,7 +9617,7 @@ export function WorkspaceView({
         // merged row for both status surfaces so the banner and its list warning point at
         // the same canonical obligation during that refresh gap.
         const watching = sessionWatching(watchingBySession, s.id);
-        const line = sessionLine(actionSession, openable, watching, recapsEnabled, machineName(runner));
+        const line = sessionLine(actionSession, openable, watching, recapsEnabled, runnerShownName);
         const drag = swipeDrag?.id === s.id ? swipeDrag : null;
         const swipeTx = drag
           ? drag.dx
@@ -9765,7 +9763,7 @@ export function WorkspaceView({
               style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
             >
               <span className="session-icon">
-                <StatusIcon session={actionSession} watching={watching?.word} machine={machineName(runner)} />
+                <StatusIcon session={actionSession} watching={watching?.word} machine={runnerShownName} />
               </span>
               <div className="session-main">
                 {renaming ? (
@@ -10195,7 +10193,7 @@ export function WorkspaceView({
             )}
           </div>
           {/* docs/mocks/runner-update-indicator: this runner drains for its update with the reader's work waiting (D3). */}
-          <RunnerUpdateIndicator runner={runner} machine={machineName(runner)} />
+          <RunnerUpdateIndicator runner={runner} machine={runnerShownName} />
           {selected && !composing && (
             <>
               {titleBarProjectId && !selectedTrashed && (
@@ -10427,7 +10425,7 @@ export function WorkspaceView({
             onClose={() => setShareOpen(false)}
             kind="SESSION"
             rootId={selected.id}
-            guests={guestContextOf(selected, machineName(runner))}
+            guests={guestContextOf(selected, runnerShownName, managedRunnerId)}
           />
         )}
         {selected && !selectedTrashed && !composing && (
@@ -10440,7 +10438,7 @@ export function WorkspaceView({
             onToggleTag={toggleTag}
             tagsSaving={setTagsMut.isPending}
             engineName={selectedSession?.engine ? engineTitle.name : null}
-            runnerName={runner ? machineName(runner) : null}
+            runnerName={runner ? runnerShownName : null}
             accountLabel={
               // An engine's own sign-in by the account it is on, as the composer's Provider row names it.
               shownProviderRow?.kind === 'login'
@@ -10455,7 +10453,7 @@ export function WorkspaceView({
             onClose={() => setShareRow(null)}
             kind="SESSION"
             rootId={shareRow.id}
-            guests={guestContextOf(shareRow, machineName(runner))}
+            guests={guestContextOf(shareRow, runnerShownName, managedRunnerId)}
           />
         )}
         <SessionMoveModal
@@ -10582,7 +10580,7 @@ export function WorkspaceView({
                 <CreatedWorkspaceLine
                   sessionId={selectedId}
                   workspace={{ ...detailForSelected.workspace, name: detailForSelected.workspace.name }}
-                  machine={machineName(runner)}
+                  machine={runnerShownName}
                   runnerId={runner.id}
                 />
               )}
@@ -10604,9 +10602,9 @@ export function WorkspaceView({
                   {runnerUpdatingGate ? (
                     <RunnerUpdatingQueued
                       gate={runnerUpdatingGate}
-                      machine={machineName(runner)}
+                      machine={runnerShownName}
                       onOpenSession={(id) => navigate(sessionPath(id))}
-                      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={machineName(runner)} />}</div>}
+                      actions={isRunnerStopping(runnerUpdatingGate) ? undefined : <div className="runner-update-actions"><RunnerUpdateLaterMenu runnerId={runner.id} />{runnerTakesUpdateNow(runner) && <RunnerUpdateNowButton runner={runner} machine={runnerShownName} />}</div>}
                     />
                   ) : (
                     <>
@@ -10984,6 +10982,7 @@ export function WorkspaceView({
               <div className="msc-draft">
                 <MachineSetupCard
                   runner={runner}
+                  managed={managed}
                   onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
                   creating={createWorkspace.isPending}
                   createError={createWorkspace.error?.message ?? null}
@@ -10996,22 +10995,6 @@ export function WorkspaceView({
                 ))}
               </div>
             </div>
-          ) : managedWelcome && managed ? (
-            <div key="welcome" className="workspace-sessions workspace-draft">
-              <div className="msc-draft">
-                <ManagedWelcomeCard
-                  managed={managed}
-                  runner={runner}
-                  engine={welcomeEngine}
-                  credential={welcomeCredential}
-                  composerText={text}
-                  startsNow={!managedDraftBlocked}
-                  onExample={pickWelcomeExample}
-                  onUseApiKey={pickApiKey}
-                  onChangeCredential={() => pickDraft(welcomeEngine as AgentProvider, welcomeEngine)}
-                />
-              </div>
-            </div>
           ) : composing ? (
             // The provider hero is centered as a hero only while it's alone: .workspace-draft is a
             // centering flex row, so once /status prints a card it would sit beside the hero instead
@@ -11020,7 +11003,7 @@ export function WorkspaceView({
               className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
-              {!machineDraft && !managedDraftBlocked && (
+              {!machineDraft && (
                 <NewSessionProviderHero
                   current={currentDraftEngine}
                   engines={draftEngines}
@@ -11076,7 +11059,7 @@ export function WorkspaceView({
         />
         {/* The managed runner's state while it is anything but ready: preparing, waiting, asleep,
             waking, failed (with Retry), removed. */}
-        {managed && managed.display.kind !== 'available' && !managedWelcome && (
+        {managed && managed.display.kind !== 'available' && !(bareMachine && managedSetup) && (
           // Asleep is not a fault: one calm line that sending wakes it, rather than the notice.
           managedHeadRow?.asleep && managedHeadRow.kind === 'sleeping' ? (
             <div className="managed-runner-composer-line" role="status" data-kind="sleeping">
@@ -11304,7 +11287,6 @@ export function WorkspaceView({
           permissionSemanticsFor={permissionSemanticsFor}
           shownEngine={shownEngine}
           configEditable={configEditable}
-          managedDraftBlocked={managedDraftBlocked}
           modelMenuOpen={modelMenuOpen}
           setModelMenuOpen={setModelMenuOpen}
           setProviderMenuOpen={setProviderMenuOpen}
@@ -11503,7 +11485,6 @@ export interface SessionComposerProps {
   permissionSemanticsFor: (label: string) => { shortNote?: string } | null | undefined;
   shownEngine: AgentProvider;
   configEditable: boolean | undefined;
-  managedDraftBlocked: boolean | undefined;
   modelMenuOpen: boolean;
   setModelMenuOpen: (open: boolean) => void;
   setProviderMenuOpen: (open: boolean) => void;
@@ -11579,7 +11560,6 @@ export function SessionComposer({
   permissionSemanticsFor,
   shownEngine,
   configEditable,
-  managedDraftBlocked,
   modelMenuOpen,
   setModelMenuOpen,
   setProviderMenuOpen,
@@ -12451,9 +12431,6 @@ export function SessionComposer({
             way a reference composer writes "model · effort" as one button: the model in the
             label's colour, the effort after it in the secondary one. The menu behind it
             (`modelMenuItems`) keeps each field's own rules. */}
-        {/* No model to show where a first session cannot start yet: the managed default
-            workspace before its runner was ever ready (`managedDraftBlocked`). */}
-        {!managedDraftBlocked && (
           <span className="composer-pill composer-model-pill">
             <Menu
               side="top"
@@ -12501,7 +12478,6 @@ export function SessionComposer({
               }
             />
           </span>
-        )}
         {shownPool && shownPoolAccount && (
           <Tooltip content={poolAccountHelp(shownPool, shownPoolAccount)}>
             <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>

@@ -6,7 +6,7 @@ import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Found
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`). Change password is the one opened from a page rather than the list: Profile's.
 public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
-    case general, notifications, profile, sharedLinks, accessTokens, terminals, machines, providers, changePassword
+    case general, notifications, profile, sharedLinks, accessTokens, terminals, github, machines, providers, changePassword
 
     /// The page's navigation title — the same words as the row that opens it.
     public var title: String {
@@ -17,6 +17,7 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
         case .sharedLinks:    return SettingsHome.title(.sharedLinks)
         case .accessTokens:   return SettingsHome.title(.accessTokens)
         case .terminals:      return SettingsHome.title(.terminals)
+        case .github:         return SettingsHome.title(.github)
         case .machines:       return SettingsHome.title(.machines)
         case .providers:      return SettingsHome.title(.providers)
         case .changePassword: return SettingsCopy.changePassword
@@ -31,16 +32,18 @@ public enum SettingsPage: String, Hashable, Sendable, CaseIterable {
 ///
 /// The groups and rows are the web Settings nav's (`SettingsLayout.tsx`, `settingsIndex.ts`), in its
 /// order: Personal — General, Notifications, Appearance, Profile, Shared links, Access tokens,
-/// Terminals — then Machines, then Providers. The web's pages the app has no page for yet (Storage,
-/// Integrations, Workspaces) are left out; a phone shows each of Machines and Providers as one row
+/// Terminals — then Integrations' GitHub (docs/github-workspace-design.md §8), then Machines, then
+/// Providers. The web's pages the app has no page for yet (Storage, Feishu, Workspaces) are left out; a phone shows each of Machines and Providers as one row
 /// opening its page, where the web lists their items in the nav itself.
 public enum SettingsHome {
     public enum Group: String, CaseIterable, Sendable {
-        case personal, machines, providers
+        case personal, integrations, machines, providers
     }
 
     public enum Row: String, CaseIterable, Sendable {
         case general, notifications, appearance, profile, sharedLinks, accessTokens, terminals
+        /// Settings → GitHub (docs/github-workspace-design.md §8): the web's Integrations group's GitHub page.
+        case github
         case machines
         case providers
     }
@@ -50,6 +53,7 @@ public enum SettingsHome {
     public static func header(_ group: Group) -> String? {
         switch group {
         case .personal:  return "Personal"
+        case .integrations: return GithubCopy.INTEGRATIONS
         case .machines:  return nil
         case .providers: return nil
         }
@@ -59,6 +63,7 @@ public enum SettingsHome {
     public static func rows(_ group: Group) -> [Row] {
         switch group {
         case .personal:  return [.general, .notifications, .appearance, .profile, .sharedLinks, .accessTokens, .terminals]
+        case .integrations: return [.github]
         case .machines:  return [.machines]
         case .providers: return [.providers]
         }
@@ -74,6 +79,7 @@ public enum SettingsHome {
         case .sharedLinks:   return "Shared links"
         case .accessTokens:  return AccessTokensList.title
         case .terminals:     return Terminals.title
+        case .github:        return GithubCopy.TITLE
         case .machines:      return MachinesAndModels.machines
         case .providers:     return "Providers"
         }
@@ -89,6 +95,7 @@ public enum SettingsHome {
         case .sharedLinks:   return "link"
         case .accessTokens:  return "key.horizontal"
         case .terminals:     return "terminal"
+        case .github:        return "chevron.left.forwardslash.chevron.right"
         case .machines:      return AppSection.runners.systemImage
         case .providers:     return "cloud"
         }
@@ -104,6 +111,7 @@ public enum SettingsHome {
         case .sharedLinks:   return .sharedLinks
         case .accessTokens:  return .accessTokens
         case .terminals:     return .terminals
+        case .github:        return .github
         case .machines:      return .machines
         case .providers:     return .providers
         }
@@ -129,6 +137,12 @@ public enum SettingsHome {
         guard !runners.isEmpty else { return "None" }
         let online = runners.filter { $0.online == true }.count
         return "\(online) of \(runners.count) online"
+    }
+
+    /// "@ada" — the GitHub account connected, once the connection has been read; nil before, and when none is.
+    public static func githubValue(_ integration: GithubIntegration?) -> String? {
+        guard let integration, integration.connected, let login = integration.login else { return nil }
+        return "@\(login)"
     }
 
     /// "25 active" — the links that open for anyone who has them.

@@ -19,10 +19,11 @@ import {
   scheduleRunView,
   scheduleUsageThisMonth,
   scheduleViewNames,
+  scheduleReadBack,
   scheduleView,
   workspaceNames,
 } from './schedule-views';
-import type { ScheduleCreateResult, ScheduleDecisionResult, ScheduleUpdateResult } from './schedules.service';
+import type { ScheduleCreateResult, ScheduleDecisionResult, ScheduleUpdateAnswer } from './schedules.service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -41,6 +42,17 @@ export const SCHEDULE_PENDING_CREATE_NOTE =
 export const SCHEDULE_PENDING_UPDATE_NOTE =
   'Not changed yet: this grows what the schedule may do, so it waits on a card only the person can allow. The '
   + 'schedule runs as it was until they do.';
+
+/** §8.1: the session asked to create a schedule it already created; it is named so the agent changes that one. */
+export const SCHEDULE_EXISTS_NOTE =
+  'Not created: this session already created this schedule (same workspace, same title or what was asked), so no '
+  + 'card was put in front of the person. To change it, call schedule_update with this scheduleId and only the fields '
+  + 'that change. If the person really wants a second schedule, give it a title of its own.';
+
+/** §8.2: a change of the time, frequency or limits is not a restated goal; the intent it carried was not written. */
+export const SCHEDULE_INTENT_KEPT_NOTE =
+  'What was asked (intent) was left as it was: this change only reschedules, and intent changes only when the person '
+  + 'restates the goal.';
 
 export const SCHEDULE_RECORD_NOTE =
   'Changed at once (inside what the person allowed). The change is recorded in the schedule\'s history, and the '
@@ -154,23 +166,21 @@ export class ScheduleReadsService {
     const schedule = await tx.schedule.findFirst({ where: { id: scheduleId, ownerId } });
     if (!schedule) throw new NotFoundException({ code: 'SCHEDULE_NOT_FOUND', message: 'No such schedule.' });
     const now = this.now();
-    const [names, viewNames, runs, findings, revisions, pending, creation, usage] = await Promise.all([
+    const [names, viewNames, runs, findings, revisions, pending, usage] = await Promise.all([
       workspaceNames(tx, ownerId, [schedule.workspaceId, schedule.envelopeWorkspaceId]),
       scheduleViewNames(tx, ownerId, [schedule]),
       tx.scheduleRun.findMany({ where: { scheduleId }, orderBy: { plannedAt: 'desc' }, take: 10 }),
       tx.scheduleFinding.findMany({ where: { scheduleId }, orderBy: { createdAt: 'desc' }, take: 50 }),
       tx.scheduleRevision.findMany({ where: { scheduleId }, orderBy: { revision: 'desc' }, take: 50 }),
       tx.scheduleChangeRequest.findMany({ where: { scheduleId, state: 'PENDING' }, orderBy: { createdAt: 'desc' } }),
-      tx.scheduleChangeRequest.findFirst({ where: { scheduleId, kind: 'CREATE', state: 'ALLOWED' } }),
       scheduleUsageThisMonth(tx, schedule, now),
     ]);
     const undone = new Map<number, number>();
     for (const r of revisions) if (r.undoOfRevision !== null) undone.set(r.undoOfRevision, r.revision);
     const ended = runs.find((r) => r.endedAt !== null) ?? null;
-    const proposed = creation?.proposed as { readBack?: string | null } | undefined;
     return {
       schedule: scheduleView(schedule, names, viewNames),
-      readBack: proposed?.readBack ?? schedule.intent,
+      readBack: scheduleReadBack(schedule),
       lastRun: ended ? scheduleRunView(ended) : null,
       recentRuns: runs.map(scheduleRunView),
       findings: findings.map(scheduleFindingView),
@@ -279,18 +289,34 @@ export class ScheduleReadsService {
 
   async createAnswer(ownerId: string, result: ScheduleCreateResult) {
     if (result.outcome === 'CREATED') return { outcome: 'CREATED' as const, schedule: await this.rowView(ownerId, result.schedule) };
+    if (result.outcome === 'EXISTS') {
+      const schedule = await this.rowView(ownerId, result.schedule);
+      return { outcome: 'EXISTS' as const, scheduled: false, note: SCHEDULE_EXISTS_NOTE, scheduleId: schedule.id, schedule };
+    }
     const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now());
     return { outcome: 'PENDING' as const, scheduled: false, note: SCHEDULE_PENDING_CREATE_NOTE, card };
   }
 
-  async updateAnswer(ownerId: string, result: ScheduleUpdateResult) {
+  async updateAnswer(ownerId: string, result: ScheduleUpdateAnswer) {
+    const kept = result.intentKept ? ` ${SCHEDULE_INTENT_KEPT_NOTE}` : '';
+    const intentKept = result.intentKept ? { intentKept: true as const } : {};
     if (result.outcome === 'PENDING') {
       const [card] = await scheduleCardViews(this.prisma, ownerId, [result.request], this.now());
-      return { outcome: 'PENDING' as const, changed: false, note: SCHEDULE_PENDING_UPDATE_NOTE, card };
+      return { outcome: 'PENDING' as const, changed: false, note: SCHEDULE_PENDING_UPDATE_NOTE + kept, ...intentKept, card };
     }
     const schedule = await this.rowView(ownerId, result.schedule);
-    if (result.outcome === 'UNCHANGED') return { outcome: 'UNCHANGED' as const, changed: false, schedule };
-    return { outcome: 'APPLIED' as const, changed: true, note: SCHEDULE_RECORD_NOTE, schedule, record: await this.record(result.schedule, result.revision) };
+    if (result.outcome === 'UNCHANGED') {
+      return { outcome: 'UNCHANGED' as const, changed: false, ...(kept ? { note: kept.trim() } : {}), ...intentKept, schedule };
+    }
+    return {
+      outcome: 'APPLIED' as const,
+      changed: true,
+      note: SCHEDULE_RECORD_NOTE + kept,
+      ...intentKept,
+      schedule,
+      readBack: scheduleReadBack(result.schedule),
+      record: await this.record(result.schedule, result.revision),
+    };
   }
 
   async decisionAnswer(ownerId: string, result: ScheduleDecisionResult) {

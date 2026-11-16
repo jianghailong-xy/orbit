@@ -1,5 +1,8 @@
 import {
+  CLONE_WORKDIR_CAPABILITY,
   CREATE_WORKDIR_CAPABILITY,
+  managedSetupState,
+  type ManagedRunnerStatus,
   DIR_PROBE_CAPABILITY,
   type DirProbe,
   type LoginEngine,
@@ -7,7 +10,8 @@ import {
   type RunnerEngineHealth,
   newFolderRoot,
 } from '@orbit/shared';
-import { encodeId } from './idCodec';
+import { encodeId, routeId } from './idCodec';
+import { MANAGED_RUNNER_LABEL } from './runnerCopy';
 import {
   SETUP_FOUND_PREFIX,
   SETUP_NEW_FOLDER_DONE,
@@ -32,18 +36,27 @@ import { workspaceRunnerId, type OrderableWorkspace } from './workspaceOrder';
  *  machine with none has no workspace to name; `/workspaces/<runner>` redirects here (WorkspaceConsole). */
 export const machineDraftPath = (runnerId: string): string => `/runners/${encodeId(runnerId)}/new`;
 
-/** The name the app labels a machine with everywhere. */
-export const machineName = (runner: { name: string; displayName?: string | null }): string =>
-  runner.displayName || runner.name;
+/** The name the app labels a machine with everywhere: the owner's own name for it, else Orbit Cloud for
+ *  the account's managed runner (`managedRunnerId`, the managed status's runnerId — never its stored
+ *  name), else the name it registered with. */
+export const machineName = (
+  runner: { id?: string; name?: string; displayName?: string | null },
+  managedRunnerId?: string | null,
+): string =>
+  runner.displayName?.trim() || (isManagedRunner(runner, managedRunnerId) ? MANAGED_RUNNER_LABEL : (runner.name ?? ''));
 
-/** Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no workspace
- *  of this account on them: an offline one is already what Machines & models says needs you. */
+/** Whether `runner` is the account's managed runner, by id. */
+export const isManagedRunner = (runner: { id?: string } | null | undefined, managedRunnerId: string | null | undefined): boolean =>
+  !!runner?.id && !!managedRunnerId && routeId(runner.id) === routeId(managedRunnerId);
+
+/** Machines without a workspace, in list order: online machines and managed machines accepting queued work. */
 export function machinesToSetUp<R extends { id: string; online?: boolean }>(
   runners: readonly R[],
   workspaces: readonly OrderableWorkspace[],
+  managedStatus?: ManagedRunnerStatus | null,
 ): R[] {
   const taken = new Set(workspaces.map(workspaceRunnerId));
-  return runners.filter((runner) => runner.online && !taken.has(runner.id));
+  return runners.filter((runner) => (runner.online || managedSetupState(runner.id, managedStatus) !== null) && !taken.has(runner.id));
 }
 
 /** Whether a machine can be asked about a path at all, and whether it can make a new folder: the
@@ -52,6 +65,21 @@ export const answersDirProbe = (runner: { capabilities?: string[] }): boolean =>
   !!runner.capabilities?.includes(DIR_PROBE_CAPABILITY);
 export const makesNewFolders = (runner: { capabilities?: string[]; reposRoot?: string | null }): boolean =>
   !!runner.capabilities?.includes(CREATE_WORKDIR_CAPABILITY) && !!runner.reposRoot?.trim();
+/** Whether a machine clones a GitHub repository on request (docs/github-workspace-design.md §6): it declares
+ *  clone-workdir/v1 and has reported the Repos Folder the clone goes in. POST /sessions refuses either missing. */
+export const clonesRepositories = (runner: { capabilities?: string[]; reposRoot?: string | null }): boolean =>
+  !!runner.capabilities?.includes(CLONE_WORKDIR_CAPABILITY) && !!runner.reposRoot?.trim();
+
+/** A path as the board writes it: the home folder as `~` (`/Users/austin/orbit-repos/x` → `~/orbit-repos/x`). */
+export function homeShortPath(path: string): string {
+  return path.replace(/^(?:\/Users\/[^/]+|\/home\/[^/]+|\/root)(?=\/|$)/, '~');
+}
+
+/** The folder a repository is cloned into by default, as the server derives it: its name, when that is a folder name. */
+export function repositoryFolder(fullName: string): string {
+  const name = fullName.split('/').pop() ?? '';
+  return isValidNewFolder(name) ? name : '';
+}
 
 /** The directory the folder step's name goes in: the machine's home on one that declares create-workdir/v2, its
  *  Repos Folder on an older one (@orbit/shared newFolderRoot, as the server joins it). */
@@ -134,12 +162,28 @@ export function newFolderPick(probe: DirProbe, name: string, root: string, machi
 /** The folder step's answer, once the person has pressed Use this folder. */
 export type PickedFolder =
   | { kind: 'existing'; path: string; note: string }
-  | { kind: 'new'; name: string; path: string };
+  | { kind: 'new'; name: string; path: string }
+  /** A clone of one of the person's GitHub repositories into `<reposRoot>/<name>` (docs/github-workspace-design.md §5.3).
+   *  `ref` null is the repository's default branch, which `defaultBranch` names. */
+  | {
+      kind: 'github';
+      repoId: number;
+      repository: string;
+      private: boolean;
+      defaultBranch: string;
+      ref: string | null;
+      name: string;
+      path: string;
+    };
 
 /** What POST /sessions is told. An existing folder is sent as the runner resolved it: a typed `~` is
  *  the runner's to expand, and a workspace's workDir is not. */
 export const newWorkspaceOf = (folder: PickedFolder): NewWorkspaceRequest =>
-  folder.kind === 'new' ? { newFolder: folder.name } : { workDir: folder.path };
+  folder.kind === 'new'
+    ? { newFolder: folder.name }
+    : folder.kind === 'github'
+      ? { github: { repoId: folder.repoId, folder: folder.name, ...(folder.ref ? { ref: folder.ref } : {}) } }
+      : { workDir: folder.path };
 
 const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
 

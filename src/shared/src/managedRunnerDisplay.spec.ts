@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 // Through the package's own entry: what the clients import is the thing under test.
 import {
   MANAGED_RUNNER_COPY,
+  MANAGED_RUNNER_REPOS_ROOT,
   MANAGED_RUNNER_ROW_TONE,
   firstSessionProvider,
+  managedSetupState,
   managedRunnerDisplay,
   managedRunnerRow,
   managedRunnersOffered,
@@ -27,8 +29,9 @@ const fixture = JSON.parse(
   entry: Record<string, string>;
   confirm: Record<string, string>;
   asleep: Record<string, string>;
+  setup: Record<string, unknown> & { reposRoot: string };
   capabilities: { name: string; httpStatus: number; body: unknown; offered: boolean }[];
-  states: { name: string; status: ManagedRunnerStatus; display: ManagedRunnerDisplay | null }[];
+  states: { name: string; status: ManagedRunnerStatus; display: ManagedRunnerDisplay | null; setupState: string | null }[];
   newer: { name: string; status: ManagedRunnerStatus; display: null }[];
 };
 
@@ -106,13 +109,27 @@ describe('managed-runner-states.fixture.json', () => {
   });
 
   it('has one set of action words: the copy the clients render is the copy in the fixture', () => {
-    const { title: _title, detail: _detail, short, entry, confirm, asleep, ...actions } = MANAGED_RUNNER_COPY;
+    const { title: _title, detail: _detail, short, entry, confirm, asleep, setup, ...actions } = MANAGED_RUNNER_COPY;
     expect(fixture.copy).toEqual(actions);
     expect(fixture.short).toEqual(short);
     expect(fixture.rowTone).toEqual(MANAGED_RUNNER_ROW_TONE);
     expect(fixture.entry).toEqual(entry);
     expect(fixture.confirm).toEqual(confirm);
     expect(fixture.asleep).toEqual(asleep);
+    const { reposRoot, ...setupCopy } = fixture.setup;
+    expect(setupCopy).toEqual(setup);
+    expect(reposRoot).toBe(MANAGED_RUNNER_REPOS_ROOT);
+  });
+
+  it("tells a setup card how to treat the managed runner: preparing or asleep while it isn't up, as any machine otherwise", () => {
+    const seen = new Set<string | null>();
+    for (const { name, status, setupState } of fixture.states) {
+      expect(managedSetupState(status.runnerId, status), name).toBe(setupState);
+      // Any other runner is never the managed one.
+      expect(managedSetupState('another-runner', status), name).toBeNull();
+      seen.add(setupState);
+    }
+    expect([...seen].sort()).toEqual(['asleep', 'preparing', null].sort());
   });
 
   it('gives every display kind but notOffered a short row label, and none reads Offline', () => {

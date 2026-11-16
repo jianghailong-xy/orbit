@@ -268,6 +268,44 @@
   width: 160px;
 }
 
+/* A GitHub workspace's clone, on the same first line (docs/mocks/github-workspace, board 01 P5). */
+.msc-created a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.msc-created a:hover {
+  text-decoration: underline;
+}
+
+.msc-clone-spin {
+  color: var(--brand);
+}
+
+.msc-clone-bar {
+  display: inline-block;
+  width: 120px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--fill-muted);
+}
+
+.msc-clone-bar i {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  transition: width 0.3s ease;
+}
+
+.msc-clone-pct {
+  font-variant-numeric: tabular-nums;
+}
+
+.msc-clone-error {
+  color: var(--error);
+}
+
 /* A new account's welcome card (docs/mocks/new-user-onboarding): the same card, greeting first, with
    three first messages to try under its steps. */
 .welcome-examples {
@@ -326,4 +364,176 @@ a.msc-change:hover {
   font-size: 12px;
 }
 
-/* Create workspace: the card's one way out, under its foot (owner 2026-11-16). */
+/* From GitHub (docs/mocks/github-workspace, board 01 P1–P3): the repository picker under the option, in the app's tokens. */
+.msc-new-tag {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--error-bg, #fff1f0);
+  color: var(--error);
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+.ghp-acct {
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.ghp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.ghp-repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.ghp-mark,
+.ghp-search-mark {
+  color: var(--text-3);
+}
+
+.ghp-search {
+  max-width: 460px;
+}
+
+.ghp-menu {
+  max-width: 460px;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12);
+}
+
+.ghp-item {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ghp-item:hover:enabled,
+.ghp-item:focus-visible {
+  background: var(--bg-hover);
+}
+
+.ghp-name {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.ghp-owner {
+  color: var(--text-2);
+  font-weight: 400;
+}
+
+.ghp-when {
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ghp-note {
+  padding: 6px 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.ghp-foot {
+  margin-top: 4px;
+  padding: 7px 8px 3px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.ghp-foot a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+/* From GitHub under the folder and its Name (docs/mocks/github-workspace, board 04 A): an "or" rule, then a row that
+   swaps the folder field to the repository picker. */
+.msc-or {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.msc-or::before,
+.msc-or::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.msc-github-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.msc-github-row:hover:enabled,
+.msc-github-row:focus-visible {
+  background: var(--bg-hover);
+}
+
+.msc-github-row:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.msc-github-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.msc-github-mark {
+  margin-top: 3px;
+  font-size: 16px;
+}
+
+.msc-github-title {
+  font-weight: 600;
+}
+
+.msc-back {
+  margin-top: 6px;
+}
+
+.msc-github > .msc-github-title {
+  display: block;
+  margin-top: 6px;
+}

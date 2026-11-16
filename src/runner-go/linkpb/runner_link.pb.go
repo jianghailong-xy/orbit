@@ -2454,6 +2454,12 @@ type Fact struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Which part: the name of the field it fills in today's heartbeat body (HeartbeatRequest in
 	// src/runner-go/types.go), such as "modelCatalog", "skills", "engines" or "repos".
+	//
+	// "cloneReports" (docs/github-workspace-design.md §5.4) is where each GitHub workspace clone the
+	// runner was asked for stands: [{ workspaceId, state: CLONING | READY | FAILED, error?, progress?,
+	// credential?: machine | github-app }] (CloneReport in src/shared/src/dto.ts). It decides what the
+	// answer lists, so a change in it reconciles in full. The server moves the workspace's clone state
+	// from it, and relays `progress` to the account's clients without storing it.
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// The lowercase hex SHA-256 of the part's JSON encoding.
 	Sha256 string `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`
@@ -2527,6 +2533,12 @@ type HeartbeatAck struct {
 	// that response today, so every command keeps its contract: delivered at least once, deduplicated
 	// by the runner. Empty when this beat ran no full reconcile, and then the runner applies nothing:
 	// an empty value is not an empty response.
+	//
+	// Its "cloneRequests" (docs/github-workspace-design.md §5.4), to a runner that declares
+	// clone-workdir/v1, lists every PENDING and CLONING GitHub workspace of the runner:
+	// [{ workspaceId, workDir, url, ref, state }] (CloneRequest in src/shared/src/dto.ts). It is a full
+	// reconcile: the runner handles each idempotently and answers with "cloneReports". The URL never
+	// carries a credential; the runner's own git commands ask POST /runner/git-credential for one.
 	ReconcileJson []byte `protobuf:"bytes,2,opt,name=reconcile_json,json=reconcileJson,proto3" json:"reconcile_json,omitempty"`
 	// Fact kinds whose digest the server does not recognize. The runner sends these parts in full in
 	// its next Heartbeat, which it sends at once.
