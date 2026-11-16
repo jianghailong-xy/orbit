@@ -3204,7 +3204,8 @@ final class ConsoleModel {
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
                                             steer: SteerDelivery.isSteerKind(accepted.kind),
                                             translation: accepted.turnTranslation,
-                                            placement: accepted.placement)
+                                            placement: accepted.placement,
+                                            acceptedAt: ISO8601DateFormatter().string(from: Date()))
                 publishStateNow()
             }
         } catch {
