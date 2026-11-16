@@ -1,11 +1,11 @@
 import { Injectable, Logger, MessageEvent } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  concat,
   concatMap,
   defer,
   distinctUntilChanged,
   EMPTY,
-  endWith,
   filter,
   from,
   map,
@@ -49,12 +49,13 @@ type Head = Record<string, unknown>;
 /**
  * Whether the viewer may still watch, as the stream rechecks it (docs/session-viewer-stream-design.md §5): `named` says
  * whether a revocation signal is about this stream, and `check` reads the access once more — null when it is gone,
- * otherwise when it lapses on its own (a link's expiry), if ever. `check` throws only for a failed read, never for a
- * refusal.
+ * otherwise when it lapses on its own (a link's expiry), if ever, and `narrowed` when the viewer may still watch but
+ * no longer see everything this stream's projection sends (a link's Tool output turned off). `check` throws only for
+ * a failed read, never for a refusal.
  */
 export interface ViewerAccess {
   named: (revocation: ViewerRevocation) => boolean;
-  check: () => Promise<{ until: Date | null } | null>;
+  check: () => Promise<{ until: Date | null; narrowed?: boolean } | null>;
 }
 
 /** The frame a stream ends with when the viewer's access has ended; clients show their not-shared / link-gone state. */
@@ -69,6 +70,8 @@ export const GONE_FRAME = 'gone';
  * Access is the route's to check BEFORE this is called (a guard: a stream's 200 is on the wire before anything
  * here runs); after that this rechecks it (§5) — once as the stream opens, on every revocation signal that names the
  * stream, at every ping, and when a link's expiry comes due — and when it is gone sends `{type:'gone'}` and ends.
+ * When the access narrows instead, the stream ends with no gone frame: the client reconnects from its sinceSeq and
+ * gets the narrower projection.
  */
 @Injectable()
 export class ViewerStreamService {
@@ -142,10 +145,14 @@ export class ViewerStreamService {
       filter((said) => said === 'ping'),
       map(() => ({ data: { type: 'ping' } }) as MessageEvent),
     );
-    const gone$ = access$.pipe(filter((said) => said === 'gone'));
+    let ending: 'gone' | 'narrowed' | undefined;
+    const end$ = access$.pipe(
+      filter((said) => said !== 'ping'),
+      tap((said) => (ending = said)),
+    );
     return merge(heads$, events$, renamed$, pings$).pipe(
-      takeUntil(gone$),
-      endWith({ data: { type: GONE_FRAME } } as MessageEvent),
+      takeUntil(end$),
+      (body$) => concat(body$, defer(() => (ending === 'narrowed' ? EMPTY : of({ data: { type: GONE_FRAME } } as MessageEvent)))),
       untilStopping(),
     );
   }
@@ -154,18 +161,18 @@ export class ViewerStreamService {
    * The keepalive and the access recheck (§5), one read at a time: as the stream opens (what was revoked between the
    * route's guard and here), on each revocation signal naming the stream, at every ping (a signal that was lost), and
    * when the access lapses on its own within the next ping's time (a link's expiry). Says `ping` at each keepalive the
-   * access still holds at, and `gone` once, when it no longer does. A read that fails keeps the stream: the next
-   * check reads again.
+   * access still holds at, and once, `gone` when it no longer does or `narrowed` when it holds for less than this
+   * stream sends. A read that fails keeps the stream: the next check reads again.
    */
-  private accessChecks(sessionId: string, access: ViewerAccess): Observable<'ping' | 'gone'> {
-    return new Observable<'ping' | 'gone'>((subscriber) => {
+  private accessChecks(sessionId: string, access: ViewerAccess): Observable<'ping' | 'gone' | 'narrowed'> {
+    return new Observable<'ping' | 'gone' | 'narrowed'>((subscriber) => {
       let ended = false;
       let lapse: NodeJS.Timeout | undefined;
       let checks = Promise.resolve();
       const recheck = (why: 'open' | 'signal' | 'ping' | 'lapse') => {
         checks = checks.then(async () => {
           if (ended) return;
-          let verdict: { until: Date | null } | null;
+          let verdict: { until: Date | null; narrowed?: boolean } | null;
           try {
             verdict = await access.check();
           } catch (err) {
@@ -174,9 +181,9 @@ export class ViewerStreamService {
             return;
           }
           if (ended) return;
-          if (!verdict) {
+          if (!verdict || verdict.narrowed) {
             ended = true;
-            subscriber.next('gone');
+            subscriber.next(verdict ? 'narrowed' : 'gone');
             subscriber.complete();
             return;
           }

@@ -277,7 +277,11 @@ export class SharedController {
       {
         // The link turned off or changed, or the session gone from the Trash's side; not one guest's removal.
         named: (r) => ('linkId' in r ? r.linkId === target.linkId : r.sessionId === target.sessionId && r.guestId === undefined),
-        check: () => this.links.streamAccess(target.token, target.sessionId, target.conversation),
+        // A link that no longer includes tool output a stream sends ends that stream, so it reopens redacted (§5).
+        check: async () => {
+          const access = await this.links.streamAccess(target.token, target.sessionId, target.conversation);
+          return access && { until: access.until, narrowed: target.toolOutput && !access.toolOutput };
+        },
       },
       { sinceSeq: query.sinceSeq, maxPayload: parseMaxPayload(query.maxPayload) },
     );

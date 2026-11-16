@@ -367,14 +367,18 @@ export class ShareLinksService {
    * Whether `token` still opens session `sessionId` to a viewer stream, as SharedStreamGuard decided when the stream
    * opened: the link's root on `:token/stream`, a conversation it opens besides its root on
    * `:token/sessions/:sessionId/stream`. Null for the one 404; otherwise when the link expires, if ever
-   * (ViewerStreamService rechecks then).
+   * (ViewerStreamService rechecks then), and whether it includes tool output now.
    */
-  async streamAccess(token: string, sessionId: string, conversation: boolean): Promise<{ until: Date | null } | null> {
+  async streamAccess(
+    token: string,
+    sessionId: string,
+    conversation: boolean,
+  ): Promise<{ until: Date | null; toolOutput: boolean } | null> {
     try {
       const link = await this.resolve(token);
       if (conversation) await this.openConversation(link, sessionId);
       else if (link.sessionId !== sessionId) return null;
-      return { until: link.expiresAt };
+      return { until: link.expiresAt, toolOutput: link.include.toolOutput === true };
     } catch (error) {
       if (error instanceof NotFoundException) return null;
       throw error;
@@ -569,7 +573,7 @@ export class ShareLinksService {
       where: { id, revokedAt: null },
       data: { include: include as Prisma.InputJsonObject, expiresAt, updatedAt: now },
     });
-    // It may no longer include a conversation a stream shows: those streams recheck.
+    // It may no longer include a conversation a stream shows, or tool output a stream sends: those streams recheck.
     if (written.count === 1) this.realtime?.publishViewerRevoked({ linkId: id });
     return written.count === 1;
   }

@@ -20,6 +20,15 @@
  *   (8) with no signal at all — the invitation ended by a bare UPDATE, no service in the way — the recheck at the next
  *       ping (KEEPALIVE_MS) ends the stream all the same.
  *
+ * And a link that still opens the session but stops including tool output ends a stream projecting it with NO gone
+ * frame — only the end, so the client reconnects from its sinceSeq and gets the redacted projection:
+ *
+ *   (9)  the owner turns the session link's Tool output off on apiserver B — ended within 1 s;
+ *   (10) the same by a bare UPDATE, no signal — ended at the next ping;
+ *
+ * each then reconnecting from sinceSeq and holding the new stream to the link's paged read: no tool_output or
+ * background_output, and tool_use/tool_result payloads equal to the read's redacted ones.
+ *
  * Each measured time is printed as a TAP diagnostic.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/sessions/viewer-stream-revocation.pg.spec.ts
@@ -47,6 +56,8 @@ const RUN = randomUUID().slice(0, 8);
 const RUNNER_TOKEN = `viewer-revocation-runner-${randomUUID()}`;
 /** The criterion's bound: the gone frame and the end of the stream within 1 s of the commit. */
 const WITHIN_MS = 1_000;
+/** What only tool output carries: in a stored tool call, and in the live tool_output / background_output. */
+const TOOL_SECRET = `tool-output-${RUN}`;
 
 test('viewer streams end with a gone frame within 1 s when access ends, and at the next ping when the signal is lost', {
   skip: !URL, concurrency: 1, timeout: 300_000,
@@ -112,10 +123,17 @@ test('viewer streams end with a gone frame within 1 s when access ends, and at t
         startedAt: new Date(),
       },
     });
+    // A tool call, whose input and result a link shows only with Tool output on, then the reply.
     await sql.query(
       `INSERT INTO run_event (id, session_id, seq, type, payload) VALUES (gen_random_uuid(), $1::uuid, 1, 'user', $2::jsonb),
-         (gen_random_uuid(), $1::uuid, 2, 'assistant', $3::jsonb)`,
-      [sessionId, JSON.stringify({ text: name }), JSON.stringify({ text: `About ${name}.` })],
+         (gen_random_uuid(), $1::uuid, 2, 'tool_use', $4::jsonb),
+         (gen_random_uuid(), $1::uuid, 3, 'tool_result', $5::jsonb),
+         (gen_random_uuid(), $1::uuid, 4, 'assistant', $3::jsonb)`,
+      [
+        sessionId, JSON.stringify({ text: name }), JSON.stringify({ text: `About ${name}.` }),
+        JSON.stringify({ id: 'toolu_1', name: 'Bash', input: { command: `echo ${TOOL_SECRET}` } }),
+        JSON.stringify({ toolUseId: 'toolu_1', content: TOOL_SECRET, isError: false }),
+      ],
     );
     await db.sessionGuest.create({ data: { sessionId, ownerId, userId: guestId } });
     const shareToken = randomBytes(24).toString('base64url');
@@ -131,6 +149,7 @@ test('viewer streams end with a gone frame within 1 s when access ends, and at t
       sessionId,
       s,
       taskId,
+      shareToken,
       doors: {
         guest: `${base}/guest-sessions/${s}/stream?access_token=${guestLogin}`,
         sessionLink: `${base}/shared/${shareToken}/stream`,
@@ -260,5 +279,90 @@ test('viewer streams end with a gone frame within 1 s when access ends, and at t
     c.diagnostic(`guest: gone frame ${times.gone} ms, stream ended ${times.ended} ms after the bare write; ${sinceOpen} ms after the stream opened (ping every ${KEEPALIVE_MS} ms)`);
     assert.equal(guest.frames.some((f) => f.type === 'ping'), false, 'the stream ended at its first ping instead of sending it');
     assert.ok(sinceOpen <= KEEPALIVE_MS + WITHIN_MS, `the stream ended ${sinceOpen} ms after it opened, past its first ping`);
+  });
+
+  /** Publish a live-only event for `sessionId` as another apiserver would (RealtimeService.publish → NOTIFY). */
+  const live = (sessionId: string, type: string, payload: unknown) => sql.query(`SELECT pg_notify('orbit_event', $1)`, [
+    JSON.stringify({ i: `viewer-revocation-${RUN}`, r: sessionId, e: { seq: 0, ts: new Date().toISOString(), type, payload } }),
+  ]);
+
+  /**
+   * The session link's stream, open with Tool output on, has sent a live tool_output and the stored tool call whole;
+   * `turnOff` turns the link's Tool output off and answers when; the stream must then end with no gone frame, as soon
+   * as `bound` says, and a stream reopened from sinceSeq carries exactly what the link's paged read does.
+   */
+  async function narrowed(
+    c: TestContext,
+    name: string,
+    turnOff: (w: Awaited<ReturnType<typeof world>>) => Promise<number>,
+    bound: (times: { ended: number; sinceOpen: number; frames: HeldStream['frames'] }) => void,
+  ) {
+    const w = await world(name);
+    const opened = Date.now();
+    const link = await open(w.doors.sessionLink, 'session link');
+    await live(w.sessionId, 'tool_output', { toolUseId: 'toolu_1', output: TOOL_SECRET });
+    await link.until((f) => f.type === 'tool_output', 'session link: the live tool_output (Tool output on)');
+    const toolUse = link.frames.find((f) => f.type === 'tool_use');
+    assert.ok(JSON.stringify(toolUse?.payload).includes(TOOL_SECRET), 'with Tool output on the stream sends the tool input');
+
+    const written = await turnOff(w);
+    await Promise.race([
+      link.ended,
+      new Promise((_, fail) => setTimeout(() => fail(new Error('session link: the stream did not end')), KEEPALIVE_MS + 5_000)),
+    ]);
+    const ended = Date.now() - written;
+    const sinceOpen = Date.now() - opened;
+    c.diagnostic(`session link: stream ended ${ended} ms after the write, ${sinceOpen} ms after it opened (ping every ${KEEPALIVE_MS} ms); frames before the end: ${link.frames.map((f) => f.type).join(',')}`);
+    assert.equal(link.frames.some((f) => f.type === 'gone'), false, 'the stream ended with no gone frame: the link still opens the session');
+    bound({ ended, sinceOpen, frames: link.frames });
+
+    // The client reconnects from the last seq it had — before the tool call, here, to replay it under the new
+    // projection — while the session goes on emitting tool output.
+    const sinceSeq = 1;
+    const again = await openStream(`${w.doors.sessionLink}?sinceSeq=${sinceSeq}`);
+    held.push(again);
+    assert.equal(again.status, 200, `the reconnect opened ${again.status}`);
+    await again.until((f) => f.type === 'head', 'reconnect: the opening head');
+    await again.until((f) => f.type === 'assistant', 'reconnect: the replayed reply');
+    await live(w.sessionId, 'tool_output', { toolUseId: 'toolu_1', output: TOOL_SECRET });
+    await live(w.sessionId, 'background_output', { shellId: 'bg_1', output: TOOL_SECRET });
+    await live(w.sessionId, 'text_delta', { text: 'after' });
+    await again.until((f) => f.type === 'text_delta', 'reconnect: the delta sent after the tool output');
+    const types = again.frames.map((f) => f.type as string);
+    assert.equal(types.includes('tool_output'), false, `reconnect: no tool_output (${types.join(',')})`);
+    assert.equal(types.includes('background_output'), false, `reconnect: no background_output (${types.join(',')})`);
+    assert.equal(again.texts.some((text) => text.includes(TOOL_SECRET)), false, 'reconnect: nothing only tool output carries');
+
+    const page = ok(await call(b!, 'GET', `/api/shared/${w.shareToken}/events?after=${sinceSeq}&limit=50`), 'the paged read');
+    const read = (page.json.events as Array<{ seq: number; type: string; payload: unknown }>).filter((e) => e.type === 'tool_use' || e.type === 'tool_result');
+    const streamed = again.frames.filter((f) => f.type === 'tool_use' || f.type === 'tool_result');
+    assert.equal(read.length, 2, 'the read shows the tool call');
+    assert.deepEqual(
+      streamed.map((f) => ({ seq: f.seq, type: f.type, payload: f.payload })),
+      read.map((e) => ({ seq: e.seq, type: e.type, payload: e.payload })),
+      'reconnect: the tool_use/tool_result payloads are the paged read\'s',
+    );
+    assert.equal(JSON.stringify(read).includes(TOOL_SECRET), false, 'the read itself is redacted');
+    c.diagnostic(`reconnect: frames ${types.join(',')}; tool payloads ${JSON.stringify(streamed.map((f) => f.payload))}`);
+  }
+
+  await t.test('(9) the session link stops including tool output: its stream ends with no gone frame, within 1 s', async (c) => {
+    await narrowed(c, 'tool output off', async (w) => {
+      const sent = Date.now();
+      ok(await onB('PUT', `/sessions/${w.s}/share`, ownerLogin, { include: { toolOutput: false } }), 'turning Tool output off');
+      return sent;
+    }, ({ ended }) => assert.ok(ended <= WITHIN_MS, `the stream ended ${ended} ms after the write was sent`));
+  });
+
+  await t.test('(10) tool output turned off with no signal: the stream ends at the next ping, with no gone frame', async (c) => {
+    await narrowed(c, 'tool output off unsignalled', async (w) => {
+      // Behind every service's back: nothing publishes viewer.revoked.
+      await sql.query(`UPDATE "share_link" SET "include" = '{"toolOutput": false}'::jsonb WHERE "session_id" = $1::uuid`, [w.sessionId]);
+      return Date.now();
+    }, ({ ended, sinceOpen, frames }) => {
+      assert.ok(ended >= 1_500, `the stream ended ${ended} ms after the bare write: before its ping, with no signal`);
+      assert.equal(frames.some((f) => f.type === 'ping'), false, 'the stream ended at its first ping instead of sending it');
+      assert.ok(sinceOpen <= KEEPALIVE_MS + WITHIN_MS, `the stream ended ${sinceOpen} ms after it opened, past its first ping`);
+    });
   });
 });
