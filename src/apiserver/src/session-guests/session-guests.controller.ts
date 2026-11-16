@@ -1,11 +1,16 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Res, StreamableFile, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, MessageEvent, Param, Post, Query, Res, Sse, StreamableFile, UseGuards } from '@nestjs/common';
+import type { Observable } from 'rxjs';
 import type { Response } from 'express';
+import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PatForbidden } from '../auth/pat-scope.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { streamable } from '../files/files.service';
+import { parseMaxPayload } from '../sessions/truncate-payload';
+import { ViewerStreamService } from '../sessions/viewer-stream.service';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
+import { GuestInvitationGuard } from './guest-invitation.guard';
 import { type GuestTurnBody, SessionGuestsService } from './session-guests.service';
 
 /** `POST /sessions/:id/guests`. */
@@ -56,7 +61,10 @@ export class SessionGuestsController {
 @PatForbidden('NO_SCOPE')
 @Controller('guest-sessions')
 export class GuestSessionsController {
-  constructor(private readonly guests: SessionGuestsService) {}
+  constructor(
+    private readonly guests: SessionGuestsService,
+    private readonly viewerStreams: ViewerStreamService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser) {
@@ -88,6 +96,27 @@ export class GuestSessionsController {
   @Get(':id/events/:seq')
   event(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Param('seq') seq: string) {
     return this.guests.event(user.userId, id, seq);
+  }
+
+  /**
+   * The guest page's stream (docs/session-viewer-stream-design.md §3–§4), shaped like the owner's `/sessions/:id/events`:
+   * `sinceSeq` replays the gap after it, `maxPayload` trims bulky tool bodies. EventSource cannot send a header, so
+   * the sign-in may ride `access_token` as on the owner's stream. The invitation is checked before anything is read
+   * (GuestInvitationGuard). The projection is the guest page's: tool output on, and head frames with `waitingOnOwner`.
+   */
+  @AllowQueryToken()
+  @UseGuards(GuestInvitationGuard)
+  @Sse(':id/stream')
+  stream(
+    @Param('id', PublicIdPipe) id: string,
+    @Query('sinceSeq') sinceSeq?: string,
+    @Query('maxPayload') maxPayload?: string,
+  ): Observable<MessageEvent> {
+    return this.viewerStreams.stream(
+      id,
+      { kind: 'GUEST', waitingOnOwner: (sessionId) => this.guests.waitingOnOwner(sessionId) },
+      { sinceSeq, maxPayload: parseMaxPayload(maxPayload) },
+    );
   }
 
   /** An image or file the transcript carries, as the public page's `/shared/:token/attachments/:id` serves it. */

@@ -93,6 +93,7 @@ export const TERMINAL_REFUSED_ROUTES: readonly string[] = [
   'GET /guest-sessions/:id/attachments/:attachmentId',
   'GET /guest-sessions/:id/events',
   'GET /guest-sessions/:id/events/:seq',
+  'GET /guest-sessions/:id/stream',
   'GET /integrations/feishu',
   'GET /integrations/feishu/chats',
   'GET /managed-runner',
