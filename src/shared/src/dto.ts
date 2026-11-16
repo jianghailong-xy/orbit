@@ -2165,9 +2165,10 @@ export type RunnerEngineUpdateDismissals = Partial<Record<ReportedEngine, string
 /**
  * Fix with an agent (POST /runners/:id/attention/:kind/fix): the machine-side warnings a press hands to
  * an agent on that machine. `engineNotUpdating` and `installFailed` name an engine; `cannotSelfUpdate`
- * (the runner can't update itself, or its updates are turned off) is the runner's own.
+ * (the runner can't update itself, or its updates are turned off) is the runner's own, and so is
+ * `engineUpdateFailed` (an Update engines run whose report has failed lines, whichever engines they name).
  */
-export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed';
+export type RunnerAttentionFixKind = 'engineNotUpdating' | 'cannotSelfUpdate' | 'installFailed' | 'engineUpdateFailed';
 
 /** Why no agent can start on a machine: it is offline, no workspace runs on it, or the engine its
  *  most recently used workspace runs on is signed out there. */
@@ -2176,7 +2177,7 @@ export type RunnerAgentFixBlockedCode = 'offline' | 'noWorkspace' | 'engineSigne
 /** An agent already at work on one warning: the session a press started, while it is open. */
 export interface RunnerAgentFixing {
   kind: RunnerAttentionFixKind;
-  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate`. */
+  /** The engine for `engineNotUpdating` and `installFailed`; null for `cannotSelfUpdate` and `engineUpdateFailed`. */
   engine: ReportedEngine | null;
   sessionId: string;
   workspaceId: string;

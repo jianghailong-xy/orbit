@@ -43,12 +43,12 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | Caller | Routes |
 | --- | --- |
 | `public` | 34 |
-| `user` | 467 |
+| `user` | 469 |
 | `admin` | 29 |
 | `runner` | 198 |
 | `channel` | 1 |
 | `link gateway` | 3 |
-| **Total** | **732** |
+| **Total** | **734** |
 
 ## Public routes
 
@@ -132,6 +132,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
 | `GET` | `/api/guest-sessions/:id` | path `id`; query `limit`, `maxPayload` | `GuestSessionsController.get` |
+| `POST` | `/api/guest-sessions/:id/attachments` | path `id` | `GuestSessionsController.uploadImage` |
 | `GET` | `/api/guest-sessions/:id/attachments/:attachmentId` | path `attachmentId`, `id` | `GuestSessionsController.attachment` |
 | `GET` | `/api/guest-sessions/:id/events` | path `id`; query `after`, `before`, `limit`, `maxPayload` | `GuestSessionsController.events` |
 | `GET` | `/api/guest-sessions/:id/events/:seq` | path `id`, `seq` | `GuestSessionsController.event` |
@@ -654,7 +655,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `POST` | `/api/runner/projects/:id/start-requests` | body `RequestProjectStartDto`; path `id` | `RunnerProjectsController.requestStart` |
 | `POST` | `/api/runner/projects/:id/tasks/:taskId/integration/retry` | body `RetryIntegrationDto`; path `id`, `taskId` | `RunnerProjectsController.retryIntegration` |
 | `POST` | `/api/runner/projects/:id/tasks/:taskId/integration/skip-merge-check` | body `SkipMergeCheckDto`; path `id`, `taskId` | `RunnerProjectsController.skipIntegrationMergeCheck` |
-| `GET` | `/api/runner/providers` | — | `RunnerProvidersController.list` |
+| `GET` | `/api/runner/providers` | query `workspace` | `RunnerProvidersController.list` |
 | `POST` | `/api/runner/providers` | body `CreateModelProviderDto` | `RunnerProvidersController.create` |
 | `DELETE` | `/api/runner/providers/:slug` | path `slug` | `RunnerProvidersController.remove` |
 | `PATCH` | `/api/runner/providers/:slug` | body `UpdateModelProviderDto`; path `slug` | `RunnerProvidersController.update` |

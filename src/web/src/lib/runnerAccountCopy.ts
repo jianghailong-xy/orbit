@@ -14,6 +14,9 @@ export function runnerAccountRemoveTitle(name: string): string {
   return `Remove ${name}?`;
 }
 
+/** Removing an added account while Default is in use. */
+export const RUNNER_ACCOUNT_REMOVE_DETAIL = 'Workspaces using it switch to Default.';
+
 /** Removing Default, which only Orbit stops using; `cli` is the CLI's own name (Codex, Claude Code). */
 export function runnerDefaultRemoveDetail(runner: string, cli: string): string {
   return `Orbit stops using it on ${runner}. Its sign-in stays on the machine, and ${cli} in a terminal there keeps working. Workspaces set to it run on Automatic.`;

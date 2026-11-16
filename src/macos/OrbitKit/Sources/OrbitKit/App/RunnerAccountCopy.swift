@@ -9,6 +9,9 @@ public enum RunnerAccountCopy {
     /// is removed from Orbit.
     public static func runnerAccountRemoveTitle(name: String) -> String { "Remove \(name)?" }
 
+    /// Removing an added account while Default is in use.
+    public static let RUNNER_ACCOUNT_REMOVE_DETAIL = "Workspaces using it switch to Default."
+
     /// Removing Default, which only Orbit stops using; `cli` is the CLI's own name (Codex, Claude Code).
     public static func runnerDefaultRemoveDetail(runner: String, cli: String) -> String {
         "Orbit stops using it on \(runner). Its sign-in stays on the machine, and \(cli) in a terminal there "

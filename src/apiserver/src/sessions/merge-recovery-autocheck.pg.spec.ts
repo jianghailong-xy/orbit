@@ -23,6 +23,7 @@ import { PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@p
 import {
   RunEventType,
   RunStatus as SharedRunStatus,
+  SESSION_MERGE_BESIDE_TURN_V1,
   SESSION_MERGE_RECOVERY_V1,
   type MergeRecovery,
 } from '@orbit/shared';
@@ -33,6 +34,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { PushService } from '../push/push.service';
 import type { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
@@ -517,6 +519,39 @@ test('S1 a repair session\'s turn has its parent\'s merge recovery checked again
       assert.equal(row.merge_status, 'pending', label);
       assert.equal(row.merge_recovery_action, 'preview', label);
     }
+  });
+  await t.test('on a runner that merges beside a turn, a merge mid-turn queues at once and neither holds the turn nor is dropped by a message', async () => {
+    const w = await world(db, 'beside', [SESSION_MERGE_RECOVERY_V1, SESSION_MERGE_BESIDE_TURN_V1]);
+    const lease = randomUUID();
+    const self = await parentSession(db, w, 'beside', { recovery: null, running: { leaseOwner: lease } });
+
+    // Asked from inside the turn: queued now, for this runner process, with nothing kept for the turn's end.
+    const answer = await sessions.mergeToMain(w.ownerId, self.id, 'main', undefined, { requestedBy: 'AGENT', selfRequest: true });
+    assert.equal((answer as { outcome?: string }).outcome, 'PENDING');
+    const queued = await sql.query(
+      `SELECT merge_status, merge_operation_id, merge_after_turn_at FROM "session" WHERE id = $1::uuid`, [self.id]);
+    assert.equal(queued.rows[0].merge_status, 'pending');
+    assert.equal(queued.rows[0].merge_after_turn_at, null);
+    const [command] = await realtime.drainMergeRequests(w.runnerId, lease);
+    assert.equal(command?.sessionId, self.id, 'the running session\'s merge is handed to its runner');
+
+    // Claimed and executing, it still holds no turn of this session out of a slot.
+    const fence = await db.$queryRaw<Array<{ fenced: boolean }>>`
+      SELECT ${worktreeOperationFenceSql('s')} AS fenced FROM "session" s WHERE s.id = ${self.id}::uuid`;
+    assert.equal(fence[0].fenced, false);
+
+    // A message sent meanwhile leaves the merge where it is.
+    await sessions.createTurn(w.ownerId, self.id, { clientTurnId: 'beside-follow-up', content: 'and one more thing' });
+    const after = await sql.query(
+      `SELECT merge_status, merge_operation_id FROM "session" WHERE id = $1::uuid`, [self.id]);
+    assert.equal(after.rows[0].merge_status, 'pending');
+    assert.equal(after.rows[0].merge_operation_id, queued.rows[0].merge_operation_id);
+
+    // On a runner without it, the same claimed merge still fences the session's turns.
+    await db.runner.update({ where: { id: w.runnerId }, data: { capabilities: [SESSION_MERGE_RECOVERY_V1] } });
+    const legacy = await db.$queryRaw<Array<{ fenced: boolean }>>`
+      SELECT ${worktreeOperationFenceSql('s')} AS fenced FROM "session" s WHERE s.id = ${self.id}::uuid`;
+    assert.equal(legacy[0].fenced, true);
   });
   await t.test('a session merging itself during its turn has the merge queued when that turn ends, and not when it fails', async () => {
     const w = await world(db, 'self');

@@ -507,6 +507,26 @@ describe('the suggestion card (frame 4)', () => {
     expect(box().value).toBe(DRAFT);
   });
 
+  it('closes once Enter sends the draft it was about', async () => {
+    await ready();
+    await openCard();
+    await key(box(), { key: 'Enter' });
+    await waitForUi(() => expect(sendMock).toHaveBeenCalled());
+    await waitForUi(() => expect(box().value).toBe(''));
+    expect(card()).toBeNull();
+  });
+
+  it('a send while it works drops the answer that comes back', async () => {
+    let answer: (value: typeof RESULT) => void = () => {};
+    optimizeMock.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    await ready();
+    await act(async () => optimizeButton()!.click());
+    await send();
+    await waitForUi(() => expect(box().value).toBe(''));
+    await act(async () => answer(RESULT));
+    expect(card()).toBeNull();
+  });
+
   it('Try again asks again', async () => {
     await ready();
     await openCard();

@@ -109,6 +109,15 @@ export function usePromptOptimizer({
   useEffect(() => cancel, [cancel]);
 
   const trimmed = text.trim();
+  // A send empties the box: the card (or the press still under way) was about the draft that just went.
+  const hadDraft = useRef(trimmed !== '');
+  useEffect(() => {
+    const had = hadDraft.current;
+    hadDraft.current = trimmed !== '';
+    if (!had || trimmed !== '') return;
+    cancel();
+    setState((s) => (s.kind === 'idle' ? s : { kind: 'idle' }));
+  }, [trimmed, cancel]);
   const busy = state.kind === 'busy';
   // The button keeps its slot whenever the optimizer is on, so the toolbar never shifts as the
   // draft fills or empties: it is only disabled when there is nothing it can do.

@@ -74,6 +74,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'id',
   'ownerId',
   'userId',
+  // `attachment.uploaded_by_guest_id` — the session guest who uploaded an image (0880): a user's id, as `userId`.
+  'uploadedByGuestId',
   'sessionId',
   'parentSessionId',
   'rootSessionId',
@@ -697,6 +699,11 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // UUIDs, kept only where they equal the id of a session assigned to that runner and counted by that equality. It
   // appears in no response, and a decode on the way in could only refuse a heartbeat over one id it cannot read.
   'backgroundJobSessionIds',
+  // The sessions a refused account removal says are using the account (runner.codex_account_remove_sessions, migration
+  // 0910): the machine protocol's raw UUIDs, kept on the reporting runner's row and read back only where they equal the
+  // id of a session assigned to that runner. The column appears in no response (runners.service.ts drops it; the page
+  // lists the matched sessions' own ids), and a decode on the way in could only refuse the report over one id.
+  'codexAccountRemoveSessions',
   'generation',
   'leaseGeneration',
   'leaseOwner',

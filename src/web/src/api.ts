@@ -1853,8 +1853,21 @@ export const fetchGuestAttachmentObjectUrl = async (id: string, attachmentId: st
   const res = await authedFetch(`/api${guestPath(id)}/attachments/${encodeURIComponent(attachmentId)}`);
   return userFileUrl(await attachmentBlob(res, attachmentId));
 };
-/** A guest's message: text only, a turn of the owner's session (resumed when it has ended). */
-export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string }) =>
+/** A guest's image for their next message, through the guest door (multipart, as `uploadAttachment`): a PNG, JPEG,
+ *  WebP or GIF of at most 5MB, the owner composer's images. Returns the id `sendGuestTurn` names it by. */
+export const uploadGuestAttachment = async (id: string, file: File): Promise<{ id: string }> => {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await authedFetch(`/api${guestPath(id)}/attachments`, { method: 'POST', body: form });
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    throw new ApiError(msg.message || res.statusText, res.status);
+  }
+  return (await res.json()) as { id: string };
+};
+/** A guest's message: words and the images they uploaded here, a turn of the owner's session (resumed when it has
+ *  ended). */
+export const sendGuestTurn = (id: string, body: { clientTurnId: string; content: string; attachmentIds?: string[] }) =>
   api<{ turnId: string; revived: boolean }>(`${guestPath(id)}/turns`, { method: 'POST', body });
 
 /** The public attachment route: no bearer, so a browser can be sent straight to it. */

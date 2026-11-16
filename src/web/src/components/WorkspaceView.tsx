@@ -710,10 +710,13 @@ interface ComposerSendVars {
 }
 
 // The image types Claude takes as inline content blocks: shown as a thumbnail and capped
-// tighter (kept in sync with the runner's image-block dispatch). Anything else is a generic
-// file — any type, up to the server's 25MB cap (attachments.media.ts).
-const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+// tighter (kept in sync with the runner's image-block dispatch, and with the guest door's
+// COMPOSER_IMAGE_TYPES / MAX_COMPOSER_IMAGE_BYTES in attachments.media.ts). Anything else is a
+// generic file — any type, up to the server's 25MB cap (attachments.media.ts).
+export const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+/** What a composer that takes only pictures (a guest's) says of anything else. */
+export const IMAGES_ONLY_REFUSED = 'Only PNG, JPEG, WebP or GIF images can be attached';
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 // What a staged picture's thumbnail is called when its file has no name. The thumbnail is the button that opens the
 // picture in the viewer and is named by the file; the picture itself stays decorative (`alt=""`).
@@ -13231,13 +13234,17 @@ export function usePendingTray({
 /**
  * The composer's pictures and files (`SessionComposer`'s attachment row): checked, uploaded at once as staged chips —
  * to the session when there is one, unscoped for a message that makes one — and handed back out of a sent message by
- * their ids. The session page and the wiki chat panel each stage into a list of their own.
+ * their ids. The session page and the wiki chat panel each stage into a list of their own; the guest view stages
+ * pictures only (`imagesOnly`) and uploads them through the guest door (`upload`).
  */
 export function useComposerImages(
   canAttach: boolean | undefined,
   sessionId: string | undefined,
   setImages: Dispatch<SetStateAction<ComposerImage[]>>,
+  opts?: { upload?: (file: File) => Promise<{ id: string }>; imagesOnly?: boolean },
 ) {
+  const upload = opts?.upload;
+  const imagesOnly = opts?.imagesOnly === true;
   const message = useToast();
   const imageUid = useRef(0);
   // Validate, then upload an attachment as a staged chip. Uploaded eagerly (not on send) so
@@ -13252,6 +13259,10 @@ export function useComposerImages(
         return;
       }
       const isInlineImage = ALLOWED_IMAGE_TYPES.includes(file.type);
+      if (imagesOnly && !isInlineImage) {
+        message.error(IMAGES_ONLY_REFUSED);
+        return;
+      }
       const cap = isInlineImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
       if (file.size <= 0) {
         message.error(`${file.name || 'File'} is empty`);
@@ -13268,7 +13279,7 @@ export function useComposerImages(
         { uid, file, name: file.name, mime: file.type, size: file.size, previewUrl, status: 'uploading' },
       ]);
       try {
-        const { id } = await uploadAttachment(file, sessionId);
+        const { id } = await (upload ? upload(file) : uploadAttachment(file, sessionId));
         setImages((prev) => prev.map((im) => (im.uid === uid ? { ...im, status: 'done', id } : im)));
       } catch (e) {
         // Drop the failed chip and free its preview; the toast explains why.
@@ -13280,7 +13291,7 @@ export function useComposerImages(
         );
       }
     },
-    [canAttach, sessionId, setImages, message],
+    [canAttach, sessionId, setImages, message, upload, imagesOnly],
   );
   // Hand attachments already on the control plane back to the composer as staged chips. There is no
   // blob to make and none is wanted: the bytes are under `id`, which is all a send references, so a

@@ -43,7 +43,13 @@ final class TranslationWiringTests: XCTestCase {
         XCTAssertTrue(bubbles.contains("if let english { BilingualEnglishView(english: english, agentLanguage: agentLanguage) }"))
         XCTAssertTrue(bubbles.contains("SessionTranslation.replyEnglish(bubble.displayText, bubble.translation, bilingual: bilingual)"))
         XCTAssertTrue(bubbles.contains("BilingualEnglishView(english: english, agentLanguage: agentLanguage, collapsible: true)"))
+        // A reply whose blocks pair is drawn block by block, its originals under them (03-interleaved.png).
+        XCTAssertTrue(bubbles.contains("SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual)"))
+        XCTAssertTrue(bubbles.contains("if bubble.isFinalized, let pairs {"))
+        XCTAssertTrue(bubbles.contains("InterleavedReplyView(pairs: pairs)"))
         let views = try source(app + "Views/Console/TranslationViews.swift")
+        XCTAssertTrue(views.contains("struct InterleavedReplyView: View {"))
+        XCTAssertTrue(views.contains("Text(BilingualEnglishView.inline(original))"))
         XCTAssertTrue(views.contains("let collapsed = collapsible && !open && lines > BilingualEnglish.collapseLines"))
         XCTAssertTrue(views.contains(".lineLimit(collapsed ? 2 : nil)"))
         XCTAssertTrue(views.contains("Text(TranslationCopy.showEnglishLabel(lines: lines, agentLanguage)).underline()"))

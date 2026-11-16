@@ -267,11 +267,13 @@ struct UserTurnRow: View {
                     UserBubbleView(bubble: withoutNote(b))
                 }
             }
-        } else if BackgroundWakeCard.drawsNoteAlone(text: b.text, hasAttachments: !b.attachments.isEmpty,
-                                                    note: b.note, queued: queued != nil) {
-            // A turn nobody typed, carrying only a block this client cannot read yet: the note alone,
-            // never an empty bubble in the reader's name (web parity: `Transcript.tsx`'s fallback).
-            if let attached = b.attached { AttachedNoteEntry(attached: attached) }
+        } else if queued == nil, OrbitEvent.draws(b) {
+            // Nothing typed and only Orbit's blocks in the note, none of which a line above knew: still
+            // nobody's message (owner rule 2026-11-16), so one generic line in the agent's stream rather
+            // than an empty bubble on the reader's side (web parity: `OrbitEventLine.tsx`).
+            OrbitEventLineView(note: b.note ?? "", ts: b.ts, undelivered: undelivered,
+                               steerState: BackgroundWakeCard.steerState(steer: b.steer, delivery: b.delivery,
+                                                                         undelivered: b.undelivered))
         } else if let sender = b.externalSender {
             // Somebody other than the owner — a connected Feishu group's member, or a guest the owner
             // invited — sent it (`externalSender`, `ExternalSender.parse`): still their words in a bubble,

@@ -2274,7 +2274,8 @@ button.toast--pill:focus-visible {
   background: var(--accent, #2563eb);
   flex: none;
 }
-.re-panel-hint.agent-fix-row {
+.re-panel-hint.agent-fix-row,
+.rd-engine-relay-hint.agent-fix-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -8285,6 +8286,39 @@ button.chat-jump-start:hover {
   margin-top: 2px;
   font-size: 12px;
 }
+/* "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): a reply drawn
+   pair by pair, each block in the owner's language with its original right under it — the bilingual
+   style (a size smaller, grey), no divider inside a pair, the usual block gap between pairs. */
+.chat-interleaved-pair + .chat-interleaved-pair {
+  margin-top: 8px;
+}
+.chat-interleaved-pair.is-heading {
+  margin-top: 14px;
+}
+.chat-interleaved-pair:first-child {
+  margin-top: 0;
+}
+.chat-interleaved-pair > .md > ul,
+.chat-interleaved-pair > .md > ol,
+.chat-interleaved-pair > .md > blockquote {
+  margin: 0;
+}
+.chat-interleaved-pair > .md > .md > h1,
+.chat-interleaved-pair > .md > .md > h2,
+.chat-interleaved-pair > .md > .md > h3,
+.chat-interleaved-pair > .md > .md > h4 {
+  margin: 0;
+}
+.chat-bilingual-original {
+  margin-top: 2px;
+  color: var(--text-3);
+}
+.chat-bilingual-original.is-heading {
+  font-weight: 400;
+}
+.chat-bilingual-original.is-heading strong {
+  font-weight: 500;
+}
 /* The composer's "<Language> → English" tag (6A): a quiet pill that opens Settings › Translation. */
 .composer-translation-tag {
   flex: none;
@@ -10525,7 +10559,8 @@ button.chat-jump-start:hover {
 }
 
 /* The English is Markdown (.md sets its own 14px): a size smaller than the words above it. Kept after .md itself, whose rule it narrows. */
-.chat-bilingual .md {
+.chat-bilingual .md,
+.chat-bilingual-original .md {
   font-size: 12.5px;
   line-height: 1.55;
 }
@@ -17014,6 +17049,31 @@ button.chat-jump-start:hover {
   background: var(--brand);
   color: #fff;
   cursor: pointer;
+}
+.guest-composer.is-dragging {
+  border-color: var(--brand);
+}
+/* The owner composer's staged-image chips (.composer-attachments), above the guest's words. */
+.guest-composer-attachments {
+  padding: 0 0 8px;
+}
+.guest-composer-attach {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 16px;
+  cursor: pointer;
+}
+.guest-composer-attach:hover {
+  background: var(--bg-sunken);
+  color: var(--text-1);
 }
 .guest-composer-send:disabled {
   background: var(--bg-sunken);
@@ -23778,6 +23838,11 @@ div.landing-jobs-open {
   flex-wrap: wrap;
   justify-content: flex-start;
   row-gap: 2px;
+}
+/* A turn carrying only Orbit's blocks no other line knows (OrbitEventLine): the same line, its mark
+   neutral — it is neither a success nor a failure, only Orbit's. */
+.orbitwake .bgwake-mark {
+  color: var(--text-3);
 }
 /* A SubAgent's end (SubagentFinishedCard): the same line, marked with the SubAgent card's own purple ✦
    so it reads back to the card that started it, and what it handed back kept under the line. */

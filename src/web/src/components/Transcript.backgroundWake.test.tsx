@@ -401,12 +401,14 @@ describe('a wake turn in the transcript', () => {
     ]);
   });
 
-  it('draws a turn nobody typed, carrying only a block this client cannot read, as the note alone — no empty bubble', async () => {
+  // Owner rule 2026-11-16: such a turn is the From Orbit line in the agent's stream (OrbitEventLine).
+  it('draws a turn nobody typed, carrying only a block this client cannot read, as the From Orbit line — no empty bubble', async () => {
     const unknown = '<orbit-future-block>\n  Something a later server sends.\n</orbit-future-block>';
     await mount([wakeEvent(unknown)]);
 
     expect(container.querySelector('.chat-user'), 'no empty bubble').toBeNull();
-    expect(container.querySelector('.chat-injected-head')?.textContent).toContain('Orbit attached: context');
+    expect(container.querySelector('.orbitwake .bgwake-title')?.textContent).toBe('From Orbit');
+    expect(container.querySelector('.orbitwake .bgwake-name')?.textContent).toBe('context');
   });
 
   it('keeps the line, and the words behind a native disclosure, in an exported transcript', () => {
