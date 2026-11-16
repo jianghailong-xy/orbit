@@ -48,8 +48,6 @@ interface SentTurn {
   turnId?: string;
   text: string;
   ts: string;
-  /** The images it carries, drawn from the guest door as the echo's are. */
-  attachments: { id: string; mime: string; name: string }[];
 }
 
 /** What the guest door answers for every session the caller cannot reply in (§4): removed, left, Trash or deleted. */
@@ -163,7 +161,7 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
         type: 'user',
         turnId: turn.turnId ?? turn.key,
         ts: turn.ts,
-        payload: { text: turn.text, sentByReader: true, ...(turn.attachments.length ? { attachments: turn.attachments } : {}) },
+        payload: { text: turn.text, sentByReader: true },
       })),
     ];
   }, [older, data, newer, myName, sent]);
@@ -293,31 +291,32 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   const send = () => {
     const content = draft.trim();
     if (!canSend) return;
-    const sent = images;
+    const sentImages = images;
     setSending(true);
     setSendError(null);
-    // Drawn the moment it is sent, not when the runner's echo is next read: the composer empties and the message sits
+    // Drawn the moment it is sent, not when the runner's echo is next read: the composer empties and the words sit
     // in the conversation while the send is on its way.
     const key = newRunRequestToken();
-    const attachments = sent.flatMap((im) => (im.status === 'done' && im.id ? [{ id: im.id, mime: im.mime, name: im.name }] : []));
-    setSent((prev) => [...prev, { key, text: content, ts: new Date().toISOString(), attachments }]);
+    if (content) setSent((prev) => [...prev, { key, text: content, ts: new Date().toISOString() }]);
     setDraft('');
-    setImages((prev) => prev.filter((im) => !sent.includes(im)));
     followRef.current = true;
-    sendGuestTurn(sessionId, { clientTurnId: key, content, ...(readyIds.length ? { attachmentIds: readyIds } : {}) })
+    sendGuestTurn(sessionId, {
+      clientTurnId: key,
+      content,
+      ...(readyIds.length ? { attachmentIds: readyIds } : {}),
+    })
       .then(({ turnId }) => {
-        // The transcript draws the sent images from the guest door now; the local previews are done with.
-        sent.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
         awaitingEchoRef.current.set(turnId, Date.now() + ECHO_POLL_FOR_MS);
         setSent((prev) => prev.map((turn) => (turn.key === key ? { ...turn, turnId } : turn)));
+        // The transcript draws the sent images from the guest door now; the local previews are done with.
+        sentImages.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
+        setImages((prev) => prev.filter((im) => !sentImages.includes(im)));
         setKick((k) => k + 1);
       })
       .catch((e) => {
         setSent((prev) => prev.filter((turn) => turn.key !== key));
-        // Not sent: the words go back to the composer, unless something new was typed meanwhile; the images go back
-        // in front of any staged since.
+        // Not sent: the words go back to the composer, unless something new was typed meanwhile.
         setDraft((current) => (current.trim() ? current : content));
-        setImages((prev) => [...sent.filter((im) => !prev.includes(im)), ...prev]);
         if (isGone(e)) setGone(true);
         else setSendError(e instanceof Error ? e.message : String(e));
       })

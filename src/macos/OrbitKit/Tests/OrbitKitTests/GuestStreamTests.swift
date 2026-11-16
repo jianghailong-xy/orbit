@@ -207,14 +207,11 @@ final class GuestStreamTests: XCTestCase {
 
     func testAMessageDrawnOnSendIsReplacedByItsEchoOnTheStream() {
         var sent = GuestSentTurns()
-        let key = sent.draw("Ship it on Friday", attachments: [TurnAttachment(id: "img1", mime: "image/png", name: "shot.png")])
-        let drawn = sent.events
-        XCTAssertEqual(drawn.count, 1)
-        XCTAssertEqual(drawn[0].payload["attachments"], .array([.object(["id": .string("img1"), "mime": .string("image/png"), "name": .string("shot.png")])]))
+        let key = sent.draw("Ship it on Friday")
         var reducer = TranscriptReducer()
-        reducer.appendNewer(EventPage(events: drawn, hasMore: false))
+        reducer.appendNewer(EventPage(events: sent.events, hasMore: false))
         guard case .user(let bubble)? = reducer.state.items.last else { return XCTFail("no user bubble") }
-        XCTAssertEqual(bubble.attachments.map(\.id), ["img1"])
+        XCTAssertEqual(bubble.text, "Ship it on Friday")
 
         sent.accepted(key, turnId: "T")
         var follow = GuestStreamFollow(after: 3)

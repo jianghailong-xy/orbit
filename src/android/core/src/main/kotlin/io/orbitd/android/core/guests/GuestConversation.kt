@@ -3,8 +3,10 @@ package io.orbitd.android.core.guests
 import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiError
+import io.orbitd.android.core.realtime.ReconnectPolicy
 import io.orbitd.android.core.realtime.RunEvent
 import io.orbitd.android.core.realtime.SENTINEL_SEQ
+import io.orbitd.android.core.realtime.SseFrame
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -12,19 +14,23 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlin.coroutines.ContinuationInterceptor
+import kotlin.coroutines.EmptyCoroutineContext
 
 /** What the guest view draws. [events] are the door's, the reader's own messages already read as theirs ([GuestTranscript]). */
 data class GuestView(
@@ -44,6 +50,11 @@ data class GuestView(
     val images: List<GuestImage> = emptyList(),
     val sending: Boolean = false,
     val sendError: String? = null,
+    /** The agent's reply as the stream types it out, by the sub-agent writing it ("" is the agent itself): the owner's reader's
+     *  `Transcript.textDrafts`, gone when the block it becomes is read. */
+    val textDrafts: Map<String, String> = emptyMap(),
+    /** Its reasoning as it is typed out, the same way (`Transcript.thinkingDrafts`). */
+    val thinkingDrafts: Map<String, String> = emptyMap(),
 ) {
     /** An image is still on its way to the door: a send waits for it. */
     val uploading: Boolean get() = images.any { it.uploading }
@@ -58,11 +69,12 @@ data class GuestImage(val id: String, val name: String, val mime: String, val si
 }
 
 /**
- * One guest view's reads and its one write (web `GuestConversation`): the root, the follow loop at [GuestFollow]'s cadence, older pages,
- * and a message — words, images or both, each image uploaded as it is staged. A sent message is drawn at once (once the uploads still
- * running have finished), before the door answers, until the runner's echo of its turn replaces it; the send then asks at once, every
- * [ECHO_MS] while that echo is missing (for up to [ECHO_FOR_MS]), and every 4 s until the run it started has been seen. A 404 at any
- * point is the not-shared state, and nothing is read after it. [initial] is the root an owner's 404 already read, so the view opens on it.
+ * One guest view's reads and its one write (web `GuestConversation`): the root, the follow over the guest [stream] — or, when it
+ * cannot be opened, the follow loop at [GuestFollow]'s cadence — older pages,
+ * and a message — words, images or both, each image uploaded as it is staged. A sent message's words are drawn at once, before the
+ * door answers, until the runner's echo of its turn replaces them; the send waits for the uploads still running, then asks at once,
+ * every [ECHO_MS] while that echo is missing (for up to [ECHO_FOR_MS]), and every 4 s until the run it started has been seen. A 404
+ * at any point is the not-shared state, and nothing is read after it. [initial] is the root an owner's 404 already read, so the view opens on it.
  */
 class GuestConversation(
     private val api: OrbitApi,
@@ -71,6 +83,9 @@ class GuestConversation(
     private val myName: String?,
     private val scope: CoroutineScope,
     initial: GuestSession? = null,
+    /** The guest stream; none follows by polling alone. */
+    private val stream: GuestStream? = null,
+    private val reconnect: ReconnectPolicy = ReconnectPolicy(),
     private val clock: () -> Long = System::currentTimeMillis,
     private val newTurnId: () -> String = { UUID.randomUUID().toString() },
 ) {
@@ -89,7 +104,11 @@ class GuestConversation(
     private val awaitingEcho = mutableMapOf<String, Long>()
     private var sentCount = 0L
 
-    private class SentTurn(val key: Long, val turnId: String?, val text: String, val ts: String, val images: List<GuestImage> = emptyList())
+    private class SentTurn(val key: Long, val turnId: String?, val text: String, val ts: String)
+    /** The stream asked for a fresh tail: the gap since its cursor is too long to replay. */
+    private class Resync : Exception()
+    /** The stream's `gone` frame: access ended (removed, left, revoked, Trash or deleted). */
+    private class Gone : Exception()
 
     init { initial?.let(::seed) }
 
@@ -110,27 +129,12 @@ class GuestConversation(
             RunEvent(type = "user", seq = SENTINEL_SEQ - DRAWN_SEQS + turn.key, turnId = turn.turnId, ts = turn.ts,
                 payload = buildJsonObject {
                     put("text", turn.text)
-                    if (turn.images.isNotEmpty()) putJsonArray("attachments") {
-                        turn.images.forEach { image ->
-                            addJsonObject { put("id", image.attachmentId); put("mime", image.mime); put("name", image.name) }
-                        }
-                    }
                     putJsonObject("externalSender") { put("source", GuestTranscript.READER_SOURCE) }
                 })
         }
     }
 
     private fun publish() = mutable.update { it.copy(events = shown()) }
-
-    /** Draws [content] with the staged images as sent now and takes them out of the composer; null while an image is not uploaded. */
-    private fun draw(content: String): SentTurn? {
-        val images = mutable.value.images
-        if (images.any { it.attachmentId == null }) return null
-        val turn = SentTurn(++sentCount, null, content, Instant.ofEpochMilli(clock()).toString(), images)
-        sent = sent + turn
-        mutable.update { view -> view.copy(draft = "", images = view.images.filterNot { it in images }, events = shown()) }
-        return turn
-    }
 
     private fun gone(failure: Throwable) = failure is ApiError && failure.status == 404
 
@@ -148,10 +152,12 @@ class GuestConversation(
     /** Asks for the root again after a failed first read. */
     fun retryLoad() = mutable.update { it.copy(error = null) }
 
-    /** Follows the conversation until cancelled (the page leaving, or its Activity stopping). Started again, it reads at once. */
+    /** Follows the conversation until cancelled (the page leaving, or its Activity stopping), over the guest stream while it can be
+     *  opened and by polling once it cannot. Started again, it opens the stream again (or reads at once). */
     suspend fun follow() {
         load()
         if (!mutable.value.loaded) return
+        if (stream != null && streamed(stream)) return
         var wait: Long? = if (followed || expecting) 0 else GuestFollow.delay(mutable.value.state, moved = false, expecting = expecting)
         followed = true
         while (!mutable.value.gone) {
@@ -160,6 +166,92 @@ class GuestConversation(
             wait = read()
         }
     }
+
+    /**
+     * Follows over the guest stream from the newest seq read, reconnecting from there when it drops or the server ends it. True once
+     * the conversation is no longer shared; false when a stream could not be opened (a refusal, a server without the route, no
+     * network), so polling takes over. Frames are handled on the caller's dispatcher, as the sends that share this state are.
+     */
+    private suspend fun streamed(stream: GuestStream): Boolean {
+        val here = currentCoroutineContext()[ContinuationInterceptor] ?: EmptyCoroutineContext
+        while (!mutable.value.gone) {
+            var opened = false
+            var failed = false
+            try {
+                stream.open(id, after, onOpen = {
+                    // The server sends the turn's whole prefix again on each connect: a draft from the last one would double it.
+                    withContext(here) { opened = true; mutable.update { it.copy(textDrafts = emptyMap(), thinkingDrafts = emptyMap()) } }
+                }, onFrame = { frame -> withContext(here) { frame(frame) } })
+            } catch (cancel: CancellationException) { throw cancel }
+            catch (_: Gone) { break }
+            catch (_: Resync) {
+                failed = true
+                try { reseed() } catch (cancel: CancellationException) { throw cancel }
+                catch (failure: Exception) { if (gone(failure)) mutable.update { it.copy(gone = true) } }
+            } catch (_: Exception) {
+                if (!opened) return mutable.value.gone
+                failed = true
+            } finally { mutable.update { it.copy(textDrafts = emptyMap(), thinkingDrafts = emptyMap()) } }
+            if (mutable.value.gone) break
+            delay(reconnect.delayMs(failed))
+        }
+        return true
+    }
+
+    /** The newest page again, for a stream whose gap was too long to replay: what was read before is dropped for it. */
+    private suspend fun reseed() {
+        val root = api.guestSession(handle, id)
+        raw = emptyList()
+        seed(root)
+    }
+
+    /** One frame of the guest stream. */
+    private fun frame(frame: SseFrame) {
+        val event = try { RunEvent.decode(frame) } catch (_: Exception) { return }
+        when (event.type) {
+            "ping" -> return
+            "resync" -> throw Resync()
+            "gone" -> { mutable.update { it.copy(gone = true) }; throw Gone() }
+            "head" -> {
+                val (title, state) = GuestWire.head(event.fields)
+                if (state.live) expecting = false
+                mutable.update { view ->
+                    view.copy(state = state, title = title ?: view.title,
+                        textDrafts = if (state.live) view.textDrafts else emptyMap(),
+                        thinkingDrafts = if (state.live) view.thinkingDrafts else emptyMap())
+                }
+            }
+            "text_delta", "thinking_delta" -> {
+                val parent = event.fields.string("parentToolUseId") ?: ""
+                val text = event.fields.string("delta") ?: event.fields.string("text") ?: ""
+                mutable.update { view ->
+                    if (event.type == "text_delta") view.copy(textDrafts = view.textDrafts + (parent to view.textDrafts[parent].orEmpty() + text))
+                    else view.copy(thinkingDrafts = view.thinkingDrafts + (parent to view.thinkingDrafts[parent].orEmpty() + text))
+                }
+            }
+            else -> {
+                if (!event.durable || raw.any { it.seq == event.seq }) return
+                raw = merge(raw, listOf(event))
+                after = maxOf(after, event.seq)
+                if (event.type == "user") event.turnId?.let(awaitingEcho::remove)
+                val parent = event.fields.string("parentToolUseId") ?: ""
+                mutable.update { view ->
+                    // A block read in full replaces the draft it was typed out as, as the owner's reader's Transcript.apply does.
+                    when (event.type) {
+                        "assistant" -> view.copy(textDrafts = view.textDrafts - parent)
+                        "thinking" -> view.copy(thinkingDrafts = view.thinkingDrafts - parent)
+                        "tool_use" -> view.copy(textDrafts = view.textDrafts - parent, thinkingDrafts = view.thinkingDrafts - parent)
+                        "user", "turn_end", "interrupt", "result" -> view.copy(textDrafts = emptyMap(), thinkingDrafts = emptyMap())
+                        else -> view
+                    }.copy(events = shown())
+                }
+            }
+        }
+        reconnect.healthy()
+    }
+
+    private fun kotlinx.serialization.json.JsonObject.string(key: String): String? =
+        (get(key) as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
 
     /** One follow read; the wait before the next, or null to wait for a send. */
     private suspend fun read(): Long? = try {
@@ -247,31 +339,29 @@ class GuestConversation(
     fun send() {
         val content = mutable.value.draft.trim()
         if (!mutable.value.canSend || (content.isEmpty() && mutable.value.images.isEmpty())) return
-        mutable.update { it.copy(sending = true, sendError = null) }
-        // Drawn the moment it is sent: the composer empties and the message sits in the conversation while the send is on its way —
-        // at once, or once the uploads still running have finished.
-        var turn = if (uploads.isEmpty()) draw(content) else null
+        // Drawn the moment it is sent: the composer empties and the words sit in the conversation while the send is on its way.
+        val key = ++sentCount
+        if (content.isNotEmpty()) sent = sent + SentTurn(key, null, content, Instant.ofEpochMilli(clock()).toString())
+        mutable.update { it.copy(sending = true, sendError = null, draft = "", events = shown()) }
         scope.launch {
             try {
                 while (uploads.isNotEmpty()) uploads.values.toList().joinAll()
                 if (mutable.value.gone) return@launch
-                if (turn == null) turn = draw(content)
-                val drawn = checkNotNull(turn) { GuestImages.FAILED_UPLOADS }
-                val accepted = api.sendGuestTurn(handle, id, newTurnId(), content, drawn.images.mapNotNull { it.attachmentId })
+                val images = mutable.value.images
+                check(images.all { it.attachmentId != null }) { GuestImages.FAILED_UPLOADS }
+                val accepted = api.sendGuestTurn(handle, id, newTurnId(), content, images.mapNotNull { it.attachmentId })
                 expecting = true
-                drawn.images.forEach { imageBytes.remove(it.id) }
+                images.forEach { imageBytes.remove(it.id) }
+                mutable.update { view -> view.copy(images = view.images.filterNot { it in images }) }
                 accepted.turnId?.let { awaitingEcho[it] = clock() + ECHO_FOR_MS }
-                sent = sent.map { if (it.key == drawn.key) SentTurn(it.key, accepted.turnId, it.text, it.ts, it.images) else it }
+                sent = sent.map { if (it.key == key) SentTurn(key, accepted.turnId, it.text, it.ts) else it }
                 publish()
                 kick.trySend(Unit)
             } catch (cancel: CancellationException) { throw cancel }
             catch (failure: Exception) {
-                // Not sent: the bubble goes, and the words go back to the composer unless something new was typed meanwhile; its images
-                // go back in front of any staged since.
-                turn?.let { drawn ->
-                    sent = sent.filterNot { it.key == drawn.key }
-                    mutable.update { it.copy(events = shown(), draft = it.draft.ifBlank { content }, images = drawn.images + it.images) }
-                }
+                // Not sent: the bubble goes, and the words go back to the composer unless something new was typed meanwhile.
+                sent = sent.filterNot { it.key == key }
+                mutable.update { it.copy(events = shown(), draft = it.draft.ifBlank { content }) }
                 if (gone(failure)) mutable.update { it.copy(gone = true) }
                 else mutable.update { it.copy(sendError = (failure as? ApiError)?.messages?.firstOrNull() ?: failure.message) }
             } finally { mutable.update { it.copy(sending = false) } }

@@ -263,32 +263,32 @@ final class GuestConversationModel {
         sending = true
         sendError = nil
         defer { sending = false }
-        while let upload = images.compactMap({ uploads[$0.id] }).first {
-            await upload.value
-        }
+        // Drawn the moment it is sent: the composer empties and the words sit in the conversation while the send is on its way.
         let content = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let staged = images
-        let attachmentIds = staged.compactMap(\.remoteID)
-        guard phase == .ready, GuestComposer.canSend(text: content, imageCount: attachmentIds.count) else { return }
-        // Drawn the moment it is sent: the composer empties and the message sits in the conversation while the send is on its way.
-        let key = sent.draw(content, attachments: staged.compactMap { chip in
-            chip.remoteID.map { TurnAttachment(id: $0, mime: chip.mimeType, name: chip.filename) }
-        })
+        let key = content.isEmpty ? nil : sent.draw(content)
         draft = ""
-        images.removeAll { chip in staged.contains { $0.id == chip.id } }
         tailRevision &+= 1
         do {
+            while let upload = images.compactMap({ uploads[$0.id] }).first {
+                await upload.value
+            }
+            let staged = images
+            let attachmentIds = staged.compactMap(\.remoteID)
+            guard phase == .ready, GuestComposer.canSend(text: content, imageCount: attachmentIds.count) else {
+                if let key { sent.refused(key) }
+                if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { draft = content }
+                return
+            }
             let accepted = try await api.sendGuestTurn(sessionID, clientTurnId: PublicID.newToken(), content: content,
                                                        attachmentIds: attachmentIds)
-            sent.accepted(key, turnId: accepted.turnId)
+            if let key { sent.accepted(key, turnId: accepted.turnId) }
+            images.removeAll { chip in staged.contains { $0.id == chip.id } }
             expecting = true
             kicked = true
         } catch {
-            // Not sent: the drawing goes, and the words go back to the composer unless something new was typed
-            // meanwhile; the images go back in front of any picked since.
-            sent.refused(key)
+            // Not sent: the drawing goes, and the words go back to the composer unless something new was typed meanwhile.
+            if let key { sent.refused(key) }
             if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { draft = content }
-            images.insert(contentsOf: staged.filter { chip in !images.contains { $0.id == chip.id } }, at: 0)
             switch error {
             case APIError.http(let status, _) where status == 404:
                 phase = .notShared

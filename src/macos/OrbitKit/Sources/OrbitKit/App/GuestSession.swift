@@ -137,7 +137,6 @@ public struct GuestSentTurns: Equatable, Sendable {
         let key: Int
         var turnId: String?
         let text: String
-        let attachments: [TurnAttachment]
         let ts: String
         var askUntil: Date?
     }
@@ -149,11 +148,10 @@ public struct GuestSentTurns: Equatable, Sendable {
 
     public var isEmpty: Bool { turns.isEmpty }
 
-    /// Draw `text` and the images it carries as sent now; the key names it to `accepted` and `refused`.
-    public mutating func draw(_ text: String, attachments: [TurnAttachment] = [], at now: Date = Date()) -> Int {
+    /// Draw `text` as sent now; the key names it to `accepted` and `refused`.
+    public mutating func draw(_ text: String, at now: Date = Date()) -> Int {
         sent += 1
-        turns.append(Turn(key: sent, turnId: nil, text: text, attachments: attachments,
-                          ts: ISO8601DateFormatter().string(from: now), askUntil: nil))
+        turns.append(Turn(key: sent, turnId: nil, text: text, ts: ISO8601DateFormatter().string(from: now), askUntil: nil))
         return sent
     }
 
@@ -178,18 +176,10 @@ public struct GuestSentTurns: Equatable, Sendable {
     /// The drawn messages as `user` events, headed as the reader's own.
     public var events: [RunEvent] {
         turns.map { turn in
-            var payload: [String: JSONValue] = ["text": .string(turn.text),
-                                                "externalSender": .object(["source": .string(ExternalSender.readerSource)])]
-            if !turn.attachments.isEmpty {
-                payload["attachments"] = .array(turn.attachments.map { image in
-                    var ref: [String: JSONValue] = ["id": .string(image.id)]
-                    if let mime = image.mime { ref["mime"] = .string(mime) }
-                    if let name = image.name { ref["name"] = .string(name) }
-                    return .object(ref)
-                })
-            }
-            return RunEvent(seq: RunEvent.sentinelSeq - Self.drawnSeqs + turn.key, type: .user, ts: turn.ts,
-                            turnId: turn.turnId ?? "sent-\(turn.key)", payload: .object(payload))
+            RunEvent(seq: RunEvent.sentinelSeq - Self.drawnSeqs + turn.key, type: .user, ts: turn.ts,
+                     turnId: turn.turnId ?? "sent-\(turn.key)",
+                     payload: .object(["text": .string(turn.text),
+                                       "externalSender": .object(["source": .string(ExternalSender.readerSource)])]))
         }
     }
 

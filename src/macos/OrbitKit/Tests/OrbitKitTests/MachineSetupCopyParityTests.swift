@@ -16,8 +16,13 @@ final class MachineSetupCopyParityTests: XCTestCase {
 
     /// Sentences of pages these clients don't have: the web's approval page, and its register guide's
     /// Settings variant (these clients register from the machine's own card, which says `REGISTER_NEXT`).
+    /// The `…CREATE` lines are the web setup card's own (web 27a0dedbf, owner 2026-11-16): there the card
+    /// alone makes the workspace with a Create button, while these clients still make it by sending, and
+    /// keep `SETUP_LEAD`, `SETUP_FOOT` and `setupReady`.
     private static let webOnly: Set<String> = ["ENROLL_NEXT_TITLE", "ENROLL_NEXT_BODY", "ENROLL_OPEN_MACHINE",
-                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty"]
+                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty",
+                                               "SETUP_LEAD_CREATE", "SETUP_FOOT_CREATE", "setupReadyCreate",
+                                               "SETUP_CREATE", "setupCreateFailed"]
 
     /// Sentences these clients say and the web doesn't, each checked on its own terms below.
     private static let thisClientsOwn: Set<String> = [
