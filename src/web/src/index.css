@@ -2274,7 +2274,8 @@ button.toast--pill:focus-visible {
   background: var(--accent, #2563eb);
   flex: none;
 }
-.re-panel-hint.agent-fix-row {
+.re-panel-hint.agent-fix-row,
+.rd-engine-relay-hint.agent-fix-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
