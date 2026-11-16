@@ -55,6 +55,10 @@ on:
         description: "Also run the iOS http://ip ATS probe (simulator, A/B against no ATS keys)"
         type: boolean
         default: false
+      prompt_optimizer_probe:
+        description: "Also run the prompt optimizer evidence probe (Mac window + iPhone shots)"
+        type: boolean
+        default: false
 
 concurrency:
   group: client-${{ github.ref }}
@@ -396,3 +400,63 @@ jobs:
           git commit -q -m "macOS runtime crash gate for ${{ github.sha }} (run ${{ github.run_id }})"
           git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
             results:refs/heads/probe/macos-runtime-results
+
+  # TEMPORARY (probe branch only, never merged): prompt optimizer shots.
+  prompt-optimizer-shots:
+    name: Prompt optimizer probe (Mac window + iPhone)
+    if: github.event_name == 'workflow_dispatch' && inputs.prompt_optimizer_probe
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      # project.yml's `../src` paths are relative to the repository root, so the harness runs from
+      # a copy of itself placed there (the crossings probe's `.xcross-probe/`).
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .po-probe
+          cp -R docs/evidence/prompt-optimizer-default-on/probe-harness/. .po-probe/
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .po-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .po-probe/shots
+          cp run-output.log .po-probe/shots/run-output.log 2>/dev/null || true
+          for log in .po-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".po-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".po-probe/shots/tail-$base.txt" || true
+          done
+          find .po-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .po-probe/shots/outcomes.txt
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .po-probe/shots/outcomes.txt
+          echo "sha=${{ github.sha }}" >> .po-probe/shots/outcomes.txt
+          # The screen the Mac window had to fit in: the window is sized against it, and the
+          # console page lays itself out taller than it (see WindowFit in the probe app).
+          { echo "== displays =="; system_profiler SPDisplaysDataType 2>/dev/null | head -40
+            osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>&1
+          } >> .po-probe/shots/outcomes.txt || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: prompt-optimizer-shots
+          path: .po-probe/shots
+          # `.done-probe` is the marker the probe's own evidence convention reads: hidden files are
+          # excluded by default, and that one is the "it ran to the end" record.
+          include-hidden-files: true
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
