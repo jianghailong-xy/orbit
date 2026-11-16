@@ -1296,6 +1296,7 @@ final class ConsoleModel {
     /// Seed the live composer's first frame before the draft opens it. The create response owns
     /// the config; the draft's catalogue names it without another asynchronous runner read.
     func adoptCreatedSession(_ session: Session, from draft: ConsoleModel) {
+        conversationCreatedAt = session.createdAt
         provider = session.provider ?? draft.provider
         recordedEngine = session.engine ?? draft.engine
         modelCatalog = draft.modelCatalog
@@ -1960,7 +1961,8 @@ final class ConsoleModel {
         guard let itemID = TranscriptRecordAnchor.itemID(for: anchor, page: page, in: state.items) else { return }
         revealedItemID = itemID
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
-                                        showWorkingIndicator: false, decisionCards: decisionCards)
+                                        showWorkingIndicator: false, decisionCards: decisionCards,
+                                        conversationCreatedAt: conversationCreatedAt)
         scrollTick += 1
         recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: itemID, in: rows) ?? itemID,
                                       tick: scrollTick)
@@ -1973,7 +1975,8 @@ final class ConsoleModel {
         guard state.items.contains(where: { $0.id == toolUseID }) else { return }
         revealedItemID = toolUseID
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
-                                        showWorkingIndicator: false, decisionCards: decisionCards)
+                                        showWorkingIndicator: false, decisionCards: decisionCards,
+                                        conversationCreatedAt: conversationCreatedAt)
         scrollTick += 1
         recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: toolUseID, in: rows) ?? toolUseID,
                                       tick: scrollTick)
@@ -2455,6 +2458,7 @@ final class ConsoleModel {
     /// List seeds and the later detail read resolve the same settings. A model-less session keeps
     /// using the cached Runtime default while the runner refresh is in flight.
     private func adoptSessionConfiguration(_ session: Session) {
+        conversationCreatedAt = session.createdAt
         // The session's engine never changes; a row an older replica wrote is placed by its provider.
         // An OpenCode session an older client started on a key is read as that key and its bare model
         // (contract §3.3) — and stays on OpenCode, which the key alone would not say.
@@ -2488,6 +2492,7 @@ final class ConsoleModel {
     /// heartbeat-derived capability changes, so an open console needn't keep an older denial.
     func adoptServerSnapshot(_ session: Session?) {
         guard let session, session.id == sessionID else { return }
+        conversationCreatedAt = session.createdAt
         // A list row carries no flag, so only the detail moves this; it never goes back to false.
         if session.createdWorkspace == true { madeWorkspace = session.agent }
         serverStatus = session.effectiveRunStatus
@@ -4488,6 +4493,19 @@ final class ConsoleModel {
     /// different things: the property is nil while unread, and the read answers nil when this
     /// project is asking nothing — which is the ordinary case and draws no card.
     private(set) var promotion: ProjectPromotionView?
+    private var mergedPromotions: [ProjectPromotionView] = []
+    private(set) var conversationCreatedAt: String?
+
+    func coordinatorHistoryCounts(createdAt: String?) -> CoordinatorCleanStart.Counts {
+        var decisions = openItems?.closedQuestions.map(\.resolvedAt) ?? []
+        decisions += criteriaDecisions?.settled.map(\.decidedAt) ?? []
+        decisions += evidenceDecisions?.decided.map(\.decidedAt) ?? []
+        if let stamp = acceptanceConfirmation?.confirmation?.confirmedAt { decisions.append(stamp) }
+        return CoordinatorCleanStart.counts(
+            createdAt: createdAt, decisions: decisions,
+            merges: PromotionCards.receipts(merged: mergedPromotions).map(\.moment))
+    }
+
     /// What the project's line is landing, for the row that names what is in front of a blocked
     /// candidate (`PromotionCards.blockedByLine`). Kept as last read, and read only while one is
     /// blocked: the three states that are not blocked have nothing to look past.
@@ -4763,13 +4781,14 @@ final class ConsoleModel {
         case .at(let moment):
             let read = clocks ?? receiptClocks
             clocks = read
-            switch ReceiptAnchor.place(read, at: moment) {
+            switch ReceiptAnchor.place(read, at: moment,
+                                       since: card.kind.isRecord ? conversationCreatedAt : nil) {
             case .after(let id): return state.items.firstIndex { $0.id == id } ?? state.items.count
             case .beforeWindow:  return -1
-            // Nothing draws this one (`TranscriptRows.build` drops an unplaceable stamp), so it is
+            // Nothing draws this one (an unreadable stamp or one before conversation creation), so it is
             // counted as if it were at the tail: the bar must not send the reader to a row that is
             // not there.
-            case .unplaceable:   return state.items.count
+            case .beforeConversation, .unplaceable: return state.items.count
             }
         }
     }
@@ -5455,7 +5474,8 @@ final class ConsoleModel {
     ///
     /// Anchors are captured once: a receipt already delivered keeps the place it was given, so a
     /// read coming round again cannot walk it down the conversation. One whose moment is older than
-    /// everything loaded leads at the HEAD of the window — see `ReceiptAnchor.Placement`.
+    /// everything loaded, but since conversation creation, leads at the HEAD of the window
+    /// — see `ReceiptAnchor.Placement`.
     private func adoptReceipts(_ queue: PendingCriteriaDecisionQueue) {
         let receipts = CriteriaDecisions.receipts(queue: queue)
         let answered = Set(receipts.map(\.settled.intentId))
@@ -5549,8 +5569,10 @@ final class ConsoleModel {
     /// a different merge in the same place. The card that ASKED for a merge is let go of by the read
     /// that says it merged (`refreshRulerQuestions`), which is where the strip stops drawing it; what
     /// is adopted here is the record that replaces it. A merge whose moment is older than everything
-    /// loaded leads at the HEAD of the window — see `ReceiptAnchor.Placement`.
+    /// loaded, but since conversation creation, leads at the HEAD of the window
+    /// — see `ReceiptAnchor.Placement`.
     private func adoptPromotionReceipts(_ merged: [ProjectPromotionView]) {
+        mergedPromotions = merged
         for receipt in PromotionCards.receipts(merged: merged) {
             guard !closedCards.contains(receipt.id),
                   !decisionCards.contains(where: { $0.id == receipt.id }) else { continue }
@@ -6076,7 +6098,8 @@ final class ConsoleModel {
         guard let until = pendingWaitingCardUntil else { return }
         guard Date() < until else { pendingWaitingCardUntil = nil; return }
         let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
-                                        showWorkingIndicator: false, decisionCards: decisionCards)
+                                        showWorkingIndicator: false, decisionCards: decisionCards,
+                                        conversationCreatedAt: conversationCreatedAt)
         guard let rowID = SessionProjectSheet.waitingCardRowID(rows: rows, openCards: openBelowRows)
         else { return }
         pendingWaitingCardUntil = nil

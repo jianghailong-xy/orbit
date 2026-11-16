@@ -145,6 +145,13 @@ export const COORDINATOR_HANDOFF_COPY = {
   handingOver: 'Handing over to a new coordinator…',
   noteCardTitle: 'Handoff from the previous coordinator',
   waitsMovedHere: (count: number) => (count === 1 ? '1 wait moved here' : `${count} waits moved here`),
+  /**
+   * The note card's line counting what this conversation does not draw (handoff v2 §4, board 3):
+   * the records stamped before it was created. Null when there are none, and the line is omitted.
+   */
+  historyBefore: (decisions: number, merges: number): string | null =>
+    decisions === 0 && merges === 0 ? null : `${decisions} ${decisions === 1 ? 'decision' : 'decisions'} and ${merges} ${merges === 1 ? 'merge' : 'merges'} before this conversation`,
+  openPrevious: 'Open previous coordinator',
   handedOver: 'Handed over to a new coordinator.',
   openIt: 'Open it',
   tryAgain: 'Try again',
