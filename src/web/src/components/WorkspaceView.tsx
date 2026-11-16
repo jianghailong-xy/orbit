@@ -10726,12 +10726,10 @@ export function WorkspaceView({
               {/* The conversation's last row while it is at rest: its recap whole, the line its list
                   row reads in one (SessionRecapCard). Above the cards that ask the owner something,
                   which stay nearest the composer, and only once the transcript it sums up is drawn.
-                  Keyed by the session like its siblings, so a refresh in flight stays with the
-                  conversation that asked for it. */}
+                  Keyed by the session like its siblings. */}
               {selected && selectedId && selectedRecap && transcriptEvents.length > 0 && (
                 <SessionRecapCard
                   key={`recap:${selectedId}`}
-                  sessionId={selectedId}
                   text={selectedRecap}
                   recapAt={selectedSession?.recapAt ?? null}
                   onHide={hideSelectedRecap}

@@ -1546,7 +1546,7 @@ struct TranscriptView: View {
             ApprovalCard(console: console, approval: approval)
         case .recap(let card):
             // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
-            RecapCardView(card: card, sessionID: console.sessionID, onHide: hideRecap)
+            RecapCardView(card: card, onHide: hideRecap)
         case .working:
             WorkingIndicatorView()
         case .queued(let bubble):
