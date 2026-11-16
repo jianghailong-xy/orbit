@@ -1,6 +1,8 @@
 import {
   CLONE_WORKDIR_CAPABILITY,
   CREATE_WORKDIR_CAPABILITY,
+  managedSetupState,
+  type ManagedRunnerStatus,
   DIR_PROBE_CAPABILITY,
   type DirProbe,
   type LoginEngine,
@@ -37,14 +39,14 @@ export const machineDraftPath = (runnerId: string): string => `/runners/${encode
 export const machineName = (runner: { name: string; displayName?: string | null }): string =>
   runner.displayName || runner.name;
 
-/** Rule 9: the machines that get a Set up row, in the runner list's order. Online, with no workspace
- *  of this account on them: an offline one is already what Machines & models says needs you. */
+/** Machines without a workspace, in list order: online machines and managed machines accepting queued work. */
 export function machinesToSetUp<R extends { id: string; online?: boolean }>(
   runners: readonly R[],
   workspaces: readonly OrderableWorkspace[],
+  managedStatus?: ManagedRunnerStatus | null,
 ): R[] {
   const taken = new Set(workspaces.map(workspaceRunnerId));
-  return runners.filter((runner) => runner.online && !taken.has(runner.id));
+  return runners.filter((runner) => (runner.online || managedSetupState(runner.id, managedStatus) !== null) && !taken.has(runner.id));
 }
 
 /** Whether a machine can be asked about a path at all, and whether it can make a new folder: the

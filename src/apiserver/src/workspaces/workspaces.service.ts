@@ -95,7 +95,7 @@ export class WorkspacesService {
     }
     const runner = await this.prisma.runner.findFirstOrThrow({
       where: { id: dto.runnerId, ownerId },
-      select: { reposRoot: true, capabilities: true, capabilitiesReportedAt: true },
+      select: { reposRoot: true, capabilities: true, capabilitiesReportedAt: true, managedRunner: { select: { id: true } } },
     });
     return newFolderWorkDirOn(runner, dto.newFolder);
   }

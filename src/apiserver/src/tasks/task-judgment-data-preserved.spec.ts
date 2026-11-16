@@ -3077,7 +3077,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0920 adds a nullable workspace.clone_credential with one CHECK (GitHub workspaces P2: which credential a clone
       // used); catalog-only, no trigger, function or DONE fence changes, and no row is written. Numbered 0880 on the
       // project line until main's 0880_attachment_guest_uploader took that number.
-      '0920_workspace_clone_credential'],
+      '0920_workspace_clone_credential',
+      // 0930 makes managed_runner.default_workspace_id nullable, clears it on mappings whose workspace nobody used, and
+      // soft-deletes those workspaces; neither table is one of the preserved relations, and no trigger, function or
+      // DONE fence changes.
+      '0930_managed_runner_no_default_workspace'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

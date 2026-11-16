@@ -187,10 +187,10 @@ final class MachineSetupWiringTests: XCTestCase {
     func testTheCardIsAFolderAndANameAskedAboutWhereItWouldGo() throws {
         let page = try app("Views/MachineSetupCard.swift")
         let card = try slice(page, from: "private struct MachineSetupCard: View {", to: "private func noAnswer(again:")
-        XCTAssertTrue(card.contains("private var root: String { MachineSetup.newFolderRoot(runner) }"))
-        XCTAssertTrue(card.contains("private var disabled: Bool { offline || !checksFolders }"),
+        XCTAssertTrue(card.contains("private var root: String { MachineSetup.setupFolderRoot(runner, managedState: managedState) }"))
+        XCTAssertTrue(card.contains("private var disabled: Bool { managedState == nil && (offline || !checksFolders) }"),
                       "a machine that can't make a folder can't be typed into")
-        try assertInOrder(card, ["guard !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }",
+        try assertInOrder(card, ["guard managedState == nil, !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }",
                                  "return MachineSetup.newFolderPath(root: root, name: folder)"],
                           "the name's question")
         try assertInOrder(card, ["guard let answer, let question, answer.path == question else { return nil }",

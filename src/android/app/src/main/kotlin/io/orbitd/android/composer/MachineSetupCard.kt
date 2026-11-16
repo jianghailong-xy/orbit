@@ -78,13 +78,14 @@ internal fun MachineSetupCard(
     github: GithubSource? = null,
     /** From GitHub's Change: Settings → GitHub. */
     onOpenGithubSettings: () -> Unit = {},
+    managedSetup: String? = null,
 ) {
     val runnerId = runner.text("id").orEmpty()
     val machine = RunnerPage.displayName(runner)
     val offline = !online
     val usable = MachineSetup.answersDirProbe(runner) && MachineSetup.makesNewFolders(runner)
-    val disabled = offline || !usable
-    val root = MachineSetup.newFolderRootOf(runner)
+    val disabled = managedSetup == null && (offline || !usable)
+    val root = if (managedSetup != null && runner.text("reposRoot").isNullOrBlank()) ManagedRunner.REPOS_ROOT else MachineSetup.newFolderRootOf(runner)
 
     var typed by remember(runnerId) { mutableStateOf("") }
     // The answer, with the path it is about: an answer about a name since changed says nothing.
@@ -96,7 +97,7 @@ internal fun MachineSetupCard(
 
     val folder = typed.trim()
     // The name is asked about where it would go, as it is typed: a folder, or a file, may be there already.
-    val query = if (!disabled && MachineSetup.isValidNewFolder(folder)) MachineSetup.newFolderPath(root, folder) else null
+    val query = if (managedSetup == null && !disabled && MachineSetup.isValidNewFolder(folder)) MachineSetup.newFolderPath(root, folder) else null
     LaunchedEffect(runnerId, query, attempt) {
         if (query == null) return@LaunchedEffect
         delay(300)
@@ -111,7 +112,8 @@ internal fun MachineSetupCard(
     }
     val current = answer?.takeIf { query != null && it.first == query }?.second
     val found = (current as? DirProbeRelay.Outcome.Answered)?.probe
-    val typedPick = if (found != null && MachineSetup.isValidNewFolder(folder)) MachineSetup.newFolderPick(found, folder, root, machine) else null
+    val typedPick = if (managedSetup != null && MachineSetup.isValidNewFolder(folder)) PickedFolder.New(folder, MachineSetup.newFolderPath(root, folder))
+        else if (found != null && MachineSetup.isValidNewFolder(folder)) MachineSetup.newFolderPick(found, folder, root, machine) else null
 
     // From GitHub: offered only where the deployment has a GitHub App. Read again each time the app comes back to the front, which is
     // where a sign-in in the browser ends; the last answer stands while it is read.
@@ -137,6 +139,7 @@ internal fun MachineSetupCard(
     val create = { if (canCreate && candidate != null) onCreate(candidate, shownName.trim()) }
 
     val notice = when {
+        managedSetup != null -> ManagedRunner.Setup.NOTICE.getValue(managedSetup)
         // Never heard from is a machine still coming up, not one gone away, nor one too old to check folders.
         offline -> if (MachineSetup.isConnecting(runner)) MachineSetupCopy.setupConnectingCreate(machine) else MachineSetupCopy.setupOfflineCreate(machine)
         !usable -> if (MachineSetup.updatesItself(runner)) MachineSetupCopy.setupUpdatingCreate(machine)
@@ -194,7 +197,7 @@ internal fun MachineSetupCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(notice, style = MaterialTheme.typography.bodySmall, color = Ink.amber)
-                    if (!offline && !usable && !MachineSetup.updatesItself(runner)) {
+                    if (managedSetup == null && !offline && !usable && !MachineSetup.updatesItself(runner)) {
                         Text(
                             MachineSetupCopy.SETUP_OPEN_MACHINE,
                             style = MaterialTheme.typography.labelMedium,
@@ -261,6 +264,7 @@ internal fun MachineSetupCard(
                     createError != null -> VerdictText(MachineSetupCopy.setupCreateFailed(createError), FolderVerdict.Tone.BAD)
                     folder.isEmpty() -> MetaText(MachineSetupCopy.SETUP_FOLDER_HINT)
                     !MachineSetup.isValidNewFolder(folder) -> VerdictText(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, FolderVerdict.Tone.BAD)
+                    managedSetup != null -> MetaText(ManagedRunner.Setup.FOLDER_UNCHECKED.getValue(managedSetup))
                     found != null -> {
                         val verdict = MachineSetup.newFolderVerdict(found, machine)
                         // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.

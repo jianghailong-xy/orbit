@@ -214,13 +214,14 @@ private struct MachineSetupCard: View {
     private var offline: Bool { !setup.online }
     private var checksFolders: Bool { MachineSetup.checksFolders(runner) }
     /// Nothing can be checked or made here yet: the notice says why.
-    private var disabled: Bool { offline || !checksFolders }
-    private var root: String { MachineSetup.newFolderRoot(runner) }
+    private var managedState: ManagedSetupState? { ManagedRunnerLogic.managedSetupState(runnerID: runner.id, status: app.managedRunner?.status) }
+    private var disabled: Bool { managedState == nil && (offline || !checksFolders) }
+    private var root: String { MachineSetup.setupFolderRoot(runner, managedState: managedState) }
     private var folder: String { setup.folder }
 
     /// The folder is asked about where it would go, as it is typed: a folder, or a file, may be there already.
     private var question: String? {
-        guard !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }
+        guard managedState == nil, !disabled, MachineSetup.isValidNewFolder(folder) else { return nil }
         return MachineSetup.newFolderPath(root: root, name: folder)
     }
 
@@ -244,15 +245,17 @@ private struct MachineSetupCard: View {
 
     private var candidate: PickedFolder? {
         if fromGithub { return setup.repository }
+        if managedState != nil { return MachineSetup.uncheckedFolder(name: folder, root: root) }
         guard MachineSetup.isValidNewFolder(folder), let found else { return nil }
         return MachineSetup.newFolderPick(found, name: folder, root: root, machine: machine)
     }
 
     private var canCreate: Bool {
         // Not the folder field's lock on From GitHub: a machine too old to make folders may clone, and the picker
-        // says when it can't.
+        // says when it can't. A managed runner that isn't up takes a typed folder unchecked.
         MachineSetup.canCreate(pick: candidate, name: setup.name.name(folder: followed), online: !offline,
-                               checksFolders: fromGithub || checksFolders, creating: setup.creating)
+                               checksFolders: fromGithub || checksFolders, creating: setup.creating,
+                               managedState: fromGithub ? nil : managedState)
     }
 
     private func create() {
@@ -314,6 +317,9 @@ private struct MachineSetupCard: View {
     /// Why nothing can be checked yet: the machine isn't here, or it can't be asked about a path. Never heard
     /// from is a machine still coming up, not one gone away, nor one too old to check folders.
     private var notice: String? {
+        if let state = managedState {
+            return state == .preparing ? ManagedRunnerCopy.Setup.Notice.preparing : ManagedRunnerCopy.Setup.Notice.asleep
+        }
         if offline {
             return MachineSetup.isConnecting(runner) ? MachineSetupCopy.setupConnectingCreate(machine: machine)
                 : MachineSetupCopy.setupOfflineCreate(machine: machine)
@@ -330,7 +336,7 @@ private struct MachineSetupCard: View {
                 .font(.orbitLabel)
                 .foregroundStyle(SetupInk.warn)
                 .fixedSize(horizontal: false, vertical: true)
-            if !offline, !checksFolders, !MachineSetup.updatesItself(runner) { openMachine }
+            if managedState == nil, !offline, !checksFolders, !MachineSetup.updatesItself(runner) { openMachine }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -376,7 +382,7 @@ private struct MachineSetupCard: View {
     /// would go; or, after a refused Create workspace, why.
     @ViewBuilder private var folderLine: some View {
         switch MachineSetup.folderLine(folder: folder, createError: setup.createError, found: found,
-                                       unanswered: current != nil && found == nil, machine: machine) {
+                                       unanswered: current != nil && found == nil, machine: machine, managedState: managedState) {
         case .meta(let text):
             meta(text)
         case .verdict(let text, let tone):

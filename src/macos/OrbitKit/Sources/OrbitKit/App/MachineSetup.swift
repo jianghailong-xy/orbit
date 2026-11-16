@@ -126,6 +126,19 @@ public enum MachineSetup {
         newFolderRoot(reposRoot: runner.reposRoot ?? "", capabilities: runner.capabilities)
     }
 
+    /// A managed runner can take a new folder before its first heartbeat.
+    public static func setupFolderRoot(_ runner: Runner, managedState: ManagedSetupState?) -> String {
+        if managedState != nil, (runner.reposRoot ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ManagedRunnerCopy.Setup.reposRoot
+        }
+        return newFolderRoot(runner)
+    }
+
+    public static func uncheckedFolder(name: String, root: String) -> PickedFolder? {
+        guard isValidNewFolder(name) else { return nil }
+        return .new(name: name, path: newFolderPath(root: root, name: name))
+    }
+
     /// Whether a machine can be asked about a path at all: the capability it declares (§2).
     public static func answersDirProbe(_ runner: Runner) -> Bool {
         runner.capabilities?.contains(dirProbeCapability) == true
@@ -317,11 +330,14 @@ public enum MachineSetup {
     /// `found` the machine's answer about `<root>/<folder>` (nil while there is none for it), and `unanswered`
     /// that the machine gave no answer to that question.
     public static func folderLine(folder: String, createError: String?, found: DirProbe?, unanswered: Bool,
-                                  machine: String) -> SetupFolderLine {
+                                  machine: String, managedState: ManagedSetupState? = nil) -> SetupFolderLine {
         // Why the last Create workspace was refused stands in for the rest until the next try.
         if let createError { return .createFailed(MachineSetupCopy.setupCreateFailed(why: createError)) }
         if folder.isEmpty { return .meta(MachineSetupCopy.SETUP_FOLDER_HINT) }
         if !isValidNewFolder(folder) { return .verdict(MachineSetupCopy.SETUP_NEW_FOLDER_INVALID, .bad) }
+        if let state = managedState {
+            return .meta(state == .preparing ? ManagedRunnerCopy.Setup.FolderUnchecked.preparing : ManagedRunnerCopy.Setup.FolderUnchecked.asleep)
+        }
         if let found {
             let verdict = newFolderVerdict(found, machine: machine)
             // Nothing there yet reads as a note; anything there says what it is, and so does a check that failed.
@@ -334,8 +350,8 @@ public enum MachineSetup {
     /// Create workspace can be pressed: the folder has an answer to make it in, the workspace a name, and the
     /// machine is here and can check and make folders, with no create already out.
     public static func canCreate(pick: PickedFolder?, name: String, online: Bool, checksFolders: Bool,
-                                 creating: Bool) -> Bool {
-        pick != nil && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && online && checksFolders
+                                 creating: Bool, managedState: ManagedSetupState? = nil) -> Bool {
+        pick != nil && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && (managedState != nil || (online && checksFolders))
             && !creating
     }
 

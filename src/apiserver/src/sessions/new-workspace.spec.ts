@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { folderNameOf, freeWorkspaceName, newFolderWorkDir, readNewWorkspace } from './new-workspace';
+import { folderNameOf, freeWorkspaceName, newFolderWorkDir, newFolderWorkDirOn, readNewWorkspace } from './new-workspace';
 import { SessionsService } from './sessions.service';
 
 /**
@@ -118,4 +118,15 @@ test('making a workspace logs one line, success or failure, with the path and ne
     assert.ok(failed.said.warn[0].includes(part), `${failed.said.warn[0]} lacks ${part}`);
   }
   assert.ok(!failed.said.warn[0].includes(SECRET), 'the error\'s message stays out of the line');
+});
+
+
+test('an unreported managed runner uses the image repos folder; after reporting it follows the advertised folder rule', () => {
+  const managed = { managedRunner: { id: 'managed' }, reposRoot: null, capabilities: [], capabilitiesReportedAt: null };
+  assert.equal(newFolderWorkDirOn(managed, 'app'), '/var/lib/orbit/home/orbit-repos/app');
+  const reported = { ...managed, reposRoot: '/home/orbit/orbit-repos', capabilitiesReportedAt: new Date(), capabilities: ['create-workdir/v1', 'create-workdir/v2'] };
+  assert.equal(newFolderWorkDirOn(reported, 'app'), '/home/orbit/app');
+  assert.equal(newFolderWorkDirOn({ ...reported, capabilities: ['create-workdir/v1'] }, 'app'), '/home/orbit/orbit-repos/app');
+  assert.throws(() => newFolderWorkDirOn({ ...reported, capabilities: [] }, 'app'), /old/);
+  assert.throws(() => newFolderWorkDirOn({ ...managed, managedRunner: null }, 'app'), /old/);
 });

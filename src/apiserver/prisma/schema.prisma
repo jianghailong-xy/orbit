@@ -1586,10 +1586,11 @@ enum ManagedRunnerManagementState {
   @@map("managed_runner_management_state")
 }
 
-/// One user's managed runner: the durable mapping from the owner to a stable runner row, a stable
-/// default workspace and one data PVC in one configured cluster namespace (migration 0399,
-/// docs/managed-runner-design.md "Identity and durable mapping"). Created with the runner and the
-/// workspace in one transaction; the manager reconciles Kubernetes towards `desiredState` and
+/// One user's managed runner: the durable mapping from the owner to a stable runner row and one
+/// data PVC in one configured cluster namespace (migration 0399, docs/managed-runner-design.md
+/// "Identity and durable mapping"). Created with the runner in one transaction. Since 0930 it has
+/// no default workspace (docs/managed-runner-no-default-workspace.md): `defaultWorkspaceId` is
+/// set only on an older mapping whose default workspace was used, and nothing writes it; the manager reconciles Kubernetes towards `desiredState` and
 /// records what it observed. Absence of a row is the read state NOT_PROVISIONED.
 ///
 /// Every reference is RESTRICT: deleting the user, the runner or the workspace would discard the
@@ -1603,8 +1604,8 @@ model ManagedRunner {
   owner              User                         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   runnerId           String                       @unique @map("runner_id") @db.Uuid
   runner             Runner                       @relation(fields: [runnerId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_runner_fkey")
-  defaultWorkspaceId String                       @unique @map("default_workspace_id") @db.Uuid
-  defaultWorkspace   Workspace                    @relation("ManagedRunnerDefaultWorkspace", fields: [defaultWorkspaceId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_default_workspace_fkey")
+  defaultWorkspaceId String?                      @unique @map("default_workspace_id") @db.Uuid
+  defaultWorkspace   Workspace?                   @relation("ManagedRunnerDefaultWorkspace", fields: [defaultWorkspaceId, ownerId], references: [id, ownerId], onDelete: Restrict, map: "managed_runner_default_workspace_fkey")
   desiredState       ManagedRunnerDesiredState    @default(RUNNING) @map("desired_state")
   managementState    ManagedRunnerManagementState @default(REQUESTED) @map("management_state")
   /// The execution incarnation the Pod is created for. Monotonic; only a proven stop or fencing

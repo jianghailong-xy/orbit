@@ -18,14 +18,9 @@ final class ManagedRunnerModel {
     private(set) var acting = false
     /// Why the last Retry or Set up did not go through, in the server's words.
     var errorText: String?
-    /// A Set up was accepted: the mapping brings its runner and default workspace with it.
+    /// A Set up was accepted: the mapping brings its runner with it.
     @ObservationIgnored var onEnsured: () -> Void = {}
-    /// What a first session in the managed default workspace starts on moved while the runner came
-    /// up — the owner added a key, READY recorded what it was found ready with. The workspace list
-    /// says it as a draft's default (`lastProvider`, which the server derives), so it is read again.
-    @ObservationIgnored var onFirstSessionProviderChanged: () -> Void = {}
-    /// The last answer's first-session provider, kept across a failed read; nil before the first answer.
-    @ObservationIgnored private var seenFirstSessionProvider: String??
+    @ObservationIgnored var onStatusChanged: (ManagedRunnerStatus?) -> Void = { _ in }
 
     private let api: APIClient
     private var offered: Bool?
@@ -94,7 +89,6 @@ final class ManagedRunnerModel {
         display = nil
         errorText = nil
         offered = nil
-        seenFirstSessionProvider = nil
         refreshNotBefore = .distantPast
     }
 
@@ -117,10 +111,6 @@ final class ManagedRunnerModel {
         status = answer
         display = ManagedRunnerLogic.display(answer)
         refreshNotBefore = Date().addingTimeInterval(ManagedRunnerLogic.refreshInterval(display))
-        if let answer {
-            let startsOn = ManagedRunnerLogic.firstSessionProvider(answer)
-            if let seen = seenFirstSessionProvider, seen != startsOn { onFirstSessionProviderChanged() }
-            seenFirstSessionProvider = .some(startsOn)
-        }
+        onStatusChanged(answer)
     }
 }

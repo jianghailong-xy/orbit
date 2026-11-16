@@ -72,22 +72,6 @@ final class ManagedRunnerLogicTests: XCTestCase {
 
     // MARK: a first session in the default workspace
 
-    func testWithNothingTheServerNamesItsDefaultWorkspaceHasNoEngineForAFirstSession() throws {
-        for name in ["preparing: starting", "model unavailable: started without a signed-in runtime",
-                     "model unavailable: none of the owner's keys runs on what it reported",
-                     "waiting for capacity before the first start", "failed: retryable"] {
-            let status = try Self.state(name)
-            let draft = try XCTUnwrap(ManagedRunnerLogic.console(status: status, runnerID: status.runnerId,
-                                                                 agentID: status.workspaceId, isDraft: true), name)
-            XCTAssertTrue(draft.blocksNewSession, name)
-            // An existing session there, and a draft in another workspace on the runner, are not drafts of a first session.
-            XCTAssertFalse(try XCTUnwrap(ManagedRunnerLogic.console(status: status, runnerID: status.runnerId,
-                                                                    agentID: status.workspaceId, isDraft: false)).blocksNewSession)
-            XCTAssertFalse(try XCTUnwrap(ManagedRunnerLogic.console(status: status, runnerID: status.runnerId,
-                                                                    agentID: Self.ownWorkspace, isDraft: true)).blocksNewSession)
-        }
-    }
-
     func testBeforeReadyAFirstSessionWaitsOnTheOwnersKeyTheServerNames() throws {
         for name in ["preparing: starting, a first session waits on the owner's key",
                      "preparing: the cluster's resource quota has no room for its first Pod, a first session waits on the owner's key",
@@ -98,7 +82,6 @@ final class ManagedRunnerLogicTests: XCTestCase {
             XCTAssertEqual(ManagedRunnerLogic.firstSessionProvider(status), "deepseek", name)
             let draft = try XCTUnwrap(ManagedRunnerLogic.console(status: status, runnerID: status.runnerId,
                                                                  agentID: status.workspaceId, isDraft: true), name)
-            XCTAssertFalse(draft.blocksNewSession, name)
             // The runner's state still stands above the composer while it is not up.
             XCTAssertTrue(draft.showsBanner, name)
         }
@@ -113,15 +96,6 @@ final class ManagedRunnerLogicTests: XCTestCase {
             XCTAssertEqual(ManagedRunnerLogic.firstSessionProvider(older), older.initialProvider, name)
             XCTAssertEqual(ManagedRunnerLogic.display(older)?.startsNewSession,
                            (ManagedRunnerLogic.display(older)?.acceptsWork ?? false) && older.initialProvider != nil, name)
-        }
-    }
-
-    func testOnceItHasBeenReadyAFirstSessionStartsEvenWhileItSleeps() throws {
-        for name in ["available", "sleeping", "waking: a message asked the sleeping runner", "waking: starting again"] {
-            let status = try Self.state(name)
-            XCTAssertNotNil(status.initialProvider, name)
-            XCTAssertEqual(ManagedRunnerLogic.console(status: status, runnerID: status.runnerId, agentID: status.workspaceId,
-                                                      isDraft: true)?.blocksNewSession, false, name)
         }
     }
 

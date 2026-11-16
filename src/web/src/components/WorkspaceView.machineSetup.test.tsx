@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import type { ManagedRunnerStatus } from '@orbit/shared';
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -97,6 +99,7 @@ const austin = (over: Partial<Machine> = {}): Machine => ({
 
 /** What the account's Completed list holds: one session by default, none for a new account. */
 let history: unknown[] = [];
+let managedStatus: ManagedRunnerStatus | null;
 let runners: Machine[];
 let workspaces: unknown[];
 let providers: unknown[];
@@ -126,6 +129,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   sessionStorage.clear();
   vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+  managedStatus = null;
   runners = [austin()];
   workspaces = [];
   providers = [];
@@ -179,7 +183,8 @@ beforeEach(() => {
       return Promise.resolve({ id: MADE_WORKSPACE });
     }
     if (options?.method === 'POST') return Promise.reject(new Error(`unstubbed POST ${path}`));
-    if (path === '/auth/capabilities') return Promise.resolve({});
+    if (path === '/auth/capabilities') return Promise.resolve(managedStatus ? { managedRunners: { enabled: true, contractVersion: 1 } } : {});
+    if (path === '/managed-runner') return Promise.resolve(managedStatus);
     if (path === '/users/me') {
       return Promise.resolve({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
     }
@@ -416,7 +421,8 @@ describe('rule 1: the page itself', () => {
     await open(`/runners/${AUSTIN}/new`);
     await waitForUi(() => expect(card()?.querySelector('.msc-notice')).toBeTruthy());
     // Its first heartbeat: nothing invalidates the list here, the page's own reads have to find it.
-    runners = [austin()];
+    managedStatus = null;
+  runners = [austin()];
     const beat = Date.now();
     await waitForUi(() => expect(card()!.querySelector('.msc-notice')).toBeNull());
     await waitForUi(() => expect(card()!.querySelector<HTMLInputElement>('.msc-input input')!.disabled).toBe(false));
@@ -424,7 +430,8 @@ describe('rule 1: the page itself', () => {
   });
 
   it('a machine with a workspace has no card: its page goes on to that workspace’s draft', async () => {
-    runners = [austin()];
+    managedStatus = null;
+  runners = [austin()];
     workspaces = [{ id: WORKSPACE, name: 'orbit', runnerId: AUSTIN, createdAt: '2026-01-01T00:00:00Z', position: 0 }];
     await open(`/runners/${AUSTIN}/new`);
     await waitForUi(() => expect(where).toBe(`/workspaces/${WORKSPACE}/new`));
@@ -618,4 +625,29 @@ describe('a new account', () => {
     expect(said(card()!.querySelector('.msc-title'))).toBe('New workspace on orbit@austin');
     expect(card()!.querySelector('.welcome-example')).toBeNull();
   });
+});
+
+describe('managed machine without a workspace', () => {
+  for (const state of ['preparing: starting', 'sleeping']) {
+    it(`${state}: creates with only newFolder while offline, with one notice and no composer`, async () => {
+      const fixture = JSON.parse(readFileSync('../shared/src/managed-runner-states.fixture.json', 'utf8'));
+      managedStatus = { ...fixture.states.find((sample: { name: string }) => sample.name === state).status, runnerId: AUSTIN };
+      runners = [austin({ online: false, engines: null, capabilities: [], reposRoot: null })];
+      await open(`/runners/${AUSTIN}/new`);
+      await waitForUi(() => expect(card()?.querySelector<HTMLInputElement>('input')?.disabled).toBe(false));
+      expect(document.querySelector('.managed-runner-notice')).toBeNull();
+      expect(document.querySelector('.managed-runner-composer-line')).toBeNull();
+      expect(document.querySelector('textarea')).toBeNull();
+      const folder = card()!.querySelector<HTMLInputElement>('input')!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(folder, 'payments-api');
+        folder.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await waitForUi(() => expect(button('Create workspace')!.disabled).toBe(false));
+      await create();
+      expect(made).toEqual([{ name: 'payments-api', runnerId: AUSTIN, newFolder: 'payments-api' }]);
+      expect(askDirProbe).not.toHaveBeenCalled();
+      expect(createMock).not.toHaveBeenCalled();
+    });
+  }
 });
