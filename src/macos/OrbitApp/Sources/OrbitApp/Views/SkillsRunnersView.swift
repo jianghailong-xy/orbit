@@ -994,6 +994,16 @@ struct RunnerDetailContent: View {
                         }
                     }
                 }
+                // A failed line: an agent can be sent to fix it, under the report
+                // (docs/mocks/engine-update-fix-with-agent/03-mobile.png).
+                if let fix = RunnerAgentFixLogic.engineUpdateState(runner) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        RunnerAgentFixButton(state: fix, pressing: fixPressing) {
+                            fixWithAnAgent(RunnerAgentFixTarget(kind: .engineUpdateFailed, engine: nil))
+                        }
+                        RunnerAgentFixLine(state: fix) { openSession($0) }
+                    }
+                }
                 Button(RunnerPageCopy.RUNNER_REFRESH_MODEL_LISTS) { refreshModels() }
             }
         } header: {
