@@ -23,24 +23,47 @@ Nothing yet.
 
 The current version of record; its operator notes are in
 [`release-notes/0.1.261.md`](release-notes/0.1.261.md). The stable release after `v0.1.260`, with everything
-merged since that tag. It supersedes `v0.1.261-beta.1`, this version's beta
-([notes](release-notes/0.1.261-beta.1.md)), which was tagged from `main` before the last of this work merged.
-Its notes also correct the 0.1.260 notes' lists of migrations and security fixes.
+merged since that tag. It supersedes the `0.1.261-beta.N` prereleases tagged from `main` on the way to it,
+starting with `v0.1.261-beta.1` ([notes](release-notes/0.1.261-beta.1.md)). Its notes also correct the 0.1.260
+notes' lists of migrations and security fixes.
 
 ### Added
 
-- SubAgents. A session's `delegate` tool runs a child engine in the session's working directory or in another
-  workspace, on a provider and model routed by tier across the enabled providers. Its steps are nested in the
-  parent's transcript on every client. An agent's settings have a SubAgents group, the Providers page a Tier
-  column, and the API is `GET /sessions/:id/subagents`.
-- A request to take a task out of its project reaches the owner and is answered in the source project's
-  conversation (web, macOS/iOS).
+- SubAgents. A session's `delegate` tool runs a child agent in the session's working directory, or on another
+  workspace of the same repository chosen by name or by runner capability. Orbit routes it by tier and the
+  agent's Optimize For setting across the enabled providers, Codex and Claude account pools included, and
+  moves it on a limit or a sign-in failure. Its work is an Agent block in the parent's conversation on every
+  client, with an Agents list in the composer band on macOS and iOS. An agent's settings have a SubAgents group,
+  the Providers page a Tier column, and the API is `GET /sessions/:id/subagents`.
+- Scheduled tasks: schedules that start agent runs on a timetable, with a Scheduled page, its timeline and run
+  panel on web, macOS, iOS and Android. Schedule cards appear in conversations and in Waiting on you, runs count
+  against a weekly budget, and CHECK_ONLY checks read the checkout without writing.
+- Translation (Settings › Translation, web, macOS/iOS, Android). It works in about 30 languages, with an
+  agent-language preference, Show original, and Show both languages, which interleaves each reply block with its
+  original.
+- The prompt optimizer. An account switch, a composer button and a suggestion card rewrite a draft in the
+  agent's language, and the owner chooses whether to use it; Tab takes the rewrite on web and macOS.
+- Coordinator handoff: Compact, or Start a new coordinator, from a coordinator's context gauge. The outgoing
+  coordinator writes a handoff note, and its successor opens with it and takes over its waits.
 - Session Settings on every client (a web drawer, an iOS/macOS sheet, an Android page). A session's own
   environment variables sit over the workspace's, with Restart to reload a live engine. It also holds
   notification overrides and a mute, the session's labels and public link, and its usage and engine version.
   The API is `PATCH /sessions/:id/settings` and `POST /sessions/:id/restart`.
 - Discard on the main checkout (web, macOS/iOS, Android): the chosen files go back to HEAD after the whole
   checkout is saved to `orbit/rescue-*`. It needs a runner with `main-checkout-discard/v1` (0.1.261).
+- New wiki…: an agent can ask the owner to create a wiki with a `WIKI_CREATE` owner card, and `POST
+  /wiki/spaces` is owner-only.
+- A recovery contract. Refusals and failures carry a stable code, a recovery action and whether the call may
+  have written. `project_create` and `session_create` keep a receipt per request id, so a retried create
+  returns the first one.
+- Managed runners in Machines & models on macOS, iOS and Android. Their image bundles every supported engine, and
+  a hosted runner left on an earlier image rolls onto the profile's once idle.
+- Guests see a shared session's images and attach their own, and the invite field suggests people invited
+  before (`GET /sessions/:id/guests/suggestions`).
+- Fix with an agent under a failed Update engines report (web, iOS, Android).
+- Android push notifications for crossing requests, coordinator confirmations and schedule alerts.
+- A request to take a task out of its project reaches the owner and is answered in the source project's
+  conversation (web, macOS/iOS).
 - Chat about this on a pending owner request in its conversation (web, macOS/iOS, Android).
 - `GET /projects/:id/handoffs` names each crossing's target coordinator conversation
   (`toProject.coordinatorSessionId`).
@@ -52,24 +75,48 @@ Its notes also correct the 0.1.260 notes' lists of migrations and security fixes
 - A busy runner's automatic self-update waits six hours for the runner to go idle, then drains between 02:00 and
   06:00 local time. A drain that lasts five minutes interrupts the turns still running, which resume on the
   updated runner. A release postponed with Later keeps its plain deferral.
+- The needs-you card on iOS and Android floats over the page at a notification's size, and a swipe up
+  dismisses it. On iOS an approval that arrives with the app open shows in it. A conversation's navigation bar
+  shows only its own needs-you, and something newly waiting is announced once, as a toast.
+- A new machine's setup card asks for one folder name in the machine's home (`create-workdir/v2`), and on the
+  web the card creates the workspace (`POST /workspaces` takes `newFolder`).
+- A merge runs beside the session's turn instead of waiting for it, and a commit waits for changes to stop.
+- A queued message says what holds it (`Queued · runner full`, `run full`, `batch full`, `runner updating`), on
+  the queued turn itself. macOS and iOS move a send the server queued to the tray as "Queued for next turn".
+- A machine's "N of M running" counts the sessions a background job holds.
+- New sessions start on the workspace's last model, and only conversations a person opened move it.
+- Switching an idle session to another account frees the old account. A refused removal names the sessions
+  still using it.
+- Removing a secret no longer holds up delivering another: the runner's scan of its checkouts runs in the
+  background.
+- An escalated owner item says when the coordinator can't take messages, and offers only the actions it can
+  carry out.
 - Project pages (web, macOS/iOS, Android) leave off the crossings their target's coordinator conversation
   already answers, and trashing an open project's coordinator opens the next one at once.
 - The upgrade skill builds the `/dl` runner from the newest release tag behind the deployed commit, so a deploy
   between releases no longer publishes new runner code under the last release's number.
 - The main checkout's Commit sends a default message naming the chosen files instead of asking for one.
-- The "Queued · runner updating" note sits on the queued turn the update holds, not under the last delivered
-  message (web, macOS/iOS, Android).
+- A turn that carries only Orbit's blocks is drawn as a From Orbit line, not as the owner's bubble.
+- Create and start leads the single-task create card, except for a task filed to be held.
+- The recap card has one ×, and Refresh recap is gone.
+- iOS: the session list's section titles scroll away with their rows. On iOS 26 the drawer's waiting count is
+  the toolbar item's badge.
+- New wiki… leaves the drawers and the Mac sidebar; the wiki head is a menu.
 - macOS and iOS label a shared pool "Shared", as the web does.
 - Both release skills (`.claude` and `.agents`) state the exact tag and its full commit SHA, and get explicit
   confirmation of both before tagging.
 
 ### Fixed
 
+- iPhone photo uploads: a HEIC photo, or any image over 5 MB, goes up as a JPEG at most 2048 px on its long
+  edge, and a failed upload says why.
+- A branch that landed some other way drops its stale "Merge conflict".
+- A background process no longer takes a session row's recap.
+- A relative link in a reply finds a file the session saved in its uploads directory, and a runner in a
+  container reports the container's CPU, memory and volume.
 - A session queued before any runner claims it shows its first message instead of an empty page.
-- iOS: the session list's pinned section header is glass on iOS 26, edge to edge.
-- iOS and Android: the needs-you fold's chevron no longer squashes when there is no count.
-- CI: Swift core's copy-parity and wiring checks follow the current web again, and the JavaScript required
-  checks pass.
+- CI: Swift core's copy-parity and wiring checks follow the current web again, Client CI's navigation gate no
+  longer mistakes a view's private property for the model's, and the JavaScript required checks pass.
 
 ### Already in the v0.1.260 tree, first recorded here
 
@@ -95,9 +142,11 @@ These were merged before `v0.1.260` was tagged, but that release did not move th
 
 ### Upgrade notes
 
-- Seven additive migrations since `v0.1.260`: `0524`, `0526`, `0527`, `0528` and `0642` for SubAgents,
-  `0700_session_settings` and `0770_main_checkout_discard`. Runners self-update; the update to 0.1.261 is taken
-  under the rules of the runner it replaces. See the [release notes](release-notes/0.1.261.md).
+- Twenty-two additive migrations since `v0.1.260`, from `0524_subagent_run` to `0910_account_remove_sessions`;
+  eleven are numbered below `0760`, the newest a 0.1.260 database has, and `prisma migrate deploy` applies them
+  all. Runners self-update; the update to 0.1.261 is taken under the rules of the runner it replaces. Before
+  rolling back to `v0.1.260`, relabel the sessions schedules started and clear messages held for their
+  translation. See the [release notes](release-notes/0.1.261.md).
 
 ## 0.1.257 to 0.1.260
 
