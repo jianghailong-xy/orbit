@@ -5,7 +5,7 @@ import { RunnerStatus, type CodexAccountRemoveCommand, type RunnerAccountRemoveS
 import type { AuthUser } from '../common/current-user.decorator';
 import { CODEX_ACCOUNT_REMOVE_V1, RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnersController } from './runners.controller';
-import { RunnersService } from './runners.service';
+import { accountRemoveSessionsOf, accountRemoveStateOf, RunnersService } from './runners.service';
 
 /**
  * Removing a Codex account from a runner, from the Providers page.
@@ -171,6 +171,48 @@ test('a removal the machine refused is reported back with the machine’s own wo
     { ok: true, applied: true },
   );
   assert.deepEqual(h.state(), { engine: 'codex', account: SLOT, status: 'done', message: null });
+});
+
+test('a removal refused over sessions in the account keeps their ids, and the page lists only the viewer’s on this runner', async () => {
+  const mine = '019fc086-c7c7-7c92-8215-778ad8a6280a';
+  const elsewhere = '019fc086-c7c7-7c92-8215-778ad8a6280b';
+  const h = harness();
+  await h.remove(SLOT);
+  await h.beat();
+
+  const message = 'codex account 1a2b3c4d is in use by a session running on this machine — end that session, then remove it';
+  await h.report({ engine: 'codex', account: SLOT, status: 'failed', message, attempt: attemptOf(h.runner), sessionIds: [mine, mine, elsewhere, 'not-a-uuid', 7] });
+  assert.equal(h.state().message, message, 'the machine’s own words are kept for clients that cannot list sessions');
+  assert.deepEqual(h.runner.codexAccountRemoveSessions, [mine, elsewhere], 'only ids, once each');
+
+  // What the page reads: the viewer's sessions on this runner, by title.
+  const asked: unknown[] = [];
+  const db = {
+    session: {
+      findMany: async (args: unknown) => {
+        asked.push(args);
+        return [{ id: mine, title: 'Fix login redirect', status: 'RUNNING', assignedRunnerId: RUNNER_ID }];
+      },
+    },
+  } as never;
+  const listed = await accountRemoveSessionsOf(db, OWNER, [h.runner as never]);
+  assert.deepEqual(listed.get(RUNNER_ID), [{ id: mine, title: 'Fix login redirect', status: 'RUNNING' }]);
+  assert.deepEqual((asked[0] as { where: unknown }).where, {
+    ownerId: OWNER,
+    OR: [{ assignedRunnerId: RUNNER_ID, id: { in: [mine, elsewhere] } }],
+  });
+  assert.deepEqual(
+    accountRemoveStateOf({ ...h.runner, sessions: listed.get(RUNNER_ID) } as never).sessions,
+    [{ id: mine, title: 'Fix login redirect', status: 'RUNNING' }],
+  );
+
+  // Asking again forgets them; a done report names none.
+  await h.remove(SLOT);
+  assert.deepEqual(h.runner.codexAccountRemoveSessions, []);
+  assert.deepEqual(await accountRemoveSessionsOf(db, OWNER, [h.runner as never]), new Map());
+  await h.report({ engine: 'codex', account: SLOT, status: 'done', attempt: attemptOf(h.runner), sessionIds: [mine] });
+  assert.deepEqual(h.runner.codexAccountRemoveSessions, []);
+  assert.equal(h.state().status, 'done');
 });
 
 test('a runner that cannot remove accounts is refused, in the words the page shows', async () => {

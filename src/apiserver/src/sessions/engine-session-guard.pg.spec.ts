@@ -151,7 +151,7 @@ async function connect(): Promise<Stack> {
     tags: new SessionTagsService(prisma, realtime),
     shares: new ShareLinksService(prisma),
     handoffs: new ProjectHandoffService(prisma),
-    guests: new SessionGuestsService(prisma, sessions),
+    guests: new SessionGuestsService(prisma, sessions, {} as AttachmentsService),
     attachments: new AttachmentsService(prisma),
     watches: new WatchesService(prisma, {
       rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },

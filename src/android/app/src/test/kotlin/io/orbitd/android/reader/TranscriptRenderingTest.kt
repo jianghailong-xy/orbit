@@ -68,4 +68,13 @@ class TranscriptRenderingTest {
         assertNull(resourceRequest("file:///etc/passwd", id))
         assertNull(resourceRequest("https://elsewhere.test/image.png", id))
     }
+    @Test fun aGuestReadsAnAttachmentThroughTheGuestDoor() {
+        val id = "01a0cca7-8609-70ed-a0e2-d4b55b832b60"
+        val attachment = "01a0cca7-8609-70ed-a0e2-d4b55b832b61"
+        assertEquals(listOf("attachments", attachment), resourceRequest("orbit-attachment:$attachment", null)!!.path)
+        assertEquals(listOf("guest-sessions", "34A", "attachments", attachment),
+            resourceRequest("orbit-attachment:$attachment", null, guestSessionId = "34A")!!.path)
+        // A guest has no artifact route: a worktree path stays words.
+        assertNull(resourceRequest("/root/.orbit/worktrees/$id/x.png", null, guestSessionId = id))
+    }
 }

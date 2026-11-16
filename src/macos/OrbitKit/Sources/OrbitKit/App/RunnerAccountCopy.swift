@@ -37,4 +37,25 @@ public enum RunnerAccountCopy {
     public static let RUNNER_DEFAULT_USE_AGAIN = "Use again"
 
     public static func runnerDefaultUseAgainFailed(name: String) -> String { "Couldn’t use \(name) again" }
+
+    /// Over the sessions a refused removal lists, when one session is running in the account; `engine`
+    /// is the CLI's own name (Codex, Claude Code).
+    public static func runnerAccountInUseOne(engine: String) -> String {
+        "This \(engine) account can’t be removed while a session is running on it — end the session below, "
+            + "then remove it"
+    }
+
+    /// The same, when several sessions are running in it.
+    public static func runnerAccountInUseMany(engine: String, count: Int) -> String {
+        "This \(engine) account can’t be removed while \(count) sessions are running on it — end them, then remove it"
+    }
+
+    /// Each listed session's way to it.
+    public static let RUNNER_ACCOUNT_IN_USE_OPEN = "Open session"
+    /// A listed session in a turn (RUNNING, or PENDING on its way to one).
+    public static let RUNNER_ACCOUNT_IN_USE_RUNNING = "Running"
+    /// A listed session between turns (AWAITING_INPUT): its process still holds the account.
+    public static let RUNNER_ACCOUNT_IN_USE_WAITING = "Waiting for input"
+    /// A listed session with no title yet.
+    public static let RUNNER_ACCOUNT_IN_USE_UNTITLED = "Untitled session"
 }

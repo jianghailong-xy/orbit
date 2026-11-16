@@ -129,6 +129,7 @@ controllers and their decorators, so it lists what the server mounts, not what a
 | `GET` | `/api/events` | query `hints` | `EventsController.events` |
 | `GET` | `/api/guest-sessions` | — | `GuestSessionsController.list` |
 | `GET` | `/api/guest-sessions/:id` | path `id`; query `limit`, `maxPayload` | `GuestSessionsController.get` |
+| `GET` | `/api/guest-sessions/:id/attachments/:attachmentId` | path `attachmentId`, `id` | `GuestSessionsController.attachment` |
 | `GET` | `/api/guest-sessions/:id/events` | path `id`; query `after`, `before`, `limit`, `maxPayload` | `GuestSessionsController.events` |
 | `GET` | `/api/guest-sessions/:id/events/:seq` | path `id`, `seq` | `GuestSessionsController.event` |
 | `POST` | `/api/guest-sessions/:id/leave` | path `id` | `GuestSessionsController.leave` |

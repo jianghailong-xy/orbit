@@ -47,3 +47,23 @@ export function runnerDefaultUseAgainFailed(name: string): string {
 export const ACCOUNT_SELECT_DEFAULT_REMOVED = 'removed from Orbit — sessions run on Automatic';
 /** And for one set to an account the runner no longer reports, while its Default is removed. */
 export const ACCOUNT_SELECT_GONE_AUTOMATIC = 'not on this runner — sessions run on Automatic';
+
+/** Over the sessions a refused removal lists, when one session is running in the account; `engine` is
+ *  the CLI's own name (Codex, Claude Code). */
+export function runnerAccountInUseOne(engine: string): string {
+  return `This ${engine} account can’t be removed while a session is running on it — end the session below, then remove it`;
+}
+
+/** The same, when several sessions are running in it. */
+export function runnerAccountInUseMany(engine: string, count: number): string {
+  return `This ${engine} account can’t be removed while ${count} sessions are running on it — end them, then remove it`;
+}
+
+/** Each listed session's way to it. */
+export const RUNNER_ACCOUNT_IN_USE_OPEN = 'Open session';
+/** A listed session in a turn (RUNNING, or PENDING on its way to one). */
+export const RUNNER_ACCOUNT_IN_USE_RUNNING = 'Running';
+/** A listed session between turns (AWAITING_INPUT): its process still holds the account. */
+export const RUNNER_ACCOUNT_IN_USE_WAITING = 'Waiting for input';
+/** A listed session with no title yet. */
+export const RUNNER_ACCOUNT_IN_USE_UNTITLED = 'Untitled session';

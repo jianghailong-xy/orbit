@@ -9,7 +9,8 @@ import type { TranslationLanguage } from './translation';
  * WHAT A CLIENT READS AND WRITES
  * ==============================
  *  - `GET /users/me` → `preferences.promptOptimizer` (PromptOptimizerPreferences) and
- *    `promptOptimizerAvailable` (MePromptOptimizer). Absent `promptOptimizer` is OFF.
+ *    `promptOptimizerAvailable` (MePromptOptimizer). Absent `promptOptimizer` is ON;
+ *    only an explicit `false` turns it off (owner's decision of 2026-11-16).
  *    `promptOptimizerAvailable: false` is board frame 1b: the switch is drawn disabled with the
  *    DEEPSEEK_API_KEY notice, and the composer shows no ✦ Optimize button.
  *  - `PATCH /users/me/preferences` with `{ promptOptimizer? }`. The answer is the same shape as
@@ -24,9 +25,12 @@ import type { TranslationLanguage } from './translation';
  *      · 422 `{ code: 'PROMPT_OPTIMIZATION_FAILED', reason }` (PromptOptimizationFailedReason) —
  *        frame 6, "Couldn't optimize this draft · Try again".
  *  - Sends. `POST /sessions/:id/turns`, a new session's opening message (`POST /sessions`) and a
- *    revive (`POST /sessions/:id/resume`) accept `skipTranslation?: boolean` (D2). A send whose text
- *    is still exactly the inserted optimized text carries it: the turn is never held for
- *    Translation and carries no `translation`. Once the owner edits the text, drop the flag.
+ *    revive (`POST /sessions/:id/resume`) accept `optimizedTranslation?: string` and
+ *    `skipTranslation?: boolean` (D2). With a `gloss`, Use inserts the gloss, and a send whose text is
+ *    still exactly it carries `optimizedTranslation: text`: the turn is held as any translated message
+ *    and released with that text, with no translator call. Without a gloss, Use inserts `text`, and an
+ *    unedited send carries `skipTranslation: true`: never held, no `translation`. Once the owner edits
+ *    the text, send neither.
  *
  * CONTEXT (D1 A)
  * ==============
@@ -39,7 +43,8 @@ import type { TranslationLanguage } from './translation';
  * ===============
  *  With the owner's Translation on, the optimized prompt is in the account's agent language
  *  (`preferences.translationAgentLanguage`, English by default; `language` is that code) and `gloss`
- *  is the same prompt in the owner's language, for reading ("Show in <language>"). Otherwise — Translation
+ *  is the same prompt in the owner's language: the card opens on it, "Show in <language>" flips to `text`, and
+ *  Use inserts it. Otherwise — Translation
  *  off, or the owner's language the agent's — the prompt is in the draft's own language and there is no gloss.
  */
 

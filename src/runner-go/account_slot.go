@@ -82,7 +82,31 @@ type accountSlotKind struct {
 	usageStatus func(ctx context.Context, binPath, dir string) (authState, *PlanUsage)
 	// liveDirs is every directory in sessionIDs that a running session is stuck to, as removal
 	// reads it: the ground under a turn in flight must not be pulled away.
-	liveDirs func(sessionIDs []string) map[string]bool
+	liveDirs func(sessionIDs []string) accountDirSessions
+}
+
+// accountDirSessions is, for each account directory a running session is stuck to, the sessions
+// stuck to it — so a removal it refuses can name them.
+type accountDirSessions map[string][]string
+
+// accountInUseError is a removal refused because sessions this runner is running are in the
+// account's directory. Sessions names them, for the report to carry to the page.
+type accountInUseError struct {
+	engine, id string
+	Sessions   []string
+}
+
+func (e *accountInUseError) Error() string {
+	return fmt.Sprintf("%s account %s is in use by a session running on this machine — end that session, then remove it", e.engine, e.id)
+}
+
+// accountInUseSessions is the sessions a refused removal names, or nil for any other outcome.
+func accountInUseSessions(err error) []string {
+	var inUse *accountInUseError
+	if errors.As(err, &inUse) {
+		return inUse.Sessions
+	}
+	return nil
 }
 
 // accountSlotKinds is every engine whose CLI keeps a login per directory, in the order a report
@@ -266,7 +290,7 @@ func (kind accountSlotKind) create(name string) (accountSlot, error) {
 // removeAccount carries out one removal for whichever engine asked: the slot's directory and record
 // go, and so does everything this runner reads for that account — its usage probe is stopped with
 // the directory it reads, which is the one part of a removal that has to know the engine.
-func removeAccount(kind accountSlotKind, claudeUsage *claudeAccountUsage, codexUsage *codexAccountUsage, kimiUsage *kimiAccountUsage, cursorUsage *cursorAccountUsage, id string, liveDirs map[string]bool) error {
+func removeAccount(kind accountSlotKind, claudeUsage *claudeAccountUsage, codexUsage *codexAccountUsage, kimiUsage *kimiAccountUsage, cursorUsage *cursorAccountUsage, id string, liveDirs accountDirSessions) error {
 	switch kind.engine {
 	case providerClaude:
 		return removeClaudeAccount(claudeUsage, id, liveDirs)
@@ -291,7 +315,7 @@ func removeAccount(kind accountSlotKind, claudeUsage *claudeAccountUsage, codexU
 // running out of it, so removing it would pull the ground out from under a turn in flight. The
 // caller stops the slot's usage probe with it (the engine's forget): a read that outlived the
 // directory would report an account the runner no longer has.
-func (kind accountSlotKind) remove(id string, liveDirs map[string]bool) error {
+func (kind accountSlotKind) remove(id string, liveDirs accountDirSessions) error {
 	if id == accountSlotDefaultID {
 		return fmt.Errorf("Default is this machine's own %s and cannot be removed", kind.varName)
 	}
@@ -306,8 +330,8 @@ func (kind accountSlotKind) remove(id string, liveDirs map[string]bool) error {
 	if err := existingPrivateAccountDir(dir); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("%s account slot %q: %w", kind.engine, id, err)
 	}
-	if liveDirs[dir] {
-		return fmt.Errorf("%s account %s is in use by a session running on this machine — end that session, then remove it", kind.engine, id)
+	if sessions := liveDirs[dir]; len(sessions) > 0 {
+		return &accountInUseError{engine: kind.engine, id: id, Sessions: sessions}
 	}
 	// Idempotent on purpose: the removal is redelivered until this runner reports an outcome, so a
 	// slot already gone is the state that was asked for, not an error.
