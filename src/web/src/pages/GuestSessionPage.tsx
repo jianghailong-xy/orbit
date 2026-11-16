@@ -34,6 +34,21 @@ const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
 const NEWER_PAGE = 200;
 const LOAD_OLDER_AT = 400;
+/** How soon the page asks again while a message it sent has not come back from the runner yet: the runner writes it
+ *  a moment after the send is accepted, and the working clock (4 s) left the sender looking at nothing until then. */
+const ECHO_POLL_MS = 500;
+/** How long it asks that often. A message behind a running turn is echoed only when its turn starts, which can be
+ *  minutes; it stays drawn meanwhile, and the page falls back to the working clock. */
+const ECHO_POLL_FOR_MS = 10_000;
+
+/** A message this page sent, drawn at once until the runner's own `user` event for its turn arrives. */
+interface SentTurn {
+  key: string;
+  /** Set once the send is accepted: the turn the echo will carry. */
+  turnId?: string;
+  text: string;
+  ts: string;
+}
 
 /** What the guest door answers for every session the caller cannot reply in (§4): removed, left, Trash or deleted. */
 export const GUEST_NOT_SHARED = 'This conversation is no longer shared with you.';
@@ -112,6 +127,9 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   const addFiles = (files: File[]) => files.forEach((f) => void addImage(f));
   // Bumped by a send, so the follow loop asks at once for the echo and the run it started.
   const [kick, setKick] = useState(0);
+  const [sent, setSent] = useState<SentTurn[]>([]);
+  // The turns sent whose echo the follow loop has not read yet, each until when it is asked for every ECHO_POLL_MS.
+  const awaitingEchoRef = useRef(new Map<string, number>());
   const afterRef = useRef(0);
   const cursorRef = useRef<{ before: number; hasMore: boolean } | null>(null);
   const inFlightRef = useRef(false);
@@ -123,14 +141,30 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   // The guest's own words read `You`, as the owner's read in their own app; anyone else's keep `From <name>`.
   const myName = me.data?.name?.trim() || null;
   const events = useMemo(() => {
-    const all = [...older, ...(data?.events ?? []), ...newer];
-    if (!myName) return all;
-    return all.map((e) =>
-      e.type === 'user' && e.payload?.externalSender?.source === 'ORBIT_GUEST' && e.payload.externalSender.name?.trim() === myName
-        ? { ...e, payload: { ...e.payload, externalSender: undefined, sentByReader: true } }
-        : e,
-    );
-  }, [older, data, newer, myName]);
+    const read = [...older, ...(data?.events ?? []), ...newer];
+    const all = myName
+      ? read.map((e) =>
+          e.type === 'user' && e.payload?.externalSender?.source === 'ORBIT_GUEST' && e.payload.externalSender.name?.trim() === myName
+            ? { ...e, payload: { ...e.payload, externalSender: undefined, sentByReader: true } }
+            : e,
+        )
+      : read;
+    // What this page sent and the runner has not echoed yet, below everything read, headed `You` as the echo will be.
+    const echoed = new Set(read.flatMap((e) => (e.type === 'user' && e.turnId ? [e.turnId] : [])));
+    const waiting = sent.filter((turn) => !turn.turnId || !echoed.has(turn.turnId));
+    if (waiting.length === 0) return all;
+    const lastSeq = read.reduce((max, e) => Math.max(max, e.seq), 0);
+    return [
+      ...all,
+      ...waiting.map((turn, i): SharedEvent => ({
+        seq: lastSeq + (i + 1) / (waiting.length + 1),
+        type: 'user',
+        turnId: turn.turnId ?? turn.key,
+        ts: turn.ts,
+        payload: { text: turn.text, sentByReader: true },
+      })),
+    ];
+  }, [older, data, newer, myName, sent]);
   const head = now ?? data;
 
   useEffect(() => {
@@ -200,6 +234,7 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
         .then((answer) => {
           if (stopped) return;
           const added = answer.events.filter((e) => e.seq > afterRef.current);
+          for (const e of added) if (e.type === 'user' && e.turnId) awaitingEchoRef.current.delete(e.turnId);
           if (added.length) {
             afterRef.current = added[added.length - 1].seq;
             const el = scrollRef.current;
@@ -210,6 +245,9 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
           setNow(answer);
           if (isSessionLive(answer)) expecting = false;
           delay = answer.after != null ? 0 : (followDelay(state, added.length > 0) ?? (expecting ? WORKING_POLL_MS : null));
+          const t = Date.now();
+          for (const [turnId, until] of awaitingEchoRef.current) if (until <= t) awaitingEchoRef.current.delete(turnId);
+          if (awaitingEchoRef.current.size > 0) delay = Math.min(delay ?? ECHO_POLL_MS, ECHO_POLL_MS);
         })
         .catch((e) => {
           if (isGone(e)) {
@@ -253,22 +291,32 @@ function GuestConversation({ sessionId }: { sessionId: string }) {
   const send = () => {
     const content = draft.trim();
     if (!canSend) return;
-    const sent = images;
+    const sentImages = images;
     setSending(true);
     setSendError(null);
+    // Drawn the moment it is sent, not when the runner's echo is next read: the composer empties and the words sit
+    // in the conversation while the send is on its way.
+    const key = newRunRequestToken();
+    if (content) setSent((prev) => [...prev, { key, text: content, ts: new Date().toISOString() }]);
+    setDraft('');
+    followRef.current = true;
     sendGuestTurn(sessionId, {
-      clientTurnId: newRunRequestToken(),
+      clientTurnId: key,
       content,
       ...(readyIds.length ? { attachmentIds: readyIds } : {}),
     })
-      .then(() => {
-        setDraft('');
+      .then(({ turnId }) => {
+        awaitingEchoRef.current.set(turnId, Date.now() + ECHO_POLL_FOR_MS);
+        setSent((prev) => prev.map((turn) => (turn.key === key ? { ...turn, turnId } : turn)));
         // The transcript draws the sent images from the guest door now; the local previews are done with.
-        sent.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
-        setImages((prev) => prev.filter((im) => !sent.includes(im)));
+        sentImages.forEach((im) => im.previewUrl && URL.revokeObjectURL(im.previewUrl));
+        setImages((prev) => prev.filter((im) => !sentImages.includes(im)));
         setKick((k) => k + 1);
       })
       .catch((e) => {
+        setSent((prev) => prev.filter((turn) => turn.key !== key));
+        // Not sent: the words go back to the composer, unless something new was typed meanwhile.
+        setDraft((current) => (current.trim() ? current : content));
         if (isGone(e)) setGone(true);
         else setSendError(e instanceof Error ? e.message : String(e));
       })

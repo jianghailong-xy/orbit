@@ -255,8 +255,9 @@ class GuestSessionsTest {
 
     // The guest view's follow loop and its message
 
-    private fun event(seq: Long, type: String, text: String, guest: String? = null) = buildJsonObject {
+    private fun event(seq: Long, type: String, text: String, guest: String? = null, turnId: String? = null) = buildJsonObject {
         put("seq", seq); put("type", type)
+        if (turnId != null) put("turnId", turnId)
         putJsonObject("payload") {
             put("text", text)
             if (guest != null) putJsonObject("externalSender") { put("source", "ORBIT_GUEST"); put("name", guest) }
@@ -269,7 +270,20 @@ class GuestSessionsTest {
         var runState = "ENDED"
         var shared = true
         val asked = mutableListOf<String>()
+        /** Off: the send is accepted, and the runner writes its echo only once [echo] is called (production: ~0.7 s later). */
+        var echoesAtOnce = true
+        var refuse: Pair<Int, String>? = null
+        var held: String? = null
     }
+
+    /** The runner writes a sent message's echo, under the turn the door answered with, and starts answering it. */
+    private fun echo(session: Session, content: String) {
+        val next = (session.events.size + 1).toLong()
+        session.events += event(next, "user", content, guest = "Bo", turnId = "T")
+        session.events += event(next + 1, "assistant", "On it.")
+    }
+
+    private fun echoHeld(session: Session) { session.held?.let { echo(session, it) }; session.held = null }
 
     private fun conversationDoor(session: Session) = Door { request ->
         val path = request.path.joinToString("/")
@@ -280,10 +294,9 @@ class GuestSessionsTest {
             "waitingOnOwner":false,"events":${events.joinToString(",", "[", "]")}"""
         when {
             request.method == HttpMethod.POST -> {
+                session.refuse?.let { return@Door it }
                 val content = (Wire.json.parseToJsonElement(request.body!!.decodeToString()) as JsonObject)["content"]!!.let { (it as JsonPrimitive).content }
-                val next = (session.events.size + 1).toLong()
-                session.events += event(next, "user", content, guest = "Bo")
-                session.events += event(next + 1, "assistant", "On it.")
+                if (session.echoesAtOnce) echo(session, content) else session.held = content
                 session.runState = "RUNNING"
                 201 to """{"turnId":"T","revived":true}"""
             }
@@ -322,6 +335,49 @@ class GuestSessionsTest {
         val reads = session.asked.size
         advanceTimeBy(4_001)
         assertEquals(reads + 1, session.asked.size)
+        follow.cancel()
+    }
+
+    @Test fun aSentMessageIsDrawnAtOnceAndAskedForEveryHalfSecondUntilItsEchoReplacesIt() = runTest {
+        val session = Session().apply { runState = "RUNNING"; echoesAtOnce = false; events += event(1, "user", "hi", guest = "Cy") }
+        val view = GuestConversation(conversationDoor(session), handle, "34A", "Bo", backgroundScope) { "k1" }
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        view.edit("Ship it on Friday")
+        view.send()
+        // Before the door has answered: the composer is empty and the words are in the conversation, headed as the reader's.
+        assertEquals("", view.state.value.draft)
+        val drawn = view.state.value.events.last()
+        assertEquals("Ship it on Friday", drawn.text)
+        assertEquals(buildJsonObject { put("source", "ORBIT_READER") }, drawn.fields["externalSender"])
+        runCurrent()
+        // Accepted, but the runner has not written it yet (production 11-16): still drawn, and asked for again within half a second.
+        assertEquals("guest-sessions/34A/events?after=1", session.asked.last())
+        assertEquals(listOf("hi", "Ship it on Friday"), view.state.value.events.map { it.text })
+        val reads = session.asked.size
+        echoHeld(session)
+        advanceTimeBy(501)
+        assertEquals(reads + 1, session.asked.size)
+        // The echo replaces it: one message, the runner's own.
+        assertEquals(listOf(1L, 2L, 3L), view.state.value.events.map { it.seq })
+        assertEquals(listOf("hi", "Ship it on Friday", "On it."), view.state.value.events.map { it.text })
+        // Echoed: back on the 4 s clock.
+        advanceTimeBy(3_000)
+        assertEquals(reads + 1, session.asked.size)
+        follow.cancel()
+    }
+
+    @Test fun aSendTheDoorRefusesTakesItsMessageAwayAndPutsTheWordsBack() = runTest {
+        val session = Session().apply { runState = "RUNNING"; refuse = 409 to """{"message":"The runner is offline."}""" }
+        val view = GuestConversation(conversationDoor(session), handle, "34A", "Bo", backgroundScope) { "k1" }
+        val follow = backgroundScope.launch { view.follow() }
+        runCurrent()
+        view.edit("Ship it on Friday")
+        view.send()
+        runCurrent()
+        assertEquals("Ship it on Friday", view.state.value.draft)
+        assertEquals(emptyList<RunEvent>(), view.state.value.events)
+        assertEquals("The runner is offline.", view.state.value.sendError)
         follow.cancel()
     }
 
