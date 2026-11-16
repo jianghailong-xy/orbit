@@ -521,7 +521,6 @@ import {
   isConnecting,
   machineDraftPath,
   machineName,
-  newWorkspaceName,
   newWorkspaceOf,
   SETUP_CONNECTING_POLL_MS,
   SETUP_POLL_MS,
@@ -530,7 +529,6 @@ import {
 import {
   composerPlaceholderFor,
 } from '../lib/machineSetupCopy';
-import { useMachineSetup } from '../lib/useMachineSetup';
 import { bindingPlanUsageRow, currentPlanUsageRows, modelPlanUsage } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { showToast } from '../lib/toastStore';
@@ -2509,8 +2507,6 @@ export function WorkspaceView({
   // mirrors `text` so the switch effect (below) can stash the *outgoing* draft without
   // re-running on every keystroke; prevDraftKey tracks which target `text` belongs to.
   const draftKey = selectedId ?? 'new';
-  // What a machine's new session page has been told: its folder, and the message waiting on it.
-  const setup = useMachineSetup(runner.id);
   const drafts = useRef<Map<string, string>>(new Map());
   const textRef = useRef('');
   const prevDraftKey = useRef(draftKey);
@@ -4136,14 +4132,6 @@ export function WorkspaceView({
     () => currentEngineChoice(pickedEngine, pickedProvider, draftEngines, choiceSources),
     [pickedEngine, pickedProvider, draftEngines, choiceSources],
   );
-  // The setup card's second step, and whether the next send makes the workspace. Rule 5: it follows
-  // the composer, so a key picked in the Provider menu answers it as well as a sign-in does.
-  const setupCredential = setupCredentialOf(runner, pickedEngine, currentDraftEngine.provider);
-  const setupReady =
-    bareMachine &&
-    !!setup.folder &&
-    !!runner.online &&
-    (setupCredential.step === 'signedIn' || setupCredential.step === 'onKey');
   // A new account's first draft wears the welcome card (docs/mocks/new-user-onboarding): on its managed
   // runner's default workspace in place of the runner's notice and the engine hero, and on a bare
   // machine as the setup card's greeting. Only while the account has never had a session.
@@ -7124,18 +7112,17 @@ export function WorkspaceView({
     nextTurnQueued: visibleQueuedTurns.some((turn) => turn.placement === 'queued' && turn.delivery == null),
   });
 
-  // The setup card's Create workspace (owner 2026-11-16): the workspace alone, in the folder the card
-  // picked. The list then says the machine has one, and the console moves on to its new session page
-  // (WorkspaceConsole), with the engine and credential picked here as its draft's.
+  // The setup card's Create workspace (owner 2026-11-16): the workspace alone, in the folder and under the
+  // name the card was given. The list then says the machine has one, and the console moves on to its new
+  // session page (WorkspaceConsole), with the engine and credential picked here as its draft's.
   const createWorkspace = useMutation({
-    mutationFn: (folder: PickedFolder) =>
+    mutationFn: ({ folder, name }: { folder: PickedFolder; name: string }) =>
       api<{ id: string }>('/workspaces', {
         method: 'POST',
-        body: { name: newWorkspaceName(folder), runnerId: runner.id, ...newWorkspaceOf(folder) },
+        body: { name, runnerId: runner.id, ...newWorkspaceOf(folder) },
       }),
     onSuccess: async (made) => {
       if (draftHere) setDraftPick({ ...draftHere, workspaceId: made.id });
-      setup.finish(runner.id);
       await qc.invalidateQueries({ queryKey: ['workspaces'] });
     },
   });
@@ -8044,13 +8031,6 @@ export function WorkspaceView({
     cleanUp: mainCheckoutCleanUp,
     viewChanges: viewSessionChanges,
   });
-  // The machine got a workspace some other way (another tab, the form on its page): the console moves
-  // on to it, and what was being set up here no longer applies.
-  useEffect(() => {
-    if (!machineDraft || !workspacesQ.isSuccess || bareMachine) return;
-    if (setup.folder) setup.finish(runner.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineDraft, workspacesQ.isSuccess, bareMachine, setup.folder]);
   // Steer is offered while a turn runs on an engine that can take a message into one (the server
   // still asks the runner, and refuses one too old).
   const steerOffered = !!live && selectedRunStatus === 'RUNNING' && runtimeTakesMidTurnSteer(selectedEngine);
@@ -11004,15 +10984,7 @@ export function WorkspaceView({
               <div className="msc-draft">
                 <MachineSetupCard
                   runner={runner}
-                  fleet={fleet}
-                  engine={pickedEngine}
-                  credential={setupCredential}
-                  folder={setup.folder}
-                  ready={setupReady}
-                  onFolder={setup.pickFolder}
-                  onEngine={(engine) => pickDraft(engine as AgentProvider, engine)}
-                  onUseApiKey={pickApiKey}
-                  onCreate={() => setup.folder && createWorkspace.mutate(setup.folder)}
+                  onCreate={(folder, name) => createWorkspace.mutate({ folder, name })}
                   creating={createWorkspace.isPending}
                   createError={createWorkspace.error?.message ?? null}
                   welcome={machineWelcome}
