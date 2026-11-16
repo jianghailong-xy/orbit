@@ -5,6 +5,7 @@ import {
   COORDINATOR_HANDOFF_PROMPT_HEAD,
   COORDINATOR_HANDOFF_SECTIONS,
   coordinatorHandoffFailureSentence,
+  coordinatorPendingWaitLine,
   type CoordinatorHandoffView,
   type CoordinatorPendingWait,
   type SessionCoordinatorHandoff,
@@ -50,8 +51,8 @@ export function isCoordinatorHandoffPrompt(text: string): boolean {
   return text.startsWith(COORDINATOR_HANDOFF_PROMPT_HEAD);
 }
 
-/** A wait as the dialog and the moved-waits list name it; a paused one says so. */
-export const pendingWaitLabel = (wait: CoordinatorPendingWait): string => (wait.paused ? `${wait.label} (paused)` : wait.label);
+/** A wait as the dialog and the moved-waits list name it: a paused one says so, and any but a watch names its kind. */
+export const pendingWaitLabel = (wait: CoordinatorPendingWait): string => coordinatorPendingWaitLine(wait);
 
 // ── icons (board 01/02) ───────────────────────────────────────────────────────────────────────────
 const svg = (children: ReactNode, fill = false) => (
@@ -178,7 +179,8 @@ export function CoordinatorHandoffConfirm({
             <WaitIcon />
             <span>
               <b>{COPY.waitsRowTitle(waits.length)}</b>
-              <span className="sub">{waits.map(pendingWaitLabel).join(' · ')}</span>
+              {/* One line each: a kind follows its label after " · ", so a joined list would blur them. */}
+              {waits.map((w) => <span key={w.id} className="sub">{pendingWaitLabel(w)}</span>)}
             </span>
           </li>
         )}

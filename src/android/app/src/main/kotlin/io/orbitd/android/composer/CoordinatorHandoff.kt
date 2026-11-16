@@ -70,6 +70,9 @@ internal object CoordinatorHandoffCopy {
     fun waitsMovedHere(count: Int) = if (count == 1) "1 wait moved here" else "$count waits moved here"
     /** After a paused wait's label in the moved-here list (web's `pendingWaitLabel`, OrbitKit's `pausedSuffix`). */
     const val PAUSED_SUFFIX = " (paused)"
+    /** The words after a wait's label naming its kind (`COORDINATOR_PENDING_WAIT_KIND_LABELS`); none for a watch, whose label
+     *  already says what it waits for — nor for a missing or unknown kind, which reads as a watch. */
+    val WAIT_KINDS = mapOf("SUBAGENT" to "SubAgent", "JOB" to "Background job", "WAKEUP" to "Scheduled wakeup", "LOOP" to "Wakeup loop")
     const val HANDED_OVER = "Handed over to a new coordinator."
     const val OPEN_IT = "Open it"
     const val TRY_AGAIN = "Try again"
@@ -97,10 +100,13 @@ internal data class OutgoingHandoff(val state: String, val startedAt: String?, v
     val locksComposer get() = state == "WRITING" || state == "HANDING_OVER"
 }
 
-/** One wait as the handoff names it (`CoordinatorPendingWait`). */
-internal data class HandoffWait(val id: String, val label: String, val paused: Boolean) {
-    /** The label as the moved-here list shows it. */
-    val shownLabel get() = if (paused) label + CoordinatorHandoffCopy.PAUSED_SUFFIX else label
+/** One wait as the handoff names it (`CoordinatorPendingWait`). [kind] is the server's, null from a server without it. */
+internal data class HandoffWait(val id: String, val label: String, val paused: Boolean, val kind: String? = null) {
+    /** The kind's words, null for a watch (or a missing or unknown kind). */
+    val kindLabel get() = kind?.let { CoordinatorHandoffCopy.WAIT_KINDS[it] }
+    /** The wait as the confirm and the moved-here list show it (`coordinatorPendingWaitLine`): the label, " (paused)" when
+     *  paused, then " · <kind>" unless it is a watch. */
+    val shownLabel get() = label + (if (paused) CoordinatorHandoffCopy.PAUSED_SUFFIX else "") + (kindLabel?.let { " · $it" } ?: "")
 }
 
 /** The handoff a successor opened with (`coordinatorHandoffReceived`). */
@@ -158,7 +164,7 @@ internal object CoordinatorHandoff {
     }
 
     fun waits(value: JsonElement?): List<HandoffWait> = (value as? JsonArray).orEmpty().filterIsInstance<JsonObject>().mapNotNull { w ->
-        HandoffWait(w.text("id") ?: return@mapNotNull null, w.text("label").orEmpty(), w.flag("paused") == true)
+        HandoffWait(w.text("id") ?: return@mapNotNull null, w.text("label").orEmpty(), w.flag("paused") == true, w.text("kind"))
     }
 
     /** The FAILED row's exits: all three, but only Hand over without a note once the outgoing conversation is already completed
@@ -247,6 +253,11 @@ internal fun HandoverConfirm(running: Boolean, waits: List<HandoffWait>?, busy: 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // No count while the waits are still being read, as when there are none.
                 Text(CoordinatorHandoffCopy.phoneConfirmBody(waits?.size ?: 0, running))
+                // Once any wait is more than a watch, each one on its own line with its kind (handoff v2 §1), as iOS's Alert;
+                // waits that are all watches, or from a server without `kind`, stay a count only.
+                if (waits.orEmpty().any { it.kindLabel != null }) Column(Modifier.testTag("handoff-confirm-waits")) {
+                    waits.orEmpty().forEach { Text("•  ${it.shownLabel}", style = MaterialTheme.typography.bodySmall) }
+                }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },

@@ -83,6 +83,18 @@ final class CoordinatorContextCopyParityTests: XCTestCase {
         assertSays(ts, "refused: \"\(CoordinatorHandoffCopy.refused)\",", in: Self.shared)
     }
 
+    /// The words naming a wait's kind are `COORDINATOR_PENDING_WAIT_KIND_LABELS`, and the line around them
+    /// is `coordinatorPendingWaitLine`'s.
+    func testThePendingWaitKindsAreTheShared() throws {
+        let ts = try source(Self.shared)
+        for kind in CoordinatorPendingWaitKind.allCases {
+            let words = CoordinatorHandoffCopy.waitKind(kind).map { "'\($0)'" } ?? "null"
+            assertSays(ts, "\(kind.rawValue): \(words),", in: Self.shared)
+        }
+        assertSays(ts, "return `${wait.label}${wait.paused ? '\(CoordinatorHandoffCopy.pausedSuffix)' : ''}${kind ? ` · ${kind}` : ''}`;",
+                   in: Self.shared)
+    }
+
     /// Board 03 iOS 2's confirm body is the shared one, which Android's confirm says too: the same
     /// two leads, the same sentence around them, the count the confirm's own.
     func testThePhoneConfirmBodyIsTheShared() throws {

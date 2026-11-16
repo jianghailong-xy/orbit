@@ -77,8 +77,8 @@ struct CoordinatorHandoffConfirmView: View {
     }
 
     private var waitNames: String {
-        waits.map { $0.label + ($0.paused ? CoordinatorHandoffCopy.pausedSuffix : "") }
-            .joined(separator: " · ")
+        // One line each: a kind follows its label after " · ", so a joined list would blur them.
+        waits.map(CoordinatorHandoffCopy.waitLine).joined(separator: "\n")
     }
 
     var body: some View {
@@ -327,7 +327,7 @@ struct CoordinatorHandoffNoteCardView: View {
         .popover(isPresented: $showingWaits) {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(received.movedWaits) { wait in
-                    Text(wait.label + (wait.paused ? CoordinatorHandoffCopy.pausedSuffix : ""))
+                    Text(CoordinatorHandoffCopy.waitLine(wait))
                         .font(.orbitLabel)
                 }
             }

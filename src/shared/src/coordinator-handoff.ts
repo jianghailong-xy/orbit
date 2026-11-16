@@ -95,6 +95,26 @@ export interface CoordinatorPendingWait {
   paused: boolean;
 }
 
+/**
+ * The words after a wait's label naming its kind ("Deploy 55a189aa3 to production · SubAgent"); null for a
+ * watch, whose label already says what it waits for, so a watch — and a wait from a server without `kind` —
+ * reads as it did before kinds.
+ */
+export const COORDINATOR_PENDING_WAIT_KIND_LABELS: Readonly<Record<CoordinatorPendingWaitKind, string | null>> = {
+  WATCH: null,
+  SUBAGENT: 'SubAgent',
+  JOB: 'Background job',
+  WAKEUP: 'Scheduled wakeup',
+  LOOP: 'Wakeup loop',
+};
+
+/** One wait as the confirm dialog and the moved-here list name it: its label, " (paused)" when paused, then
+ *  " · <kind>" unless it is a watch. A missing or unknown kind reads as a watch. */
+export function coordinatorPendingWaitLine(wait: Pick<CoordinatorPendingWait, 'label' | 'paused'> & { kind?: string | null }): string {
+  const kind = wait.kind ? COORDINATOR_PENDING_WAIT_KIND_LABELS[wait.kind as CoordinatorPendingWaitKind] ?? null : null;
+  return `${wait.label}${wait.paused ? ' (paused)' : ''}${kind ? ` · ${kind}` : ''}`;
+}
+
 /** `coordinatorHandoff` on the OUTGOING coordinator's session (detail and `session.updated`). */
 export interface SessionCoordinatorHandoff {
   state: CoordinatorHandoffState;

@@ -29,6 +29,15 @@ public enum CoordinatorContextCopy {
         let moves = waits > 0 ? " \(CoordinatorHandoffCopy.waitsRowTitle(waits))." : ""
         return "\(lead), then the project continues in a new conversation.\(moves) Nothing is deleted."
     }
+
+    /// The phone's whole Alert message: the body, then — once any wait is more than a watch — each wait
+    /// on its own line with its kind (handoff v2 §1). Waits that are all watches, or come from a server
+    /// without `kind`, stay a count only, as board 03 draws them.
+    public static func phoneConfirmMessage(waits: [CoordinatorPendingWait], running: Bool) -> String {
+        let body = phoneConfirmBody(waits: waits.count, running: running)
+        guard waits.contains(where: { $0.kind != .watch }) else { return body }
+        return body + "\n\n" + waits.map(CoordinatorHandoffCopy.waitLine).joined(separator: "\n")
+    }
 }
 
 /// Board 02's copy, verbatim: `COORDINATOR_HANDOFF_COPY` in src/shared/src/coordinator-handoff.ts.
@@ -47,6 +56,22 @@ public enum CoordinatorHandoffCopy {
     }
     /// A paused wait in the macOS confirm's list (the handoff task's note: phones show only the count).
     public static let pausedSuffix = " (paused)"
+    /// The words after a wait's label naming its kind (`COORDINATOR_PENDING_WAIT_KIND_LABELS`); nil for a
+    /// watch, whose label already says what it waits for.
+    public static func waitKind(_ kind: CoordinatorPendingWaitKind) -> String? {
+        switch kind {
+        case .watch: return nil
+        case .subagent: return "SubAgent"
+        case .job: return "Background job"
+        case .wakeup: return "Scheduled wakeup"
+        case .loop: return "Wakeup loop"
+        }
+    }
+    /// One wait as the confirm and the moved-here list name it (`coordinatorPendingWaitLine`): its label,
+    /// " (paused)" when paused, then " · <kind>" unless it is a watch.
+    public static func waitLine(_ wait: CoordinatorPendingWait) -> String {
+        wait.label + (wait.paused ? pausedSuffix : "") + (waitKind(wait.kind).map { " · \($0)" } ?? "")
+    }
     public static let cancel = "Cancel"
     public static let handOver = "Hand over"
     public static let badgeHandingOver = "Handing over"

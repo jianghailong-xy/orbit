@@ -116,11 +116,26 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         // Board 03 iOS 2's words, the iPhone's: one body, the waits a count inside it, no note row.
         await { has(inDialog("This coordinator writes a handoff note, then the project continues in a new conversation. 2 pending waits move over. Nothing is deleted.")) }
         assertFalse(has(inDialog("Handoff note")))
-        assertFalse("the waits are a count, not their names", has(hasText("Fix login redirect", substring = true) and hasAnyAncestor(isDialog())))
+        assertFalse("waits without a kind are a count, not their names", has(hasText("Fix login redirect", substring = true) and hasAnyAncestor(isDialog())))
+        assertFalse(has(hasTestTag("handoff-confirm-waits")))
         assertTrue(has(inDialog("Cancel")))
         press(hasTestTag("handoff-confirm-hand-over"))
         await { ComposerShell.calls.contains("POST projects/$project/coordinator/handoff") }
         await { !has(inDialog("Hand over to a new coordinator?")) }
+    }
+
+    @Test fun theConfirmNamesEachWaitsKindOnceAnyIsMoreThanAWatch() {
+        runnerWithCompact(); coordinatorSession()
+        ComposerShell.answers["GET projects/$project/coordinator/pending-waits"] = { ApiResponse(200,
+            """[{"id":"w1","kind":"WATCH","label":"Waiting for \"Fix login redirect\" to be DONE","paused":false},
+               {"id":"r1","kind":"SUBAGENT","label":"Deploy 55a189aa3 to production","paused":false},
+               {"id":"sw1","kind":"WAKEUP","label":"Check the deploy","paused":false}]""".encodeToByteArray()) }
+        signIn(); openSession(); openContext()
+        press(hasTestTag("context-action-new-coordinator"))
+        await { has(inDialog("This coordinator writes a handoff note, then the project continues in a new conversation. 3 pending waits move over. Nothing is deleted.")) }
+        await { has(inDialog("•  Deploy 55a189aa3 to production · SubAgent")) }
+        assertTrue(has(inDialog("•  Check the deploy · Scheduled wakeup")))
+        assertTrue("a watch reads as its label alone", has(inDialog("•  Waiting for \"Fix login redirect\" to be DONE")))
     }
 
     @Test fun aRefusedHandOverSaysCouldntHandOverAndWhyInTheConfirm() {
@@ -311,5 +326,20 @@ class CoordinatorHandoffShellTest : ComposerShellTest() {
         assertTrue(has(hasText("•  Session \"Payment retries\" finishing its turn (paused)"), unmerged = true))
         press(hasTestTag("handoff-note-from"))
         await { ComposerShell.calls.any { it.startsWith("GET sessions/34HandoffPrevious00001") } }
+    }
+
+    @Test fun theSuccessorsMovedListNamesEachWaitsKind() {
+        ComposerShell.session = mapOf("coordinatorHandoffReceived" to Json.parseToJsonElement("""{"handoffFromSessionId":"34HandoffPrevious00001",
+            "note":null,"handedOverAt":"2026-11-14T15:42:00Z","movedWaits":[
+            {"id":"r1","kind":"SUBAGENT","label":"Deploy 55a189aa3 to production","paused":false},
+            {"id":"sw1","kind":"WAKEUP","label":"Check the deploy","paused":false},
+            {"id":"w1","kind":"WATCH","label":"Waiting for \"Fix login redirect\" to be DONE","paused":true}]}"""))
+        signIn(); open("orbit-session:${ComposerShell.SESSION}")
+        await { has(hasTestTag("handoff-note-card")) }
+        assertTrue(has(hasText("3 waits moved here"), unmerged = true))
+        press(hasTestTag("handoff-waits-moved"))
+        await { has(hasText("•  Deploy 55a189aa3 to production · SubAgent"), unmerged = true) }
+        assertTrue(has(hasText("•  Check the deploy · Scheduled wakeup"), unmerged = true))
+        assertTrue(has(hasText("•  Waiting for \"Fix login redirect\" to be DONE (paused)"), unmerged = true))
     }
 }
