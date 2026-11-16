@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
-# TEMPORARY evidence probe (never merged): the slice of the Orbit API the native SESSION page reads,
-# for three sessions that all produced nothing, each for a different reason:
+# TEMPORARY evidence probe (never merged): the slice of the Orbit API the native setup card, the conversation's
+# first line and Settings -> GitHub read for GitHub workspaces P3 (docs/github-workspace-design.md §8).
 #
-#   S1  a task session whose SOURCE was refused — source_state REFUSED, code BASE_REF_NOT_FOUND,
-#       detail {ref, stderr, fixAction FIX_REF} — the project's integration line was never created.
-#       The run is FAILED with the code as its error, as the refused-start task lands it.
-#   S2  an ordinary session (no task) the reaper ended: error `runner offline`, 0 turns.
-#   S3  an ordinary session whose engine is not on the machine: the runner's own install sentence.
+#   r2   a bare machine that clones (clone-workdir/v1, a Repos Folder): its setup card offers From GitHub.
+#   S1   a conversation whose GitHub workspace is cloning (the stream relays 42%).
+#   S2   ... whose clone failed with git's own words; S3 the App was removed; S4 the sign-in expired;
+#   S5   ... cloned (READY): the created line with the repository; S6 failed with its reason not read yet.
 #
-# Project P1 carries one SOURCE_UNRESOLVED blocker so the project page's card can be photographed.
-# Every request is logged with its body; anything not served is a 404 and shows up in not-served.txt.
+# POST /__github {"mode": "disconnected"|"connected"} picks what GET /integrations/github answers.
 # All data is made up.
 import json
 import sys
 import time
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
 LOG = sys.argv[2] if len(sys.argv) > 2 else "requests.log"
@@ -28,111 +26,92 @@ def ago(minutes):
 
 
 DAY = 24 * 60
-USER = {"id": "u1", "email": "hailong@example.com", "name": "Hailong", "role": "MEMBER",
+USER = {"id": "u1", "email": "ada@example.com", "name": "Ada", "role": "MEMBER",
         "createdAt": ago(90 * DAY), "preferences": {"theme": "system"}}
-RUNNER = {"id": "r1", "name": "longdeMac-mini.local", "displayName": "longdeMac-mini.local",
-          "online": True, "status": "ONLINE", "version": "0.1.120", "maxConcurrent": 4,
-          "lastHeartbeatAt": ago(0), "capabilities": [],
-          "engines": [{"engine": "claude", "installed": True, "version": "2.1.290", "auth": "yes"}]}
-AGENT = {"id": "a1", "name": "orbit-macos", "provider": "claude", "lastProvider": "claude", "runnerId": "r1",
-         "enabled": True, "enableWorktree": True, "effort": "", "workDir": "/srv/orbit",
-         "appendSystemPrompt": "", "workDirExists": True, "workDirIsGit": True}
+CLAUDE = [{"engine": "claude", "installed": True, "version": "2.1.290", "auth": "yes"}]
+CAPS = ["dir-probe/v1", "create-workdir/v1", "clone-workdir/v1"]
 
-TITLES = {"P0": "Coordinator control loop", "P1": "Runner hardening"}
 
-REF = "refs/heads/project/34bZ3i4AvgJaaow5E9tH"
-STDERR = "git: fatal: couldn't find remote ref " + REF
+def runners():
+    return [
+        {"id": "r1", "name": "build-box", "displayName": "build-box", "online": True, "status": "ONLINE",
+         "version": "0.1.261", "maxConcurrent": 4, "lastHeartbeatAt": ago(0), "capabilities": CAPS,
+         "reposRoot": "/Users/ada/orbit-repos", "engines": CLAUDE},
+        {"id": "r2", "name": "studio-mac", "displayName": "studio-mac", "online": True, "status": "ONLINE",
+         "version": "0.1.261", "maxConcurrent": 4, "lastHeartbeatAt": ago(0), "capabilities": CAPS,
+         "reposRoot": "/Users/ada/orbit-repos", "registerDir": "~", "engines": CLAUDE},
+    ]
 
-SESSIONS = {
-    "S1": {
-        "id": "S1", "publicId": "S1", "title": "Two-engine pin board: OpenCode row", "status": "FAILED",
-        "runStatus": "FAILED", "runState": "FAILED", "sessionState": "FAILED",
-        "agentId": "a1", "assignedRunnerId": "r1", "provider": "claude",
-        "taskId": "T1", "taskTitle": "Two-engine pin board: OpenCode row",
-        "projectId": "P1", "projectTitle": TITLES["P1"],
-        "error": "BASE_REF_NOT_FOUND: " + STDERR,
-        "sourceState": "REFUSED", "sourceRefusalCode": "BASE_REF_NOT_FOUND",
-        "sourceRefusalDetail": {"ref": REF, "refAuthority": "REMOTE", "remoteName": "origin",
-                                "stderr": STDERR, "fixAction": "FIX_REF"},
-        "runClaimedAt": ago(37), "engineStartedAt": None, "numTurns": 0,
-        "createdAt": ago(37), "updatedAt": ago(37),
-    },
-    "S2": {
-        "id": "S2", "publicId": "S2", "title": "把今天的抓取日志拉出来看看", "status": "FAILED",
-        "runStatus": "FAILED", "runState": "FAILED", "sessionState": "FAILED",
-        "agentId": "a1", "assignedRunnerId": "r1", "provider": "claude",
-        "taskId": None, "projectId": None, "projectTitle": None,
-        "error": "runner offline",
-        "sourceState": "UNBOUND",
-        "runClaimedAt": ago(12), "engineStartedAt": None, "numTurns": 0,
-        "createdAt": ago(12), "updatedAt": ago(12),
-    },
-    "S3": {
-        "id": "S3", "publicId": "S3", "title": "Try the OpenCode engine on this box", "status": "FAILED",
-        "runStatus": "FAILED", "runState": "FAILED", "sessionState": "FAILED",
-        "agentId": "a1", "assignedRunnerId": "r1", "provider": "opencode",
-        "taskId": None, "projectId": None, "projectTitle": None,
-        "error": "OpenCode isn't installed on this runner and installing it failed (exit status 1) "
-                 "— run `orbit doctor` on that machine. Tried:  npm install -g opencode-ai",
-        "sourceState": "UNBOUND",
-        "runClaimedAt": ago(4), "engineStartedAt": None, "numTurns": 0,
-        "createdAt": ago(4), "updatedAt": ago(4),
-    },
+
+REPO_URL = "https://github.com/orbit-labs/orbit-web.git"
+WORKSPACES = {
+    "w1": ("orbit-web", "CLONING", None),
+    "w2": ("orbit-web 2", "FAILED", "fatal: could not read from remote repository"),
+    "w3": ("orbit-web 3", "FAILED", "Orbit's GitHub App is no longer installed on orbit-labs/orbit-web. Install it again or pick another repository."),
+    "w4": ("orbit-web 4", "FAILED", "Your GitHub sign-in expired. Connect GitHub in Settings."),
+    "w5": ("orbit-web 5", "READY", None),
+    "w6": ("orbit-web 6", "FAILED", None),
 }
+
+
+def agent(wid):
+    name, state, error = WORKSPACES[wid]
+    return {"id": wid, "name": name, "provider": "claude", "lastProvider": "claude", "runnerId": "r1",
+            "enabled": True, "enableWorktree": True, "effort": "",
+            "workDir": "/Users/ada/orbit-repos/" + name.replace(" ", "-"),
+            "appendSystemPrompt": "", "workDirExists": state == "READY", "workDirIsGit": state == "READY",
+            "repoUrl": REPO_URL, "cloneState": state, "cloneError": error}
+
+
+def session(n):
+    wid = "w%d" % n
+    a = agent(wid)
+    return {"id": "S%d" % n, "publicId": "S%d" % n, "title": "Fix the flaky login test", "status": "PENDING",
+            "runStatus": "PENDING", "runState": "QUEUED", "sessionState": "QUEUED",
+            "agentId": wid, "assignedRunnerId": "r1", "provider": "claude", "createdWorkspace": True,
+            "agent": {"id": wid, "name": a["name"], "provider": None, "model": None, "effort": None,
+                      "workDir": a["workDir"], "deletedAt": None, "repoUrl": REPO_URL,
+                      "cloneState": a["cloneState"], "cloneError": a["cloneError"]},
+            "numTurns": 0, "createdAt": ago(3), "updatedAt": ago(1)}
+
+
+SESSIONS = {"S%d" % n: session(n) for n in range(1, 7)}
+REPOS = [
+    ("orbit-labs/orbit-web", True, 12), ("orbit-labs/orbit-api", True, 95), ("ada/dotfiles", False, 60 * 5),
+    ("orbit-labs/runner", True, 60 * 30), ("ada/notes", False, 3 * DAY), ("orbit-labs/site", False, 9 * DAY),
+    ("orbit-labs/design", True, 20 * DAY), ("ada/advent-2025", False, 40 * DAY), ("orbit-labs/old-cli", False, 300 * DAY),
+]
+
+
+def repos(q):
+    rows = [{"id": 1000 + i, "fullName": n, "private": p, "defaultBranch": "main", "installationId": 7 if n.startswith("ada/") else 9,
+             "pushedAt": ago(m)} for i, (n, p, m) in enumerate(REPOS)]
+    return [r for r in rows if q.lower() in r["fullName"].lower()] if q else rows
+
+
+def github():
+    base = {"available": True, "installUrl": "https://github.com/apps/orbit/installations/new"}
+    if STATE["github"] == "disconnected":
+        return dict(base, connected=False, login=None, connectedAt=None, needsReconnect=False, installations=[],
+                    workspaceCount=0, workspaces=[])
+    return dict(base, connected=True, login="ada", connectedAt="2026-11-03T10:00:00.000Z", needsReconnect=False,
+                installations=[{"id": 7, "account": "ada", "type": "User", "repositorySelection": "selected", "repositoryCount": 4},
+                               {"id": 9, "account": "orbit-labs", "type": "Organization", "repositorySelection": "all", "repositoryCount": 11}],
+                workspaceCount=3,
+                workspaces=[{"id": "w5", "name": "orbit-web", "machine": "build-box", "repository": "orbit-labs/orbit-web", "cloneState": "READY", "credential": "github-app"},
+                            {"id": "w7", "name": "dotfiles", "machine": "studio-mac", "repository": "ada/dotfiles", "cloneState": "READY", "credential": "machine"},
+                            {"id": "w1", "name": "orbit-api", "machine": "build-box", "repository": "orbit-labs/orbit-api", "cloneState": "CLONING", "credential": None}])
+
 
 STATE = {}
 
 
 def reset():
     STATE.clear()
-    STATE.update(decisions=[])
+    STATE.update(github="connected", probes={})
 
 
 reset()
-
-
-def summary(pid, done, total):
-    return {"id": pid, "publicId": pid, "title": TITLES[pid], "status": "OPEN",
-            "goal": "Probe goal for " + TITLES[pid] + ".", "createdAt": ago(20 * DAY), "updatedAt": ago(30),
-            "lastActivityAt": ago(30), "_count": {"tasks": total}, "startedAt": ago(19 * DAY),
-            "taskCounts": {"done": done, "failed": 1, "total": total}}
-
-
-def task(tid, title, status, level=0):
-    return {"id": tid, "publicId": tid, "title": title, "status": status, "parentTaskId": None,
-            "childCount": 0, "unmetCount": 0, "blocksCount": 0, "topoLevel": level,
-            "dependencyState": "READY", "workState": "IDLE", "completionPolicy": "MANUAL",
-            "autoRunWhenReady": True}
-
-
-def criterion(cid, ordinal, text):
-    return {"id": cid, "publicId": cid, "key": cid, "ordinal": ordinal, "text": text, "satisfied": False,
-            "unmet": [], "landing": "UNKNOWN", "verificationMethod": "A pg spec and a screenshot."}
-
-
-BLOCKER = {
-    "id": "B1", "publicId": "B1", "kind": "SOURCE_UNRESOLVED", "owner": "USER", "severity": "HIGH",
-    "requiredAction": "Create the project's integration line, or point its binding at a branch that exists.",
-    "subjectTitle": None, "agentArgument": None,
-    "detail": {"code": "BASE_REF_NOT_FOUND", "fixAction": "FIX_REF", "ref": REF, "taskIds": ["T1", "T2"]},
-    "firstSeenAt": ago(37), "resolvedAt": None, "resolvedBy": None, "resolutionNote": None,
-}
-
-
-def document(pid):
-    tasks = [task("T1", "Two-engine pin board: OpenCode row", "FAILED"),
-             task("T2", "Both engines' pins in one place", "FAILED"),
-             task("T3", "Retire the old pin script", "DONE")]
-    return {"id": pid, "publicId": pid, "title": TITLES[pid], "status": "OPEN",
-            "goal": "Runners stay healthy on their own: a wedged drain restarts, images are pinned, and "
-                    "every failure leaves a runbook entry.",
-            "instructions": "Probe instructions.", "createdAt": ago(20 * DAY), "updatedAt": ago(30),
-            "coordinatorEnabled": True, "configRevision": "1", "coordinatorSessionId": None,
-            "_count": {"tasks": len(tasks)}, "tasksByStatus": {"DONE": 1, "FAILED": 2},
-            "acceptanceCriteriaItems": [criterion("34bCrit1", 1, "A wedged drain restarts within a minute.")],
-            "blockers": {"open": [BLOCKER] if pid == "P1" else [], "resolved": [], "resolvedCount": 0},
-            "startedAt": ago(19 * DAY), "pausedAt": None, "maxConcurrentTasks": 3}
-
 
 EMPTY = ["providers", "providers/mine", "providers/pools", "providers/shared-pools", "session-tags",
          "session-folders", "task-lists", "watches", "tasks/active", "tasks/counts", "notifications"]
@@ -164,7 +143,9 @@ class Handler(BaseHTTPRequestHandler):
             return raw.decode(errors="replace"), {}
 
     def do_GET(self):
-        parts = [p for p in urlparse(self.path).path.split("/") if p]
+        url = urlparse(self.path)
+        parts = [p for p in url.path.split("/") if p]
+        query = parse_qs(url.query)
         if parts == ["__log"]:
             try:
                 data = open(LOG, "rb").read()
@@ -181,13 +162,31 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["api", "users", "me"]:
             return self.send(200, USER)
         if parts == ["api", "agents"]:
-            return self.send(200, [AGENT])
-        if parts == ["api", "agents", "a1"]:
-            return self.send(200, AGENT)
+            return self.send(200, [agent(w) for w in WORKSPACES])
+        if len(parts) == 3 and parts[:2] == ["api", "agents"] and parts[2] in WORKSPACES:
+            return self.send(200, agent(parts[2]))
         if parts == ["api", "runners"]:
-            return self.send(200, [RUNNER])
-        if parts == ["api", "runners", "r1"]:
-            return self.send(200, RUNNER)
+            return self.send(200, runners())
+        if len(parts) == 3 and parts[:2] == ["api", "runners"]:
+            for r in runners():
+                if r["id"] == parts[2]:
+                    return self.send(200, r)
+        if len(parts) == 4 and parts[:2] == ["api", "runners"] and parts[3] == "dir-probe":
+            path = (query.get("path") or [""])[0]
+            taken = path.endswith("/taken") or path.endswith("/orbit-api")
+            if path not in STATE["probes"]:
+                return self.send(200, {"path": path, "status": "idle"})
+            return self.send(200, {"path": path, "status": "done", "result": {
+                "path": path, "exists": taken, "isDir": taken, "isGit": taken, "branch": "main" if taken else None,
+                "isHome": False, "freeBytes": 100000000000, "error": None}})
+        if parts == ["api", "integrations", "github"]:
+            return self.send(200, github())
+        if parts == ["api", "integrations", "github", "repos"]:
+            return self.send(200, {"repositories": repos((query.get("q") or [""])[0]), "nextCursor": None})
+        if len(parts) == 6 and parts[:4] == ["api", "integrations", "github", "repos"] and parts[5] == "branches":
+            return self.send(200, {"defaultBranch": "main", "branches": ["main", "dev", "release/1.4", "fix/login"]})
+        if parts == ["api", "integrations", "github", "start"]:
+            return self.send(200, {"authorizationUrl": "https://github.com/login/oauth/authorize?probe=1"})
         if len(parts) >= 2 and parts[:2] == ["api", "sessions"]:
             rest = parts[2:]
             if rest == []:
@@ -196,54 +195,42 @@ class Handler(BaseHTTPRequestHandler):
                 sid, more = rest[0], rest[1:]
                 if more == []:
                     return self.send(200, SESSIONS[sid])
-                # The transcript of a run that never started: nothing, and no further pages.
+                if more == ["events", "page"]:
+                    return self.send(200, {"events": [], "hasMore": False})
                 if more[0] == "events":
                     return self.send(200, {"items": [], "nextCursor": None, "events": []})
+                if more[0] in ("turns", "background", "approvals", "schedule-cards"):
+                    return self.send(200, [])
                 if more[0] in ("retry-message", "capabilities", "owner-confirmation", "watches",
                                "owner-items", "attribution", "created-tasks"):
-                    return self.send(200, {} if more[0] != "owner-items" else {"needsYou": [],
-                                                                               "withCoordinator": []})
+                    return self.send(200, {} if more[0] != "owner-items" else {"needsYou": [], "withCoordinator": []})
         if parts == ["api", "wiki", "spaces"]:
             return self.send(200, [])
-        if len(parts) >= 2 and parts[:2] == ["api", "projects"]:
-            rest = parts[2:]
-            if not rest:
-                return self.send(200, [summary("P1", 1, 3)])
-            if rest == ["sidebar"]:
-                return self.send(200, [summary("P1", 1, 3)])
-            pid = rest[0]
-            if pid in TITLES:
-                if len(rest) == 1:
-                    return self.send(200, document(pid))
-                if rest[1:] == ["tasks", "page"]:
-                    return self.send(200, {"items": [task("T1", "Two-engine pin board: OpenCode row", "FAILED"),
-                                                     task("T2", "Both engines' pins in one place", "FAILED"),
-                                                     task("T3", "Retire the old pin script", "DONE")],
-                                           "nextCursor": None})
-                if rest[1:] == ["open-items"]:
-                    return self.send(200, {"needsYou": [], "withCoordinator": []})
-                if rest[1:] == ["handoffs"]:
-                    return self.send(200, [])
+        if parts[:2] == ["api", "projects"]:
+            return self.send(200, [])
         if parts[:1] == ["api"] and len(parts) >= 2 and "/".join(parts[1:]) in EMPTY:
             return self.send(200, [])
-        if parts[:1] == ["api"] and len(parts) >= 2 and parts[1] in ("tasks", "task-lists") and len(parts) == 2:
+        if parts[:1] == ["api"] and len(parts) == 2 and parts[1] in ("tasks", "task-lists"):
             return self.send(200, [])
-        if len(parts) >= 2 and parts[:2] == ["api", "tasks"] and parts[2:] == ["page"]:
+        if parts[:2] == ["api", "tasks"] and parts[2:] == ["page"]:
             return self.send(200, {"items": [], "nextCursor": None})
         self.note("NOT SERVED %s" % self.path)
         return self.send(404, {"statusCode": 404, "message": "not in the probe"})
 
     def stream(self):
-        """A control stream with nothing to say: keepalives inside the clients' watchdog."""
+        """The control stream: keepalives, and S1's clone at 42% (agent.changed names the workspace agentId)."""
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
+        frame = {"type": "agent.changed", "sessionId": "", "agentId": None, "ts": ago(0),
+                 "data": {"agentId": "w1", "clone": {"state": "CLONING", "progress": 42}, "affectsTaskRows": False}}
         try:
             while True:
+                self.wfile.write(b"data: " + json.dumps(frame).encode() + b"\n\n")
                 self.wfile.write(b": ping\n\n")
                 self.wfile.flush()
-                time.sleep(10)
+                time.sleep(3)
         except (BrokenPipeError, ConnectionResetError):
             return
 
@@ -253,25 +240,21 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["__reset"]:
             reset()
             return self.send(200, {"ok": True})
+        if parts == ["__github"]:
+            STATE["github"] = body.get("mode", "connected")
+            return self.send(200, {"ok": True})
         self.note("BODY %s %s" % (self.path, raw))
-        # The one press this probe lets through: "Start it again" on the refused run, which is a
-        # new run on the task (SR34). Recorded, and answered as the door does.
-        if len(parts) == 4 and parts[:2] == ["api", "tasks"] and parts[3] == "execute":
-            STATE["decisions"].append(("execute", parts[2], raw))
-            return self.send(201, {"sessionId": "S9", "runId": "R9"})
-        return self.send(409, {"statusCode": 409, "code": "PROBE_PRESSES_NOTHING",
-                               "message": "the probe does not run anything"})
+        if len(parts) == 4 and parts[:2] == ["api", "runners"] and parts[3] == "dir-probe":
+            STATE["probes"][body.get("path", "")] = True
+            return self.send(200, {"path": body.get("path", ""), "status": "pending"})
+        return self.send(409, {"statusCode": 409, "code": "PROBE_PRESSES_NOTHING", "message": "the probe does not run anything"})
 
 
 class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    # HTTPServer.server_bind resolves its own name (socket.getfqdn), a reverse lookup that on
-    # macOS raises the "Allow "Python" to find devices on local networks?" prompt — over the app
-    # being photographed. It sat in the middle of the first Mac picture taken on CI (run
-    # 37614770864) and threw the shot away; the crossings probe's stub carries this override and
-    # this one was written without it.
+    # The reverse lookup HTTPServer.server_bind does raises macOS's local-network prompt over the app.
     def server_bind(self):
         import socketserver
         socketserver.TCPServer.server_bind(self)
