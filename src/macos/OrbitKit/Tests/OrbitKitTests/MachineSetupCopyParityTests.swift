@@ -16,17 +16,8 @@ final class MachineSetupCopyParityTests: XCTestCase {
 
     /// Sentences of pages these clients don't have: the web's approval page, and its register guide's
     /// Settings variant (these clients register from the machine's own card, which says `REGISTER_NEXT`).
-    /// The rest are the web setup card's own (owner 2026-11-16, docs/mocks/new-folder-in-home/
-    /// workspace-card-with-name): there the card alone makes the workspace from a folder and a name, with a
-    /// Create button and no sign-in, while these clients still make it by sending, and keep `SETUP_LEAD`,
-    /// `SETUP_FOOT` and `setupReady`.
     private static let webOnly: Set<String> = ["ENROLL_NEXT_TITLE", "ENROLL_NEXT_BODY", "ENROLL_OPEN_MACHINE",
-                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty",
-                                               "SETUP_CREATE", "setupCreateFailed",
-                                               "setupNewWorkspaceTitle", "setupNewWorkspaceLead",
-                                               "SETUP_NEW_FOLDER_WITH_WORKSPACE", "SETUP_NAME", "SETUP_NAME_PLACEHOLDER",
-                                               "SETUP_NAME_HINT", "SETUP_NAME_EDITED", "SETUP_NAME_EMPTY",
-                                               "setupOfflineCreate", "setupConnectingCreate", "setupUpdatingCreate"]
+                                               "REGISTER_NEXT_IN_SETTINGS", "machineEmpty"]
 
     /// Sentences these clients say and the web doesn't, each checked on its own terms below.
     private static let thisClientsOwn: Set<String> = [
@@ -35,7 +26,7 @@ final class MachineSetupCopyParityTests: XCTestCase {
     ]
 
     /// The words are the web's, in the title case board 03 draws its buttons in.
-    private static let titleCased: Set<String> = ["SETUP_USE_FOLDER"]
+    private static let titleCased: Set<String> = []
 
     private enum ParityError: Error { case noRepo }
 
@@ -80,7 +71,6 @@ final class MachineSetupCopyParityTests: XCTestCase {
     }
 
     private static let constants: [(name: String, value: String)] = [
-        ("SETUP_LEAD", MachineSetupCopy.SETUP_LEAD),
         ("SETUP_OPEN_MACHINE", MachineSetupCopy.SETUP_OPEN_MACHINE),
         ("SETUP_FOLDER", MachineSetupCopy.SETUP_FOLDER),
         ("SETUP_NEW_FOLDER_NAME", MachineSetupCopy.SETUP_NEW_FOLDER_NAME),
@@ -88,20 +78,19 @@ final class MachineSetupCopyParityTests: XCTestCase {
         ("SETUP_NEW_FOLDER_META", MachineSetupCopy.SETUP_NEW_FOLDER_META),
         ("SETUP_NEW_FOLDER_DONE", MachineSetupCopy.SETUP_NEW_FOLDER_DONE),
         ("SETUP_NEW_FOLDER_INVALID", MachineSetupCopy.SETUP_NEW_FOLDER_INVALID),
-        ("SETUP_USE_FOLDER", MachineSetupCopy.SETUP_USE_FOLDER),
         ("SETUP_CHANGE", MachineSetupCopy.SETUP_CHANGE),
         ("SETUP_FOUND_PREFIX", MachineSetupCopy.SETUP_FOUND_PREFIX),
         ("SETUP_NOT_GIT", MachineSetupCopy.SETUP_NOT_GIT),
         ("SETUP_CHECK_AGAIN", MachineSetupCopy.SETUP_CHECK_AGAIN),
-        ("SETUP_SIGN_IN_HELP", MachineSetupCopy.SETUP_SIGN_IN_HELP),
         ("SETUP_ON_A_KEY", MachineSetupCopy.SETUP_ON_A_KEY),
         ("SETUP_ON_A_POOL", MachineSetupCopy.SETUP_ON_A_POOL),
-        ("SETUP_FOOT", MachineSetupCopy.SETUP_FOOT),
-        ("HELD_WITHDRAW", MachineSetupCopy.HELD_WITHDRAW),
-        ("HELD_SENDING", MachineSetupCopy.HELD_SENDING),
-        ("HELD_TRY_AGAIN", MachineSetupCopy.HELD_TRY_AGAIN),
-        ("HELD_ALREADY_WAITING", MachineSetupCopy.HELD_ALREADY_WAITING),
-        ("HELD_ALREADY_WAITING_DETAIL", MachineSetupCopy.HELD_ALREADY_WAITING_DETAIL),
+        ("SETUP_NEW_FOLDER_WITH_WORKSPACE", MachineSetupCopy.SETUP_NEW_FOLDER_WITH_WORKSPACE),
+        ("SETUP_NAME", MachineSetupCopy.SETUP_NAME),
+        ("SETUP_NAME_PLACEHOLDER", MachineSetupCopy.SETUP_NAME_PLACEHOLDER),
+        ("SETUP_NAME_HINT", MachineSetupCopy.SETUP_NAME_HINT),
+        ("SETUP_NAME_EDITED", MachineSetupCopy.SETUP_NAME_EDITED),
+        ("SETUP_NAME_EMPTY", MachineSetupCopy.SETUP_NAME_EMPTY),
+        ("SETUP_CREATE", MachineSetupCopy.SETUP_CREATE),
         ("CREATED_WORKSPACE", MachineSetupCopy.CREATED_WORKSPACE),
         ("CREATED_ON", MachineSetupCopy.CREATED_ON),
         ("CREATED_RENAME", MachineSetupCopy.CREATED_RENAME),
@@ -115,25 +104,21 @@ final class MachineSetupCopyParityTests: XCTestCase {
     /// Each template rendered with the web's own interpolations for its values.
     private static let templates: [(name: String, rendered: String)] = [
         ("setupTitle", MachineSetupCopy.setupTitle(machine: "${machine}")),
-        ("setupOffline", MachineSetupCopy.setupOffline(machine: "${machine}")),
-        ("setupConnecting", MachineSetupCopy.setupConnecting(machine: "${machine}")),
-        ("setupUpdating", MachineSetupCopy.setupUpdating(machine: "${machine}")),
         ("setupNeedsUpdate", MachineSetupCopy.setupNeedsUpdate(machine: "${machine}")),
-        ("setupFolderHelp", MachineSetupCopy.setupFolderHelp(machine: "${machine}")),
         ("setupNewFolderIsFile", MachineSetupCopy.setupNewFolderIsFile(machine: "${machine}")),
         ("setupChecking", MachineSetupCopy.setupChecking(machine: "${machine}")),
         ("setupNoSuchDirectory", MachineSetupCopy.setupNoSuchDirectory(machine: "${machine}")),
         ("setupNotADirectory", MachineSetupCopy.setupNotADirectory(machine: "${machine}")),
         ("setupNoAnswer", MachineSetupCopy.setupNoAnswer(machine: "${machine}")),
         ("setupCouldNotCheck", MachineSetupCopy.setupCouldNotCheck(machine: "${machine}", why: "${why}")),
-        ("setupSignIn", MachineSetupCopy.setupSignIn(engine: "${engine}", machine: "${machine}")),
-        ("setupSignedIn", MachineSetupCopy.setupSignedIn(machine: "${machine}")),
-        ("setupUseEngine", MachineSetupCopy.setupUseEngine(engine: "${engine}")),
-        ("setupNotInstalled", MachineSetupCopy.setupNotInstalled(engine: "${engine}", machine: "${machine}")),
-        ("setupReady", MachineSetupCopy.setupReady(workspace: "${workspace}", path: "${path}")),
+        ("setupNewWorkspaceTitle", MachineSetupCopy.setupNewWorkspaceTitle(machine: "${machine}")),
+        ("setupNewWorkspaceLead", MachineSetupCopy.setupNewWorkspaceLead(machine: "${machine}")),
+        ("setupOfflineCreate", MachineSetupCopy.setupOfflineCreate(machine: "${machine}")),
+        ("setupConnectingCreate", MachineSetupCopy.setupConnectingCreate(machine: "${machine}")),
+        ("setupUpdatingCreate", MachineSetupCopy.setupUpdatingCreate(machine: "${machine}")),
+        ("setupCreateFailed", MachineSetupCopy.setupCreateFailed(why: "${why}")),
         ("composerPlaceholderFor", MachineSetupCopy.composerPlaceholderFor(machine: "${machine}")),
         ("heldWaiting", MachineSetupCopy.heldWaiting(machine: "${machine}")),
-        ("heldFailed", MachineSetupCopy.heldFailed(why: "${why}")),
     ]
 
     func testEveryConstantIsTheWebDeclarationOfTheSameName() throws {
@@ -179,7 +164,6 @@ final class MachineSetupCopyParityTests: XCTestCase {
         XCTAssertEqual(MachineSetupCopy.SETUP_USE_API_KEY, "Use an API Key")
         let board = try source("docs/mocks/first-workspace-in-conversation/03-iphone.html")
         XCTAssertTrue(board.contains(">\(MachineSetupCopy.SETUP_USE_API_KEY)<"))
-        XCTAssertTrue(board.contains(">\(MachineSetupCopy.SETUP_USE_FOLDER)<"))
         XCTAssertTrue(board.contains("<b>\(MachineSetupCopy.SETUP_PAGE_TITLE)</b>"))
     }
 

@@ -265,6 +265,18 @@ describe('the folder: one name, in the machine’s home', () => {
     expect(createButton().disabled).toBe(false);
   });
 
+  it('a check that failed says why, not that a new folder is made', async () => {
+    await open();
+    vi.mocked(readDirProbe).mockImplementation(async (_runner, path) => ({
+      path,
+      status: 'done',
+      result: { ...runnerSays(path), error: 'permission denied' },
+    }));
+    await checkFolder('payments-api');
+    expect(line('folder')).toBe('Couldn’t check on orbit@austin: permission denied');
+    expect(createButton().disabled).toBe(true);
+  });
+
   it('an answer about a name typed a moment ago does not stand for the name typed now', async () => {
     await open();
     await checkFolder('payments-api');

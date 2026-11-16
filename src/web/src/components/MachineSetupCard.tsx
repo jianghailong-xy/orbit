@@ -214,8 +214,8 @@ export function MachineSetupCard({
             ) : !isValidNewFolder(folder) ? (
               <span className="msc-verdict bad">{SETUP_NEW_FOLDER_INVALID}</span>
             ) : verdict ? (
-              // Nothing there yet reads as a note; anything there says what it is.
-              found?.exists ? (
+              // Nothing there yet reads as a note; anything there, or a check that failed, says what it is.
+              found?.exists || found?.error ? (
                 <span className={`msc-verdict ${verdict.tone}`}>{verdict.text}</span>
               ) : (
                 <span className="msc-meta">{SETUP_NEW_FOLDER_WITH_WORKSPACE}</span>
