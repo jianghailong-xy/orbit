@@ -154,7 +154,7 @@ describe('the guest page', { timeout: 30_000 }, () => {
     vi.mocked(getGuestSession).mockResolvedValue(head('RUNNING'));
     vi.mocked(sendGuestTurn).mockResolvedValue({ turnId: 't9', revived: false });
     await visit();
-    const echo = user(5, '!ls -la', 'Alice Chen');
+    const echo = { ...user(5, '!ls -la', 'Alice Chen'), turnId: 't9' };
     const reply = assistant(6, 'That reads as a message, not a command.');
     vi.mocked(getGuestEventsAfter).mockImplementation(async (_id, { after }) =>
       now('RUNNING', [echo, reply].filter((e) => e.seq > after)),
@@ -170,6 +170,82 @@ describe('the guest page', { timeout: 30_000 }, () => {
     expect(page()).toContain('That reads as a message, not a command.');
     expect([...container.querySelectorAll('.chat-user-from')].map((el) => el.textContent)).toEqual(['You', 'From Ravi Kumar', 'You']);
     expect(q<HTMLTextAreaElement>('textarea.guest-composer-input')!.value).toBe('');
+  });
+
+  it('draws the message the moment Send is pressed, before the door answers', async () => {
+    vi.mocked(getGuestSession).mockResolvedValue(head('RUNNING'));
+    let accept!: (answer: { turnId: string; revived: boolean }) => void;
+    vi.mocked(sendGuestTurn).mockReturnValue(new Promise((resolve) => { accept = resolve; }));
+    await visit();
+    await typeAndSend('Ship it on Friday');
+    expect(page()).toContain('Ship it on Friday');
+    expect([...container.querySelectorAll('.chat-user-from')].map((el) => el.textContent)).toEqual(['You', 'From Ravi Kumar', 'You']);
+    expect(q<HTMLTextAreaElement>('textarea.guest-composer-input')!.value).toBe('');
+    // The runner's echo replaces it: one bubble, not two.
+    vi.mocked(getGuestEventsAfter).mockImplementation(async (_id, { after }) =>
+      now('RUNNING', [{ ...user(5, 'Ship it on Friday', 'Alice Chen'), turnId: 't9' }].filter((e) => e.seq > after)),
+    );
+    accept({ turnId: 't9', revived: false });
+    await settle();
+    expect(page().split('Ship it on Friday').length - 1).toBe(1);
+    expect([...container.querySelectorAll('.chat-user-from')].map((el) => el.textContent)).toEqual(['You', 'From Ravi Kumar', 'You']);
+  });
+
+  it('asks again within half a second while its echo is not there yet, not four seconds later', async () => {
+    vi.mocked(getGuestSession).mockResolvedValue(head('RUNNING'));
+    vi.mocked(sendGuestTurn).mockResolvedValue({ turnId: 't9', revived: false });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await act(async () => {
+        void visit();
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(q('textarea.guest-composer-input')).not.toBeNull();
+      // The read right after the send comes back before the runner has written the message (production 11-16).
+      vi.mocked(getGuestEventsAfter).mockImplementation(async () => now('RUNNING', []));
+      const box = q<HTMLTextAreaElement>('textarea.guest-composer-input')!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'Ship it on Friday');
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(async () => {
+        q('button.guest-composer-send')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(vi.mocked(getGuestEventsAfter)).toHaveBeenCalledTimes(1);
+      vi.mocked(getGuestEventsAfter).mockImplementation(async () =>
+        now('RUNNING', [{ ...user(5, 'Ship it on Friday', 'Alice Chen'), turnId: 't9' }]),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(500);
+      });
+      expect(vi.mocked(getGuestEventsAfter)).toHaveBeenCalledTimes(2);
+      expect(page().split('Ship it on Friday').length - 1).toBe(1);
+      // Echoed: back on the working clock.
+      vi.mocked(getGuestEventsAfter).mockImplementation(async () => now('RUNNING', []));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000);
+      });
+      expect(vi.mocked(getGuestEventsAfter)).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a send the door refuses takes its bubble away and puts the words back in the composer', async () => {
+    vi.mocked(getGuestSession).mockResolvedValue(head('RUNNING'));
+    vi.mocked(sendGuestTurn).mockRejectedValue(new ApiError('The runner is offline.', 409));
+    await visit();
+    await typeAndSend('Ship it on Friday');
+    expect(q<HTMLTextAreaElement>('textarea.guest-composer-input')!.value).toBe('Ship it on Friday');
+    expect([...container.querySelectorAll('.chat-user-from')].map((el) => el.textContent)).toEqual(['You', 'From Ravi Kumar']);
+    expect(hint()).toBe('The runner is offline.');
   });
 
   it('follows a running session on the public page’s clock: asked again after four seconds, the new reply below', async () => {
