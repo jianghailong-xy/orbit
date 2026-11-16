@@ -238,6 +238,7 @@ func (s *evalSession) env(permissionPrompt bool) []string {
 func (s *evalSession) setMode(mode string) {
 	s.job.Agent.PermissionMode = mode
 	s.job.notePermissionMode(mode)
+	s.plane.setMode(mode, s.job.Provider)
 }
 
 // probeMCP starts the session's `orbit mcp` as an engine would and reads what it offers: the instructions, the tool

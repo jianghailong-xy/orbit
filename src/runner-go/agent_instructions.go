@@ -107,10 +107,12 @@ func orbitCLIInstructions(executable string, insideRecordedWork, watches bool) s
 // they run inside this session, so the person cannot see them and they end with it, as a todo list does. The
 // agent-contract eval measured the need on 2026-11-14 (E6/E7 on Claude Code 2.1.325, claude-sonnet-5-5): asked to
 // have another agent fix a test now, the agent launched its own background sub-agent and told the person the work
-// was handed off, with no Orbit record and no receipt.
-const orbitSubAgentInstructions = "Your engine's own sub-agents are as private as its plan: work the person hands to " +
-	"another agent goes to Orbit, task_start if task_list shows it recorded, else task_create with startNow or " +
-	"session_create.\n\n"
+// was handed off, with no Orbit record and no receipt. Measured again on 2026-11-16: told "task_start if task_list shows
+// it recorded, else task_create with startNow or session_create", claude-sonnet-5-5 called no task_list in six runs of
+// six and filed the recorded work a second time, so the paragraph says to look first.
+const orbitSubAgentInstructions = "Your engine's own sub-agents are as private as its plan, so work the person hands to " +
+	"another agent goes to Orbit: look it up with task_list and task_start it if recorded (never file it twice), else " +
+	"task_create with startNow or session_create.\n\n"
 
 // orbitReplyFileInstructions says which files a reply can really hand over. The runner uploads a linked
 // file only out of the session's own directories (reply_attachments.go), so an agent that leaves its

@@ -131,6 +131,10 @@ type evalPlane struct {
 	selfSession   string // decoded (UUID) id of the session under eval
 	selfAgent     string
 	selfTask      string // the task the session runs, when it is a task's run
+	// selfMode and selfEngine are the session's live permission mode and its engine: what a session it starts is
+	// compared with (evalModeIsWider).
+	selfMode      string
+	selfEngine    string
 	orchestration bool
 	owner         evalOwnerPolicy
 	// dropCreateAnswers drops the answer of that many task creates, after writing the task.
@@ -171,6 +175,41 @@ func (p *evalPlane) setTurn(turn int) {
 	p.mu.Lock()
 	p.turn = turn
 	p.mu.Unlock()
+}
+
+// setMode is the session's live permission mode, as the control plane stores it for the session.
+func (p *evalPlane) setMode(mode, engine string) {
+	p.mu.Lock()
+	p.selfMode, p.selfEngine = mode, engine
+	p.mu.Unlock()
+}
+
+// evalWiderThan mirrors the control plane's WIDER_THAN (apiserver src/common/permission-mode.ts): what a session in
+// each mode may not start. Auto and Bypass start anything.
+var evalWiderThan = map[string]map[string]bool{
+	"plan":        {"default": true, "acceptEdits": true, "auto": true, "dontAsk": true, "bypassPermissions": true},
+	"default":     {"auto": true, "bypassPermissions": true},
+	"acceptEdits": {"auto": true, "bypassPermissions": true},
+	"dontAsk":     {"bypassPermissions": true},
+}
+
+// evalPermissionModes is the control plane's PermissionMode enum, in its order (src/shared/src/enums.ts).
+var evalPermissionModes = []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"}
+
+// evalModeIsWider is the control plane's isWiderThanStarter: whether a session in starter mode, on starterEngine, may
+// not start a session in mode on engine. Codex runs Don't Ask as Bypass (runsAsBypass).
+func evalModeIsWider(starter, starterEngine, mode, engine string) bool {
+	wider := evalWiderThan[starter]
+	if wider == nil {
+		return false
+	}
+	if mode == starter && engine != "" && engine == starterEngine {
+		return false
+	}
+	if mode == "dontAsk" && engine == providerCodex {
+		mode = "bypassPermissions"
+	}
+	return wider[mode]
 }
 
 func (p *evalPlane) record(kind, id, detail string) {
@@ -793,6 +832,24 @@ func (p *evalPlane) orchestrationRoute(w http.ResponseWriter, r *http.Request, p
 	}
 	switch {
 	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "sessions":
+		// A session may not start a wider one (sessions.service.ts assertChildModeOrNarrow): the mode named is
+		// refused, and nothing is created.
+		engine := asString(body["engine"])
+		if engine == "" {
+			engine = p.selfEngine
+		}
+		if mode := asString(body["permissionMode"]); mode != "" && evalModeIsWider(p.selfMode, p.selfEngine, mode, engine) {
+			var may []string
+			for _, m := range evalPermissionModes {
+				if !evalModeIsWider(p.selfMode, p.selfEngine, m, engine) {
+					may = append(may, m)
+				}
+			}
+			p.record("session_refused", "", mode)
+			return p.refuse(w, 403, "PERMISSION_MODE_WIDER_THAN_SESSION", fmt.Sprintf("This session runs in %q, so a session it "+
+				"starts may not run in %q. Name a mode it may start (%s). For a wider session, ask the account owner to start "+
+				"it, or to switch this session's mode.", p.selfMode, mode, strings.Join(may, ", ")), "")
+		}
 		s := &evalSessionRow{ID: evalPublicID(), Status: "PENDING", By: "session_create", Turn: p.turn,
 			AgentID: asString(body["agentId"]), Mode: asString(body["permissionMode"]), FromSession: session}
 		if taskID := asString(body["taskId"]); taskID != "" {

@@ -135,7 +135,7 @@ func TestCodexTurnAfterACompactionOrAResumeCarriesTheContextResetNote(t *testing
 	// A session that runs no task is told to re-read what it names, not a task it does not have.
 	app.resetNotePending.Store(true)
 	if got := app.turnPrompt("Continue.", false); got != orbitContextResetNoteFree+"\n\nContinue." ||
-		strings.Contains(got, "task_get (no id)") {
+		strings.Contains(got, "task_get") {
 		t.Fatalf("the turn after a reset in a session with no task = %q", got)
 	}
 }

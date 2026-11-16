@@ -15,11 +15,14 @@ package main
 
 // orbitContextResetNote is the note for a session that runs a task; orbitContextResetNoteFree for one that runs
 // none, where task_get with no id has nothing to read. Measured on the first: told only to read "what you are working
-// on", the agent re-read the follow-up it had filed and not its own task, so the note names the task.
+// on", the agent re-read the follow-up it had filed and not its own task, so the note named the task; told to read
+// "this session's task again with task_get (no id)", claude-sonnet-5-5 still re-read the follow-up by its id in two
+// runs of three (2026-11-16), so the note says the call to make and that the session's task is not one it filed.
 const (
 	orbitContextResetNote = "[Orbit: this conversation was compacted or resumed since your last turn. Before you act on " +
-		"this message, read this session's task again with task_get (no id) and any other record you will name, and do " +
-		"not rebuild an id, a status or an approval from the summary or from memory.]"
+		"this message, call task_get with no arguments: it reads the task this session was started for, which is not a " +
+		"task you filed. Then read again any other record you will name, and do not rebuild an id, a status or an " +
+		"approval from the summary or from memory.]"
 	orbitContextResetNoteFree = "[Orbit: this conversation was compacted or resumed since your last turn. Before you act " +
 		"on this message, read again from Orbit's tools any record you will name, and do not rebuild an id, a status or " +
 		"an approval from the summary or from memory.]"

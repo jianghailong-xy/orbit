@@ -38,7 +38,9 @@ the rules the scenarios turn on, as the real control plane keeps them:
   and no otherwise. A request to leave Plan is answered no.
 - `autoRunWhenReady` defaults to true. `startNow` arrives as a run time followed by an execute. A caller key
   answers a repeated create with the first task.
-- The orchestration routes answer only while the scenario's switch is on.
+- The orchestration routes answer only while the scenario's switch is on, and a session may not start one in a wider
+  permission mode than its own: the mode is refused `PERMISSION_MODE_WIDER_THAN_SESSION` by the control plane's own
+  rule (`WIDER_THAN`, `src/apiserver/src/common/permission-mode.ts`), and nothing is created.
 - A fault can drop the answer to a create after the task was written. This is what a lost answer looks like to the
   caller (§5.2 rule 4).
 
@@ -148,7 +150,8 @@ reads as drift of the same cell. A report carries:
 engine, model or machine) and reads its gate again.
 
 `suite.hash` covers the scenarios and the graders: the scenario definitions (`suite.scenarioHash`: the checkout, the
-owner's answers, every setup and every turn's words), the graders' version and every clause. A run given
+owner's answers, the control plane's rules, every setup and every turn's words), the graders' version and every
+clause. A run given
 `--transcripts DIR` also writes each run's transcript there, and `scripts/agent-eval.sh regrade OUT.json DIR` grades
 those transcripts again with the checkout's graders. A grader fix is then read against what the engines did, without
 running them again. Only transcripts with the same `scenarioHash` can be regraded. A transcript holds the engines'
