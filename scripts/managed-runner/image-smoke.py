@@ -15,7 +15,7 @@ import time
 from urllib.parse import urlsplit
 import uuid
 
-HOME = Path('/var/lib/orbit/home')
+HOME = Path('/home/orbit')
 ORBIT = HOME / '.orbit'
 WORKSPACE = HOME / 'orbit-repos/default'
 SESSION = 'artificial-smoke-session'
@@ -231,7 +231,7 @@ def main():
                  'imageId': image['Id'], 'fixture': 'ARTIFICIAL', 'skips': SKIPS,
                  'daemon': json.loads(call('version', '--format', '{{json .Server}}'))}
         mount = ('--mount', 'type=volume,src=' + call('volume', 'create', '--label', 'orbit.smoke=artificial',
-                                                    'orbit-smoke-' + uuid.uuid4().hex) + ',dst=/var/lib/orbit')
+                                                    'orbit-smoke-' + uuid.uuid4().hex) + ',dst=/home/orbit')
         volumes.append(mount[1].split('src=')[1].split(',')[0])
         init = create(extra=(*mount, '--user', '0:0', '--cap-add', 'CHOWN', '--cap-add', 'FOWNER',
                             '--cap-add', 'DAC_OVERRIDE'), entrypoint='/usr/local/bin/orbit-container', command=('init-volume',))

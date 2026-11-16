@@ -123,7 +123,7 @@ class LiveBoundaryTests(unittest.TestCase):
                         with self.assertRaises(ValueError):
                             verify.assert_pod(kube, identity)
             result = {"sqliteIntegrity": ["ok"], "sqliteJournalMode": "wal", "gitStatus": "",
-                      "mountInfo": ["32 25 8:1 / /var/lib/orbit rw - ext4 /dev/sda1 rw"]}
+                      "mountInfo": ["32 25 8:1 / /home/orbit rw - ext4 /dev/sda1 rw"]}
             response = subprocess.CompletedProcess([], 0, json.dumps(result), "")
             with patch.object(verify, "assert_pod"), patch.object(kube, "call", return_value=response):
                 with self.assertRaisesRegex(ValueError, "kernel /dev/rbd"):

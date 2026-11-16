@@ -161,20 +161,23 @@ Expose both states and `lastHeartbeatAt`, with an explicit server-derived `usabl
 
 ## Persistent filesystem layout
 
-Mount the entire per-user PVC at **`/var/lib/orbit`** as an ext4 filesystem. The managed image uses
+Mount the entire per-user PVC at **`/home/orbit`** as an ext4 filesystem: the volume's root is the
+`orbit` user's home itself. (Until 2026-11-17 it was mounted at `/var/lib/orbit` with home in its `home`
+folder; volumes in that layout were discarded and rebuilt rather than migrated, and migration 0980
+moved the workspaces on managed runners to the same folders under `/home/orbit`.) The managed image uses
 the following fixed absolute locations on every node and image rebuild:
 
 | Location or environment | Data to retain |
 | --- | --- |
-| `HOME=/var/lib/orbit/home` | User-owned runtime configuration, engine histories, and non-rebuildable state under the home directory. |
-| `ORBIT_HOME=/var/lib/orbit/home/.orbit` | The complete machine directory, including private `config.json`, credential/account slots, run metadata, and local recovery markers. |
+| `HOME=/home/orbit` | User-owned runtime configuration, engine histories, and non-rebuildable state under the home directory. |
+| `ORBIT_HOME=/home/orbit/.orbit` | The complete machine directory, including private `config.json`, credential/account slots, run metadata, and local recovery markers. |
 | `$ORBIT_HOME/runs/<canonical-session-id>` | Session metadata, supervisor/event state, legacy Codex state, and isolated engine homes. |
 | `$ORBIT_HOME/worktrees/<canonical-session-id>` | Session Git checkouts and worktree metadata. Retain alongside the original repository's `.git` directory. |
 | `$ORBIT_HOME/uploads/<canonical-session-id>` | Downloaded/uploaded attachment scratch until normal session-aware GC; restart must not wipe it. |
 | `$ORBIT_HOME/codex-state/<partition>` | Runner-wide Codex SQLite database partitions, together with WAL and SHM files. |
-| `CODEX_HOME=/var/lib/orbit/home/.codex` | Default Codex configuration, authentication when used, history, and engine sessions. Additional account homes keep their persisted paths. |
-| `CLAUDE_CONFIG_DIR=/var/lib/orbit/home/.claude` | Claude state when this supplied runtime is enabled. Other supported runtimes keep state below the same persistent home. |
-| `/var/lib/orbit/home/orbit-repos` | Checkout root reported by existing `reposRoot()`; default workspace `workDir` is `/var/lib/orbit/home/orbit-repos/default`. |
+| `CODEX_HOME=/home/orbit/.codex` | Default Codex configuration, authentication when used, history, and engine sessions. Additional account homes keep their persisted paths. |
+| `CLAUDE_CONFIG_DIR=/home/orbit/.claude` | Claude state when this supplied runtime is enabled. Other supported runtimes keep state below the same persistent home. |
+| `/home/orbit/orbit-repos` | Checkout root reported by existing `reposRoot()`; default workspace `workDir` is `/home/orbit/orbit-repos/default`. |
 
 Persist the whole home/machine directories, not just the named examples. The image and executable
 tools are reproducible, `/tmp` and container runtime sockets are ephemeral, and the authoritative
@@ -992,7 +995,7 @@ of a real engine session (D4) or of a new deployment's wiring (D3).
 | Area | As implemented |
 | --- | --- |
 | Channel | `deploy/managed-runner/docker-channel/channel.py`, Python 3 standard library, a process of its own and the only one holding `docker.sock`. JSON over HTTP on a unix socket (or loopback), bearer token from a file only its owner reads. It creates, reads and removes data volumes; keeps the runner credential of a generation; creates one container from its own template and starts it, reads its state and exit, stops it and removes it once stopped; reports what holds a volume, the host's size and this instance's resources. Everything it creates carries `orbit.managed-runner.instance=<instanceId>`; nothing without that label is read, returned, adopted or removed. A request names identities and amounts only: `privileged`, capabilities, binds and mounts, host network/PID/IPC/UTS, devices, security options, a user, an environment or labels are refused by name, a volume that is not `mr-data-<runner uuid>` (a host path, the Docker socket) is refused, another image is refused, amounts above its ceilings are refused. The spec is checked against its rules before it is sent and the created container is inspected and checked again before it starts. Its README gives the API, the rules and the reasons. |
-| Template | Image by local ID (built here, never pushed), user 10001:10001, every capability dropped, `no-new-privileges`, read-only root, private IPC and cgroup namespaces, `NanoCpus`, memory with no swap beyond it, PID limit, `/tmp` a sized tmpfs (counted in memory), restart policy `no`, bounded json-file logs, the one configured network, and three mounts: the data volume at `/var/lib/orbit` (Docker copies the image's 10001-owned `/var/lib/orbit` into an empty volume, so no root init step is needed), the bootstrap volume at `/run/orbit-bootstrap`, `/tmp`. |
+| Template | Image by local ID (built here, never pushed), user 10001:10001, every capability dropped, `no-new-privileges`, read-only root, private IPC and cgroup namespaces, `NanoCpus`, memory with no swap beyond it, PID limit, `/tmp` a sized tmpfs (counted in memory), restart policy `no`, bounded json-file logs, the one configured network, and three mounts: the data volume at `/home/orbit` (Docker copies the image's 10001-owned `/home/orbit` into an empty volume, so no root init step is needed), the bootstrap volume at `/run/orbit-bootstrap`, `/tmp`. |
 | Credential and identity | The runner credential of the container's generation is written, before it starts, into its bootstrap volume as root-owned mode-0444 files beside `generation` and `instance.json` (runner, generation, instance UID). The container's environment names the files (`ORBIT_RUNNER_CREDENTIAL_FILE`, `ORBIT_MANAGED_RUNNER_INSTANCE_FILE`), never the credential or the generation. The image's entrypoint reads both from the files and, as on Kubernetes, hands the generation and UID to `orbit run`, which no longer prints them in its log. That entrypoint change is commit 198f6d6cc (branch `d2/entrypoint-instance-file`), handed to the image task (T03): this task changes nothing under `deploy/managed-runner/image`. The instance UID is a canonical UUID the channel gives each container: the runner door authorizes it as it authorizes a Pod UID. |
 | Network | One dedicated bridge network the deployment creates, inter-container traffic off; the runner reaches the apiserver at an address of the host's container network. For a Docker container (identity from its instance file) the Docker profile, and the entrypoint in 198f6d6cc, accept plain HTTP to a private, loopback or link-local address or a single-label host; anything else must be HTTPS, and a Pod's rule is unchanged. |
 | Backend | `DockerBackend` implements the run backend interface over the channel: fixed names from the runner UUID, create once with read-back after a lost answer, identity checks (owner, runner, generation, volume UID), the volume as its own storage (handle `docker:<instance>/<volume>/<uid>`), holders of every label, the guard probe (a dry run under another name must come back `SINGLE_CONTAINER_GUARD`), removal by instance UID, Docker's exit report as the stop proof. A channel that cannot be reached, or answers 5xx/429, is transient; its refusals are `DOCKER_CHANNEL_FORBIDDEN`, `DOCKER_CHANNEL_MISMATCH`, `DOCKER_CHANNEL_REFUSED`, `VOLUME_OVER_LIMIT`, `CONTAINER_GUARD_MISSING` or `CONTAINER_GUARD_UNVERIFIED`, each with a sentence in the manager's table. |

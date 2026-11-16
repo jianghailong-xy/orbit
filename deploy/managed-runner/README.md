@@ -59,20 +59,20 @@ update operations from replacing the image tools.
 
 ## Persistent paths and identity
 
-Mount one user's entire original ext4 PVC at `/var/lib/orbit`. Paths and UID/GID **10001:10001** must
+Mount one user's entire original ext4 PVC at `/home/orbit`. Paths and UID/GID **10001:10001** must
 stay constant across rebuilds and nodes:
 
 | Fixed location | Retained data |
 | --- | --- |
-| `/var/lib/orbit/home` | Entire user home, runtime histories and configuration. |
-| `/var/lib/orbit/home/.orbit/config.json` | Original runner ID, server URL and runner credential. |
-| `/var/lib/orbit/home/.orbit/runs` | Session metadata, recovery/lease markers, legacy and isolated engine homes. |
-| `/var/lib/orbit/home/.orbit/worktrees` | Linked Git checkouts, alongside the original repository's `.git`. |
-| `/var/lib/orbit/home/.orbit/uploads` | Attachment scratch retained until ordinary session-aware GC. |
-| `/var/lib/orbit/home/.orbit/codex-state` | Codex SQLite partitions, including database, WAL and SHM. |
-| `/var/lib/orbit/home/.codex` | Default Codex auth/configuration, transcripts and sessions. |
-| `/var/lib/orbit/home/.claude` | Claude Code configuration and session transcripts (`projects/<cwd>/<session>.jsonl`). |
-| `/var/lib/orbit/home/orbit-repos/default` | Stable default workspace directory and original repository. |
+| `/home/orbit` | Entire user home, runtime histories and configuration. |
+| `/home/orbit/.orbit/config.json` | Original runner ID, server URL and runner credential. |
+| `/home/orbit/.orbit/runs` | Session metadata, recovery/lease markers, legacy and isolated engine homes. |
+| `/home/orbit/.orbit/worktrees` | Linked Git checkouts, alongside the original repository's `.git`. |
+| `/home/orbit/.orbit/uploads` | Attachment scratch retained until ordinary session-aware GC. |
+| `/home/orbit/.orbit/codex-state` | Codex SQLite partitions, including database, WAL and SHM. |
+| `/home/orbit/.codex` | Default Codex auth/configuration, transcripts and sessions. |
+| `/home/orbit/.claude` | Claude Code configuration and session transcripts (`projects/<cwd>/<session>.jsonl`). |
+| `/home/orbit/orbit-repos/default` | Stable default workspace directory and original repository. |
 
 The entrypoint fixes `HOME`, `ORBIT_HOME`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR` to these paths. Codex
 partitions hash the absolute engine home; Git worktree metadata also embeds absolute paths. Moving

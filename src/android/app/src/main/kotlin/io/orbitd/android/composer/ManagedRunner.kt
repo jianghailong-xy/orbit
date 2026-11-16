@@ -229,7 +229,7 @@ object ManagedRunner {
         const val COMPOSER = "Your managed runner is asleep. Sending wakes it (about 10 s)."
     }
 
-    const val REPOS_ROOT = "/var/lib/orbit/home/orbit-repos"
+    const val REPOS_ROOT = "/home/orbit/orbit-repos"
     object Setup {
         val NOTICE = mapOf(
             "preparing" to "Orbit is setting up your managed runner. You can create the workspace now; your first session starts when it’s ready.",

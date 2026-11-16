@@ -14,7 +14,8 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 
-ROOT = Path("/var/lib/orbit")
+# The user's persistent volume is mounted as the home directory itself.
+ROOT = Path("/home/orbit")
 UID = GID = 10001
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 GENERATION = re.compile(r"[1-9][0-9]{0,9}")
@@ -27,14 +28,14 @@ INSTANCE_FILE_ENV = "ORBIT_MANAGED_RUNNER_INSTANCE_FILE"
 
 
 def paths():
-    home = ROOT / "home"
+    home = ROOT
     orbit = home / ".orbit"
     return home, orbit, home / "orbit-repos" / "default"
 
 
 def directories():
     home, orbit, workspace = paths()
-    return [ROOT, home, orbit, home / ".codex", home / ".claude",
+    return [home, orbit, home / ".codex", home / ".claude",
             home / "orbit-repos", workspace,
             *[orbit / name for name in ("runs", "worktrees", "uploads", "codex-state")]]
 
@@ -43,7 +44,7 @@ def require_mount():
     # ismount alone misses bind mounts on the same device. The container path is fixed.
     if not any(line.split()[4] == str(ROOT)
                for line in Path("/proc/self/mountinfo").read_text().splitlines()):
-        raise ValueError("mount the user's persistent volume at /var/lib/orbit")
+        raise ValueError("mount the user's persistent volume at /home/orbit")
 
 
 def private_path(path, directory=False, initialize=False):
@@ -193,7 +194,9 @@ def register():
             or any(any((home / name).iterdir()) for name in (".codex", ".claude"))
             or any(path != workspace for path in (home / "orbit-repos").iterdir())
             or any(workspace.iterdir())
-            or any(path.name not in (".orbit", ".codex", ".claude", "orbit-repos") for path in home.iterdir())):
+            # lost+found: an ext4 volume's own, at its root, which is home.
+            or any(path.name not in (".orbit", ".codex", ".claude", "orbit-repos", "lost+found")
+                   for path in home.iterdir())):
         raise ValueError("retained session/repository data has no config; restore the original identity")
     name = os.environ.get("ORBIT_RUNNER_NAME", "").strip()
     concurrency = os.environ.get("ORBIT_RUNNER_MAX_CONCURRENT", "")

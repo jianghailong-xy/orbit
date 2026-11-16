@@ -57,8 +57,8 @@ STATE = SERVER / 'state'
 NAMESPACE = ENV['LAB_NAMESPACE']
 API = f"http://127.0.0.1:{ENV['LAB_TEST_API_PORT']}/api"
 POD_SERVER_URL = f"https://10.0.2.2:{ENV['LAB_TEST_TLS_PORT']}"
-STATE_ROOT = '/var/lib/orbit'
-WORKSPACE_DIR = STATE_ROOT + '/home/orbit-repos/default'
+STATE_ROOT = '/home/orbit'
+WORKSPACE_DIR = STATE_ROOT + '/orbit-repos/default'
 KEY_FILE = LAB_DIR / 'secrets' / 'deepseek-api-key'
 
 
@@ -393,7 +393,7 @@ def cmd_stop(args):
 SNAPSHOT = r'''
 import hashlib, json, os, sqlite3, subprocess
 from pathlib import Path
-HOME = Path('/var/lib/orbit/home'); ORBIT = HOME / '.orbit'; WS = HOME / 'orbit-repos/default'
+HOME = Path('/home/orbit'); ORBIT = HOME / '.orbit'; WS = HOME / 'orbit-repos/default'
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
 def git(d, *a):
     r = subprocess.run(['git', '-C', str(d), *a], capture_output=True, text=True)
@@ -403,7 +403,7 @@ def files(root, skip=()):
     return {str(p.relative_to(root)): sha(p) for p in sorted(root.rglob('*'))
             if p.is_file() and not p.is_symlink() and not any(part in skip for part in p.relative_to(root).parts)}
 config = json.loads((ORBIT / 'config.json').read_text())
-mount = [l.split() for l in Path('/proc/self/mountinfo').read_text().splitlines() if l.split()[4] == '/var/lib/orbit']
+mount = [l.split() for l in Path('/proc/self/mountinfo').read_text().splitlines() if l.split()[4] == '/home/orbit']
 result = {
     'process': {'uid': os.getuid(), 'gid': os.getgid(), 'capEff': [l.split()[1] for l in Path('/proc/self/status').read_text().splitlines() if l.startswith('CapEff')][0]},
     'mount': [{'fstype': m[m.index('-') + 1], 'source': m[m.index('-') + 2]} for m in mount],

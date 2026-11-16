@@ -156,10 +156,10 @@ class EntrypointTest(EntrypointFixture):
     def test_rebuild_preserves_identity_credentials_and_all_local_state_bytes(self):
         self.start()
         retained = [self.config, self.orbit / "container-identity.json"]
-        for relative in ("home/.orbit/runs/session/meta.json", "home/.orbit/worktrees/session/work.txt",
-                         "home/.orbit/uploads/session/attachment.bin", "home/.orbit/codex-state/partition/state.sqlite",
-                         "home/.codex/sessions/session.jsonl", "home/.claude/projects/session.jsonl",
-                         "home/orbit-repos/default/project.txt"):
+        for relative in (".orbit/runs/session/meta.json", ".orbit/worktrees/session/work.txt",
+                         ".orbit/uploads/session/attachment.bin", ".orbit/codex-state/partition/state.sqlite",
+                         ".codex/sessions/session.jsonl", ".claude/projects/session.jsonl",
+                         "orbit-repos/default/project.txt"):
             path = self.runner.ROOT / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"fixture-state:" + relative.encode())
@@ -246,6 +246,18 @@ class EntrypointTest(EntrypointFixture):
     def test_missing_config_with_another_retained_repository_never_registers(self):
         self.runner.prepare()
         (self.runner.paths()[0] / "orbit-repos" / "existing-repository").mkdir()
+        self.assert_refused()
+
+    def test_an_ext4_volumes_lost_and_found_in_home_still_registers(self):
+        # The volume's root is home, so an ext4 claim's lost+found sits beside .orbit.
+        self.runner.prepare()
+        (self.runner.paths()[0] / "lost+found").mkdir()
+        self.start()
+        self.popen.assert_called_once()
+
+    def test_missing_config_with_another_folder_in_home_never_registers(self):
+        self.runner.prepare()
+        (self.runner.paths()[0] / "existing-project").mkdir()
         self.assert_refused()
 
     def test_failed_or_uncertain_registration_is_never_repeated(self):
@@ -417,7 +429,7 @@ class ManagedBootstrapTest(ManagedBootstrapFixture):
 
     def test_the_next_generation_replaces_only_the_credential(self):
         self.started_env()
-        state = self.runner.ROOT / "home/.orbit/worktrees/session/work.txt"
+        state = self.runner.ROOT / ".orbit/worktrees/session/work.txt"
         state.parent.mkdir(parents=True, exist_ok=True)
         state.write_text("retained")
         before = json.loads(self.config.read_text())

@@ -99,7 +99,7 @@ test('managed runners switched off with existing state: nothing is stopped, dele
     )).rows[0].id as string;
     const workspaceId = (await sql.query(
       `INSERT INTO workspace (id, name, owner_id, runner_id, target_runner_id, work_dir, auto_init_git, enable_worktree)
-         VALUES (gen_random_uuid(), 'Default', $1, $2, $2, '/var/lib/orbit/home/orbit-repos/default', true, true) RETURNING id`,
+         VALUES (gen_random_uuid(), 'Default', $1, $2, $2, '/home/orbit/orbit-repos/default', true, true) RETURNING id`,
       [ownerId, runnerId],
     )).rows[0].id as string;
     const columns = {
