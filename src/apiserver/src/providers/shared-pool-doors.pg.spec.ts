@@ -159,7 +159,9 @@ async function settle(request: Promise<unknown>): Promise<'went through' | 'refu
   }
 }
 
-const doorsOver: { pools: unknown; providers: unknown; prisma: unknown } = { pools: null, providers: null, prisma: null };
+const doorsOver: { pools: unknown; providers: unknown; prisma: unknown; usage: unknown } = {
+  pools: null, providers: null, prisma: null, usage: null,
+};
 
 @Module({
   controllers: [SharedPoolsController, RunnerProvidersController],
@@ -167,6 +169,9 @@ const doorsOver: { pools: unknown; providers: unknown; prisma: unknown } = { poo
     { provide: SharedPoolsService, useFactory: () => doorsOver.pools },
     { provide: ProvidersService, useFactory: () => doorsOver.providers },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
+    // RunnerProvidersController's third dependency since 95884b154f (provider_list --workspace): the same
+    // plan-usage service the services above are built with.
+    { provide: ProviderPlanUsageService, useFactory: () => doorsOver.usage },
     JwtAuthGuard,
     RunnerAuthGuard,
     Reflector,
@@ -205,6 +210,7 @@ suite('a shared pool, door by door: every cell of §2.5, on real PostgreSQL', { 
   doorsOver.pools = pools;
   doorsOver.providers = providers;
   doorsOver.prisma = db;
+  doorsOver.usage = usage;
   const doors = await openDoors();
   t.after(async () => {
     await doors.close();

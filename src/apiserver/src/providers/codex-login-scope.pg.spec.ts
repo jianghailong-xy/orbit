@@ -134,10 +134,11 @@ const TASK_CHECK = {
   acceptanceExpectedExitCode: 0,
 } as const;
 
-const doorsOver: { providers: unknown; login: unknown; prisma: unknown } = {
+const doorsOver: { providers: unknown; login: unknown; prisma: unknown; usage: unknown } = {
   providers: null,
   login: null,
   prisma: null,
+  usage: null,
 };
 
 @Module({
@@ -149,6 +150,9 @@ const doorsOver: { providers: unknown; login: unknown; prisma: unknown } = {
     // that omitted it would fail to build the controller.
     { provide: DeepSeekBalanceService, useValue: {} },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
+    // RunnerProvidersController's third dependency since 95884b154f (provider_list --workspace): the same
+    // plan-usage service the services above are built with.
+    { provide: ProviderPlanUsageService, useFactory: () => doorsOver.usage },
     JwtAuthGuard,
     RunnerAuthGuard,
     Reflector,
@@ -188,6 +192,7 @@ suite("a pool of one's own ChatGPT login, at every door — its owner's, and nob
   doorsOver.providers = providers;
   doorsOver.login = login;
   doorsOver.prisma = db;
+  doorsOver.usage = usage;
   const doors = await openDoors();
   t.after(async () => {
     await doors.close();
