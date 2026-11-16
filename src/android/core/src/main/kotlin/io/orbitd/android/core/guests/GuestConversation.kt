@@ -4,6 +4,8 @@ import io.orbitd.android.core.auth.OrbitApi
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.core.realtime.SENTINEL_SEQ
+import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -12,6 +14,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -35,8 +41,9 @@ data class GuestView(
 
 /**
  * One guest view's reads and its one write (web `GuestConversation`): the root, the follow loop at [GuestFollow]'s cadence, older pages,
- * and a text-only message. A send asks at once and keeps asking every 4 s until the run it started has been seen. A 404 at any point is
- * the not-shared state, and nothing is read after it. [initial] is the root an owner's 404 already read, so the view opens on it.
+ * and a text-only message. A sent message is drawn at once, before the door answers, until the runner's echo of its turn replaces it;
+ * the send then asks at once, every [ECHO_MS] while that echo is missing (for up to [ECHO_FOR_MS]), and every 4 s until the run it
+ * started has been seen. A 404 at any point is the not-shared state, and nothing is read after it. [initial] is the root an owner's 404 already read, so the view opens on it.
  */
 class GuestConversation(
     private val api: OrbitApi,
@@ -45,6 +52,7 @@ class GuestConversation(
     private val myName: String?,
     private val scope: CoroutineScope,
     initial: GuestSession? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
     private val newTurnId: () -> String = { UUID.randomUUID().toString() },
 ) {
     private val mutable = MutableStateFlow(GuestView())
@@ -54,6 +62,13 @@ class GuestConversation(
     private var expecting = false
     private var followed = false
     private val kick = Channel<Unit>(Channel.CONFLATED)
+    /** What this view sent, drawn until the runner's `user` event for its turn is read. */
+    private var sent: List<SentTurn> = emptyList()
+    /** The turns sent whose echo has not been read yet, each until when it is asked for every [ECHO_MS]. */
+    private val awaitingEcho = mutableMapOf<String, Long>()
+    private var sentCount = 0L
+
+    private class SentTurn(val key: Long, val turnId: String?, val text: String, val ts: String)
 
     init { initial?.let(::seed) }
 
@@ -61,10 +76,25 @@ class GuestConversation(
         raw = merge(emptyList(), root.events)
         after = raw.lastOrNull()?.seq ?: 0
         mutable.update { it.copy(loaded = true, error = null, title = root.title, ownerName = root.ownerName, state = root.state,
-            events = GuestTranscript.ownMessages(raw, myName), hasOlder = root.hasMore && raw.isNotEmpty()) }
+            events = shown(), hasOlder = root.hasMore && raw.isNotEmpty()) }
     }
 
-    private fun publish() = mutable.update { it.copy(events = GuestTranscript.ownMessages(raw, myName)) }
+    /** The door's events, the reader's own read as theirs, and below them what this view sent that is not echoed yet. A drawn
+     *  message's seq sits just under [SENTINEL_SEQ]: after every real event, and never one a real event can take. */
+    private fun shown(): List<RunEvent> {
+        val read = GuestTranscript.ownMessages(raw, myName)
+        val echoed = raw.mapNotNullTo(mutableSetOf()) { e -> e.turnId?.takeIf { e.type == "user" } }
+        val waiting = sent.filter { it.turnId == null || it.turnId !in echoed }
+        return read + waiting.map { turn ->
+            RunEvent(type = "user", seq = SENTINEL_SEQ - DRAWN_SEQS + turn.key, turnId = turn.turnId, ts = turn.ts,
+                payload = buildJsonObject {
+                    put("text", turn.text)
+                    putJsonObject("externalSender") { put("source", GuestTranscript.READER_SOURCE) }
+                })
+        }
+    }
+
+    private fun publish() = mutable.update { it.copy(events = shown()) }
 
     private fun gone(failure: Throwable) = failure is ApiError && failure.status == 404
 
@@ -100,9 +130,13 @@ class GuestConversation(
         val answer = api.guestEventsAfter(handle, id, after)
         val added = answer.events.filter { it.seq > after }
         if (added.isNotEmpty()) { raw = merge(raw, added); after = added.last().seq }
+        added.forEach { e -> if (e.type == "user") e.turnId?.let(awaitingEcho::remove) }
+        val now = clock()
+        awaitingEcho.values.removeAll { until -> until <= now }
         if (answer.state.live) expecting = false
-        mutable.update { it.copy(state = answer.state, title = answer.title ?: it.title, events = GuestTranscript.ownMessages(raw, myName)) }
-        if (answer.after != null) 0 else GuestFollow.delay(answer.state, added.isNotEmpty(), expecting)
+        mutable.update { it.copy(state = answer.state, title = answer.title ?: it.title, events = shown()) }
+        val next = if (answer.after != null) 0 else GuestFollow.delay(answer.state, added.isNotEmpty(), expecting)
+        if (awaitingEcho.isNotEmpty()) minOf(next ?: ECHO_MS, ECHO_MS) else next
     } catch (cancel: CancellationException) { throw cancel }
     catch (failure: Exception) {
         if (gone(failure)) { mutable.update { it.copy(gone = true) }; null } else GuestFollow.WORKING_MS
@@ -135,15 +169,23 @@ class GuestConversation(
     fun send() {
         val content = mutable.value.draft.trim()
         if (content.isEmpty() || mutable.value.sending || mutable.value.gone) return
-        mutable.update { it.copy(sending = true, sendError = null) }
+        // Drawn the moment it is sent: the composer empties and the words sit in the conversation while the send is on its way.
+        val key = ++sentCount
+        sent = sent + SentTurn(key, null, content, Instant.ofEpochMilli(clock()).toString())
+        mutable.update { it.copy(sending = true, sendError = null, draft = "", events = shown()) }
         scope.launch {
             try {
-                api.sendGuestTurn(handle, id, newTurnId(), content)
+                val accepted = api.sendGuestTurn(handle, id, newTurnId(), content)
                 expecting = true
-                mutable.update { it.copy(draft = "") }
+                accepted.turnId?.let { awaitingEcho[it] = clock() + ECHO_FOR_MS }
+                sent = sent.map { if (it.key == key) SentTurn(key, accepted.turnId, it.text, it.ts) else it }
+                publish()
                 kick.trySend(Unit)
             } catch (cancel: CancellationException) { throw cancel }
             catch (failure: Exception) {
+                // Not sent: the bubble goes, and the words go back to the composer unless something new was typed meanwhile.
+                sent = sent.filterNot { it.key == key }
+                mutable.update { it.copy(events = shown(), draft = it.draft.ifBlank { content }) }
                 if (gone(failure)) mutable.update { it.copy(gone = true) }
                 else mutable.update { it.copy(sendError = (failure as? ApiError)?.messages?.firstOrNull() ?: failure.message) }
             } finally { mutable.update { it.copy(sending = false) } }
@@ -151,6 +193,13 @@ class GuestConversation(
     }
 
     private companion object {
+        /** How soon it asks again while a message it sent has not come back from the runner: written a moment after the send is
+         *  accepted, it was otherwise seen only at the next 4 s read. */
+        const val ECHO_MS = 500L
+        /** How long it asks that often. A message behind a running turn is echoed only when its turn starts, which can be minutes. */
+        const val ECHO_FOR_MS = 10_000L
+        /** The seqs below [SENTINEL_SEQ] a drawn message takes, one per message this view sent: far above any session's real events. */
+        const val DRAWN_SEQS = 1_000_000_000L
         fun merge(a: List<RunEvent>, b: List<RunEvent>) = (a + b).associateBy { it.seq }.values.sortedBy { it.seq }
     }
 }

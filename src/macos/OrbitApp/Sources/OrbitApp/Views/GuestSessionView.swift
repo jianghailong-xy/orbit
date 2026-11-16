@@ -37,6 +37,8 @@ final class GuestConversationModel {
     @ObservationIgnored private var expecting = false
     /// Set by a send: the follow loop asks at once instead of finishing its wait.
     @ObservationIgnored private var kicked = false
+    /// What this view sent, drawn below the transcript until the runner's echo of each turn is read.
+    private(set) var sent = GuestSentTurns()
 
     init(sessionID: String, api: APIClient, myName: @escaping () -> String?) {
         self.sessionID = sessionID
@@ -44,7 +46,13 @@ final class GuestConversationModel {
         self.myName = myName
     }
 
-    var items: [TranscriptItem] { reducer.state.items }
+    var items: [TranscriptItem] {
+        guard !sent.isEmpty else { return reducer.state.items }
+        // Folded by a copy of the reducer, so a drawn message reads as the echo will, and the real window is never touched.
+        var drawn = reducer
+        drawn.appendNewer(EventPage(events: sent.events, hasMore: false))
+        return drawn.state.items
+    }
     var hasMoreOlder: Bool { reducer.state.hasMoreOlder }
 
     /// The first read: the head and the newest page.
@@ -69,7 +77,7 @@ final class GuestConversationModel {
     /// half minute while it waits, and not at all once it is over — until a send asks again.
     func follow() async {
         while !Task.isCancelled, phase == .ready {
-            await pause(GuestFollow.delay(state, moved: false, expecting: expecting))
+            await pause(sent.delay(GuestFollow.delay(state, moved: false, expecting: expecting)))
             guard !Task.isCancelled, phase == .ready else { return }
             await readNewer()
         }
@@ -92,6 +100,7 @@ final class GuestConversationModel {
             while more {
                 let now = try await api.guestEventsAfter(sessionID, after: after, limit: GuestFollow.pageSize)
                 let added = now.events.filter { $0.seq > after }
+                sent.read(added)
                 if !added.isEmpty {
                     reducer.appendNewer(EventPage(events: own(added), hasMore: false))
                     after = added.last?.seq ?? after
@@ -129,17 +138,27 @@ final class GuestConversationModel {
         sending = true
         sendError = nil
         defer { sending = false }
+        // Drawn the moment it is sent: the composer empties and the words sit in the conversation while the send is on its way.
+        let key = sent.draw(content)
+        draft = ""
+        tailRevision &+= 1
         do {
-            try await api.sendGuestTurn(sessionID, clientTurnId: PublicID.newToken(), content: content)
-            draft = ""
+            let accepted = try await api.sendGuestTurn(sessionID, clientTurnId: PublicID.newToken(), content: content)
+            sent.accepted(key, turnId: accepted.turnId)
             expecting = true
             kicked = true
-        } catch APIError.http(let status, _) where status == 404 {
-            phase = .notShared
-        } catch APIError.http(_, let body) {
-            sendError = Self.message(body) ?? "Couldn\u{2019}t send your message."
         } catch {
-            sendError = "Couldn\u{2019}t send your message."
+            // Not sent: the drawing goes, and the words go back to the composer unless something new was typed meanwhile.
+            sent.refused(key)
+            if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { draft = content }
+            switch error {
+            case APIError.http(let status, _) where status == 404:
+                phase = .notShared
+            case APIError.http(_, let body):
+                sendError = Self.message(body) ?? "Couldn\u{2019}t send your message."
+            default:
+                sendError = "Couldn\u{2019}t send your message."
+            }
         }
     }
 
