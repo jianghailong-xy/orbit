@@ -885,7 +885,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
 }
 
 @Composable
-private fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
+internal fun LiveMessage(label: String, parent: String, text: String, open: (String) -> Unit) {
     // A06-11: reasoning still being written is open and held to a few self-scrolling lines (iOS 471b2afbb).
     if (label == "Thinking") return LiveThinking(parent, text, open)
     // Settings › Translation (2A): the agent's own reply, streaming with translation on, is the English greyed with its chip until
