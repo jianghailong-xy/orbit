@@ -250,6 +250,18 @@ final class SubagentBlockTests: XCTestCase {
         XCTAssertEqual(SubagentSessionSummary.make([run(costUsd: 0)])?.capsule, "1")
     }
 
+    func testTheBandSaysWhatTheRunningAgentIsDoing() throws {
+        let deploy = "Deploy dacad7403 to production"
+        let done = run(status: "DONE", createdAt: "2026-11-11T08:00:00.000Z", description: deploy)
+        let one = run(status: "RUNNING", createdAt: "2026-11-11T08:05:00.000Z", endedAt: nil, description: " \(deploy) ")
+        let older = run(status: "RUNNING", createdAt: "2026-11-11T08:01:00.000Z", endedAt: nil, description: "Audit")
+        XCTAssertEqual(SubagentSessionSummary.make([done, one])?.band, deploy)
+        XCTAssertEqual(SubagentSessionSummary.make([done, older, one])?.band, "2 running · \(deploy)", "the newest running one")
+        XCTAssertEqual(SubagentSessionSummary.make([done, run(status: "RUNNING", endedAt: nil)])?.band, "2 · 1 running",
+                       "no description keeps the counts")
+        XCTAssertEqual(SubagentSessionSummary.make([done, done])?.band, "2", "nothing running: the count alone")
+    }
+
     func testAnOlderServerWithoutTheNewFieldsStillDecodes() throws {
         let json = """
         [{"toolUseId":"t","type":"explore","background":false,"status":"DONE","level":"S","model":"m",

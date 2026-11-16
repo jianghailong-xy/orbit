@@ -17,7 +17,7 @@ lab's Secrets and in the test server's provider store.
                                    to run and for the test server to see the runner online
   stop NAME [--grace S]            delete the Pod (SIGTERM), time its exit, keep the logs
   snapshot NAME                    hashes of the persistent state, read inside the runner container
-  workspace NAME                   the default workspace on the runner (git worktrees on)
+  workspace NAME                   the lab's workspace on the runner, its folder made first (git worktrees on)
   provider NAME --closed | --fake | --key-file F
                                    a DeepSeek-preset provider: a closed endpoint (no model call),
                                    fake-model.py (canned answers, no key), or the owner's key read
@@ -57,8 +57,8 @@ STATE = SERVER / 'state'
 NAMESPACE = ENV['LAB_NAMESPACE']
 API = f"http://127.0.0.1:{ENV['LAB_TEST_API_PORT']}/api"
 POD_SERVER_URL = f"https://10.0.2.2:{ENV['LAB_TEST_TLS_PORT']}"
-STATE_ROOT = '/var/lib/orbit'
-WORKSPACE_DIR = STATE_ROOT + '/home/orbit-repos/default'
+STATE_ROOT = '/home/orbit'
+WORKSPACE_DIR = STATE_ROOT + '/orbit-repos/default'
 KEY_FILE = LAB_DIR / 'secrets' / 'deepseek-api-key'
 
 
@@ -393,7 +393,7 @@ def cmd_stop(args):
 SNAPSHOT = r'''
 import hashlib, json, os, sqlite3, subprocess
 from pathlib import Path
-HOME = Path('/var/lib/orbit/home'); ORBIT = HOME / '.orbit'; WS = HOME / 'orbit-repos/default'
+HOME = Path('/home/orbit'); ORBIT = HOME / '.orbit'; WS = HOME / 'orbit-repos/default'
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
 def git(d, *a):
     r = subprocess.run(['git', '-C', str(d), *a], capture_output=True, text=True)
@@ -403,7 +403,7 @@ def files(root, skip=()):
     return {str(p.relative_to(root)): sha(p) for p in sorted(root.rglob('*'))
             if p.is_file() and not p.is_symlink() and not any(part in skip for part in p.relative_to(root).parts)}
 config = json.loads((ORBIT / 'config.json').read_text())
-mount = [l.split() for l in Path('/proc/self/mountinfo').read_text().splitlines() if l.split()[4] == '/var/lib/orbit']
+mount = [l.split() for l in Path('/proc/self/mountinfo').read_text().splitlines() if l.split()[4] == '/home/orbit']
 result = {
     'process': {'uid': os.getuid(), 'gid': os.getgid(), 'capEff': [l.split()[1] for l in Path('/proc/self/status').read_text().splitlines() if l.startswith('CapEff')][0]},
     'mount': [{'fstype': m[m.index('-') + 1], 'source': m[m.index('-') + 2]} for m in mount],
@@ -451,6 +451,8 @@ def cmd_snapshot(args):
 def cmd_workspace(args):
     lab = state(args.name)
     if not lab.get('workspaceId'):
+        # The image makes no project folder of its own (docs/managed-runner-no-default-workspace.md): the lab's is made here.
+        kubectl('exec', f'{args.name}-runner', '-c', 'runner', '--', 'mkdir', '-p', '-m', '700', WORKSPACE_DIR)
         answer = api('POST', '/workspaces', {'name': f'{args.name} default', 'runnerId': lab['runnerId'],
                                             'workDir': WORKSPACE_DIR, 'enableWorktree': True, 'autoInitGit': True})
         lab['workspaceId'] = answer['id']

@@ -669,7 +669,7 @@ struct RunnerDetailContent: View {
         }
         .formStyle(.grouped)
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
-        .navigationTitle(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow?.runnerID))
+        .navigationTitle(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow.map { _ in runner.id }))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -722,7 +722,7 @@ struct RunnerDetailContent: View {
             HStack(spacing: 14) {
                 RunnerMachineTile(presence: RunnerPageFormat.presence(runner, now: now))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow?.runnerID))
+                    Text(RunnerPageFormat.displayName(runner, managedRunnerID: managedRow.map { _ in runner.id }))
                         .font(.title3.weight(.bold))
                         .lineLimit(2)
                     if let managed = managedRow {

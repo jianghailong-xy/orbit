@@ -159,7 +159,12 @@ test('with Automatic on, the coordinator is told it judges task completion, and 
     // A failed landing of a DONE task is the coordinator's to rerun or send back (J-T1b), and
     // task_start is named as the door that does NOT do it.
     assert.match(form, /task_start does not queue the landing again/);
-    assert.match(form, /queue it once more with integration_retry and a reason; a problem in the delivery itself is sent back for rework with task_reopen/);
+    assert.match(form, /queue it once more with integration_retry and a reason\. /);
+    assert.match(form, /A problem in the delivery itself is sent back for rework with task_reopen/);
+    // A timeout is not a reason a rerun comes out differently: as the item's own words say, it is
+    // rerun only with a named reason the next run will be shorter, and otherwise put to the owner.
+    assert.doesNotMatch(form, /the check timed out, the integration machinery failed/);
+    assert.match(form, /A check that timed out takes about as long again and stops at the same limit: rerun it only when you can name why the next run will be shorter, and otherwise ask the account owner with ask_owner \(raise the check’s time limit, change the merge-check command, or file a fix task for the slow part\)/);
     assert.match(form, /use task_create and attach it to the open item with fixesOpenItemId/);
     assert.match(form, /cancel it, then task_create with supersedesTaskId/);
     assert.match(form, /Whether such a landing goes ahead is yours to judge, not a question for the account owner/);

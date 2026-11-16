@@ -135,11 +135,11 @@ other XFS StorageClass keeps the default (`disabled`).
 On a freshly bound PVC and before it holds data:
 
 ```sh
-xfs_info /var/lib/orbit | grep -E 'reflink|rmapbt'
+xfs_info /home/orbit | grep -E 'reflink|rmapbt'
 # reflink=1
 
-cp --reflink=always /var/lib/orbit/.probe /var/lib/orbit/.probe.clone
-stat -c '%b' /var/lib/orbit/.probe /var/lib/orbit/.probe.clone   # same blocks
+cp --reflink=always /home/orbit/.probe /home/orbit/.probe.clone
+stat -c '%b' /home/orbit/.probe /home/orbit/.probe.clone   # same blocks
 ```
 
 Then a managed runner's start log must say

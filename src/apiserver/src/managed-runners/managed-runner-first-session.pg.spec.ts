@@ -284,7 +284,7 @@ test('a new account queues its first session while its managed runner waits for 
     const made = await call(server, 'POST', '/api/workspaces', fresh.token,
       { name: 'Project', runnerId: waiting.runnerId, newFolder: 'project' });
     assert.equal(made.status, 201, made.text);
-    assert.equal(made.json.workDir, '/var/lib/orbit/home/orbit-repos/project');
+    assert.equal(made.json.workDir, '/home/orbit/orbit-repos/project');
     type Listed = { id: string; lastProvider: string; lastEngine: string; providerBuiltin: boolean };
     const listed = async () => ((await call(server, 'GET', '/api/workspaces', fresh.token)).json as Listed[])
       .find((w) => toUuid(w.id) === toUuid(made.json.id))!;
@@ -339,7 +339,7 @@ test('a new account queues its first session while its managed runner waits for 
     assert.equal(named.status, 201, named.text);
     assert.deepEqual([named.json.status, named.json.provider, named.json.engine], ['PENDING', slug, 'claude']);
     const newWorkspace = await db.workspace.findUniqueOrThrow({ where: { id: toUuid(named.json.workspaceId) } });
-    assert.equal(newWorkspace.workDir, '/var/lib/orbit/home/orbit-repos/first-session');
+    assert.equal(newWorkspace.workDir, '/home/orbit/orbit-repos/first-session');
     const first = await call(server, 'POST', '/api/sessions', fresh.token, { workspaceId: workspace.id, prompt: 'the second message', title: 'existing workspace, nothing named' });
     assert.equal(first.status, 201, first.text);
     assert.deepEqual([first.json.status, first.json.provider, first.json.engine], ['PENDING', slug, 'claude']);
