@@ -2099,7 +2099,7 @@ final class ConsoleModel {
 
     /// × / Esc: the card (or the failure line) goes; the draft is kept.
     func dismissOptimization() {
-        promptOptimizer.dismiss()
+        promptOptimizer.dismiss(current: composerText)
     }
 
     /// Use, or Edit, then use: the suggestion replaces the draft (attachments stay). Edit, then use
