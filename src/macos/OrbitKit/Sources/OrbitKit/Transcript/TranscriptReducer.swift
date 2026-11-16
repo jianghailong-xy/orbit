@@ -230,6 +230,12 @@ public struct TranscriptReducer: Sendable, Codable {
     /// retaining this small tombstone prevents a delayed NOTIFY from reviving a settled/background
     /// card, or a foreground card stranded by turn/run termination. Also transient and unencoded.
     private var suppressedLiveToolIDs = Set<String>()
+    /// Set before a stream connect with no cursor fills an empty window (every tail page failed):
+    /// the server replays only its capped tail, which can start mid-conversation, and no page says
+    /// where the window's older edge is. The first durable event the replay brings decides it. Left
+    /// unset, `hasMoreOlder` stayed false and the transcript could never be scrolled back past where
+    /// the replay began (web had the same bug, 2026-11-16). Transient and unencoded.
+    private var replaySetsOlderEdge = false
 
     private enum CodingKeys: String, CodingKey { case state, seen, openAssistant, openThinking, idSeq }
 
@@ -305,6 +311,10 @@ public struct TranscriptReducer: Sendable, Codable {
             if ev.seq > state.maxSeq { state.maxSeq = ev.seq }
             // Low-water mark: the `before=` cursor for scroll-up history paging.
             if state.oldestSeq.map({ ev.seq < $0 }) ?? true { state.oldestSeq = ev.seq }
+            if replaySetsOlderEdge {
+                replaySetsOlderEdge = false
+                state.hasMoreOlder = ev.seq > 1   // seqs start at 1; a page before it answers the rest
+            }
         }
         // The runner reports context-window occupancy on `turn_end`; a lightweight event can also
         // refresh the gauge without ending the active turn. Guard on > 0 so an event without usage
@@ -476,7 +486,21 @@ public struct TranscriptReducer: Sendable, Codable {
     /// run status and the context gauge —
     /// because clearing those would blank live UI the re-seed cannot restore. Web's `reseed`
     /// draws the same line: it resets `events`/`seen`/`oldestSeq`/`lastSeq` and nothing else.
+    /// The window is about to be filled by a cursor-less stream replay rather than a page: let its
+    /// first durable event set the older edge (see `replaySetsOlderEdge`).
+    public mutating func expectReplayToSetOlderEdge() {
+        replaySetsOlderEdge = true
+    }
+
+    /// A restored snapshot whose window does not start at the session's first event but says nothing
+    /// older exists was written by the replay path above before it set the edge: read it as having
+    /// older history, which one page fetch settles.
+    public mutating func reopenUnsettledOlderEdge() {
+        if !state.hasMoreOlder, let oldest = state.oldestSeq, oldest > 1 { state.hasMoreOlder = true }
+    }
+
     public mutating func resetForResync() {
+        replaySetsOlderEdge = false
         // Retire any running shell before discarding its card. Otherwise a delayed notification
         // from the spent stream could be cached as an apparent output-before-tool_use after reseed.
         clearLiveToolOutputsAtBoundary()
@@ -500,6 +524,7 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Fold the tail-first initial page (the newest N persisted events) and record whether older
     /// history remains on the server before it — the cold-open half of tail-first pagination.
     public mutating func applyTailPage(_ page: EventPage) {
+        replaySetsOlderEdge = false   // the page says where the edge is
         for ev in page.events { apply(ev) }
         // Page membership itself proves persistence. During a rolling upgrade an older API briefly
         // stored `tool_output` snapshots even though their event kind is live-only; treating those

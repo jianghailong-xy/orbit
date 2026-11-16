@@ -1212,7 +1212,8 @@ final class ConsoleModel {
         // (see EventStream's `#if os(macOS) || os(iOS)` guard). A draft console never starts its
         // stream, so the value there is inert.
         self.stream = URLSessionEventStream(baseURL: baseURL, token: { tokenStore.token(for: baseURL) })
-        if let reducer {
+        if var reducer {
+            reducer.reopenUnsettledOlderEdge()
             self.reducer = reducer
             self.state = reducer.state   // render the persisted transcript instantly, before SSE connects
         }
@@ -1519,6 +1520,9 @@ final class ConsoleModel {
             }
             catchUpPending = false
             catchUpAfterFailure = false
+            // No page seeded the window (every tail attempt failed): the connect below is cursor-less
+            // and its capped replay can start mid-conversation, so its first event sets the older edge.
+            if reducer.state.maxSeq == 0 { reducer.expectReplayToSetOlderEdge() }
             let outcome = await withTaskGroup(of: StreamOutcome.self) { group in
                 // The live read, on the main actor (folds into the shared reducer). Ends on a clean
                 // close, throws on a drop, or is cancelled by the kick watcher / view teardown.
