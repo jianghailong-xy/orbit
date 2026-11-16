@@ -219,6 +219,8 @@ func evalScenarios() []*evalScenario {
 	}
 	return []*evalScenario{
 		e1("E1-record-task", "default"),
+		e1("E1-record-task/acceptEdits", "acceptEdits"),
+		e1("E1-record-task/dontAsk", "dontAsk"),
 		e1("E1-record-task/auto", "auto"),
 		e1("E1-record-task/bypassPermissions", "bypassPermissions"),
 		{

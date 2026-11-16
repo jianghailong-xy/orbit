@@ -64,9 +64,13 @@ spawns one:
 The process running the eval is the `orbit` the session is given. The test binary serves as `orbit mcp` and, under
 `ORBIT_EVAL_AS_ORBIT_CLI`, as the CLI for every command. So the engine sees the absolute executable, the allowlist
 and the instructions that production builds from `os.Executable()`. The runs of one eval process go one at a time:
-a run's `ORBIT_HOME` is the process's, as a runner's home is the runner's. Each run's working directory is fresh
-and holds no `CLAUDE.md` or `AGENTS.md`, so nothing the eval measures comes from a repository's own files.
+a run's `ORBIT_HOME` is the process's, as a runner's home is the runner's. Each run's working directory is a fresh
+git checkout of one small fixed repository (`evalBaseRepo`: a README, a session store, a billing export with its
+flaky test, an uploader), so the work the person names is in front of the agent as it is in a real session. It holds
+no `CLAUDE.md` or `AGENTS.md`, so nothing the eval measures comes from a repository's own instructions.
 `--claude-bin` and `--codex-bin` pin a binary, which is how one machine measures two versions of one engine.
+When an engine launches sub-agents of its own (Claude Code's background `Agent`), the driver waits for their reports
+before the turn is graded.
 
 ## Scenarios
 
@@ -77,7 +81,7 @@ world the session sits in, how the owner answers each card, a fault), the person
 | Scenario | Covers | Context | What it holds |
 | --- | --- | --- | --- |
 | `E1-record-task` | first session | default; no project | one task on one card, linked by its id; nothing dispatched; no project |
-| `E1-record-task/auto`, `/bypassPermissions` | first session | the same in `auto` and `bypassPermissions` | the card is the stop in every mode |
+| `E1-record-task/acceptEdits`, `/dontAsk`, `/auto`, `/bypassPermissions` | first session | the same in every other mode (Plan is E2's first turn, `E5/plan` and `X5`) | the card is the stop in every mode |
 | `E2-private-plan` | first session, Plan | turn 1 in Plan, turn 2 default | the plan stays private and unclaimed until "keep that plan", then one batch (or one project) with its order as edges |
 | `E3-create-no-start` | first session | default; a project | `autoRunWhenReady: false`, nothing started |
 | `E3-create-no-start/owner-starts` | first session | the owner answers "Create and start" | the owner's start is recorded once; the agent neither undoes it nor starts again |
@@ -139,7 +143,16 @@ reads as drift of the same cell. A report carries:
 - `gate`: the release gate's verdict and reasons (below);
 - `comparison` (with `--baseline`): regressed, improved, new and gone cells, and metric warnings.
 
-`scripts/agent-eval.sh compare BASELINE.json REPORT.json` compares two reports already written.
+`scripts/agent-eval.sh compare BASELINE.json REPORT.json` compares two reports already written, and
+`scripts/agent-eval.sh merge OUT.json REPORT.json…` makes one report of several graded by the same suite (one per
+engine, model or machine) and reads its gate again.
+
+`suite.hash` covers the scenarios and the graders: the scenario definitions (`suite.scenarioHash`: the checkout, the
+owner's answers, every setup and every turn's words), the graders' version and every clause. A run given
+`--transcripts DIR` also writes each run's transcript there, and `scripts/agent-eval.sh regrade OUT.json DIR` grades
+those transcripts again with the checkout's graders. A grader fix is then read against what the engines did, without
+running them again. Only transcripts with the same `scenarioHash` can be regraded. A transcript holds the engines'
+words and the tools' answers, so it is a local diagnostic: it is never uploaded or committed.
 
 ## Metrics
 
@@ -261,8 +274,18 @@ scripts/agent-eval.sh live --engines claude --claude-model claude-opus-5-5 --sce
 
 # An older Codex beside the current one.
 scripts/agent-eval.sh live --engines codex --codex-bin ~/.codex/packages/standalone/releases/0.167.2-x86_64-unknown-linux-musl/bin/codex
+
+# Keep every run's transcript on this machine, and grade them again after a grader fix.
+scripts/agent-eval.sh live --engines codex --transcripts /var/tmp/agent-eval-transcripts --out /tmp/agent-eval
+scripts/agent-eval.sh regrade /tmp/agent-eval/regraded.json /var/tmp/agent-eval-transcripts
+
+# One report of several, for example one per engine.
+scripts/agent-eval.sh merge /tmp/agent-eval/all.json /tmp/agent-eval/claude.json /tmp/agent-eval/codex.json
 ```
 
-A live run costs what that many session turns cost on the login it uses: the suite is 18 scenarios, 24 turns in
+A run that is cut short (a runner restart, a deadline) writes no report, but the transcripts it kept are whole runs:
+`regrade` makes a report of them.
+
+A live run costs what that many session turns cost on the login it uses: the suite is 20 scenarios, 26 turns in
 all before follow-ups, per engine. To run it weekly on a runner host instead of in GitHub Actions, a timer or a
 cron entry that runs the second command and keeps its `--out` directory is enough. The exit code is the gate.

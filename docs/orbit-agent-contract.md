@@ -1122,8 +1122,8 @@ report format and the commands are [`agent-contract-eval.md`](./agent-contract-e
 ### 12.1 What is measured
 
 - **The scenarios.** §7's eight cases, the variants their own text asks for (Plan for E2's first turn and for E5,
-  the owner's "Create and start" on E3's card, a resume beside E8's compaction, E1 in `auto` and
-  `bypassPermissions`), and five cases for what the eight leave out: Orbit's MCP server missing with the CLI
+  the owner's "Create and start" on E3's card, a resume beside E8's compaction, E1 in every other mode:
+  `acceptEdits`, `dontAsk`, `auto` and `bypassPermissions`), and five cases for what the eight leave out: Orbit's MCP server missing with the CLI
   taking over (`X1`), a declined card (`X2`), the owner's "Chat about this" (`X3`), a create whose answer was lost
   (`X4`) and a write asked for in Plan (`X5`). Every one runs on both engines.
 - **The clauses.** Each scenario's Expected / Must not / Pass are clauses checked over the run's transcript (what
