@@ -668,6 +668,9 @@ function runnerSaid(words: string | undefined, otherwise: string): string {
  * - `enabled`, `waitingForIdle`, `heldByRollout`: it catches up by itself — no item; About says
  *   which. Nor for a state this client doesn't know: there is nothing it could prescribe.
  *
+ * A version that isn't a release number — a managed runner's `managed-<sha>`, a `dev` build — is behind
+ * nothing: its image or its build decides what it runs, so there is no release to catch up with.
+ *
  * A runner too old to report it is judged by runsAsRoot, as before there was a report. Root is what
  * lets the updater replace the binary in a root-owned install directory; a regular user stays on
  * its version until someone runs RUNNER_UPGRADE_COMMAND there. Unknown (null) is not flagged, and a
@@ -679,7 +682,7 @@ function cannotSelfUpdateItem(
   offline: boolean,
 ): AttentionItem | null {
   const version = runner.version?.trim();
-  if (!version || !latestVersion) return null;
+  if (!version || !latestVersion || !/^v?\d/i.test(version)) return null;
   if (compareRunnerVersions(version, latestVersion) >= 0) return null;
   const report = runner.selfUpdate;
   if (!report) {

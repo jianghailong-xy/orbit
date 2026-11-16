@@ -611,6 +611,13 @@ public final class APIClient: @unchecked Sendable {
         return list.guests
     }
 
+    /// The people the owner has invited before, to any session, for the email field: newest first,
+    /// those already in this session left out. Web parity: `getSessionGuestSuggestions`.
+    public func sessionGuestSuggestions(_ sessionID: String) async throws -> [SessionGuestSuggestion] {
+        let list: SessionGuestSuggestionList = try await get("sessions/\(sessionID)/guests/suggestions")
+        return list.people
+    }
+
     /// Invite an Orbit account by the email it signs in with; answers the people as they now stand.
     /// Web parity: `inviteSessionGuest`.
     public func inviteSessionGuest(_ sessionID: String, email: String) async throws -> [SessionGuestPerson] {

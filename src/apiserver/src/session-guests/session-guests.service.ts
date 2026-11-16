@@ -4,7 +4,7 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { Prisma, RunStatus } from '@prisma/client';
-import { uuidToBase62, type GuestSessionSummary, type SessionGuestPerson } from '@orbit/shared';
+import { uuidToBase62, type GuestSessionSummary, type SessionGuestPerson, type SessionGuestSuggestion } from '@orbit/shared';
 import {
   assertValidUpload, COMPOSER_IMAGE_TYPES, GUEST_IMAGE_TOO_LARGE, GUEST_IMAGE_TYPE_REFUSED, imageBytesMatch,
   MAX_COMPOSER_IMAGE_BYTES,
@@ -61,6 +61,9 @@ export const guestAttachmentRefused = (publicId: string) =>
 
 /** Midnight UTC of today: a guest's day (§6 rule 5). */
 const utcMidnight = (now = new Date()) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+/** How many people the email field may suggest; the client shows five, filtered by what is typed. */
+export const GUEST_SUGGESTIONS_LIMIT = 50;
 
 /** A live invitation as the guest door reads it: whose session, and the guest's name for the turn. */
 interface LiveInvitation {
@@ -150,6 +153,32 @@ export class SessionGuestsService {
         opened: r.openedAt !== null,
         emailSentAt: sent.get(r.userId)?.toISOString() ?? null,
       })),
+    };
+  }
+
+  /**
+   * The people the owner has invited before, to any of their sessions, newest invitation first, for the email field
+   * (board docs/mocks/share-links/14-guest-suggestions). People who can already reply in this session are left out;
+   * someone removed or who left is kept. Only the owner's own invitations are read, so nothing here is an email the
+   * owner has not typed themselves; a disabled account, which invite refuses, is left out.
+   */
+  async suggestions(ownerId: string, sessionId: string): Promise<{ people: SessionGuestSuggestion[] }> {
+    await this.ownedSession(ownerId, sessionId, { live: false, write: false });
+    const rows = await this.prisma.$queryRaw<{ name: string; email: string; last_invited_at: Date }[]>`
+      SELECT u."name", u."email", max(g."added_at") AS "last_invited_at"
+      FROM "session_guest" g
+      JOIN "user" u ON u."id" = g."user_id"
+      WHERE g."owner_id" = ${ownerId}::uuid
+        AND u."disabled_at" IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "session_guest" here
+          WHERE here."session_id" = ${sessionId}::uuid AND here."user_id" = g."user_id" AND here."removed_at" IS NULL
+        )
+      GROUP BY u."id", u."name", u."email"
+      ORDER BY "last_invited_at" DESC, u."email" ASC
+      LIMIT ${GUEST_SUGGESTIONS_LIMIT}`;
+    return {
+      people: rows.map((r) => ({ name: r.name, email: r.email, lastInvitedAt: r.last_invited_at.toISOString() })),
     };
   }
 

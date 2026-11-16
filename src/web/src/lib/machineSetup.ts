@@ -160,6 +160,10 @@ export type PickedFolder =
 export const newWorkspaceOf = (folder: PickedFolder): NewWorkspaceRequest =>
   folder.kind === 'new' ? { newFolder: folder.name } : { workDir: folder.path };
 
+/** The workspace a picked folder makes, by its name: a new folder's own, or an existing one's last segment. */
+export const newWorkspaceName = (folder: PickedFolder): string =>
+  folder.kind === 'new' ? folder.name : folderName(folder.path);
+
 const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
 
 /** The login CLIs installed here, in the app's order. */

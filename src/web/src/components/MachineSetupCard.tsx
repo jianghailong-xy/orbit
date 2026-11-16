@@ -1,15 +1,13 @@
 import { CheckCircleFilled, DesktopOutlined } from '@ant-design/icons';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { LoginEngine } from '@orbit/shared';
-import { queuedTurnEvent } from '../lib/acceptedUserTurn';
 import type { CursorRunnerFacts } from '../lib/cursorRuntime';
 import { encodeId } from '../lib/idCodec';
 import {
   answersDirProbe,
   defaultFolderChoice,
   firstEngineOn,
-  folderName,
   folderVerdict,
   installedLogins,
   isConnecting,
@@ -20,20 +18,19 @@ import {
   newFolderPath,
   newFolderPick,
   newFolderVerdict,
+  newWorkspaceName,
   registerDirToProbe,
   updatesItself,
   type FolderChoice,
   type PickedFolder,
 } from '../lib/machineSetup';
 import {
-  HELD_SENDING,
-  HELD_TRY_AGAIN,
-  HELD_WITHDRAW,
   SETUP_CHANGE,
   SETUP_CHECK_AGAIN,
+  SETUP_CREATE,
   SETUP_FOLDER,
-  SETUP_FOOT,
-  SETUP_LEAD,
+  SETUP_FOOT_CREATE,
+  SETUP_LEAD_CREATE,
   SETUP_NEW_FOLDER,
   SETUP_NEW_FOLDER_DONE,
   SETUP_NEW_FOLDER_INVALID,
@@ -45,17 +42,16 @@ import {
   SETUP_REGISTER_DIR,
   SETUP_SIGN_IN_HELP,
   SETUP_USE_FOLDER,
-  heldFailed,
-  heldWaiting,
   setupChecking,
   setupConnecting,
+  setupCreateFailed,
   setupFolderHelp,
   setupNeedsUpdate,
   setupNoAnswer,
   setupNotInstalled,
   setupOffline,
   setupOtherFolder,
-  setupReady,
+  setupReadyCreate,
   setupSignIn,
   setupSignedIn,
   setupTitle,
@@ -64,16 +60,14 @@ import {
 } from '../lib/machineSetupCopy';
 import type { ProviderChoice } from '../lib/sessionProviderChoices';
 import { useDirProbe } from '../lib/useDirProbe';
-import type { HeldMessage } from '../lib/useMachineSetup';
 import { webShowsEngine } from '../lib/runnerEngines';
 import { isLoginProvider } from '../lib/workspaceDefaults';
 import { ENGINE_NAME, probeReportsSignedIn, RunnerSignIn } from './RunnerSignIn';
 import type { Runner } from './TasksSidePanel';
-import { QueuedUserTurn } from './Transcript';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { Radio, RadioGroup } from './ui/Radio';
-import { WelcomeExamples, WelcomeHead } from './WelcomeCard';
+import { WelcomeHead } from './WelcomeCard';
 import './MachineSetupCard.css';
 
 const TYPED_PATH_SETTLE_MS = 400;
@@ -285,10 +279,11 @@ function FolderOptions({
 }
 
 /**
- * A machine with no workspace, on its new session page, where the engine hero stands for a machine
- * that has one. It asks the two things only the owner can answer: the folder sessions may read and
- * change, and the coding CLI they run on (board rules 1–5). The folder and the engine belong to the
- * page, which sends with them: this card only shows them and takes the answers.
+ * A machine with no workspace, on its new session page, which it fills alone: no session list beside it
+ * and no composer under it (owner 2026-11-16). It asks the two things only the owner can answer: the
+ * folder sessions may read and change, and the coding CLI they run on (board rules 1–5), and once both
+ * are answered its button makes the workspace. The folder and the engine belong to the page, which
+ * makes the workspace with them: this card only shows them and takes the answers.
  */
 export function MachineSetupCard({
   runner,
@@ -300,6 +295,9 @@ export function MachineSetupCard({
   onFolder,
   onEngine,
   onUseApiKey,
+  onCreate,
+  creating,
+  createError,
   welcome,
 }: {
   runner: Runner;
@@ -309,15 +307,19 @@ export function MachineSetupCard({
   engine: string;
   credential: SetupCredential;
   folder: PickedFolder | null;
-  /** Both steps are done and the machine is here: the next send makes the workspace. */
+  /** Both steps are done and the machine is here: Create workspace makes it. */
   ready: boolean;
   onFolder: (folder: PickedFolder | null) => void;
   /** Run on this engine's own sign-in instead, which is also how a key is left again. */
   onEngine: (engine: LoginEngine) => void;
   onUseApiKey: () => void;
-  /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it, and offers
-   *  first messages to try, which fill the page's composer. */
-  welcome?: { composerText: string; onExample: (text: string) => void };
+  onCreate: () => void;
+  /** The workspace is being made: the button waits. */
+  creating: boolean;
+  /** Why the last Create workspace was refused, said on the card until the next try. */
+  createError: string | null;
+  /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it. */
+  welcome?: boolean;
 }) {
   const machine = machineName(runner);
   const offline = runner.online !== true;
@@ -350,7 +352,7 @@ export function MachineSetupCard({
           </span>
           <div>
             <div className="msc-title">{setupTitle(machine)}</div>
-            <div className="msc-sub">{SETUP_LEAD}</div>
+            <div className="msc-sub">{SETUP_LEAD_CREATE}</div>
           </div>
         </div>
       )}
@@ -433,12 +435,16 @@ export function MachineSetupCard({
         </div>
       </div>
 
-      {welcome && <WelcomeExamples step={3} picked={welcome.composerText} onPick={welcome.onExample} />}
-
       <div className={`msc-foot${ready ? ' ready' : ''}`}>
         {ready && folder
-          ? setupReady(folder.kind === 'new' ? folder.name : folderName(folder.path), folder.path)
-          : SETUP_FOOT}
+          ? setupReadyCreate(newWorkspaceName(folder), folder.path)
+          : SETUP_FOOT_CREATE}
+      </div>
+      {createError && <div className="msc-create-error">{setupCreateFailed(createError)}</div>}
+      <div className="msc-create">
+        <Button variant="primary" disabled={!ready} loading={creating} onClick={onCreate}>
+          {SETUP_CREATE}
+        </Button>
       </div>
     </div>
   );
@@ -465,62 +471,5 @@ export function RevealedOnArrival({ className, children }: { className?: string;
     <div ref={arrived} className={className ? `msc-revealed ${className}` : 'msc-revealed'}>
       {children}
     </div>
-  );
-}
-
-/**
- * The first message, waiting under the card for both steps: the bubble it will be, with what it is
- * waiting for beneath it and the way to take it back (board rule 6). It goes by itself; only a refusal
- * stops it, and then it stays here, saying why, until it is tried again or taken back.
- */
-export function HeldFirstMessage({
-  held,
-  machine,
-  sending,
-  onWithdraw,
-  onRetry,
-}: {
-  held: HeldMessage;
-  machine: string;
-  sending: boolean;
-  onWithdraw: () => void;
-  onRetry: () => void;
-}) {
-  const event = useMemo(
-    () =>
-      queuedTurnEvent({
-        turnId: 'held-first-message',
-        content: held.content,
-        shell: held.shell,
-        attachments: held.attachments?.map(({ id, mime }) => ({ id, mimeType: mime })),
-      }),
-    [held],
-  );
-  return (
-    <RevealedOnArrival className="msc-held">
-      <QueuedUserTurn event={event} queued={null} />
-      <div className="msc-held-state">
-        {sending ? (
-          HELD_SENDING
-        ) : (
-          <>
-            {held.error ? (
-              <>
-                <span className="msc-held-error">{heldFailed(held.error)}</span> ·{' '}
-                <button className="msc-change" type="button" onClick={onRetry}>
-                  {HELD_TRY_AGAIN}
-                </button>
-              </>
-            ) : (
-              heldWaiting(machine)
-            )}{' '}
-            ·{' '}
-            <button className="msc-change" type="button" onClick={onWithdraw}>
-              {HELD_WITHDRAW}
-            </button>
-          </>
-        )}
-      </div>
-    </RevealedOnArrival>
   );
 }

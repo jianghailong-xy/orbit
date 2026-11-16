@@ -26,7 +26,7 @@ interface InviteGuestBody {
 
 /**
  * The owner's People who can reply (docs/session-guests-design.md §3, §7). Inviting lets someone else drive an agent
- * on the owner's machine with the owner's accounts, so all three are the owner channel: no access token reaches them
+ * on the owner's machine with the owner's accounts, so all four are the owner channel: no access token reaches them
  * (auth/pat-owner-channel-routes.ts).
  */
 @UseGuards(JwtAuthGuard)
@@ -38,6 +38,12 @@ export class SessionGuestsController {
   @Get()
   list(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.guests.list(user.userId, id);
+  }
+
+  @PatForbidden('OWNER_INTERACTIVE')
+  @Get('suggestions')
+  suggestions(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.guests.suggestions(user.userId, id);
   }
 
   @PatForbidden('OWNER_INTERACTIVE')
