@@ -39,6 +39,7 @@ import {
 } from '@ant-design/icons';
 import { MANAGED_RUNNER_COPY, type ManagedRunnerRow } from '@orbit/shared';
 import { api } from '../../api';
+import { machineName } from '../../lib/machineSetup';
 import { managedRowOf, useManagedRunner } from '../../lib/managedRunner';
 import { Spinner } from '../ui/Spinner';
 import { publishedRunnerVersionQuery, runnersQuery, workspacesQuery } from '../../lib/queries';
@@ -105,9 +106,6 @@ export function byRecentUse<T extends { lastActiveAt?: string | null }>(workspac
     .sort((a, b) => at(b.w) - at(a.w) || a.index - b.index)
     .map(({ w }) => w);
 }
-
-const runnerName = (runner: Pick<Runner, 'name' | 'displayName'>): string =>
-  runner.displayName?.trim() || runner.name;
 
 /**
  * The Settings window (owner's choice A1): Settings takes over the whole window, the app's own sidebar
@@ -230,6 +228,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
       workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),
       nowMs,
       latestVersion,
+      managed: !!managedRowFor(runner),
     });
     return items.length > 0 ? 'attention' : 'online';
   };
@@ -239,7 +238,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
 
   const machineOf = (workspace: SettingsWorkspace): string | null => {
     const runner = runners.find((r) => r.id === workspace.runnerId) ?? workspace.runner;
-    return runner ? runner.displayName?.trim() || runner.name || null : null;
+    return runner ? machineName(runner, managed?.status.runnerId) || null : null;
   };
 
   // New workspace starts by picking its machine; with no machine at all, registering one comes first.
@@ -257,6 +256,7 @@ function SettingsNav({ query, onQuery }: { query: string; onQuery: (query: strin
         onQuery={onQuery}
         groups={searchSettings(query, {
           runners,
+          managedRunnerId: managed?.status.runnerId,
           keys: providers.data ?? [],
           workspaces: workspaces.map((workspace) => ({ ...workspace, machine: machineOf(workspace) })),
         })}
@@ -515,7 +515,8 @@ function MachineRow({
 }) {
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: runner.id, disabled: dragDisabled });
-  const name = runnerName(runner);
+  // The managed runner (the one with a managed row) is Orbit Cloud.
+  const name = machineName(runner, managedRow ? runner.id : null);
   // The click a drag ends with is the drag's, not the link's. dnd-kit stops that click at the
   // document, before React's handlers, which leaves the browser to follow the link's href with a
   // full page load to the machine just moved; the window sees it first, and cancels it.

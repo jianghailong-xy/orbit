@@ -9,7 +9,6 @@ import {
   isConnecting,
   isValidNewFolder,
   makesNewFolders,
-  machineName,
   newFolderPath,
   newFolderPick,
   newFolderRootOf,
@@ -48,6 +47,7 @@ import type { Runner } from './TasksSidePanel';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { WelcomeHead } from './WelcomeCard';
+import { useMachineName } from '../lib/managedRunner';
 import './MachineSetupCard.css';
 
 const TYPED_PATH_SETTLE_MS = 400;
@@ -128,7 +128,9 @@ export function MachineSetupCard({
   /** A new account's first machine (docs/mocks/new-user-onboarding): the card greets it. */
   welcome?: boolean;
 }) {
-  const machine = machineName(runner);
+  // Orbit Cloud for the account's managed runner (machineName).
+  const machineNameOf = useMachineName();
+  const machine = machineNameOf(runner);
   const managedState = managedSetupState(runner.id, managed?.status);
   const offline = !managedState && runner.online !== true;
   const probes = answersDirProbe(runner);

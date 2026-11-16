@@ -77,6 +77,7 @@ import { Card } from './ui/Card';
 import { Menu } from './ui/Menu';
 import { Radio, RadioGroup } from './ui/Radio';
 import { Switch } from './ui/Switch';
+import { useManagedRunnerId } from '../lib/managedRunner';
 
 /**
  * Wiki settings (criterion 8, mocks 19–20): which review mode the space runs in, whether Automatic
@@ -391,8 +392,9 @@ function MaintenanceOn({
   onTurnOff: () => void;
 }) {
   const workspaces = useQuery(workspacesQuery());
+  const managedRunnerId = useManagedRunnerId();
   const workspace = (workspaces.data ?? []).find((row) => row.id === maintenance.workspaceId);
-  const where = workspace ? wikiWorkspaceLabel(workspace) : (maintenance.workspaceId ?? '—');
+  const where = workspace ? wikiWorkspaceLabel(workspace, managedRunnerId) : (maintenance.workspaceId ?? '—');
   return (
     <>
       <MaintenanceRepo space={space} onChange={onEdit} />

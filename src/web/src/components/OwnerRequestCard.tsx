@@ -59,6 +59,7 @@ import { Textarea } from './ui/Textarea';
 import { WikiCreateDialog, sameId, useWikiWorkspaceChoices } from './WikiSetUpDialog';
 import { ScheduleWaitingCard, isScheduleWaitingKind } from './ScheduleWaitingCard';
 import './OwnerRequest.css';
+import { useMachineName } from '../lib/managedRunner';
 
 /**
  * What a session asked the owner to do, as a card in the conversation that asked and in the
@@ -85,7 +86,8 @@ const PRIMARY: Readonly<Record<AgentRequestKind, string>> = {
 function useRunnerName(runnerId: string | undefined): string {
   const runners = useQuery({ ...runnersQuery(), enabled: Boolean(runnerId) });
   const runner = runners.data?.find((row) => runnerId && sameResourceId(row.id, runnerId));
-  return runner?.displayName ?? runner?.name ?? 'this runner';
+  const machineNameOf = useMachineName();
+  return (runner ? machineNameOf(runner) : '') || 'this runner';
 }
 
 /** The tasks a request holds up, linked by title. A task that cannot be read keeps a link with no name. */

@@ -337,7 +337,7 @@ export function SessionOutputs({
           ))}
       </div>
       {recovery && recoveryOperating && <MergeOperationLine action={detail.mergeRecoveryAction}
-        target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner} />}
+        target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner && { ...detail.assignedRunner, id: detail.assignedRunnerId ?? undefined }} />}
       {recovery && !recoveryOperating && !recoveryFastForward && <MergeRepairStrip recovery={recovery}
         branch={detail.branch}
         message={detail.mergeError}
