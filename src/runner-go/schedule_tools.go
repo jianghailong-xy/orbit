@@ -96,7 +96,7 @@ func scheduleToolDescriptors(obj func(map[string]interface{}, ...string) map[str
 	return []map[string]interface{}{
 		{
 			"name": "schedule_create",
-			"description": "Propose a NEW scheduled task: work Orbit runs by itself at each slot, in a new session of this " +
+			"description": "Propose a scheduled task, a new one: work Orbit runs by itself at each slot, in a new session of this " +
 				"session's workspace, on its engine, until it is paused, ended or deleted. To change a schedule that " +
 				"already exists (\"make it weekly instead\", \"move it to 09:00\", \"change the one we have\"), call " +
 				"schedule_update on it instead, never schedule_create: find its scheduleId with schedule_list or " +
