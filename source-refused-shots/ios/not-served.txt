@@ -1,0 +1,14 @@
+  22 NOT SERVED /api/wiki/trash
+  13 NOT SERVED /api/guest-sessions
+  11 NOT SERVED /api/schedules
+  11 NOT SERVED /api/owner-requests?state=open
+  11 NOT SERVED /api/auth/capabilities
+   4 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S6
+   4 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S5
+   4 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S4
+   4 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S3
+   4 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S1
+   3 NOT SERVED /api/tasks/evidence-decisions/pending?decidingSessionId=S2
+   1 NOT SERVED /api/terminals
+   1 NOT SERVED /api/share-links?kind=SESSION,TASK,PROJECT,WIKI
+   1 NOT SERVED /api/access-tokens

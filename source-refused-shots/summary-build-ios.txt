@@ -1,0 +1,6 @@
+Test Case '-[GithubProbeUITests.GithubShotTests testIPhoneGithubStates]' started.
+Test Case '-[GithubProbeUITests.GithubShotTests testIPhoneGithubStates]' passed (437.123 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 437.123 (437.130) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 437.123 (437.133) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 437.123 (437.165) seconds
+** TEST SUCCEEDED **
