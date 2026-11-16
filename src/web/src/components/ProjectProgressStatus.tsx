@@ -2356,12 +2356,26 @@ export function coordinatorRowPresses(reading: CoordinatorReading): CoordinatorR
   }
 }
 
-/** The line under the coordinator row's presses. */
-export function coordinatorRowNote(row: ProjectOpenItemRow, reading: CoordinatorReading): string | null {
+/** What Ask again does, with the project's own window when the project document says it: "It goes
+ *  back to the coordinator with a fresh 2h clock." (board ②). */
+export function askAgainFreshClock(escalationSeconds: number): string {
+  return `It goes back to the coordinator with a fresh ${formatSpan(escalationSeconds * 1000)} clock.`;
+}
+
+/** The line under the coordinator row's presses. `escalationSeconds` is the project's window
+ *  (`exceptionEscalationSeconds` on the project document); without it, the sentence the door has
+ *  always worn. */
+export function coordinatorRowNote(
+  row: ProjectOpenItemRow,
+  reading: CoordinatorReading,
+  escalationSeconds?: number | null,
+): string | null {
   switch (reading.cause) {
     case 'ESCALATED':
     case 'HANDED_OVER':
-      return actionConsequence(row, 'ASK_COORDINATOR_AGAIN');
+      return escalationSeconds != null && escalationSeconds > 0
+        ? askAgainFreshClock(escalationSeconds)
+        : actionConsequence(row, 'ASK_COORDINATOR_AGAIN');
     case 'RUNNER_DOWN':
       return null;
     default:
@@ -2615,6 +2629,8 @@ export function WhoFixesItCard({
   // the coordinator conversation read it under the same key): read from the cache, never fetched.
   const project = useQuery({ ...projectDetailsQuery(projectId), enabled: false });
   const name = project.data?.title ?? null;
+  const escalationSeconds = (project.data as { exceptionEscalationSeconds?: number } | undefined)
+    ?.exceptionEscalationSeconds ?? null;
   const statusData = askable ? null : (status.data ?? null);
   const workspaceId = statusData?.coordination.workspaceId ?? null;
   const workspace = live && workspaceId
@@ -2625,7 +2641,7 @@ export function WhoFixesItCard({
   const heading = whoFixesHeading(reading.cause);
   const actions = cardActions(row, currentPromotionId);
   const presses = coordinatorRowPresses(reading);
-  const note = coordinatorRowNote(row, reading);
+  const note = coordinatorRowNote(row, reading, escalationSeconds);
   const landingHref = actions.includes('OPEN_LANDING') ? actionHref(row, 'OPEN_LANDING') : null;
   const fixMyself = actions.includes('OPEN_TASK_SESSION');
   // The owner's other ways onto the work the server listed (a failed task's Retry, say): drawn in the
@@ -2726,7 +2742,7 @@ export function WhoFixesItCard({
             ))}
           </p>
         ) : null}
-        <div className="project-open-item-who">
+        <div className="project-open-item-whofixes">
           <div className="project-open-item-who-label">{WHO_FIXES_IT}</div>
           {youLead(reading) ? [youRow, coordinatorRow] : [coordinatorRow, youRow]}
         </div>
