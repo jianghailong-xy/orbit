@@ -274,6 +274,11 @@ export class SharedController {
     return this.viewerStreams.stream(
       target.sessionId,
       { kind: 'PUBLIC', toolOutput: target.toolOutput },
+      {
+        // The link turned off or changed, or the session gone from the Trash's side; not one guest's removal.
+        named: (r) => ('linkId' in r ? r.linkId === target.linkId : r.sessionId === target.sessionId && r.guestId === undefined),
+        check: () => this.links.streamAccess(target.token, target.sessionId, target.conversation),
+      },
       { sinceSeq: query.sinceSeq, maxPayload: parseMaxPayload(query.maxPayload) },
     );
   }
