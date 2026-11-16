@@ -25741,6 +25741,10 @@ button.project-open-item-action:disabled {
   gap: 8px;
   margin: 7px 0 5px;
 }
+/* A check stopped at its time limit: the run time against the limit, under the You row's presses. */
+.project-open-item-time-limit {
+  margin-top: 10px;
+}
 .project-open-item-who-presses .project-open-item-error {
   flex-basis: 100%;
 }

@@ -45,10 +45,12 @@ import { pollWhileInFlight, promotionInFlight, streamPoll } from '../lib/listBud
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
   DEFAULT_MAIN_BRANCH,
+  RUN_MERGE_CHECK_ANCHOR,
   START_PROJECT_TITLE,
   START_ROW_NOT_ASKED,
   START_ROW_OWN,
   mainBranchName,
+  revealRunMergeCheck,
   startMainBranch,
   startPageRow,
   startRequestSummary,
@@ -294,7 +296,22 @@ export const REVIEW_ACTION_LABEL = ACTION_LABEL.REVIEW!;
 export const RETRY_ACTION_LABEL = ACTION_LABEL.RETRY!;
 export const RERUN_CHECK_ACTION_LABEL = 'Re-run the check';
 export const REQUIRED_ACTION_FALLBACK = 'Review what needs to happen next.';
-export const RETRY_REASON_FALLBACK = 'Retry the integration after the failed check.';
+/** The prompt a Re-run or an integration Retry opens before anything is sent: the reason is the
+ *  owner's own, typed here, and nothing else — the door requires one (`RetryIntegrationDto`). */
+export const RETRY_REASON_QUESTION = 'Why will this run come out differently?';
+export const RETRY_REASON_HINT = 'For example: a fix has landed since, or the runner was overloaded.';
+export const RETRY_REASON_BACK = 'Back';
+/** A check the platform stopped at its budget (CHECK_TIMED_OUT): the press in the You row that opens
+ *  where the project's merge check is set, and what it does. */
+export const CHECK_TIME_LIMIT_PRESS = 'Change the check or its time limit…';
+export const CHECK_TIME_LIMIT_CONSEQUENCE = 'Opens the merge check in How it runs.';
+/** The run time against the limit: "The check ran 4h of a 4h limit." An item recorded before the
+ *  limit was (`check.timeoutSeconds` absent) says only how long it ran. */
+export function checkRanAgainstLimit(durationMs: number, timeoutSeconds: number | null | undefined): string {
+  return timeoutSeconds != null
+    ? `The check ran ${checkDuration(durationMs)} of a ${checkDuration(timeoutSeconds * 1000)} limit.`
+    : `The check ran ${checkDuration(durationMs)} and was stopped at its time limit.`;
+}
 export const PROMOTION_RETRY_CONSEQUENCE = 'The current candidate is checked again with your reason.';
 /** What a RETRY on a `TASK_FAILED` row does — the run-again door, not an integration rerun: the
  *  task starts a new run and the item closes with that fact (`taskFailureDoors`, §4.7). */
@@ -926,19 +943,75 @@ function RetryPress({
   const error = failure.error instanceof Error ? failure.error : null;
   const conflict = error ? readTaskRunConflict(error) : null;
   const label = actionLabel(row, 'RETRY');
-  const reason = row.requiredAction?.trim() || RETRY_REASON_FALLBACK;
+  const fieldId = useId();
+  // An integration rerun carries the owner's reason, asked for here before anything is sent; Back
+  // sends nothing. A failed task's run-again takes no reason, so it is pressed straight away.
+  const [asking, setAsking] = useState(false);
+  const [reason, setReason] = useState('');
+  const trimmed = reason.trim();
+  const close = () => {
+    if (integration.isPending) return;
+    setReason('');
+    setAsking(false);
+  };
   return (
     <>
       <PressButton
         label={label}
         tier={tier}
         pending={runAgain ? runTask.isPending : integration.isPending}
-        onClick={() =>
-          runAgain
-            ? runTask.mutate({ triggerId: newRunRequestToken() })
-            : integration.mutate({ reason })
-        }
+        onClick={() => {
+          if (runAgain) {
+            runTask.mutate({ triggerId: newRunRequestToken() });
+            return;
+          }
+          integration.reset();
+          setAsking(true);
+        }}
       />
+      {runAgain ? null : (
+        <Dialog
+          className="project-open-item-dialog"
+          open={asking}
+          title={label}
+          onClose={close}
+          footer={
+            <>
+              <Button onClick={close}>{RETRY_REASON_BACK}</Button>
+              {/* Empty is not a press: the door requires the reason, and the handler holds the same
+                  line, because a disabled button is not a rule about what is sent. */}
+              <Button
+                variant="primary"
+                disabled={trimmed === ''}
+                loading={integration.isPending}
+                onClick={() => {
+                  if (trimmed === '') return;
+                  integration.mutate({ reason: trimmed }, {
+                    onSuccess: () => {
+                      setReason('');
+                      setAsking(false);
+                    },
+                  });
+                }}
+              >
+                {label}
+              </Button>
+            </>
+          }
+        >
+          <label className="project-open-item-reason-label" htmlFor={fieldId}>
+            {RETRY_REASON_QUESTION}
+          </label>
+          <Textarea
+            id={fieldId}
+            value={reason}
+            maxLength={2000}
+            autoSize={{ minRows: 2, maxRows: 8 }}
+            onChange={(event) => setReason(event.target.value)}
+          />
+          <p className="project-open-item-consequence">{RETRY_REASON_HINT}</p>
+        </Dialog>
+      )}
       {conflict?.sessionId ? (
         <TaskRunHandoffNotice conflict={conflict} className="project-open-item-error" />
       ) : error ? (
@@ -2562,6 +2635,36 @@ function CoordinatorRepairPress({
   }
 }
 
+/**
+ * The You row's answer to a check stopped at its time limit: the run time against the limit, and a
+ * quiet press onto the project's merge-check setting in How it runs — brought into view where the
+ * project page is drawn, otherwise the project page is opened at it.
+ */
+function CheckTimeLimitRow({
+  projectId,
+  check,
+}: {
+  projectId: string;
+  check: NonNullable<OpenItemFacts['check']>;
+}): JSX.Element {
+  const navigate = useNavigate();
+  return (
+    <div className="project-open-item-time-limit" data-check-timed-out="">
+      <p className="project-open-item-who-status">{checkRanAgainstLimit(check.durationMs, check.timeoutSeconds)}</p>
+      <div className="project-open-item-actions project-open-item-who-presses">
+        <PressButton
+          label={CHECK_TIME_LIMIT_PRESS}
+          tier="link"
+          onClick={() => {
+            if (!revealRunMergeCheck()) navigate(`/projects/${encodeId(projectId)}#${RUN_MERGE_CHECK_ANCHOR}`);
+          }}
+        />
+      </div>
+      <p className="project-open-item-consequence">{CHECK_TIME_LIMIT_CONSEQUENCE}</p>
+    </div>
+  );
+}
+
 /** Details, folded (board ② 4): the facts, how long the coordinator had it, and the landing. */
 function WhoFixesDetails({
   row,
@@ -2681,7 +2784,10 @@ export function WhoFixesItCard({
       </div>
     </div>
   );
-  const youRow = fixMyself || youDoors.length > 0 ? (
+  // A check the platform stopped at its budget (CHECK_TIMED_OUT): rerunning it as it is times out
+  // again, so the You row says how long it ran against the limit and opens where the check is set.
+  const timedOut = row.facts?.check?.timedOut ? row.facts.check : null;
+  const youRow = fixMyself || youDoors.length > 0 || timedOut ? (
     <div className="project-open-item-who-row" data-who="you" key="you">
       <span className="project-open-item-who-name">{WHO_FIXES_YOU}</span>
       <div className="project-open-item-who-body">
@@ -2711,6 +2817,7 @@ export function WhoFixesItCard({
             {actionConsequence(row, action)}
           </p>
         ))}
+        {timedOut ? <CheckTimeLimitRow projectId={projectId} check={timedOut} /> : null}
       </div>
     </div>
   ) : null;

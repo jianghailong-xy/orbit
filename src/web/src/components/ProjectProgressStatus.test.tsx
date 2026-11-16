@@ -1515,11 +1515,25 @@ describe('the exception cards’ presses, through their doors', () => {
   it('retries the landing of a failed integration through the owner integration door with a reason', async () => {
     await press({ needsYou: [], withCoordinator: [CHECK_FAILED] }, 'Retry');
 
+    // The press alone asks for the reason: nothing is sent while the question stands.
+    expect(apiMock.mock.calls.filter(([path]) => String(path).endsWith('/integration/retry')))
+      .toEqual([]);
+    const field = document.body.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')!;
+    expect(field.value).toBe('');
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(field, 'The flaky fixture was fixed on main.');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const confirm = await buttonAppears('Retry', 2);
+    await act(async () => confirm!.click());
+    await settle();
+
     // An integration row is unchanged: its task is the one that failed to LAND, and the door that
-    // queues another landing is the integration retry, carrying the required reason.
+    // queues another landing is the integration retry, carrying the reason the owner typed.
     expect(apiMock).toHaveBeenCalledWith(
       `/projects/${PROJECT_ID}/tasks/${CHECK_FAILED.taskId}/integration/retry`,
-      { method: 'POST', body: { reason: expect.any(String) } },
+      { method: 'POST', body: { reason: 'The flaky fixture was fixed on main.' } },
     );
   });
 

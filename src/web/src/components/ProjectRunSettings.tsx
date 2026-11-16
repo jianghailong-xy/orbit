@@ -22,6 +22,7 @@ import {
   RUN_MAIN_BRANCH,
   RUN_MAIN_BRANCH_HINT,
   RUN_MERGE_CHECK,
+  RUN_MERGE_CHECK_ANCHOR,
   RUN_MERGE_CHECK_PLACEHOLDER,
   RUN_NOT_PAUSED,
   RUN_NOT_RESUMED,
@@ -56,6 +57,7 @@ import {
   runPauseHint,
   runPausedSince,
   revealRunDelivery,
+  revealRunMergeCheck,
   runTasksAtATime,
   shortBranch,
 } from '../lib/projectStart';
@@ -325,6 +327,8 @@ export function ProjectRunSettings({
   const drawn = view !== null;
   useEffect(() => {
     if (drawn && window.location.hash === `#${RUN_DELIVERY_ANCHOR}`) revealRunDelivery();
+    // Arrived from a timed-out check's "Change the check or its time limit…": the Merge check row.
+    if (drawn && window.location.hash === `#${RUN_MERGE_CHECK_ANCHOR}`) revealRunMergeCheck();
     // Arrived from the done card's Change: the Delivers row is brought into view.
     if (drawn && window.location.hash === `#${NON_CODE_ANCHOR}`) {
       document.getElementById(NON_CODE_ANCHOR)?.scrollIntoView?.({ block: 'center' });
@@ -609,7 +613,11 @@ export function ProjectRunSettings({
               <div className="project-integration-setting-hint">{RUN_LANDING_OFF_HINT}</div>
             </div>
           ) : (
-          <div className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}>
+          <div
+            className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}
+            id={RUN_MERGE_CHECK_ANCHOR}
+            tabIndex={-1}
+          >
             <div className="project-integration-setting-label">{RUN_MERGE_CHECK}</div>
             <div>
               <Input

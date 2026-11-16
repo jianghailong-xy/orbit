@@ -1062,8 +1062,9 @@ export interface OpenItemFacts {
   /** Whether the target branch is where it was — the first thing a reader asks a conflict. */
   nothingLanded: boolean;
   /** The check that disagreed on the combined tree, whole: its command, verdict, how long it took
-   *  and the tail of what it printed (INTEGRATION_CHECK_FAILED). */
-  check: IntegrationCheckResult | null;
+   *  and the tail of what it printed (INTEGRATION_CHECK_FAILED). A check the platform stopped at
+   *  its budget also carries that budget (`timeoutSeconds`); an item recorded before it did not. */
+  check: (IntegrationCheckResult & { timeoutSeconds?: number }) | null;
   /** Whether the task's own branch passed — the check failed only combined with it. */
   branchUnchanged: boolean;
   /** The code an integration job ended with (INTEGRATION_ERROR). */

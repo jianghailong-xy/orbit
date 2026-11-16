@@ -239,6 +239,15 @@ export function revealRunDelivery(): boolean {
   row.focus({ preventScroll: true });
   return true;
 }
+/** The merge-check row of How it runs, which a timed-out check's card opens (`CheckTimeLimitRow`). */
+export const RUN_MERGE_CHECK_ANCHOR = 'project-run-merge-check';
+export function revealRunMergeCheck(): boolean {
+  const row = document.getElementById(RUN_MERGE_CHECK_ANCHOR);
+  if (!row) return false;
+  row.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  row.focus({ preventScroll: true });
+  return true;
+}
 export function runDeliveryPlatformHint(main: string = DEFAULT_MAIN_BRANCH): string {
   return `The agent doesn’t push to ${main}: Orbit lands its branch once the work is accepted.`;
 }
