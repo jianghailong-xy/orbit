@@ -19,7 +19,7 @@ test('0930 releases only unused default workspaces, and a second pass changes no
   const db = prismaClientFor(URL!);
   t.after(async () => { await db.$disconnect(); await sql.end(); });
   const w = managedRunnerWorld(db);
-  const fixtures = [];
+  const fixtures: Array<{ use: 'unused' | 'session' | 'task' | 'project'; mappingId: string; workspaceId: string }> = [];
   for (const use of ['unused', 'session', 'task', 'project'] as const) {
     const ownerId = await w.makeUser(`migration-${use}`);
     await w.service.ensure(ownerId, `migration-${use}`);

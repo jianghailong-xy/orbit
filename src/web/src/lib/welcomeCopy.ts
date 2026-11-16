@@ -24,3 +24,13 @@ export const WELCOME_MODEL_HELP =
 export const WELCOME_AFTER_STEP_ONE = 'Opens after step 1';
 
 export const WELCOME_FIRST = 'Your first message';
+// The native setup cards' first-message step and composer (they make the workspace with the first message); the web
+// card has no composer. Kept here so the three clients read one set of words.
+export const WELCOME_FIRST_HELP = 'Pick one to try, or write your own below.';
+/** Each one finishes in an empty folder within minutes. Picking one only fills the composer. */
+export const WELCOME_EXAMPLES = [
+  'Build a one-page site that shows today’s weather for a city',
+  'Read github.com/owner/repo and explain how it is put together',
+  'Write a script that renames my photos by the date they were taken',
+] as const;
+export const WELCOME_PLACEHOLDER = 'Describe a task for the agent…';

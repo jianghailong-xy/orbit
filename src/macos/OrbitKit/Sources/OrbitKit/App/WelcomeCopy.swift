@@ -13,19 +13,13 @@ public enum WelcomeCopy {
         "Orbit gives a coding agent a computer and a task, and keeps the conversation and its results here — on the web and on your phone."
 
     public static let WELCOME_COMPUTER = "A computer to work on"
-    public static let WELCOME_COMPUTER_MANAGED = "Orbit is starting one for you. You don’t need to install anything."
     public static let WELCOME_COMPUTER_OWN = "Connect the computer you want the agent to work on. Run this there:"
-    public static let WELCOME_OWN_INSTEAD = "Use my own computer instead"
-    public static let WELCOME_COMPUTER_DONE = "Computer"
-    public static func welcomeComputerReady(machine: String) -> String { "\(machine) is ready" }
     public static let WELCOME_WAITING_CONNECT = "Waiting for it to connect… this page moves on by itself."
     public static let WELCOME_HAVING_TROUBLE = "Having trouble?"
 
     public static let WELCOME_MODEL = "A model to think with"
     public static let WELCOME_MODEL_HELP =
         "Sign in with your Claude or ChatGPT subscription, or use an API key. The sign-in stays on that computer."
-    public static let WELCOME_MODEL_DONE = "Model"
-    public static let WELCOME_AFTER_COMPUTER = "Opens once the computer is up"
     public static let WELCOME_AFTER_STEP_ONE = "Opens after step 1"
 
     public static let WELCOME_FIRST = "Your first message"
@@ -37,6 +31,11 @@ public enum WelcomeCopy {
         "Write a script that renames my photos by the date they were taken",
     ]
 
+    public static let WELCOME_PLACEHOLDER = "Describe a task for the agent…"
+}
+
+/// The welcome card's rules (docs/mocks/new-user-onboarding, board 03), the web's `WelcomeCard.tsx`'s.
+public enum Welcome {
     /// Whether this account has never had a session: the Open list and the Completed list, each read
     /// with `limit=1`, both answered empty. A read that failed (nil) is an account that is not new.
     /// Nothing is stored to remember it (board 03, rule 1).
@@ -48,5 +47,4 @@ public enum WelcomeCopy {
     public static func picked(_ composerText: String, _ example: String) -> Bool {
         composerText.trimmingCharacters(in: .whitespacesAndNewlines) == example
     }
-
 }
