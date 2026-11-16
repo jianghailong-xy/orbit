@@ -216,7 +216,9 @@ test('success: the note turn\'s final text becomes the successor\'s opening, the
   assert.deepEqual(s.completed, [f.outgoing], 'the outgoing coordinator is completed');
   const opening = s.openings.find((o) => o.id === successor)!.prompt;
   assert.ok(opening.includes(`<handoff_note>\n${NOTE}\n</handoff_note>`), 'the note — the final top-level text — is in the opening');
-  assert.match(opening, /project_get and task_list win/);
+  assert.match(opening, /disagrees with the note or with the digest above, the later read wins/);
+  assert.ok(opening.indexOf('</state_digest>') < opening.indexOf('<handoff_note>'), 'the digest is in the opening, before the note');
+  assert.ok(!opening.includes('Read first'), 'a successor does not have to read before its first report');
   assert.ok(opening.indexOf('this is its coordinator session') < opening.indexOf('<handoff_note>'), 'after the standing instructions');
 
   // Both waits moved; the PAUSED one kept its state.

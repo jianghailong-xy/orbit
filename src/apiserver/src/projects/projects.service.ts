@@ -123,6 +123,7 @@ import {
   standardSetVersion,
 } from './project-acceptance';
 import { DEFAULT_FOLD_OPTIONS, foldProjectGraph } from './project-graph-fold';
+import { readStateDigest } from './coordinator-digest';
 import {
   buildCoordinatorInstructions,
   buildCoordinatorOpening,
@@ -4862,6 +4863,11 @@ export class ProjectsService {
     // the coordinator is unavailable until its owner rebinds it, which is a different sentence
     // with a different addressee. Anything that is not one of those two refusals is a fault rather
     // than a state of this project, and is left alone.
+    // A successor opens with the project's state rendered in (docs/coordinator-handoff-v2-design.md
+    // §3), read here, after the outgoing conversation is completed, so it is as of the swap.
+    const openingHandoff = handoff
+      ? { note: handoff.note, digest: await readStateDigest(this.prisma, ownerId, project.id) }
+      : null;
     let session: { id: string };
     try {
       session = await this.sessions.create(
@@ -4874,7 +4880,7 @@ export class ProjectsService {
             project.id,
             project.coordinatorEnabled,
             modelRoutingEnabled(project.owner),
-            handoff?.note,
+            openingHandoff,
           ),
         },
         // The opening is the platform's own words, not the owner's (0493, design §3.5).
