@@ -38,6 +38,7 @@ import sql from 'highlight.js/lib/languages/sql';
 import java from 'highlight.js/lib/languages/java';
 import c from 'highlight.js/lib/languages/c';
 import cpp from 'highlight.js/lib/languages/cpp';
+import { useMachineName } from '../lib/managedRunner';
 
 // Register only the languages this repo (and common config) actually uses; anything else falls
 // back to plain text. Keeps the highlighter to a focused subset rather than all ~37 grammars.
@@ -146,6 +147,8 @@ export function SessionOutputs({
   /** Moves when something outside asks to open this session's diff (a Move result line's View changes). */
   openDiffSignal?: number;
 }) {
+  // The machine the merge runs on, as the app names it (Orbit Cloud for the managed runner).
+  const machineNameOf = useMachineName();
   const message = useToast();
   const mainCheckout = useMainCheckoutHost();
   // The changed file whose diff is shown in the drawer (null = drawer closed). Reset when the
@@ -337,7 +340,10 @@ export function SessionOutputs({
           ))}
       </div>
       {recovery && recoveryOperating && <MergeOperationLine action={detail.mergeRecoveryAction}
-        target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner && { ...detail.assignedRunner, id: detail.assignedRunnerId ?? undefined }} />}
+        target={recovery.targetBranch} requestedAt={detail.mergeRequestedAt} runner={detail.assignedRunner && {
+          ...detail.assignedRunner,
+          displayName: machineNameOf({ ...detail.assignedRunner, id: detail.assignedRunnerId ?? undefined, name: detail.assignedRunner.name ?? undefined }) || null,
+        }} />}
       {recovery && !recoveryOperating && !recoveryFastForward && <MergeRepairStrip recovery={recovery}
         branch={detail.branch}
         message={detail.mergeError}

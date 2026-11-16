@@ -4,7 +4,6 @@ import { mergeRecoveryCommitOrigin, mergeRecoveryConfirmable, mergeRecoveryReady
   type MergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
 import type { MergeRepairSession, SessionDetail } from '../api';
 import { relTime } from './Transcript';
-import { useMachineName } from '../lib/managedRunner';
 
 const ORIGIN_LABEL = { local: 'Local-only', merge: 'Merge commit', session: 'This session' } as const;
 const REPAIR_RUNNING = ['PENDING', 'QUEUED', 'RUNNING'];
@@ -108,13 +107,12 @@ export function MergeOperationLine({ action, target, requestedAt, runner, now = 
   action?: MergeRecoveryAction | null;
   target: string;
   requestedAt?: string | null;
-  runner?: { id?: string; name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
+  runner?: { name?: string | null; displayName?: string | null; lastHeartbeatAt?: string | null } | null;
   now?: number;
 }) {
-  const machineNameOf = useMachineName();
   const what = action === 'preview' ? `Checking ${target} against origin/${target}`
     : action === 'sync-local' ? `Syncing local ${target}` : `Merging into ${target}`;
-  const runnerName = runner ? machineNameOf({ ...runner, name: runner.name ?? undefined }) || undefined : undefined;
+  const runnerName = runner?.displayName || runner?.name;
   const overdue = !!requestedAt && now - Date.parse(requestedAt) > MERGE_OPERATION_OVERDUE_MS;
   const since = [requestedAt && `started ${relTime(requestedAt)}`, runnerName && `on ${runnerName}`].filter(Boolean).join(' ');
   return <div className={`wt-merge-op${overdue ? ' is-overdue' : ''}`} role="status">
