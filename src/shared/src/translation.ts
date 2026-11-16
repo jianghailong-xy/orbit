@@ -16,7 +16,8 @@
  *    cards go exactly as with translation off (no `translation` on any of them).
  *  - `preferences.translationBilingual` ("Show both languages", board 02-bilingual.png): absent is
  *    OFF. On, every translated message ALSO shows the text in the agent's language (what the agent
- *    read or wrote), below a dashed divider (bilingualEnglish, bilingualLineCount). Off, the clients
+ *    read or wrote): a reply block by block, each original under its translation (bilingualPairs),
+ *    and the owner's message whole below a dashed divider (bilingualEnglish). Off, the clients
  *    draw exactly what they drew before it existed. Display only: the server translates the same
  *    either way.
  *  - `PATCH /users/me/preferences` with `{ translationEnabled?, translationLanguage?,
@@ -275,23 +276,193 @@ export interface ApprovalTranslation {
 export const TRANSLATION_FAILED_CODE = 'TRANSLATION_FAILED' as const;
 
 /**
- * "Show both languages" (board 02-bilingual.png, frame 3 option B). An agent reply's original (in the
- * account's agent language, English by default) is drawn in full when it runs to at most
- * BILINGUAL_COLLAPSE_LINES lines; longer, it collapses to a two-line faded preview with
- * "Show <agent language> · N lines" ("Show English · N lines"). A line is counted the same way on every client — a
- * source line wraps every BILINGUAL_LINE_CHARS characters, blank lines do not count — so N is the
- * same number on the web, an iPhone and an Android phone.
+ * "Show both languages" (board 02-bilingual.png, frame 3 option B), for a reply whose blocks do not
+ * pair (bilingualPairs answers null) and so is drawn whole: its original (in the account's agent
+ * language, English by default) is drawn in full when it runs to at most BILINGUAL_COLLAPSE_LINES
+ * lines; longer, it collapses to a two-line faded preview with "Show <agent language> · N lines"
+ * ("Show English · N lines"). An interleaved reply never collapses (03-interleaved.png). A line is
+ * counted the same way on every client — a source line wraps every BILINGUAL_LINE_CHARS characters,
+ * blank lines do not count — so N is the same number on the web, an iPhone and an Android phone.
  */
 export const BILINGUAL_COLLAPSE_LINES = 6;
 export const BILINGUAL_LINE_CHARS = 60;
 
-/** The English drawn under a translated reply: its prose only. A fenced code block is drawn once, in
- *  the translation above it, never again in the English (board mark D). */
+/** The English drawn under the owner's translated message, and under a reply whose blocks do not pair
+ *  (bilingualPairs answers null): its prose only. A fenced code block is drawn once, in the
+ *  translation above it, never again in the English (board mark D). */
 export function bilingualEnglish(text: string): string {
   return text
     .replace(/^ {0,3}(```|~~~)[^\n]*\n[\s\S]*?^ {0,3}\1[^\n]*$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * "Show both languages", interleaved (board docs/mocks/session-translation/03-interleaved.png): an
+ * agent reply is drawn block by block, each paragraph, list item, heading or quote in the owner's
+ * language with its original (the agent's words) right under it, smaller and grey.
+ *
+ * ONE RULE, THREE PORTS. OrbitKit `BilingualPairs.pairs` and Android `Translation.bilingualPairs`
+ * are line for line the same, and all three are walked through `bilingual-pairs.fixture.json`.
+ *
+ *  - Both texts are split into blocks by lines: a fenced code block (``` or ~~~ opening and the same
+ *    fence closing, at most 3 spaces in; an unclosed fence is not one), a heading (`#`…`######`), a
+ *    list item (`-`, `*`, `+`, `1.`, `1)`) with the lines that continue it, a quote (consecutive `>`
+ *    lines), a table (consecutive lines starting with `|`), a thematic break, and otherwise a
+ *    paragraph (consecutive non-blank lines up to a line that starts one of the above).
+ *  - `depth` is how many list items the block sits inside, by indentation.
+ *  - Paragraphs, headings, list items and quotes pair; code, tables, breaks and image-only paragraphs
+ *    do not ('other'): they are drawn once, from the translation, and the original's are dropped.
+ *  - The two sequences of pairable blocks must match in count, kind and depth, or there is no
+ *    pairing (null) and the message is drawn whole, translation over original (board frame 4). A
+ *    reply with nothing to pair is null too.
+ *
+ * Each pair is a block of the translation, in order: `text` is its source with its indentation
+ * removed — an item's without its marker (`marker` keeps "-" or "3."), a heading's whole line, a
+ * quote's without its `>`s — and `original` the matching block of the original in the same form,
+ * except a heading's, which is its words alone. 'other' blocks carry no `original`.
+ */
+export type BilingualBlockKind = 'paragraph' | 'heading' | 'item' | 'quote' | 'other';
+
+export interface BilingualPair {
+  kind: BilingualBlockKind;
+  depth: number;
+  /** An item's marker as written: "-", "*", "+", "1.", "2)". */
+  marker?: string;
+  text: string;
+  original?: string;
+}
+
+interface BilingualBlock {
+  kind: BilingualBlockKind;
+  depth: number;
+  marker?: string;
+  /** What `text` / `original` hold, by the rule above. */
+  body: string;
+  /** A heading's words alone; otherwise the same as body. */
+  words: string;
+}
+
+const FENCE = /^ *(```|~~~)/;
+const HEADING = /^ {0,3}(#{1,6})(?: +|$)(.*)$/;
+const ITEM = /^( *)([-*+]|\d{1,9}[.)])( +|$)(.*)$/;
+const BREAK = /^ {0,3}([-*_])(?: *\1){2,} *$/;
+const QUOTE = /^ {0,3}>/;
+const TABLE = /^ *\|/;
+const IMAGES = /^(?:!\[[^\]]*\]\([^)]*\)\s*)+$/;
+
+function indentOf(line: string): number {
+  return line.length - line.replace(/^ +/, '').length;
+}
+
+function dedent(line: string, n: number): string {
+  const k = Math.min(n, indentOf(line));
+  return line.slice(k);
+}
+
+function startsBlock(line: string): boolean {
+  return FENCE.test(line) || HEADING.test(line) || BREAK.test(line) || ITEM.test(line) || QUOTE.test(line) || TABLE.test(line);
+}
+
+function bilingualBlocks(text: string): BilingualBlock[] {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  const blocks: BilingualBlock[] = [];
+  // The content column of each open list item, innermost last.
+  const items: number[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === '') {
+      i++;
+      continue;
+    }
+    const indent = indentOf(line);
+    while (items.length > 0 && indent < items[items.length - 1]) items.pop();
+    const depth = items.length;
+    const push = (kind: BilingualBlockKind, body: string, words = body, marker?: string) =>
+      blocks.push({ kind, depth, body, words, marker });
+    // A fence opens at most 3 spaces in from the column its block sits at, and closes the same way.
+    const base = depth > 0 ? items[depth - 1] : 0;
+    const fence = indent - base <= 3 ? /^(```|~~~)/.exec(line.trimStart()) : null;
+    if (fence) {
+      let close = i + 1;
+      while (close < lines.length && !(indentOf(lines[close]) - base <= 3 && lines[close].trimStart().startsWith(fence[1]))) close++;
+      if (close < lines.length) {
+        push('other', lines.slice(i, close + 1).map((l) => dedent(l, indent)).join('\n'));
+        i = close + 1;
+        continue;
+      }
+    }
+    const heading = HEADING.exec(line);
+    if (heading) {
+      push('heading', line.trim(), heading[2].replace(/(?:^| +)#+ *$/, '').trim());
+      i++;
+      continue;
+    }
+    if (BREAK.test(line)) {
+      push('other', line.trim());
+      i++;
+      continue;
+    }
+    const item = ITEM.exec(line);
+    if (item) {
+      const spaces = item[3].length;
+      const column = indent + item[2].length + (spaces >= 1 && spaces <= 4 ? spaces : 1);
+      const body = [item[4]];
+      i++;
+      while (i < lines.length && lines[i].trim() !== '' && !startsBlock(lines[i])) {
+        body.push(dedent(lines[i], column));
+        i++;
+      }
+      blocks.push({ kind: 'item', depth, marker: item[2], body: body.join('\n'), words: body.join('\n') });
+      items.push(column);
+      continue;
+    }
+    if (QUOTE.test(line)) {
+      const body: string[] = [];
+      while (i < lines.length && QUOTE.test(lines[i])) {
+        body.push(lines[i].replace(/^ {0,3}> ?/, ''));
+        i++;
+      }
+      push('quote', body.join('\n'));
+      continue;
+    }
+    if (TABLE.test(line)) {
+      const body: string[] = [];
+      while (i < lines.length && TABLE.test(lines[i])) {
+        body.push(dedent(lines[i], indent));
+        i++;
+      }
+      push('other', body.join('\n'));
+      continue;
+    }
+    const body = [dedent(line, indent)];
+    i++;
+    while (i < lines.length && lines[i].trim() !== '' && !startsBlock(lines[i])) {
+      body.push(dedent(lines[i], indent));
+      i++;
+    }
+    const joined = body.join('\n');
+    push(IMAGES.test(joined.trim()) ? 'other' : 'paragraph', joined);
+  }
+  return blocks;
+}
+
+/** The translation's blocks with the original's matched under them, or null when the two texts do not
+ *  split into the same pairable blocks (draw the message whole, as before; board frame 4). */
+export function bilingualPairs(translation: string, original: string): BilingualPair[] | null {
+  const ours = bilingualBlocks(translation);
+  const theirs = bilingualBlocks(original).filter((b) => b.kind !== 'other');
+  const pairable = ours.filter((b) => b.kind !== 'other');
+  if (pairable.length === 0 || pairable.length !== theirs.length) return null;
+  if (pairable.some((b, k) => b.kind !== theirs[k].kind || b.depth !== theirs[k].depth)) return null;
+  let k = 0;
+  return ours.map((b) => {
+    const pair: BilingualPair = { kind: b.kind, depth: b.depth, text: b.body };
+    if (b.marker !== undefined) pair.marker = b.marker;
+    if (b.kind !== 'other') pair.original = theirs[k++].words;
+    return pair;
+  });
 }
 
 /** How many lines `english` runs to, by the rule above. */

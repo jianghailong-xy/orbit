@@ -80,8 +80,64 @@ struct TranslationFootView: View {
     }
 }
 
+/// "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): a reply
+/// drawn pair by pair — each block in the owner's language, its original right under it, a size
+/// smaller and grey, no divider inside a pair and the usual block gap between pairs. An item's
+/// original sits under its own words, indented with them; a heading's under the heading, in the
+/// regular weight. Code, tables and images are drawn once, from the translation. Never collapsed.
+struct InterleavedReplyView: View {
+    let pairs: [BilingualPairs.Pair]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(pairs.enumerated()), id: \.offset) { _, pair in
+                pairView(pair)
+                    .padding(.leading, CGFloat(pair.depth) * 16)
+                    .padding(.top, pair.kind == .heading ? 4 : 0)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("translation.interleaved")
+    }
+
+    @ViewBuilder private func pairView(_ pair: BilingualPairs.Pair) -> some View {
+        switch pair.kind {
+        case .item:
+            // The marker drawn here, as MarkdownView draws a list's, so the original can sit under
+            // the item's words rather than under its bullet.
+            HStack(alignment: .top, spacing: 6) {
+                Text(pair.number.map { "\($0)." } ?? "•").monospacedDigit().foregroundStyle(.secondary)
+                words(pair)
+            }
+        case .quote:
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 1.5).fill(Color.secondary.opacity(0.4)).frame(width: 3)
+                words(pair)
+            }
+        default:
+            words(pair)
+        }
+    }
+
+    private func words(_ pair: BilingualPairs.Pair) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            MarkdownView(source: pair.text)
+            if let original = pair.original {
+                Text(BilingualEnglishView.inline(original))
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("translation.original")
+            }
+        }
+    }
+}
+
 /// "Show both languages" (docs/mocks/session-translation/02-bilingual.png): the English the agent
-/// read or wrote, under a dashed divider, a size smaller and grey. A reply's English over
+/// read or wrote, under a dashed divider, a size smaller and grey — the owner's message, and a reply
+/// whose blocks do not pair (frame 4 of 03-interleaved.png). A reply's English over
 /// `BilingualEnglish.collapseLines` lines starts as a two-line faded preview with "Show English · N
 /// lines", which opens it in place (frame 3); per message and never kept.
 struct BilingualEnglishView: View {

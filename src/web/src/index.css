@@ -8285,6 +8285,39 @@ button.chat-jump-start:hover {
   margin-top: 2px;
   font-size: 12px;
 }
+/* "Show both languages", interleaved (docs/mocks/session-translation/03-interleaved.png): a reply drawn
+   pair by pair, each block in the owner's language with its original right under it — the bilingual
+   style (a size smaller, grey), no divider inside a pair, the usual block gap between pairs. */
+.chat-interleaved-pair + .chat-interleaved-pair {
+  margin-top: 8px;
+}
+.chat-interleaved-pair.is-heading {
+  margin-top: 14px;
+}
+.chat-interleaved-pair:first-child {
+  margin-top: 0;
+}
+.chat-interleaved-pair > .md > ul,
+.chat-interleaved-pair > .md > ol,
+.chat-interleaved-pair > .md > blockquote {
+  margin: 0;
+}
+.chat-interleaved-pair > .md > .md > h1,
+.chat-interleaved-pair > .md > .md > h2,
+.chat-interleaved-pair > .md > .md > h3,
+.chat-interleaved-pair > .md > .md > h4 {
+  margin: 0;
+}
+.chat-bilingual-original {
+  margin-top: 2px;
+  color: var(--text-3);
+}
+.chat-bilingual-original.is-heading {
+  font-weight: 400;
+}
+.chat-bilingual-original.is-heading strong {
+  font-weight: 500;
+}
 /* The composer's "<Language> → English" tag (6A): a quiet pill that opens Settings › Translation. */
 .composer-translation-tag {
   flex: none;
@@ -10523,7 +10556,8 @@ button.chat-jump-start:hover {
 }
 
 /* The English is Markdown (.md sets its own 14px): a size smaller than the words above it. Kept after .md itself, whose rule it narrows. */
-.chat-bilingual .md {
+.chat-bilingual .md,
+.chat-bilingual-original .md {
   font-size: 12.5px;
   line-height: 1.55;
 }

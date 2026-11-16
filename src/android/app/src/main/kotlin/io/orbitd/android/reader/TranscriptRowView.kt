@@ -45,6 +45,7 @@ import io.orbitd.android.directory.ExternalSender
 import io.orbitd.android.translation.LocalShownOriginals
 import io.orbitd.android.translation.BilingualEnglish
 import io.orbitd.android.translation.BilingualShown
+import io.orbitd.android.translation.InterleavedReply
 import io.orbitd.android.management.LocalTranslation
 import io.orbitd.android.translation.ReplyTranslationFoot
 import io.orbitd.android.translation.ShownOriginals
@@ -354,7 +355,10 @@ internal fun TranscriptRowView(row: TranscriptRow, model: FullEvents, live: Tran
             val pendingReply = replyTranslation == null && row.awaitsTranslation
             cards.forEach { if (it === bubble) SessionMessageBubble(it.source, shown, open, words, note?.trim(), revealed = highlighted) else TranscriptCardView(it, open, shown) }
             if (cards.isEmpty() && !attachmentOnly) { if (note == null || words.isNotBlank()) {
-                if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                // Both languages, block by block, when the reply pairs with its translation (03-interleaved.png).
+                val pairs = if (event.type == "assistant") BilingualShown.replyPairs(shown.body(), replyTranslation, bilingual) else null
+                if (pairs != null) InterleavedReply(pairs, open)
+                else if (pendingReply) CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
                     MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
                 } else MarkdownText(words.ifBlank { shown.payload.toString() }, open = open)
                 // The English the agent read or wrote, below its dashed divider; a long reply's collapsed (frame 3).
