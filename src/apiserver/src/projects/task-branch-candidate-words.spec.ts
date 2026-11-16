@@ -101,8 +101,9 @@ const NEXT_STEPS: Record<FailureClass, Record<(typeof HOLDERS)[number], string>>
     OWNER: 'Nothing on this task’s branch reaches develop until this check passes — re-run it or ask the coordinator to fix it.',
   },
   CHECK_TIMED_OUT: {
+    // Changed on 2026-11-16: a timed-out check is the owner's timeout sentence too, not "until this check passes".
     COORDINATOR: 'This task’s branch cannot reach develop until this check finishes — re-run it with a reason or file a fix task.',
-    OWNER: 'Nothing on this task’s branch reaches develop until this check passes — re-run it or ask the coordinator to fix it.',
+    OWNER: 'This task’s branch cannot reach develop until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
   },
   ERROR: {
     COORDINATOR: 'This task’s branch cannot reach develop until this integration is repaired — re-run it or file a fix task.',
@@ -282,7 +283,8 @@ const PROJECT_NEXT_STEPS: Record<FailureClass, Record<(typeof HOLDERS)[number], 
   },
   CHECK_TIMED_OUT: {
     COORDINATOR: 'The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
-    OWNER: 'Nothing on the project branch reaches main until this check passes — re-run it or ask the coordinator to fix it.',
+    // Changed on 2026-11-16: a timed-out check is the owner's timeout sentence too, not "until this check passes".
+    OWNER: 'The project branch cannot reach main until this check finishes — re-run it with a reason or ask the coordinator to fix it.',
   },
   ERROR: {
     COORDINATOR: 'The project branch cannot reach main until this integration is repaired — re-run it or ask the coordinator to fix it.',

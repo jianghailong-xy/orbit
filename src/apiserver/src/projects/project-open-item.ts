@@ -431,12 +431,14 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   const orAsk = (clause: string): string => (ownerCannotAsk ? '' : ` or ${clause}`);
   const orFix = taskBranch && row.assignee !== 'OWNER' ? ' or file a fix task' : orAsk('ask the coordinator to fix it');
 
+  // A check that timed out did not fail on merit, so it falls through to its own sentence below,
+  // the owner's as much as the coordinator's.
   // This is the copy approved in the project effect and is intentionally byte-for-byte stable:
   // the three clients render this field, they do not translate it. Its main is the project's main
   // branch by name, so a project on main reads every sentence as it always did.
   if (row.assignee === 'OWNER' && row.kind === 'INTEGRATION_CHECK_FAILED'
       && (sourceJob === 'CHECK_PROMOTION' || sourceJob === 'LAND_PROMOTION')
-      && failureClass !== 'CONFLICT') {
+      && failureClass !== 'CONFLICT' && failureClass !== 'CHECK_TIMED_OUT') {
     return `Nothing on ${taskBranch ? 'this task’s branch' : 'the project branch'} reaches ${main} until this check passes — re-run it${orAsk('ask the coordinator to fix it')}.`;
   }
 
