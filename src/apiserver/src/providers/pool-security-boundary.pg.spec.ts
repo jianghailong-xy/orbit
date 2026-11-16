@@ -353,14 +353,12 @@ const doorsOver: {
   pools: SharedPoolsService | null;
   balances: DeepSeekBalanceService | null;
   prisma: unknown;
-  usage: ProviderPlanUsageService | null;
 } = {
   providers: null,
   login: null,
   pools: null,
   balances: null,
   prisma: null,
-  usage: null,
 };
 
 @Module({
@@ -379,9 +377,9 @@ const doorsOver: {
     // A DeepSeek key's account balance, read with the stored key — the REAL service, for the same reason.
     { provide: DeepSeekBalanceService, useFactory: () => doorsOver.balances },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
-    // RunnerProvidersController's third dependency since 95884b154f (provider_list --workspace): the same
-    // plan-usage service the services above are built with.
-    { provide: ProviderPlanUsageService, useFactory: () => doorsOver.usage },
+    // RunnerProvidersController's quota cache (95884b154), which only GET /runner/providers?workspace= reads:
+    // the REAL service, over the realtime stub below.
+    ProviderPlanUsageService,
     // The rest of what RunnerApiController is built with. Neither of its two routes reaches any of it: what a runner
     // answers about a Cursor key is kept by ProvidersService, the REAL one above.
     { provide: QueueService, useValue: {} },
@@ -545,7 +543,6 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     db as never, queue as never, realtime as never, {} as never, { issue: async () => 'orchestration-credential' } as never, {} as never,
   );
   doorsOver.providers = providers;
-  doorsOver.usage = usage;
   doorsOver.login = new CodexLoginService(prisma, realtime);
   doorsOver.pools = new SharedPoolsService(prisma, realtime, providers);
   doorsOver.balances = new DeepSeekBalanceService(prisma);

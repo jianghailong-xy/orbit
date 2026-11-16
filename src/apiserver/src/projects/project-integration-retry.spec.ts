@@ -232,6 +232,84 @@ test('a failed landing\'s item tells the coordinator its class, and that running
   assert.doesNotMatch(told, /This is generation/, 'a first generation is not a rerun');
 });
 
+/** A check the platform stopped at a 4h budget after it had run that long, as the relay records it. */
+const STOPPED = {
+  name: 'MERGE_CHECK', command: 'npm run test:all', expectedExitCode: 0, exitCode: null, timedOut: true,
+  durationMs: 14_400_250, timeoutSeconds: 14_400, outputTail: 'ok 812 orders sync\n',
+};
+
+/** What every timed-out item's next step says about a rerun and the owner's question, landing or candidate. */
+function assertTimedOutAdvice(told: string): void {
+  assert.match(told, /Check MERGE_CHECK did not finish: the platform stopped it at its 4h limit after running 4h 0m, so it reached no verdict; the target branch did not move\./);
+  assert.match(told, /It ran: npm run test:all/);
+  assert.match(told, /The end of its output:\nok 812 orders sync/, 'the output tail is kept');
+  assert.doesNotMatch(told, /exited with code/, 'a stopped check has no exit code of its own to report');
+  // A rerun only beside a reason the next run can be shorter.
+  assert.match(told, /takes about as long and stops at the same limit, so rerun it once only when you can name why the next run will be shorter — the machine was under unusual load, the output above shows a one-off hang \(a stuck network call or lock, for example\), or a fix for the slow part has landed since — and give that reason: /);
+  // Otherwise the owner's question, with its options.
+  assert.match(told, /If this check usually takes close to its limit or longer, a rerun will time out again: do not rerun it, ask the account owner with ask_owner instead, offering options such as raising the check’s time limit, changing the merge-check command \(to a faster one, or a subset of it\), or filing a fix task for the slow part, with your recommended option and its reason\./);
+  assert.doesNotMatch(told, /go test|10-minute/, 'no example written for one toolchain');
+  assert.doesNotMatch(told, /the check timed out/, 'a timeout is not listed as a reason a rerun comes out differently');
+}
+
+test('a timed-out landing check\'s item states the limit and the run time, and advises a rerun only with a reason', () => {
+  const told = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-00000000000a',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: ③',
+    projectId: PROJECT,
+    taskId: TASK,
+    payload: { jobKind: 'LAND_TASK', check: { ...STOPPED, name: 'MERGE_CHECK' }, branchUnchanged: true, failureClass: 'CHECK_TIMED_OUT', generation: 1 },
+  });
+  assertTimedOutAdvice(told);
+  assert.match(told, /give that reason: queue the landing once more with integration_retry \(projectId: 34Y7My8sqhKLWtmCQYv1l, taskId: 34Y7Utvsd47A14DjMzIzD, reason: why this time will be different\)/);
+});
+
+test('a timed-out promotion check\'s item states the limit and the run time, and advises a rerun only with a reason', () => {
+  const told = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-00000000000b',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: merging the project branch into main',
+    projectId: PROJECT,
+    taskId: null,
+    promotionId: CANDIDATE,
+    payload: { jobKind: 'CHECK_PROMOTION', check: STOPPED, branchUnchanged: true, failureClass: 'CHECK_TIMED_OUT', generation: 1 },
+  });
+  assertTimedOutAdvice(told);
+  assert.match(told, /give that reason: rerun this candidate’s check once with integration_retry \(projectId: 34Y7My8sqhKLWtmCQYv1l, promotionId: /);
+  assert.doesNotMatch(told, /If the merge-check command or its time limit has to change/, 'the owner’s question is asked once, in the timeout’s own words');
+});
+
+test('a timed-out check\'s item written before the limit was recorded says it does not know the limit', () => {
+  const { timeoutSeconds: _limit, ...unrecorded } = STOPPED;
+  const told = openItemMessage({
+    id: '01a0f5c9-0000-7000-8000-00000000000c',
+    kind: 'INTEGRATION_CHECK_FAILED',
+    title: 'Checks failed on the combined tree: ③',
+    projectId: PROJECT,
+    taskId: TASK,
+    payload: { jobKind: 'LAND_TASK', check: { ...unrecorded, durationMs: 605_000 }, branchUnchanged: true, failureClass: 'CHECK_TIMED_OUT', generation: 1 },
+  });
+  assert.match(told, /the platform stopped it at its time limit \(this item did not record the limit\) after running 10m 5s, so it reached no verdict/);
+  assert.doesNotMatch(told, /exited with code/);
+});
+
+test('a red check\'s item keeps its exit-code wording and the rerun list names no timeout', () => {
+  for (const [jobKind, ids] of [['LAND_TASK', { taskId: TASK }], ['CHECK_PROMOTION', { taskId: null, promotionId: CANDIDATE }]] as const) {
+    const told = openItemMessage({
+      id: '01a0f5c9-0000-7000-8000-00000000000d',
+      kind: 'INTEGRATION_CHECK_FAILED',
+      title: 'Checks failed on the combined tree: ③',
+      projectId: PROJECT,
+      ...ids,
+      payload: { jobKind, check: { ...RED, durationMs: 9_000 }, branchUnchanged: true, failureClass: 'CHECK_FAILED', generation: 1 },
+    });
+    assert.match(told, /Check MERGE_CHECK exited with code 1 \(its declaration expects 0\); the target branch did not move\./, jobKind);
+    assert.match(told, /If it is not the (delivery|work)’s problem — the merge check’s baseline was repaired since, the integration machinery failed — /, jobKind);
+    assert.doesNotMatch(told, /did not finish|stopped it at|go test|10-minute|usually takes close to its limit/, jobKind);
+  }
+});
+
 test('a rerun that failed again says what it reran and why, and not to rerun it as it stands', () => {
   const told = openItemMessage({
     id: '01a0f5c9-0000-7000-8000-000000000002',
