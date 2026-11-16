@@ -437,6 +437,12 @@ struct AssistantBubbleView: View {
         #endif
     }
 
+    /// "Show both languages" with a reply whose blocks pair: drawn block by block, each original under
+    /// its translation (03-interleaved.png). Nil draws it as before, whole (frame 4).
+    private var pairs: [BilingualPairs.Pair]? {
+        SessionTranslation.replyPairs(bubble.displayText, bubble.translation, bilingual: bilingual)
+    }
+
     /// Waiting for its translation (2A): streaming while the account translates, or settled in a
     /// translated turn before the server's `translation` event has come.
     private var awaiting: Bool {
@@ -452,7 +458,10 @@ struct AssistantBubbleView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
-                if bubble.isFinalized {
+                if bubble.isFinalized, let pairs {
+                    // Both languages, block by block (03-interleaved.png).
+                    InterleavedReplyView(pairs: pairs)
+                } else if bubble.isFinalized {
                     MarkdownView(source: SessionTranslation.shownReplyText(bubble.displayText, bubble.translation,
                                                                     flipped: flipped && !bilingual),
                                  tail: tail)

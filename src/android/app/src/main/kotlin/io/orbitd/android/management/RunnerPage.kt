@@ -256,6 +256,8 @@ internal object AccountCopy {
 internal object RunnerAccountCopy {
     /** The question in front of Default's Remove…, and an added account's while Default is removed. */
     fun removeTitle(name: String) = "Remove $name?"
+    /** Removing an added account while Default is in use. */
+    const val REMOVE_DETAIL = "Workspaces using it switch to Default."
     /** Removing Default, which only Orbit stops using; [cli] is the CLI's own name (Codex, Claude Code). */
     fun defaultRemoveDetail(runner: String, cli: String) = "Orbit stops using it on $runner. Its sign-in stays on the machine, and $cli in a " +
         "terminal there keeps working. Workspaces set to it run on Automatic."
@@ -1398,13 +1400,12 @@ internal object RunnerPage {
 
     /** The question before [line]'s Remove…, title and body. Default's, and an added account's while Default is removed, are the web's:
      * that only Orbit stops using Default; that the added account's workspaces then run on Automatic, or, for the last account Orbit
-     * uses there, that Orbit uses Default again. An added account's while Default is in use is the page's own, as it was. */
+     * uses there, that Orbit uses Default again; while Default is in use, that its workspaces switch to Default. */
     fun removeQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
         val name = displayName(runner)
         val title = RunnerAccountCopy.removeTitle(line.name)
         if (line.isDefault) return title to RunnerAccountCopy.defaultRemoveDetail(name, engineName(health.text("engine")))
-        val removed = removedDefault(health) ?: return "Remove “${line.name}” from $name?" to
-            "${line.home ?: "Its sign-in"} goes from this machine, and sessions stop running on it. Default is untouched."
+        val removed = removedDefault(health) ?: return title to RunnerAccountCopy.REMOVE_DETAIL
         return title to if (othersStaying(runner, health, line.id) > 0) RunnerAccountCopy.removeDetailAutomatic(name)
             else RunnerAccountCopy.removeDetailLast(name, removedDefaultName(removed))
     }

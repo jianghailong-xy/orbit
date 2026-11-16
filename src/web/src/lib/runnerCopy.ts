@@ -551,6 +551,10 @@ export function agentFixStartsIn(workspace: string, engine: string): string {
 export function agentFixSignInAbove(engine: string): string {
   return ` Sign in to ${engine} above to use this.`;
 }
+/** The same, after a signed-out reason on the Update engines report, which sits above the engine rows. */
+export function agentFixSignInBelow(engine: string): string {
+  return ` Sign in to ${engine} below to use this.`;
+}
 export const AGENT_FIX_FAILED = 'Couldn’t start the agent';
 
 /** The card's second action, beside Update Engines Now; `engine` is the CLI's own name. */

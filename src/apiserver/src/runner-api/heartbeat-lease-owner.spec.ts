@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Prisma } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 import { RunnerStatus } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
@@ -110,10 +111,36 @@ test('modern heartbeat live-diff writes are fenced by the process owner', async 
     },
   );
 
-  assert.equal(h.updateManyWhere.length, 1);
+  // The live diff, then — the branch being merged — the clearing of a merge failure it left behind, both fenced.
+  assert.equal(h.updateManyWhere.length, 2);
   assert.equal((h.updateManyWhere[0] as { inboxLeaseOwner?: string }).inboxLeaseOwner, OWNER);
   assert.equal((h.updateManyData[0] as { baseSha?: string }).baseSha, baseSha);
   assert.deepEqual((h.updateManyData[0] as { changedFiles?: unknown }).changedFiles, changedFiles);
+  assert.deepEqual(h.updateManyWhere[1], {
+    id: SESSION_A,
+    assignedRunnerId: RUNNER_ID,
+    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    mergeStatus: { in: ['conflict', 'error'] },
+    mergeRecovery: { equals: Prisma.AnyNull },
+    inboxLeaseOwner: OWNER,
+  });
+  assert.deepEqual(h.updateManyData[1], { mergeStatus: null, mergeError: null });
+});
+
+test('a heartbeat that finds the branch not merged leaves a merge failure alone', async () => {
+  const h = harness([SESSION_A]);
+  await h.controller.heartbeat(
+    { id: RUNNER_ID, version: null },
+    {
+      status: RunnerStatus.ONLINE,
+      idleCapacity: 0,
+      leaseOwner: OWNER,
+      supervisedSessionIds: [SESSION_A],
+      sessions: [{ sessionId: SESSION_A, isolationStatus: 'worktree', changedFiles: [] }],
+    },
+  );
+  assert.equal(h.updateManyWhere.length, 1);
+  assert.equal((h.updateManyData[0] as { mergeStatus?: unknown }).mergeStatus, undefined);
 });
 
 test('legacy heartbeat omits the owner fence', async () => {

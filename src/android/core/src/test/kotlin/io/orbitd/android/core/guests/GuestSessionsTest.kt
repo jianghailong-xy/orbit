@@ -10,11 +10,13 @@ import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.RunEvent
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -33,13 +35,15 @@ import org.junit.Test
 class GuestSessionsTest {
     private val handle = SessionHandle(AccountKey("https://orbit.example/", "bo"))
 
-    private class Sent(val method: HttpMethod, val path: String, val query: List<Pair<String, String>>, val body: String)
+    private class Sent(val method: HttpMethod, val path: String, val query: List<Pair<String, String>>, val body: String,
+        val contentType: String = "")
 
     /** Answers [answer] for every request, and keeps what was asked. */
     private class Door(var answer: (ApiRequest) -> Pair<Int, String>) : OrbitApi {
         val sent = mutableListOf<Sent>()
         override suspend fun request(handle: SessionHandle, request: ApiRequest): ApiResponse {
-            sent += Sent(request.method, request.path.joinToString("/"), request.query, request.body?.decodeToString().orEmpty())
+            sent += Sent(request.method, request.path.joinToString("/"), request.query, request.body?.decodeToString().orEmpty(),
+                request.contentType)
             val (status, body) = answer(request)
             return ApiResponse(status, body.encodeToByteArray()).requireSuccess()
         }
@@ -119,16 +123,38 @@ class GuestSessionsTest {
         assertEquals("guest-sessions/34A/events/8", full.sent[0].path)
     }
 
-    @Test fun aMessageIsTextOnly() = runTest {
+    @Test fun aMessageWithoutImagesIsItsKeyAndWords() = runTest {
         val door = door("""{"turnId":"T9","revived":true}""", 201)
         val accepted = door.sendGuestTurn(handle, "34A", "k1", "Please run the tests")
         assertEquals("T9", accepted.turnId)
         assertTrue(accepted.revived)
         assertEquals(HttpMethod.POST, door.sent[0].method)
         assertEquals("guest-sessions/34A/turns", door.sent[0].path)
-        // Nothing but the key and the words: no mode, model, effort or attachment.
+        // Nothing but the key and the words: no mode, model or effort, and no attachmentIds while no image goes with it.
         val body = Wire.json.parseToJsonElement(door.sent[0].body) as JsonObject
         assertEquals(mapOf("clientTurnId" to JsonPrimitive("k1"), "content" to JsonPrimitive("Please run the tests")), body.toMap())
+    }
+
+    @Test fun aMessageCarriesTheIdsOfItsImagesAndMayHaveNoWords() = runTest {
+        val door = door("""{"turnId":"T9","revived":false}""", 201)
+        door.sendGuestTurn(handle, "34A", "k1", "", listOf("A1", "A2"))
+        val body = Wire.json.parseToJsonElement(door.sent[0].body) as JsonObject
+        assertEquals("guest-sessions/34A/turns", door.sent[0].path)
+        assertEquals(JsonPrimitive(""), body["content"])
+        assertEquals(JsonArray(listOf(JsonPrimitive("A1"), JsonPrimitive("A2"))), body["attachmentIds"])
+    }
+
+    @Test fun anImageIsUploadedThroughTheGuestDoorAsOneFilePart() = runTest {
+        val door = door("""{"id":"A1"}""", 201)
+        assertEquals("A1", door.uploadGuestAttachment(handle, "34A", "shot.png", "image/png", byteArrayOf(1, 2, 3)))
+        val sent = door.sent.single()
+        assertEquals(HttpMethod.POST, sent.method)
+        // The guest's own route, never the owner's `attachments?sessionId=`.
+        assertEquals("guest-sessions/34A/attachments", sent.path)
+        assertEquals(emptyList<Pair<String, String>>(), sent.query)
+        assertTrue(sent.contentType.startsWith("multipart/form-data; boundary="))
+        assertTrue(sent.body.contains("""Content-Disposition: form-data; name="file"; filename="shot.png""""))
+        assertTrue(sent.body.contains("Content-Type: image/png"))
     }
 
     @Test fun notSharedIsTheDoorsOne404() = runTest {
@@ -340,4 +366,94 @@ class GuestSessionsTest {
     }
 
     private val RunEvent.text get() = (fields["text"] as? JsonPrimitive)?.content
+
+    // The guest view's images
+
+    /** A guest door whose uploads wait for [release], answering `A1`, `A2`… in the order they were asked; it keeps every turn's body. */
+    private class ImageDoor : OrbitApi {
+        val release = CompletableDeferred<Unit>()
+        val uploads = mutableListOf<String>()
+        val turns = mutableListOf<JsonObject>()
+        var uploadStatus = 201
+        override suspend fun request(handle: SessionHandle, request: ApiRequest): ApiResponse {
+            val path = request.path.joinToString("/")
+            return when (path) {
+                "guest-sessions/34A/attachments" -> {
+                    uploads += path
+                    val n = uploads.size
+                    release.await()
+                    if (uploadStatus == 201) ApiResponse(201, """{"id":"A$n"}""".encodeToByteArray())
+                    else ApiResponse(uploadStatus, """{"message":"Image exceeds the 5MB limit"}""".encodeToByteArray()).requireSuccess()
+                }
+                "guest-sessions/34A/turns" -> {
+                    turns += Wire.json.parseToJsonElement(request.body!!.decodeToString()) as JsonObject
+                    ApiResponse(201, """{"turnId":"T","revived":false}""".encodeToByteArray())
+                }
+                else -> ApiResponse(200, """{"events":[],"hasMore":false}""".encodeToByteArray())
+            }
+        }
+    }
+
+    @Test fun imagesAloneSendOnceTheirUploadsFinishAndARemovedOneIsLeftOut() = runTest {
+        val door = ImageDoor()
+        val view = GuestConversation(door, handle, "34A", "Bo", backgroundScope) { "k1" }
+        assertFalse(view.state.value.canSend)
+        view.attach("a.png", "image/png", byteArrayOf(1))
+        view.attach("b.jpg", "image/jpeg", byteArrayOf(2))
+        view.attach("c.webp", "image/webp", byteArrayOf(3))
+        runCurrent()
+        assertEquals(3, door.uploads.size)
+        // No words, only images: Send is offered.
+        assertTrue(view.state.value.canSend)
+        assertTrue(view.state.value.uploading)
+        view.removeImage(view.state.value.images[1].id)
+        assertEquals(listOf("a.png", "c.webp"), view.state.value.images.map { it.name })
+        view.send()
+        runCurrent()
+        // Pressed while uploads run, the message waits for them.
+        assertTrue(view.state.value.sending)
+        assertEquals(emptyList<JsonObject>(), door.turns)
+        door.release.complete(Unit)
+        runCurrent()
+        val body = door.turns.single()
+        assertEquals(JsonPrimitive(""), body["content"])
+        assertEquals(JsonArray(listOf(JsonPrimitive("A1"), JsonPrimitive("A3"))), body["attachmentIds"])
+        assertEquals(emptyList<GuestImage>(), view.state.value.images)
+        assertFalse(view.state.value.sending)
+    }
+
+    @Test fun anImageTheDoorWouldRefuseIsNotStagedAndAFailedUploadHoldsTheMessage() = runTest {
+        val door = ImageDoor().apply { release.complete(Unit) }
+        val view = GuestConversation(door, handle, "34A", "Bo", backgroundScope) { "k1" }
+        view.attach("x.svg", "image/svg+xml", byteArrayOf(1))
+        assertEquals(GuestImages.WRONG_TYPE, view.state.value.sendError)
+        view.attach("big.png", "image/png", ByteArray(GuestImages.MAX_BYTES + 1))
+        assertEquals(GuestImages.TOO_LARGE, view.state.value.sendError)
+        runCurrent()
+        assertEquals(emptyList<GuestImage>(), view.state.value.images)
+        assertEquals(emptyList<String>(), door.uploads)
+
+        door.uploadStatus = 413
+        view.attach("ok.png", "image/png", byteArrayOf(1))
+        runCurrent()
+        assertEquals("Image exceeds the 5MB limit", view.state.value.images.single().error)
+        view.edit("look")
+        view.send()
+        runCurrent()
+        assertEquals(GuestImages.FAILED_UPLOADS, view.state.value.sendError)
+        assertEquals(emptyList<JsonObject>(), door.turns)
+        view.removeImage(view.state.value.images.single().id)
+        view.send()
+        runCurrent()
+        assertEquals(JsonPrimitive("look"), door.turns.single()["content"])
+        assertNull(door.turns.single()["attachmentIds"])
+    }
+
+    @Test fun anUploadTheDoorAnswers404IsTheNotSharedState() = runTest {
+        val door = ImageDoor().apply { release.complete(Unit); uploadStatus = 404 }
+        val view = GuestConversation(door, handle, "34A", "Bo", backgroundScope)
+        view.attach("a.png", "image/png", byteArrayOf(1))
+        runCurrent()
+        assertTrue(view.state.value.gone)
+    }
 }

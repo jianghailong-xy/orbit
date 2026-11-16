@@ -68,6 +68,15 @@ export class AttachmentsService {
   }
 
   /**
+   * Keep a session guest's image (session-guests.service.ts uploadImage, which has read the guest's live invitation
+   * and checked the image): a row of the owner's session, as the owner's own upload to it would be, that names the
+   * guest who uploaded it. The owner's quota counts it, as it counts every file of their sessions.
+   */
+  createForGuest(ownerId: string, sessionId: string, guestId: string, file: FileUpload): Promise<{ id: string }> {
+    return this.files.createAttachment(file, { ownerId, sessionId, uploadedByGuestId: guestId });
+  }
+
+  /**
    * Remove one of the caller's TASK inputs.
    *
    * Task-scoped only, and that is the rule rather than an oversight: a session- or turn-scoped row

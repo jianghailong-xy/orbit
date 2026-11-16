@@ -1232,39 +1232,25 @@ func settleSessionCheckout(job *ClaimedSession, execDir string) {
 	syncManagedVolume("the session's checkout", execDir)
 }
 
-// heartbeatMerge performs one heartbeat-delivered merge against the exact supervisor
-// epoch its heartbeat advertised, or answers why it did not. merge is mergeToMain.
+// heartbeatMerge performs one heartbeat-delivered merge. merge is mergeToMain.
+//
+// It does not ask the session's checkout for admission: a merge reads only the commit the branch
+// is at when it starts, replays it in the repository's scratch worktree and never touches the
+// checkout. So a turn running in the checkout, a supervisor being handed over or a background job
+// neither holds a merge up nor is held up by one (session-merge-beside-turn-v1). What the
+// merge must not overlap — another merge of the same repository — mergeToMain's own lock keeps
+// out, and the control plane hands this process only an operation it claimed for it.
+// pool and advertised are kept for the call site's shape; nothing here reads them.
 func heartbeatMerge(
-	pool *sessionPool,
+	_ *sessionPool,
 	req MergeCommand,
-	advertised heartbeatSupervisorSnapshot,
+	_ heartbeatSupervisorSnapshot,
 	merge func(MergeCommand) mergeOutcome,
 ) mergeOutcome {
-	release, receipt, admitted := pool.beginManualWorktreeOperation(
-		req.SessionID,
-		advertised.supervisor,
-		advertised.permitGeneration,
-		false,
-		"merge",
-	)
-	if !admitted {
-		// Either the server already claimed this exact epoch before returning the
-		// heartbeat, or a turn or another operation still holds the checkout. Close it
-		// explicitly, naming which: a silent drop would leave Resume permanently blocked
-		// on its operation owner, and a refusal that names the wrong reason reads as a
-		// control-plane race rather than as "wait for the turn".
-		logln("not merging", req.SessionID+":", receipt)
-		return mergeOutcome{Status: "error", Message: receipt}
-	}
-	if receipt != "" {
-		logln("merging", req.SessionID+":", receipt)
-	}
 	res := merge(req)
 	syncManagedVolume("a merge", expandTilde(req.WorkDir))
-	// Record where this session's work went before opening the gate.
+	// Record where this session's work went.
 	rememberMergeTarget(req.SessionID, req.TargetBranch)
-	release()
-	res.Message = appendWorktreeReceipt(res.Message, receipt)
 	return res
 }
 

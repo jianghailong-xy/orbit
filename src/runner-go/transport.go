@@ -31,6 +31,9 @@ const (
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
 	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
+	// A merge runs whether or not a turn holds the session's checkout, and holds no turn back
+	// (heartbeatMerge); a commit is refused while a background job is still changing it.
+	sessionMergeBesideTurnV1 = "session-merge-beside-turn-v1"
 	// The commit relay may also carry `discard`, and this runner reports which finished
 	// sessions' checkouts still hold uncommitted work (abandoned_checkout.go).
 	abandonedCheckoutCapabilityV1 = "abandoned-checkout-v1"
@@ -82,6 +85,7 @@ func init() {
 		sessionWorktreeOpsV1,
 		sessionMergeRecoveryV1,
 		abandonedCheckoutCapabilityV1,
+		sessionMergeBesideTurnV1,
 		sessionCurrentWorkRoutingV1,
 		sessionClaudeSteerWithdrawV1,
 		sessionClaudeCoordinatorContextV1,

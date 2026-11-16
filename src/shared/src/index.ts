@@ -2,6 +2,7 @@ export * from './enums';
 export * from './events';
 export * from './background';
 export * from './dto';
+export * from './engineUpdateReport';
 export * from './permissionSemantics';
 export * from './bashRules';
 export * from './claude-region-check';

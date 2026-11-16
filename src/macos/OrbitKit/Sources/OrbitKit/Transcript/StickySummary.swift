@@ -58,6 +58,8 @@ public enum StickySummary {
         if ownerAnswer != nil { return false }
         if coordinatorDelivery != nil { return true }
         if WatchWakeText.parse(text) != nil { return false }
+        // A turn carrying only Orbit's blocks is a line in the answer too (`OrbitEvent`), whatever block.
+        if OrbitEvent.draws(text: text, note: note, hasAttachments: hasAttachments) { return false }
         guard BackgroundWakeText.carriesWake(note) || SubagentFinishedText.carriesWake(note) else {
             // A turn that is only a note this client cannot read draws no bubble, so it heads no round
             // (`BackgroundWakeCard.drawsNoteAlone`; web: no `.chat-user` for the bar to find).

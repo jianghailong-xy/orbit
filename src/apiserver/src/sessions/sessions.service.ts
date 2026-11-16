@@ -325,6 +325,7 @@ import { sessionHeldKey } from '../providers/held-key';
 import {
   newTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
+  mergeFencesTurn,
   retireSessionInboxGeneration,
   worktreeOperationFenceSql,
 } from '../common/session-inbox-fence';
@@ -7015,7 +7016,9 @@ export class SessionsService {
       // keeps it out of a runner slot until the merge/commit result flips the status
       // off 'pending', at which point the worktree is free and the turn runs. This is
       // what lets a user send while "Merging…"/"Committing…" instead of being bounced.
-      const mergeExecuting = pendingWorktreeOperationMayBeExecuting(
+      // A merge on a runner that merges beside a turn is neither dropped nor waited for.
+      const mergeFences = session.mergeStatus === 'pending' && await this.mergeFencesTurnOn(tx, session.assignedRunnerId);
+      const mergeExecuting = mergeFences && pendingWorktreeOperationMayBeExecuting(
         session.mergeStatus,
         session.mergeOperationId,
         session.mergeOperationOwner,
@@ -7191,7 +7194,7 @@ export class SessionsService {
           retryAt: null,
           retryClaimedAt: null,
           ...(accountMove ?? {}),
-          ...(session.mergeStatus === 'pending' && !mergeExecuting
+          ...(session.mergeStatus === 'pending' && mergeFences && !mergeExecuting
             ? {
                 mergeStatus: null,
                 mergeOperationId: null,
@@ -8618,7 +8621,7 @@ export class SessionsService {
     if (session.commitStatus === 'pending') {
       throw new ConflictException('wait for the pending worktree commit to finish');
     }
-    if (SessionsService.mergeWaitsForTurn(session)) {
+    if (SessionsService.mergeWaitsForTurn(session) && await this.mergeFencesTurnOn(tx, session.assignedRunnerId)) {
       // A session merging itself asks from inside its own turn, so "wait for the turn" can never be
       // answered by asking again. The request is kept instead, and mergeAfterOwnTurn queues it when the
       // turn ends. Anyone else can wait for the turn and ask then.
@@ -8798,6 +8801,14 @@ export class SessionsService {
       select: { id: true },
     });
     return { decision: 'ALREADY_LANDED' as const, receiptId: receipt.id, sourceSha, targetSha: tip };
+  }
+
+  /** Whether a merge on this session's runner still holds its turns back, and they it (mergeFencesTurn). A
+   *  plain read of the runner's declared capabilities; no runner is the older answer, that they do. */
+  private async mergeFencesTurnOn(tx: Prisma.TransactionClient, runnerId: string | null): Promise<boolean> {
+    if (!runnerId) return true;
+    const runner = await tx.runner.findUnique({ where: { id: runnerId }, select: { capabilities: true } });
+    return mergeFencesTurn(runner?.capabilities);
   }
 
   /** {@link mergeToMain}'s "wait for the current turn to finish": the session is open and not parked
@@ -10621,12 +10632,12 @@ export class SessionsService {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason, id, current.assignedRunnerId);
       }
       if (
-        pendingWorktreeOperationMayBeExecuting(
+        (pendingWorktreeOperationMayBeExecuting(
           current.mergeStatus,
           current.mergeOperationId,
           current.mergeOperationOwner,
           current.mergeRequestedAt,
-        ) ||
+        ) && await this.mergeFencesTurnOn(tx, current.assignedRunnerId)) ||
         pendingWorktreeOperationMayBeExecuting(
           current.commitStatus,
           current.commitOperationId,
