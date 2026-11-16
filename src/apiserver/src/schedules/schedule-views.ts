@@ -10,8 +10,8 @@
  * server and the clients cannot word a line two ways (schedule-copy.spec.ts).
  */
 import {
-  SCHEDULE_COPY,
   scheduleCostsText,
+  SCHEDULE_COPY,
   scheduleCreateNotice,
   scheduleCreateWhen,
   scheduleMayText,

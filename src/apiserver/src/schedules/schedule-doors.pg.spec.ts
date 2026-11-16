@@ -813,7 +813,7 @@ test('GET /api/schedules carries the timeline: runs under way and the last day\'
   const a = await world('timeline-a');
   const b = await world('timeline-b');
   const sa = await createdThroughCard(a);
-  const paused = await createdThroughCard(a, { title: 'Paused one' });
+  const paused = await createdThroughCard(a, { title: 'Paused one', intent: 'Check the paused one every day' });
   await rest.pause(a.user, paused.id, NO_SESSION);
   const sb = await createdThroughCard(b);
   const hour = 60 * 60_000;
@@ -942,11 +942,12 @@ test('schedule_update: a correction of the time does not overwrite what was aske
   assert.deepEqual(row.rule, { kind: 'WEEKLY', time: '09:00', weekdays: ['MON'] });
   assert.equal(row.intent, CREATE.intent, 'what was asked is the original goal');
 
+  // Inside what the weekly change left allowed (one run a week), so it applies at once too.
   const back = await tools.update(w.runner, w.sessionId, s.id, {
-    rule: { kind: 'DAILY', time: '09:00' },
+    rule: { kind: 'WEEKLY', time: '10:00', weekdays: ['TUE'] },
     timezone: 'Asia/Shanghai',
     runLimitMinutes: 20,
-    intent: 'On second thought, weekly is too rare. Change it back to every day at 09:00 Beijing time.',
+    intent: 'On second thought, Monday is a bad day. Move it to Tuesdays at 10:00 Beijing time.',
   } as never);
   assert.equal(back.outcome, 'APPLIED');
   row = await db.schedule.findUniqueOrThrow({ where: { id: s.id } });
