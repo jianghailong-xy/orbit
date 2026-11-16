@@ -101,12 +101,17 @@ final class AccessTokensWiringTests: XCTestCase {
     func testTheMacFormHasTheSectionAndRevokesOnlyAfterAsking() throws {
         let form = code(try slice(try appSource("Views/SettingsAdminView.swift"),
                                   from: "#if os(macOS)\n/// macOS Settings", to: "private struct AccessTokensSection"))
-        let order = ["Section(\"Change password\")", "AccessTokensSection()", "Section(\"Updates\")"]
-            .map { form.range(of: $0)?.lowerBound }
+        // The Form lists its sections by property (the release build could not type-check them inline), so
+        // the order is the list's, and each property still draws its section.
+        let list = try slice(form, from: "Form {", to: "}")
+        let order = ["passwordSection", "AccessTokensSection()", "updatesSection"]
+            .map { list.range(of: $0)?.lowerBound }
         XCTAssertFalse(order.contains(where: { $0 == nil }), "the form lost one of \(order)")
         if let a = order[0], let b = order[1], let c = order[2] {
             XCTAssertTrue(a < b && b < c, "Access tokens sits between Change password and Updates")
         }
+        XCTAssertTrue(try slice(form, from: "private var passwordSection", to: "}").contains("Section(\"Change password\")"))
+        XCTAssertTrue(try slice(form, from: "private var updatesSection", to: "}").contains("Section(\"Updates\")"))
         XCTAssertTrue(form.contains(".task { await model.accessTokens?.load() }"))
 
         let section = try macSection()
